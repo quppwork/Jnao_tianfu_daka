@@ -1,1 +1,0 @@
-export { TalentTest } from "./TalentTest";
