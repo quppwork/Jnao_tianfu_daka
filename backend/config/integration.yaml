@@ -1,0 +1,38 @@
+# JNAO 集中平台 — 接入状态
+# status: live=已接入, mock=占位数据, pending=等待后端开发
+
+endpoints:
+  talent_submit:
+    status: live
+    description: "天赋测试答案提交与评分"
+    endpoint: "POST /api/talent/submit"
+
+  talent_result:
+    status: live
+    description: "天赋报告查询"
+    endpoint: "GET /api/talent/result/{session_id}"
+
+  jnao_submit:
+    status: live
+    description: "代理提交答案到 JNAO (m.jnao.com)"
+    endpoint: "POST /api/talent/jnao/submit"
+
+  jnao_report:
+    status: live
+    description: "代理获取 JNAO 报告"
+    endpoint: "GET /api/talent/jnao/report/{record_id}"
+
+  talent_stream:
+    status: mock
+    description: "AI 对话式答题（依赖 tianfu_rag，未接入时前端使用本地静态题目）"
+    endpoint: "GET /api/chat/stream"
+
+  user_auth:
+    status: pending
+    description: "用户注册/登录（后端团队规划中）"
+    endpoint: "POST /api/auth/login"
+
+  history:
+    status: pending
+    description: "历史测试记录查询"
+    endpoint: "GET /api/talent/history"
