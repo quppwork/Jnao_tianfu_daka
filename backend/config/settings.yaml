@@ -1,0 +1,17 @@
+# JNAO Backend — 服务器与上游配置
+# 环境变量可覆盖: JNAO_HOST, JNAO_PORT, TIANFU_RAG_URL, DEEPSEEK_API_KEY
+
+server:
+  host: "127.0.0.1"
+  port: 8011
+
+upstream:
+  tianfu_rag:
+    url: "http://192.168.60.199:8010"
+    timeout: 120.0
+    health_timeout: 3.0
+
+deepseek:
+  api_key: "${DEEPSEEK_API_KEY}"
+  model: "deepseek-v4-flash"
+  timeout: 3.0

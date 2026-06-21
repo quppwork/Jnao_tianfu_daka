@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/* JNAO AI — 全局样式 */
+:root {
+  --brand: #6C5CE7;
+  --brand-light: #A78BFA;
+  --brand-dark: #5A4BD1;
+  --brand-bg: #F3F0FF;
+  --j-red: #dc2626;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --surface-primary: #ffffff;
+  --surface-secondary: #f5f5f5;
+  --border: #f0f0f0;
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100dvh;
+}
+
+/* 隐藏滚动条但可滚动 */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 顶部渐变虚化 */
+.top-fade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  z-index: 10;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.95) 20%, transparent 100%);
+}
+
+.pull-indicator {
+  display: flex;
+  justify-content: center;
+  height: var(--pull-h, 0px);
+  opacity: var(--pull-o, 0);
+  transition: height 0.2s ease, opacity 0.2s ease;
+}
+
+/* —— 对话气泡（JNAO 原型风格）—— */
+.bubble-card {
+  width: 88%;
+  max-width: 400px;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble-ai {
+  background: #fff;
+  color: #1f2937;
+  border-radius: 2px 18px 18px 18px;
+  border: 1px solid #E8E4F0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+
+.bubble-user {
+  background: #6C5CE7;
+  color: #fff;
+  border-radius: 18px 2px 18px 18px;
+  width: auto;
+  max-width: 75%;
+}
+
+/* —— 计时器 —— */
+.timer-bar {
+  height: 3px;
+  background: #e5e7eb;
+  border-radius: 0 2px 2px 0;
+  overflow: hidden;
+}
+.timer-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6C5CE7, #A78BFA);
+  transition: width 0.1s linear;
+}
+.timer-bar-fill.warn { background: #F0A040; }
+.timer-bar-fill.danger { background: #E84040; }
+
+/* —— 答案选择按钮（测试模式）—— */
+.btn-test-yes {
+  padding: 12px 28px;
+  border-radius: 24px;
+  font-size: 15px;
+  font-weight: 600;
+  background: #6C5CE7;
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 16px rgba(108,92,231,.25);
+  transition: transform 0.15s;
+}
+.btn-test-yes:active { transform: scale(0.97); }
+
+.btn-test-no {
+  padding: 12px 28px;
+  border-radius: 24px;
+  font-size: 15px;
+  font-weight: 600;
+  background: #fff;
+  color: #8E8E93;
+  border: 1.5px solid #e5e7eb;
+  transition: transform 0.15s;
+}
+.btn-test-no:active { transform: scale(0.97); }
+
+/* —— 打字指示器 —— */
+.typing-dots {
+  display: flex; gap: 4px; padding: 4px 0;
+}
+.typing-dots span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #C7C7CC;
+  animation: typingBounce 1.4s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* —— 背景光斑淡入 —— */
+.bg-blob-fade {
+  animation: blobFadeIn 1.2s ease-out;
+}
+@keyframes blobFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* —— 对话区域内背景切换 —— */
+@keyframes quiz-bg-fade {
+  from { opacity: 0; transform: scale(1.04); }
+  to { opacity: 1; transform: scale(1); }
+}
+.quiz-bg-fade {
+  animation: quiz-bg-fade 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* —— 光斑漂浮 —— */
+@keyframes quiz-blob-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(8%, 6%) scale(1.08); }
+}
+@keyframes quiz-blob-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-6%, 8%) scale(1.06); }
+}
+@keyframes quiz-blob-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(5%, -5%) scale(1.05); }
+}
+.quiz-blob-1 { animation: quiz-blob-drift-1 14s ease-in-out infinite; }
+.quiz-blob-2 { animation: quiz-blob-drift-2 18s ease-in-out infinite; }
+.quiz-blob-3 { animation: quiz-blob-drift-3 16s ease-in-out infinite; }
+
+/* —— 倒计时圆环紧急脉冲 —— */
+.countdown-urgent-ring {
+  animation: urgentPulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes urgentPulse {
+  from { opacity: 1; }
+  to { opacity: 0.5; }
+}
+
+/* —— 报告 HTML 富文本 —— */
+.report-html p {
+  margin-bottom: 0.5rem;
+  line-height: 1.7;
+}
+.report-html strong {
+  color: #1f2937;
+  font-weight: 600;
+}
+.report-html br {
+  display: block;
+  content: "";
+  margin-top: 0.25rem;
+}
