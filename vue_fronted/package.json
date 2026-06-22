@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "unh dev",
     "build": "unh build",
-    "about": "unh info"
+    "about": "unh info",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5000720260410001",
@@ -43,6 +45,7 @@
     "@vue/runtime-core": "3.4.21",
     "miniprogram-api-typings": "^5.1.2",
     "sass": "1.64.2",
-    "vite": "5.2.8"
+    "vite": "5.2.8",
+    "vitest": "^4.1.9"
   }
 }
