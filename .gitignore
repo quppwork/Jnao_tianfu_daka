@@ -26,3 +26,9 @@ dist/
 skills-lock.json
 
 参考
+
+# 设计预览（仅本地测试）
+vue_fronted/tests_fronted/
+
+# 旧版前端（待废弃）
+h5_fronted/
