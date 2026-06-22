@@ -2,18 +2,37 @@
   "pages": [
     {
       "path": "pages/index",
-      "type": "home"
+      "type": "home",
+      "style": {
+        "navigationBarTitleText": "JNAO",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/talent/index",
+      "style": {
+        "navigationBarTitleText": "天赋测试",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/report/index",
+      "style": {
+        "navigationBarTitleText": "天赋报告",
+        "navigationStyle": "custom"
+      }
     }
   ],
   "globalStyle": {
-    "backgroundColor": "@bgColor",
-    "backgroundColorBottom": "@bgColorBottom",
-    "backgroundColorTop": "@bgColorTop",
-    "backgroundTextStyle": "@bgTxtStyle",
-    "navigationBarBackgroundColor": "#000000",
-    "navigationBarTextStyle": "@navTxtStyle",
-    "navigationBarTitleText": "Uni Creator",
+    "backgroundColor": "#0a0e14",
+    "navigationBarBackgroundColor": "#0d1117",
+    "navigationBarTextStyle": "white",
     "navigationStyle": "custom"
   },
-  "subPackages": []
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^u-(.*)": "uview-plus/components/u-$1/u-$1.vue"
+    }
+  }
 }

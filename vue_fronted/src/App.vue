@@ -1,7 +1,9 @@
 <script setup>
 import { onLaunch } from '@dcloudio/uni-app'
 
-onLaunch(() => {})
+onLaunch(() => {
+  console.log('JNAO App launched')
+})
 </script>
 
 <style></style>

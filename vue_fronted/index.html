@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" href="static/logo.svg">
     <script>
+      // 主题检测 — 必须在任何渲染之前执行
+      (function(){
+        var t = 'dark';
+        try { t = localStorage.getItem('jnao_theme') || 'dark'; } catch(e) {}
+        document.documentElement.setAttribute('data-theme', t);
+      })();
       const coverSupport = 'CSS' in window && typeof CSS.supports === 'function' && (CSS.supports('top: env(a)')
   || CSS.supports('top: constant(a)'))
       document.write(
@@ -13,8 +19,72 @@
     <title></title>
     <!--preload-links-->
     <!--app-context-->
+    <style>
+      /* ===== Theme CSS Variables ===== */
+      :root, [data-theme="dark"] {
+        --bg: #0a0e14; --bg-card: #161b22; --bg-input: #0d1117;
+        --text: #e6edf3; --text-sub: #c9d1d9; --text-dim: #8b949e; --text-hint: #484f58;
+        --accent: #58a6ff; --accent-bg: rgba(88,166,255,0.15);
+        --border: #30363d; --chat-ai-bg: #1a3a5c; --chat-me-bg: #21262d;
+        --nav-bg: #0d1117; --nav-border: #21262d;
+        --focus-bg: linear-gradient(135deg,#1a2332,#162d4a);
+        --mic-shadow: rgba(88,166,255,0.3);
+        --splash-bg: #0d1117; --splash-text: #e6edf3; --splash-sub: #8b949e;
+      }
+      [data-theme="white"] {
+        --bg: #f0f2f5; --bg-card: #ffffff; --bg-input: #f5f5f5;
+        --text: #1a1a2e; --text-sub: #333; --text-dim: #6b7280; --text-hint: #9ca3af;
+        --accent: #2563eb; --accent-bg: rgba(37,99,235,0.08);
+        --border: #e5e7eb; --chat-ai-bg: #eff6ff; --chat-me-bg: #f3f4f6;
+        --nav-bg: #ffffff; --nav-border: #e5e7eb;
+        --focus-bg: linear-gradient(135deg,#1e3a5f,#2563eb);
+        --mic-shadow: rgba(37,99,235,0.25);
+        --splash-bg: #ffffff; --splash-text: #1a1a2e; --splash-sub: #6b7280;
+      }
+    </style>
   </head>
   <body>
+    <!-- Splash -->
+    <div id="initial-splash" style="position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:-apple-system,PingFang SC,sans-serif;">
+      <div style="display:flex;align-items:baseline;gap:12px;transform:translateY(-8vh);">
+        <span id="splash-logo" style="font-size:48px;font-weight:700;letter-spacing:.04em;animation:jr 0.6s 0.1s cubic-bezier(.22,.61,.36,1) both,jn 0.5s 0.9s cubic-bezier(.34,1.56,.64,1) both;">
+          <span style="color:#dc2626">J</span><span id="splash-nao">nao</span>
+        </span>
+        <span id="splash-ai" style="font-size:48px;font-weight:700;letter-spacing:.04em;animation:as 0.5s 0.9s cubic-bezier(.34,1.56,.64,1) both;">AI</span>
+      </div>
+      <span id="splash-tag" style="margin-top:16px;font-size:13px;letter-spacing:.08em;animation:fu 0.7s 0.5s ease-out both;">劲脑 · 智能工作台</span>
+      <style>
+        @keyframes jr { from{opacity:0;transform:scale(.6)} to{opacity:1;transform:scale(1)} }
+        @keyframes jn { 0%{transform:translateX(0)} 30%{transform:translateX(-12px)} 100%{transform:translateX(-4px)} }
+        @keyframes as { from{opacity:0;transform:translateX(50px)} 60%{opacity:1;transform:translateX(-3px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes fu { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+      </style>
+    </div>
+    <script>
+      // Splash — 冷启动完整动画，热重载快速闪过
+      (function(){
+        var s = document.getElementById('initial-splash');
+        // 只在首次安装/清缓存时显示，之后页面间跳转不再出现
+        var launched = false;
+        try { launched = localStorage.getItem('jnao_launched'); } catch(e) {}
+        if (launched) { s.remove(); return; }
+        var delay = 2500;
+
+        // 适配主题
+        var isLight = document.documentElement.getAttribute('data-theme') === 'white';
+        s.style.background = isLight ? '#ffffff' : '#0d1117';
+        document.getElementById('splash-nao').style.color = isLight ? '#1a1a2e' : '#e6edf3';
+        document.getElementById('splash-ai').style.color = isLight ? '#1a1a2e' : '#e6edf3';
+        document.getElementById('splash-tag').style.color = isLight ? '#6b7280' : '#8b949e';
+
+        setTimeout(function(){
+          s.style.transition = 'opacity 0.3s';
+          s.style.opacity = '0';
+          setTimeout(function(){ s.remove(); }, 300);
+        }, delay);
+        try { localStorage.setItem('jnao_launched', '1'); } catch(e) {}
+      })();
+    </script>
     <div id="app"><!--app-html--></div>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -10,10 +10,15 @@ export default defineConfig({
     }
   },
   plugins: [
-    // https://uni-helper.js.org/plugin-uni
     Uni(),
   ],
-  
+  server: {
+    port: 5185,
+    host: '0.0.0.0',
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:8011', changeOrigin: true },
+    }
+  }
 })
 
 
