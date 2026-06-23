@@ -208,11 +208,11 @@ const answers = ref({})             // { qid: '完全符合' | '有差异' }
 const prevCard = ref(null)          // { idx, text, answer }
 const undoMode = ref(false)
 const tickRef = ref(0)
-const cdLeft = ref(15)
+const cdLeft = ref(60)
 const busy = ref(false)
 
 const TOTAL = 35
-const QUESTION_SEC = 15
+const QUESTION_SEC = 60
 const UNDO_SEC = 5
 
 let noticeTimer = null
@@ -337,14 +337,7 @@ function handleAnswer(choice) {
 
 function handleQuestionTimeout() {
   if (undoMode.value) return
-  const qid = questionOrder.value[currentQIndex.value]
-  const remaining = questionOrder.value.slice(currentQIndex.value)
-  const pool = remaining.filter(x => x !== qid)
-  const backStart = Math.max(0, Math.floor(pool.length / 2))
-  const insertIdx = backStart + Math.floor(Math.random() * (pool.length - backStart + 1))
-  questionOrder.value = [...questionOrder.value.slice(0, currentQIndex.value), ...pool.slice(0, insertIdx), qid, ...pool.slice(insertIdx)]
-  tickRef.value++
-  showToast('时间到～这道题先跳过，我们最后再回来答', 'info')
+  showToast('好的，你慢慢想～', 'info')
 }
 
 function handleUndo() {
