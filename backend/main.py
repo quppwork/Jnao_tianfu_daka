@@ -4,16 +4,16 @@
 """
 
 from dotenv import load_dotenv
-load_dotenv()
+import os
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import talent, chat, health
-import logging
+from app.api import talent, chat, health, guide, voice
+from app.core.logger import setup_logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("jnao")
+logger = setup_logging("jnao")
 
 app = FastAPI(title="JNAO API", version="0.2.0")
 
@@ -34,3 +34,5 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(talent.router)
 app.include_router(chat.router)
+app.include_router(guide.router)
+app.include_router(voice.router)

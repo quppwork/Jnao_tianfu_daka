@@ -38,32 +38,29 @@
     </view>
 
     <!-- Chat Area -->
-    <view class="chat-section">
-      <view class="chat-row user">
-        <view class="chat-av me"><text>我</text></view>
-        <view class="chat-bbl me">老师，我想了解一下天赋测试怎么做？</view>
+    <view class="chat-section" id="chatScroll">
+      <view v-for="(m,i) in messages" :key="i" class="chat-row" :class="{ user: m.role === 'user' }">
+        <view class="chat-av me" v-if="m.role==='user'"><text>我</text></view>
+        <view class="chat-av ai" v-else><view class="ai-avatar-inner"></view></view>
+        <view class="chat-bbl" :class="{ me: m.role==='user', ai: m.role!=='user' }">{{ m.text }}</view>
       </view>
-      <view class="chat-row">
+      <view v-if="loading" class="chat-row">
         <view class="chat-av ai"><view class="ai-avatar-inner"></view></view>
-        <view class="chat-bbl ai">天赋测试是我们核心功能，你只需回答 35 道选择题，AI 就会自动分析生成专属报告 ✨</view>
-      </view>
-      <view class="chat-row">
-        <view class="chat-av ai"><view class="ai-avatar-inner"></view></view>
-        <view class="chat-bbl ai">报告包含雷达图 📊、情绪分析 🧠、五大天赋维度的详细解读，以及针对性的发展建议。要不要现在就试试？</view>
+        <view class="chat-bbl ai"><text class="loading-dots">...</text></view>
       </view>
     </view>
 
     <!-- Bottom Input -->
     <view class="input-panel">
-      <view class="input-area">
-        <text class="input-hint">点击输入你想问的问题...</text>
-        <text class="input-chevron">⌄</text>
+      <textarea class="chat-input" v-model="inputText" placeholder="输入问题... Shift+Enter 换行" :disabled="loading" @keydown="onKeyDown" :rows="1" />
+      <view class="btn-send" @click="sendMsg">
+        <text style="color:#fff;font-size:18px;">➤</text>
       </view>
       <view class="input-actions">
-        <view class="btn-speaker" @click="showToast('语音播报')">
+        <view class="btn-speaker" @click="speakLast">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         </view>
-        <view class="btn-mic" @click="showToast('语音输入')">
+        <view class="btn-mic" :class="{ 'mic-recording': recording }" @click="voicePlaceholder">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         </view>
       </view>
@@ -72,11 +69,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 
 const isLight = ref(false)
+const inputText = ref('')
+const loading = ref(false)
+const messages = ref([
+  { role: 'ai', text: '你好！我是 JNAO 智能助手 👋 有什么想问的吗？比如：天赋测试怎么做？' },
+])
 
-// 初始化主题
 try {
   const saved = localStorage.getItem('jnao_theme')
   isLight.value = saved === 'white'
@@ -89,15 +90,115 @@ function toggleTheme() {
   try { localStorage.setItem('jnao_theme', theme) } catch (e) {}
 }
 
+function onKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendMsg()
+  }
+}
+
+async function sendMsg() {
+  stopRecord()  // 发送时停录音
+  const text = inputText.value.trim()
+  if (!text || loading.value) return
+  messages.value.push({ role: 'user', text })
+  inputText.value = ''
+  loading.value = true
+  await nextTick()
+  scrollChat()
+  try {
+    const res = await fetch('/api/guide/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    })
+    const data = await res.json()
+    messages.value.push({ role: 'ai', text: data.reply || '抱歉，AI 暂时无法响应' })
+  } catch (e) {
+    messages.value.push({ role: 'ai', text: '网络错误，请稍后再试' })
+  }
+  loading.value = false
+  await nextTick()
+  scrollChat()
+}
+
+function scrollChat() {
+  const el = document.getElementById('chatScroll')
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+function speakLast() {
+  const aiMsgs = messages.value.filter(m => m.role === 'ai')
+  if (!aiMsgs.length) return
+  const text = aiMsgs[aiMsgs.length - 1].text
+  if (window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = 'zh-CN'
+    u.rate = 1.1
+    speechSynthesis.cancel()
+    speechSynthesis.speak(u)
+  } else {
+    uni.showToast({ title: '当前浏览器不支持语音播报', icon: 'none' })
+  }
+}
+const recording = ref(false)
+let recognition = null
+
+function initRecognition() {
+  if (recognition) return true
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SpeechRecognition) { console.log('SpeechRecognition not available'); return false }
+  recognition = new SpeechRecognition()
+  recognition.lang = 'zh-CN'
+  recognition.interimResults = true
+  recognition.continuous = true
+  recognition.onresult = (e) => {
+    let text = ''
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      text += e.results[i][0].transcript
+    }
+    inputText.value = text
+    console.log('recognized:', text)
+  }
+  recognition.onerror = (e) => {
+    console.log('recognition error:', e.error)
+    recording.value = false
+  }
+  recognition.onend = () => {
+    console.log('recognition ended')
+    recording.value = false
+    if (inputText.value.trim()) sendMsg()
+  }
+  console.log('SpeechRecognition ready')
+  return true
+}
+
+function voicePlaceholder() {
+  if (recording.value) { stopRecord(); return }
+  if (!initRecognition()) {
+    uni.showToast({ title: '当前浏览器不支持语音识别', icon: 'none' })
+    return
+  }
+  recording.value = true
+  try { recognition.start() } catch(e) {
+    recording.value = false
+    uni.showToast({ title: '麦克风权限被拒', icon: 'none', duration: 3000 })
+  }
+}
+
+function stopRecord() {
+  if (recognition) {
+    try { recognition.stop() } catch(e) {}
+    recording.value = false
+  }
+}
+
 function openPage(name) {
   if (name === 'talent') {
     uni.navigateTo({ url: '/pages/talent/index' })
   } else {
     uni.showToast({ title: '进入: ' + name, icon: 'none' })
   }
-}
-function showToast(msg) {
-  uni.showToast({ title: msg, icon: 'none' })
 }
 </script>
 
@@ -127,15 +228,19 @@ function showToast(msg) {
 .chat-av.ai { background:var(--chat-ai-bg); border:1.5px solid rgba(88,166,255,0.3); overflow:hidden; }
 .chat-av.me { background:var(--chat-me-bg); border-radius:50%; color:var(--text-dim); font-size:13px; }
 .ai-avatar-inner { width:22px; height:26px; background:#2a5a8e; border-radius:5px 5px 0 0; margin-top:8px; }
-.chat-bbl { max-width:72%; padding:10px 14px; border-radius:16px; font-size:13px; line-height:1.5; }
+.chat-bbl { max-width:75%; padding:10px 14px; border-radius:16px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
 .chat-bbl.ai { background:var(--chat-ai-bg); color:var(--text); border-bottom-left-radius:4px; }
 .chat-bbl.me { background:var(--chat-me-bg); color:var(--text-sub); border-bottom-right-radius:4px; }
 
-.input-panel { margin:8px 14px 14px; background:var(--bg-card); border-radius:18px; padding:12px 14px; display:flex; align-items:center; gap:10px; }
-.input-area { flex:1; background:var(--bg-input); border-radius:12px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; }
-.input-hint { color:var(--text-hint); font-size:13px; }
-.input-chevron { color:var(--border); }
+.input-panel { margin:8px 14px 14px; background:var(--bg-card); border-radius:18px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
+.chat-input { flex:1; background:var(--bg-input); border-radius:12px; padding:10px 14px; font-size:13px; color:var(--text); border:none; outline:none; resize:none; height:38px; line-height:18px; overflow-y:auto; }
+.loading-dots { animation:dotPulse 1.4s infinite; }
+@keyframes dotPulse { 0%,80%,100% { opacity:0.2 } 40% { opacity:1 } }
 .input-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .btn-speaker { width:36px; height:36px; border-radius:50%; border:1.5px solid rgba(139,148,158,0.3); display:flex; align-items:center; justify-content:center; }
-.btn-mic { width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--accent),#3b8bff); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px var(--mic-shadow); }
+.btn-send { width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex !important; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.btn-send:active { opacity:0.8; }
+.btn-mic { width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--accent),#3b8bff); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px var(--mic-shadow); transition:all 0.2s; }
+.btn-mic.mic-recording { background:#ff4444 !important; box-shadow:0 0 0 6px rgba(255,68,68,0.3); animation:micPulse 1s infinite; }
+@keyframes micPulse { 0%,100% { box-shadow:0 0 0 6px rgba(255,68,68,0.3) } 50% { box-shadow:0 0 0 14px rgba(255,68,68,0) } }
 </style>
