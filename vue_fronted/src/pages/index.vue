@@ -196,6 +196,8 @@ function stopRecord() {
 function openPage(name) {
   if (name === 'talent') {
     uni.navigateTo({ url: '/pages/talent/index' })
+  } else if (name === 'train') {
+    uni.navigateTo({ url: '/pages/training/index' })
   } else {
     uni.showToast({ title: '进入: ' + name, icon: 'none' })
   }

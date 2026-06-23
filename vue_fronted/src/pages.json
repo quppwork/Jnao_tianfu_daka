@@ -21,6 +21,13 @@
         "navigationBarTitleText": "天赋报告",
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/training/index",
+      "style": {
+        "navigationBarTitleText": "今日训练",
+        "navigationStyle": "custom"
+      }
     }
   ],
   "globalStyle": {
