@@ -223,7 +223,8 @@ function openPage(name) {
 .func-icon { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--accent-bg); }
 .func-label { color:var(--text-sub); font-size:11px; font-weight:500; }
 
-.chat-section { flex:1; overflow-y:auto; padding:8px 14px 0; }
+.chat-section { flex:1; overflow-y:auto; padding:8px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
+.chat-section::-webkit-scrollbar { display:none; }
 .chat-row { display:flex; gap:8px; margin-bottom:14px; align-items:flex-start; }
 .chat-row.user { flex-direction:row-reverse; }
 .chat-av { width:36px; height:36px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
