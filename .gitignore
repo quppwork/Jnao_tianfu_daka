@@ -32,3 +32,11 @@ vue_fronted/tests_fronted/
 
 # 旧版前端（待废弃）
 h5_fronted/
+
+# 大型媒体文件
+*.mp4
+*.mp3
+*.avi
+*.mov
+*.wav
+*.ogg
