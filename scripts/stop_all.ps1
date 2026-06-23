@@ -5,7 +5,7 @@ Write-Host "  JNAO - Stop All Services" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Kill by port
-foreach ($port in @(8011, 5185)) {
+foreach ($port in @(8012, 5185)) {
     Write-Host "[PORT] Cleaning port $port..." -ForegroundColor Gray
     $conns = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
     if ($conns) {

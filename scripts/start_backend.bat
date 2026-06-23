@@ -18,16 +18,16 @@ echo [TIME] venv activate start: %time%
 call .venv\Scripts\activate
 echo [TIME] venv activate done:  %time%
 
-echo [INFO] Cleaning port 8011...
-powershell -ExecutionPolicy Bypass -File "%~dp0kill_port.ps1" 8011
+echo [INFO] Cleaning port 8012...
+powershell -ExecutionPolicy Bypass -File "%~dp0kill_port.ps1" 8012
 
 cd backend
 
 echo [TIME] uvicorn start: %time%
-echo [INFO] Starting backend on http://127.0.0.1:8011
-echo [INFO] API docs: http://127.0.0.1:8011/docs
+echo [INFO] Starting backend on http://127.0.0.1:8012
+echo [INFO] API docs: http://127.0.0.1:8012/docs
 echo.
 
-uvicorn main:app --host 127.0.0.1 --port 8011 --reload
+uvicorn main:app --host 127.0.0.1 --port 8012 --reload
 
 pause

@@ -34,6 +34,11 @@ def load_settings() -> dict:
     deepseek = raw.get("deepseek", {})
     deepseek["api_key"] = os.getenv("DEEPSEEK_API_KEY", deepseek.get("api_key", ""))
     raw["deepseek"] = deepseek
+    doubao = raw.get("doubao", {})
+    doubao["api_key"] = os.getenv("DOUBAO_API_KEY", doubao.get("api_key", ""))
+    doubao["api_base"] = os.getenv("DOUBAO_API_BASE", doubao.get("api_base", "https://ark.cn-beijing.volces.com/api/v3"))
+    doubao["model"] = os.getenv("DOUBAO_CHAT_MODEL", doubao.get("model", "doubao-lite-128k"))
+    raw["doubao"] = doubao
     raw["server"] = server
     raw["upstream"]["tianfu_rag"] = upstream
     return raw

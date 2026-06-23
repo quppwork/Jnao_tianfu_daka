@@ -3,7 +3,7 @@
 
 server:
   host: "127.0.0.1"
-  port: 8011
+  port: 8012
 
 upstream:
   tianfu_rag:
@@ -15,3 +15,9 @@ deepseek:
   api_key: "${DEEPSEEK_API_KEY}"
   model: "deepseek-v4-flash"
   timeout: 3.0
+
+doubao:
+  api_key: "${DOUBAO_API_KEY}"
+  api_base: "${DOUBAO_API_BASE}"
+  model: "${DOUBAO_CHAT_MODEL}"
+  timeout: 30.0
