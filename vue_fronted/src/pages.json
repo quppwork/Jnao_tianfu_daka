@@ -28,6 +28,20 @@
         "navigationBarTitleText": "今日训练",
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/qa/index",
+      "style": {
+        "navigationBarTitleText": "学科答疑",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/growth/index",
+      "style": {
+        "navigationBarTitleText": "成长里程碑",
+        "navigationStyle": "custom"
+      }
     }
   ],
   "globalStyle": {

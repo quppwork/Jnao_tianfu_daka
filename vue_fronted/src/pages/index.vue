@@ -198,6 +198,10 @@ function openPage(name) {
     uni.navigateTo({ url: '/pages/talent/index' })
   } else if (name === 'train') {
     uni.navigateTo({ url: '/pages/training/index' })
+  } else if (name === 'qa') {
+    uni.navigateTo({ url: '/pages/qa/index' })
+  } else if (name === 'growth') {
+    uni.navigateTo({ url: '/pages/growth/index' })
   } else {
     uni.showToast({ title: '进入: ' + name, icon: 'none' })
   }
