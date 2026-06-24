@@ -42,8 +42,9 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
     try:
         record_id = await jnao_submit(req.answer, req.uid, req.type)
         report = await jnao_get_report(record_id)
+        assessment_id = None
         if req.child_user_id:
-            assessment_service.save_assessment(
+            row = assessment_service.save_assessment(
                 db,
                 child_user_id=req.child_user_id,
                 jnao_record_id=str(record_id),
@@ -51,7 +52,8 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
                 test_type=req.type,
                 report=report,
             )
-        return {"code": 1, "data": report}
+            assessment_id = row.id
+        return {"code": 1, "data": report, "assessment_id": assessment_id}
     except Exception as e:
         raise HTTPException(502, str(e)) from e
 
@@ -85,6 +87,15 @@ async def save_assessment_endpoint(
         raise HTTPException(502, str(e)) from e
 
 
+@router.get("/assessment/history")
+def assessment_history(
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+    limit: int = 30,
+):
+    return {"items": assessment_service.list_assessments(db, child_user_id, limit)}
+
+
 @router.get("/assessment/latest", response_model=AssessmentOut)
 def latest_assessment(
     child_user_id: int = Depends(get_child_user_id),
@@ -102,3 +113,22 @@ def latest_assessment(
         assessed_at=row.assessed_at.isoformat() if row.assessed_at else None,
         jnao_record_id=row.jnao_record_id,
     )
+
+
+@router.get("/assessment/{assessment_id}")
+def get_assessment(
+    assessment_id: int,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    row = assessment_service.get_assessment_by_id(db, assessment_id, child_user_id)
+    if not row:
+        raise HTTPException(404, "测评记录不存在")
+    report = row.report_json or {}
+    return {
+        "code": 1,
+        "data": report,
+        "assessment_id": row.id,
+        "talent_primary": row.talent_primary,
+        "assessed_at": row.assessed_at.isoformat() if row.assessed_at else None,
+    }

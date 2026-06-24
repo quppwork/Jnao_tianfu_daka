@@ -8,7 +8,6 @@
       <view class="nav-spacer"></view>
     </view>
 
-    <!-- Avatar + Greeting -->
     <view class="top-area">
       <view class="avatar-wrap">
         <view class="avatar-ring">
@@ -18,7 +17,6 @@
       <text class="greet-text">有什么不会的？告诉我吧～</text>
     </view>
 
-    <!-- Chat -->
     <view class="chat-section" id="chatScroll">
       <view v-for="(m,i) in messages" :key="i" class="chat-row" :class="{ user: m.role === 'user' }">
         <view class="chat-av" :class="m.role">
@@ -32,7 +30,6 @@
       </view>
     </view>
 
-    <!-- Input -->
     <view class="input-panel">
       <input class="chat-input" v-model="inputText" placeholder="输入问题... Enter 发送" confirm-type="send" @confirm="sendMsg" :disabled="loading" />
       <view class="btn-send" @click="sendMsg"><text style="color:#fff;">➤</text></view>
@@ -42,15 +39,34 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+import { ensureChildUser, fetchQaSession, sendQaMessage } from '@/utils/userApi.js'
 
 const inputText = ref('')
 const loading = ref(false)
+const qaSessionId = ref(null)
 const messages = ref([
-  { role: 'assistant', text: '你好！我是 JNAO 智能助手 ✨ 有任何学科问题都可以问我～' },
+  { role: 'assistant', text: '你好！我是张宇老师 ✨ 有任何学科问题都可以问我～' },
 ])
 
 function goBack() { uni.navigateBack({ delta: 1 }) }
+
+async function loadSession() {
+  try {
+    const uid = await ensureChildUser()
+    const sessions = await fetch(`/api/qa/sessions?user_id=${uid}`).then(r => r.json())
+    const latest = sessions.items?.[0]
+    if (!latest) return
+    qaSessionId.value = latest.id
+    const data = await fetchQaSession(uid, latest.id)
+    if (data.messages?.length) {
+      messages.value = data.messages.map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        text: m.content,
+      }))
+    }
+  } catch (e) { /* 新用户无历史会话 */ }
+}
 
 async function sendMsg() {
   const text = inputText.value.trim()
@@ -61,12 +77,9 @@ async function sendMsg() {
   await nextTick()
   scrollChat()
   try {
-    const res = await fetch('/api/guide/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text })
-    })
-    const data = await res.json()
+    const uid = await ensureChildUser()
+    const data = await sendQaMessage(uid, text, qaSessionId.value)
+    qaSessionId.value = data.session_id
     messages.value.push({ role: 'assistant', text: data.reply || '抱歉，AI 暂时无法响应' })
   } catch (e) {
     messages.value.push({ role: 'assistant', text: '网络错误，请稍后再试' })
@@ -84,6 +97,8 @@ function scrollChat() {
 function voiceInput() {
   uni.showToast({ title: '语音输入功能开发中', icon: 'none' })
 }
+
+onMounted(loadSession)
 </script>
 
 <style scoped>
@@ -118,5 +133,4 @@ function voiceInput() {
 .btn-send { width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .btn-send:active { opacity:0.8; }
 .btn-mic { width:36px; height:36px; border-radius:50%; background:var(--accent-bg); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
-.btn-mic:active { opacity:0.8; }
 </style>

@@ -45,25 +45,27 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { ensureChildUser, fetchGrowthBadges, fetchGrowthTimeline } from '@/utils/userApi.js'
 
-const badges = ref([
-  { name:'首次测评', icon:'🌟', cond:'完成天赋测试', earned:true },
-  { name:'初露锋芒', icon:'🔥', cond:'连续打卡7天', earned:true },
-  { name:'持之以恒', icon:'⚡', cond:'连续打卡30天', earned:false },
-  { name:'百炼成钢', icon:'🏆', cond:'累计100次打卡', earned:false },
-  { name:'全能王者', icon:'👑', cond:'完成全部能力训练', earned:false },
-  { name:'知识达人', icon:'💎', cond:'累计提问100次', earned:false },
-])
+const badges = ref([])
+const events = ref([])
+const loading = ref(true)
 
-const events = ref([
-  { title:'连续打卡 7 天', date:'06-28', desc:'获得「初露锋芒」徽章', done:true },
-  { title:'完成首次天赋测评', date:'06-22', desc:'主导天赋：学者型', done:true },
-  { title:'第 10 次打卡', date:'06-30', desc:'累计完成10天训练', done:true },
-  { title:'首次学科答疑', date:'06-25', desc:'提出第一个学科问题', done:true },
-  { title:'连续打卡 30 天', date:'未来', desc:'解锁「持之以恒」徽章', done:false },
-  { title:'累计 100 次打卡', date:'未来', desc:'解锁「百炼成钢」金徽章', done:false },
-])
+async function loadGrowth() {
+  loading.value = true
+  try {
+    const uid = await ensureChildUser()
+    badges.value = await fetchGrowthBadges(uid)
+    events.value = await fetchGrowthTimeline(uid)
+  } catch (e) {
+    badges.value = []
+    events.value = []
+  }
+  loading.value = false
+}
+
+onMounted(loadGrowth)
 
 function goBack() { uni.navigateBack({ delta: 1 }) }
 function shareToast() { uni.showToast({ title: '分享功能开发中', icon: 'none' }) }

@@ -169,3 +169,31 @@ class QaMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     session: Mapped["QaSession"] = relationship(back_populates="messages")
+
+
+class GuideSession(Base):
+    __tablename__ = "guide_session"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    messages: Mapped[list["GuideMessage"]] = relationship(
+        back_populates="session", order_by="GuideMessage.id"
+    )
+
+
+class GuideMessage(Base):
+    __tablename__ = "guide_message"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("guide_session.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    session: Mapped["GuideSession"] = relationship(back_populates="messages")

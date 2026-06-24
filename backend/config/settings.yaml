@@ -9,7 +9,7 @@ upstream:
   tianfu_rag:
     url: "http://192.168.60.199:8010"
     timeout: 120.0
-    health_timeout: 3.0
+    health_timeout: 0.5
 
 deepseek:
   api_key: "${DEEPSEEK_API_KEY}"

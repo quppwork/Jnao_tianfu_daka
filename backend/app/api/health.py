@@ -10,6 +10,12 @@ from config import load_integration, load_settings
 router = APIRouter(tags=["health"])
 
 
+@router.get("/api/ping")
+def ping():
+    """轻量存活探测 — 供启动脚本使用，不探测上游"""
+    return {"ok": True}
+
+
 def _check_database() -> dict:
     try:
         session = get_session_factory()()
@@ -25,9 +31,18 @@ def _check_database() -> dict:
 @router.get("/api/health")
 async def health():
     """返回各服务接入状态"""
+    import asyncio
+    import os
+
     settings = load_settings()
     upstream_url = settings["upstream"]["tianfu_rag"]["url"]
-    upstream_ok = await ai_proxy.check_health()
+    if os.getenv("TIANFU_RAG_MOCK", "") == "1":
+        upstream_ok = False
+    else:
+        try:
+            upstream_ok = await asyncio.wait_for(ai_proxy.check_health(), timeout=1.0)
+        except (asyncio.TimeoutError, Exception):
+            upstream_ok = False
     integration = load_integration()
     db_ok = _check_database()
 

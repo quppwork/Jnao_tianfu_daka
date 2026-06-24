@@ -16,8 +16,18 @@ class TestModuleTalent:
             },
         )
         assert res.status_code == 200
-        assert res.json()["code"] == 1
-        assert res.json()["data"]["talent"] == "学者"
+        body = res.json()
+        assert body["code"] == 1
+        assert body["data"]["talent"] == "学者"
+        assert body["assessment_id"]
+
+        history = client.get(f"/api/talent/assessment/history?user_id={uid}")
+        assert history.status_code == 200
+        assert len(history.json()["items"]) == 1
+
+        detail = client.get(f"/api/talent/assessment/{body['assessment_id']}?user_id={uid}")
+        assert detail.status_code == 200
+        assert detail.json()["data"]["talent"] == "学者"
 
         latest = client.get(f"/api/talent/assessment/latest?user_id={uid}")
         assert latest.status_code == 200
