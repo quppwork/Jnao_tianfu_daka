@@ -181,6 +181,8 @@
 
 <script setup>
 import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
+import { getOrCreateUid } from '@/utils/testHelpers.js'
+import { ensureChildUser } from '@/utils/userApi.js'
 
 // Load history
 onMounted(() => {
@@ -417,16 +419,6 @@ function encodeAnswers() {
     .join('')
 }
 
-function getUid() {
-  const key = 'jnao_uid'
-  let uid = localStorage.getItem(key)
-  if (!uid) {
-    uid = String(Math.floor(Date.now() / 1000) % 900000 + 100000 + Math.floor(Math.random() * 1000))
-    localStorage.setItem(key, uid)
-  }
-  return parseInt(uid)
-}
-
 async function doSubmitReport() {
   console.log('[doSubmitReport] called')
   if (submitting.value) { console.log('[doSubmitReport] already submitting'); return }
@@ -434,13 +426,14 @@ async function doSubmitReport() {
   submitError.value = ''
   try {
     const bits = encodeAnswers()
-    const uid = getUid()
+    const uid = getOrCreateUid()
+    const childUserId = await ensureChildUser('测评学员')
     const type = testType.value === '成人' ? 0 : 1
-    console.log('[doSubmitReport] sending', { bits, uid, type })
+    console.log('[doSubmitReport] sending', { bits, uid, type, childUserId })
     const res = await fetch('/api/talent/report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answer: bits, uid, type })
+      body: JSON.stringify({ answer: bits, uid, type, child_user_id: childUserId })
     })
     if (!res.ok) throw new Error('HTTP ' + res.status)
     const json = await res.json()

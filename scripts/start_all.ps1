@@ -1,65 +1,49 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  JNAO - Start All Services" -ForegroundColor Cyan
+Write-Host "  JNAO - 一键启动前后端" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# --- Stop stale ---
-Write-Host "[CLEAN] Stopping old processes..." -ForegroundColor Gray
+Write-Host "[CLEAN] 清理旧进程..." -ForegroundColor Gray
 & "$PSScriptRoot\stop_all.ps1"
 
-# --- Start Backend (hidden window) ---
-Write-Host "[BACKEND] Starting on port 8012..." -ForegroundColor Yellow
-$backendDir = Join-Path $root "backend"
-$logsDir = Join-Path $root "logs"
-if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir -Force | Out-Null }
-$logFile = Join-Path $logsDir "backend.log"
+Write-Host "[START] 打开后端窗口 (8012)..." -ForegroundColor Yellow
+Start-Process powershell.exe -ArgumentList @(
+    "-NoExit",
+    "-ExecutionPolicy", "Bypass",
+    "-File", (Join-Path $PSScriptRoot "run_backend.ps1")
+) -WorkingDirectory $root
 
-$backendProc = Start-Process -FilePath "powershell" `
-  -ArgumentList "-Command", "& { `$host.UI.RawUI.WindowTitle='JNAO-Backend'; python -m uvicorn main:app --host 127.0.0.1 --port 8012 --reload 2>&1 | Out-File '$logFile' }" `
-  -WorkingDirectory $backendDir `
-  -PassThru `
-  -WindowStyle Minimized
-
-# Save PID
-$backendProc.Id | Out-File (Join-Path $logsDir "backend.pid") -NoNewline
-
-# --- Wait for backend ---
-Write-Host "[BACKEND] Waiting for health check..." -ForegroundColor Gray
+Write-Host "[WAIT] 等待后端就绪..." -ForegroundColor Gray
 $ready = $false
-for ($i = 0; $i -lt 20; $i++) {
+for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep -Seconds 1
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8012/health" -UseBasicParsing -TimeoutSec 2
-        if ($r.StatusCode -eq 200) {
-            Write-Host "[BACKEND] Ready (PID $($backendProc.Id))" -ForegroundColor Green
+        $code = & curl.exe -s -o $null -w "%{http_code}" --max-time 2 "http://127.0.0.1:8012/api/health" 2>$null
+        if ($code -eq "200") {
+            Write-Host "[BACKEND] Ready" -ForegroundColor Green
             $ready = $true
             break
         }
     } catch { }
 }
 if (-not $ready) {
-    Write-Host "[WARN] Backend not responding yet" -ForegroundColor DarkYellow
+    Write-Host "[WARN] 后端尚未响应，前端窗口仍会启动" -ForegroundColor DarkYellow
 }
 
-# --- Start Frontend (foreground) ---
-Write-Host "[FRONTEND] Starting on port 5185..." -ForegroundColor Yellow
-$frontendDir = Join-Path $root "vue_fronted"
+Write-Host "[START] 打开前端窗口 (5185)..." -ForegroundColor Yellow
+Start-Process powershell.exe -ArgumentList @(
+    "-NoExit",
+    "-ExecutionPolicy", "Bypass",
+    "-File", (Join-Path $PSScriptRoot "run_frontend.ps1")
+) -WorkingDirectory $root
 
 Write-Host ""
 Write-Host "  Backend:  http://127.0.0.1:8012" -ForegroundColor Green
 Write-Host "  Frontend: http://127.0.0.1:5185" -ForegroundColor Green
-Write-Host "  Press Ctrl+C to stop all" -ForegroundColor Gray
-Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-
-try {
-    Set-Location $frontendDir
-    npm run dev
-} finally {
-    Write-Host ""
-    Write-Host "[CLEANUP] Stopping all services..." -ForegroundColor Yellow
-    & "$PSScriptRoot\stop_all.ps1"
-    Write-Host "[DONE] All services stopped." -ForegroundColor Green
-}
+Write-Host "  已弹出两个 PowerShell 窗口" -ForegroundColor Cyan
+Write-Host "  关闭对应窗口即可停止该服务" -ForegroundColor Cyan
+Write-Host "  或运行 scripts\stop_all.ps1 全部停止" -ForegroundColor Gray
+Write-Host "========================================" -ForegroundColor Cyan

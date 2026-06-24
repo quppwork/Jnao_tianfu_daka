@@ -37,10 +37,29 @@ def load_settings() -> dict:
     doubao = raw.get("doubao", {})
     doubao["api_key"] = os.getenv("DOUBAO_API_KEY", doubao.get("api_key", ""))
     doubao["api_base"] = os.getenv("DOUBAO_API_BASE", doubao.get("api_base", "https://ark.cn-beijing.volces.com/api/v3"))
-    doubao["model"] = os.getenv("DOUBAO_CHAT_MODEL", doubao.get("model", "doubao-lite-128k"))
+    raw_model = doubao.get("model", "")
+    if raw_model.startswith("${"):
+        raw_model = ""
+    doubao["model"] = os.getenv("DOUBAO_CHAT_MODEL", raw_model or "doubao-seed-1-6-250615")
     raw["doubao"] = doubao
     raw["server"] = server
     raw["upstream"]["tianfu_rag"] = upstream
+    db = raw.get("database", {})
+    default_db = "sqlite:///" + str(_CONFIG_DIR.parent / "data" / "jnao_daka.db").replace("\\", "/")
+    db["url"] = os.getenv("DATABASE_URL", db.get("url", default_db))
+    if db["url"].startswith("${"):
+        db["url"] = default_db
+    raw["database"] = db
+    oss = raw.get("oss", {})
+    oss["access_key_id"] = os.getenv("OSS_ACCESS_KEY_ID", oss.get("access_key_id", ""))
+    oss["access_key_secret"] = os.getenv("OSS_ACCESS_KEY_SECRET", oss.get("access_key_secret", ""))
+    oss["bucket"] = os.getenv("OSS_BUCKET", oss.get("bucket", "jnao-talent-ai"))
+    oss["endpoint"] = os.getenv("OSS_ENDPOINT", oss.get("endpoint", "oss-cn-beijing.aliyuncs.com"))
+    oss["prefix"] = os.getenv("OSS_PREFIX", oss.get("prefix", "yinpin/"))
+    signed = os.getenv("OSS_SIGNED_URL", str(oss.get("signed_url", True)))
+    oss["signed_url"] = signed.lower() in ("1", "true", "yes")
+    oss["sign_expires"] = int(os.getenv("OSS_SIGN_EXPIRES", oss.get("sign_expires", 7200)))
+    raw["oss"] = oss
     return raw
 
 

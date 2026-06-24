@@ -1,0 +1,149 @@
+"""豆包 Ark 对话客户端 — 全平台 AI 统一入口"""
+
+from collections.abc import AsyncIterator
+
+import httpx
+from config.loader import load_settings
+from app.core.logger import get_logger
+
+logger = get_logger("doubao")
+
+DEFAULT_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+
+
+def is_configured() -> bool:
+    cfg = load_settings().get("doubao", {})
+    key = cfg.get("api_key", "")
+    return bool(key and not str(key).startswith("your-") and key != "your-ark-api-key")
+
+
+def _cfg() -> dict:
+    settings = load_settings()
+    cfg = settings.get("doubao", {})
+    return {
+        "api_key": cfg.get("api_key", ""),
+        "api_base": cfg.get("api_base", DEFAULT_API_BASE),
+        "model": cfg.get("model", "doubao-seed-1-6-250615"),
+    }
+
+
+def _build_messages(
+    system_prompt: str,
+    user_message: str,
+    history: list[dict] | None = None,
+) -> list[dict]:
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        for item in history[-10:]:
+            role = item.get("role", "user")
+            if role == "assistant":
+                role = "assistant"
+            elif role in ("ai", "bot"):
+                role = "assistant"
+            else:
+                role = "user"
+            content = item.get("content") or item.get("text") or ""
+            if content:
+                messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": user_message})
+    return messages
+
+
+async def chat_completion(
+    *,
+    system_prompt: str,
+    user_message: str,
+    history: list[dict] | None = None,
+    max_tokens: int = 500,
+) -> str | None:
+    cfg = _cfg()
+    if not cfg["api_key"]:
+        return None
+
+    messages = _build_messages(system_prompt, user_message, history)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{cfg['api_base']}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {cfg['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": cfg["model"],
+                "messages": messages,
+                "max_tokens": max_tokens,
+            },
+        )
+    if resp.status_code != 200:
+        logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
+        return None
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
+async def chat_completion_stream(
+    *,
+    system_prompt: str,
+    user_message: str,
+    history: list[dict] | None = None,
+    max_tokens: int = 500,
+) -> AsyncIterator[str]:
+    """流式输出：优先真流式，失败则整段回退"""
+    cfg = _cfg()
+    if not cfg["api_key"]:
+        yield "[ERROR] 豆包 API 未配置"
+        return
+
+    messages = _build_messages(system_prompt, user_message, history)
+    payload = {
+        "model": cfg["model"],
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream(
+                "POST",
+                f"{cfg['api_base']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            ) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    logger.error(f"Doubao stream error {resp.status_code}: {body[:200]}")
+                    yield "[ERROR] 豆包服务异常"
+                    return
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    chunk = line[6:].strip()
+                    if chunk == "[DONE]":
+                        break
+                    try:
+                        import json
+
+                        data = json.loads(chunk)
+                        delta = data["choices"][0].get("delta", {})
+                        text = delta.get("content", "")
+                        if text:
+                            yield text
+                    except Exception:
+                        continue
+    except Exception as e:
+        logger.error(f"Doubao stream failed: {e}")
+        full = await chat_completion(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            history=history,
+            max_tokens=max_tokens,
+        )
+        if full:
+            yield full
+        else:
+            yield f"[ERROR] {e}"

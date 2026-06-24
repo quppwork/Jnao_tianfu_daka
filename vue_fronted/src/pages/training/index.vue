@@ -14,8 +14,10 @@
         <text class="plan-label">📋 今日方案</text>
         <view class="plan-list">
           <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">观看"五者天赋"训练视频，理解天赋类型特点</text></view>
-          <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">完成音频听力训练，提升听觉记忆能力</text></view>
+          <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">{{ planAudioHint }}</text></view>
         </view>
+        <text v-if="talentLabel" class="plan-talent">当前天赋：{{ talentLabel }}</text>
+        <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
       </view>
 
       <!-- 今日训练时段 -->
@@ -49,8 +51,8 @@
         <view class="step-num">2</view>
         <view class="step-content">
           <text class="step-label">音频训练</text>
-          <view class="step-box">🎧 训练用音频</view>
-          <text class="step-time">点击播放</text>
+          <view class="step-box">{{ audioTitle }}</view>
+          <text class="step-time">{{ audioSrc ? '▶ 点击播放' : '暂无推荐音频' }}</text>
         </view>
       </view>
 
@@ -290,7 +292,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { ensureChildUser, fetchTrainingToday, fetchTrainingProgress } from '@/utils/userApi.js'
 
 const devMode = ref(false)
 const trainStart = ref('')
@@ -310,10 +314,17 @@ const scores = [
   { pct:0,   emoji:'☠️', desc:'不完成任务，严重不配合训练' },
 ]
 const mediaPlayer = ref({ show: false, type: 'video' })
-const mediaSrc = ref('/static/training_video.mp4')
+const videoSrc = ref('/static/training_video.mp4')
+const audioSrc = ref('')
+const audioTitle = ref('🎧 训练用音频')
+const talentLabel = ref('')
+const planAudioHint = ref('完成音频听力训练，提升听觉记忆能力')
+const needAssessment = ref(false)
+const todayPlan = ref(null)
+const planLoading = ref(false)
 
-const videoHtml = computed(() => mediaSrc.value ? `<video src="${mediaSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
-const audioHtml = computed(() => mediaSrc.value ? `<audio src="${mediaSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
+const videoHtml = computed(() => videoSrc.value ? `<video src="${videoSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
+const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const cards = ref([])
 const abilities = ['超脑阅读','影像追忆','扫描速记','极速运算','极速学习','难题专练','文科扫书','理科扫书','高效作业','天赋绘画','音乐灵感','棋类专注']
 
@@ -426,13 +437,66 @@ function openMedia(type) {
       return
     }
   }
+  if (type === 'audio' && !audioSrc.value) {
+    if (needAssessment.value) {
+      uni.showToast({ title: '请先完成天赋测评', icon: 'none', duration: 2000 })
+      setTimeout(() => goTalent(), 500)
+    } else {
+      uni.showToast({ title: '暂无推荐音频', icon: 'none', duration: 2000 })
+    }
+    return
+  }
   mediaPlayer.value = { show: true, type }
-  if (type === 'video') mediaSrc.value = '/static/training_video.mp4'
-  else mediaSrc.value = ''
 }
 function closeMedia() {
   mediaPlayer.value.show = false
 }
+
+async function loadTodayPlan() {
+  if (planLoading.value) return
+  planLoading.value = true
+  needAssessment.value = false
+  try {
+    const uid = await ensureChildUser()
+    const result = await fetchTrainingToday(uid)
+    if (result.error === 'assessment') {
+      needAssessment.value = true
+      audioSrc.value = ''
+      audioTitle.value = '🎧 训练用音频'
+      planAudioHint.value = '完成天赋测评后，将按天赋推荐今日音频'
+      return
+    }
+    if (result.error) throw new Error(result.message)
+
+    todayPlan.value = result.data
+    const item = result.data.items?.[0]
+    if (item?.audio_url) {
+      audioSrc.value = item.audio_url
+      audioTitle.value = `🎧 ${item.title || '今日训练音频'}`
+      planAudioHint.value = `今日推荐：${item.title || '天赋训练音频'}（按测评天赋推送）`
+    }
+    if (result.data.report_text) {
+      planAudioHint.value = result.data.report_text
+    }
+
+    const progress = await fetchTrainingProgress(uid)
+    if (progress?.talent_tag) {
+      const tagMap = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }
+      talentLabel.value = tagMap[progress.talent_tag] || `${progress.talent_tag}者`
+    }
+  } catch (e) {
+    uni.showToast({ title: e.message || '加载训练方案失败', icon: 'none' })
+  } finally {
+    planLoading.value = false
+  }
+}
+
+function goTalent() {
+  uni.navigateTo({ url: '/pages/talent/index' })
+}
+
+onMounted(loadTodayPlan)
+onShow(loadTodayPlan)
 function goBack() {
   uni.navigateBack({ delta: 1 })
 }
@@ -453,6 +517,8 @@ function goBack() {
 .plan-item { display:flex; gap:6px; align-items:flex-start; margin-bottom:6px; }
 .pl-dot { color:#00d2ff; font-size:12px; flex-shrink:0; margin-top:2px; }
 .pl-text { color:#fff; font-size:12px; line-height:1.5; }
+.plan-talent { color:#00d2ff; font-size:12px; display:block; margin-top:8px; }
+.plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
 [data-theme="white"] .pl-text { color:#374151; }
 [data-theme="white"] .pl-dot { color:#2563eb; }
 

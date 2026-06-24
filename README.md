@@ -102,9 +102,13 @@ cd h5_fronted && npm test
 
 | 文档 | 说明 |
 |------|------|
+| **[从 0 到 1 实施手册（Cursor 协作）](docs/从0到1实施手册-Cursor协作版.md)** | MVP 分阶段任务清单，给 Cursor 按序开发 |
+| **[老板确认清单（可填写）](docs/老板确认清单-可填写.md)** | 需老板确认的业务规则 |
+| **[脑力奥秘音频资源说明](docs/data/脑力奥秘-音频资源说明.md)** | 五天赋 MP3 URL、标签、SQL |
+| [brain_power_audio_catalog.json](docs/data/brain_power_audio_catalog.json) | 41 条音频机器可读清单 |
 | [产品规格](docs/产品规格.md) | 产品定位 + 模块 + 开发状态 |
 | [项目结构说明](docs/项目结构说明.md) | 目录结构 + 文件说明 |
-| [打卡系统理解文档](docs/打卡系统理解文档.md) | 打卡模块设计方案 |
+| [今日训练（打卡）](docs/功能模块文档/今日训练.md) | 打卡模块设计方案 |
 | [API 接入文档](docs/API接入文档.md) | 所有 API 汇总 |
 
 ## 端口分配
