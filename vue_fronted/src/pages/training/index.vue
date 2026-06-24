@@ -128,6 +128,22 @@
 
       </TransitionGroup>
 
+      <!-- 配合度打分 -->
+      <view v-if="showPicker && cards.length" class="score-panel">
+        <view class="score-header">
+          <text class="pph-dot">◆</text>
+          <text class="pph-title">训练配合度</text>
+          <text class="pph-dot">◆</text>
+        </view>
+        <view class="score-grid">
+          <view v-for="s in scores" :key="s.pct" class="score-item" :class="{ active: attitude === s.pct }" @click="attitude = s.pct">
+            <text class="si-pct">{{ s.pct }}%</text>
+            <text class="si-emoji">{{ s.emoji }}</text>
+            <text class="si-desc">{{ s.desc }}</text>
+          </view>
+        </view>
+      </view>
+
       <view v-if="showPicker" class="btn-checkin" @click="submitFormWithAnim" style="margin-top:8px;">
         <text>✅ 提交打卡 {{ cards.length ? '(' + cards.length + ')' : '' }}</text>
       </view>
@@ -195,6 +211,15 @@ const bTip = ref('⚠ 训练 A 未完成，B 暂不开放')
 const showPicker = ref(false)
 const showSummary = ref(false)
 const submittedCards = ref([])
+const attitude = ref(0)
+const scores = [
+  { pct:100, emoji:'🔴', desc:'身体已透支，精神还要求进步' },
+  { pct:80,  emoji:'🟡', desc:'能完成任务，但还有余力学习' },
+  { pct:60,  emoji:'🔵', desc:'做基本任务，被动的低效训练' },
+  { pct:40,  emoji:'🟤', desc:'不完成任务，不认真逃避训练' },
+  { pct:20,  emoji:'⚫️', desc:'不完成任务，基本不配合训练' },
+  { pct:0,   emoji:'☠️', desc:'不完成任务，严重不配合训练' },
+]
 const cards = ref([])
 const abilities = ['高效作业','超脑阅读','扫描速记','影像追忆','数学奥秘','极速运算','极速学习','英语奥秘','精力恢复','文科奥秘','理科奥秘','考前解压','天赋绘画','音乐灵感','棋类专注','我是冠军']
 
@@ -237,6 +262,10 @@ function submitForm() {
     const btn = document.querySelector('.btn-checkin')
     if (btn) { btn.classList.add('warn-flash'); setTimeout(() => btn.classList.remove('warn-flash'), 600) }
     uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 })
+    return
+  }
+  if (!attitude.value) {
+    uni.showToast({ title: '请选择训练配合度', icon: 'none', duration: 2000 })
     return
   }
   bUnlocked.value = true
@@ -393,6 +422,27 @@ function goBack() {
 .form-input.short { width:80px; flex:none; background:#fff; color:#0b111e; }
 .form-inline .form-unit { color:rgba(255,255,255,0.7); }
 .form-unit { color:rgba(255,255,255,0.5); font-size:12px; }
+
+.score-panel { border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:14px; margin-bottom:12px; background:rgba(13,23,40,0.5); }
+.score-header { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; }
+.score-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.score-item { background:rgba(200,210,230,0.1); border-radius:8px; padding:10px 6px; text-align:center; cursor:pointer; border:1px solid rgba(255,255,255,0.06); transition:all 0.2s; opacity:0; animation:popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+.score-item:nth-child(1) { animation-delay:0.05s; }
+.score-item:nth-child(2) { animation-delay:0.12s; }
+.score-item:nth-child(3) { animation-delay:0.19s; }
+.score-item:nth-child(4) { animation-delay:0.26s; }
+.score-item:nth-child(5) { animation-delay:0.33s; }
+.score-item:nth-child(6) { animation-delay:0.40s; }
+.score-item:active { transform:scale(0.96); }
+.score-item.active { border-color:#00d2ff; background:rgba(0,136,204,0.3); box-shadow:0 0 12px rgba(0,210,255,0.15); }
+@keyframes popIn {
+  0% { opacity:0; transform:scale(0.5) translateY(10px); }
+  100% { opacity:1; transform:scale(1) translateY(0); }
+}
+.si-pct { color:#00d2ff; font-size:18px; font-weight:800; display:block; }
+.si-emoji { font-size:16px; display:block; margin:2px 0; }
+.si-desc { color:rgba(255,255,255,0.5); font-size:9px; line-height:1.3; display:block; }
+.score-item.active .si-desc { color:#fff; }
 
 .card-enter-active { animation:scanDown 0.4s cubic-bezier(0.25,0.8,0.25,1); }
 .card-leave-active { animation:cardOut 0.25s ease-in forwards; max-height:200px; overflow:hidden; }
