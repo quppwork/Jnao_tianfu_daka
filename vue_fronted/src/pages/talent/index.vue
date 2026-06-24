@@ -162,9 +162,9 @@
       <view class="notice-card" style="max-width:340px;" @tap.stop>
         <text class="notice-text" style="font-weight:700;margin-bottom:12px;display:block;">历史报告</text>
         <view v-if="historyList.length" class="history-list">
-          <view v-for="(h,i) in historyList" :key="i" class="history-item" @tap="viewHistory(h)">
-            <text class="hi-talent">{{ h.talent || '--' }}</text>
-            <text class="hi-time">{{ h.create_time || h.saved_at }}</text>
+          <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item" @tap="viewHistory(h)">
+            <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+            <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
           </view>
         </view>
         <text v-else class="notice-text">暂无历史报告</text>
@@ -181,16 +181,23 @@
 
 <script setup>
 import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
-import { getOrCreateUid } from '@/utils/testHelpers.js'
-import { ensureChildUser } from '@/utils/userApi.js'
+import {
+  ensureChildUser,
+  ensureJnaoUid,
+  fetchAssessmentHistory,
+  submitTalentReport,
+} from '@/utils/userApi.js'
 
-// Load history
-onMounted(() => {
+async function loadHistory() {
   try {
-    const raw = localStorage.getItem('jnao_test_history')
-    if (raw) historyList.value = JSON.parse(raw)
-  } catch(e) {}
-})
+    const uid = await ensureChildUser()
+    historyList.value = await fetchAssessmentHistory(uid)
+  } catch (e) {
+    historyList.value = []
+  }
+}
+
+onMounted(loadHistory)
 
 // ── State ──
 const phase = ref('door')
@@ -426,29 +433,14 @@ async function doSubmitReport() {
   submitError.value = ''
   try {
     const bits = encodeAnswers()
-    const uid = getOrCreateUid()
     const childUserId = await ensureChildUser('测评学员')
+    const jnaoUid = await ensureJnaoUid(childUserId)
     const type = testType.value === '成人' ? 0 : 1
-    console.log('[doSubmitReport] sending', { bits, uid, type, childUserId })
-    const res = await fetch('/api/talent/report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answer: bits, uid, type, child_user_id: childUserId })
-    })
-    if (!res.ok) throw new Error('HTTP ' + res.status)
-    const json = await res.json()
+    const json = await submitTalentReport(childUserId, { answer: bits, jnaoUid, type })
     if (json.code !== 1) throw new Error('报告生成失败')
-    // 存到本地，跳转报告页
-    uni.setStorageSync('jnao_report', json.data)
-    try { localStorage.setItem('jnao_report', JSON.stringify(json.data)) } catch(e) {}
-    // 存入历史
-    try {
-      const raw = localStorage.getItem('jnao_test_history') || '[]'
-      const list = JSON.parse(raw)
-      list.push({ talent: json.data.talent, create_time: json.data.create_time, id: json.data.id, saved_at: new Date().toISOString(), data: json.data })
-      localStorage.setItem('jnao_test_history', JSON.stringify(list))
-    } catch(e) {}
-    uni.navigateTo({ url: '/pages/report/index' })
+    await loadHistory()
+    const aid = json.assessment_id
+    uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
   } catch (e) {
     submitError.value = '提交失败：' + (e.message || '请稍后重试')
   }
@@ -457,10 +449,8 @@ async function doSubmitReport() {
 
 function viewHistory(h) {
   showHistory.value = false
-  if (h.data) {
-    uni.setStorageSync('jnao_report', h.data)
-    try { localStorage.setItem('jnao_report', JSON.stringify(h.data)) } catch(e) {}
-    uni.navigateTo({ url: '/pages/report/index' })
+  if (h.id) {
+    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
   }
 }
 

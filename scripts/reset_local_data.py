@@ -24,6 +24,8 @@ from sqlalchemy import delete, func, select, text
 from app.db.models import (
     ChildUser,
     ContentItem,
+    GuideMessage,
+    GuideSession,
     QaMessage,
     QaSession,
     TalentAssessment,
@@ -42,6 +44,8 @@ def reset_db(*, include_content: bool = False) -> dict[str, int]:
     counts: dict[str, int] = {}
     try:
         for model in (
+            GuideMessage,
+            GuideSession,
             QaMessage,
             QaSession,
             TrainingRecord,

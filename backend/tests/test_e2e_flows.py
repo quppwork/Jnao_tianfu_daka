@@ -15,7 +15,7 @@ class TestE2EUserFlows:
         uid = reg.json()["child_user_id"]
 
         # 2. 首页咨询
-        guide = client.post("/api/guide/chat", json={"message": "怎么开始？"})
+        guide = client.post(f"/api/guide/chat?user_id={uid}", json={"message": "怎么开始？"})
         assert guide.json()["reply"]
 
         # 3. 天赋测评

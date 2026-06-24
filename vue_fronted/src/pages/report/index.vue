@@ -1,5 +1,9 @@
 <template>
-  <view class="app" v-if="report">
+  <view class="app" v-if="loadError && !report">
+    <view class="nav"><view class="nav-back" @click="goBack"><text class="nav-back-text">← 首页</text></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
+    <view style="padding:40px 20px;text-align:center;color:#888;">{{ loadError }}</view>
+  </view>
+  <view class="app" v-else-if="report">
     <!-- Nav -->
     <view class="nav"><view class="nav-back" @click="goBack"><text class="nav-back-text">← 首页</text></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
 
@@ -132,6 +136,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { ensureChildUser, fetchAssessmentReport } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#FFB600","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
@@ -141,19 +146,28 @@ const report = ref(null)
 const testType = ref('成人')
 const isBackup = ref(false)
 const collapseOpen = ref({})
+const loadError = ref('')
 
-onMounted(() => {
-  // 从 localStorage 直读（H5 模式下 uni.storage 不可靠）
+onMounted(async () => {
   try {
-    const raw = localStorage.getItem('jnao_report')
-    if (raw) report.value = JSON.parse(raw)
-  } catch(e) {
+    const pages = getCurrentPages()
+    const page = pages[pages.length - 1]
+    const assessmentId = page?.options?.assessment_id
+    const uid = await ensureChildUser()
+    if (!assessmentId) {
+      loadError.value = '缺少测评记录 ID'
+      return
+    }
+    const json = await fetchAssessmentReport(uid, assessmentId)
+    if (json.code !== 1) throw new Error('报告加载失败')
+    report.value = json.data
+  } catch (e) {
+    loadError.value = e.message || '报告加载失败'
     console.error('报告加载失败:', e)
   }
 })
 
 function goBack() {
-  try { localStorage.removeItem('jnao_report') } catch(e) {}
   uni.redirectTo({ url: '/pages/index' })
 }
 

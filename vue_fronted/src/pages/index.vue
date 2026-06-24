@@ -69,14 +69,19 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+import {
+  clearChildUserId,
+  ensureChildUser,
+  fetchGuideSession,
+  sendGuideMessage,
+} from '@/utils/userApi.js'
 
 const isLight = ref(false)
 const inputText = ref('')
 const loading = ref(false)
-const messages = ref([
-  { role: 'ai', text: '你好！我是 JNAO 智能助手 👋 有什么想问的吗？比如：天赋测试怎么做？' },
-])
+const guideSessionId = ref(null)
+const messages = ref([])
 
 try {
   const saved = localStorage.getItem('jnao_theme')
@@ -98,7 +103,7 @@ function onKeyDown(e) {
 }
 
 async function sendMsg() {
-  stopRecord()  // 发送时停录音
+  stopRecord()
   const text = inputText.value.trim()
   if (!text || loading.value) return
   messages.value.push({ role: 'user', text })
@@ -107,12 +112,9 @@ async function sendMsg() {
   await nextTick()
   scrollChat()
   try {
-    const res = await fetch('/api/guide/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text })
-    })
-    const data = await res.json()
+    const uid = await ensureChildUser()
+    const data = await sendGuideMessage(uid, text, guideSessionId.value)
+    guideSessionId.value = data.session_id
     messages.value.push({ role: 'ai', text: data.reply || '抱歉，AI 暂时无法响应' })
   } catch (e) {
     messages.value.push({ role: 'ai', text: '网络错误，请稍后再试' })
@@ -121,6 +123,25 @@ async function sendMsg() {
   await nextTick()
   scrollChat()
 }
+
+async function loadGuideSession() {
+  try {
+    const uid = await ensureChildUser()
+    const data = await fetchGuideSession(uid)
+    guideSessionId.value = data.session_id
+    messages.value = (data.messages || []).map(m => ({
+      role: m.role === 'assistant' ? 'ai' : 'user',
+      text: m.content,
+    }))
+    if (!messages.value.length) {
+      messages.value = [{ role: 'ai', text: '你好！我是 JNAO 智能助手 👋 有什么想问的吗？比如：天赋测试怎么做？' }]
+    }
+  } catch (e) {
+    messages.value = [{ role: 'ai', text: '你好！我是 JNAO 智能助手 👋 有什么想问的吗？比如：天赋测试怎么做？' }]
+  }
+}
+
+onMounted(loadGuideSession)
 
 function scrollChat() {
   const el = document.getElementById('chatScroll')
@@ -217,14 +238,10 @@ function onNavTap() {
   if (navTapCount < 3) return
   navTapCount = 0
   const ok = window.confirm(
-    '清空浏览器本地缓存？\n（测评历史、用户ID、主题等，不含数据库）\n\n数据库请运行 reset.bat'
+    '清空本地登录状态？\n（测评、对话、训练记录仍在服务器，需运行 reset.bat 清库）'
   )
   if (!ok) return
-  try {
-    const keepTheme = localStorage.getItem('jnao_theme')
-    localStorage.clear()
-    if (keepTheme) localStorage.setItem('jnao_theme', keepTheme)
-  } catch (e) { /* ignore */ }
+  clearChildUserId()
   location.reload()
 }
 </script>
