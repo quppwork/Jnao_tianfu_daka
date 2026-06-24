@@ -1,181 +1,218 @@
-# 后端 API 开发清单
+# 后端 API 待开发清单
 
-> 最后更新：2026-06-23
-
----
-
-## 一、已实现
-
-| 方法 | 路径 | 说明 | 依赖 |
-|------|------|------|------|
-| GET | `/api/health` | 健康检查 + 集成状态 | — |
-| POST | `/api/talent/report` | 天赋测试：提交35位答案 → 获取报告 | JNAO 外部 API (m.jnao.com) |
-| POST | `/api/talent/jnao/submit` | 代理提交答案到 JNAO | JNAO 外部 API |
-| GET | `/api/talent/jnao/report/{id}` | 代理获取 JNAO 报告 | JNAO 外部 API |
-| POST | `/api/chat` | 同步 AI 对话（代理 tianfu_rag） | tianfu_rag |
-| GET | `/api/chat/stream` | SSE 流式 AI 对话 | tianfu_rag |
-| POST | `/api/guide/chat` | 首页引导对话（豆包 AI） | 豆包 API |
-| POST | `/api/voice/tts` | 文字 → 语音 mp3 | 火山引擎语音（待开通）|
-| POST | `/api/voice/asr` | 语音 → 文字（本地 Whisper） | faster-whisper |
-| — | 日志系统 | 控制台 + 文件轮转 (5MB×3) | — |
+> 最后更新：2026-06-24  
+> 只列待开发内容，已实现的见 `git log`
 
 ---
 
-## 二、待开发：今日训练
+## 一、今日训练
+
+### 1.1 训练方案
 
 | 方法 | 路径 | 说明 | 优先级 |
 |------|------|------|--------|
-| GET | `/api/training/today` | 获取今日训练方案（等级+内容+状态） | P0 |
-| POST | `/api/training/checkin` | 提交打卡记录（能力类型+时间+内容+结果） | P0 |
-| GET | `/api/training/history` | 打卡历史列表 | P1 |
-| DELETE | `/api/training/checkin/{id}` | 删除打卡记录 | P2 |
-| PUT | `/api/training/checkin/{id}` | 修改打卡记录 | P2 |
+| GET | `/api/training/report/today` | AI 生成今日训练报告（基于历史+模板） | P0 |
+| GET | `/api/training/report/{date}` | 获取指定日期训练报告 | P1 |
 
-### 数据库表（需新建）
+**AI 职责：**
+- 根据学员历史数据 + 等级 + 12 能力类型，自动编排今日训练项
+- 每项从资源库拉取对应音频/视频链接
+- 今日方案基于昨日内容承接推演
+- 报告模板：极简文字，越少越好
+
+### 1.2 打卡记录
+
+| 方法 | 路径 | 说明 | 优先级 |
+|------|------|------|--------|
+| POST | `/api/training/checkin` | 提交打卡（能力类型+时间+内容+结果+态度分） | P0 |
+| GET | `/api/training/history` | 打卡历史列表 | P1 |
+| PUT | `/api/training/checkin/{id}` | 修改打卡记录 | P2 |
+| DELETE | `/api/training/checkin/{id}` | 删除打卡记录 | P2 |
+
+### 1.3 训练时段
+
+| 方法 | 路径 | 说明 | 优先级 |
+|------|------|------|--------|
+| POST | `/api/training/window` | 设置今日训练时段 | P0 |
+| GET | `/api/training/window` | 获取今日训练时段 | P0 |
+| GET | `/api/training/window/status` | 检查当前是否在时段内 | P1 |
+
+### 1.4 资源库
+
+| 方法 | 路径 | 说明 | 优先级 |
+|------|------|------|--------|
+| GET | `/api/resources/list` | 资源列表（按类型/等级/能力筛选） | P1 |
+| GET | `/api/resources/{id}` | 获取资源详情（含播放 URL） | P1 |
+| POST | `/api/resources/upload` | 上传训练资源（视频/音频） | P2 |
+
+### 1.5 数据库表
 
 ```sql
 CREATE TABLE training_plan (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
-    train_date DATE NOT NULL,
-    level VARCHAR(20),         -- 训练等级
+    plan_date DATE NOT NULL,
+    level VARCHAR(20),
+    report_text TEXT,           -- AI 生成的每日报告
+    generated_at DATETIME,
     created_at DATETIME DEFAULT NOW()
+);
+
+CREATE TABLE training_item (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    plan_id INT NOT NULL,
+    sort_order INT NOT NULL,    -- 顺序号
+    ability_type VARCHAR(20),   -- 12 能力类型之一
+    duration INT,               -- 建议时长（分钟）
+    video_url VARCHAR(500),
+    audio_url VARCHAR(500),
+    instructions TEXT,          -- 指导建议
+    created_at DATETIME DEFAULT NOW(),
+    FOREIGN KEY (plan_id) REFERENCES training_plan(id)
 );
 
 CREATE TABLE training_record (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    plan_id INT,
     user_id INT NOT NULL,
-    ability_type VARCHAR(20),  -- 能力类型（极速运算/扫描速记/...）
-    time_spent VARCHAR(50),    -- 用时
-    content TEXT,              -- 训练内容
-    result TEXT,               -- 训练结果
+    plan_id INT,
+    ability_type VARCHAR(20),
+    time_spent VARCHAR(50),
+    content TEXT,
+    result TEXT,
+    note TEXT,
+    attitude_pct INT,           -- 配合度 0/20/40/60/80/100
+    files JSON,                 -- 上传的文件列表
+    created_at DATETIME DEFAULT NOW()
+);
+
+CREATE TABLE training_window (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    train_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    created_at DATETIME DEFAULT NOW()
+);
+
+CREATE TABLE training_resources (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    type VARCHAR(10) NOT NULL,  -- video/audio/doc
+    title VARCHAR(200),
+    url VARCHAR(500),
+    level VARCHAR(20),
+    ability_type VARCHAR(20),
+    duration INT,
     created_at DATETIME DEFAULT NOW()
 );
 ```
 
 ---
 
-## 三、待开发：知识答题
+## 二、知识答题
 
 | 方法 | 路径 | 说明 | 优先级 |
 |------|------|------|--------|
 | POST | `/api/qa/chat` | 文字对话（豆包 + 天赋类型提示词注入） | P1 |
 | POST | `/api/qa/chat/stream` | SSE 流式对话 | P1 |
-| POST | `/api/qa/voice` | 语音输入：上传音频 → 返回文字+TTS音频 | P2 |
-| GET | `/api/qa/history` | 对话历史列表 | P2 |
-| POST | `/api/qa/session` | 新建对话 | P2 |
-| GET | `/api/qa/session/{id}` | 获取对话详情 | P2 |
-| DELETE | `/api/qa/session/{id}` | 删除对话 | P2 |
-
-### 数据库表
+| GET | `/api/qa/sessions` | 对话历史列表 | P2 |
+| POST | `/api/qa/sessions` | 新建对话 | P2 |
+| GET | `/api/qa/sessions/{id}` | 对话消息列表 | P2 |
+| DELETE | `/api/qa/sessions/{id}` | 删除对话 | P2 |
 
 ```sql
 CREATE TABLE qa_session (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
-    title VARCHAR(200),        -- AI 自动生成标题
-    subject VARCHAR(20),       -- math/chinese/english/science/other
+    title VARCHAR(200),
+    subject VARCHAR(20),
     created_at DATETIME DEFAULT NOW()
 );
 
 CREATE TABLE qa_message (
     id INT PRIMARY KEY AUTO_INCREMENT,
     session_id INT NOT NULL,
-    role VARCHAR(10) NOT NULL,  -- user/assistant
+    role VARCHAR(10) NOT NULL,
     content TEXT NOT NULL,
     voice_url VARCHAR(500),
     created_at DATETIME DEFAULT NOW()
 );
 ```
 
-### 豆包提示词注入方案
-
-- 方案 A：开局设 system prompt（天赋类型+特点）
-- 方案 B：每条消息前追加简短上下文
-- 推荐 A+B 混合使用
-
-### Q&A 引导流程（前端实现）
-
-- "不会" → 选学科（数学/语文/英语/科学/其他）
-- 选学科 → 选题型（计算题/应用题/几何/...）
-- 选"说不清楚" → 拍照/语音描述
-
-### 对话历史管理
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/qa/sessions` | 会话列表 |
-| POST | `/api/qa/sessions` | 新建会话 |
-| GET | `/api/qa/sessions/{id}` | 会话消息列表 |
-| DELETE | `/api/qa/sessions/{id}` | 删除会话 |
-
 ---
 
-## 四、待开发：成长里程碑
+## 三、成长里程碑
 
 | 方法 | 路径 | 说明 | 优先级 |
 |------|------|------|--------|
 | GET | `/api/growth/milestones` | 荣誉级别列表+达成条件 | P2 |
-| GET | `/api/growth/timeline` | 用户成长时间线 | P2 |
+| GET | `/api/growth/timeline` | 用户成长时间线（打卡+测评+答疑） | P2 |
 | GET | `/api/growth/badges` | 用户已获徽章 | P2 |
 
 ---
 
-## 五、待开发：用户系统
+## 四、用户系统
 
 | 方法 | 路径 | 说明 | 优先级 |
 |------|------|------|--------|
-| POST | `/api/auth/register` | 用户注册（年级/成绩等个人信息） | P1 |
+| POST | `/api/auth/register` | 注册（年级/成绩/等级） | P1 |
 | POST | `/api/auth/login` | 登录 | P1 |
-| GET | `/api/user/profile` | 获取个人信息 | P1 |
+| GET | `/api/user/profile` | 个人信息 | P1 |
 | PUT | `/api/user/profile` | 修改个人信息 | P1 |
-| GET | `/api/user/students` | 家长查看绑定的学生列表 | P2 |
+| GET | `/api/user/students` | 家长→绑定的学生列表 | P2 |
 | POST | `/api/user/bind-student` | 绑定新学生 | P2 |
-
-### 数据库表
 
 ```sql
 CREATE TABLE users (
     id INT PRIMARY KEY AUTO_INCREMENT,
     phone VARCHAR(20) UNIQUE,
-    role VARCHAR(10),          -- student/parent/teacher
+    role VARCHAR(10),
     grade VARCHAR(10),
     score_level VARCHAR(20),
     talent_type VARCHAR(20),
     training_level VARCHAR(20),
     created_at DATETIME DEFAULT NOW()
 );
-
-CREATE TABLE parent_student (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    parent_id INT NOT NULL,
-    student_id INT NOT NULL,
-    FOREIGN KEY (parent_id) REFERENCES users(id),
-    FOREIGN KEY (student_id) REFERENCES users(id)
-);
 ```
 
 ---
 
-## 六、依赖服务清单
+## 五、清北班导师审核（后续）
 
-| 服务 | 用途 | 状态 | 凭证 |
-|------|------|------|------|
-| JNAO API (m.jnao.com) | 天赋测试提交+报告 | ✅ 已接入 | — |
-| 豆包 API (Ark) | LLM 对话 | ✅ 已接入 | `DOUBAO_API_KEY` |
-| 火山引擎 TTS | 文字转语音 | ⚠️ 需开通 | `SPEECH_APP_ID` + `SPEECH_ACCESS_TOKEN` |
-| 火山引擎 ASR | 语音转文字 | ⚠️ 需开通 | 同上 |
-| 本地 Whisper | 语音转文字（备选） | ✅ 已部署 | — |
-| tianfu_rag | RAG 知识库 | ✅ 已接入 | 端口 8010 |
-| MySQL | 持久化存储 | ⚠️ 待建表 | 端口 3306 |
+| 方法 | 路径 | 说明 | 优先级 |
+|------|------|------|--------|
+| POST | `/api/training/review/{id}` | 导师审核打卡 | P3 |
+| GET | `/api/training/review/pending` | 待审核列表 | P3 |
 
 ---
 
-## 七、开发优先级
+## 六、语音服务
+
+| 任务 | 说明 | 优先级 |
+|------|------|--------|
+| 火山引擎 TTS 开通 | 文字转语音（张宇老师声音） | P2 |
+| 火山引擎 ASR 开通 | 语音转文字 | P2 |
+| 语音凭证获取 | SPEECH_APP_ID + SPEECH_ACCESS_TOKEN | P2 |
+
+---
+
+## 七、依赖服务
+
+| 服务 | 用途 | 状态 |
+|------|------|------|
+| 豆包 API (Ark) | LLM 对话 + 训练报告生成 | ✅ 已接入 |
+| JNAO API | 天赋测试提交+报告 | ✅ 已接入 |
+| 火山引擎 TTS | 文字转语音 | ⚠️ 需开通 |
+| 火山引擎 ASR | 语音转文字 | ⚠️ 需开通 |
+| MySQL | 持久化存储 | ⚠️ 待建表 |
+| 云存储 (OSS/COS) | 训练资源存储 | 🔒 待定 |
+
+---
+
+## 八、开发优先级
 
 ```
-P0（本周）: 今日训练 API + 数据库建表
-P1（下周）: 知识答题 API + 用户注册登录
-P2（后续）: 成长里程碑 + 家长端 + 语音服务开通
+P0（当前）: 训练打卡 API + 时段管理 API + 数据库建表
+P1（随后）: AI 训练报告 + 资源库 + 知识答题 API + 用户注册
+P2（后续）: 成长里程碑 + 语音服务 + 文件上传
+P3（远期）: 清北班导师审核 + 家长端
 ```
