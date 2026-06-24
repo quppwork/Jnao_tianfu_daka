@@ -2,7 +2,7 @@
   <view class="app">
     <!-- Nav Bar -->
     <view class="nav-bar">
-      <text class="nav-center">张宇老师</text>
+      <text class="nav-center" @click="onNavTap">张宇老师</text>
       <text class="theme-btn" @click="toggleTheme">{{ isLight ? '☀️' : '🌙' }}</text>
     </view>
 
@@ -205,6 +205,27 @@ function openPage(name) {
   } else {
     uni.showToast({ title: '进入: ' + name, icon: 'none' })
   }
+}
+
+let navTapCount = 0
+let navTapTimer = null
+
+function onNavTap() {
+  navTapCount += 1
+  if (navTapTimer) clearTimeout(navTapTimer)
+  navTapTimer = setTimeout(() => { navTapCount = 0 }, 1500)
+  if (navTapCount < 3) return
+  navTapCount = 0
+  const ok = window.confirm(
+    '清空浏览器本地缓存？\n（测评历史、用户ID、主题等，不含数据库）\n\n数据库请运行 reset.bat'
+  )
+  if (!ok) return
+  try {
+    const keepTheme = localStorage.getItem('jnao_theme')
+    localStorage.clear()
+    if (keepTheme) localStorage.setItem('jnao_theme', keepTheme)
+  } catch (e) { /* ignore */ }
+  location.reload()
 }
 </script>
 

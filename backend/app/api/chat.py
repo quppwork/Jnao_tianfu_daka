@@ -1,15 +1,17 @@
-"""AI 对话 API — 流式 & 非流式代理"""
+"""AI 对话 API — 统一走豆包 Ark"""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.api import ai_proxy
+from app.services.doubao_client import chat_completion, chat_completion_stream, is_configured
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
+CHAT_SYSTEM = """你是 JNAO 天赋成长平台的 AI 助手。
+可回答平台使用、学习方法、天赋成长相关问题。
+语气亲切，回答简洁实用。"""
 
-# ── Request models ──
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
@@ -18,44 +20,56 @@ class ChatRequest(BaseModel):
     history: list[dict] | None = None
 
 
-# ── Non-streaming chat ──
-
 @router.post("")
 async def chat(req: ChatRequest):
-    """非流式对话 — 代理到 tianfu_rag"""
+    """非流式对话 — 豆包"""
+    if not is_configured():
+        return {
+            "code": 0,
+            "data": {"answer": "AI 服务未配置豆包 API Key", "sources": [], "answer_mode": "error"},
+        }
     try:
-        result = await ai_proxy.chat(
-            message=req.message,
-            user_id=req.user_id,
-            user_department=req.user_department,
+        answer = await chat_completion(
+            system_prompt=CHAT_SYSTEM,
+            user_message=req.message,
             history=req.history,
+            max_tokens=800,
         )
-        return {"code": 1, "data": result}
+        if not answer:
+            raise RuntimeError("豆包返回空响应")
+        return {
+            "code": 1,
+            "data": {"answer": answer, "sources": [], "answer_mode": "doubao"},
+        }
     except Exception as e:
-        return {"code": 0, "data": {"answer": f"AI 服务暂不可用：{e}", "sources": [], "answer_mode": "error"}}
+        return {
+            "code": 0,
+            "data": {"answer": f"AI 服务暂不可用：{e}", "sources": [], "answer_mode": "error"},
+        }
 
-
-# ── Streaming chat (SSE) ──
 
 @router.get("/stream")
 async def stream_chat(
     message: str = Query(...),
     user_id: str = Query("mobile_user"),
 ):
-    """SSE 流式对话 — 代理到 tianfu_rag"""
+    """SSE 流式对话 — 豆包"""
 
     async def event_stream():
+        if not is_configured():
+            yield "data: [ERROR] 豆包 API 未配置\n\n"
+            return
         try:
-            async for event in ai_proxy.proxy_talent_stream(message=message, user_id=user_id):
-                event_type = event.get("type", "token")
-                if event_type == "token":
-                    yield f"data: {event['content']}\n\n"
-                elif event_type == "done":
-                    yield "data: [DONE]\n\n"
+            async for token in chat_completion_stream(
+                system_prompt=CHAT_SYSTEM,
+                user_message=message,
+                max_tokens=800,
+            ):
+                if token.startswith("[ERROR]"):
+                    yield f"data: {token}\n\n"
                     break
-                elif event_type == "error":
-                    yield f"data: [ERROR] {event.get('message', '')}\n\n"
-                    break
+                yield f"data: {token}\n\n"
+            yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: [ERROR] AI 服务连接失败：{e}\n\n"
 

@@ -21,3 +21,15 @@ doubao:
   api_base: "${DOUBAO_API_BASE}"
   model: "${DOUBAO_CHAT_MODEL}"
   timeout: 30.0
+
+database:
+  url: "${DATABASE_URL}"
+
+oss:
+  access_key_id: "${OSS_ACCESS_KEY_ID}"
+  access_key_secret: "${OSS_ACCESS_KEY_SECRET}"
+  bucket: "jnao-talent-ai"
+  endpoint: "oss-cn-beijing.aliyuncs.com"
+  prefix: "yinpin/"
+  signed_url: true
+  sign_expires: 7200
