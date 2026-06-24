@@ -18,6 +18,21 @@
         </view>
       </view>
 
+      <!-- 今日训练时段 -->
+      <view class="card time-card">
+        <view class="time-header">
+          <text class="plan-label">⏰ 今日训练时段</text>
+          <text v-if="devMode" class="time-dev-tag">DEV</text>
+        </view>
+        <view class="time-row">
+          <input class="time-inp" v-model="trainStart" type="time" />
+          <text class="time-to">至</text>
+          <input class="time-inp" v-model="trainEnd" type="time" />
+          <view class="time-dev-btn" @click="devMode = !devMode"><text>{{ devMode ? '🔓' : '🔒' }}</text></view>
+        </view>
+        <view v-if="devMode" class="time-dev-hint"><text>开发者模式：时段限制已关闭</text></view>
+      </view>
+
       <!-- Training A -->
       <text class="section-title">训练 A</text>
 
@@ -89,6 +104,23 @@
               <text class="form-unit">%</text>
             </view>
           </view>
+          <view class="form-row">
+            <text class="form-label">图片/视频</text>
+            <view class="form-file-wrap">
+              <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+              <view v-if="card.files && card.files.length" class="file-previews">
+                <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                  <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                  <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                  <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view class="form-row">
+            <text class="form-label">备注</text>
+            <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+          </view>
         </template>
         <template v-else-if="card.name === '扫描速记'">
           <view class="form-row">
@@ -112,6 +144,23 @@
               <text class="ftag" :class="{ on: card.result === '复述80%准确' }" @click="card.result = '复述80%准确'">复述80%准确</text>
             </view>
           </view>
+          <view class="form-row">
+            <text class="form-label">图片/视频</text>
+            <view class="form-file-wrap">
+              <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+              <view v-if="card.files && card.files.length" class="file-previews">
+                <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                  <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                  <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                  <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view class="form-row">
+            <text class="form-label">备注</text>
+            <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+          </view>
         </template>
         <template v-else>
           <view class="form-row">
@@ -125,6 +174,24 @@
           <view class="form-row">
             <text class="form-label">结果</text>
             <textarea class="form-textarea" v-model="card.result" placeholder="训练效果如何？" />
+          </view>
+          <view class="form-row">
+            <text class="form-label">图片/视频</text>
+            <view class="form-file-wrap">
+              <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+              <text class="file-hint" v-if="!card.files.length">支持图片和视频</text>
+              <view v-if="card.files.length" class="file-previews">
+                <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                  <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                  <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                  <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view class="form-row">
+            <text class="form-label">备注</text>
+            <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
           </view>
         </template>
       </view>
@@ -225,6 +292,9 @@
 <script setup>
 import { ref, computed } from 'vue'
 
+const devMode = ref(false)
+const trainStart = ref('')
+const trainEnd = ref('')
 const bUnlocked = ref(false)
 const bTip = ref('⚠ 训练 A 未完成，B 暂不开放')
 const showPicker = ref(false)
@@ -245,7 +315,7 @@ const mediaSrc = ref('/static/training_video.mp4')
 const videoHtml = computed(() => mediaSrc.value ? `<video src="${mediaSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
 const audioHtml = computed(() => mediaSrc.value ? `<audio src="${mediaSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const cards = ref([])
-const abilities = ['高效作业','超脑阅读','扫描速记','影像追忆','数学奥秘','极速运算','极速学习','英语奥秘','精力恢复','文科奥秘','理科奥秘','考前解压','天赋绘画','音乐灵感','棋类专注','我是冠军']
+const abilities = ['超脑阅读','影像追忆','扫描速记','极速运算','极速学习','难题专练','文科扫书','理科扫书','高效作业','天赋绘画','音乐灵感','棋类专注']
 
 function hasCard(name) { return cards.value.some(c => c.name === name) }
 
@@ -254,11 +324,31 @@ function toggleCard(name) {
   if (idx >= 0) {
     cards.value.splice(idx, 1)
   } else {
-    cards.value.push({ name, time: '', content: '', result: '', tag: '', count: '', accuracy: '' })
+    cards.value.push({ name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] })
   }
 }
 
 function removeCard(idx) { cards.value.splice(idx, 1) }
+function pickFile(idx) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*,video/*'
+  input.multiple = true
+  input.onchange = (e) => {
+    const files = e.target.files
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      const url = URL.createObjectURL(f)
+      cards.value[idx].files.push({ name: f.name, url, type: f.type.startsWith('video') ? 'video' : 'image' })
+    }
+  }
+  input.click()
+}
+function removeFile(cardIdx, fileIdx) {
+  const card = cards.value[cardIdx]
+  URL.revokeObjectURL(card.files[fileIdx].url)
+  card.files.splice(fileIdx, 1)
+}
 
 function openPicker() {
   showPicker.value = !showPicker.value
@@ -323,9 +413,22 @@ function deleteCard(idx) {
 }
 
 function openMedia(type) {
+  // 检查训练时段
+  if (!devMode.value && trainStart.value && trainEnd.value) {
+    const now = new Date()
+    const [sh, sm] = trainStart.value.split(':').map(Number)
+    const [eh, em] = trainEnd.value.split(':').map(Number)
+    const startMin = sh * 60 + sm
+    const endMin = eh * 60 + em
+    const nowMin = now.getHours() * 60 + now.getMinutes()
+    if (nowMin < startMin || nowMin > endMin) {
+      uni.showToast({ title: '当前不在训练时段内', icon: 'none', duration: 2000 })
+      return
+    }
+  }
   mediaPlayer.value = { show: true, type }
   if (type === 'video') mediaSrc.value = '/static/training_video.mp4'
-  else mediaSrc.value = ''  // 音频暂无资源
+  else mediaSrc.value = ''
 }
 function closeMedia() {
   mediaPlayer.value.show = false
@@ -401,6 +504,20 @@ function goBack() {
 .si-del { color:rgba(255,255,255,0.4); font-size:16px; cursor:pointer; }
 .si-del:active { color:#ff6b6b; }
 
+.time-card { }
+.time-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.time-dev-tag { background:rgba(0,210,255,0.15); color:#00d2ff; font-size:9px; padding:2px 6px; border-radius:4px; }
+.time-row { display:flex; align-items:center; gap:8px; }
+.time-inp { flex:1; background:rgba(0,210,255,0.05); border:1px solid rgba(0,210,255,0.15); border-radius:10px; padding:10px; color:#fff; font-size:14px; text-align:center; }
+.time-to { color:rgba(255,255,255,0.4); font-size:13px; }
+.time-dev-btn { width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.05); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.time-dev-btn text { font-size:14px; }
+.time-dev-hint { margin-top:8px; }
+.time-dev-hint text { color:rgba(255,255,255,0.3); font-size:10px; }
+[data-theme="white"] .time-inp { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
+[data-theme="white"] .time-to { color:#9ca3af; }
+[data-theme="white"] .time-dev-btn { background:#f3f4f6; }
+
 .divider { height:1px; background:linear-gradient(90deg,transparent,rgba(0,210,255,0.3),transparent); margin:12px 0; }
 .b-section { }
 .b-section.locked { opacity:0.25; pointer-events:none; }
@@ -418,7 +535,7 @@ function goBack() {
 .picker-item:nth-child(1),.picker-item:nth-child(2),.picker-item:nth-child(3),.picker-item:nth-child(4) { animation-delay:0.05s; }
 .picker-item:nth-child(5),.picker-item:nth-child(6),.picker-item:nth-child(7),.picker-item:nth-child(8) { animation-delay:0.15s; }
 .picker-item:nth-child(9),.picker-item:nth-child(10),.picker-item:nth-child(11),.picker-item:nth-child(12) { animation-delay:0.25s; }
-.picker-item:nth-child(13),.picker-item:nth-child(14),.picker-item:nth-child(15),.picker-item:nth-child(16) { animation-delay:0.35s; }
+.picker-item:nth-child(13) { animation-delay:0.35s; }
 @keyframes matrixReveal {
   0% { opacity:0; transform:translateY(-8px) scale(0.95); }
   60% { opacity:0.6; }
@@ -452,6 +569,18 @@ function goBack() {
 .ftag { padding:6px 14px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:12px; border:1px solid rgba(0,210,255,0.2); cursor:pointer; transition:all 0.15s; }
 .ftag.on { background:#0088cc; border-color:#00d2ff; color:#fff; box-shadow:0 0 10px rgba(0,210,255,0.2); }
 .form-inline { display:flex; align-items:center; gap:6px; flex:1; }
+.form-file-wrap { flex:1; }
+.file-btn { background:rgba(0,210,255,0.1); border:1px dashed rgba(0,210,255,0.25); border-radius:10px; padding:10px; text-align:center; cursor:pointer; }
+.file-btn text { color:#00d2ff; font-size:12px; }
+.file-hint { color:rgba(255,255,255,0.3); font-size:10px; display:block; margin-top:4px; text-align:center; }
+.file-previews { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.file-preview { position:relative; width:60px; height:60px; border-radius:8px; overflow:hidden; }
+.preview-img, .preview-video { width:100%; height:100%; object-fit:cover; }
+.file-del { position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+[data-theme="white"] .file-btn { background:#f3f4f6; border-color:#e5e7eb; }
+[data-theme="white"] .file-btn text { color:#2563eb; }
+[data-theme="white"] .file-hint { color:#9ca3af; }
+
 .form-input.short { width:80px; flex:none; background:#fff; color:#0b111e; }
 .form-inline .form-unit { color:rgba(255,255,255,0.7); }
 .form-unit { color:rgba(255,255,255,0.5); font-size:12px; }
