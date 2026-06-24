@@ -11,14 +11,17 @@
     <view class="body">
       <!-- Plan -->
       <view class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
-        <text class="plan-label">📋 方案</text>
-        <text class="plan-text">训练内容 + 验收标准</text>
+        <text class="plan-label">📋 今日方案</text>
+        <view class="plan-list">
+          <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">观看"五者天赋"训练视频，理解天赋类型特点</text></view>
+          <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">完成音频听力训练，提升听觉记忆能力</text></view>
+        </view>
       </view>
 
       <!-- Training A -->
       <text class="section-title">训练 A</text>
 
-      <view class="step step-ready" @click="playVideo">
+      <view class="step step-ready" @click="openMedia('video')">
         <view class="step-num step-num-ready">1</view>
         <view class="step-content">
           <text class="step-label">视频训练</text>
@@ -27,12 +30,12 @@
         </view>
       </view>
 
-      <view class="step">
+      <view class="step" @click="openMedia('audio')">
         <view class="step-num">2</view>
         <view class="step-content">
           <text class="step-label">音频训练</text>
           <view class="step-box">🎧 训练用音频</view>
-          <text class="step-time">约 X 分钟</text>
+          <text class="step-time">点击播放</text>
         </view>
       </view>
 
@@ -200,11 +203,27 @@
       <view style="height:40px;"></view>
     </view>
 
+    <!-- Media Player Overlay -->
+    <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
+      <view class="player-card" @click.stop>
+        <view class="player-header">
+          <text class="player-title">{{ mediaPlayer.type === 'video' ? '🎬 视频训练' : '🎧 音频训练' }}</text>
+          <view class="player-close" @click="closeMedia">✕</view>
+        </view>
+        <view v-if="mediaPlayer.type === 'video'" class="player-body">
+          <view v-html="videoHtml"></view>
+        </view>
+        <view v-if="mediaPlayer.type === 'audio'" class="player-body">
+          <text class="pa-icon" style="font-size:48px;display:block;text-align:center;margin-bottom:8px;">🎧</text>
+          <view v-html="audioHtml"></view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const bUnlocked = ref(false)
 const bTip = ref('⚠ 训练 A 未完成，B 暂不开放')
@@ -220,6 +239,11 @@ const scores = [
   { pct:20,  emoji:'⚫️', desc:'不完成任务，基本不配合训练' },
   { pct:0,   emoji:'☠️', desc:'不完成任务，严重不配合训练' },
 ]
+const mediaPlayer = ref({ show: false, type: 'video' })
+const mediaSrc = ref('/static/training_video.mp4')
+
+const videoHtml = computed(() => mediaSrc.value ? `<video src="${mediaSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
+const audioHtml = computed(() => mediaSrc.value ? `<audio src="${mediaSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const cards = ref([])
 const abilities = ['高效作业','超脑阅读','扫描速记','影像追忆','数学奥秘','极速运算','极速学习','英语奥秘','精力恢复','文科奥秘','理科奥秘','考前解压','天赋绘画','音乐灵感','棋类专注','我是冠军']
 
@@ -298,8 +322,13 @@ function deleteCard(idx) {
   }
 }
 
-function playVideo() {
-  window.open('/static/training_video.mp4', '_blank')
+function openMedia(type) {
+  mediaPlayer.value = { show: true, type }
+  if (type === 'video') mediaSrc.value = '/static/training_video.mp4'
+  else mediaSrc.value = ''  // 音频暂无资源
+}
+function closeMedia() {
+  mediaPlayer.value.show = false
 }
 function goBack() {
   uni.navigateBack({ delta: 1 })
@@ -317,8 +346,12 @@ function goBack() {
 .body::-webkit-scrollbar { display:none; }
 
 .card { background:#243046; border-radius:10px; padding:14px 16px; margin-bottom:12px; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
-.plan-label { color:#00d2ff; font-size:12px; font-weight:600; display:block; margin-bottom:4px; }
-.plan-text { color:#fff; font-size:13px; line-height:1.6; }
+.plan-label { color:#00d2ff; font-size:13px; font-weight:700; display:block; margin-bottom:8px; }
+.plan-item { display:flex; gap:6px; align-items:flex-start; margin-bottom:6px; }
+.pl-dot { color:#00d2ff; font-size:12px; flex-shrink:0; margin-top:2px; }
+.pl-text { color:#fff; font-size:12px; line-height:1.5; }
+[data-theme="white"] .pl-text { color:#374151; }
+[data-theme="white"] .pl-dot { color:#2563eb; }
 
 .section-title { color:#fff; font-size:14px; font-weight:700; margin-bottom:8px; display:block; }
 .section-title.dim { color:rgba(255,255,255,0.35); }
@@ -435,6 +468,69 @@ function goBack() {
 .score-item:nth-child(6) { animation-delay:0.40s; }
 .score-item:active { transform:scale(0.96); }
 .score-item.active { border-color:#00d2ff; background:rgba(0,136,204,0.3); box-shadow:0 0 12px rgba(0,210,255,0.15); }
+/* White theme */
+[data-theme="white"] .app { background:#f0f2f5; }
+[data-theme="white"] .nav-title { color:#1a1a2e; }
+[data-theme="white"] .nav-back { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .card { background:#fff; border:2px solid #e5e7eb; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+[data-theme="white"] .card::before, [data-theme="white"] .card::after { border-color:#2563eb; }
+[data-theme="white"] .plan-label { color:#2563eb; }
+[data-theme="white"] .section-title { color:#1a1a2e; }
+[data-theme="white"] .step { background:#fff; border-left-color:#2563eb; box-shadow:0 2px 8px rgba(0,0,0,0.03); }
+[data-theme="white"] .step-num { background:#2563eb; }
+[data-theme="white"] .step-label { color:#1a1a2e; }
+[data-theme="white"] .step-box { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
+[data-theme="white"] .step-time { color:#9ca3af; }
+[data-theme="white"] .btn-checkin { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .btn-checkin text { color:#fff; }
+[data-theme="white"] .summary-card { border-color:#e5e7eb; }
+[data-theme="white"] .summary-label { color:#6b7280; }
+[data-theme="white"] .summary-text { color:#9ca3af; }
+[data-theme="white"] .summary-more { color:#2563eb; }
+[data-theme="white"] .picker-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 24px rgba(0,0,0,0.06); }
+[data-theme="white"] .pph-dot { color:#2563eb; }
+[data-theme="white"] .pph-title { color:#6b7280; }
+[data-theme="white"] .picker-item { background:#f3f4f6; border-color:#e5e7eb; }
+[data-theme="white"] .pi-text { color:#374151; }
+[data-theme="white"] .picker-item.active { background:#2563eb; border-color:#2563eb; }
+[data-theme="white"] .picker-item.active .pi-text { color:#fff; text-shadow:none; }
+[data-theme="white"] .form-card { background:#fff; border-color:#2563eb; box-shadow:0 4px 20px rgba(0,0,0,0.06); }
+[data-theme="white"] .form-title { color:#1a1a2e; }
+[data-theme="white"] .form-label { color:#6b7280; }
+[data-theme="white"] .form-input { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
+[data-theme="white"] .form-textarea { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
+[data-theme="white"] .form-input.short { background:#fff; }
+[data-theme="white"] .ftag { background:#f3f4f6; color:#6b7280; border-color:#e5e7eb; }
+[data-theme="white"] .ftag.on { background:#2563eb; border-color:#2563eb; color:#fff; }
+[data-theme="white"] .score-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 20px rgba(0,0,0,0.04); }
+[data-theme="white"] .score-item { background:#f3f4f6; border-color:#e5e7eb; }
+[data-theme="white"] .score-item.active { background:rgba(37,99,235,0.08); border-color:#2563eb; }
+[data-theme="white"] .si-pct { color:#2563eb; }
+[data-theme="white"] .si-desc { color:#6b7280; }
+[data-theme="white"] .score-item.active .si-desc { color:#1a1a2e; }
+[data-theme="white"] .divider { background:#e5e7eb; }
+[data-theme="white"] .picker-overlay { background:rgba(0,0,0,0.4); }
+[data-theme="white"] .picker-card { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .picker-title { color:#1a1a2e; }
+[data-theme="white"] .si-text { color:#1a1a2e; }
+[data-theme="white"] .lock-tip { color:#9ca3af; }
+[data-theme="white"] .step-label.dim-text { color:#d1d5db; }
+[data-theme="white"] .step-time.dim-text { color:#9ca3af; }
+[data-theme="white"] .step.dim-step { border-left-color:rgba(0,0,0,0.06); }
+[data-theme="white"] .step.dim-step::after { border-color:rgba(0,0,0,0.06); }
+[data-theme="white"] .step-num.dim { background:#d1d5db; }
+[data-theme="white"] .b-section.locked .section-title { color:#d1d5db; }
+[data-theme="white"] .section-title.dim { color:#d1d5db; }
+[data-theme="white"] .step-num { color:#fff; }
+[data-theme="white"] .si-edit { color:#2563eb; }
+[data-theme="white"] .si-del { color:#9ca3af; }
+[data-theme="white"] .si-del:active { color:#ef4444; }
+[data-theme="white"] .form-del { color:#9ca3af; }
+[data-theme="white"] .form-del:active { color:#ef4444; }
+[data-theme="white"] .submitted-item { border-bottom-color:#e5e7eb; }
+[data-theme="white"] .step-content .step-time { color:#9ca3af; }
+[data-theme="white"] .step-box.dim-box { opacity:0.6; }
+
 @keyframes popIn {
   0% { opacity:0; transform:scale(0.5) translateY(10px); }
   100% { opacity:1; transform:scale(1) translateY(0); }
@@ -451,6 +547,17 @@ function goBack() {
   0% { clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); opacity:1; }
   100% { clip-path:polygon(10px 0,100% 0,100% 4px,calc(100% - 10px) 4px,0 4px,0 4px); opacity:0; }
 }
+.player-overlay { position:fixed; inset:0; z-index:600; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; padding:16px; }
+.player-card { background:var(--bg-card,#1a2840); border:1px solid rgba(0,210,255,0.2); border-radius:16px; padding:16px; width:100%; max-width:420px; }
+.player-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.player-title { color:#fff; font-size:15px; font-weight:600; }
+.player-close { color:rgba(255,255,255,0.5); font-size:20px; cursor:pointer; padding:4px 8px; }
+.player-body { }
+[data-theme="white"] .player-overlay { background:rgba(0,0,0,0.6); }
+[data-theme="white"] .player-card { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .player-title { color:#1a1a2e; }
+[data-theme="white"] .player-close { color:#9ca3af; }
+
 .pulse-out { animation:pulseRing 0.5s ease-out; }
 @keyframes pulseRing {
   0% { box-shadow:0 0 0 0 rgba(0,210,255,0.5); }
