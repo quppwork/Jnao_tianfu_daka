@@ -11,21 +11,105 @@
     </view>
 
     <view class="body">
-      <!-- Plan -->
+      <!-- Plan · 时间轴总览 -->
       <view class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
-        <text class="plan-label">📋 今日方案</text>
-        <text v-if="planLoading" class="plan-loading">正在生成今日训练方案...</text>
+        <view class="plan-header">
+          <text class="plan-label">📋 今日方案</text>
+          <text v-if="talentLabel && !planLoading" class="plan-header-meta">{{ talentLabel }} · 第 {{ lessonIndex }} 课</text>
+        </view>
+        <!-- Loading -->
+        <view v-if="planLoading" class="plan-loading-wrap">
+          <view class="plan-loading-ring">
+            <view class="plr-core"></view>
+            <view class="plr-arc"></view>
+          </view>
+          <text class="plan-loading-title">AI 正在生成今日方案</text>
+          <view class="plan-loading-bar">
+            <view class="plan-loading-bar-fill"></view>
+          </view>
+          <text class="plan-loading-hint">首次生成约需 3~5 秒，分析天赋与训练进度...</text>
+        </view>
+
+        <!-- Done -->
+        <view v-else-if="planJustGenerated" class="plan-done-wrap">
+          <text class="plan-done-icon">✅</text>
+          <text class="plan-done-title">方案生成完毕</text>
+          <text class="plan-done-sub">请开始今日的训练</text>
+        </view>
+
+        <!-- Plan content (loaded) -->
         <template v-else>
+          <view v-if="planPhases.length" class="plan-timeline">
+            <view
+              v-for="(phase, pi) in planPhases"
+              :key="phase.block"
+              class="tl-phase"
+            >
+              <view class="tl-rail">
+                <view class="tl-node" :class="phase.nodeClass">
+                  <text class="tl-node-icon">{{ phase.nodeIcon }}</text>
+                </view>
+                <view v-if="pi < planPhases.length - 1" class="tl-line"></view>
+              </view>
+              <view class="tl-content">
+                <view class="tl-node-row" @click="scrollToPhase(phase.block)">
+                  <view class="tl-phase-head">
+                    <text class="tl-phase-title">{{ phase.label }} · {{ phase.subtitle }}</text>
+                    <text class="tl-phase-meta">{{ phaseMetaText(phase) }}</text>
+                  </view>
+                </view>
+                <view class="tl-items">
+                  <view
+                    v-for="item in phase.items"
+                    :key="item.id"
+                    class="tl-item"
+                    @click="scrollToPhase(phase.block)"
+                  >
+                    <text class="tl-item-icon">{{ itemStatusIcon(item, phase) }}</text>
+                    <text class="tl-item-title">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</text>
+                    <text class="tl-item-right">
+                      <text v-if="item.duration_min" class="tl-item-dur">{{ item.duration_min }}分钟</text>
+                      <text class="tl-item-status" :class="itemStatusClass(item, phase)">{{ itemStatusLabel(item, phase) }}</text>
+                    </text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view v-else class="plan-empty">
+            <text class="plan-empty-text">暂无训练项，请先设置时长并开始训练</text>
+          </view>
+
+          <view v-if="planTotalCount > 0" class="plan-progress">
+            <view class="plan-progress-track">
+              <view class="plan-progress-fill" :style="{ width: planProgressPct + '%' }"></view>
+            </view>
+            <text class="plan-progress-text">{{ planProgressPct }}% · {{ planCompletedCount }}/{{ planTotalCount }} 项已完成</text>
+          </view>
+
           <view v-if="aiPlanText" class="plan-ai-box">
-            <text class="plan-ai-label">🤖 教练今日指令</text>
+            <text class="plan-ai-label">💬 教练</text>
             <text class="plan-ai-text">{{ aiPlanText }}</text>
           </view>
-          <view class="plan-list">
-            <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">观看"五者天赋"训练视频，理解天赋类型特点</text></view>
-            <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">{{ planAudioHint }}</text></view>
-          </view>
-          <text v-if="talentLabel" class="plan-talent">{{ talentLabel }} · 第 {{ lessonIndex }} 课</text>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
+        </template>
+      </view>
+
+      <!-- Summary -->
+      <view
+        class="card summary-card"
+        :class="{ 'summary-empty': !submittedCards.length }"
+        @click="submittedCards.length ? showSummary = true : null"
+      >
+        <template v-if="submittedCards.length">
+          <text class="summary-label">📝 打卡训练总结</text>
+          <text class="summary-text">今日已打卡 {{ submittedCards.length }} 项</text>
+          <text class="summary-more">点击管理打卡 ›</text>
+        </template>
+        <template v-else>
+          <text class="summary-empty-icon">⚠</text>
+          <text class="summary-empty-title">今日还未进行打卡</text>
+          <text class="summary-empty-hint">完成训练后点击「训练 A 打卡」开始记录</text>
         </template>
       </view>
 
@@ -90,6 +174,7 @@
       </view>
 
       <!-- Training A -->
+      <view id="phase-block-A" class="phase-section">
       <text class="section-title">训练 A</text>
 
       <view class="media-block" :class="{ locked: isMediaLocked }">
@@ -125,7 +210,7 @@
 
       <view class="checkin-block" :class="{ locked: isCheckinLocked }">
         <view v-if="isCheckinLocked" class="checkin-lock-overlay">
-          <text class="checkin-lock-text">请先设置时长并开始训练</text>
+          <text class="checkin-lock-text">{{ checkinLockText }}</text>
         </view>
 
       <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker">
@@ -147,7 +232,7 @@
       </view>
 
       <!-- 已选卡片列表 -->
-      <TransitionGroup name="card">
+      <TransitionGroup v-if="showPicker" name="card">
         <view v-for="(card, idx) in cards" :key="card.name" class="form-card">
         <view class="scan-line"></view>
         <view class="form-header">
@@ -291,12 +376,6 @@
       <view v-if="showPicker" class="btn-checkin" @click="submitFormWithAnim" style="margin-top:8px;">
         <text>{{ checkinSubmitting ? '提交中...' : '✅ 提交打卡 ' + (cards.length ? '(' + cards.length + ')' : '') }}</text>
       </view>
-
-      <!-- Summary -->
-      <view class="card summary-card" @click="submittedCards.length ? showSummary = true : null">
-        <text class="summary-label">📝 打卡的训练总结</text>
-        <text class="summary-text">{{ submittedCards.length ? '今日已打卡 ' + submittedCards.length + ' 项' : '完成训练后自动生成今日总结...' }}</text>
-        <text v-if="submittedCards.length" class="summary-more">点击管理打卡 ›</text>
       </view>
 
       <view v-if="showSummary && submittedCards.length" class="picker-overlay" @click="showSummary = false">
@@ -313,11 +392,13 @@
         </view>
       </view>
 
+      </view>
+
       <!-- Divider -->
       <view class="divider"></view>
 
       <!-- Training B：内容始终展示，播放需完成 A 打卡 -->
-      <view class="b-section">
+      <view id="phase-block-B" class="b-section phase-section">
         <text class="section-title" :class="{ dim: !bUnlocked }">训练 B {{ !bUnlocked ? '🔒' : '' }}</text>
 
         <template v-if="blockBItems.length">
@@ -353,8 +434,6 @@
         </template>
 
         <text class="lock-tip">{{ bTip }}</text>
-      </view>
-
       </view>
 
       <view style="height:40px;"></view>
@@ -398,16 +477,26 @@ const remainingSeconds = ref(0)
 const plannedDurationSec = ref(0)
 let timerTickId = null
 
+function todayAnimKey() { return 'jnao_plan_anim_' + new Date().toDateString() }
+function planAnimShownToday() { try { return sessionStorage.getItem(todayAnimKey()) === '1' } catch (_) { return false } }
+function markPlanAnimShown() { try { sessionStorage.setItem(todayAnimKey(), '1') } catch (_) {} }
+
 const hourLabels = HOUR_OPTIONS.map(h => `${h} 小时`)
 const minuteLabels = MINUTE_OPTIONS.map(m => `${m} 分钟`)
 const hourIndex = computed(() => Math.max(0, HOUR_OPTIONS.indexOf(selectedHours.value)))
 const minuteIndex = computed(() => Math.max(0, MINUTE_OPTIONS.indexOf(selectedMinutes.value)))
-const canStartTimer = computed(() => selectedHours.value > 0 || selectedMinutes.value > 0)
-const isMediaLocked = computed(() => !devMode.value && (timerPhase.value === 'setup' || timerPhase.value === 'expired'))
-const isCheckinLocked = computed(() => !devMode.value && timerPhase.value === 'setup')
-const mediaLockText = computed(() =>
-  timerPhase.value === 'expired' ? '训练时长已到，音视频已锁定' : '请先设置时长并开始训练'
-)
+const canStartTimer = computed(() => !planLoading.value && !planJustGenerated.value && (selectedHours.value > 0 || selectedMinutes.value > 0))
+const isPageLoading = computed(() => planLoading.value || planJustGenerated.value)
+const isMediaLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup' || timerPhase.value === 'expired'))
+const isCheckinLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup'))
+const mediaLockText = computed(() => {
+  if (isPageLoading.value) return '方案生成中，请稍候...'
+  return timerPhase.value === 'expired' ? '训练时长已到，音视频已锁定' : '请先设置时长并开始训练'
+})
+const checkinLockText = computed(() => {
+  if (isPageLoading.value) return '方案生成中，请稍候...'
+  return '请先设置时长并开始训练'
+})
 const countdownDisplay = computed(() => formatDuration(remainingSeconds.value))
 const durationLabel = computed(() => formatDuration(plannedDurationSec.value))
 
@@ -682,18 +771,24 @@ function devUnlockB() {
 async function devRefreshAiPlan() {
   if (!devMode.value) return
   planLoading.value = true
+  planJustGenerated.value = false
   try {
     const uid = await ensureChildUser()
     const result = await refreshTrainingReport(uid, true)
     if (result.error) throw new Error(result.message)
     todayPlan.value = result.data
+    applyPlanMedia(result.data)
     aiPlanText.value = result.data.report_text || ''
-    uni.showToast({ title: 'AI 方案已刷新', icon: 'none' })
+    lessonIndex.value = (result.data.content_index ?? 0) + 1
   } catch (e) {
-    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
-  } finally {
     planLoading.value = false
+    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+    return
   }
+  planLoading.value = false
+  planJustGenerated.value = true
+  setTimeout(() => { planJustGenerated.value = false }, 1500)
+  uni.showToast({ title: 'AI 方案已刷新', icon: 'none' })
 }
 
 const bUnlocked = ref(false)
@@ -717,11 +812,11 @@ const audioTitle = ref('🎧 训练用音频')
 const talentLabel = ref('')
 const aiPlanText = ref('')
 const lessonIndex = ref(1)
-const planAudioHint = ref('完成音频听力训练，提升听觉记忆能力')
 const needAssessment = ref(false)
 const todayPlan = ref(null)
 const todayCheckinRecordId = ref(null)
 const planLoading = ref(false)
+const planJustGenerated = ref(false)
 const checkinSubmitting = ref(false)
 
 const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
@@ -738,6 +833,113 @@ const blockBEmptyHint = computed(() => {
   if (todayPlan.value?.planned_minutes) return '今日 B 段暂无额外音频'
   return '请先点击「开始训练」生成训练 B'
 })
+
+function buildPhaseSubtitle(items) {
+  const tags = new Set()
+  for (const item of items) {
+    if (item.item_type === 'video' || item.video_url) tags.add('视频')
+    if (item.item_type === 'audio' || (item.audio_url && !item.video_url)) tags.add('音频')
+  }
+  if (!tags.size) return '综合训练'
+  return `${[...tags].join('+')}训练`
+}
+
+function isPhaseUnlocked(block, blockOrder, items) {
+  const idx = blockOrder.indexOf(block)
+  if (idx <= 0) return true // 阶段 A 始终解锁
+  // 阶段 B 沿用 bUnlocked（A 打卡提交后立即解锁），不等 checkin_status
+  // 阶段 C/D 需前一阶段全部 checkin_status === 'done'
+  if (block === 'B') return bUnlocked.value
+  const prevBlock = blockOrder[idx - 1]
+  const prevItems = items.filter(i => (i.block || 'A') === prevBlock)
+  return prevItems.length > 0 && prevItems.every(i => i.checkin_status === 'done')
+}
+
+const planPhases = computed(() => {
+  const items = todayPlan.value?.items || []
+  if (!items.length) return []
+
+  const blockOrder = []
+  const seen = new Set()
+  for (const item of items) {
+    const b = item.block || 'A'
+    if (!seen.has(b)) {
+      seen.add(b)
+      blockOrder.push(b)
+    }
+  }
+
+  return blockOrder.map(block => {
+    const phaseItems = items.filter(i => (i.block || 'A') === block)
+    const unlocked = isPhaseUnlocked(block, blockOrder, items)
+    const doneCount = phaseItems.filter(i => i.checkin_status === 'done').length
+    const allDone = phaseItems.length > 0 && doneCount === phaseItems.length
+    let nodeIcon = '○'
+    let nodeClass = 'tl-node-locked'
+    if (unlocked) {
+      nodeIcon = '●'
+      nodeClass = allDone ? 'tl-node-done' : 'tl-node-active'
+    }
+    return {
+      block,
+      label: `阶段 ${block}`,
+      subtitle: buildPhaseSubtitle(phaseItems),
+      items: phaseItems,
+      unlocked,
+      allDone,
+      doneCount,
+      totalCount: phaseItems.length,
+      nodeIcon,
+      nodeClass,
+    }
+  })
+})
+
+const planTotalCount = computed(() => (todayPlan.value?.items || []).length)
+const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => i.checkin_status === 'done').length)
+const planProgressPct = computed(() => {
+  if (!planTotalCount.value) return 0
+  return Math.round((planCompletedCount.value / planTotalCount.value) * 100)
+})
+
+function itemTypeEmoji(item) {
+  if (item.item_type === 'video' || item.video_url) return '🎬'
+  if (item.item_type === 'audio' || item.audio_url) return '🎧'
+  return '▸'
+}
+
+function itemStatusIcon(item, phase) {
+  if (!phase.unlocked) return '🔒'
+  if (item.checkin_status === 'done') return '☑'
+  return '○'
+}
+
+function itemStatusLabel(item, phase) {
+  if (!phase.unlocked) return '待解锁'
+  if (item.checkin_status === 'done') return '已完成'
+  return '进行中'
+}
+
+function itemStatusClass(item, phase) {
+  if (!phase.unlocked) return 'tl-st-locked'
+  if (item.checkin_status === 'done') return 'tl-st-done'
+  return 'tl-st-active'
+}
+
+function phaseMetaText(phase) {
+  if (!phase.unlocked) return '待解锁'
+  if (phase.allDone) return `${phase.doneCount}/${phase.totalCount} 已完成`
+  return `${phase.doneCount}/${phase.totalCount} · 进行中`
+}
+
+function scrollToPhase(block) {
+  const body = document.querySelector('.body')
+  const target = document.getElementById(`phase-block-${block}`)
+  if (!body || !target) return
+  const bodyTop = body.getBoundingClientRect().top
+  const targetTop = target.getBoundingClientRect().top
+  body.scrollTo({ top: body.scrollTop + targetTop - bodyTop - 12, behavior: 'smooth' })
+}
 
 function syncBlockBTip() {
   if (!blockBItems.value.length) {
@@ -872,12 +1074,30 @@ async function persistCheckinCards(cardsList, attitudePct) {
   return res
 }
 
+function autoDetectAbilities() {
+  const items = blockAItems.value
+  if (!items || !items.length) return
+  for (const item of items) {
+    const title = (item.title || item.lesson_title || '').replace(/\s+/g, '')
+    if (!title) continue
+    for (const ability of abilities) {
+      if (title.includes(ability) && !hasCard(ability)) {
+        cards.value.push({ name: ability, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] })
+      }
+    }
+  }
+}
+
 function openPicker() {
   if (!guardCheckin()) return
   if (todayCompleted.value) {
     if (submittedCards.value.length) showSummary.value = true
     else uni.showToast({ title: '今日训练已打卡完成', icon: 'none' })
     return
+  }
+  // 首次打开时自动识别今日训练项对应的能力
+  if (!showPicker.value && !cards.value.length) {
+    autoDetectAbilities()
   }
   showPicker.value = !showPicker.value
   // 赛博点击特效
@@ -982,11 +1202,6 @@ function applyPlanMedia(plan) {
   if (firstAudio) {
     audioSrc.value = firstAudio.audio_url
     audioTitle.value = `🎧 ${firstAudio.title || '今日训练音频'}`
-    planAudioHint.value = `收听「${firstAudio.title || '今日训练音频'}」并完成听力训练`
-  }
-  const totalAudio = items.filter(i => i.audio_url).length
-  if (totalAudio > 1) {
-    planAudioHint.value = `今日共 ${totalAudio} 段音频，按训练 A/B 顺序完成`
   }
 }
 
@@ -1038,7 +1253,12 @@ function closeMedia() {
 
 async function loadTodayPlan() {
   if (planLoading.value) return
-  planLoading.value = true
+
+  const isFirstLoad = !planAnimShownToday()
+  if (isFirstLoad) {
+    planLoading.value = true
+    planJustGenerated.value = false
+  }
   needAssessment.value = false
   try {
     const uid = await ensureChildUser()
@@ -1048,7 +1268,7 @@ async function loadTodayPlan() {
       aiPlanText.value = ''
       audioSrc.value = ''
       audioTitle.value = '🎧 训练用音频'
-      planAudioHint.value = '完成天赋测评后，将按天赋推荐今日音频'
+      if (isFirstLoad) planLoading.value = false
       return
     }
     if (result.error) throw new Error(result.message)
@@ -1083,10 +1303,17 @@ async function loadTodayPlan() {
     }
 
     if (devMode.value) await loadDevStatus()
+
+    // 当天首次 AI 生成 → 显示完成动画；后续静默刷新
+    if (isFirstLoad) {
+      markPlanAnimShown()
+      planLoading.value = false
+      planJustGenerated.value = true
+      setTimeout(() => { planJustGenerated.value = false }, 2000)
+    }
   } catch (e) {
     uni.showToast({ title: e.message || '加载训练方案失败', icon: 'none' })
-  } finally {
-    planLoading.value = false
+    if (isFirstLoad) planLoading.value = false
   }
 }
 
@@ -1120,18 +1347,67 @@ function goBack() {
 .body::-webkit-scrollbar { display:none; }
 
 .card { background:#243046; border-radius:10px; padding:14px 16px; margin-bottom:12px; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
-.plan-label { color:#00d2ff; font-size:13px; font-weight:700; display:block; margin-bottom:8px; }
+.plan-label { color:#00d2ff; font-size:13px; font-weight:700; display:block; }
+.plan-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.plan-header-meta { color:rgba(255,255,255,0.55); font-size:11px; font-weight:600; white-space:nowrap; }
 .plan-loading { color:rgba(255,255,255,0.45); font-size:12px; display:block; padding:8px 0; }
-.plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-bottom:10px; }
+
+/* ---- AI 方案加载动画 ---- */
+.plan-loading-wrap { text-align:center; padding:24px 8px 12px; }
+.plan-loading-ring { position:relative; width:48px; height:48px; margin:0 auto 14px; }
+.plr-core { position:absolute; inset:8px; border-radius:50%; background:rgba(0,210,255,0.08); border:1.5px solid rgba(0,210,255,0.25); animation:plrPulse 1.8s ease-in-out infinite; }
+.plr-arc { position:absolute; inset:0; border-radius:50%; border:2px solid transparent; border-top-color:#00d2ff; animation:plrSpin 1.2s linear infinite; box-shadow:0 0 12px rgba(0,210,255,0.25); }
+@keyframes plrSpin { to { transform:rotate(360deg); } }
+@keyframes plrPulse { 0%,100% { transform:scale(0.85); opacity:0.5; } 50% { transform:scale(1.1); opacity:1; } }
+.plan-loading-title { display:block; color:#fff; font-size:13px; font-weight:600; margin-bottom:10px; }
+.plan-loading-bar { height:3px; width:70%; max-width:200px; margin:0 auto 8px; background:rgba(255,255,255,0.06); border-radius:999px; overflow:hidden; }
+.plan-loading-bar-fill { height:100%; width:30%; background:linear-gradient(90deg,transparent,#00d2ff); border-radius:999px; animation:plrBar 1.6s ease-in-out infinite; }
+@keyframes plrBar { 0% { margin-left:0; width:30%; } 50% { margin-left:50%; width:40%; } 100% { margin-left:70%; width:30%; } }
+.plan-loading-hint { display:block; color:rgba(255,255,255,0.3); font-size:10px; }
+
+/* ---- 方案生成完毕 ---- */
+.plan-done-wrap { text-align:center; padding:28px 8px 16px; animation:doneFadeIn 0.4s ease-out; }
+@keyframes doneFadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.plan-done-icon { display:block; font-size:32px; margin-bottom:8px; animation:doneBounce 0.5s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes doneBounce { from { transform:scale(0); } to { transform:scale(1); } }
+.plan-done-title { display:block; color:#22c55e; font-size:15px; font-weight:700; margin-bottom:4px; }
+.plan-done-sub { display:block; color:rgba(255,255,255,0.45); font-size:12px; }
+.plan-empty { padding:10px 0 4px; }
+.plan-empty-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.5; }
+.plan-timeline { margin-top:2px; }
+.tl-phase { display:flex; gap:10px; align-items:stretch; }
+.tl-rail { display:flex; flex-direction:column; align-items:center; width:18px; flex-shrink:0; }
+.tl-node { width:14px; height:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+.tl-node-icon { font-size:12px; line-height:1; color:rgba(255,255,255,0.35); }
+.tl-node-active .tl-node-icon { color:#00d2ff; text-shadow:0 0 8px rgba(0,210,255,0.6); }
+.tl-node-done .tl-node-icon { color:#22c55e; text-shadow:0 0 8px rgba(34,197,94,0.5); }
+.tl-node-locked .tl-node-icon { color:rgba(255,255,255,0.25); }
+.tl-line { width:1px; flex:1; min-height:16px; margin:3px 0; background:linear-gradient(180deg,rgba(0,210,255,0.35),rgba(0,210,255,0.08)); }
+.tl-content { flex:1; min-width:0; padding-bottom:8px; }
+.tl-node-row { cursor:pointer; }
+.tl-phase-head { padding-top:0; min-width:0; }
+.tl-phase-title { color:#fff; font-size:12px; font-weight:700; display:block; line-height:1.4; }
+.tl-phase-meta { color:rgba(255,255,255,0.38); font-size:10px; display:block; margin-top:2px; }
+.tl-items { margin:6px 0 2px; padding-left:2px; }
+.tl-item { display:flex; align-items:center; gap:6px; padding:5px 0; cursor:pointer; }
+.tl-item-icon { font-size:11px; width:14px; text-align:center; flex-shrink:0; }
+.tl-item-title { flex:1; color:rgba(255,255,255,0.82); font-size:11px; line-height:1.35; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tl-item-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.tl-item-dur { color:rgba(255,255,255,0.35); font-size:10px; }
+.tl-item-status { font-size:10px; }
+.tl-st-locked { color:rgba(255,255,255,0.3); }
+.tl-st-done { color:#22c55e; }
+.tl-st-active { color:#00d2ff; }
+.tl-st-pending { color:rgba(255,255,255,0.35); }
+.plan-progress { margin-top:12px; padding-top:12px; border-top:1px solid rgba(0,210,255,0.12); }
+.plan-progress-track { height:4px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; }
+.plan-progress-fill { height:100%; background:linear-gradient(90deg,#00d2ff,#22c55e); border-radius:999px; transition:width 0.35s ease; box-shadow:0 0 10px rgba(0,210,255,0.35); }
+.plan-progress-text { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:10px; text-align:center; letter-spacing:0.04em; }
+.plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-top:12px; }
 .plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; display:block; margin-bottom:6px; }
 .plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
-.plan-item { display:flex; gap:6px; align-items:flex-start; margin-bottom:6px; }
-.pl-dot { color:#00d2ff; font-size:12px; flex-shrink:0; margin-top:2px; }
-.pl-text { color:#fff; font-size:12px; line-height:1.5; }
-.plan-talent { color:#00d2ff; font-size:12px; display:block; margin-top:8px; }
 .plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
-[data-theme="white"] .pl-text { color:#374151; }
-[data-theme="white"] .pl-dot { color:#2563eb; }
+.phase-section { scroll-margin-top:12px; }
 
 .section-title { color:#fff; font-size:14px; font-weight:700; margin-bottom:8px; display:block; }
 .section-title.dim { color:rgba(255,255,255,0.35); }
@@ -1165,6 +1441,14 @@ function goBack() {
 .summary-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.6; }
 .summary-more { color:#00d2ff; font-size:11px; display:block; margin-top:4px; }
 
+/* 未打卡 — 暖黄警告 */
+.summary-empty { border-color:rgba(251,191,36,0.4); background:rgba(251,191,36,0.06); text-align:center; cursor:default; }
+.summary-empty:active { background:rgba(251,191,36,0.06); }
+.summary-empty-icon { display:block; font-size:22px; margin-bottom:6px; text-align:center; animation:pulseWarn 2s ease-in-out infinite; }
+.summary-empty-title { display:block; color:#fbbf24; font-size:14px; font-weight:700; text-align:center; margin-bottom:4px; }
+.summary-empty-hint { display:block; color:rgba(251,191,36,0.55); font-size:11px; text-align:center; line-height:1.4; }
+@keyframes pulseWarn { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:1; transform:scale(1.15); } }
+
 .picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
 .picker-card { background:#1a2840; border:1px solid #00d2ff; border-radius:14px; padding:24px 20px; width:100%; max-width:360px; box-shadow:0 0 30px rgba(0,210,255,0.1); position:relative; }
 .picker-card::before, .picker-card::after { content:''; position:absolute; width:10px; height:10px; border-color:#00d2ff; border-style:solid; }
@@ -1187,7 +1471,7 @@ function goBack() {
 .time-status-tag.running { background:rgba(34,197,94,0.15); color:#22c55e; }
 .time-status-tag.expired { background:rgba(239,68,68,0.15); color:#ef4444; }
 .time-setup { display:flex; flex-direction:column; gap:10px; }
-.time-pickers { display:flex; gap:10px; }
+.time-pickers { display:flex; gap:10px; justify-content:center; max-width:280px; margin:0 auto; }
 .time-select { flex:1; background:rgba(0,210,255,0.05); border:1px solid rgba(0,210,255,0.2); border-radius:10px; padding:12px 10px; display:flex; align-items:baseline; justify-content:center; gap:4px; cursor:pointer; }
 .time-select-val { color:#fff; font-size:22px; font-weight:700; }
 .time-select-unit { color:rgba(255,255,255,0.5); font-size:12px; }
@@ -1213,6 +1497,11 @@ function goBack() {
 .dev-action text { color:#fbbf24; font-size:11px; font-weight:600; }
 .dev-panel-hint { display:block; margin-top:8px; color:rgba(255,255,255,0.3); font-size:10px; text-align:center; }
 .media-block, .checkin-block { position:relative; }
+.media-block { display:flex; gap:8px; margin-bottom:18px; }
+.media-block .step { flex:1; min-width:0; margin-bottom:0; padding:10px 8px; }
+.media-block .step-box { font-size:14px; padding:12px 6px; }
+.media-block .step-label { font-size:11px; margin-bottom:4px; }
+.media-block .step-num { width:18px; height:18px; font-size:10px; }
 .media-block.locked, .checkin-block.locked { pointer-events:none; }
 .media-block.locked .step { opacity:0.4; }
 .checkin-block.locked { opacity:0.35; }
@@ -1325,6 +1614,14 @@ function goBack() {
 [data-theme="white"] .card::before, [data-theme="white"] .card::after { border-color:#2563eb; }
 [data-theme="white"] .plan-label { color:#2563eb; }
 [data-theme="white"] .plan-loading { color:#9ca3af; }
+[data-theme="white"] .plan-loading-title { color:#1a1a2e; }
+[data-theme="white"] .plan-loading-hint { color:#9ca3af; }
+[data-theme="white"] .plr-core { background:rgba(37,99,235,0.05); border-color:rgba(37,99,235,0.15); }
+[data-theme="white"] .plr-arc { border-top-color:#2563eb; box-shadow:0 0 12px rgba(37,99,235,0.15); }
+[data-theme="white"] .plan-loading-bar { background:#e5e7eb; }
+[data-theme="white"] .plan-loading-bar-fill { background:linear-gradient(90deg,transparent,#2563eb); }
+[data-theme="white"] .plan-done-title { color:#16a34a; }
+[data-theme="white"] .plan-done-sub { color:#6b7280; }
 [data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
 [data-theme="white"] .plan-ai-label { color:#2563eb; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
@@ -1340,6 +1637,10 @@ function goBack() {
 [data-theme="white"] .summary-label { color:#6b7280; }
 [data-theme="white"] .summary-text { color:#9ca3af; }
 [data-theme="white"] .summary-more { color:#2563eb; }
+[data-theme="white"] .summary-empty { border-color:rgba(217,119,6,0.35); background:rgba(251,191,36,0.06); }
+[data-theme="white"] .summary-empty:active { background:rgba(251,191,36,0.06); }
+[data-theme="white"] .summary-empty-title { color:#d97706; }
+[data-theme="white"] .summary-empty-hint { color:rgba(217,119,6,0.55); }
 [data-theme="white"] .picker-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 24px rgba(0,0,0,0.06); }
 [data-theme="white"] .pph-dot { color:#2563eb; }
 [data-theme="white"] .pph-title { color:#6b7280; }
@@ -1383,6 +1684,26 @@ function goBack() {
 [data-theme="white"] .submitted-item { border-bottom-color:#e5e7eb; }
 [data-theme="white"] .step-content .step-time { color:#9ca3af; }
 [data-theme="white"] .step-box.dim-box { opacity:0.6; }
+
+/* ---- 时间轴总览 — 白色主题 ---- */
+[data-theme="white"] .plan-header-meta { color:#6b7280; }
+[data-theme="white"] .plan-empty-text { color:#9ca3af; }
+[data-theme="white"] .tl-phase-title { color:#1a1a2e; }
+[data-theme="white"] .tl-phase-meta { color:#9ca3af; }
+[data-theme="white"] .tl-item-title { color:#374151; }
+[data-theme="white"] .tl-item-dur { color:#9ca3af; }
+[data-theme="white"] .tl-item-status.tl-st-locked { color:#d1d5db; }
+[data-theme="white"] .tl-item-status.tl-st-done { color:#16a34a; }
+[data-theme="white"] .tl-item-status.tl-st-active { color:#2563eb; }
+[data-theme="white"] .tl-item-status.tl-st-pending { color:#9ca3af; }
+[data-theme="white"] .tl-node-locked .tl-node-icon { color:#d1d5db; text-shadow:none; }
+[data-theme="white"] .tl-node-active .tl-node-icon { color:#2563eb; text-shadow:0 0 8px rgba(37,99,235,0.3); }
+[data-theme="white"] .tl-node-done .tl-node-icon { color:#16a34a; text-shadow:0 0 8px rgba(22,163,74,0.3); }
+[data-theme="white"] .tl-line { background:linear-gradient(180deg,#2563eb,#93c5fd); }
+[data-theme="white"] .plan-progress { border-top-color:#e5e7eb; }
+[data-theme="white"] .plan-progress-track { background:#e5e7eb; }
+[data-theme="white"] .plan-progress-fill { background:linear-gradient(90deg,#2563eb,#16a34a); box-shadow:0 0 10px rgba(37,99,235,0.2); }
+[data-theme="white"] .plan-progress-text { color:#6b7280; }
 
 @keyframes popIn {
   0% { opacity:0; transform:scale(0.5) translateY(10px); }
