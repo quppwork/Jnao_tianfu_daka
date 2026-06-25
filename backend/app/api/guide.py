@@ -1,11 +1,12 @@
 """首页引导对话 — 豆包 AI + 会话持久化"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_child_user_id, get_db
 from app.core.logger import get_logger
+from app.core.security import is_debug_routes_enabled
 from app.services import guide_service
 from app.services.doubao_client import is_configured
 
@@ -15,12 +16,14 @@ router = APIRouter(prefix="/api/guide", tags=["guide"])
 
 
 class GuideChatRequest(BaseModel):
-    message: str = Field(..., min_length=1)
-    session_id: int | None = None
+    message: str = Field(..., min_length=1, max_length=4000)
+    session_id: int | None = Field(None, ge=1)
 
 
 @router.get("/debug")
 async def guide_debug():
+    if not is_debug_routes_enabled():
+        raise HTTPException(404, "Not Found")
     from config.loader import load_settings
 
     c = load_settings().get("doubao", {})

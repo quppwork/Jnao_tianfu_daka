@@ -1,6 +1,8 @@
 /** 后端 API — 用户身份与各模块数据（仅存 child_user_id 于 localStorage） */
 
 const CHILD_KEY = 'jnao_child_user_id'
+const GUEST_PHONE_KEY = 'jnao_guest_phone'
+const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
 
 export function getChildUserId() {
   try {
@@ -19,6 +21,8 @@ export function setChildUserId(id) {
 export function clearChildUserId() {
   try {
     localStorage.removeItem(CHILD_KEY)
+    localStorage.removeItem(GUEST_PHONE_KEY)
+    localStorage.removeItem(GUEST_NICKNAME_KEY)
   } catch (e) { /* ignore */ }
 }
 
@@ -39,19 +43,83 @@ function withUser(url, userId) {
   return `${url}${sep}user_id=${userId}`
 }
 
-/** 无则自动注册，返回 child_user_id */
-export async function ensureChildUser(nickname = '学员') {
-  const existing = getChildUserId()
-  if (existing) return existing
+function getOrCreateGuestPhone() {
+  try {
+    const saved = localStorage.getItem(GUEST_PHONE_KEY)
+    if (saved) return saved
+    const phone = `13${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`
+    localStorage.setItem(GUEST_PHONE_KEY, phone)
+    return phone
+  } catch (e) {
+    return `13${String(Date.now()).slice(-9)}`
+  }
+}
 
-  const phone = `13${String(Date.now()).slice(-9)}`
+function getOrCreateGuestNickname(fallback = '学员') {
+  try {
+    const saved = localStorage.getItem(GUEST_NICKNAME_KEY)
+    if (saved) return saved
+    localStorage.setItem(GUEST_NICKNAME_KEY, fallback)
+    return fallback
+  } catch (e) {
+    return fallback
+  }
+}
+
+function readLoginProfile() {
+  try {
+    const raw = localStorage.getItem('jnao_user')
+    if (!raw) return null
+    const user = JSON.parse(raw)
+    if (!user?.name) return null
+    return {
+      nickname: String(user.name).trim(),
+      phone: String(user.phone || '').trim(),
+    }
+  } catch (e) {
+    return null
+  }
+}
+
+async function registerChildUser(parentPhone, nickname) {
   const data = await apiJson('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parent_phone: phone, nickname }),
+    body: JSON.stringify({ parent_phone: parentPhone, nickname }),
   })
   setChildUserId(data.child_user_id)
+  try {
+    localStorage.setItem(GUEST_PHONE_KEY, parentPhone)
+    localStorage.setItem(GUEST_NICKNAME_KEY, nickname)
+  } catch (e) { /* ignore */ }
   return data.child_user_id
+}
+
+/** 登录页：用手机号+昵称绑定已有账号或注册 */
+export async function loginOrRegisterChildUser({ nickname, phone } = {}) {
+  const loginProfile = readLoginProfile()
+  const nick = (nickname || loginProfile?.nickname || getOrCreateGuestNickname()).trim() || '学员'
+  const parentPhone = (phone || loginProfile?.phone || getOrCreateGuestPhone()).trim() || getOrCreateGuestPhone()
+  return registerChildUser(parentPhone, nick)
+}
+
+/** 无则自动注册，返回 child_user_id（同一设备/浏览器会复用稳定身份） */
+export async function ensureChildUser(nickname = '学员') {
+  const existing = getChildUserId()
+  if (existing) {
+    try {
+      await apiJson(withUser('/api/user/profile', existing))
+      return existing
+    } catch (e) {
+      if (e.status !== 404) return existing
+      clearChildUserId()
+    }
+  }
+
+  const loginProfile = readLoginProfile()
+  const nick = loginProfile?.nickname || getOrCreateGuestNickname(nickname)
+  const phone = loginProfile?.phone || getOrCreateGuestPhone()
+  return registerChildUser(phone, nick)
 }
 
 /** JNAO 外部 API 用的 uid（存于 child_user.jnao_uid） */
