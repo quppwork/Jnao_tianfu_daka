@@ -128,10 +128,12 @@
                   <text class="hm-talent">{{ h.talent_primary || h.talent || '--' }}</text>
                   <text class="hm-time">{{ h.create_time || h.assessed_at }}</text>
                 </view>
+                <text class="hm-del" @click.stop="confirmDelete(h)">✕</text>
                 <text class="hm-arrow">›</text>
               </view>
             </view>
             <text v-else class="history-empty">暂无历史测评记录</text>
+            <view class="btn-clear-chat" @click="clearGuideChat"><text>清空首页对话</text></view>
           </view>
         </view>
 
@@ -149,9 +151,14 @@ import {
   ensureChildUser,
   fetchGuideSession,
   sendGuideMessage,
+  clearGuideSession,
   fetchProfile,
   saveProfile as saveProfileToDb,
   fetchAssessmentHistory,
+  fetchLatestAssessment,
+  deleteAssessmentReport,
+  updateLearnerProfile,
+  gradeToSchoolStage,
 } from '@/utils/userApi.js'
 
 const isLight = ref(false)
@@ -217,10 +224,10 @@ async function loadGuideSession() {
       text: m.content,
     }))
     if (!messages.value.length) {
-      messages.value = [{ role: 'ai', text: '你好！我是 JNAO 智能助手 👋 有什么想问的吗？比如：天赋测试怎么做？' }]
+      messages.value = [{ role: 'ai', text: '你好！我是张宇老师 👋 想了解平台怎么用都可以问我～比如：天赋测试怎么做？知识答题在哪里？' }]
     }
   } catch (e) {
-    messages.value = [{ role: 'ai', text: '你好！我是 JNAO 智能助手 👋 有什么想问的吗？比如：天赋测试怎么做？' }]
+    messages.value = [{ role: 'ai', text: '你好！我是张宇老师 👋 想了解平台怎么用都可以问我～比如：天赋测试怎么做？知识答题在哪里？' }]
   }
 }
 
@@ -242,6 +249,14 @@ async function loadProfile() {
       const tt = data.profile_json.talent_tag
       if (tp) profile.value.talent = tt ? `${tp}偏${tt}` : tp
     }
+    try {
+      const latest = await fetchLatestAssessment(uid)
+      if (latest?.talent_primary) {
+        profile.value.talent = latest.talent_tag
+          ? `${latest.talent_primary}偏${latest.talent_tag}`
+          : latest.talent_primary
+      }
+    } catch (_) { /* 尚未测评 */ }
     const idx = gradeOptions.indexOf(profile.value.grade)
     if (idx >= 0) gradeIndex.value = idx
   } catch (_) {}
@@ -257,12 +272,52 @@ async function loadHistory() {
 async function saveProfile() {
   try {
     const uid = await ensureChildUser()
+    const existing = await fetchProfile(uid)
+    const pj = { ...(existing.profile_json || {}), grade: profile.value.grade, parentName: profile.value.parentName }
     await saveProfileToDb(uid, {
       nickname: profile.value.name,
-      profile_json: { grade: profile.value.grade, parentName: profile.value.parentName },
+      profile_json: pj,
     })
+    if (profile.value.grade) {
+      await updateLearnerProfile(uid, {
+        grade: profile.value.grade,
+        school_stage: gradeToSchoolStage(profile.value.grade),
+      })
+    }
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch (_) { uni.showToast({ title: '保存失败', icon: 'none' }) }
+}
+
+function confirmDelete(h) {
+  if (!h.id) return
+  uni.showModal({
+    title: '删除测评',
+    content: '确定删除这条测评记录？',
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        const uid = await ensureChildUser()
+        await deleteAssessmentReport(uid, h.id)
+        await loadHistory()
+        await loadProfile()
+        uni.showToast({ title: '已删除', icon: 'none' })
+      } catch (_) {
+        uni.showToast({ title: '删除失败', icon: 'none' })
+      }
+    },
+  })
+}
+
+async function clearGuideChat() {
+  try {
+    const uid = await ensureChildUser()
+    await clearGuideSession(uid)
+    guideSessionId.value = null
+    messages.value = [{ role: 'ai', text: '你好！我是张宇老师 👋 想了解平台怎么用都可以问我～比如：天赋测试怎么做？知识答题在哪里？' }]
+    uni.showToast({ title: '对话已清空', icon: 'none' })
+  } catch (_) {
+    uni.showToast({ title: '清空失败', icon: 'none' })
+  }
 }
 
 function viewHistory(h) {
@@ -366,17 +421,15 @@ function stopRecord() {
 }
 
 function openPage(name) {
-  if (name === 'talent') {
-    uni.navigateTo({ url: '/pages/talent/index' })
-  } else if (name === 'train') {
-    uni.navigateTo({ url: '/pages/training/index' })
-  } else if (name === 'qa') {
-    uni.navigateTo({ url: '/pages/qa/index' })
-  } else if (name === 'growth') {
-    uni.navigateTo({ url: '/pages/growth/index' })
-  } else {
-    uni.showToast({ title: '进入: ' + name, icon: 'none' })
+  const routes = {
+    talent: '/pages/talent/index',
+    train: '/pages/training/index',
+    qa: '/pages/qa/index',
+    growth: '/pages/growth/index',
   }
+  const url = routes[name]
+  if (url) uni.navigateTo({ url })
+  else uni.showToast({ title: '进入: ' + name, icon: 'none' })
 }
 
 let navTapCount = 0
@@ -416,23 +469,23 @@ function onNavTap() {
 .func-grid { display:flex; gap:8px; padding:12px 14px; }
 .func-card { flex:1; background:var(--bg-card); border-radius:12px; padding:12px 6px 10px; display:flex; flex-direction:column; align-items:center; gap:6px; border:1.5px solid transparent; transition:all 0.15s; }
 .func-card:active { background:var(--accent-bg); border-color:var(--accent); transform:scale(0.95); }
-.func-card.active { border-color:var(--accent); }
 .func-icon { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--accent-bg); }
 .func-label { color:var(--text-sub); font-size:11px; font-weight:500; }
 
 .chat-section { flex:1; overflow-y:auto; padding:8px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
 .chat-section::-webkit-scrollbar { display:none; }
-.chat-row { display:flex; gap:8px; margin-bottom:14px; align-items:flex-start; }
+.chat-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-end; }
 .chat-row.user { flex-direction:row-reverse; }
-.chat-av { width:36px; height:36px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
-.chat-av.ai { background:var(--chat-ai-bg); border:1.5px solid rgba(88,166,255,0.3); overflow:hidden; }
-.chat-av.me { background:var(--chat-me-bg); border-radius:50%; color:var(--text-dim); font-size:13px; }
+.chat-av { width:32px; height:32px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.chat-av.ai { background:var(--chat-ai-bg); border:1px solid var(--border); }
+.chat-av.me { background:var(--chat-me-bg); border-radius:50%; color:var(--text-dim); font-size:12px; }
 .ai-avatar-img { width:100%; height:100%; border-radius:8px; object-fit:cover; }
-.chat-bbl { max-width:75%; padding:10px 14px; border-radius:16px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
+.chat-bbl { max-width:76%; padding:9px 13px; border-radius:14px; font-size:13px; line-height:1.55; word-break:break-word; white-space:pre-wrap; }
 .chat-bbl.ai { background:var(--chat-ai-bg); color:var(--text); border-bottom-left-radius:4px; }
 .chat-bbl.me { background:var(--chat-me-bg); color:var(--text-sub); border-bottom-right-radius:4px; }
+[data-theme="white"] .chat-bbl.me { background:#eef2ff; color:#1e293b; border:1px solid #e0e7ff; }
 
-.input-panel { margin:8px 14px 14px; background:var(--bg-card); border-radius:18px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
+.input-panel { margin:8px 14px 14px; background:var(--bg-card); border-radius:18px; padding:8px 10px; display:flex; align-items:center; gap:8px; border:1px solid var(--border); }
 .chat-input { flex:1; background:var(--bg-input); border-radius:12px; padding:10px 14px; font-size:13px; color:var(--text); border:none; outline:none; resize:none; height:38px; line-height:18px; overflow-y:auto; }
 .loading-dots { animation:dotPulse 1.4s infinite; }
 @keyframes dotPulse { 0%,80%,100% { opacity:0.2 } 40% { opacity:1 } }
@@ -474,6 +527,9 @@ function onNavTap() {
 .btn-logout:active { background:rgba(239,68,68,0.2); }
 .history-mini { max-height:160px; overflow-y:auto; }
 .hm-item { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+.hm-del { color:#f85149; font-size:14px; padding:0 4px; cursor:pointer; flex-shrink:0; }
+.btn-clear-chat { margin-top:10px; padding:10px; text-align:center; border:1px dashed var(--border); border-radius:10px; cursor:pointer; }
+.btn-clear-chat text { color:var(--text-dim); font-size:12px; }
 .hm-item:last-child { border-bottom:none; }
 .hm-talent { flex:1; color:var(--text); font-size:12px; font-weight:600; }
 .hm-time { color:var(--text-dim); font-size:10px; }

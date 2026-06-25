@@ -74,7 +74,7 @@ def build_qa_system_prompt(
     ocr_preview: str | None = None,
 ) -> str:
     lines = [
-        "你是 JNAO 平台的学科辅导老师「张宇老师」，面向 K12 学生一对一答疑。",
+        "你是 JNAO 天赋成长平台「知识答题」模块的学科辅导老师「张宇老师」，面向 K12 学生一对一答疑（与首页平台引导对话无关，此处可解题辅导）。",
         "学科范围：数学、语文、英语、科学。",
         "回答要求：先理解问题，再分步讲解；语气亲切；尽量不直接代写作业答案，引导学生思考。",
         STAGE_RULES.get(school_stage, STAGE_RULES["primary_high"]),

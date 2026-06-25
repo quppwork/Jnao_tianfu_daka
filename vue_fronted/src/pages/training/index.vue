@@ -7,8 +7,11 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
       <text class="nav-title cyber-glitch" @click="triggerGlitch">今日训练</text>
-      <view class="nav-dev" :class="{ active: devMode }" @click="toggleDevMode">
-        <text>{{ devMode ? 'DEV ✓' : 'DEV' }}</text>
+      <view class="nav-actions">
+        <view class="nav-history" @click="openHistory"><text>记录</text></view>
+        <view class="nav-dev" :class="{ active: devMode }" @click="toggleDevMode">
+          <text>{{ devMode ? 'DEV ✓' : 'DEV' }}</text>
+        </view>
       </view>
     </view>
 
@@ -456,6 +459,21 @@
         </view>
       </view>
 
+      <view v-if="showHistory" class="picker-overlay" @click="showHistory = false">
+        <view class="picker-card" @click.stop>
+          <text class="picker-title">📅 打卡记录</text>
+          <view v-if="checkinHistory.length" class="history-list">
+            <view v-for="(r, idx) in checkinHistory" :key="r.id || idx" class="history-row">
+              <text class="hr-date">{{ formatHistoryDate(r.created_at) }}</text>
+              <text class="hr-meta">{{ r.ability_type || '训练' }} · {{ r.time_spent || 0 }}分钟</text>
+              <text v-if="r.note" class="hr-note">{{ r.note }}</text>
+            </view>
+          </view>
+          <text v-else class="history-empty">暂无打卡记录</text>
+          <view class="picker-close" @click="showHistory = false"><text>关闭</text></view>
+        </view>
+      </view>
+
       </view>
 
       <!-- Divider -->
@@ -813,6 +831,24 @@ function toggleDevMode() {
   if (devMode.value) loadDevStatus()
 }
 
+async function openHistory() {
+  try {
+    const uid = await ensureChildUser()
+    checkinHistory.value = await fetchTrainingHistory(uid, 30)
+    showHistory.value = true
+  } catch (_) {
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  }
+}
+
+function formatHistoryDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ')
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 async function setAttitude(pct) {
   summaryAttitude.value = pct
   try {
@@ -984,6 +1020,8 @@ const bUnlocked = ref(false)
 const bTip = ref('⚠ 训练 A 未完成，B 暂不开放')
 const showPicker = ref(false)
 const showSummary = ref(false)
+const showHistory = ref(false)
+const checkinHistory = ref([])
 const submittedCards = ref([])
 const attitude = ref(60)
 const summaryAttitude = ref(60)
@@ -1739,6 +1777,15 @@ function triggerGlitch() {
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:#fff; font-size:16px; font-weight:600; }
 .nav-dev { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.nav-actions { display:flex; align-items:center; gap:6px; }
+.nav-history { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.nav-history text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
+.history-list { max-height:50vh; overflow-y:auto; margin-bottom:8px; }
+.history-row { padding:8px 0; border-bottom:1px solid var(--border); }
+.hr-date { color:var(--text); font-size:12px; font-weight:600; display:block; }
+.hr-meta { color:var(--text-dim); font-size:11px; display:block; margin-top:2px; }
+.hr-note { color:var(--text-dim); font-size:10px; display:block; margin-top:2px; }
+.history-empty { color:var(--text-dim); font-size:12px; text-align:center; padding:12px 0; }
 .nav-dev text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
 .nav-dev.active { background:rgba(251,191,36,0.15); border-color:rgba(251,191,36,0.45); }
 .nav-dev.active text { color:#fbbf24; }
