@@ -9,6 +9,30 @@
     </view>
 
     <scroll-view class="body" scroll-y>
+      <!-- Summary -->
+      <view v-if="summary" class="summary-card">
+        <text class="sum-honor">{{ summary.honor_level }}</text>
+        <text class="sum-nick">{{ summary.nickname || '学员' }}</text>
+        <view class="sum-stats">
+          <view class="sum-stat"><text class="sum-num">{{ summary.total_checkins }}</text><text class="sum-lbl">累计打卡</text></view>
+          <view class="sum-stat"><text class="sum-num">{{ summary.checkin_streak }}</text><text class="sum-lbl">连续天数</text></view>
+          <view class="sum-stat"><text class="sum-num">{{ summary.badges_earned }}/{{ summary.badges_total }}</text><text class="sum-lbl">徽章</text></view>
+        </view>
+        <text v-if="summary.talent_primary" class="sum-talent">主导天赋：{{ summary.talent_primary }}</text>
+      </view>
+
+      <!-- Milestones -->
+      <text class="sec-title">🏆 荣誉级别</text>
+      <view class="milestone-list">
+        <view v-for="(m, i) in milestones" :key="i" class="ms-item" :class="{ achieved: m.achieved }">
+          <view class="ms-dot">{{ m.achieved ? '✓' : '' }}</view>
+          <view class="ms-body">
+            <text class="ms-level">{{ m.level }}</text>
+            <text class="ms-cond">{{ m.condition }} · {{ m.progress }}</text>
+          </view>
+        </view>
+      </view>
+
       <!-- Badges -->
       <text class="sec-title">🏅 荣誉徽章</text>
       <view class="badge-row">
@@ -35,8 +59,9 @@
       <!-- Share -->
       <view class="share-card">
         <text class="share-title">📤 一键分享</text>
-        <text class="share-hint">分享你的成长成就到微信/朋友圈</text>
-        <view class="share-btn" @click="shareToast"><text>生成分享卡片</text></view>
+        <text class="share-hint">复制成长成就文案，分享到微信/朋友圈</text>
+        <view v-if="sharePreview" class="share-preview">{{ sharePreview }}</view>
+        <view class="share-btn" @click="copyShare"><text>{{ sharing ? '复制中...' : '复制分享文案' }}</text></view>
       </view>
 
       <view style="height:40px;"></view>
@@ -46,18 +71,39 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ensureChildUser, fetchGrowthBadges, fetchGrowthTimeline } from '@/utils/userApi.js'
+import {
+  ensureChildUser,
+  fetchGrowthBadges,
+  fetchGrowthTimeline,
+  fetchGrowthSummary,
+  fetchGrowthMilestones,
+  fetchGrowthShare,
+} from '@/utils/userApi.js'
 
 const badges = ref([])
 const events = ref([])
+const milestones = ref([])
+const summary = ref(null)
+const sharePreview = ref('')
+const sharing = ref(false)
 const loading = ref(true)
 
 async function loadGrowth() {
   loading.value = true
   try {
     const uid = await ensureChildUser()
-    badges.value = await fetchGrowthBadges(uid)
-    events.value = await fetchGrowthTimeline(uid)
+    const [b, t, s, m, sh] = await Promise.all([
+      fetchGrowthBadges(uid),
+      fetchGrowthTimeline(uid),
+      fetchGrowthSummary(uid).catch(() => null),
+      fetchGrowthMilestones(uid).catch(() => []),
+      fetchGrowthShare(uid).catch(() => null),
+    ])
+    badges.value = b
+    events.value = t
+    summary.value = s
+    milestones.value = m
+    sharePreview.value = sh?.text || ''
   } catch (e) {
     badges.value = []
     events.value = []
@@ -68,7 +114,30 @@ async function loadGrowth() {
 onMounted(loadGrowth)
 
 function goBack() { uni.navigateBack({ delta: 1 }) }
-function shareToast() { uni.showToast({ title: '分享功能开发中', icon: 'none' }) }
+
+async function copyShare() {
+  if (sharing.value) return
+  sharing.value = true
+  const text = sharePreview.value || '我在劲脑天赋成长平台坚持学习，一起来打卡吧！'
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    uni.showToast({ title: '已复制到剪贴板', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: '复制失败，请手动复制', icon: 'none' })
+  }
+  sharing.value = false
+}
 </script>
 
 <style scoped>
@@ -80,6 +149,23 @@ function shareToast() { uni.showToast({ title: '分享功能开发中', icon: 'n
 .body { flex:1; overflow-y:auto; padding:12px 16px 0; scrollbar-width:none; }
 .body::-webkit-scrollbar { display:none; }
 .sec-title { color:var(--text); font-size:15px; font-weight:700; display:block; margin:0 0 12px; }
+
+.summary-card { background:linear-gradient(135deg, rgba(88,166,255,0.12), rgba(124,58,237,0.08)); border:1px solid var(--border); border-radius:16px; padding:18px; margin-bottom:20px; text-align:center; }
+.sum-honor { color:var(--accent); font-size:20px; font-weight:800; display:block; margin-bottom:4px; }
+.sum-nick { color:var(--text-dim); font-size:13px; display:block; margin-bottom:12px; }
+.sum-stats { display:flex; justify-content:space-around; margin-bottom:8px; }
+.sum-stat { text-align:center; }
+.sum-num { color:var(--text); font-size:18px; font-weight:700; display:block; }
+.sum-lbl { color:var(--text-dim); font-size:10px; display:block; margin-top:2px; }
+.sum-talent { color:var(--text-dim); font-size:12px; display:block; margin-top:8px; }
+
+.milestone-list { margin-bottom:20px; }
+.ms-item { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:12px; margin-bottom:8px; background:var(--bg-card); opacity:0.45; }
+.ms-item.achieved { opacity:1; border:1px solid rgba(88,166,255,0.25); }
+.ms-dot { width:22px; height:22px; border-radius:50%; background:var(--bg); border:2px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--accent); margin-top:2px; }
+.ms-item.achieved .ms-dot { background:var(--accent-bg); border-color:var(--accent); }
+.ms-level { color:var(--text); font-size:13px; font-weight:600; display:block; }
+.ms-cond { color:var(--text-dim); font-size:11px; display:block; margin-top:2px; }
 
 .badge-row { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:20px; }
 .badge-item { text-align:center; width:calc(33.33% - 10px); }
@@ -96,13 +182,13 @@ function shareToast() { uni.showToast({ title: '分享功能开发中', icon: 'n
 .tl-item.future { opacity:0.35; }
 .tl-dot { position:absolute; left:-18px; top:4px; width:10px; height:10px; border-radius:50%; background:var(--bg-card); border:2px solid var(--border); }
 .tl-dot.done { background:var(--accent); border-color:var(--accent); }
-.tl-card { }
 .tl-title { color:var(--text); font-size:13px; font-weight:600; display:block; }
 .tl-date { color:var(--text-dim); font-size:11px; display:block; margin-top:2px; }
 
 .share-card { background:var(--bg-card); border-radius:16px; padding:20px; text-align:center; margin-bottom:20px; border:1px dashed var(--border); }
 .share-title { color:var(--text); font-size:15px; font-weight:700; display:block; margin-bottom:4px; }
 .share-hint { color:var(--text-dim); font-size:12px; display:block; margin-bottom:12px; }
+.share-preview { background:var(--bg); border-radius:10px; padding:12px; text-align:left; font-size:11px; color:var(--text-dim); line-height:1.5; margin-bottom:12px; white-space:pre-wrap; max-height:120px; overflow-y:auto; }
 .share-btn { background:var(--accent); border-radius:12px; padding:12px; display:inline-block; cursor:pointer; }
 .share-btn text { color:#fff; font-size:14px; font-weight:600; }
 .share-btn:active { opacity:0.85; }

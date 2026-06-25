@@ -197,6 +197,19 @@ export async function deleteAssessmentReport(userId, assessmentId) {
   })
 }
 
+export async function fetchLatestAssessment(userId) {
+  return apiJson(withUser('/api/talent/assessment/latest', userId))
+}
+
+export function gradeToSchoolStage(grade) {
+  const g = String(grade || '')
+  if (['一年级', '二年级', '三年级'].includes(g)) return 'primary_low'
+  if (['四年级', '五年级', '六年级'].includes(g)) return 'primary_high'
+  if (['初一', '初二', '初三'].includes(g)) return 'junior'
+  if (['高一', '高二', '高三'].includes(g)) return 'senior'
+  return 'primary_high'
+}
+
 export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
   return apiJson('/api/talent/report', {
     method: 'POST',
@@ -307,6 +320,10 @@ export async function fetchGuideSession(userId) {
   return apiJson(withUser('/api/guide/session', userId))
 }
 
+export async function clearGuideSession(userId) {
+  return apiJson(withUser('/api/guide/clear', userId), { method: 'POST' })
+}
+
 export async function sendGuideMessage(userId, message, sessionId = null) {
   return apiJson(withUser('/api/guide/chat', userId), {
     method: 'POST',
@@ -316,6 +333,23 @@ export async function sendGuideMessage(userId, message, sessionId = null) {
 }
 
 // ── 学科答疑 ──
+
+export async function fetchQaSessions(userId) {
+  const data = await apiJson(withUser('/api/qa/sessions', userId))
+  return data.items || []
+}
+
+export async function createQaSession(userId, subject = null) {
+  return apiJson(withUser('/api/qa/sessions', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject: subject || null }),
+  })
+}
+
+export async function deleteQaSession(userId, sessionId) {
+  return apiJson(withUser(`/api/qa/sessions/${sessionId}`, userId), { method: 'DELETE' })
+}
 
 export async function fetchQaSession(userId, sessionId) {
   return apiJson(withUser(`/api/qa/sessions/${sessionId}`, userId))
@@ -385,6 +419,19 @@ export async function fetchGrowthBadges(userId) {
 export async function fetchGrowthTimeline(userId) {
   const data = await apiJson(withUser('/api/growth/timeline', userId))
   return data.items || []
+}
+
+export async function fetchGrowthSummary(userId) {
+  return apiJson(withUser('/api/growth/summary', userId))
+}
+
+export async function fetchGrowthMilestones(userId) {
+  const data = await apiJson(withUser('/api/growth/milestones', userId))
+  return data.items || []
+}
+
+export async function fetchGrowthShare(userId) {
+  return apiJson(withUser('/api/growth/share', userId))
 }
 
 // ── 开发者工具（JNAO_DEV_MODE=1）──

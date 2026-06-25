@@ -29,6 +29,13 @@ class TestModuleHome:
         assert res.json()["session_id"]
         assert len(res.json()["messages"]) >= 2
 
+    def test_guide_session_greeting(self, client: TestClient, registered_user):
+        uid = registered_user["child_user_id"]
+        res = client.get(f"/api/guide/session?user_id={uid}")
+        assert res.status_code == 200
+        msgs = res.json()["messages"]
+        assert msgs[0]["content"].startswith("你好！我是张宇老师")
+
     def test_guide_debug_shows_doubao(self, client: TestClient):
         res = client.get("/api/guide/debug")
         assert res.status_code == 200
