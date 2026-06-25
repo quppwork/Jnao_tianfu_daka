@@ -9,7 +9,7 @@ upstream:
   tianfu_rag:
     url: "http://192.168.60.199:8010"
     timeout: 120.0
-    health_timeout: 3.0
+    health_timeout: 0.5
 
 deepseek:
   api_key: "${DEEPSEEK_API_KEY}"
@@ -21,6 +21,25 @@ doubao:
   api_base: "${DOUBAO_API_BASE}"
   model: "${DOUBAO_CHAT_MODEL}"
   timeout: 30.0
+
+# 各天赋固定训练视频（url 可为 OSS 或 /static/ 路径）
+training:
+  # 首日固定课（content_index=0）；未完成则次日仍推同一套
+  day_one:
+    a_lessons:
+      - { skill: 影像追忆, stage: 1, part: 1 }
+      - { skill: 影像追忆, stage: 1, part: 2 }
+    b_lessons:
+      - { skill: 数学奥秘, stage: 1, part: 1 }
+  # 次日及以后
+  after_day_one:
+    strategy: random
+  talent_videos:
+    "1": { title: "学者·五者天赋视频", url: "/static/training_video.mp4" }
+    "2": { title: "思者·五者天赋视频", url: "/static/training_video.mp4" }
+    "3": { title: "行者·五者天赋视频", url: "/static/training_video.mp4" }
+    "4": { title: "德者·五者天赋视频", url: "/static/training_video.mp4" }
+    "5": { title: "赢者·五者天赋视频", url: "/static/training_video.mp4" }
 
 database:
   url: "${DATABASE_URL}"

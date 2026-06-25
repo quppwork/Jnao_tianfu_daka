@@ -162,9 +162,14 @@
       <view class="notice-card" style="max-width:340px;" @tap.stop>
         <text class="notice-text" style="font-weight:700;margin-bottom:12px;display:block;">历史报告</text>
         <view v-if="historyList.length" class="history-list">
-          <view v-for="(h,i) in historyList" :key="i" class="history-item" @tap="viewHistory(h)">
-            <text class="hi-talent">{{ h.talent || '--' }}</text>
-            <text class="hi-time">{{ h.create_time || h.saved_at }}</text>
+          <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item">
+            <view class="history-item-main" @tap="viewHistory(h)">
+              <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+              <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
+            </view>
+            <view class="history-del" @tap.stop="confirmDeleteHistory(h)">
+              <text>✕</text>
+            </view>
           </view>
         </view>
         <text v-else class="notice-text">暂无历史报告</text>
@@ -181,16 +186,24 @@
 
 <script setup>
 import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
-import { getOrCreateUid } from '@/utils/testHelpers.js'
-import { ensureChildUser } from '@/utils/userApi.js'
+import {
+  ensureChildUser,
+  ensureJnaoUid,
+  fetchAssessmentHistory,
+  deleteAssessmentReport,
+  submitTalentReport,
+} from '@/utils/userApi.js'
 
-// Load history
-onMounted(() => {
+async function loadHistory() {
   try {
-    const raw = localStorage.getItem('jnao_test_history')
-    if (raw) historyList.value = JSON.parse(raw)
-  } catch(e) {}
-})
+    const uid = await ensureChildUser()
+    historyList.value = await fetchAssessmentHistory(uid)
+  } catch (e) {
+    historyList.value = []
+  }
+}
+
+onMounted(loadHistory)
 
 // ── State ──
 const phase = ref('door')
@@ -202,6 +215,8 @@ const compPhase = ref(0)
 const showHistory = ref(false)
 const historyList = ref([])
 const toast = ref({ text: '', variant: 'ack' })
+
+watch(showHistory, (open) => { if (open) loadHistory() })
 
 // Testing state
 const questionOrder = ref([])       // shuffled question IDs
@@ -426,29 +441,14 @@ async function doSubmitReport() {
   submitError.value = ''
   try {
     const bits = encodeAnswers()
-    const uid = getOrCreateUid()
     const childUserId = await ensureChildUser('测评学员')
+    const jnaoUid = await ensureJnaoUid(childUserId)
     const type = testType.value === '成人' ? 0 : 1
-    console.log('[doSubmitReport] sending', { bits, uid, type, childUserId })
-    const res = await fetch('/api/talent/report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answer: bits, uid, type, child_user_id: childUserId })
-    })
-    if (!res.ok) throw new Error('HTTP ' + res.status)
-    const json = await res.json()
+    const json = await submitTalentReport(childUserId, { answer: bits, jnaoUid, type })
     if (json.code !== 1) throw new Error('报告生成失败')
-    // 存到本地，跳转报告页
-    uni.setStorageSync('jnao_report', json.data)
-    try { localStorage.setItem('jnao_report', JSON.stringify(json.data)) } catch(e) {}
-    // 存入历史
-    try {
-      const raw = localStorage.getItem('jnao_test_history') || '[]'
-      const list = JSON.parse(raw)
-      list.push({ talent: json.data.talent, create_time: json.data.create_time, id: json.data.id, saved_at: new Date().toISOString(), data: json.data })
-      localStorage.setItem('jnao_test_history', JSON.stringify(list))
-    } catch(e) {}
-    uni.navigateTo({ url: '/pages/report/index' })
+    await loadHistory()
+    const aid = json.assessment_id
+    uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
   } catch (e) {
     submitError.value = '提交失败：' + (e.message || '请稍后重试')
   }
@@ -457,10 +457,32 @@ async function doSubmitReport() {
 
 function viewHistory(h) {
   showHistory.value = false
-  if (h.data) {
-    uni.setStorageSync('jnao_report', h.data)
-    try { localStorage.setItem('jnao_report', JSON.stringify(h.data)) } catch(e) {}
-    uni.navigateTo({ url: '/pages/report/index' })
+  if (h.id) {
+    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
+  }
+}
+
+function confirmDeleteHistory(h) {
+  if (!h?.id) return
+  uni.showModal({
+    title: '删除报告',
+    content: `确定删除「${h.talent_primary || h.talent || '测评'}」报告？删除后将从列表移除，数据已归档备份。`,
+    confirmText: '删除',
+    confirmColor: '#ef4444',
+    success: (res) => {
+      if (res.confirm) deleteHistory(h.id)
+    },
+  })
+}
+
+async function deleteHistory(assessmentId) {
+  try {
+    const uid = await ensureChildUser()
+    await deleteAssessmentReport(uid, assessmentId)
+    historyList.value = historyList.value.filter(h => h.id !== assessmentId)
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
   }
 }
 
@@ -525,8 +547,12 @@ onBeforeUnmount(() => {
 .history-hint { text-align:center; margin-bottom:8px; cursor:pointer; }
 .history-hint text { color:var(--text-dim); font-size:13px; }
 .history-list { max-height:300px; overflow-y:auto; margin-bottom:8px; }
-.history-item { padding:12px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
-.history-item:active { background:var(--accent-bg); }
+.history-item { padding:12px 0; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+.history-item-main { flex:1; display:flex; justify-content:space-between; align-items:center; cursor:pointer; min-width:0; }
+.history-item-main:active { opacity:0.7; }
+.history-del { width:32px; height:32px; border-radius:8px; background:rgba(239,68,68,0.1); display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; }
+.history-del text { color:#ef4444; font-size:14px; font-weight:700; }
+.history-del:active { background:rgba(239,68,68,0.2); }
 .hi-talent { color:var(--accent); font-size:14px; font-weight:600; }
 .hi-time { color:var(--text-dim); font-size:11px; }
 .history-close { text-align:center; margin-top:10px; cursor:pointer; }

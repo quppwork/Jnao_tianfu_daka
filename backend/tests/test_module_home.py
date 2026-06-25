@@ -6,15 +6,28 @@ from fastapi.testclient import TestClient
 class TestModuleHome:
     """前端：pages/index.vue"""
 
-    def test_guide_chat(self, client: TestClient, mock_doubao):
-        res = client.post("/api/guide/chat", json={"message": "天赋测试怎么做？"})
+    def test_guide_chat(self, client: TestClient, registered_user, mock_doubao):
+        uid = registered_user["child_user_id"]
+        res = client.post(
+            f"/api/guide/chat?user_id={uid}",
+            json={"message": "天赋测试怎么做？"},
+        )
         assert res.status_code == 200
         assert res.json()["reply"] == "【测试】豆包回复"
+        assert res.json()["session_id"]
 
-    def test_guide_empty_message(self, client: TestClient):
-        res = client.post("/api/guide/chat", json={"message": ""})
+    def test_guide_empty_message(self, client: TestClient, registered_user):
+        uid = registered_user["child_user_id"]
+        res = client.post(f"/api/guide/chat?user_id={uid}", json={"message": ""})
+        assert res.status_code == 422
+
+    def test_guide_session_load(self, client: TestClient, registered_user, mock_doubao):
+        uid = registered_user["child_user_id"]
+        client.post(f"/api/guide/chat?user_id={uid}", json={"message": "你好"})
+        res = client.get(f"/api/guide/session?user_id={uid}")
         assert res.status_code == 200
-        assert "请输入" in res.json()["reply"]
+        assert res.json()["session_id"]
+        assert len(res.json()["messages"]) >= 2
 
     def test_guide_debug_shows_doubao(self, client: TestClient):
         res = client.get("/api/guide/debug")
