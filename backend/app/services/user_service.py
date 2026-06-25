@@ -3,6 +3,7 @@
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser
+from app.services.assessment_service import get_latest_assessment
 
 
 def get_profile(db: Session, child_user_id: int) -> ChildUser | None:
@@ -34,8 +35,8 @@ def update_profile(
     return user
 
 
-def profile_to_dict(user: ChildUser) -> dict:
-    return {
+def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
+    data = {
         "child_user_id": user.id,
         "parent_phone": user.parent_phone,
         "nickname": user.nickname,
@@ -45,3 +46,11 @@ def profile_to_dict(user: ChildUser) -> dict:
         "is_qingbei": bool(user.is_qingbei),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
+    if db is not None:
+        latest = get_latest_assessment(db, user.id)
+        if latest:
+            data["talent_code"] = latest.talent_code
+            data["talent_tag"] = latest.talent_tag
+            data["talent_primary"] = latest.talent_primary
+            data["latest_assessment_id"] = latest.id
+    return data

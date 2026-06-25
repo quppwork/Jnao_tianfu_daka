@@ -25,7 +25,7 @@ def get_profile(
     user = user_service.get_profile(db, child_user_id)
     if not user:
         raise HTTPException(404, "用户不存在")
-    return user_service.profile_to_dict(user)
+    return user_service.profile_to_dict(user, db)
 
 
 @router.put("/profile")
@@ -44,4 +44,4 @@ def update_profile(
     )
     if not user:
         raise HTTPException(404, "用户不存在")
-    return user_service.profile_to_dict(user)
+    return user_service.profile_to_dict(user, db)

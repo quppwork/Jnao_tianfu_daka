@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import auth, chat, growth, guide, health, qa, resources, talent, training, user, voice
+from app.api import auth, chat, dev, growth, guide, health, qa, resources, talent, training, user, voice
 from app.core.logger import setup_logging
 from app.db.models import ContentItem
 from app.db.session import get_session_factory, init_db
@@ -47,6 +47,20 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="JNAO API", version="0.3.0", lifespan=lifespan)
 
 
+@app.get("/")
+def root():
+    """根路径说明 — 8012 为 API，产品页面在前端"""
+    return {
+        "name": "JNAO 天赋成长平台 API",
+        "version": "0.3.0",
+        "message": "这是后端 API 服务。请在浏览器打开前端地址使用训练、测评等功能。",
+        "frontend": "http://127.0.0.1:5185",
+        "docs": "/docs",
+        "health": "/api/health",
+        "ping": "/api/ping",
+    }
+
+
 @app.middleware("http")
 async def log_requests(request, call_next):
     logger.info(f"--> {request.method} {request.url.path}")
@@ -70,6 +84,7 @@ app.include_router(voice.router)
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(training.router)
+app.include_router(dev.router)
 app.include_router(resources.router)
 app.include_router(qa.router)
 app.include_router(growth.router)

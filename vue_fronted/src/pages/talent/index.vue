@@ -162,9 +162,14 @@
       <view class="notice-card" style="max-width:340px;" @tap.stop>
         <text class="notice-text" style="font-weight:700;margin-bottom:12px;display:block;">历史报告</text>
         <view v-if="historyList.length" class="history-list">
-          <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item" @tap="viewHistory(h)">
-            <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
-            <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
+          <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item">
+            <view class="history-item-main" @tap="viewHistory(h)">
+              <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+              <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
+            </view>
+            <view class="history-del" @tap.stop="confirmDeleteHistory(h)">
+              <text>✕</text>
+            </view>
           </view>
         </view>
         <text v-else class="notice-text">暂无历史报告</text>
@@ -185,6 +190,7 @@ import {
   ensureChildUser,
   ensureJnaoUid,
   fetchAssessmentHistory,
+  deleteAssessmentReport,
   submitTalentReport,
 } from '@/utils/userApi.js'
 
@@ -454,6 +460,30 @@ function viewHistory(h) {
   }
 }
 
+function confirmDeleteHistory(h) {
+  if (!h?.id) return
+  uni.showModal({
+    title: '删除报告',
+    content: `确定删除「${h.talent_primary || h.talent || '测评'}」报告？删除后将从列表移除，数据已归档备份。`,
+    confirmText: '删除',
+    confirmColor: '#ef4444',
+    success: (res) => {
+      if (res.confirm) deleteHistory(h.id)
+    },
+  })
+}
+
+async function deleteHistory(assessmentId) {
+  try {
+    const uid = await ensureChildUser()
+    await deleteAssessmentReport(uid, assessmentId)
+    historyList.value = historyList.value.filter(h => h.id !== assessmentId)
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+  }
+}
+
 function dismissNotice() {
   ageGateNotice.value = false
   if (noticeTimer) clearTimeout(noticeTimer)
@@ -515,8 +545,12 @@ onBeforeUnmount(() => {
 .history-hint { text-align:center; margin-bottom:8px; cursor:pointer; }
 .history-hint text { color:var(--text-dim); font-size:13px; }
 .history-list { max-height:300px; overflow-y:auto; margin-bottom:8px; }
-.history-item { padding:12px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
-.history-item:active { background:var(--accent-bg); }
+.history-item { padding:12px 0; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+.history-item-main { flex:1; display:flex; justify-content:space-between; align-items:center; cursor:pointer; min-width:0; }
+.history-item-main:active { opacity:0.7; }
+.history-del { width:32px; height:32px; border-radius:8px; background:rgba(239,68,68,0.1); display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; }
+.history-del text { color:#ef4444; font-size:14px; font-weight:700; }
+.history-del:active { background:rgba(239,68,68,0.2); }
 .hi-talent { color:var(--accent); font-size:14px; font-weight:600; }
 .hi-time { color:var(--text-dim); font-size:11px; }
 .history-close { text-align:center; margin-top:10px; cursor:pointer; }
