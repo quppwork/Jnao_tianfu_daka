@@ -17,6 +17,16 @@ class ProfileUpdateRequest(BaseModel):
     training_level: str | None = None
 
 
+class LearnerProfileUpdate(BaseModel):
+    age: int | None = Field(None, ge=5, le=25)
+    grade: str | None = Field(None, max_length=20)
+    school_stage: str | None = Field(
+        None,
+        pattern="^(primary_low|primary_high|junior|senior)$",
+    )
+    subject_pref: str | None = Field(None, max_length=20)
+
+
 @router.get("/profile")
 def get_profile(
     child_user_id: int = Depends(get_child_user_id),
@@ -42,6 +52,19 @@ def update_profile(
         profile_json=req.profile_json,
         training_level=req.training_level,
     )
+    if not user:
+        raise HTTPException(404, "用户不存在")
+    return user_service.profile_to_dict(user, db)
+
+
+@router.put("/learner-profile")
+def update_learner_profile(
+    req: LearnerProfileUpdate,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    patch = req.model_dump(exclude_none=True)
+    user = user_service.merge_learner_profile(db, child_user_id, patch)
     if not user:
         raise HTTPException(404, "用户不存在")
     return user_service.profile_to_dict(user, db)

@@ -84,6 +84,16 @@ def mock_doubao():
             return_value=reply,
         ),
         patch(
+            "app.services.qa_service.vision_chat_completion",
+            new_callable=AsyncMock,
+            return_value="【测试】识题预览",
+        ),
+        patch(
+            "app.services.doubao_client.vision_chat_completion",
+            new_callable=AsyncMock,
+            return_value="【测试】识题预览",
+        ),
+        patch(
             "app.services.training_plan_generator.chat_completion",
             new_callable=AsyncMock,
             return_value=reply,

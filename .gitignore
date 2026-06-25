@@ -11,6 +11,7 @@ backend/data/
 
 # Node
 node_modules/
+vue_fronted/.cert/
 
 # IDE
 .vscode/
