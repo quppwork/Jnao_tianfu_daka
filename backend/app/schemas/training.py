@@ -11,6 +11,11 @@ class RegisterRequest(BaseModel):
     jnao_uid: str | None = None
 
 
+class LoginRequest(BaseModel):
+    nickname: str = Field(..., min_length=1, max_length=50)
+    parent_phone: str | None = None
+
+
 class RegisterResponse(BaseModel):
     child_user_id: int
     parent_phone: str

@@ -283,24 +283,38 @@
         </template>
         <template v-else-if="card.name === '扫描速记'">
           <view class="form-row">
-            <text class="form-label">用时</text>
-            <input class="form-input" v-model="card.time" placeholder="如：1秒" />
-          </view>
-          <view class="form-row">
-            <text class="form-label">完成</text>
-            <view class="form-inline">
-              <input class="form-input short" v-model="card.wordCount" placeholder="字数" />
-              <text class="form-unit">字的</text>
-              <input class="form-input short" v-model="card.bookName" placeholder="书名" />
-              <text class="form-unit">训练</text>
+            <text class="form-label">材料类型</text>
+            <view class="form-tags">
+              <text class="ftag" :class="{ on: card.materialType === '书' }" @click="card.materialType = '书'">书</text>
+              <text class="ftag" :class="{ on: card.materialType === '文章' }" @click="card.materialType = '文章'">文章</text>
+              <text class="ftag" :class="{ on: card.materialType === '自定义' }" @click="card.materialType = '自定义'">自定义</text>
             </view>
           </view>
           <view class="form-row">
-            <text class="form-label">达到</text>
-            <view class="form-tags">
-              <text class="ftag" :class="{ on: card.result === '逐字倒背' }" @click="card.result = '逐字倒背'">逐字倒背</text>
-              <text class="ftag" :class="{ on: card.result === '逐字复述' }" @click="card.result = '逐字复述'">逐字复述</text>
-              <text class="ftag" :class="{ on: card.result === '复述80%准确' }" @click="card.result = '复述80%准确'">复述80%准确</text>
+            <text class="form-label">材料名称</text>
+            <input class="form-input" v-model="card.materialName" :placeholder="card.materialType === '书' ? '如：《西游记》' : card.materialType === '文章' ? '如：作文《我的姐姐》' : '如：圆周率前100位'" />
+          </view>
+          <view class="form-row">
+            <text class="form-label">字数</text>
+            <view class="form-inline">
+              <input class="form-input short" v-model="card.wordCount" placeholder="字数" type="number" />
+              <text class="form-unit">字</text>
+            </view>
+          </view>
+          <view class="form-row">
+            <text class="form-label">正背</text>
+            <view class="form-inline">
+              <input class="form-input short" v-model="card.forwardTime" placeholder="用时" />
+              <text class="form-unit">·</text>
+              <input class="form-input short" v-model="card.forwardAcc" placeholder="准确度" />
+            </view>
+          </view>
+          <view class="form-row">
+            <text class="form-label">倒背</text>
+            <view class="form-inline">
+              <input class="form-input short" v-model="card.backwardTime" placeholder="用时" />
+              <text class="form-unit">·</text>
+              <input class="form-input short" v-model="card.backwardAcc" placeholder="准确度" />
             </view>
           </view>
           <view class="form-row">
@@ -962,12 +976,20 @@ const abilities = ['超脑阅读','影像追忆','扫描速记','极速运算','
 
 function hasCard(name) { return cards.value.some(c => c.name === name) }
 
+function newCard(name) {
+  const base = { name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] }
+  if (name === '扫描速记') {
+    return { ...base, materialType: '书', materialName: '', wordCount: '', forwardTime: '', forwardAcc: '', backwardTime: '', backwardAcc: '' }
+  }
+  return base
+}
+
 function toggleCard(name) {
   const idx = cards.value.findIndex(c => c.name === name)
   if (idx >= 0) {
     cards.value.splice(idx, 1)
   } else {
-    cards.value.push({ name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] })
+    cards.value.push(newCard(name))
   }
 }
 
@@ -1004,7 +1026,12 @@ function serializeCards(list) {
     accuracy: c.accuracy,
     note: c.note,
     wordCount: c.wordCount,
-    bookName: c.bookName,
+    materialType: c.materialType,
+    materialName: c.materialName,
+    forwardTime: c.forwardTime,
+    forwardAcc: c.forwardAcc,
+    backwardTime: c.backwardTime,
+    backwardAcc: c.backwardAcc,
     fileNames: (c.files || []).map(f => f.name),
   }))
 }
@@ -1082,7 +1109,7 @@ function autoDetectAbilities() {
     if (!title) continue
     for (const ability of abilities) {
       if (title.includes(ability) && !hasCard(ability)) {
-        cards.value.push({ name: ability, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] })
+        cards.value.push(newCard(ability))
       }
     }
   }
@@ -1161,7 +1188,12 @@ async function submitForm() {
 
 function getCardSummary(c) {
   if (c.name === '极速运算') return c.name + '(' + (c.tag || '运算') + ',' + c.time + '分钟,' + c.count + '题,' + c.accuracy + '%)'
-  if (c.name === '扫描速记') return '扫描速记：用时' + (c.time||'?') + '，完成' + (c.wordCount||'?') + '字《' + (c.bookName||'?') + '》，' + (c.result||'待选')
+  if (c.name === '扫描速记') {
+    const parts = [(c.materialType||'书') + '《' + (c.materialName||'?') + '》', (c.wordCount||'?') + '字']
+    if (c.forwardTime || c.forwardAcc) parts.push('正背' + (c.forwardTime||'?') + '/' + (c.forwardAcc||'?'))
+    if (c.backwardTime || c.backwardAcc) parts.push('倒背' + (c.backwardTime||'?') + '/' + (c.backwardAcc||'?'))
+    return '扫描速记：' + parts.join('，')
+  }
   return c.name + '(' + c.time + '分钟)'
 }
 
@@ -1442,11 +1474,11 @@ function goBack() {
 .summary-more { color:#00d2ff; font-size:11px; display:block; margin-top:4px; }
 
 /* 未打卡 — 暖黄警告 */
-.summary-empty { border-color:rgba(251,191,36,0.4); background:rgba(251,191,36,0.06); text-align:center; cursor:default; }
-.summary-empty:active { background:rgba(251,191,36,0.06); }
-.summary-empty-icon { display:block; font-size:22px; margin-bottom:6px; text-align:center; animation:pulseWarn 2s ease-in-out infinite; }
+.summary-empty { border-color:rgba(251,191,36,0.5); background:rgba(251,191,36,0.08); text-align:center; cursor:default; }
+.summary-empty:active { background:rgba(251,191,36,0.08); }
+.summary-empty-icon { display:block; font-size:22px; margin-bottom:6px; text-align:center; animation:pulseWarn 2s ease-in-out infinite; color:#fbbf24; text-shadow:0 0 12px rgba(251,191,36,0.5); }
 .summary-empty-title { display:block; color:#fbbf24; font-size:14px; font-weight:700; text-align:center; margin-bottom:4px; }
-.summary-empty-hint { display:block; color:rgba(251,191,36,0.55); font-size:11px; text-align:center; line-height:1.4; }
+.summary-empty-hint { display:block; color:rgba(251,191,36,0.6); font-size:11px; text-align:center; line-height:1.4; }
 @keyframes pulseWarn { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:1; transform:scale(1.15); } }
 
 .picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
@@ -1637,10 +1669,11 @@ function goBack() {
 [data-theme="white"] .summary-label { color:#6b7280; }
 [data-theme="white"] .summary-text { color:#9ca3af; }
 [data-theme="white"] .summary-more { color:#2563eb; }
-[data-theme="white"] .summary-empty { border-color:rgba(217,119,6,0.35); background:rgba(251,191,36,0.06); }
-[data-theme="white"] .summary-empty:active { background:rgba(251,191,36,0.06); }
+[data-theme="white"] .summary-empty { border-color:rgba(217,119,6,0.4); background:rgba(251,191,36,0.08); }
+[data-theme="white"] .summary-empty:active { background:rgba(251,191,36,0.08); }
+[data-theme="white"] .summary-empty-icon { color:#d97706; text-shadow:0 0 10px rgba(217,119,6,0.3); }
 [data-theme="white"] .summary-empty-title { color:#d97706; }
-[data-theme="white"] .summary-empty-hint { color:rgba(217,119,6,0.55); }
+[data-theme="white"] .summary-empty-hint { color:rgba(217,119,6,0.6); }
 [data-theme="white"] .picker-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 24px rgba(0,0,0,0.06); }
 [data-theme="white"] .pph-dot { color:#2563eb; }
 [data-theme="white"] .pph-title { color:#6b7280; }
