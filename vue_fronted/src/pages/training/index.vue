@@ -1772,7 +1772,7 @@ function triggerGlitch() {
 
 <style scoped>
 @import 'augmented-ui/augmented-ui.min.css';
-[data-augmented-ui].card, [data-augmented-ui].plan-card { --aug-border-bg:rgba(0,210,255,0.2); --aug-border-all:2px; }
+[data-augmented-ui].card, [data-augmented-ui].plan-card { --aug-border-bg:rgba(0,210,255,0.35); --aug-border-all:2px; }
 .app { height:100vh; max-width:480px; margin:0 auto; background:#0b111e; font-family:PingFang SC,Roboto,sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; }
 .nav { display:flex; align-items:center; padding:14px 14px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
