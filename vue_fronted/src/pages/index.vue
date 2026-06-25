@@ -123,12 +123,12 @@
           </view>
           <view v-if="settingsTab === 'history'" class="set-block-body">
             <view v-if="historyList.length" class="history-mini">
-              <view v-for="(h, i) in historyList" :key="h.id || i" class="hm-item" @click="viewHistory(h)">
-                <view class="hm-left">
+              <view v-for="(h, i) in historyList" :key="h.id || i" class="hm-item">
+                <view class="hm-left" @click="viewHistory(h)">
                   <text class="hm-talent">{{ h.talent_primary || h.talent || '--' }}</text>
                   <text class="hm-time">{{ h.create_time || h.assessed_at }}</text>
                 </view>
-                <text class="hm-arrow">›</text>
+                <text class="hm-del" @click.stop="confirmDeleteHistory(h)">✕</text>
               </view>
             </view>
             <text v-else class="history-empty">暂无历史测评记录</text>
@@ -152,6 +152,7 @@ import {
   fetchProfile,
   saveProfile as saveProfileToDb,
   fetchAssessmentHistory,
+  deleteAssessmentReport,
 } from '@/utils/userApi.js'
 
 const isLight = ref(false)
@@ -269,6 +270,28 @@ function viewHistory(h) {
   if (h.id) {
     showSettings.value = false
     uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
+  }
+}
+
+function confirmDeleteHistory(h) {
+  if (!h?.id) return
+  uni.showModal({
+    title: '删除报告',
+    content: `确定删除「${h.talent_primary || h.talent || '测评'}」报告？`,
+    confirmText: '删除',
+    confirmColor: '#ef4444',
+    success: (res) => { if (res.confirm) deleteHistory(h.id) },
+  })
+}
+
+async function deleteHistory(assessmentId) {
+  try {
+    const uid = await ensureChildUser()
+    await deleteAssessmentReport(uid, assessmentId)
+    historyList.value = historyList.value.filter(h => h.id !== assessmentId)
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
   }
 }
 
@@ -478,5 +501,7 @@ function onNavTap() {
 .hm-talent { flex:1; color:var(--text); font-size:12px; font-weight:600; }
 .hm-time { color:var(--text-dim); font-size:10px; }
 .hm-arrow { color:var(--text-dim); font-size:16px; }
+.hm-del { color:var(--text-dim); font-size:14px; padding:4px; cursor:pointer; }
+.hm-del:active { color:#ef4444; }
 .history-empty { color:var(--text-dim); font-size:12px; text-align:center; padding:8px 0; }
 </style>

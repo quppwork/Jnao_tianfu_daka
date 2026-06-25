@@ -1734,6 +1734,7 @@ function triggerGlitch() {
 
 <style scoped>
 @import 'augmented-ui/augmented-ui.min.css';
+[data-augmented-ui].card, [data-augmented-ui].plan-card { --aug-border-bg:rgba(0,210,255,0.2); --aug-border-all:2px; }
 .app { height:100vh; max-width:480px; margin:0 auto; background:#0b111e; font-family:PingFang SC,Roboto,sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; }
 .nav { display:flex; align-items:center; padding:14px 14px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
@@ -2060,6 +2061,7 @@ function triggerGlitch() {
 [data-theme="white"] .nav-back { background:#fff; border-color:#e5e7eb; }
 [data-theme="white"] .card { background:#fff; border:2px solid #e5e7eb; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
 [data-theme="white"] .card::before, [data-theme="white"] .card::after { border-color:#2563eb; }
+[data-theme="white"] [data-augmented-ui].card, [data-theme="white"] [data-augmented-ui].plan-card { --aug-border-bg:#e5e7eb; }
 [data-theme="white"] .plan-label { color:#2563eb; }
 [data-theme="white"] .plan-loading { color:#9ca3af; }
 [data-theme="white"] .plan-loading-title { color:#1a1a2e; }
