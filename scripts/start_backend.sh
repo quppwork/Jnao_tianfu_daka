@@ -10,13 +10,13 @@ echo "========================================"
 echo "[START] $(date '+%H:%M:%S')"
 echo ""
 
-if [ ! -f ".venv/Scripts/activate" ]; then
-    echo "[ERROR] Virtual environment not found. Run: python -m venv .venv"
+if [ ! -f "backend/venv/bin/activate" ]; then
+    echo "[ERROR] Virtual environment not found. Run: python -m venv backend/venv"
     exit 1
 fi
 
 echo "[TIME] venv activate start: $(date '+%H:%M:%S')"
-source .venv/Scripts/activate
+source backend/venv/bin/activate
 echo "[TIME] venv activate done:  $(date '+%H:%M:%S')"
 
 # Clean port 8012
