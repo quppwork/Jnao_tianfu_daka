@@ -2,7 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR/../h5_fronted"
+cd "$SCRIPT_DIR/../vue_fronted"
 
 if [ ! -d "node_modules" ]; then
     echo "[INFO] Installing dependencies..."
