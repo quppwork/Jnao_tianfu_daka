@@ -11,7 +11,7 @@ from app.db.models import ContentItem
 from app.services.content_meta import build_instructions_meta
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_CATALOG = PROJECT_ROOT / "docs" / "data" / "brain_power_audio_catalog.json"
+DEFAULT_CATALOG = PROJECT_ROOT / "docs" / "data" / "xet_brain_power_catalog.json"
 
 
 def catalog_path() -> Path:
