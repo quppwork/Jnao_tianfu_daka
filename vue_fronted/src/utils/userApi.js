@@ -55,6 +55,28 @@ function getOrCreateGuestPhone() {
   }
 }
 
+/** 登录：验证手机+昵称，不存在则报错 */
+export async function loginUser(phone, nickname) {
+  const data = await apiJson('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parent_phone: phone, nickname }),
+  })
+  setChildUserId(data.child_user_id)
+  return data
+}
+
+/** 注册：用手机+昵称创建新用户 */
+export async function registerChild(phone, nickname) {
+  const data = await apiJson('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parent_phone: phone, nickname }),
+  })
+  setChildUserId(data.child_user_id)
+  return data
+}
+
 function getOrCreateGuestNickname(fallback = '学员') {
   try {
     const saved = localStorage.getItem(GUEST_NICKNAME_KEY)
@@ -133,6 +155,20 @@ export async function ensureJnaoUid(userId) {
     body: JSON.stringify({ jnao_uid: String(jnaoUid) }),
   })
   return jnaoUid
+}
+
+// ── 用户资料 ──
+
+export async function fetchProfile(userId) {
+  return apiJson(withUser('/api/user/profile', userId))
+}
+
+export async function saveProfile(userId, data) {
+  return apiJson(withUser('/api/user/profile', userId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
 }
 
 // ── 天赋测评 ──

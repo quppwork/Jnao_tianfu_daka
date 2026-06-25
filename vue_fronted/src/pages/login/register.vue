@@ -4,56 +4,38 @@
       <view class="logo-row">
         <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
       </view>
-      <text class="subtitle">天赋成长平台</text>
+      <text class="subtitle">注册新账号</text>
 
-      <!-- Input -->
       <view class="form">
         <view class="input-wrap">
           <text class="input-icon">👤</text>
-          <input class="login-input" v-model="form.name" placeholder="输入昵称" />
+          <input class="login-input" v-model="form.name" placeholder="输入昵称（必填）" />
         </view>
         <view class="input-wrap">
           <text class="input-icon">📱</text>
           <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" />
         </view>
 
-        <!-- Role Select -->
-        <view class="role-row">
-          <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'">
-            <text class="ri-icon">🧑‍🎓</text>
-            <text class="ri-label">学生</text>
-          </view>
-          <view class="role-item" :class="{ active: form.role === 'parent' }" @click="form.role = 'parent'">
-            <text class="ri-icon">👨‍👩‍👧</text>
-            <text class="ri-label">家长</text>
-          </view>
+        <view class="btn-login" @click="doRegister">
+          <text>{{ submitting ? '注册中...' : '注册并登录' }}</text>
         </view>
 
-        <view class="btn-login" @click="doLogin">
-          <text>{{ submitting ? '登录中...' : '进入平台' }}</text>
-        </view>
-
-        <view class="btn-register" @click="goRegister">
-          <text>注册新账号</text>
+        <view class="btn-back" @click="goBack">
+          <text>← 返回登录</text>
         </view>
       </view>
-
     </view>
   </view>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import { loginUser } from '@/utils/userApi.js'
+import { registerChild } from '@/utils/userApi.js'
 
-const form = ref({ name: '', phone: '', role: 'student' })
+const form = ref({ name: '', phone: '' })
 const submitting = ref(false)
 
-async function doLogin() {
-  if (form.value.role === 'parent') {
-    uni.showToast({ title: '家长模式暂未开放，敬请期待', icon: 'none', duration: 2000 })
-    return
-  }
+async function doRegister() {
   if (!form.value.name.trim()) {
     uni.showToast({ title: '请输入昵称', icon: 'none' })
     return
@@ -64,30 +46,25 @@ async function doLogin() {
   }
   submitting.value = true
   try {
-    const data = await loginUser(form.value.phone.trim(), form.value.name.trim())
+    const data = await registerChild(form.value.phone.trim(), form.value.name.trim())
     localStorage.setItem('jnao_user', JSON.stringify({
       name: data.nickname,
       phone: data.parent_phone,
-      role: form.value.role,
+      role: 'student',
       loginTime: new Date().toISOString()
     }))
     localStorage.setItem('jnao_logged_in', '1')
-    uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
+    uni.showToast({ title: '注册成功，' + data.nickname + '！', icon: 'none' })
     setTimeout(() => { uni.redirectTo({ url: '/pages/index' }) }, 500)
   } catch (e) {
     submitting.value = false
-    if (e.status === 404) {
-      uni.showToast({ title: '用户不存在，请先注册', icon: 'none', duration: 2000 })
-    } else {
-      uni.showToast({ title: '登录失败，请稍后重试', icon: 'none' })
-    }
+    uni.showToast({ title: '注册失败，请稍后重试', icon: 'none' })
   }
 }
 
-function goRegister() {
-  uni.navigateTo({ url: '/pages/login/register' })
+function goBack() {
+  uni.navigateBack()
 }
-
 </script>
 
 <style scoped>
@@ -102,16 +79,10 @@ function goRegister() {
 .input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:14px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); }
 .input-icon { font-size:16px; margin-right:10px; }
 .login-input { flex:1; padding:14px 0; font-size:15px; color:var(--text); }
-.role-row { display:flex; gap:10px; margin-bottom:20px; }
-.role-item { flex:1; background:var(--bg-card); border-radius:14px; padding:14px; text-align:center; border:2px solid transparent; cursor:pointer; transition:all 0.15s; }
-.role-item.active { border-color:var(--accent); background:var(--accent-bg); }
-.ri-icon { font-size:24px; display:block; margin-bottom:4px; }
-.ri-label { color:var(--text-dim); font-size:13px; font-weight:500; }
-.role-item.active .ri-label { color:var(--accent); }
 .btn-login { background:linear-gradient(135deg,var(--accent),#3b8bff); border-radius:14px; padding:15px; text-align:center; cursor:pointer; }
 .btn-login text { color:#fff; font-size:16px; font-weight:700; }
 .btn-login:active { opacity:0.85; }
-.btn-register { border:1.5px solid var(--border); border-radius:14px; padding:13px; text-align:center; cursor:pointer; margin-top:10px; }
-.btn-register text { color:var(--text-dim); font-size:14px; font-weight:500; }
-.btn-register:active { background:var(--bg-card); }
+.btn-back { border:1.5px solid var(--border); border-radius:14px; padding:13px; text-align:center; cursor:pointer; margin-top:10px; }
+.btn-back text { color:var(--text-dim); font-size:14px; font-weight:500; }
+.btn-back:active { background:var(--bg-card); }
 </style>

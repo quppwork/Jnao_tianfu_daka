@@ -2,8 +2,12 @@
   <view class="app">
     <!-- Nav Bar -->
     <view class="nav-bar">
+      <view class="nav-spacer"></view>
       <text class="nav-center" @click="onNavTap">张宇老师</text>
-      <text class="theme-btn" @click="toggleTheme">{{ isLight ? '☀️' : '🌙' }}</text>
+      <view class="nav-actions">
+        <text class="settings-btn" @click="showSettings = true">⚙</text>
+        <text class="theme-btn" @click="toggleTheme">{{ isLight ? '☀️' : '🌙' }}</text>
+      </view>
     </view>
 
     <!-- Hero Banner -->
@@ -65,6 +69,26 @@
         </view>
       </view>
     </view>
+
+    <!-- Settings Modal -->
+    <view v-if="showSettings" class="picker-overlay" @click="showSettings = false">
+      <view class="picker-card" @click.stop>
+        <text class="picker-title">⚙ 设置</text>
+        <view class="form-row" style="margin-bottom:10px;">
+          <text class="form-label">姓名</text>
+          <input class="form-input" v-model="profile.name" placeholder="孩子真实姓名" />
+        </view>
+        <view class="form-row" style="margin-bottom:14px;">
+          <text class="form-label">年级</text>
+          <picker class="form-picker" mode="selector" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
+            <view class="form-input form-picker-val">{{ profile.grade || '请选择年级' }}</view>
+          </picker>
+        </view>
+        <view class="btn-checkin" @click="saveProfile"><text>保存</text></view>
+        <view class="btn-logout" @click="doLogout"><text>登出</text></view>
+        <view class="picker-close" @click="showSettings = false"><text>取消</text></view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -75,6 +99,8 @@ import {
   ensureChildUser,
   fetchGuideSession,
   sendGuideMessage,
+  fetchProfile,
+  saveProfile as saveProfileToDb,
 } from '@/utils/userApi.js'
 
 const isLight = ref(false)
@@ -82,6 +108,15 @@ const inputText = ref('')
 const loading = ref(false)
 const guideSessionId = ref(null)
 const messages = ref([])
+const showSettings = ref(false)
+const profile = ref({ name: '', grade: '' })
+const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
+const gradeIndex = ref(0)
+
+function onGradeChange(e) {
+  gradeIndex.value = e.detail.value
+  profile.value.grade = gradeOptions[e.detail.value]
+}
 
 try {
   const saved = localStorage.getItem('jnao_theme')
@@ -141,7 +176,49 @@ async function loadGuideSession() {
   }
 }
 
-onMounted(loadGuideSession)
+async function loadProfile() {
+  try {
+    const uid = await ensureChildUser()
+    const data = await fetchProfile(uid)
+    if (data.nickname && data.nickname !== '学员') profile.value.name = data.nickname
+    if (data.profile_json?.grade) profile.value.grade = data.profile_json.grade
+    const idx = gradeOptions.indexOf(profile.value.grade)
+    if (idx >= 0) gradeIndex.value = idx
+  } catch (_) {}
+}
+async function saveProfile() {
+  try {
+    const uid = await ensureChildUser()
+    await saveProfileToDb(uid, {
+      nickname: profile.value.name,
+      profile_json: { grade: profile.value.grade },
+    })
+  } catch (_) {}
+  showSettings.value = false
+  uni.showToast({ title: '已保存', icon: 'none' })
+}
+
+function doLogout() {
+  try {
+    clearChildUserId()
+    localStorage.removeItem('jnao_logged_in')
+    localStorage.removeItem('jnao_user')
+  } catch (_) {}
+  showSettings.value = false
+  uni.redirectTo({ url: '/pages/login/index' })
+}
+
+onMounted(() => {
+  // 登录检查
+  try {
+    if (localStorage.getItem('jnao_logged_in') !== '1') {
+      uni.redirectTo({ url: '/pages/login/index' })
+      return
+    }
+  } catch (_) {}
+  loadProfile()
+  loadGuideSession()
+})
 
 function scrollChat() {
   const el = document.getElementById('chatScroll')
@@ -252,9 +329,13 @@ function onNavTap() {
   background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden;
 }
 
-.nav-bar { display:flex; align-items:center; justify-content:center; padding:10px 16px 8px; position:relative; }
-.nav-center { color:var(--text); font-size:15px; font-weight:500; }
-.theme-btn { position:absolute; right:16px; font-size:20px; cursor:pointer; }
+.nav-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 8px; }
+.nav-spacer { width:52px; flex-shrink:0; }
+.nav-center { color:var(--text); font-size:15px; font-weight:500; text-align:center; }
+.nav-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.settings-btn { font-size:20px; cursor:pointer; opacity:0.6; }
+.settings-btn:active { opacity:1; }
+.theme-btn { font-size:20px; cursor:pointer; }
 
 .hero-img { width:calc(100% - 28px); margin:0 14px; border-radius:16px; display:block; }
 
@@ -288,4 +369,22 @@ function onNavTap() {
 .btn-mic { width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--accent),#3b8bff); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px var(--mic-shadow); transition:all 0.2s; }
 .btn-mic.mic-recording { background:#ff4444 !important; box-shadow:0 0 0 6px rgba(255,68,68,0.3); animation:micPulse 1s infinite; }
 @keyframes micPulse { 0%,100% { box-shadow:0 0 0 6px rgba(255,68,68,0.3) } 50% { box-shadow:0 0 0 14px rgba(255,68,68,0) } }
+
+/* Settings modal */
+.picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
+.picker-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:24px 20px; width:100%; max-width:340px; }
+.picker-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
+.picker-close { text-align:center; margin-top:10px; cursor:pointer; }
+.picker-close text { color:var(--text-dim); font-size:14px; }
+.form-row { display:flex; align-items:center; gap:10px; }
+.form-label { color:var(--text-dim); font-size:13px; width:44px; flex-shrink:0; }
+.form-input { flex:1; background:var(--bg-input); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--text); }
+.form-picker { flex:1; }
+.form-picker-val { color:var(--text); }
+.btn-checkin { background:linear-gradient(135deg,var(--accent),#3b8bff); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
+.btn-checkin text { color:#fff; font-size:15px; font-weight:600; }
+.btn-checkin:active { opacity:0.85; }
+.btn-logout { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:10px; padding:10px; text-align:center; cursor:pointer; margin-top:8px; }
+.btn-logout text { color:rgba(239,68,68,0.8); font-size:14px; font-weight:500; }
+.btn-logout:active { background:rgba(239,68,68,0.2); }
 </style>
