@@ -52,11 +52,11 @@
     <view class="chat-section" id="chatScroll">
       <view v-for="(m,i) in messages" :key="i" class="chat-row" :class="{ user: m.role === 'user' }">
         <view class="chat-av me" v-if="m.role==='user'"><text>我</text></view>
-        <view class="chat-av ai" v-else><view class="ai-avatar-inner"></view></view>
+        <view class="chat-av ai" v-else><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl" :class="{ me: m.role==='user', ai: m.role!=='user' }">{{ m.text }}</view>
       </view>
       <view v-if="loading" class="chat-row">
-        <view class="chat-av ai"><view class="ai-avatar-inner"></view></view>
+        <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl ai"><text class="loading-dots">...</text></view>
       </view>
     </view>
@@ -427,7 +427,7 @@ function onNavTap() {
 .chat-av { width:36px; height:36px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
 .chat-av.ai { background:var(--chat-ai-bg); border:1.5px solid rgba(88,166,255,0.3); overflow:hidden; }
 .chat-av.me { background:var(--chat-me-bg); border-radius:50%; color:var(--text-dim); font-size:13px; }
-.ai-avatar-inner { width:22px; height:26px; background:#2a5a8e; border-radius:5px 5px 0 0; margin-top:8px; }
+.ai-avatar-img { width:100%; height:100%; border-radius:8px; object-fit:cover; }
 .chat-bbl { max-width:75%; padding:10px 14px; border-radius:16px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
 .chat-bbl.ai { background:var(--chat-ai-bg); color:var(--text); border-bottom-left-radius:4px; }
 .chat-bbl.me { background:var(--chat-me-bg); color:var(--text-sub); border-bottom-right-radius:4px; }
