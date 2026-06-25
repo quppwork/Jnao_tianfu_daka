@@ -8,6 +8,7 @@ from app.core.security import is_dev_api_enabled
 from app.services.dev_training_service import (
     get_dev_training_status,
     reset_all_training,
+    reset_talent_assessment,
     reset_today_training,
     simulate_next_training_day,
 )
@@ -46,6 +47,16 @@ def dev_reset_all(
     db: Session = Depends(get_db),
 ):
     return reset_all_training(db, child_user_id)
+
+
+@router.post("/training/reset-talent")
+def dev_reset_talent(
+    _: None = Depends(_require_dev_mode),
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    """清除天赋测评 + 今日训练（用于测试「需先测评」流程）"""
+    return reset_talent_assessment(db, child_user_id)
 
 
 @router.post("/training/next-day")

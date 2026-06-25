@@ -212,9 +212,15 @@ export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
 
 // ── 今日训练 ──
 
-export async function fetchTrainingToday(userId) {
+export async function fetchTrainingEntry(userId) {
+  return apiJson(withUser('/api/training/entry', userId))
+}
+
+export async function fetchTrainingToday(userId, options = {}) {
+  const skipAi = options.skipAi ?? options.skip_ai ?? false
+  const base = skipAi ? '/api/training/today?skip_ai=1' : '/api/training/today'
   try {
-    const data = await apiJson(withUser('/api/training/today', userId))
+    const data = await apiJson(withUser(base, userId))
     return { data }
   } catch (e) {
     if (e.status === 403) {
@@ -397,4 +403,8 @@ export async function devResetAllTraining(userId) {
 
 export async function devSimulateNextDay(userId) {
   return apiJson(withUser('/api/dev/training/next-day', userId), { method: 'POST' })
+}
+
+export async function devResetTalent(userId) {
+  return apiJson(withUser('/api/dev/training/reset-talent', userId), { method: 'POST' })
 }

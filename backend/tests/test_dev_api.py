@@ -38,6 +38,17 @@ class TestDevTraining:
         assert res.json()["status"]["plan_count"] == 0
         assert res.json()["status"]["record_count"] == 0
 
+    def test_reset_talent_clears_assessment(self, client, child_with_assessment, mock_doubao):
+        uid = child_with_assessment
+        client.get(f"/api/training/today?user_id={uid}")
+        res = client.post(f"/api/dev/training/reset-talent?user_id={uid}")
+        assert res.status_code == 200
+        assert res.json()["action"] == "reset_talent"
+        assert res.json()["deleted_assessment"] is True
+        entry = client.get(f"/api/training/entry?user_id={uid}").json()
+        assert entry["needs_assessment"] is True
+        assert client.get(f"/api/training/today?user_id={uid}").status_code == 403
+
     def test_dev_status(self, client, child_with_assessment, mock_doubao):
         uid = child_with_assessment
         res = client.get(f"/api/dev/training/status?user_id={uid}")

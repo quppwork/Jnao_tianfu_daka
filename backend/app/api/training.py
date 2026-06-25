@@ -14,6 +14,7 @@ from app.schemas.training import (
     CheckinUpdateRequest,
     ScheduleRequest,
     TalentVideoResponse,
+    TrainingEntryResponse,
     TrainingProgressResponse,
     TrainingTodayResponse,
     WindowResponse,
@@ -58,15 +59,25 @@ def talent_training_video(
     return get_talent_training_video(assessment.talent_code)
 
 
+@router.get("/entry", response_model=TrainingEntryResponse)
+def training_entry(
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    """训练页入口：优先检查最新天赋并同步今日方案状态"""
+    return training_service.get_training_entry(db, child_user_id)
+
+
 @router.get("/today", response_model=TrainingTodayResponse)
 async def training_today(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
     plan_date: date | None = Query(None),
+    skip_ai: bool = Query(False, description="跳过 AI 生成，加快首屏"),
 ):
     """今日训练方案：按天赋推送音频 + AI 生成今日指令（参考昨日打卡）"""
     try:
-        return await ensure_plan_report(db, child_user_id, plan_date)
+        return await ensure_plan_report(db, child_user_id, plan_date, skip_ai=skip_ai)
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
 
@@ -198,9 +209,10 @@ async def training_report_today(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
     force: bool = Query(False, description="强制重新生成 AI 方案"),
+    skip_ai: bool = Query(False),
 ):
     try:
-        return await ensure_plan_report(db, child_user_id, force=force)
+        return await ensure_plan_report(db, child_user_id, force=force, skip_ai=skip_ai)
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
 
