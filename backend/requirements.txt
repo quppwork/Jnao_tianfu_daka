@@ -9,3 +9,4 @@ alembic>=1.14.0
 pytest>=9.0
 pytest-asyncio>=1.0
 oss2>=2.18.0
+faster-whisper>=1.0.0

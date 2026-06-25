@@ -43,6 +43,15 @@ function withUser(url, userId) {
   return `${url}${sep}user_id=${userId}`
 }
 
+/** 答疑图片需带 user_id 鉴权，否则 <img> 请求会 401 */
+export function resolveQaImageUrl(url, userId) {
+  if (!url || !userId) return url
+  if (url.startsWith('blob:') || url.startsWith('data:')) return url
+  if (!url.includes('/api/qa/images/')) return url
+  if (/[?&]user_id=/.test(url)) return url
+  return withUser(url, userId)
+}
+
 function getOrCreateGuestPhone() {
   try {
     const saved = localStorage.getItem(GUEST_PHONE_KEY)
@@ -306,11 +315,57 @@ export async function fetchQaSession(userId, sessionId) {
   return apiJson(withUser(`/api/qa/sessions/${sessionId}`, userId))
 }
 
-export async function sendQaMessage(userId, message, sessionId = null, subject = null) {
+export async function sendQaMessage(userId, message, sessionId = null, options = {}) {
+  const subject = typeof options === 'string' ? options : options.subject
+  const imageId = options.image_id || options.imageId || null
+  const useRag = options.use_rag ?? options.useRag ?? null
   return apiJson(withUser('/api/qa/chat', userId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, subject }),
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      subject: subject || null,
+      image_id: imageId,
+      use_rag: useRag,
+    }),
+  })
+}
+
+export async function uploadQaImage(userId, file) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(withUser('/api/qa/upload-image', userId), {
+    method: 'POST',
+    body: form,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+  return data
+}
+
+export async function transcribeVoice(audioBlob, filename = 'speech.webm') {
+  const form = new FormData()
+  form.append('audio', audioBlob, filename)
+  const res = await fetch('/api/voice/asr', { method: 'POST', body: form })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.error) throw new Error(data.error || data.detail || '语音识别失败')
+  return data.text || ''
+}
+
+/** uni.chooseImage / getRecorderManager 返回的临时路径 → 转写 */
+export async function transcribeVoicePath(tempFilePath) {
+  const resp = await fetch(tempFilePath)
+  const blob = await resp.blob()
+  const ext = (blob.type || '').includes('mpeg') ? 'mp3' : 'webm'
+  return transcribeVoice(blob, `recording.${ext}`)
+}
+
+export async function updateLearnerProfile(userId, profile) {
+  return apiJson(withUser('/api/user/learner-profile', userId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
   })
 }
 
