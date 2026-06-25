@@ -5,8 +5,15 @@
       <view class="nav-spacer"></view>
       <text class="nav-center" @click="onNavTap">张宇老师</text>
       <view class="nav-actions">
-        <text class="settings-btn" @click="showSettings = true">⚙</text>
-        <text class="theme-btn" @click="toggleTheme">{{ isLight ? '☀️' : '🌙' }}</text>
+        <!-- 设置 -->
+        <view class="nav-icon-btn" @click="showSettings = true; settingsTab = 'profile'">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </view>
+        <!-- 主题 -->
+        <view class="nav-icon-btn" @click="toggleTheme">
+          <svg v-if="isLight" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </view>
       </view>
     </view>
 
@@ -72,21 +79,64 @@
 
     <!-- Settings Modal -->
     <view v-if="showSettings" class="picker-overlay" @click="showSettings = false">
-      <view class="picker-card" @click.stop>
+      <view class="picker-card settings-card" @click.stop>
         <text class="picker-title">⚙ 设置</text>
-        <view class="form-row" style="margin-bottom:10px;">
-          <text class="form-label">姓名</text>
-          <input class="form-input" v-model="profile.name" placeholder="孩子真实姓名" />
+
+        <!-- Tab 1: 个人信息 -->
+        <view class="set-block">
+          <view class="set-block-head" @click="settingsTab = 'profile'">
+            <text class="set-block-title">📋 个人信息</text>
+            <text class="set-block-arrow" :class="{ open: settingsTab === 'profile' }">▾</text>
+          </view>
+          <view v-if="settingsTab === 'profile'" class="set-block-body">
+            <view class="form-row">
+              <text class="form-label">孩子姓名</text>
+              <input class="form-input" v-model="profile.name" placeholder="孩子真实姓名" />
+            </view>
+            <view class="form-row">
+              <text class="form-label">年级</text>
+              <picker class="form-picker" mode="selector" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
+                <view class="form-input form-picker-val">{{ profile.grade || '请选择年级' }}</view>
+              </picker>
+            </view>
+            <view v-if="profile.talent" class="form-row">
+              <text class="form-label">天赋</text>
+              <view class="form-input talent-readonly">{{ profile.talent }}</view>
+            </view>
+            <view class="form-row">
+              <text class="form-label">家长手机</text>
+              <view class="form-input form-input-dim">{{ profile.phone || '暂无' }}</view>
+            </view>
+            <view class="form-row">
+              <text class="form-label">家长姓名</text>
+              <input class="form-input" v-model="profile.parentName" placeholder="家长姓名（选填）" />
+            </view>
+            <view class="btn-checkin" @click="saveProfile"><text>保存信息</text></view>
+          </view>
         </view>
-        <view class="form-row" style="margin-bottom:14px;">
-          <text class="form-label">年级</text>
-          <picker class="form-picker" mode="selector" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
-            <view class="form-input form-picker-val">{{ profile.grade || '请选择年级' }}</view>
-          </picker>
+
+        <!-- Tab 2: 天赋测评历史 -->
+        <view class="set-block">
+          <view class="set-block-head" @click="settingsTab = 'history'">
+            <text class="set-block-title">📊 天赋测评历史</text>
+            <text class="set-block-arrow" :class="{ open: settingsTab === 'history' }">▾</text>
+          </view>
+          <view v-if="settingsTab === 'history'" class="set-block-body">
+            <view v-if="historyList.length" class="history-mini">
+              <view v-for="(h, i) in historyList" :key="h.id || i" class="hm-item" @click="viewHistory(h)">
+                <view class="hm-left">
+                  <text class="hm-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+                  <text class="hm-time">{{ h.create_time || h.assessed_at }}</text>
+                </view>
+                <text class="hm-arrow">›</text>
+              </view>
+            </view>
+            <text v-else class="history-empty">暂无历史测评记录</text>
+          </view>
         </view>
-        <view class="btn-checkin" @click="saveProfile"><text>保存</text></view>
-        <view class="btn-logout" @click="doLogout"><text>登出</text></view>
-        <view class="picker-close" @click="showSettings = false"><text>取消</text></view>
+
+        <view class="btn-logout" @click="doLogout"><text>登出账号</text></view>
+        <view class="picker-close" @click="showSettings = false"><text>关闭</text></view>
       </view>
     </view>
   </view>
@@ -101,6 +151,7 @@ import {
   sendGuideMessage,
   fetchProfile,
   saveProfile as saveProfileToDb,
+  fetchAssessmentHistory,
 } from '@/utils/userApi.js'
 
 const isLight = ref(false)
@@ -109,14 +160,11 @@ const loading = ref(false)
 const guideSessionId = ref(null)
 const messages = ref([])
 const showSettings = ref(false)
-const profile = ref({ name: '', grade: '' })
+const settingsTab = ref('profile')
+const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: '' })
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
-
-function onGradeChange(e) {
-  gradeIndex.value = e.detail.value
-  profile.value.grade = gradeOptions[e.detail.value]
-}
+const historyList = ref([])
 
 try {
   const saved = localStorage.getItem('jnao_theme')
@@ -176,26 +224,52 @@ async function loadGuideSession() {
   }
 }
 
+function onGradeChange(e) {
+  gradeIndex.value = e.detail.value
+  profile.value.grade = gradeOptions[e.detail.value]
+}
+
 async function loadProfile() {
   try {
     const uid = await ensureChildUser()
     const data = await fetchProfile(uid)
     if (data.nickname && data.nickname !== '学员') profile.value.name = data.nickname
-    if (data.profile_json?.grade) profile.value.grade = data.profile_json.grade
+    if (data.parent_phone) profile.value.phone = data.parent_phone
+    if (data.profile_json) {
+      if (data.profile_json.grade) profile.value.grade = data.profile_json.grade
+      if (data.profile_json.parentName) profile.value.parentName = data.profile_json.parentName
+      const tp = data.profile_json.talent_primary || data.profile_json.talent
+      const tt = data.profile_json.talent_tag
+      if (tp) profile.value.talent = tt ? `${tp}偏${tt}` : tp
+    }
     const idx = gradeOptions.indexOf(profile.value.grade)
     if (idx >= 0) gradeIndex.value = idx
   } catch (_) {}
 }
+
+async function loadHistory() {
+  try {
+    const uid = await ensureChildUser()
+    historyList.value = await fetchAssessmentHistory(uid)
+  } catch (_) { historyList.value = [] }
+}
+
 async function saveProfile() {
   try {
     const uid = await ensureChildUser()
     await saveProfileToDb(uid, {
       nickname: profile.value.name,
-      profile_json: { grade: profile.value.grade },
+      profile_json: { grade: profile.value.grade, parentName: profile.value.parentName },
     })
-  } catch (_) {}
-  showSettings.value = false
-  uni.showToast({ title: '已保存', icon: 'none' })
+    uni.showToast({ title: '已保存', icon: 'none' })
+  } catch (_) { uni.showToast({ title: '保存失败', icon: 'none' }) }
+}
+
+function viewHistory(h) {
+  if (h.id) {
+    showSettings.value = false
+    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
+  }
 }
 
 function doLogout() {
@@ -209,7 +283,6 @@ function doLogout() {
 }
 
 onMounted(() => {
-  // 登录检查
   try {
     if (localStorage.getItem('jnao_logged_in') !== '1') {
       uni.redirectTo({ url: '/pages/login/index' })
@@ -217,6 +290,7 @@ onMounted(() => {
     }
   } catch (_) {}
   loadProfile()
+  loadHistory()
   loadGuideSession()
 })
 
@@ -330,12 +404,12 @@ function onNavTap() {
 }
 
 .nav-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 8px; }
-.nav-spacer { width:52px; flex-shrink:0; }
+.nav-spacer { width:78px; flex-shrink:0; }
 .nav-center { color:var(--text); font-size:15px; font-weight:500; text-align:center; }
-.nav-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
-.settings-btn { font-size:20px; cursor:pointer; opacity:0.6; }
-.settings-btn:active { opacity:1; }
-.theme-btn { font-size:20px; cursor:pointer; }
+.nav-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.nav-icon-btn { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; opacity:0.55; transition:opacity 0.15s; }
+.nav-icon-btn:active { opacity:1; background:rgba(255,255,255,0.06); }
+.nav-icon-btn svg { display:block; }
 
 .hero-img { width:calc(100% - 28px); margin:0 14px; border-radius:16px; display:block; }
 
@@ -372,19 +446,37 @@ function onNavTap() {
 
 /* Settings modal */
 .picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
-.picker-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:24px 20px; width:100%; max-width:340px; }
+.picker-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:24px 20px; width:100%; max-width:340px; max-height:85vh; overflow-y:auto; }
+.settings-card { animation:settingsIn 0.3s cubic-bezier(0.22,0.61,0.36,1); }
+@keyframes settingsIn { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
 .picker-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
+.set-block { margin-bottom:4px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.set-block-head { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; cursor:pointer; background:rgba(255,255,255,0.02); }
+.set-block-title { color:var(--text); font-size:13px; font-weight:600; }
+.set-block-arrow { color:var(--text-dim); font-size:12px; transition:transform 0.2s; }
+.set-block-arrow.open { transform:rotate(180deg); }
+.set-block-body { padding:4px 14px 14px; }
+.talent-readonly { color:var(--accent); font-weight:600; }
+.form-input-dim { color:var(--text-dim); }
 .picker-close { text-align:center; margin-top:10px; cursor:pointer; }
 .picker-close text { color:var(--text-dim); font-size:14px; }
-.form-row { display:flex; align-items:center; gap:10px; }
-.form-label { color:var(--text-dim); font-size:13px; width:44px; flex-shrink:0; }
+.form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.form-row:last-child { margin-bottom:0; }
+.form-label { color:var(--text-dim); font-size:13px; width:56px; flex-shrink:0; }
 .form-input { flex:1; background:var(--bg-input); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--text); }
 .form-picker { flex:1; }
 .form-picker-val { color:var(--text); }
-.btn-checkin { background:linear-gradient(135deg,var(--accent),#3b8bff); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
+.btn-checkin { background:linear-gradient(135deg,var(--accent),#3b8bff); border-radius:10px; padding:12px; text-align:center; cursor:pointer; margin-top:4px; }
 .btn-checkin text { color:#fff; font-size:15px; font-weight:600; }
 .btn-checkin:active { opacity:0.85; }
 .btn-logout { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:10px; padding:10px; text-align:center; cursor:pointer; margin-top:8px; }
 .btn-logout text { color:rgba(239,68,68,0.8); font-size:14px; font-weight:500; }
 .btn-logout:active { background:rgba(239,68,68,0.2); }
+.history-mini { max-height:160px; overflow-y:auto; }
+.hm-item { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+.hm-item:last-child { border-bottom:none; }
+.hm-talent { flex:1; color:var(--text); font-size:12px; font-weight:600; }
+.hm-time { color:var(--text-dim); font-size:10px; }
+.hm-arrow { color:var(--text-dim); font-size:16px; }
+.history-empty { color:var(--text-dim); font-size:12px; text-align:center; padding:8px 0; }
 </style>

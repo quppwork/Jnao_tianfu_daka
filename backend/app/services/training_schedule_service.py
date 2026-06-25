@@ -51,13 +51,25 @@ def _build_candidates(
     start_index: int,
     *,
     series: str = "chaonaoaomi",
+    skill: str | None = None,
     limit: int = 24,
 ) -> list[ContentItem]:
     items = get_content_series(db, talent_code, series=series)
     if not items:
         return []
-    ordered = items[start_index:] + items[:start_index]
+    if skill:
+        preferred = [i for i in items if _get_skill(i) == skill]
+        others = [i for i in items if _get_skill(i) != skill]
+        ordered = preferred + others
+        ordered = ordered[start_index % max(1, len(ordered)):] + ordered[:start_index % max(1, len(ordered))]
+    else:
+        ordered = items[start_index:] + items[:start_index]
     return ordered[:limit]
+
+
+def _get_skill(item: ContentItem) -> str:
+    from app.services.content_meta import parse_item_meta
+    return (parse_item_meta(item) or {}).get("skill", "")
 
 
 def _pick_by_duration(items: list[ContentItem], budget_min: int) -> list[ContentItem]:
@@ -185,13 +197,18 @@ async def schedule_training_by_duration(
     talent_code = assessment.talent_code
     pool_limit = 80 if plan.content_index <= 0 else 24
     candidates_a = _build_candidates(
-        db, talent_code, plan.content_index, series="chaonaoaomi", limit=pool_limit
+        db, talent_code, plan.content_index, series="chaonaoaomi", skill="影像追忆", limit=pool_limit
     )
     candidates_b = _build_candidates(
-        db, talent_code, plan.content_index, series="xuekeaomi", limit=pool_limit
+        db, talent_code, plan.content_index, series="chaonaoaomi", skill="极速运算", limit=pool_limit
     )
     if not candidates_a:
         raise TrainingError("暂无可用脑力奥秘音频", 503)
+    # B 如果极速运算不足，混入学科奥秘补充
+    if not candidates_b:
+        candidates_b = _build_candidates(
+            db, talent_code, plan.content_index, series="xuekeaomi", limit=pool_limit
+        )
 
     route = route_training_blocks(
         plan.content_index,

@@ -40,6 +40,7 @@ def get_content_series(
     talent_code: int,
     *,
     series: str = "chaonaoaomi",
+    prefer_skill: str | None = None,
     skip_intro: bool = True,
 ) -> list[ContentItem]:
     from app.services.content_meta import parse_item_meta
@@ -53,6 +54,10 @@ def get_content_series(
     )
     if series:
         rows = [r for r in rows if parse_item_meta(r).get("series", "chaonaoaomi") == series]
+    if prefer_skill:
+        preferred = [r for r in rows if parse_item_meta(r).get("skill", "") == prefer_skill]
+        others = [r for r in rows if parse_item_meta(r).get("skill", "") != prefer_skill]
+        rows = preferred + others
     if skip_intro:
         rows = [r for r in rows if r.lesson_sort != 0]
     return rows
@@ -162,7 +167,7 @@ def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | 
     if existing:
         return _plan_to_response(existing)
 
-    series = get_content_series(db, assessment.talent_code)
+    series = get_content_series(db, assessment.talent_code, prefer_skill="影像追忆")
     if not series:
         raise TrainingError("暂无可用训练音频，请联系管理员导入资源", 503)
 
