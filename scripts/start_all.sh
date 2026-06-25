@@ -2,14 +2,15 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR/.."
+PROJECT_ROOT="$SCRIPT_DIR/.."
+cd "$PROJECT_ROOT"
 
-if [ ! -f ".venv/Scripts/activate" ]; then
-    echo "[ERROR] Virtual environment not found. Run: python -m venv .venv"
+if [ ! -f "backend/venv/bin/activate" ]; then
+    echo "[ERROR] Virtual environment not found. Run: python -m venv backend/venv"
     exit 1
 fi
 
-source .venv/Scripts/activate
+source backend/venv/bin/activate
 
 echo "========================================"
 echo "  JNAO - Start All Services"
@@ -30,9 +31,8 @@ fi
 echo "[TIME] backend start: $(date '+%H:%M:%S')"
 echo "[INFO] Starting backend on http://127.0.0.1:8012"
 mkdir -p logs
-cd backend && uvicorn main:app --host 127.0.0.1 --port 8012 --reload > ../logs/backend.log 2>&1 &
+(cd backend && uvicorn main:app --host 127.0.0.1 --port 8012 --reload > ../logs/backend.log 2>&1) &
 BACKEND_PID=$!
-cd ..
 
 # Frontend (foreground)
 echo "[TIME] frontend start: $(date '+%H:%M:%S')"
@@ -52,10 +52,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-cd h5_fronted
-if [ ! -d "node_modules" ]; then
-    echo "[INFO] Installing frontend dependencies..."
-    npm install
+if [ ! -d "vue_fronted" ]; then
+    echo "[ERROR] Frontend directory 'vue_fronted' not found!"
+    exit 1
 fi
 
-npm run dev
+if [ ! -d "vue_fronted/node_modules" ]; then
+    echo "[INFO] Installing frontend dependencies..."
+    (cd vue_fronted && npm install)
+fi
+
+(cd vue_fronted && npm run dev)

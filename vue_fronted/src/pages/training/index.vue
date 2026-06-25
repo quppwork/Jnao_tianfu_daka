@@ -1,10 +1,12 @@
 <template>
   <view class="app">
+    <!-- 扫描线 -->
+    <view class="cyber-scanlines"></view>
     <view class="nav">
       <view class="nav-back" @click="goBack">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
-      <text class="nav-title">今日训练</text>
+      <text class="nav-title cyber-glitch" @click="triggerGlitch">今日训练</text>
       <view class="nav-dev" :class="{ active: devMode }" @click="toggleDevMode">
         <text>{{ devMode ? 'DEV ✓' : 'DEV' }}</text>
       </view>
@@ -87,7 +89,7 @@
             <view class="plan-progress-track">
               <view class="plan-progress-fill" :style="{ width: planProgressPct + '%' }"></view>
             </view>
-            <text class="plan-progress-text">{{ planProgressPct }}% · {{ planCompletedCount }}/{{ planTotalCount }} 项已完成</text>
+            <text class="plan-progress-text">{{ planCompletedCount }}/{{ planTotalCount }} 项已完成</text>
           </view>
 
           <view v-if="aiPlanText" class="plan-ai-box">
@@ -119,9 +121,7 @@
           </view>
         </template>
         <template v-else>
-          <text class="summary-empty-icon">⚠</text>
-          <text class="summary-empty-title">今日还未进行打卡</text>
-          <text class="summary-empty-hint">完成训练后点击「训练 A 打卡」开始记录</text>
+          <text class="summary-empty-text">今日还未打卡 · 完成训练后点击下方按钮记录</text>
         </template>
       </view>
 
@@ -197,12 +197,12 @@
           <text class="media-lock-text">{{ mediaLockText }}</text>
         </view>
 
-      <view class="step step-ready" :class="{ 'step-locked': isMediaLocked }" @click="openMediaItem(blockAVideo)">
-        <view class="step-num step-num-ready">1</view>
+      <view class="step" :class="{ 'step-locked': isMediaLocked, 'step-watched': watchedItemIds.has(blockAVideo?.id) }" @click="openMediaItem(blockAVideo)">
+        <view class="step-num" :class="{ 'step-num-done': watchedItemIds.has(blockAVideo?.id) }">1</view>
         <view class="step-content">
           <text class="step-label">视频训练</text>
-          <view class="step-box step-box-ready">🎬 {{ blockAVideo?.title || '五者天赋视频' }}</view>
-          <text class="step-time ready-text">{{ isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : '▶ 点击播放' }}</text>
+          <view class="step-box">🎬 {{ blockAVideo?.title || '五者天赋视频' }}</view>
+          <text class="step-time">{{ isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : watchedItemIds.has(blockAVideo?.id) ? '✅ 已观看' : '▶ 点击播放' }}</text>
         </view>
       </view>
 
@@ -210,14 +210,14 @@
         v-for="(item, idx) in blockAAudios"
         :key="item.id || idx"
         class="step"
-        :class="{ 'step-locked': isMediaLocked }"
+        :class="{ 'step-locked': isMediaLocked, 'step-watched': watchedItemIds.has(item.id) }"
         @click="openMediaItem(item)"
       >
-        <view class="step-num">{{ idx + 2 }}</view>
+        <view class="step-num" :class="{ 'step-num-done': watchedItemIds.has(item.id) }">{{ idx + 2 }}</view>
         <view class="step-content">
           <text class="step-label">音频训练</text>
           <view class="step-box">{{ item.title || '训练音频' }}</view>
-          <text class="step-time">{{ item.audio_url ? (isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : `▶ 约 ${item.duration_min || '?'} 分钟`) : '暂无推荐音频' }}</text>
+          <text class="step-time">{{ item.audio_url ? (isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : watchedItemIds.has(item.id) ? '✅ 已观看' : `▶ 约 ${item.duration_min || '?'} 分钟`) : '暂无推荐音频' }}</text>
         </view>
       </view>
 
@@ -249,7 +249,7 @@
               <text class="pph-dot">◆</text>
             </view>
             <view class="picker-grid">
-              <view v-for="item in abilities" :key="item" class="picker-item" :class="{ active: hasCard(item) }" @click="toggleCard(item)">
+              <view v-for="(item, ai) in abilities" :key="item" class="picker-item" :class="{ active: hasCard(item), 'ability-spark': sparkAbi === ai }" @click="toggleCard(item, ai)">
                 <text class="pi-text">{{ item }}</text>
               </view>
             </view>
@@ -825,6 +825,7 @@ function resetAllLocalState() {
   devResetTimer()
   bUnlocked.value = false
   cards.value = []
+  watchedItemIds.value = new Set()
   showPicker.value = false
   showSummary.value = false
   submittedCards.value = []
@@ -995,6 +996,8 @@ const scores = [
   { pct:0,   emoji:'☠️', desc:'不完成任务，严重不配合训练' },
 ]
 const mediaPlayer = ref({ show: false, type: 'video' })
+const watchedItemIds = ref(new Set())    // 已观看的训练项 ID
+const lastOpenedItem = ref(null)          // 最近打开的媒体项
 const videoSrc = ref('/static/training_video.mp4')
 const audioSrc = ref('')
 const audioTitle = ref('🎧 训练用音频')
@@ -1173,6 +1176,7 @@ function syncBlockBTip() {
 const videoHtml = computed(() => videoSrc.value ? `<video src="${videoSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
 const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const cards = ref([])
+const sparkAbi = ref(-1)
 const abilities = ['超脑阅读','影像追忆','扫描速记','极速运算','极速学习','难题专练','文科扫书','理科扫书','高效作业','天赋绘画','音乐灵感','棋类专注']
 
 function hasCard(name) { return cards.value.some(c => c.name === name) }
@@ -1188,13 +1192,15 @@ function newCard(name) {
   return base
 }
 
-function toggleCard(name) {
+function toggleCard(name, abi) {
   const idx = cards.value.findIndex(c => c.name === name)
   if (idx >= 0) {
     cards.value.splice(idx, 1)
   } else {
     cards.value.push(newCard(name))
   }
+  sparkAbi.value = abi
+  setTimeout(() => sparkAbi.value = -1, 1500)
 }
 
 function removeCard(idx) { cards.value.splice(idx, 1) }
@@ -1337,7 +1343,7 @@ function openPicker() {
     else uni.showToast({ title: '今日训练已打卡完成', icon: 'none' })
     return
   }
-  // 首次打开时自动识别今日训练项对应的能力
+  // 自动识别已观看的训练项对应的能力
   if (!cards.value.length) {
     autoDetectAbilities()
   }
@@ -1543,6 +1549,7 @@ function openBlockBItem(item) {
 function openMediaItem(item) {
   if (!item) return
   if (!guardMedia()) return
+  lastOpenedItem.value = item
   if (item.video_url) {
     videoSrc.value = item.video_url
     mediaPlayer.value = { show: true, type: 'video' }
@@ -1573,6 +1580,10 @@ function openMedia(type) {
   }
 }
 function closeMedia() {
+  if (lastOpenedItem.value?.id) {
+    watchedItemIds.value.add(lastOpenedItem.value.id)
+    watchedItemIds.value = new Set(watchedItemIds.value) // 触发响应式
+  }
   mediaPlayer.value.show = false
 }
 
@@ -1712,6 +1723,13 @@ onUnmounted(clearTimerTick)
 function goBack() {
   uni.navigateBack({ delta: 1 })
 }
+
+function triggerGlitch() {
+  const el = document.querySelector('.cyber-glitch')
+  if (!el) return
+  el.classList.add('glitching')
+  setTimeout(() => el.classList.remove('glitching'), 500)
+}
 </script>
 
 <style scoped>
@@ -1833,13 +1851,10 @@ function goBack() {
 .sa-item.active .sa-pct { color:#00d2ff; }
 .sa-emoji { display:block; font-size:12px; margin-top:1px; }
 
-/* 未打卡 — 暖黄警告 */
-.summary-empty { border-color:rgba(251,191,36,0.5); background:rgba(251,191,36,0.08); text-align:center; cursor:default; }
-.summary-empty:active { background:rgba(251,191,36,0.08); }
-.summary-empty-icon { display:block; font-size:22px; margin-bottom:6px; text-align:center; animation:pulseWarn 2s ease-in-out infinite; color:#fbbf24; text-shadow:0 0 12px rgba(251,191,36,0.5); }
-.summary-empty-title { display:block; color:#fbbf24; font-size:14px; font-weight:700; text-align:center; margin-bottom:4px; }
-.summary-empty-hint { display:block; color:rgba(251,191,36,0.6); font-size:11px; text-align:center; line-height:1.4; }
-@keyframes pulseWarn { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:1; transform:scale(1.15); } }
+/* 未打卡 — 简约提示 */
+.summary-empty { border:1px solid rgba(255,255,255,0.08); text-align:center; cursor:default; opacity:0.7; }
+.summary-empty:active { background:var(--bg-card, #243046); }
+.summary-empty-text { display:block; color:rgba(255,255,255,0.35); font-size:12px; line-height:1.5; }
 
 .picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
 .picker-card { background:#1a2840; border:1px solid #00d2ff; border-radius:14px; padding:24px 20px; width:100%; max-width:360px; box-shadow:0 0 30px rgba(0,210,255,0.1); position:relative; }
@@ -1953,7 +1968,7 @@ function goBack() {
 .pph-title { color:rgba(255,255,255,0.5); font-size:11px; letter-spacing:0.1em; text-transform:uppercase; }
 
 .picker-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
-.picker-item { background:rgba(200,210,230,0.25); border-radius:8px; padding:12px 4px; text-align:center; cursor:pointer; border:1px solid rgba(255,255,255,0.1); transition:all 0.2s; opacity:0; animation:matrixReveal 0.5s ease-out forwards; }
+.picker-item { background:rgba(200,210,230,0.25); border-radius:8px; padding:12px 4px; text-align:center; cursor:pointer; border:1px solid rgba(255,255,255,0.1); transition:all 0.2s; opacity:0; animation:matrixReveal 0.5s ease-out forwards; position:relative; overflow:hidden; }
 .picker-item:nth-child(1),.picker-item:nth-child(2),.picker-item:nth-child(3),.picker-item:nth-child(4) { animation-delay:0.05s; }
 .picker-item:nth-child(5),.picker-item:nth-child(6),.picker-item:nth-child(7),.picker-item:nth-child(8) { animation-delay:0.15s; }
 .picker-item:nth-child(9),.picker-item:nth-child(10),.picker-item:nth-child(11),.picker-item:nth-child(12) { animation-delay:0.25s; }
@@ -1967,6 +1982,26 @@ function goBack() {
 .pi-text { color:#fff; font-size:11px; font-weight:600; letter-spacing:0.02em; }
 .picker-item.active { border-color:#00d2ff; background:#0088cc; box-shadow:0 0 20px rgba(0,210,255,0.35),inset 0 0 10px rgba(0,0,0,0.15); }
 .picker-item.active .pi-text { color:#fff; text-shadow:0 0 6px rgba(0,210,255,0.5); }
+.picker-item.ability-spark::before {
+  content:''; position:absolute;
+  width:30px; height:2px;
+  background:#00d2ff;
+  box-shadow:0 0 6px #00d2ff, 0 0 14px #00d2ff;
+  animation:borderSweep 1.4s ease-in-out forwards;
+  pointer-events:none; z-index:3;
+  border-radius:1px;
+}
+@keyframes borderSweep {
+  0%   { top:0; left:-10px; width:30px; height:2px; }
+  18%  { top:0; left:calc(100% - 20px); width:30px; height:2px; }
+  22%  { top:0; left:calc(100% - 2px); width:2px; height:25px; }
+  40%  { top:calc(100% - 25px); left:calc(100% - 2px); width:2px; height:25px; }
+  44%  { top:calc(100% - 2px); left:calc(100% - 20px); width:30px; height:2px; }
+  62%  { top:calc(100% - 2px); left:-10px; width:30px; height:2px; }
+  66%  { top:calc(100% - 25px); left:0; width:2px; height:25px; }
+  84%  { top:0; left:0; width:2px; height:25px; }
+  100% { top:0; left:-10px; width:30px; height:2px; opacity:0; }
+}
 
 .form-card { background:#1a2840; border:2px solid rgba(0,210,255,0.5); border-radius:12px; padding:18px; margin-bottom:10px; position:relative; box-shadow:0 0 20px rgba(0,210,255,0.12), inset 0 0 30px rgba(0,210,255,0.02); clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); animation:scanDown 0.4s cubic-bezier(0.25,0.8,0.25,1) both; }
 @keyframes scanDown {
@@ -2055,11 +2090,10 @@ function goBack() {
 [data-theme="white"] .sa-pct { color:#6b7280; }
 [data-theme="white"] .sa-item.active { border-color:#2563eb; background:rgba(37,99,235,0.06); }
 [data-theme="white"] .sa-item.active .sa-pct { color:#2563eb; }
-[data-theme="white"] .summary-empty { border-color:rgba(217,119,6,0.4); background:rgba(251,191,36,0.08); }
-[data-theme="white"] .summary-empty:active { background:rgba(251,191,36,0.08); }
-[data-theme="white"] .summary-empty-icon { color:#d97706; text-shadow:0 0 10px rgba(217,119,6,0.3); }
-[data-theme="white"] .summary-empty-title { color:#d97706; }
-[data-theme="white"] .summary-empty-hint { color:rgba(217,119,6,0.6); }
+[data-theme="white"] .summary-empty { border-color:#e5e7eb; opacity:0.6; }
+[data-theme="white"] .summary-empty-text { color:#9ca3af; }
+[data-theme="white"] .step-watched { border-left-color:#16a34a !important; }
+[data-theme="white"] .step-num-done { background:#16a34a !important; }
 [data-theme="white"] .picker-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 24px rgba(0,0,0,0.06); }
 [data-theme="white"] .pph-dot { color:#2563eb; }
 [data-theme="white"] .pph-title { color:#6b7280; }
@@ -2173,4 +2207,169 @@ function goBack() {
   40% { box-shadow:0 0 20px rgba(0,210,255,0.3), 0 0 0 8px rgba(0,210,255,0.15); }
   100% { box-shadow:0 0 10px rgba(0,210,255,0.15); transform:scale(1); }
 }
+
+/* ═══════════════════════════════════════════
+   赛博朋克特效层
+   ═══════════════════════════════════════════ */
+
+/* ── CRT 扫描线 ── */
+.cyber-scanlines {
+  position:fixed; inset:0; z-index:999; pointer-events:none;
+  background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  opacity:0.6;
+}
+[data-theme="white"] .cyber-scanlines {
+  background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.015) 2px, rgba(0,0,0,0.015) 4px);
+  opacity:0.4;
+}
+
+/* ── 标题故障效果 ── */
+.cyber-glitch {
+  position:relative; cursor:pointer; user-select:none;
+}
+.cyber-glitch::before,
+.cyber-glitch::after {
+  content:'今日训练';
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  opacity:0; pointer-events:none;
+}
+.cyber-glitch::before { color:#ff6ec7; z-index:-1; }
+.cyber-glitch::after  { color:#00d2ff; z-index:-2; }
+.cyber-glitch.glitching { animation:glitchShake 0.3s ease-in-out; }
+.cyber-glitch.glitching::before {
+  animation:glitchOffset1 0.3s steps(2) forwards;
+  opacity:1; clip-path:inset(20% 0 60% 0);
+}
+.cyber-glitch.glitching::after {
+  animation:glitchOffset2 0.3s steps(2) forwards;
+  opacity:1; clip-path:inset(60% 0 20% 0);
+}
+@keyframes glitchShake {
+  0%,100% { transform:translate(0); }
+  20% { transform:translate(-3px,2px); }
+  40% { transform:translate(3px,-1px); }
+  60% { transform:translate(-1px,-2px); }
+  80% { transform:translate(2px,1px); }
+}
+@keyframes glitchOffset1 {
+  0% { transform:translate(0); }
+  100% { transform:translate(-4px,1px); }
+}
+@keyframes glitchOffset2 {
+  0% { transform:translate(0); }
+  100% { transform:translate(4px,-1px); }
+}
+
+/* ── 全息光泽（卡片） ── */
+.card {
+  position:relative; overflow:hidden;
+}
+.card::before {
+  content:''; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:linear-gradient(125deg, transparent 30%, rgba(0,210,255,0.04) 45%, rgba(255,110,199,0.04) 55%, transparent 70%);
+  background-size:200% 200%;
+  animation:holoSheen 6s ease-in-out infinite;
+  border-radius:inherit;
+}
+@keyframes holoSheen {
+  0%,100% { background-position:0% 50%; }
+  50% { background-position:100% 50%; }
+}
+
+/* ── 霓虹呼吸 ── */
+.card { animation:neonBreathe 4s ease-in-out infinite; }
+@keyframes neonBreathe {
+  0%,100% { box-shadow:0 0 8px rgba(0,210,255,0.08), inset 0 0 20px rgba(0,210,255,0.01); }
+  50% { box-shadow:0 0 18px rgba(0,210,255,0.18), 0 0 40px rgba(255,110,199,0.06), inset 0 0 30px rgba(0,210,255,0.03); }
+}
+
+/* ── 悬浮微倾斜 ── */
+.card:active {
+  transform:perspective(600px) rotateX(1deg) rotateY(-1deg) scale(0.985);
+  transition:transform 0.1s ease-out;
+}
+
+/* ── 按钮霓虹爆发 ── */
+.btn-checkin {
+  position:relative; overflow:hidden;
+}
+.btn-checkin::after {
+  content:''; position:absolute; top:50%; left:50%; width:0; height:0;
+  border-radius:50%; background:rgba(0,210,255,0.3);
+  transform:translate(-50%,-50%);
+  transition:width 0.6s ease-out, height 0.6s ease-out, opacity 0.6s;
+  pointer-events:none;
+}
+.btn-checkin:active::after {
+  width:600px; height:600px; opacity:0;
+}
+
+/* ── 进度条数据流 ── */
+.plan-progress-track {
+  position:relative; overflow:hidden;
+}
+.plan-progress-track::after {
+  content:''; position:absolute; top:0; left:-60px; width:60px; height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent);
+  animation:dataStream 2s linear infinite;
+  pointer-events:none; z-index:2;
+}
+@keyframes dataStream {
+  0% { left:-60px; }
+  100% { left:100%; }
+}
+
+/* ── 步骤卡片光晕增强 ── */
+.step {
+  transition:all 0.2s ease, box-shadow 0.3s ease;
+}
+.step:active {
+  box-shadow:0 0 20px rgba(0,210,255,0.25), inset 0 0 30px rgba(0,210,255,0.04) !important;
+  border-left-width:6px;
+}
+
+/* ── 计时器数字终端风格 ── */
+.time-countdown {
+  font-family:'SF Mono','Cascadia Code','Fira Code','Courier New',monospace !important;
+  text-shadow:0 0 20px rgba(34,197,94,0.5), 0 0 40px rgba(34,197,94,0.2);
+}
+[data-theme="white"] .time-countdown {
+  text-shadow:none;
+}
+
+/* ── 分割线动态 ── */
+.divider {
+  background:linear-gradient(90deg,transparent,rgba(0,210,255,0.4),rgba(255,110,199,0.2),rgba(0,210,255,0.4),transparent) !important;
+  animation:dividerFlow 3s ease-in-out infinite;
+  background-size:200% 100% !important;
+}
+@keyframes dividerFlow {
+  0%,100% { background-position:0% 50%; }
+  50% { background-position:100% 50%; }
+}
+
+/* ── 能力网格悬浮全息 ── */
+.picker-item {
+  position:relative; overflow:hidden;
+}
+.picker-item::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(0,210,255,0.15) 0%, transparent 60%);
+  opacity:0; transition:opacity 0.2s;
+}
+.picker-item:active::after { opacity:1; }
+
+/* ── 解锁B段动画 ── */
+.b-section.locked { transition:all 0.3s; }
+.lock-tip {
+  animation:lockPulse 2.5s ease-in-out infinite;
+}
+@keyframes lockPulse {
+  0%,100% { opacity:0.4; }
+  50% { opacity:0.8; text-shadow:0 0 8px rgba(0,210,255,0.3); }
+}
+
+/* ── 训练项已完成标记 ── */
+.step-watched { border-left-color:#22c55e !important; opacity:0.7; }
+.step-num-done { background:#22c55e !important; }
 </style>
