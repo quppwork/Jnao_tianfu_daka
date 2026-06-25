@@ -35,8 +35,17 @@ def load_settings() -> dict:
     deepseek["api_key"] = os.getenv("DEEPSEEK_API_KEY", deepseek.get("api_key", ""))
     raw["deepseek"] = deepseek
     doubao = raw.get("doubao", {})
-    doubao["api_key"] = os.getenv("DOUBAO_API_KEY", doubao.get("api_key", ""))
-    doubao["api_base"] = os.getenv("DOUBAO_API_BASE", doubao.get("api_base", "https://ark.cn-beijing.volces.com/api/v3"))
+    doubao_key = os.getenv("DOUBAO_API_KEY", doubao.get("api_key", ""))
+    if str(doubao_key).startswith("${"):
+        doubao_key = ""
+    doubao["api_key"] = doubao_key
+    doubao_base = os.getenv(
+        "DOUBAO_API_BASE",
+        doubao.get("api_base", "https://ark.cn-beijing.volces.com/api/v3"),
+    )
+    if str(doubao_base).startswith("${"):
+        doubao_base = "https://ark.cn-beijing.volces.com/api/v3"
+    doubao["api_base"] = doubao_base
     raw_model = doubao.get("model", "")
     if raw_model.startswith("${"):
         raw_model = ""

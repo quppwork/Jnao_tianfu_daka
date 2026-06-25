@@ -6,6 +6,8 @@
 
   python scripts/oss_audio.py list
   python scripts/oss_audio.py sync-catalog
+  python scripts/oss_audio.py build-xue-catalog
+  python scripts/oss_audio.py import-db --all
   python scripts/oss_audio.py import-db --replace
 """
 
@@ -26,7 +28,19 @@ from dotenv import load_dotenv
 load_dotenv(BACKEND / ".env", override=True)
 
 DEFAULT_CATALOG = ROOT / "docs" / "data" / "xet_brain_power_catalog.json"
+XUE_CATALOG = ROOT / "docs" / "data" / "xet_xuekeaomi_catalog.json"
 OSS_INDEX = ROOT / "docs" / "data" / "oss_yinpin_index.json"
+
+
+def _series_from_prefix(prefix: str | None) -> str:
+    p = (prefix or "yinpin/").lower()
+    if "xuekeaomi" in p:
+        return "xuekeaomi"
+    if "chaonengli" in p:
+        return "chaonengli"
+    if "zhuanzhuli" in p:
+        return "zhuanzhuli"
+    return "chaonaoaomi"
 
 
 def _norm_name(name: str) -> str:
@@ -67,6 +81,7 @@ def cmd_sync_catalog(args: argparse.Namespace) -> None:
         if hit:
             row["play_url"] = hit["url"] if not args.public_prefix else f"{args.public_prefix.rstrip('/')}/{hit['key'].split('/', 1)[-1]}"
             row["oss_key"] = hit["key"]
+            row["series"] = row.get("series") or _series_from_prefix(args.prefix)
             matched += 1
         else:
             missing.append(fname)
@@ -82,15 +97,32 @@ def cmd_sync_catalog(args: argparse.Namespace) -> None:
         print(f"未匹配 {len(missing)} 个，示例: {missing[:5]}")
 
 
+def cmd_build_xue(args: argparse.Namespace) -> None:
+    import subprocess
+
+    cmd = [sys.executable, str(ROOT / "scripts" / "build_xet_xuekeaomi_catalog.py")]
+    if args.oss_index:
+        cmd.extend(["--from-oss-index", args.oss_index])
+    if args.source_dir:
+        cmd.append(args.source_dir)
+    subprocess.check_call(cmd)
+
+
 def cmd_import_db(args: argparse.Namespace) -> None:
     from app.db.session import get_session_factory, init_db
-    from app.services.catalog_import import import_catalog
+    from app.services.catalog_import import import_all_xet_catalogs, import_catalog
 
     init_db()
     session = get_session_factory()()
     try:
-        n = import_catalog(session, Path(args.catalog), replace=args.replace)
-        print(f"导入/更新 {n} 条 content_item（replace={args.replace}）")
+        if args.all:
+            results = import_all_xet_catalogs(session, replace=args.replace)
+            for name, n in results.items():
+                print(f"  {name}: {n} 条")
+            print(f"合计导入/更新 {sum(results.values())} 条 content_item")
+        else:
+            n = import_catalog(session, Path(args.catalog), replace=args.replace)
+            print(f"导入/更新 {n} 条 content_item（replace={args.replace}）")
     finally:
         session.close()
 
@@ -115,8 +147,14 @@ def main() -> None:
 
     p_db = sub.add_parser("import-db", help="将 catalog JSON 导入 MySQL content_item")
     p_db.add_argument("--catalog", default=str(DEFAULT_CATALOG))
-    p_db.add_argument("--replace", action="store_true", help="清空后重新导入")
+    p_db.add_argument("--replace", action="store_true", help="清空后重新导入（--all 时仅首份 catalog 清空）")
+    p_db.add_argument("--all", action="store_true", help="导入脑力奥秘 + 学科奥秘两份 catalog")
     p_db.set_defaults(func=cmd_import_db)
+
+    p_xue = sub.add_parser("build-xue-catalog", help="从 OSS 索引生成学科奥秘 catalog")
+    p_xue.add_argument("--oss-index", default=str(OSS_INDEX))
+    p_xue.add_argument("source_dir", nargs="?", help="可选：本地 MP3 目录")
+    p_xue.set_defaults(func=cmd_build_xue)
 
     args = parser.parse_args()
     if not os.getenv("OSS_ACCESS_KEY_ID") or not os.getenv("OSS_ACCESS_KEY_SECRET"):

@@ -17,10 +17,10 @@ Start-Process powershell.exe -ArgumentList @(
 
 Write-Host "[WAIT] 等待后端就绪..." -ForegroundColor Gray
 $ready = $false
-for ($i = 0; $i -lt 30; $i++) {
-    Start-Sleep -Seconds 1
+for ($i = 0; $i -lt 15; $i++) {
+    Start-Sleep -Milliseconds 500
     try {
-        $code = & curl.exe -s -o $null -w "%{http_code}" --max-time 2 "http://127.0.0.1:8012/api/health" 2>$null
+        $code = & curl.exe -s -o $null -w "%{http_code}" --max-time 1 "http://127.0.0.1:8012/api/ping" 2>$null
         if ($code -eq "200") {
             Write-Host "[BACKEND] Ready" -ForegroundColor Green
             $ready = $true

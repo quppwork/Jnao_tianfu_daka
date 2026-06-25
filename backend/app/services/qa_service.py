@@ -94,13 +94,24 @@ async def chat(
     else:
         session = create_session(db, child_user_id, subject)
 
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in session.messages
+        if m.role in ("user", "assistant")
+    ][-10:]
+
     db.add(QaMessage(session_id=session.id, role="user", content=message))
     if session.title == "新对话":
         session.title = message[:30]
     db.commit()
 
     system = _build_system_prompt(talent, subject or session.subject)
-    reply = await chat_completion(system_prompt=system, user_message=message, max_tokens=800)
+    reply = await chat_completion(
+        system_prompt=system,
+        user_message=message,
+        history=history,
+        max_tokens=800,
+    )
     if not reply:
         reply = "抱歉，AI 暂时无法响应，请稍后再试。"
 

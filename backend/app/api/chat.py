@@ -14,10 +14,10 @@ CHAT_SYSTEM = """你是 JNAO 天赋成长平台的 AI 助手。
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1)
-    user_id: str = "mobile_user"
-    user_department: str = ""
-    history: list[dict] | None = None
+    message: str = Field(..., min_length=1, max_length=4000)
+    user_id: str = Field("mobile_user", max_length=64)
+    user_department: str = Field("", max_length=100)
+    history: list[dict] | None = Field(None, max_length=20)
 
 
 @router.post("")
@@ -50,8 +50,8 @@ async def chat(req: ChatRequest):
 
 @router.get("/stream")
 async def stream_chat(
-    message: str = Query(...),
-    user_id: str = Query("mobile_user"),
+    message: str = Query(..., min_length=1, max_length=4000),
+    user_id: str = Query("mobile_user", max_length=64),
 ):
     """SSE 流式对话 — 豆包"""
 

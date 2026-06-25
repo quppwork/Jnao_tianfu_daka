@@ -11,18 +11,31 @@ logger = get_logger("doubao")
 DEFAULT_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
 
 
+def _sanitize_api_base(value: str | None) -> str:
+    base = (value or "").strip()
+    if not base or base.startswith("${") or not base.startswith("http"):
+        return DEFAULT_API_BASE
+    return base.rstrip("/")
+
+
 def is_configured() -> bool:
     cfg = load_settings().get("doubao", {})
-    key = cfg.get("api_key", "")
-    return bool(key and not str(key).startswith("your-") and key != "your-ark-api-key")
+    key = str(cfg.get("api_key", "") or "").strip()
+    if not key or key.startswith("${") or key.startswith("your-"):
+        return False
+    base = _sanitize_api_base(cfg.get("api_base"))
+    return bool(key and base.startswith("http"))
 
 
 def _cfg() -> dict:
     settings = load_settings()
     cfg = settings.get("doubao", {})
+    key = str(cfg.get("api_key", "") or "").strip()
+    if key.startswith("${"):
+        key = ""
     return {
-        "api_key": cfg.get("api_key", ""),
-        "api_base": cfg.get("api_base", DEFAULT_API_BASE),
+        "api_key": key,
+        "api_base": _sanitize_api_base(cfg.get("api_base")),
         "model": cfg.get("model", "doubao-seed-1-6-250615"),
     }
 
@@ -55,6 +68,7 @@ async def chat_completion(
     user_message: str,
     history: list[dict] | None = None,
     max_tokens: int = 500,
+    timeout: float = 30,
 ) -> str | None:
     cfg = _cfg()
     if not cfg["api_key"]:
@@ -62,24 +76,31 @@ async def chat_completion(
 
     messages = _build_messages(system_prompt, user_message, history)
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{cfg['api_base']}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {cfg['api_key']}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": cfg["model"],
-                "messages": messages,
-                "max_tokens": max_tokens,
-            },
-        )
-    if resp.status_code != 200:
-        logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                f"{cfg['api_base']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": cfg["model"],
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                },
+            )
+        if resp.status_code != 200:
+            logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
+            return None
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+    except httpx.HTTPError as e:
+        logger.warning(f"Doubao request failed: {e}")
         return None
-    data = resp.json()
-    return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, ValueError) as e:
+        logger.warning(f"Doubao response parse failed: {e}")
+        return None
 
 
 async def chat_completion_stream(
