@@ -35,6 +35,18 @@ def update_profile(
     return user
 
 
+def merge_learner_profile(db: Session, child_user_id: int, patch: dict) -> ChildUser | None:
+    user = db.get(ChildUser, child_user_id)
+    if not user:
+        return None
+    current = dict(user.profile_json or {})
+    current.update(patch)
+    user.profile_json = current
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
     data = {
         "child_user_id": user.id,

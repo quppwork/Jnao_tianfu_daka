@@ -50,6 +50,7 @@ def load_settings() -> dict:
     if raw_model.startswith("${"):
         raw_model = ""
     doubao["model"] = os.getenv("DOUBAO_CHAT_MODEL", raw_model or "doubao-seed-1-6-250615")
+    doubao["vision_model"] = os.getenv("DOUBAO_VISION_MODEL", doubao["model"])
     raw["doubao"] = doubao
     raw["server"] = server
     raw["upstream"]["tianfu_rag"] = upstream

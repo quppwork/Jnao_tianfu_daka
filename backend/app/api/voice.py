@@ -3,6 +3,7 @@
 import os
 import io
 import tempfile
+from pathlib import Path
 import httpx
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import Response
@@ -63,9 +64,10 @@ async def speech_to_text(audio: UploadFile = File(...)):
     except Exception as e:
         return {"error": f"Whisper 模型加载失败: {e}"}
 
-    # 保存上传的音频到临时文件
+    # 保存上传的音频到临时文件（保留真实后缀，Whisper 可识别 webm/mp3/wav）
     audio_bytes = await audio.read()
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+    suffix = Path(audio.filename or "audio.webm").suffix or ".webm"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
         f.write(audio_bytes)
         tmp_path = f.name
 
