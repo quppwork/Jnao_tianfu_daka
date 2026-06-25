@@ -94,7 +94,7 @@ function goRegister() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
+.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:18vh; font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
 
 /* 渐变光晕 */
 .glow { position:absolute; width:260px; height:260px; border-radius:50%; pointer-events:none; z-index:0; }

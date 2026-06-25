@@ -14,11 +14,11 @@
         <view class="card hero-row">
           <view class="hero-logo">
             <image v-if="talentLogo" :src="talentLogo" mode="aspectFit" class="hero-logo-img" />
-            <text v-else class="hero-logo-text">{{ report.talent?.[0] || '?' }}</text>
+            <text v-else class="hero-logo-text">{{ report.check_talent?.[0] || report.talent?.[0] || '?' }}</text>
           </view>
           <view class="hero-info">
             <text class="hero-label">天赋者</text>
-            <text class="hero-name">{{ checkLabel }}{{ report.talent }}</text>
+            <text class="hero-name">{{ talentDisplay }}</text>
             <text class="hero-desc">{{ attrShort }}</text>
           </view>
         </view>
@@ -26,7 +26,7 @@
         <!-- ══ 2. Stats Row ══ -->
         <view class="card stats-row">
           <view class="stat"><text class="stat-val">{{ talentVal }}</text><text class="stat-label">核心天赋值</text></view>
-          <view class="stat"><text class="stat-val" :style="{ color: talentColor }">{{ report.talent }}</text><text class="stat-label">天赋类型</text></view>
+          <view class="stat"><text class="stat-val" :style="{ color: talentColor }">{{ talentDisplay }}</text><text class="stat-label">天赋类型</text></view>
           <view class="stat"><text class="stat-val">{{ stateName }}</text><text class="stat-label">能量状态</text></view>
         </view>
 
@@ -43,7 +43,7 @@
 
         <!-- ══ 4. 双重属性 ══ -->
         <view class="card" v-if="suppDesp">
-          <text class="card-label">{{ checkLabel }}双重属性详解</text>
+          <text class="card-label">{{ talentDisplay }} · 双重属性详解</text>
           <view class="collapse-wrap" :class="{ clamped: !collapseOpen['supp'] && suppDesp.length > 120 }" v-html="suppDesp"></view>
           <text v-if="stripHtml(suppDesp).length > 120" class="collapse-btn" @tap="collapseOpen['supp']=!collapseOpen['supp']">{{ collapseOpen['supp'] ? '收起' : '展示更多' }}</text>
         </view>
@@ -174,7 +174,11 @@ function goBack() {
 // Computed
 const talentColor = computed(() => TALENT_COLORS[report.value?.talent] || '#171717')
 const talentLogo = computed(() => TALENT_LOGOS[report.value?.talent] || '')
-const checkLabel = computed(() => report.value?.check_talent ? `${report.value.check_talent} · ` : '')
+const talentDisplay = computed(() => {
+  const ct = report.value?.check_talent
+  if (ct && ct.length >= 2) return ct[0] + '偏' + ct[1]
+  return report.value?.talent || '--'
+})
 const stateName = computed(() => report.value?.results?.State?.name || '--')
 const talentVal = computed(() => report.value?.results?.Talent?.value || report.value?.results?.State?.id || '--')
 const attrShort = computed(() => stripHtml(report.value?.results?.Attribute?.desp || '').slice(0, 80))

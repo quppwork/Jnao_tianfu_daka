@@ -16,9 +16,6 @@
         <view class="phase-inner">
           <text class="msg-title">首先我们来打开 Jnao 的大门，测试一下天赋吧！</text>
           <text class="msg-sub">以下您将完成 35 道题目，请问你想进行哪种类型的天赋测试呢？</text>
-          <view class="history-hint" @tap="showHistory = true">
-            <text>📋 查看历史报告{{ historyList.length ? ' (' + historyList.length + ')' : '' }}</text>
-          </view>
           <view class="card-row">
             <view class="pcard pcard-in" style="animation-delay:0.4s" @tap="handleChoice('孩子测试')">
               <view class="pcard-icon-wrap">
@@ -157,26 +154,6 @@
       </view>
     </view>
 
-    <!-- History Overlay -->
-    <view v-if="showHistory" class="notice-overlay" @tap="showHistory = false">
-      <view class="notice-card" style="max-width:340px;" @tap.stop>
-        <text class="notice-text" style="font-weight:700;margin-bottom:12px;display:block;">历史报告</text>
-        <view v-if="historyList.length" class="history-list">
-          <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item">
-            <view class="history-item-main" @tap="viewHistory(h)">
-              <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
-              <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
-            </view>
-            <view class="history-del" @tap.stop="confirmDeleteHistory(h)">
-              <text>✕</text>
-            </view>
-          </view>
-        </view>
-        <text v-else class="notice-text">暂无历史报告</text>
-        <view class="history-close" @tap="showHistory = false"><text>关闭</text></view>
-      </view>
-    </view>
-
     <!-- Toast -->
     <view v-if="toast.text" class="toast" :class="'toast-' + toast.variant">
       <text>{{ toast.text }}</text>
@@ -185,38 +162,21 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import {
   ensureChildUser,
   ensureJnaoUid,
-  fetchAssessmentHistory,
-  deleteAssessmentReport,
   submitTalentReport,
 } from '@/utils/userApi.js'
 
-async function loadHistory() {
-  try {
-    const uid = await ensureChildUser()
-    historyList.value = await fetchAssessmentHistory(uid)
-  } catch (e) {
-    historyList.value = []
-  }
-}
-
-onMounted(loadHistory)
-
 // ── State ──
 const phase = ref('door')
-const testType = ref(null)          // '成人' | '孩子'
+const testType = ref(null)
 const ageGateNotice = ref(false)
 const submitting = ref(false)
 const submitError = ref('')
 const compPhase = ref(0)
-const showHistory = ref(false)
-const historyList = ref([])
 const toast = ref({ text: '', variant: 'ack' })
-
-watch(showHistory, (open) => { if (open) loadHistory() })
 
 // Testing state
 const questionOrder = ref([])       // shuffled question IDs
@@ -446,44 +406,12 @@ async function doSubmitReport() {
     const type = testType.value === '成人' ? 0 : 1
     const json = await submitTalentReport(childUserId, { answer: bits, jnaoUid, type })
     if (json.code !== 1) throw new Error('报告生成失败')
-    await loadHistory()
     const aid = json.assessment_id
     uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
   } catch (e) {
     submitError.value = '提交失败：' + (e.message || '请稍后重试')
   }
   submitting.value = false
-}
-
-function viewHistory(h) {
-  showHistory.value = false
-  if (h.id) {
-    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
-  }
-}
-
-function confirmDeleteHistory(h) {
-  if (!h?.id) return
-  uni.showModal({
-    title: '删除报告',
-    content: `确定删除「${h.talent_primary || h.talent || '测评'}」报告？删除后将从列表移除，数据已归档备份。`,
-    confirmText: '删除',
-    confirmColor: '#ef4444',
-    success: (res) => {
-      if (res.confirm) deleteHistory(h.id)
-    },
-  })
-}
-
-async function deleteHistory(assessmentId) {
-  try {
-    const uid = await ensureChildUser()
-    await deleteAssessmentReport(uid, assessmentId)
-    historyList.value = historyList.value.filter(h => h.id !== assessmentId)
-    uni.showToast({ title: '已删除', icon: 'none' })
-  } catch (e) {
-    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
-  }
 }
 
 function dismissNotice() {

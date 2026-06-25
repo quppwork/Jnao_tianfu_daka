@@ -52,13 +52,16 @@
                 <view v-if="pi < planPhases.length - 1" class="tl-line"></view>
               </view>
               <view class="tl-content">
-                <view class="tl-node-row" @click="scrollToPhase(phase.block)">
+                <view class="tl-node-row" @click="togglePhase(phase.block)">
                   <view class="tl-phase-head">
                     <text class="tl-phase-title">{{ phase.label }} · {{ phase.subtitle }}</text>
-                    <text class="tl-phase-meta">{{ phaseMetaText(phase) }}</text>
+                    <view class="tl-phase-right">
+                      <text class="tl-phase-meta">{{ phaseMetaText(phase) }}</text>
+                      <text class="tl-phase-toggle">{{ planExpanded[phase.block] ? '▾' : '▸' }}</text>
+                    </view>
                   </view>
                 </view>
-                <view class="tl-items">
+                <view v-if="planExpanded[phase.block]" class="tl-items">
                   <view
                     v-for="item in phase.items"
                     :key="item.id"
@@ -105,6 +108,15 @@
           <text class="summary-label">📝 打卡训练总结</text>
           <text class="summary-text">今日已打卡 {{ submittedCards.length }} 项</text>
           <text class="summary-more">点击管理打卡 ›</text>
+          <view class="summary-attitude">
+            <text class="sa-label">配合度</text>
+            <view class="sa-grid">
+              <view v-for="s in scores" :key="s.pct" class="sa-item" :class="{ active: summaryAttitude === s.pct }" @click.stop="setAttitude(s.pct)">
+                <text class="sa-pct">{{ s.pct }}%</text>
+                <text class="sa-emoji">{{ s.emoji }}</text>
+              </view>
+            </view>
+          </view>
         </template>
         <template v-else>
           <text class="summary-empty-icon">⚠</text>
@@ -154,22 +166,24 @@
         </view>
 
         <view v-if="devMode" class="dev-panel">
-          <text class="dev-panel-label">开发者测试</text>
+          <text class="dev-panel-label">🔧 开发者测试</text>
           <view v-if="devStatusText" class="dev-status">
             <text>{{ devStatusText }}</text>
           </view>
           <view class="dev-actions">
-            <view class="dev-action dev-action-primary" @click="devRefreshAll"><text>刷新全部</text></view>
-            <view class="dev-action" @click="devGoNextDay"><text>模拟下一天</text></view>
-            <view class="dev-action" @click="devClearAllHistory"><text>清空训练历史</text></view>
+            <view class="dev-action dev-action-primary" @click="devRefreshAll"><text>🔄 重置今日</text></view>
+            <view class="dev-action" @click="devGoNextDay"><text>➡️ 下一天</text></view>
+            <view class="dev-action" @click="devRefreshAiPlan"><text>🤖 刷新 AI</text></view>
           </view>
           <view class="dev-actions">
-            <view class="dev-action" @click="devResetTimer"><text>重置计时</text></view>
-            <view class="dev-action" @click="devSimulateExpire"><text>模拟结束</text></view>
-            <view class="dev-action" @click="devUnlockB"><text>解锁训练 B</text></view>
-            <view class="dev-action" @click="devRefreshAiPlan"><text>刷新 AI 方案</text></view>
+            <view class="dev-action" @click="devResetTimer"><text>⏱ 重置计时</text></view>
+            <view class="dev-action" @click="devSimulateExpire"><text>⏰ 模拟结束</text></view>
+            <view class="dev-action" @click="devUnlockB"><text>🔓 解锁 B</text></view>
           </view>
-          <text class="dev-panel-hint">已跳过计时限制 · 可用「模拟下一天」测多日推送闭环</text>
+          <view class="dev-actions">
+            <view class="dev-action dev-action-danger" @click="devClearAllHistory"><text>🗑 清空历史</text></view>
+          </view>
+          <text class="dev-panel-hint">已跳过计时限制 · 重置今日 = 清空今日方案 + 重新加载（不删天赋测评）</text>
         </view>
       </view>
 
@@ -216,180 +230,215 @@
       <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker">
         <text>✅ 训练 A 打卡</text>
       </view>
-
-      <!-- 能力选择面板 -->
-      <view v-if="showPicker" class="picker-panel" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
-        <view class="picker-panel-header">
-          <text class="pph-dot">◆</text>
-          <text class="pph-title">选择训练能力</text>
-          <text class="pph-dot">◆</text>
-        </view>
-        <view class="picker-grid">
-          <view v-for="item in abilities" :key="item" class="picker-item" :class="{ active: hasCard(item) }" @click="toggleCard(item)">
-            <text class="pi-text">{{ item }}</text>
-          </view>
-        </view>
       </view>
 
-      <!-- 已选卡片列表 -->
-      <TransitionGroup v-if="showPicker" name="card">
-        <view v-for="(card, idx) in cards" :key="card.name" class="form-card">
-        <view class="scan-line"></view>
-        <view class="form-header">
-          <text class="form-title">{{ card.name }} — 训练记录</text>
-          <view class="form-del" @click="removeCard(idx)">✕</view>
-        </view>
+      <!-- 打卡弹窗 -->
+      <view v-if="showPicker" class="picker-overlay" @click="closePicker">
+        <view class="picker-card checkin-modal" @click.stop>
+          <view class="modal-header">
+            <text class="modal-title">训练 A 打卡</text>
+            <view class="modal-close" @click="closePicker">✕</view>
+          </view>
 
-        <template v-if="card.name === '极速运算'">
-          <view class="form-row">
-            <text class="form-label">时间</text>
-            <input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" />
-          </view>
-          <view class="form-row">
-            <text class="form-label">内容</text>
-            <view class="form-tags">
-              <text class="ftag" :class="{ on: card.tag === '加减法' }" @click="card.tag = '加减法'">加减法</text>
-              <text class="ftag" :class="{ on: card.tag === '乘除法' }" @click="card.tag = '乘除法'">乘除法</text>
-              <text class="ftag" :class="{ on: card.tag === '混合运算' }" @click="card.tag = '混合运算'">混合运算</text>
-              <text class="ftag" :class="{ on: card.tag === '口算' }" @click="card.tag = '口算'">口算</text>
+          <!-- 能力选择 -->
+          <view class="picker-panel" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
+            <view class="picker-panel-header">
+              <text class="pph-dot">◆</text>
+              <text class="pph-title">选择训练能力</text>
+              <text class="pph-dot">◆</text>
             </view>
-          </view>
-          <view class="form-row">
-            <text class="form-label">结果</text>
-            <view class="form-inline">
-              <input class="form-input short" v-model="card.count" placeholder="题数" type="number" />
-              <text class="form-unit">题</text>
-              <input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" />
-              <text class="form-unit">%</text>
-            </view>
-          </view>
-          <view class="form-row">
-            <text class="form-label">图片/视频</text>
-            <view class="form-file-wrap">
-              <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
-              <view v-if="card.files && card.files.length" class="file-previews">
-                <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
-                  <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
-                  <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                  <text class="file-del" @click="removeFile(idx, fi)">✕</text>
-                </view>
+            <view class="picker-grid">
+              <view v-for="item in abilities" :key="item" class="picker-item" :class="{ active: hasCard(item) }" @click="toggleCard(item)">
+                <text class="pi-text">{{ item }}</text>
               </view>
             </view>
           </view>
-          <view class="form-row">
-            <text class="form-label">备注</text>
-            <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
-          </view>
-        </template>
-        <template v-else-if="card.name === '扫描速记'">
-          <view class="form-row">
-            <text class="form-label">材料类型</text>
-            <view class="form-tags">
-              <text class="ftag" :class="{ on: card.materialType === '书' }" @click="card.materialType = '书'">书</text>
-              <text class="ftag" :class="{ on: card.materialType === '文章' }" @click="card.materialType = '文章'">文章</text>
-              <text class="ftag" :class="{ on: card.materialType === '自定义' }" @click="card.materialType = '自定义'">自定义</text>
+
+          <!-- 已选卡片列表 -->
+          <TransitionGroup v-if="cards.length" name="card">
+            <view v-for="(card, idx) in cards" :key="card.name" class="form-card">
+            <view class="scan-line"></view>
+            <view class="form-header">
+              <text class="form-title">{{ card.name }} — 训练记录</text>
+              <view class="form-del" @click="removeCard(idx)">✕</view>
             </view>
-          </view>
-          <view class="form-row">
-            <text class="form-label">材料名称</text>
-            <input class="form-input" v-model="card.materialName" :placeholder="card.materialType === '书' ? '如：《西游记》' : card.materialType === '文章' ? '如：作文《我的姐姐》' : '如：圆周率前100位'" />
-          </view>
-          <view class="form-row">
-            <text class="form-label">字数</text>
-            <view class="form-inline">
-              <input class="form-input short" v-model="card.wordCount" placeholder="字数" type="number" />
-              <text class="form-unit">字</text>
-            </view>
-          </view>
-          <view class="form-row">
-            <text class="form-label">正背</text>
-            <view class="form-inline">
-              <input class="form-input short" v-model="card.forwardTime" placeholder="用时" />
-              <text class="form-unit">·</text>
-              <input class="form-input short" v-model="card.forwardAcc" placeholder="准确度" />
-            </view>
-          </view>
-          <view class="form-row">
-            <text class="form-label">倒背</text>
-            <view class="form-inline">
-              <input class="form-input short" v-model="card.backwardTime" placeholder="用时" />
-              <text class="form-unit">·</text>
-              <input class="form-input short" v-model="card.backwardAcc" placeholder="准确度" />
-            </view>
-          </view>
-          <view class="form-row">
-            <text class="form-label">图片/视频</text>
-            <view class="form-file-wrap">
-              <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
-              <view v-if="card.files && card.files.length" class="file-previews">
-                <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
-                  <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
-                  <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                  <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+
+            <template v-if="card.name === '极速运算'">
+              <view class="form-row">
+                <text class="form-label">时间</text>
+                <input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" />
+              </view>
+              <view class="form-row">
+                <text class="form-label">内容</text>
+                <view class="form-tags">
+                  <text class="ftag" :class="{ on: card.tag === '加减法' }" @click="card.tag = '加减法'">加减法</text>
+                  <text class="ftag" :class="{ on: card.tag === '乘除法' }" @click="card.tag = '乘除法'">乘除法</text>
+                  <text class="ftag" :class="{ on: card.tag === '混合运算' }" @click="card.tag = '混合运算'">混合运算</text>
+                  <text class="ftag" :class="{ on: card.tag === '口算' }" @click="card.tag = '口算'">口算</text>
                 </view>
               </view>
-            </view>
-          </view>
-          <view class="form-row">
-            <text class="form-label">备注</text>
-            <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
-          </view>
-        </template>
-        <template v-else>
-          <view class="form-row">
-            <text class="form-label">时间</text>
-            <input class="form-input" v-model="card.time" placeholder="训练时长/分钟" />
-          </view>
-          <view class="form-row">
-            <text class="form-label">内容</text>
-            <textarea class="form-textarea" v-model="card.content" placeholder="训练了什么内容？" />
-          </view>
-          <view class="form-row">
-            <text class="form-label">结果</text>
-            <textarea class="form-textarea" v-model="card.result" placeholder="训练效果如何？" />
-          </view>
-          <view class="form-row">
-            <text class="form-label">图片/视频</text>
-            <view class="form-file-wrap">
-              <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
-              <text class="file-hint" v-if="!card.files.length">支持图片和视频</text>
-              <view v-if="card.files.length" class="file-previews">
-                <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
-                  <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
-                  <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                  <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+              <view class="form-row">
+                <text class="form-label">结果</text>
+                <view class="form-inline">
+                  <input class="form-input short" v-model="card.count" placeholder="题数" type="number" />
+                  <text class="form-unit">题</text>
+                  <input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" />
+                  <text class="form-unit">%</text>
                 </view>
               </view>
-            </view>
+              <view class="form-row">
+                <text class="form-label">图片/视频</text>
+                <view class="form-file-wrap">
+                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <view v-if="card.files && card.files.length" class="file-previews">
+                    <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                      <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                      <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">备注</text>
+                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+              </view>
+            </template>
+            <template v-else-if="card.name === '扫描速记'">
+              <view class="form-row">
+                <text class="form-label">材料类型</text>
+                <view class="form-tags">
+                  <text class="ftag" :class="{ on: card.materialType === '书' }" @click="card.materialType = '书'">书</text>
+                  <text class="ftag" :class="{ on: card.materialType === '文章' }" @click="card.materialType = '文章'">文章</text>
+                  <text class="ftag" :class="{ on: card.materialType === '自定义' }" @click="card.materialType = '自定义'">自定义</text>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">材料名称</text>
+                <input class="form-input" v-model="card.materialName" :placeholder="card.materialType === '书' ? '如：《西游记》' : card.materialType === '文章' ? '如：作文《我的姐姐》' : '如：圆周率前100位'" />
+              </view>
+              <view class="form-row">
+                <text class="form-label">字数</text>
+                <view class="form-inline">
+                  <input class="form-input short" v-model="card.wordCount" placeholder="字数" type="number" />
+                  <text class="form-unit">字</text>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">正背</text>
+                <view class="form-inline">
+                  <input class="form-input short" v-model="card.forwardTime" placeholder="用时" />
+                  <text class="form-unit">·</text>
+                  <input class="form-input short" v-model="card.forwardAcc" placeholder="准确度" />
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">倒背</text>
+                <view class="form-inline">
+                  <input class="form-input short" v-model="card.backwardTime" placeholder="用时" />
+                  <text class="form-unit">·</text>
+                  <input class="form-input short" v-model="card.backwardAcc" placeholder="准确度" />
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">图片/视频</text>
+                <view class="form-file-wrap">
+                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <view v-if="card.files && card.files.length" class="file-previews">
+                    <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                      <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                      <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">备注</text>
+                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+              </view>
+            </template>
+            <template v-else-if="card.name === '影像追忆'">
+              <view class="form-row">
+                <text class="form-label">使用工具</text>
+                <view class="form-tags">
+                  <text class="ftag" :class="{ on: card.tool === '书本' }" @click="card.tool = '书本'">书本</text>
+                  <text class="ftag" :class="{ on: card.tool === '视频' }" @click="card.tool = '视频'">视频</text>
+                  <text class="ftag" :class="{ on: card.tool === '自定义' }" @click="card.tool = '自定义'">自定义</text>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">时长</text>
+                <input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" />
+              </view>
+              <view class="form-row">
+                <text class="form-label">材料</text>
+                <textarea class="form-textarea" v-model="card.content" placeholder="如：一卜语文重要知识点" />
+              </view>
+              <view class="form-row">
+                <text class="form-label">追忆率</text>
+                <view class="form-inline">
+                  <input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" />
+                  <text class="form-unit">%</text>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">图片/视频</text>
+                <view class="form-file-wrap">
+                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <view v-if="card.files && card.files.length" class="file-previews">
+                    <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                      <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                      <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">备注</text>
+                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+              </view>
+            </template>
+            <template v-else>
+              <view class="form-row">
+                <text class="form-label">时间</text>
+                <input class="form-input" v-model="card.time" placeholder="训练时长/分钟" />
+              </view>
+              <view class="form-row">
+                <text class="form-label">内容</text>
+                <textarea class="form-textarea" v-model="card.content" placeholder="训练了什么内容？" />
+              </view>
+              <view class="form-row">
+                <text class="form-label">结果</text>
+                <textarea class="form-textarea" v-model="card.result" placeholder="训练效果如何？" />
+              </view>
+              <view class="form-row">
+                <text class="form-label">图片/视频</text>
+                <view class="form-file-wrap">
+                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="file-hint" v-if="!card.files.length">支持图片和视频</text>
+                  <view v-if="card.files.length" class="file-previews">
+                    <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                      <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                      <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">备注</text>
+                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+              </view>
+            </template>
           </view>
-          <view class="form-row">
-            <text class="form-label">备注</text>
-            <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+          </TransitionGroup>
+
+          <view class="btn-checkin" @click="submitFormWithAnim" style="margin-top:8px;">
+            <text>{{ checkinSubmitting ? '提交中...' : '✅ 提交打卡 ' + (cards.length ? '(' + cards.length + ')' : '') }}</text>
           </view>
-        </template>
-      </view>
-
-      </TransitionGroup>
-
-      <!-- 配合度打分 -->
-      <view v-if="showPicker && cards.length" class="score-panel">
-        <view class="score-header">
-          <text class="pph-dot">◆</text>
-          <text class="pph-title">训练配合度</text>
-          <text class="pph-dot">◆</text>
         </view>
-        <view class="score-grid">
-          <view v-for="s in scores" :key="s.pct" class="score-item" :class="{ active: attitude === s.pct }" @click="attitude = s.pct">
-            <text class="si-pct">{{ s.pct }}%</text>
-            <text class="si-emoji">{{ s.emoji }}</text>
-            <text class="si-desc">{{ s.desc }}</text>
-          </view>
-        </view>
-      </view>
-
-      <view v-if="showPicker" class="btn-checkin" @click="submitFormWithAnim" style="margin-top:8px;">
-        <text>{{ checkinSubmitting ? '提交中...' : '✅ 提交打卡 ' + (cards.length ? '(' + cards.length + ')' : '') }}</text>
-      </view>
       </view>
 
       <view v-if="showSummary && submittedCards.length" class="picker-overlay" @click="showSummary = false">
@@ -448,6 +497,86 @@
         </template>
 
         <text class="lock-tip">{{ bTip }}</text>
+
+        <!-- 训练 B 打卡 -->
+        <view class="checkin-block" :class="{ locked: !bUnlocked || isCheckinLocked }">
+          <view v-if="!bUnlocked || isCheckinLocked" class="checkin-lock-overlay">
+            <text class="checkin-lock-text">{{ !bUnlocked ? '请先完成训练 A 打卡' : checkinLockText }}</text>
+          </view>
+          <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPickerB">
+            <text>✅ 训练 B 打卡</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 训练 B 打卡弹窗 -->
+      <view v-if="showPickerB" class="picker-overlay" @click="closePickerB">
+        <view class="picker-card checkin-modal" @click.stop>
+          <view class="modal-header">
+            <text class="modal-title">训练 B 打卡</text>
+            <view class="modal-close" @click="closePickerB">✕</view>
+          </view>
+
+          <view class="picker-panel" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
+            <view class="picker-panel-header">
+              <text class="pph-dot">◆</text>
+              <text class="pph-title">选择训练能力</text>
+              <text class="pph-dot">◆</text>
+            </view>
+            <view class="picker-grid">
+              <view v-for="item in abilities" :key="item" class="picker-item" :class="{ active: hasCardB(item) }" @click="toggleCardB(item)">
+                <text class="pi-text">{{ item }}</text>
+              </view>
+            </view>
+          </view>
+
+          <TransitionGroup v-if="cardsB.length" name="card">
+            <view v-for="(card, idx) in cardsB" :key="card.name" class="form-card">
+            <view class="scan-line"></view>
+            <view class="form-header">
+              <text class="form-title">{{ card.name }} — 训练记录</text>
+              <view class="form-del" @click="removeCardB(idx)">✕</view>
+            </view>
+            <template v-if="card.name === '极速运算'">
+              <view class="form-row"><text class="form-label">时间</text><input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" /></view>
+              <view class="form-row"><text class="form-label">内容</text>
+                <view class="form-tags">
+                  <text class="ftag" :class="{ on: card.tag === '加减法' }" @click="card.tag = '加减法'">加减法</text>
+                  <text class="ftag" :class="{ on: card.tag === '乘除法' }" @click="card.tag = '乘除法'">乘除法</text>
+                  <text class="ftag" :class="{ on: card.tag === '混合运算' }" @click="card.tag = '混合运算'">混合运算</text>
+                  <text class="ftag" :class="{ on: card.tag === '口算' }" @click="card.tag = '口算'">口算</text>
+                </view>
+              </view>
+              <view class="form-row"><text class="form-label">结果</text>
+                <view class="form-inline"><input class="form-input short" v-model="card.count" placeholder="题数" type="number" /><text class="form-unit">题</text><input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" /><text class="form-unit">%</text></view>
+              </view>
+            </template>
+            <template v-else>
+              <view class="form-row"><text class="form-label">时间</text><input class="form-input" v-model="card.time" placeholder="训练时长/分钟" /></view>
+              <view class="form-row"><text class="form-label">内容</text><textarea class="form-textarea" v-model="card.content" placeholder="训练了什么内容？" /></view>
+              <view class="form-row"><text class="form-label">结果</text><textarea class="form-textarea" v-model="card.result" placeholder="训练效果如何？" /></view>
+            </template>
+            <view class="form-row"><text class="form-label">图片/视频</text>
+              <view class="form-file-wrap">
+                <view class="file-btn" @click="pickFileB(idx)"><text>📷 选择文件</text></view>
+                <text class="file-hint" v-if="!card.files.length">支持图片和视频</text>
+                <view v-if="card.files.length" class="file-previews">
+                  <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
+                    <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
+                    <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
+                    <text class="file-del" @click="removeFileB(idx, fi)">✕</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+            <view class="form-row"><text class="form-label">备注</text><textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" /></view>
+          </view>
+          </TransitionGroup>
+
+          <view class="btn-checkin" @click="submitFormB" style="margin-top:8px;">
+            <text>{{ checkinSubmittingB ? '提交中...' : '✅ 提交打卡 ' + (cardsB.length ? '(' + cardsB.length + ')' : '') }}</text>
+          </view>
+        </view>
       </view>
 
       <view style="height:40px;"></view>
@@ -473,7 +602,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ensureChildUser, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay } from '@/utils/userApi.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
@@ -606,6 +735,7 @@ function startTrainingTimer() {
       applyPlanMedia(result.data)
       aiPlanText.value = result.data.report_text || ''
       syncBlockBTip()
+      nextTick(() => syncPhaseExpand())
     } catch (e) {
       uni.showToast({ title: e.message || '排课失败', icon: 'none' })
       return
@@ -669,6 +799,14 @@ function toggleDevMode() {
   if (devMode.value) loadDevStatus()
 }
 
+async function setAttitude(pct) {
+  summaryAttitude.value = pct
+  try {
+    const uid = await ensureChildUser()
+    await updateTrainingCheckin(uid, todayCheckinRecordId.value, { attitude_pct: pct })
+  } catch (_) { /* ignore */ }
+}
+
 function resetAllLocalState() {
   devResetTimer()
   bUnlocked.value = false
@@ -677,7 +815,10 @@ function resetAllLocalState() {
   showSummary.value = false
   submittedCards.value = []
   todayCheckinRecordId.value = null
-  attitude.value = 0
+  todayCheckinRecordIdB.value = null
+  cardsB.value = []
+  showPickerB.value = false
+  attitude.value = 60
   closeMedia()
   syncBlockBTip()
 }
@@ -794,6 +935,7 @@ async function devRefreshAiPlan() {
     applyPlanMedia(result.data)
     aiPlanText.value = result.data.report_text || ''
     lessonIndex.value = (result.data.content_index ?? 0) + 1
+    nextTick(() => syncPhaseExpand())
   } catch (e) {
     planLoading.value = false
     uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
@@ -810,7 +952,8 @@ const bTip = ref('⚠ 训练 A 未完成，B 暂不开放')
 const showPicker = ref(false)
 const showSummary = ref(false)
 const submittedCards = ref([])
-const attitude = ref(0)
+const attitude = ref(60)
+const summaryAttitude = ref(60)
 const scores = [
   { pct:100, emoji:'🔴', desc:'身体已透支，精神还要求进步' },
   { pct:80,  emoji:'🟡', desc:'能完成任务，但还有余力学习' },
@@ -832,6 +975,10 @@ const todayCheckinRecordId = ref(null)
 const planLoading = ref(false)
 const planJustGenerated = ref(false)
 const checkinSubmitting = ref(false)
+const checkinSubmittingB = ref(false)
+const showPickerB = ref(false)
+const cardsB = ref([])
+const todayCheckinRecordIdB = ref(null)
 
 const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
 
@@ -867,6 +1014,27 @@ function isPhaseUnlocked(block, blockOrder, items) {
   const prevBlock = blockOrder[idx - 1]
   const prevItems = items.filter(i => (i.block || 'A') === prevBlock)
   return prevItems.length > 0 && prevItems.every(i => i.checkin_status === 'done')
+}
+
+const planExpanded = ref({})
+
+function togglePhase(block) {
+  planExpanded.value = { ...planExpanded.value, [block]: !planExpanded.value[block] }
+}
+
+function syncPhaseExpand() {
+  const phases = planPhases.value
+  if (!phases.length) return
+  const next = {}
+  for (const p of phases) {
+    // 默认：进行中的阶段展开，其他折叠
+    if (planExpanded.value[p.block] !== undefined) {
+      next[p.block] = planExpanded.value[p.block]
+    } else {
+      next[p.block] = p.unlocked && !p.allDone
+    }
+  }
+  planExpanded.value = next
 }
 
 const planPhases = computed(() => {
@@ -981,6 +1149,9 @@ function newCard(name) {
   if (name === '扫描速记') {
     return { ...base, materialType: '书', materialName: '', wordCount: '', forwardTime: '', forwardAcc: '', backwardTime: '', backwardAcc: '' }
   }
+  if (name === '影像追忆') {
+    return { ...base, tool: '书本' }
+  }
   return base
 }
 
@@ -1032,13 +1203,23 @@ function serializeCards(list) {
     forwardAcc: c.forwardAcc,
     backwardTime: c.backwardTime,
     backwardAcc: c.backwardAcc,
+    tool: c.tool,
     fileNames: (c.files || []).map(f => f.name),
   }))
 }
 
 function applyTodayCompletedState() {
   bUnlocked.value = true
+  // 更新本地 item 状态 → 时间轴进度前进
+  const items = todayPlan.value?.items || []
+  for (const item of items) {
+    if (item.block === 'A' || (!item.block && items.indexOf(item) === 0)) {
+      item.checkin_status = 'done'
+    }
+  }
   syncBlockBTip()
+  // A完成 → 折叠A，展开B
+  nextTick(() => syncPhaseExpand())
 }
 
 async function loadTodayCheckinRecords(uid, planId) {
@@ -1050,6 +1231,7 @@ async function loadTodayCheckinRecords(uid, planId) {
       return
     }
     todayCheckinRecordId.value = record.id
+    if (record.attitude_pct) summaryAttitude.value = record.attitude_pct
     if (Array.isArray(record.cards) && record.cards.length) {
       submittedCards.value = record.cards.map(c => ({ ...c, files: [] }))
       return
@@ -1123,16 +1305,20 @@ function openPicker() {
     return
   }
   // 首次打开时自动识别今日训练项对应的能力
-  if (!showPicker.value && !cards.value.length) {
+  if (!cards.value.length) {
     autoDetectAbilities()
   }
-  showPicker.value = !showPicker.value
+  showPicker.value = true
   // 赛博点击特效
   const btn = document.querySelector('.btn-cyber')
   if (btn) {
     btn.classList.add('spark')
     setTimeout(() => btn.classList.remove('spark'), 400)
   }
+}
+
+function closePicker() {
+  showPicker.value = false
 }
 
 function submitFormWithAnim() {
@@ -1164,11 +1350,6 @@ async function submitForm() {
     uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 })
     return
   }
-  if (!isUpdate && !attitude.value) {
-    uni.showToast({ title: '请选择训练配合度', icon: 'none', duration: 2000 })
-    return
-  }
-
   checkinSubmitting.value = true
   try {
     const merged = [...submittedCards.value.map(c => ({ ...c })), ...cards.value.map(c => ({ ...c }))]
@@ -1176,8 +1357,10 @@ async function submitForm() {
     applyTodayCompletedState()
     submittedCards.value = merged
     cards.value = []
-    if (!isUpdate) attitude.value = 0
+    if (!isUpdate) { attitude.value = 60; summaryAttitude.value = attitude.value }
     showPicker.value = false
+    // 静默刷新方案 → 同步后端 item 状态
+    loadTodayPlan()
     uni.showToast({ title: isUpdate ? '✅ 打卡已更新' : '✅ 训练 A 打卡成功！', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
@@ -1188,6 +1371,13 @@ async function submitForm() {
 
 function getCardSummary(c) {
   if (c.name === '极速运算') return c.name + '(' + (c.tag || '运算') + ',' + c.time + '分钟,' + c.count + '题,' + c.accuracy + '%)'
+  if (c.name === '影像追忆') {
+    const parts = ['工具' + (c.tool || '豆包')]
+    if (c.time) parts.push(c.time + '分钟')
+    if (c.content) parts.push('材料《' + c.content + '》')
+    if (c.accuracy) parts.push('追忆率' + c.accuracy + '%')
+    return '影像追忆：' + parts.join('，')
+  }
   if (c.name === '扫描速记') {
     const parts = [(c.materialType||'书') + '《' + (c.materialName||'?') + '》', (c.wordCount||'?') + '字']
     if (c.forwardTime || c.forwardAcc) parts.push('正背' + (c.forwardTime||'?') + '/' + (c.forwardAcc||'?'))
@@ -1220,6 +1410,77 @@ async function deleteCard(idx) {
   } finally {
     checkinSubmitting.value = false
   }
+}
+
+// ── 训练 B 打卡 ──
+
+function hasCardB(name) { return cardsB.value.some(c => c.name === name) }
+
+function toggleCardB(name) {
+  const idx = cardsB.value.findIndex(c => c.name === name)
+  if (idx >= 0) { cardsB.value.splice(idx, 1) }
+  else { cardsB.value.push(newCardB(name)) }
+}
+
+function newCardB(name) {
+  return { name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] }
+}
+
+function removeCardB(idx) { cardsB.value.splice(idx, 1) }
+
+function pickFileB(idx) {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = 'image/*,video/*'; input.multiple = true
+  input.onchange = (e) => {
+    for (let i = 0; i < e.target.files.length; i++) {
+      const f = e.target.files[i]
+      cardsB.value[idx].files.push({ name: f.name, url: URL.createObjectURL(f), type: f.type.startsWith('video') ? 'video' : 'image' })
+    }
+  }
+  input.click()
+}
+function removeFileB(cardIdx, fileIdx) { cardsB.value[cardIdx].files.splice(fileIdx, 1) }
+
+function autoDetectB() {
+  // 暂时默认选极速运算
+  if (!hasCardB('极速运算')) cardsB.value.push(newCardB('极速运算'))
+}
+
+function openPickerB() {
+  if (!guardCheckin()) return
+  if (!bUnlocked.value) { uni.showToast({ title: '请先完成训练 A 打卡', icon: 'none' }); return }
+  if (!cardsB.value.length) autoDetectB()
+  showPickerB.value = true
+}
+
+function closePickerB() { showPickerB.value = false }
+
+async function submitFormB() {
+  if (checkinSubmittingB.value) return
+  const hasContent = cardsB.value.some(c => c.time || c.content || c.result || c.count || c.tag)
+  if (!hasContent) { uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 }); return }
+  checkinSubmittingB.value = true
+  try {
+    const uid = await ensureChildUser()
+    const cardsList = cardsB.value.map(c => ({ ...c }))
+    const payload = {
+      cards: serializeCards(cardsList),
+      ability_type: cardsList.map(c => c.name).join('、'),
+      content: cardsList.map(c => getCardSummary(c)).join('；'),
+    }
+    if (!todayCheckinRecordIdB.value) {
+      if (!todayPlan.value?.plan_id) return
+      const res = await submitTrainingCheckin(uid, { plan_id: todayPlan.value.plan_id, item_id: todayPlan.value.items?.[0]?.id, ...payload })
+      todayCheckinRecordIdB.value = res.record_id
+    } else {
+      await updateTrainingCheckin(uid, todayCheckinRecordIdB.value, payload)
+    }
+    cardsB.value = []
+    showPickerB.value = false
+    uni.showToast({ title: '✅ 训练 B 打卡成功！', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '提交失败', icon: 'none' })
+  } finally { checkinSubmittingB.value = false }
 }
 
 function applyPlanMedia(plan) {
@@ -1311,6 +1572,7 @@ async function loadTodayPlan() {
     lessonIndex.value = (result.data.content_index ?? 0) + 1
     aiPlanText.value = result.data.report_text || ''
     applyPlanMedia(result.data)
+    nextTick(() => syncPhaseExpand())
 
     await loadTodayCheckinRecords(uid, result.data.plan_id)
     if (submittedCards.value.length > 0) {
@@ -1417,9 +1679,11 @@ function goBack() {
 .tl-line { width:1px; flex:1; min-height:16px; margin:3px 0; background:linear-gradient(180deg,rgba(0,210,255,0.35),rgba(0,210,255,0.08)); }
 .tl-content { flex:1; min-width:0; padding-bottom:8px; }
 .tl-node-row { cursor:pointer; }
-.tl-phase-head { padding-top:0; min-width:0; }
+.tl-phase-head { padding-top:0; min-width:0; display:flex; align-items:center; justify-content:space-between; }
 .tl-phase-title { color:#fff; font-size:12px; font-weight:700; display:block; line-height:1.4; }
-.tl-phase-meta { color:rgba(255,255,255,0.38); font-size:10px; display:block; margin-top:2px; }
+.tl-phase-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.tl-phase-meta { color:rgba(255,255,255,0.38); font-size:10px; display:block; margin-top:0; }
+.tl-phase-toggle { color:rgba(255,255,255,0.3); font-size:10px; cursor:pointer; }
 .tl-items { margin:6px 0 2px; padding-left:2px; }
 .tl-item { display:flex; align-items:center; gap:6px; padding:5px 0; cursor:pointer; }
 .tl-item-icon { font-size:11px; width:14px; text-align:center; flex-shrink:0; }
@@ -1472,6 +1736,15 @@ function goBack() {
 .summary-label { color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; display:block; margin-bottom:4px; }
 .summary-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.6; }
 .summary-more { color:#00d2ff; font-size:11px; display:block; margin-top:4px; }
+.summary-attitude { margin-top:10px; padding-top:10px; border-top:1px solid rgba(0,210,255,0.1); }
+.sa-label { color:rgba(255,255,255,0.4); font-size:10px; font-weight:500; display:block; margin-bottom:6px; }
+.sa-grid { display:flex; gap:4px; }
+.sa-item { flex:1; text-align:center; padding:6px 2px; border-radius:6px; cursor:pointer; border:1px solid transparent; transition:all 0.15s; }
+.sa-item:active { transform:scale(0.95); }
+.sa-item.active { border-color:#00d2ff; background:rgba(0,136,204,0.2); }
+.sa-pct { display:block; color:rgba(255,255,255,0.55); font-size:9px; font-weight:700; }
+.sa-item.active .sa-pct { color:#00d2ff; }
+.sa-emoji { display:block; font-size:12px; margin-top:1px; }
 
 /* 未打卡 — 暖黄警告 */
 .summary-empty { border-color:rgba(251,191,36,0.5); background:rgba(251,191,36,0.08); text-align:center; cursor:default; }
@@ -1487,6 +1760,14 @@ function goBack() {
 .picker-card::before { top:0; left:0; border-width:1px 0 0 1px; }
 .picker-card::after { bottom:0; right:0; border-width:0 1px 1px 0; }
 .picker-title { color:#fff; font-size:16px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
+
+/* 打卡弹窗 */
+.checkin-modal { max-height:85vh; overflow-y:auto; padding:20px 16px; max-width:400px; }
+.checkin-modal .picker-panel { margin-bottom:10px; }
+.checkin-modal .form-card { margin-bottom:8px; }
+.modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.modal-title { color:#fff; font-size:16px; font-weight:700; }
+.modal-close { color:rgba(255,255,255,0.5); font-size:20px; cursor:pointer; padding:4px 8px; }
 .picker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .picker-close text { color:rgba(255,255,255,0.5); font-size:14px; }
 .submitted-item { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid rgba(0,210,255,0.1); }
@@ -1526,6 +1807,8 @@ function goBack() {
 .dev-action { flex:1; min-width:88px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 6px; text-align:center; cursor:pointer; }
 .dev-action-primary { background:rgba(34,197,94,0.12); border-color:rgba(34,197,94,0.35); }
 .dev-action-primary text { color:#4ade80; }
+.dev-action-danger { background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.2); }
+.dev-action-danger text { color:rgba(239,68,68,0.7); }
 .dev-action text { color:#fbbf24; font-size:11px; font-weight:600; }
 .dev-panel-hint { display:block; margin-top:8px; color:rgba(255,255,255,0.3); font-size:10px; text-align:center; }
 .media-block, .checkin-block { position:relative; }
@@ -1669,6 +1952,11 @@ function goBack() {
 [data-theme="white"] .summary-label { color:#6b7280; }
 [data-theme="white"] .summary-text { color:#9ca3af; }
 [data-theme="white"] .summary-more { color:#2563eb; }
+[data-theme="white"] .summary-attitude { border-top-color:#e5e7eb; }
+[data-theme="white"] .sa-label { color:#9ca3af; }
+[data-theme="white"] .sa-pct { color:#6b7280; }
+[data-theme="white"] .sa-item.active { border-color:#2563eb; background:rgba(37,99,235,0.06); }
+[data-theme="white"] .sa-item.active .sa-pct { color:#2563eb; }
 [data-theme="white"] .summary-empty { border-color:rgba(217,119,6,0.4); background:rgba(251,191,36,0.08); }
 [data-theme="white"] .summary-empty:active { background:rgba(251,191,36,0.08); }
 [data-theme="white"] .summary-empty-icon { color:#d97706; text-shadow:0 0 10px rgba(217,119,6,0.3); }
@@ -1698,7 +1986,10 @@ function goBack() {
 [data-theme="white"] .divider { background:#e5e7eb; }
 [data-theme="white"] .picker-overlay { background:rgba(0,0,0,0.4); }
 [data-theme="white"] .picker-card { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .picker-card::before, [data-theme="white"] .picker-card::after { border-color:#2563eb; }
 [data-theme="white"] .picker-title { color:#1a1a2e; }
+[data-theme="white"] .modal-title { color:#1a1a2e; }
+[data-theme="white"] .modal-close { color:#9ca3af; }
 [data-theme="white"] .si-text { color:#1a1a2e; }
 [data-theme="white"] .lock-tip { color:#9ca3af; }
 [data-theme="white"] .step-label.dim-text { color:#d1d5db; }
@@ -1723,6 +2014,7 @@ function goBack() {
 [data-theme="white"] .plan-empty-text { color:#9ca3af; }
 [data-theme="white"] .tl-phase-title { color:#1a1a2e; }
 [data-theme="white"] .tl-phase-meta { color:#9ca3af; }
+[data-theme="white"] .tl-phase-toggle { color:#d1d5db; }
 [data-theme="white"] .tl-item-title { color:#374151; }
 [data-theme="white"] .tl-item-dur { color:#9ca3af; }
 [data-theme="white"] .tl-item-status.tl-st-locked { color:#d1d5db; }
