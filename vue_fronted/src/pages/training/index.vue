@@ -182,6 +182,7 @@
           </view>
           <view class="dev-actions">
             <view class="dev-action dev-action-danger" @click="devClearAllHistory"><text>🗑 清空历史</text></view>
+            <view class="dev-action dev-action-danger" @click="devResetTalentAction"><text>🧬 重置天赋</text></view>
           </view>
           <text class="dev-panel-hint">已跳过计时限制 · 重置今日 = 清空今日方案 + 重新加载（不删天赋测评）</text>
         </view>
@@ -582,6 +583,19 @@
       <view style="height:40px;"></view>
     </view>
 
+    <!-- 天赋测评引导 -->
+    <view v-if="showAssessmentModal" class="picker-overlay" @click="dismissAssessmentModal">
+      <view class="picker-card assessment-modal" @click.stop>
+        <text class="assessment-modal-icon">🎯</text>
+        <text class="assessment-modal-title">需要先进行天赋测试</text>
+        <text class="assessment-modal-desc">完成天赋测试后，才能帮你安排今日训练方案</text>
+        <view class="assessment-modal-actions">
+          <view class="assessment-btn secondary" @click="dismissAssessmentModal"><text>稍后再说</text></view>
+          <view class="assessment-btn primary" @click="confirmGoTalent"><text>去测试</text></view>
+        </view>
+      </view>
+    </view>
+
     <!-- Media Player Overlay -->
     <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
       <view class="player-card" @click.stop>
@@ -604,7 +618,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay } from '@/utils/userApi.js'
+import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay, devResetTalent } from '@/utils/userApi.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
 
 const TIMER_STORAGE_KEY = 'jnao_training_timer'
@@ -727,7 +741,7 @@ function startTrainingTimer() {
       const result = await scheduleTrainingPlan(uid, plannedMin)
       if (result.error === 'assessment') {
         needAssessment.value = true
-        uni.showToast({ title: result.message, icon: 'none' })
+        showAssessmentModal.value = true
         return
       }
       if (result.error) throw new Error(result.message)
@@ -895,6 +909,24 @@ async function devClearAllHistory() {
   }
 }
 
+async function devResetTalentAction() {
+  if (!devMode.value) return
+  try {
+    uni.showLoading({ title: '重置天赋...' })
+    const uid = await ensureChildUser()
+    await devResetTalent(uid)
+    resetAllLocalState()
+    needAssessment.value = true
+    showAssessmentModal.value = true
+    await loadDevStatus()
+    uni.showToast({ title: '天赋已重置', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '重置失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
 function clearTimerStorage() {
   try {
     sessionStorage.removeItem(TIMER_STORAGE_KEY)
@@ -970,6 +1002,7 @@ const talentLabel = ref('')
 const aiPlanText = ref('')
 const lessonIndex = ref(1)
 const needAssessment = ref(false)
+const showAssessmentModal = ref(false)
 const todayPlan = ref(null)
 const todayCheckinRecordId = ref(null)
 const planLoading = ref(false)
@@ -1522,11 +1555,10 @@ function openMediaItem(item) {
     return
   }
   if (needAssessment.value) {
-    uni.showToast({ title: '请先完成天赋测评', icon: 'none', duration: 2000 })
-    setTimeout(() => goTalent(), 500)
-  } else {
-    uni.showToast({ title: '暂无推荐音频', icon: 'none', duration: 2000 })
+    showAssessmentModal.value = true
+    return
   }
+  uni.showToast({ title: '暂无推荐音频', icon: 'none', duration: 2000 })
 }
 
 function openMedia(type) {
@@ -1544,6 +1576,50 @@ function closeMedia() {
   mediaPlayer.value.show = false
 }
 
+function applyTalentLabelFromTag(talentTag) {
+  if (!talentTag) return
+  const tagMap = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }
+  talentLabel.value = tagMap[talentTag] || `${talentTag}者`
+}
+
+async function checkTrainingEntry(uid) {
+  try {
+    const entry = await fetchTrainingEntry(uid)
+    if (entry.needs_assessment || !entry.has_assessment) {
+      needAssessment.value = true
+      showAssessmentModal.value = true
+      return false
+    }
+    needAssessment.value = false
+    showAssessmentModal.value = false
+    applyTalentLabelFromTag(entry.talent_tag)
+    return true
+  } catch (e) {
+    needAssessment.value = true
+    showAssessmentModal.value = true
+    return false
+  }
+}
+
+async function refreshAiPlanInBackground(uid) {
+  try {
+    const result = await refreshTrainingReport(uid, false)
+    if (result.data?.report_text) {
+      aiPlanText.value = result.data.report_text
+      if (todayPlan.value) todayPlan.value.report_text = result.data.report_text
+    }
+  } catch (_) { /* AI 可后台重试 */ }
+}
+
+function confirmGoTalent() {
+  showAssessmentModal.value = false
+  goTalent()
+}
+
+function dismissAssessmentModal() {
+  showAssessmentModal.value = false
+}
+
 async function loadTodayPlan() {
   if (planLoading.value) return
 
@@ -1555,9 +1631,20 @@ async function loadTodayPlan() {
   needAssessment.value = false
   try {
     const uid = await ensureChildUser()
-    const result = await fetchTrainingToday(uid)
+    const entryOk = await checkTrainingEntry(uid)
+    if (!entryOk) {
+      aiPlanText.value = ''
+      audioSrc.value = ''
+      audioTitle.value = '🎧 训练用音频'
+      todayPlan.value = null
+      if (isFirstLoad) planLoading.value = false
+      return
+    }
+
+    const result = await fetchTrainingToday(uid, { skipAi: true })
     if (result.error === 'assessment') {
       needAssessment.value = true
+      showAssessmentModal.value = true
       aiPlanText.value = ''
       audioSrc.value = ''
       audioTitle.value = '🎧 训练用音频'
@@ -1581,10 +1668,9 @@ async function loadTodayPlan() {
       syncBlockBTip()
     }
 
-    const progress = await fetchTrainingProgress(uid)
-    if (progress?.talent_tag) {
-      const tagMap = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }
-      talentLabel.value = tagMap[progress.talent_tag] || `${progress.talent_tag}者`
+    if (!talentLabel.value) {
+      const progress = await fetchTrainingProgress(uid)
+      applyTalentLabelFromTag(progress?.talent_tag)
     }
 
     if (!videoSrc.value || videoSrc.value === '/static/training_video.mp4') {
@@ -1598,13 +1684,14 @@ async function loadTodayPlan() {
 
     if (devMode.value) await loadDevStatus()
 
-    // 当天首次 AI 生成 → 显示完成动画；后续静默刷新
     if (isFirstLoad) {
       markPlanAnimShown()
       planLoading.value = false
       planJustGenerated.value = true
       setTimeout(() => { planJustGenerated.value = false }, 2000)
     }
+
+    refreshAiPlanInBackground(uid)
   } catch (e) {
     uni.showToast({ title: e.message || '加载训练方案失败', icon: 'none' })
     if (isFirstLoad) planLoading.value = false
@@ -1763,6 +1850,17 @@ function goBack() {
 
 /* 打卡弹窗 */
 .checkin-modal { max-height:85vh; overflow-y:auto; padding:20px 16px; max-width:400px; }
+.assessment-modal { max-width:320px; padding:28px 22px 22px; text-align:center; }
+.assessment-modal-icon { font-size:40px; display:block; margin-bottom:12px; }
+.assessment-modal-title { display:block; color:#fff; font-size:17px; font-weight:700; margin-bottom:10px; }
+.assessment-modal-desc { display:block; color:rgba(255,255,255,0.65); font-size:13px; line-height:1.55; margin-bottom:22px; }
+.assessment-modal-actions { display:flex; gap:10px; }
+.assessment-btn { flex:1; padding:12px 10px; border-radius:10px; cursor:pointer; }
+.assessment-btn text { font-size:14px; font-weight:600; }
+.assessment-btn.secondary { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); }
+.assessment-btn.secondary text { color:rgba(255,255,255,0.7); }
+.assessment-btn.primary { background:linear-gradient(135deg,#00d2ff,#3b8bff); }
+.assessment-btn.primary text { color:#fff; }
 .checkin-modal .picker-panel { margin-bottom:10px; }
 .checkin-modal .form-card { margin-bottom:8px; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }

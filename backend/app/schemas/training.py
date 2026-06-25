@@ -107,7 +107,24 @@ class TrainingProgressResponse(BaseModel):
     content_index: int
     talent_code: int | None
     talent_tag: str | None
+    talent_primary: str | None = None
+    assessment_id: int | None = None
+    has_assessment: bool = False
+    needs_assessment: bool = False
     today_completed: bool
+
+
+class TrainingEntryResponse(BaseModel):
+    has_assessment: bool
+    needs_assessment: bool
+    message: str | None = None
+    assessment_id: int | None = None
+    talent_primary: str | None = None
+    talent_tag: str | None = None
+    talent_code: int | None = None
+    total_checkins: int = 0
+    content_index: int = 0
+    today_completed: bool = False
 
 
 class WindowSetRequest(BaseModel):

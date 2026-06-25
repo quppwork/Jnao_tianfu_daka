@@ -8,13 +8,14 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import TrainingItem, TrainingPlan, TrainingRecord, TrainingWindow
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import delete_assessment, get_latest_assessment
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
     _plan_to_response,
     get_or_create_today_plan,
     get_progress,
+    purge_today_plan_without_assessment,
 )
 
 
@@ -94,6 +95,23 @@ def reset_all_training(db: Session, child_user_id: int) -> dict:
     return {
         "action": "reset_all",
         "deleted_plans": len(plan_ids),
+        "status": get_dev_training_status(db, child_user_id),
+    }
+
+
+def reset_talent_assessment(db: Session, child_user_id: int) -> dict:
+    """开发者：清除最新天赋测评及今日训练计划"""
+    latest = get_latest_assessment(db, child_user_id)
+    deleted_assessment = False
+    if latest:
+        delete_assessment(db, latest.id, child_user_id)
+        deleted_assessment = True
+    else:
+        purge_today_plan_without_assessment(db, child_user_id)
+    reset_today_training(db, child_user_id)
+    return {
+        "action": "reset_talent",
+        "deleted_assessment": deleted_assessment,
         "status": get_dev_training_status(db, child_user_id),
     }
 

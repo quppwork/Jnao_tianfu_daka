@@ -15,6 +15,28 @@ class TestTrainingToday:
         res = client.get(f"/api/training/today?user_id={user_id}")
         assert res.status_code == 403
 
+    def test_entry_without_assessment(self, client, registered_user):
+        uid = registered_user["child_user_id"]
+        res = client.get(f"/api/training/entry?user_id={uid}")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["needs_assessment"] is True
+        assert body["has_assessment"] is False
+
+    def test_entry_with_assessment(self, client, child_with_assessment):
+        res = client.get(f"/api/training/entry?user_id={child_with_assessment}")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["has_assessment"] is True
+        assert body["talent_code"] is not None
+
+    def test_skip_ai_returns_fast_placeholder(self, client, child_with_assessment, mock_doubao):
+        res = client.get(f"/api/training/today?user_id={child_with_assessment}&skip_ai=1")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data["items"]) == 1
+        assert data["report_text"].startswith("今日音频：")
+
     def test_today_returns_audio(self, client, child_with_assessment, mock_doubao):
         res = client.get(f"/api/training/today?user_id={child_with_assessment}")
         assert res.status_code == 200
