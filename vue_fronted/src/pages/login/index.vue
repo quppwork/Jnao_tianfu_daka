@@ -41,11 +41,12 @@
 
 <script setup>
 import { ref } from 'vue'
+import { loginOrRegisterChildUser } from '@/utils/userApi.js'
 
 const form = ref({ name: '', phone: '', role: 'student' })
 const submitting = ref(false)
 
-function doLogin() {
+async function doLogin() {
   if (!form.value.name.trim()) {
     uni.showToast({ title: '请输入昵称', icon: 'none' })
     return
@@ -59,16 +60,24 @@ function doLogin() {
       loginTime: new Date().toISOString()
     }))
     localStorage.setItem('jnao_logged_in', '1')
+    await loginOrRegisterChildUser({
+      nickname: form.value.name.trim(),
+      phone: form.value.phone.trim(),
+    })
   } catch(e) {}
+  submitting.value = false
   uni.showToast({ title: '欢迎，' + form.value.name + '！', icon: 'none' })
   setTimeout(() => {
     uni.redirectTo({ url: '/pages/index' })
   }, 500)
 }
 
-function skipLogin() {
+async function skipLogin() {
   localStorage.setItem('jnao_user', JSON.stringify({ name: '体验用户', role: 'student' }))
   localStorage.setItem('jnao_logged_in', '1')
+  try {
+    await loginOrRegisterChildUser({ nickname: '体验用户' })
+  } catch (e) {}
   uni.redirectTo({ url: '/pages/index' })
 }
 </script>

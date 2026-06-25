@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.api import auth, chat, dev, growth, guide, health, qa, resources, talent, training, user, voice
 from app.core.logger import setup_logging
+from app.core.security import get_cors_origins, is_debug_routes_enabled
 from app.db.models import ContentItem
 from app.db.session import get_session_factory, init_db
 from app.services.catalog_import import import_catalog
@@ -44,7 +45,15 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="JNAO API", version="0.3.0", lifespan=lifespan)
+_debug = is_debug_routes_enabled()
+app = FastAPI(
+    title="JNAO API",
+    version="0.3.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _debug else None,
+    redoc_url="/redoc" if _debug else None,
+    openapi_url="/openapi.json" if _debug else None,
+)
 
 
 @app.get("/")
@@ -71,9 +80,10 @@ async def log_requests(request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Child-User-Id"],
 )
 
 app.include_router(health.router)

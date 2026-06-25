@@ -52,15 +52,15 @@ class TalentVideoResponse(BaseModel):
 
 
 class CheckinRequest(BaseModel):
-    plan_id: int
-    item_id: int | None = None
-    ability_type: str | None = None
-    time_spent: str | None = None
-    content: str | None = None
-    result: str | None = None
-    note: str | None = None
-    attitude_pct: int | None = None
-    cards: list[dict] | None = None
+    plan_id: int = Field(..., ge=1)
+    item_id: int | None = Field(None, ge=1)
+    ability_type: str | None = Field(None, max_length=50)
+    time_spent: str | None = Field(None, max_length=20)
+    content: str | None = Field(None, max_length=2000)
+    result: str | None = Field(None, max_length=500)
+    note: str | None = Field(None, max_length=500)
+    attitude_pct: int | None = Field(None, ge=0, le=100)
+    cards: list[dict] | None = Field(None, max_length=20)
 
 
 class CheckinResponse(BaseModel):
@@ -69,13 +69,13 @@ class CheckinResponse(BaseModel):
 
 
 class CheckinUpdateRequest(BaseModel):
-    ability_type: str | None = None
-    time_spent: str | None = None
-    content: str | None = None
-    result: str | None = None
-    note: str | None = None
-    attitude_pct: int | None = None
-    cards: list[dict] | None = None
+    ability_type: str | None = Field(None, max_length=50)
+    time_spent: str | None = Field(None, max_length=20)
+    content: str | None = Field(None, max_length=2000)
+    result: str | None = Field(None, max_length=500)
+    note: str | None = Field(None, max_length=500)
+    attitude_pct: int | None = Field(None, ge=0, le=100)
+    cards: list[dict] | None = Field(None, max_length=20)
 
 
 class CheckinRecordOut(BaseModel):

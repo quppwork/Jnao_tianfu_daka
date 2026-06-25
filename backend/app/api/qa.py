@@ -11,13 +11,13 @@ router = APIRouter(prefix="/api/qa", tags=["qa"])
 
 
 class QaChatRequest(BaseModel):
-    message: str = Field(..., min_length=1)
-    session_id: int | None = None
-    subject: str | None = Field(None, description="数学/语文/英语/科学")
+    message: str = Field(..., min_length=1, max_length=4000)
+    session_id: int | None = Field(None, ge=1)
+    subject: str | None = Field(None, max_length=20, description="数学/语文/英语/科学")
 
 
 class QaSessionCreateRequest(BaseModel):
-    subject: str | None = None
+    subject: str | None = Field(None, max_length=20)
 
 
 @router.post("/chat")

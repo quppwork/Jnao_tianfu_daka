@@ -216,6 +216,8 @@ const showHistory = ref(false)
 const historyList = ref([])
 const toast = ref({ text: '', variant: 'ack' })
 
+watch(showHistory, (open) => { if (open) loadHistory() })
+
 // Testing state
 const questionOrder = ref([])       // shuffled question IDs
 const currentQIndex = ref(0)

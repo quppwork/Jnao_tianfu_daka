@@ -238,7 +238,7 @@ function onNavTap() {
   if (navTapCount < 3) return
   navTapCount = 0
   const ok = window.confirm(
-    '清空本地登录状态？\n（测评、对话、训练记录仍在服务器，需运行 reset.bat 清库）'
+    '清空本地登录状态？\n（将清除本机用户标识；服务器上的测评/训练数据需运行 reset.bat 清库）'
   )
   if (!ok) return
   clearChildUserId()

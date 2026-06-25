@@ -1,11 +1,10 @@
 """开发者 API — 仅 JNAO_DEV_MODE=1 时可用"""
 
-import os
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_child_user_id, get_db
+from app.core.security import is_dev_api_enabled
 from app.services.dev_training_service import (
     get_dev_training_status,
     reset_all_training,
@@ -18,8 +17,8 @@ router = APIRouter(prefix="/api/dev", tags=["dev"])
 
 
 def _require_dev_mode() -> None:
-    if os.getenv("JNAO_DEV_MODE", "1") != "1":
-        raise HTTPException(403, "开发者 API 已关闭（设置 JNAO_DEV_MODE=1 启用）")
+    if not is_dev_api_enabled():
+        raise HTTPException(403, "开发者 API 已关闭（本地开发设 JNAO_DEV_MODE=1）")
 
 
 @router.get("/training/status")
