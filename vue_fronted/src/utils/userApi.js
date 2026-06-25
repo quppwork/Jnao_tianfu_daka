@@ -78,6 +78,12 @@ export async function fetchAssessmentReport(userId, assessmentId) {
   return apiJson(withUser(`/api/talent/assessment/${assessmentId}`, userId))
 }
 
+export async function deleteAssessmentReport(userId, assessmentId) {
+  return apiJson(withUser(`/api/talent/assessment/${assessmentId}`, userId), {
+    method: 'DELETE',
+  })
+}
+
 export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
   return apiJson('/api/talent/report', {
     method: 'POST',
@@ -105,8 +111,75 @@ export async function fetchTrainingToday(userId) {
   }
 }
 
+/** 强制重新生成 AI 今日方案（开发者/刷新用） */
+export async function refreshTrainingReport(userId, force = true) {
+  try {
+    const data = await apiJson(withUser(`/api/training/report/today?force=${force ? '1' : '0'}`, userId))
+    return { data }
+  } catch (e) {
+    if (e.status === 403) {
+      return { error: 'assessment', message: e.data?.detail || '请先完成天赋测评' }
+    }
+    return { error: 'api', message: e.message }
+  }
+}
+
+/** 按训练时长排课：豆包路由 A/B 音频 + 天赋视频 */
+export async function scheduleTrainingPlan(userId, plannedMinutes) {
+  try {
+    const data = await apiJson(withUser('/api/training/schedule', userId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planned_minutes: plannedMinutes }),
+    })
+    return { data }
+  } catch (e) {
+    if (e.status === 403) {
+      return { error: 'assessment', message: e.data?.detail || '请先完成天赋测评' }
+    }
+    return { error: 'api', message: e.message }
+  }
+}
+
+/** 天赋固定训练视频 */
+export async function fetchTalentTrainingVideo(userId) {
+  return apiJson(withUser('/api/training/video/talent', userId))
+}
+
 export async function fetchTrainingProgress(userId) {
   return apiJson(withUser('/api/training/progress', userId))
+}
+
+export async function submitTrainingCheckin(userId, payload) {
+  return apiJson(withUser('/api/training/checkin', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function fetchTodayCheckins(userId) {
+  const data = await apiJson(withUser('/api/training/checkin/today', userId))
+  return Array.isArray(data) ? data : []
+}
+
+export async function updateTrainingCheckin(userId, recordId, payload) {
+  return apiJson(withUser(`/api/training/checkin/${recordId}`, userId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteTrainingCheckin(userId, recordId) {
+  return apiJson(withUser(`/api/training/checkin/${recordId}`, userId), {
+    method: 'DELETE',
+  })
+}
+
+export async function fetchTrainingHistory(userId, limit = 30) {
+  const data = await apiJson(withUser(`/api/training/history?limit=${limit}`, userId))
+  return data.items || []
 }
 
 // ── 首页引导对话 ──
@@ -147,4 +220,22 @@ export async function fetchGrowthBadges(userId) {
 export async function fetchGrowthTimeline(userId) {
   const data = await apiJson(withUser('/api/growth/timeline', userId))
   return data.items || []
+}
+
+// ── 开发者工具（JNAO_DEV_MODE=1）──
+
+export async function fetchDevTrainingStatus(userId) {
+  return apiJson(withUser('/api/dev/training/status', userId))
+}
+
+export async function devResetTodayTraining(userId) {
+  return apiJson(withUser('/api/dev/training/reset-today', userId), { method: 'POST' })
+}
+
+export async function devResetAllTraining(userId) {
+  return apiJson(withUser('/api/dev/training/reset-all', userId), { method: 'POST' })
+}
+
+export async function devSimulateNextDay(userId) {
+  return apiJson(withUser('/api/dev/training/next-day', userId), { method: 'POST' })
 }

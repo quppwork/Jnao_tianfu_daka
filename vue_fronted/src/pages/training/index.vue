@@ -5,56 +5,128 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
       <text class="nav-title">今日训练</text>
-      <view class="nav-spacer"></view>
+      <view class="nav-dev" :class="{ active: devMode }" @click="toggleDevMode">
+        <text>{{ devMode ? 'DEV ✓' : 'DEV' }}</text>
+      </view>
     </view>
 
     <view class="body">
       <!-- Plan -->
       <view class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
         <text class="plan-label">📋 今日方案</text>
-        <view class="plan-list">
-          <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">观看"五者天赋"训练视频，理解天赋类型特点</text></view>
-          <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">{{ planAudioHint }}</text></view>
-        </view>
-        <text v-if="talentLabel" class="plan-talent">当前天赋：{{ talentLabel }}</text>
-        <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
+        <text v-if="planLoading" class="plan-loading">正在生成今日训练方案...</text>
+        <template v-else>
+          <view v-if="aiPlanText" class="plan-ai-box">
+            <text class="plan-ai-label">🤖 教练今日指令</text>
+            <text class="plan-ai-text">{{ aiPlanText }}</text>
+          </view>
+          <view class="plan-list">
+            <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">观看"五者天赋"训练视频，理解天赋类型特点</text></view>
+            <view class="plan-item"><text class="pl-dot">▸</text><text class="pl-text">{{ planAudioHint }}</text></view>
+          </view>
+          <text v-if="talentLabel" class="plan-talent">{{ talentLabel }} · 第 {{ lessonIndex }} 课</text>
+          <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
+        </template>
       </view>
 
-      <!-- 今日训练时段 -->
+      <!-- 今日训练时长 -->
       <view class="card time-card">
         <view class="time-header">
-          <text class="plan-label">⏰ 今日训练时段</text>
-          <text v-if="devMode" class="time-dev-tag">DEV</text>
+          <text class="plan-label">⏰ 今日训练时长</text>
+          <text v-if="timerPhase === 'running'" class="time-status-tag running">进行中</text>
+          <text v-else-if="timerPhase === 'expired'" class="time-status-tag expired">已结束</text>
         </view>
-        <view class="time-row">
-          <input class="time-inp" v-model="trainStart" type="time" />
-          <text class="time-to">至</text>
-          <input class="time-inp" v-model="trainEnd" type="time" />
-          <view class="time-dev-btn" @click="devMode = !devMode"><text>{{ devMode ? '🔓' : '🔒' }}</text></view>
+
+        <view v-if="timerPhase === 'setup'" class="time-setup">
+          <view class="time-pickers">
+            <picker mode="selector" :range="hourLabels" :value="hourIndex" @change="onHourPick">
+              <view class="time-select">
+                <text class="time-select-val">{{ selectedHours }}</text>
+                <text class="time-select-unit">小时</text>
+              </view>
+            </picker>
+            <picker mode="selector" :range="minuteLabels" :value="minuteIndex" @change="onMinutePick">
+              <view class="time-select">
+                <text class="time-select-val">{{ selectedMinutes }}</text>
+                <text class="time-select-unit">分钟</text>
+              </view>
+            </picker>
+          </view>
+          <view class="time-start-btn" :class="{ disabled: !canStartTimer }" @click="startTrainingTimer">
+            <text>开始训练</text>
+          </view>
+          <text class="time-setup-hint">选择本次训练时长，确认后开始倒计时</text>
         </view>
-        <view v-if="devMode" class="time-dev-hint"><text>开发者模式：时段限制已关闭</text></view>
+
+        <view v-else-if="timerPhase === 'running'" class="time-running">
+          <text class="time-countdown">{{ countdownDisplay }}</text>
+          <text class="time-running-hint">剩余时间 · 今日计划 {{ durationLabel }}</text>
+        </view>
+
+        <view v-else class="time-expired">
+          <text class="time-expired-icon">🔒</text>
+          <text class="time-expired-text">训练时长已到，音视频已锁定</text>
+          <text class="time-expired-sub">仍可继续打卡 · 今日计划 {{ durationLabel }}</text>
+        </view>
+
+        <view v-if="devMode" class="dev-panel">
+          <text class="dev-panel-label">开发者测试</text>
+          <view v-if="devStatusText" class="dev-status">
+            <text>{{ devStatusText }}</text>
+          </view>
+          <view class="dev-actions">
+            <view class="dev-action dev-action-primary" @click="devRefreshAll"><text>刷新全部</text></view>
+            <view class="dev-action" @click="devGoNextDay"><text>模拟下一天</text></view>
+            <view class="dev-action" @click="devClearAllHistory"><text>清空训练历史</text></view>
+          </view>
+          <view class="dev-actions">
+            <view class="dev-action" @click="devResetTimer"><text>重置计时</text></view>
+            <view class="dev-action" @click="devSimulateExpire"><text>模拟结束</text></view>
+            <view class="dev-action" @click="devUnlockB"><text>解锁训练 B</text></view>
+            <view class="dev-action" @click="devRefreshAiPlan"><text>刷新 AI 方案</text></view>
+          </view>
+          <text class="dev-panel-hint">已跳过计时限制 · 可用「模拟下一天」测多日推送闭环</text>
+        </view>
       </view>
 
       <!-- Training A -->
       <text class="section-title">训练 A</text>
 
-      <view class="step step-ready" @click="openMedia('video')">
+      <view class="media-block" :class="{ locked: isMediaLocked }">
+        <view v-if="isMediaLocked" class="media-lock-overlay">
+          <text class="media-lock-text">{{ mediaLockText }}</text>
+        </view>
+
+      <view class="step step-ready" :class="{ 'step-locked': isMediaLocked }" @click="openMediaItem(blockAVideo)">
         <view class="step-num step-num-ready">1</view>
         <view class="step-content">
           <text class="step-label">视频训练</text>
-          <view class="step-box step-box-ready">🎬 五者天赋视频</view>
-          <text class="step-time ready-text">▶ 点击播放</text>
+          <view class="step-box step-box-ready">🎬 {{ blockAVideo?.title || '五者天赋视频' }}</view>
+          <text class="step-time ready-text">{{ isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : '▶ 点击播放' }}</text>
         </view>
       </view>
 
-      <view class="step" @click="openMedia('audio')">
-        <view class="step-num">2</view>
+      <view
+        v-for="(item, idx) in blockAAudios"
+        :key="item.id || idx"
+        class="step"
+        :class="{ 'step-locked': isMediaLocked }"
+        @click="openMediaItem(item)"
+      >
+        <view class="step-num">{{ idx + 2 }}</view>
         <view class="step-content">
           <text class="step-label">音频训练</text>
-          <view class="step-box">{{ audioTitle }}</view>
-          <text class="step-time">{{ audioSrc ? '▶ 点击播放' : '暂无推荐音频' }}</text>
+          <view class="step-box">{{ item.title || '训练音频' }}</view>
+          <text class="step-time">{{ item.audio_url ? (isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : `▶ 约 ${item.duration_min || '?'} 分钟`) : '暂无推荐音频' }}</text>
         </view>
       </view>
+
+      </view>
+
+      <view class="checkin-block" :class="{ locked: isCheckinLocked }">
+        <view v-if="isCheckinLocked" class="checkin-lock-overlay">
+          <text class="checkin-lock-text">请先设置时长并开始训练</text>
+        </view>
 
       <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker">
         <text>✅ 训练 A 打卡</text>
@@ -217,7 +289,7 @@
       </view>
 
       <view v-if="showPicker" class="btn-checkin" @click="submitFormWithAnim" style="margin-top:8px;">
-        <text>✅ 提交打卡 {{ cards.length ? '(' + cards.length + ')' : '' }}</text>
+        <text>{{ checkinSubmitting ? '提交中...' : '✅ 提交打卡 ' + (cards.length ? '(' + cards.length + ')' : '') }}</text>
       </view>
 
       <!-- Summary -->
@@ -244,29 +316,45 @@
       <!-- Divider -->
       <view class="divider"></view>
 
-      <!-- Training B -->
-      <view class="b-section" :class="{ locked: !bUnlocked }">
+      <!-- Training B：内容始终展示，播放需完成 A 打卡 -->
+      <view class="b-section">
         <text class="section-title" :class="{ dim: !bUnlocked }">训练 B {{ !bUnlocked ? '🔒' : '' }}</text>
 
-        <view class="step dim-step">
-          <view class="step-num dim">1</view>
-          <view class="step-content">
-            <text class="step-label dim-text">视频训练</text>
-            <view class="step-box dim-box">🎬 训练用视频</view>
-            <text class="step-time dim-text">约 X 分钟</text>
+        <template v-if="blockBItems.length">
+          <view
+            v-for="(item, idx) in blockBItems"
+            :key="item.id || idx"
+            class="step"
+            :class="{
+              'step-preview-locked': !bUnlocked,
+              'step-locked': bUnlocked && isMediaLocked,
+            }"
+            @click="openBlockBItem(item)"
+          >
+            <view class="step-num" :class="{ dim: !bUnlocked }">{{ idx + 1 }}</view>
+            <view class="step-content">
+              <text class="step-label" :class="{ 'dim-text': !bUnlocked }">音频训练</text>
+              <view class="step-box" :class="{ 'dim-box': !bUnlocked }">🎧 {{ item.title || '训练音频' }}</view>
+              <text class="step-time" :class="{ 'dim-text': !bUnlocked }">
+                {{ !bUnlocked ? '🔒 完成 A 打卡后可播放' : (item.audio_url ? `▶ 约 ${item.duration_min || '?'} 分钟` : '暂无音频') }}
+              </text>
+            </view>
           </view>
-        </view>
-
-        <view class="step dim-step">
-          <view class="step-num dim">2</view>
-          <view class="step-content">
-            <text class="step-label dim-text">音频训练</text>
-            <view class="step-box dim-box">🎧 训练用音频</view>
-            <text class="step-time dim-text">约 X 分钟</text>
+        </template>
+        <template v-else>
+          <view class="step dim-step">
+            <view class="step-num dim">1</view>
+            <view class="step-content">
+              <text class="step-label dim-text">音频训练</text>
+              <view class="step-box dim-box">🎧 训练用音频</view>
+              <text class="step-time dim-text">{{ blockBEmptyHint }}</text>
+            </view>
           </view>
-        </view>
+        </template>
 
         <text class="lock-tip">{{ bTip }}</text>
+      </view>
+
       </view>
 
       <view style="height:40px;"></view>
@@ -292,13 +380,322 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, fetchTrainingToday, fetchTrainingProgress } from '@/utils/userApi.js'
+import { ensureChildUser, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay } from '@/utils/userApi.js'
+import { getDevMode, setDevMode } from '@/utils/devMode.js'
 
-const devMode = ref(false)
-const trainStart = ref('')
-const trainEnd = ref('')
+const TIMER_STORAGE_KEY = 'jnao_training_timer'
+const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+
+const devMode = ref(getDevMode())
+const devStatusText = ref('')
+const timerPhase = ref('setup') // setup | running | expired
+const selectedHours = ref(1)
+const selectedMinutes = ref(30)
+const remainingSeconds = ref(0)
+const plannedDurationSec = ref(0)
+let timerTickId = null
+
+const hourLabels = HOUR_OPTIONS.map(h => `${h} 小时`)
+const minuteLabels = MINUTE_OPTIONS.map(m => `${m} 分钟`)
+const hourIndex = computed(() => Math.max(0, HOUR_OPTIONS.indexOf(selectedHours.value)))
+const minuteIndex = computed(() => Math.max(0, MINUTE_OPTIONS.indexOf(selectedMinutes.value)))
+const canStartTimer = computed(() => selectedHours.value > 0 || selectedMinutes.value > 0)
+const isMediaLocked = computed(() => !devMode.value && (timerPhase.value === 'setup' || timerPhase.value === 'expired'))
+const isCheckinLocked = computed(() => !devMode.value && timerPhase.value === 'setup')
+const mediaLockText = computed(() =>
+  timerPhase.value === 'expired' ? '训练时长已到，音视频已锁定' : '请先设置时长并开始训练'
+)
+const countdownDisplay = computed(() => formatDuration(remainingSeconds.value))
+const durationLabel = computed(() => formatDuration(plannedDurationSec.value))
+
+function formatDuration(totalSec) {
+  const sec = Math.max(0, totalSec)
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function onHourPick(e) {
+  selectedHours.value = HOUR_OPTIONS[Number(e.detail.value)] ?? 0
+}
+function onMinutePick(e) {
+  selectedMinutes.value = MINUTE_OPTIONS[Number(e.detail.value)] ?? 0
+}
+
+function clearTimerTick() {
+  if (timerTickId != null) {
+    clearInterval(timerTickId)
+    timerTickId = null
+  }
+}
+
+function persistTimer(endAt, plannedSec) {
+  try {
+    sessionStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify({ endAt, plannedSec }))
+  } catch (_) { /* ignore */ }
+}
+
+function readTimerData() {
+  try {
+    const raw = sessionStorage.getItem(TIMER_STORAGE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data?.endAt) return null
+    return data
+  } catch (_) {
+    return null
+  }
+}
+
+function expireTrainingTimer() {
+  clearTimerTick()
+  timerPhase.value = 'expired'
+  remainingSeconds.value = 0
+  closeMedia()
+  uni.showToast({ title: '训练时长已到，音视频已锁定', icon: 'none', duration: 2500 })
+}
+
+function syncTimerFromEndAt(endAt) {
+  const left = Math.ceil((endAt - Date.now()) / 1000)
+  if (left <= 0) {
+    expireTrainingTimer()
+    return
+  }
+  timerPhase.value = 'running'
+  remainingSeconds.value = left
+}
+
+function tickTrainingTimer() {
+  const data = readTimerData()
+  if (!data) {
+    clearTimerTick()
+    return
+  }
+  syncTimerFromEndAt(data.endAt)
+}
+
+function startTrainingTimer() {
+  if (!canStartTimer.value) {
+    uni.showToast({ title: '请至少选择 1 分钟', icon: 'none' })
+    return
+  }
+  const totalSec = selectedHours.value * 3600 + selectedMinutes.value * 60
+  const plannedMin = Math.max(5, Math.ceil(totalSec / 60))
+  plannedDurationSec.value = totalSec
+
+  ;(async () => {
+    try {
+      uni.showLoading({ title: '正在排课...' })
+      const uid = await ensureChildUser()
+      const result = await scheduleTrainingPlan(uid, plannedMin)
+      if (result.error === 'assessment') {
+        needAssessment.value = true
+        uni.showToast({ title: result.message, icon: 'none' })
+        return
+      }
+      if (result.error) throw new Error(result.message)
+      todayPlan.value = result.data
+      applyPlanMedia(result.data)
+      aiPlanText.value = result.data.report_text || ''
+      syncBlockBTip()
+    } catch (e) {
+      uni.showToast({ title: e.message || '排课失败', icon: 'none' })
+      return
+    } finally {
+      uni.hideLoading()
+    }
+
+    const endAt = Date.now() + totalSec * 1000
+    persistTimer(endAt, totalSec)
+    syncTimerFromEndAt(endAt)
+    clearTimerTick()
+    timerTickId = setInterval(tickTrainingTimer, 1000)
+    uni.showToast({ title: '训练计时已开始', icon: 'none' })
+  })()
+}
+
+function restoreTrainingTimer() {
+  const data = readTimerData()
+  if (!data) return
+  plannedDurationSec.value = data.plannedSec || 0
+  const left = Math.ceil((data.endAt - Date.now()) / 1000)
+  if (left <= 0) {
+    timerPhase.value = 'expired'
+    remainingSeconds.value = 0
+    return
+  }
+  syncTimerFromEndAt(data.endAt)
+  clearTimerTick()
+  timerTickId = setInterval(tickTrainingTimer, 1000)
+}
+
+function guardMedia() {
+  if (devMode.value) return true
+  if (timerPhase.value === 'expired') {
+    uni.showToast({ title: '训练时长已到，无法播放', icon: 'none' })
+    return false
+  }
+  if (timerPhase.value === 'setup') {
+    uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
+    return false
+  }
+  return true
+}
+
+function guardCheckin() {
+  if (devMode.value) return true
+  if (timerPhase.value === 'setup') {
+    uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
+    return false
+  }
+  return true
+}
+
+function toggleDevMode() {
+  devMode.value = !devMode.value
+  setDevMode(devMode.value)
+  uni.showToast({
+    title: devMode.value ? '开发者模式已开启' : '开发者模式已关闭',
+    icon: 'none',
+  })
+  if (devMode.value) loadDevStatus()
+}
+
+function resetAllLocalState() {
+  devResetTimer()
+  bUnlocked.value = false
+  cards.value = []
+  showPicker.value = false
+  showSummary.value = false
+  submittedCards.value = []
+  todayCheckinRecordId.value = null
+  attitude.value = 0
+  closeMedia()
+  syncBlockBTip()
+}
+
+async function loadDevStatus() {
+  if (!devMode.value) return
+  try {
+    const uid = await ensureChildUser()
+    const s = await fetchDevTrainingStatus(uid)
+    const tag = s.talent_tag || '?'
+    devStatusText.value = `课序 ${s.content_index ?? 0} · ${tag} · 计划 ${s.plan_count} 天 · 打卡 ${s.record_count} 条`
+  } catch (_) {
+    devStatusText.value = ''
+  }
+}
+
+async function devRefreshAll() {
+  if (!devMode.value) return
+  try {
+    uni.showLoading({ title: '刷新全部...' })
+    const uid = await ensureChildUser()
+    await devResetTodayTraining(uid)
+    resetAllLocalState()
+    await loadTodayPlan()
+    await loadDevStatus()
+    uni.showToast({ title: '今日已重置并刷新', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+async function devGoNextDay() {
+  if (!devMode.value) return
+  try {
+    uni.showLoading({ title: '模拟下一天...' })
+    const uid = await ensureChildUser()
+    const res = await devSimulateNextDay(uid)
+    resetAllLocalState()
+    if (res.today) {
+      todayPlan.value = res.today
+      applyPlanMedia(res.today)
+      aiPlanText.value = res.today.report_text || ''
+      lessonIndex.value = (res.today.content_index ?? 0) + 1
+    } else {
+      await loadTodayPlan()
+    }
+    syncBlockBTip()
+    await loadDevStatus()
+    const idx = res.today?.content_index ?? res.status?.content_index ?? '?'
+    uni.showToast({ title: `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
+  } catch (e) {
+    uni.showToast({ title: e.message || '模拟失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+async function devClearAllHistory() {
+  if (!devMode.value) return
+  try {
+    uni.showLoading({ title: '清空中...' })
+    const uid = await ensureChildUser()
+    await devResetAllTraining(uid)
+    resetAllLocalState()
+    await loadTodayPlan()
+    await loadDevStatus()
+    uni.showToast({ title: '训练历史已清空', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '清空失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+function clearTimerStorage() {
+  try {
+    sessionStorage.removeItem(TIMER_STORAGE_KEY)
+  } catch (_) { /* ignore */ }
+}
+
+function devResetTimer() {
+  clearTimerTick()
+  clearTimerStorage()
+  timerPhase.value = 'setup'
+  remainingSeconds.value = 0
+  plannedDurationSec.value = 0
+  closeMedia()
+  uni.showToast({ title: '计时已重置', icon: 'none' })
+}
+
+function devSimulateExpire() {
+  clearTimerTick()
+  clearTimerStorage()
+  expireTrainingTimer()
+}
+
+function devUnlockB() {
+  bUnlocked.value = true
+  bTip.value = '✅ [DEV] 训练 B 已解锁'
+  uni.showToast({ title: '训练 B 已解锁', icon: 'none' })
+}
+
+async function devRefreshAiPlan() {
+  if (!devMode.value) return
+  planLoading.value = true
+  try {
+    const uid = await ensureChildUser()
+    const result = await refreshTrainingReport(uid, true)
+    if (result.error) throw new Error(result.message)
+    todayPlan.value = result.data
+    aiPlanText.value = result.data.report_text || ''
+    uni.showToast({ title: 'AI 方案已刷新', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+  } finally {
+    planLoading.value = false
+  }
+}
+
 const bUnlocked = ref(false)
 const bTip = ref('⚠ 训练 A 未完成，B 暂不开放')
 const showPicker = ref(false)
@@ -318,10 +715,43 @@ const videoSrc = ref('/static/training_video.mp4')
 const audioSrc = ref('')
 const audioTitle = ref('🎧 训练用音频')
 const talentLabel = ref('')
+const aiPlanText = ref('')
+const lessonIndex = ref(1)
 const planAudioHint = ref('完成音频听力训练，提升听觉记忆能力')
 const needAssessment = ref(false)
 const todayPlan = ref(null)
+const todayCheckinRecordId = ref(null)
 const planLoading = ref(false)
+const checkinSubmitting = ref(false)
+
+const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
+
+const blockAItems = computed(() => {
+  const items = todayPlan.value?.items || []
+  const tagged = items.filter(i => i.block === 'A')
+  return tagged.length ? tagged : items
+})
+const blockBItems = computed(() => (todayPlan.value?.items || []).filter(i => i.block === 'B'))
+const blockAVideo = computed(() => blockAItems.value.find(i => i.item_type === 'video' || i.video_url))
+const blockAAudios = computed(() => blockAItems.value.filter(i => i.item_type === 'audio' || (i.audio_url && !i.video_url)))
+const blockBEmptyHint = computed(() => {
+  if (todayPlan.value?.planned_minutes) return '今日 B 段暂无额外音频'
+  return '请先点击「开始训练」生成训练 B'
+})
+
+function syncBlockBTip() {
+  if (!blockBItems.value.length) {
+    bTip.value = todayPlan.value?.planned_minutes
+      ? '今日训练 B 暂无额外音频'
+      : '请先点击「开始训练」查看训练 B 内容'
+    return
+  }
+  if (bUnlocked.value) {
+    bTip.value = '✅ A 已完成，开始训练 B'
+  } else {
+    bTip.value = `训练 B 共 ${blockBItems.value.length} 段，内容已排好，完成 A 打卡后可播放`
+  }
+}
 
 const videoHtml = computed(() => videoSrc.value ? `<video src="${videoSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
 const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
@@ -361,7 +791,94 @@ function removeFile(cardIdx, fileIdx) {
   card.files.splice(fileIdx, 1)
 }
 
+function serializeCards(list) {
+  return list.map(c => ({
+    name: c.name,
+    time: c.time,
+    content: c.content,
+    result: c.result,
+    tag: c.tag,
+    count: c.count,
+    accuracy: c.accuracy,
+    note: c.note,
+    wordCount: c.wordCount,
+    bookName: c.bookName,
+    fileNames: (c.files || []).map(f => f.name),
+  }))
+}
+
+function applyTodayCompletedState() {
+  bUnlocked.value = true
+  syncBlockBTip()
+}
+
+async function loadTodayCheckinRecords(uid, planId) {
+  try {
+    const items = await fetchTodayCheckins(uid)
+    const record = items[0] || (await fetchTrainingHistory(uid)).find(r => r.plan_id === planId)
+    if (!record) {
+      todayCheckinRecordId.value = null
+      return
+    }
+    todayCheckinRecordId.value = record.id
+    if (Array.isArray(record.cards) && record.cards.length) {
+      submittedCards.value = record.cards.map(c => ({ ...c, files: [] }))
+      return
+    }
+    if (record.ability_type || record.content) {
+      submittedCards.value = [{
+        name: record.ability_type || '训练记录',
+        content: record.content || '',
+        result: record.result || '',
+        time: '',
+        files: [],
+      }]
+    }
+  } catch (_) { /* ignore */ }
+}
+
+async function persistCheckinCards(cardsList, attitudePct) {
+  const uid = await ensureChildUser()
+  const payload = {
+    cards: serializeCards(cardsList),
+    ability_type: cardsList.map(c => c.name).join('、'),
+    content: cardsList.map(c => getCardSummary(c)).join('；'),
+  }
+  if (attitudePct != null) payload.attitude_pct = attitudePct
+
+  if (!todayCheckinRecordId.value) {
+    if (!todayPlan.value?.plan_id || !cardsList.length) return null
+    const res = await submitTrainingCheckin(uid, {
+      plan_id: todayPlan.value.plan_id,
+      item_id: todayPlan.value.items?.[0]?.id,
+      ...payload,
+    })
+    todayCheckinRecordId.value = res.record_id
+    if (todayPlan.value) todayPlan.value.status = res.plan_status
+    return res
+  }
+
+  if (!cardsList.length) {
+    const res = await deleteTrainingCheckin(uid, todayCheckinRecordId.value)
+    todayCheckinRecordId.value = null
+    if (todayPlan.value) todayPlan.value.status = res.plan_status || 'pending'
+    bUnlocked.value = false
+    syncBlockBTip()
+    return res
+  }
+
+  const res = await updateTrainingCheckin(uid, todayCheckinRecordId.value, payload)
+  if (todayPlan.value && res.plan_status) todayPlan.value.status = res.plan_status
+  return res
+}
+
 function openPicker() {
+  if (!guardCheckin()) return
+  if (todayCompleted.value) {
+    if (submittedCards.value.length) showSummary.value = true
+    else uni.showToast({ title: '今日训练已打卡完成', icon: 'none' })
+    return
+  }
   showPicker.value = !showPicker.value
   // 赛博点击特效
   const btn = document.querySelector('.btn-cyber')
@@ -372,6 +889,7 @@ function openPicker() {
 }
 
 function submitFormWithAnim() {
+  if (checkinSubmitting.value) return
   // 脉冲扩散动画
   const btn = document.querySelector('.btn-checkin')
   if (btn) {
@@ -381,7 +899,17 @@ function submitFormWithAnim() {
   submitForm()
 }
 
-function submitForm() {
+async function submitForm() {
+  if (!guardCheckin()) return
+  if (!todayPlan.value?.plan_id) {
+    uni.showToast({ title: '训练方案未加载，请稍后重试', icon: 'none' })
+    return
+  }
+  const isUpdate = Boolean(todayCheckinRecordId.value)
+  if (!isUpdate && todayCompleted.value) {
+    uni.showToast({ title: '今日已打卡完成', icon: 'none' })
+    return
+  }
   const hasContent = cards.value.some(c => c.time || c.content || c.result || c.count || c.tag)
   if (!hasContent) {
     const btn = document.querySelector('.btn-checkin')
@@ -389,17 +917,26 @@ function submitForm() {
     uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 })
     return
   }
-  if (!attitude.value) {
+  if (!isUpdate && !attitude.value) {
     uni.showToast({ title: '请选择训练配合度', icon: 'none', duration: 2000 })
     return
   }
-  bUnlocked.value = true
-  bTip.value = '✅ A 已完成，开始训练 B'
-  // 保存到已提交列表
-  submittedCards.value.push(...cards.value.map(c => ({ ...c })))
-  cards.value = []
-  showPicker.value = false
-  uni.showToast({ title: '✅ 训练 A 打卡成功！', icon: 'none' })
+
+  checkinSubmitting.value = true
+  try {
+    const merged = [...submittedCards.value.map(c => ({ ...c })), ...cards.value.map(c => ({ ...c }))]
+    await persistCheckinCards(merged, isUpdate ? undefined : attitude.value)
+    applyTodayCompletedState()
+    submittedCards.value = merged
+    cards.value = []
+    if (!isUpdate) attitude.value = 0
+    showPicker.value = false
+    uni.showToast({ title: isUpdate ? '✅ 打卡已更新' : '✅ 训练 A 打卡成功！', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+  } finally {
+    checkinSubmitting.value = false
+  }
 }
 
 function getCardSummary(c) {
@@ -409,44 +946,91 @@ function getCardSummary(c) {
 }
 
 function editCard(idx) {
+  if (!guardCheckin()) return
   const c = submittedCards.value[idx]
-  cards.value.push({ ...c })
+  cards.value.push({ ...c, files: c.files ? [...c.files] : [] })
   submittedCards.value.splice(idx, 1)
   showPicker.value = true
+  showSummary.value = false
 }
 
-function deleteCard(idx) {
+async function deleteCard(idx) {
   submittedCards.value.splice(idx, 1)
-  if (!submittedCards.value.length) {
-    bUnlocked.value = false
-    bTip.value = '⚠ 训练 A 未完成，B 暂不开放'
+  checkinSubmitting.value = true
+  try {
+    await persistCheckinCards(submittedCards.value.map(c => ({ ...c })))
+    if (!submittedCards.value.length) {
+      showSummary.value = false
+    }
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+  } finally {
+    checkinSubmitting.value = false
+  }
+}
+
+function applyPlanMedia(plan) {
+  const items = plan?.items || []
+  const videoItem = items.find(i => i.item_type === 'video' || i.video_url)
+  if (videoItem?.video_url) {
+    videoSrc.value = videoItem.video_url
+  }
+  const audios = items.filter(i => i.block === 'A' && i.audio_url)
+  const legacy = items.find(i => i.audio_url && !i.video_url)
+  const firstAudio = audios[0] || legacy
+  if (firstAudio) {
+    audioSrc.value = firstAudio.audio_url
+    audioTitle.value = `🎧 ${firstAudio.title || '今日训练音频'}`
+    planAudioHint.value = `收听「${firstAudio.title || '今日训练音频'}」并完成听力训练`
+  }
+  const totalAudio = items.filter(i => i.audio_url).length
+  if (totalAudio > 1) {
+    planAudioHint.value = `今日共 ${totalAudio} 段音频，按训练 A/B 顺序完成`
+  }
+}
+
+function openBlockBItem(item) {
+  if (!item) return
+  if (!bUnlocked.value && !devMode.value) {
+    uni.showToast({ title: '请先完成训练 A 打卡', icon: 'none' })
+    return
+  }
+  openMediaItem(item)
+}
+
+function openMediaItem(item) {
+  if (!item) return
+  if (!guardMedia()) return
+  if (item.video_url) {
+    videoSrc.value = item.video_url
+    mediaPlayer.value = { show: true, type: 'video' }
+    return
+  }
+  if (item.audio_url) {
+    audioSrc.value = item.audio_url
+    audioTitle.value = item.title || '训练音频'
+    mediaPlayer.value = { show: true, type: 'audio' }
+    return
+  }
+  if (needAssessment.value) {
+    uni.showToast({ title: '请先完成天赋测评', icon: 'none', duration: 2000 })
+    setTimeout(() => goTalent(), 500)
+  } else {
+    uni.showToast({ title: '暂无推荐音频', icon: 'none', duration: 2000 })
   }
 }
 
 function openMedia(type) {
-  // 检查训练时段
-  if (!devMode.value && trainStart.value && trainEnd.value) {
-    const now = new Date()
-    const [sh, sm] = trainStart.value.split(':').map(Number)
-    const [eh, em] = trainEnd.value.split(':').map(Number)
-    const startMin = sh * 60 + sm
-    const endMin = eh * 60 + em
-    const nowMin = now.getHours() * 60 + now.getMinutes()
-    if (nowMin < startMin || nowMin > endMin) {
-      uni.showToast({ title: '当前不在训练时段内', icon: 'none', duration: 2000 })
-      return
-    }
-  }
-  if (type === 'audio' && !audioSrc.value) {
-    if (needAssessment.value) {
-      uni.showToast({ title: '请先完成天赋测评', icon: 'none', duration: 2000 })
-      setTimeout(() => goTalent(), 500)
-    } else {
-      uni.showToast({ title: '暂无推荐音频', icon: 'none', duration: 2000 })
-    }
+  if (!guardMedia()) return
+  if (type === 'video') {
+    openMediaItem(blockAVideo.value || { video_url: videoSrc.value })
     return
   }
-  mediaPlayer.value = { show: true, type }
+  if (type === 'audio') {
+    openMediaItem(blockAAudios.value[0] || { audio_url: audioSrc.value, title: audioTitle.value })
+    return
+  }
 }
 function closeMedia() {
   mediaPlayer.value.show = false
@@ -461,6 +1045,7 @@ async function loadTodayPlan() {
     const result = await fetchTrainingToday(uid)
     if (result.error === 'assessment') {
       needAssessment.value = true
+      aiPlanText.value = ''
       audioSrc.value = ''
       audioTitle.value = '🎧 训练用音频'
       planAudioHint.value = '完成天赋测评后，将按天赋推荐今日音频'
@@ -469,14 +1054,17 @@ async function loadTodayPlan() {
     if (result.error) throw new Error(result.message)
 
     todayPlan.value = result.data
-    const item = result.data.items?.[0]
-    if (item?.audio_url) {
-      audioSrc.value = item.audio_url
-      audioTitle.value = `🎧 ${item.title || '今日训练音频'}`
-      planAudioHint.value = `今日推荐：${item.title || '天赋训练音频'}（按测评天赋推送）`
-    }
-    if (result.data.report_text) {
-      planAudioHint.value = result.data.report_text
+    submittedCards.value = []
+    todayCheckinRecordId.value = null
+    lessonIndex.value = (result.data.content_index ?? 0) + 1
+    aiPlanText.value = result.data.report_text || ''
+    applyPlanMedia(result.data)
+
+    await loadTodayCheckinRecords(uid, result.data.plan_id)
+    if (submittedCards.value.length > 0) {
+      applyTodayCompletedState()
+    } else {
+      syncBlockBTip()
     }
 
     const progress = await fetchTrainingProgress(uid)
@@ -484,6 +1072,17 @@ async function loadTodayPlan() {
       const tagMap = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }
       talentLabel.value = tagMap[progress.talent_tag] || `${progress.talent_tag}者`
     }
+
+    if (!videoSrc.value || videoSrc.value === '/static/training_video.mp4') {
+      try {
+        const video = await fetchTalentTrainingVideo(uid)
+        if (video?.url && !todayPlan.value?.items?.some(i => i.video_url)) {
+          videoSrc.value = video.url
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    if (devMode.value) await loadDevStatus()
   } catch (e) {
     uni.showToast({ title: e.message || '加载训练方案失败', icon: 'none' })
   } finally {
@@ -495,8 +1094,13 @@ function goTalent() {
   uni.navigateTo({ url: '/pages/talent/index' })
 }
 
-onMounted(loadTodayPlan)
+onMounted(() => {
+  restoreTrainingTimer()
+  loadTodayPlan()
+  if (devMode.value) loadDevStatus()
+})
 onShow(loadTodayPlan)
+onUnmounted(clearTimerTick)
 function goBack() {
   uni.navigateBack({ delta: 1 })
 }
@@ -508,12 +1112,19 @@ function goBack() {
 .nav { display:flex; align-items:center; padding:14px 14px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:#fff; font-size:16px; font-weight:600; }
-.nav-spacer { width:36px; }
+.nav-dev { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.nav-dev text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
+.nav-dev.active { background:rgba(251,191,36,0.15); border-color:rgba(251,191,36,0.45); }
+.nav-dev.active text { color:#fbbf24; }
 .body { flex:1; overflow-y:auto; padding:12px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
 .body::-webkit-scrollbar { display:none; }
 
 .card { background:#243046; border-radius:10px; padding:14px 16px; margin-bottom:12px; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
 .plan-label { color:#00d2ff; font-size:13px; font-weight:700; display:block; margin-bottom:8px; }
+.plan-loading { color:rgba(255,255,255,0.45); font-size:12px; display:block; padding:8px 0; }
+.plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-bottom:10px; }
+.plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; display:block; margin-bottom:6px; }
+.plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
 .plan-item { display:flex; gap:6px; align-items:flex-start; margin-bottom:6px; }
 .pl-dot { color:#00d2ff; font-size:12px; flex-shrink:0; margin-top:2px; }
 .pl-text { color:#fff; font-size:12px; line-height:1.5; }
@@ -571,22 +1182,65 @@ function goBack() {
 .si-del:active { color:#ff6b6b; }
 
 .time-card { }
-.time-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.time-dev-tag { background:rgba(0,210,255,0.15); color:#00d2ff; font-size:9px; padding:2px 6px; border-radius:4px; }
-.time-row { display:flex; align-items:center; gap:8px; }
-.time-inp { flex:1; background:rgba(0,210,255,0.05); border:1px solid rgba(0,210,255,0.15); border-radius:10px; padding:10px; color:#fff; font-size:14px; text-align:center; }
-.time-to { color:rgba(255,255,255,0.4); font-size:13px; }
-.time-dev-btn { width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.05); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.time-dev-btn text { font-size:14px; }
-.time-dev-hint { margin-top:8px; }
-.time-dev-hint text { color:rgba(255,255,255,0.3); font-size:10px; }
-[data-theme="white"] .time-inp { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
-[data-theme="white"] .time-to { color:#9ca3af; }
-[data-theme="white"] .time-dev-btn { background:#f3f4f6; }
+.time-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.time-status-tag { font-size:10px; padding:2px 8px; border-radius:999px; }
+.time-status-tag.running { background:rgba(34,197,94,0.15); color:#22c55e; }
+.time-status-tag.expired { background:rgba(239,68,68,0.15); color:#ef4444; }
+.time-setup { display:flex; flex-direction:column; gap:10px; }
+.time-pickers { display:flex; gap:10px; }
+.time-select { flex:1; background:rgba(0,210,255,0.05); border:1px solid rgba(0,210,255,0.2); border-radius:10px; padding:12px 10px; display:flex; align-items:baseline; justify-content:center; gap:4px; cursor:pointer; }
+.time-select-val { color:#fff; font-size:22px; font-weight:700; }
+.time-select-unit { color:rgba(255,255,255,0.5); font-size:12px; }
+.time-start-btn { background:linear-gradient(135deg,rgba(0,210,255,0.35),rgba(0,136,204,0.35)); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
+.time-start-btn text { color:#00d2ff; font-size:15px; font-weight:600; }
+.time-start-btn.disabled { opacity:0.4; pointer-events:none; }
+.time-setup-hint { color:rgba(255,255,255,0.35); font-size:11px; text-align:center; }
+.time-running { text-align:center; padding:4px 0; }
+.time-countdown { display:block; color:#22c55e; font-size:36px; font-weight:800; letter-spacing:0.06em; font-variant-numeric:tabular-nums; }
+.time-running-hint { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:11px; }
+.time-expired { text-align:center; padding:6px 0; }
+.time-expired-icon { display:block; font-size:28px; margin-bottom:6px; }
+.time-expired-text { display:block; color:#ef4444; font-size:14px; font-weight:600; }
+.time-expired-sub { display:block; margin-top:4px; color:rgba(255,255,255,0.4); font-size:11px; }
+.dev-panel { margin-top:12px; padding-top:12px; border-top:1px dashed rgba(251,191,36,0.25); }
+.dev-panel-label { display:block; color:#fbbf24; font-size:11px; font-weight:700; margin-bottom:8px; }
+.dev-status { margin-bottom:8px; padding:6px 10px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px; }
+.dev-status text { color:rgba(251,191,36,0.9); font-size:10px; line-height:1.4; }
+.dev-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+.dev-action { flex:1; min-width:88px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 6px; text-align:center; cursor:pointer; }
+.dev-action-primary { background:rgba(34,197,94,0.12); border-color:rgba(34,197,94,0.35); }
+.dev-action-primary text { color:#4ade80; }
+.dev-action text { color:#fbbf24; font-size:11px; font-weight:600; }
+.dev-panel-hint { display:block; margin-top:8px; color:rgba(255,255,255,0.3); font-size:10px; text-align:center; }
+.media-block, .checkin-block { position:relative; }
+.media-block.locked, .checkin-block.locked { pointer-events:none; }
+.media-block.locked .step { opacity:0.4; }
+.checkin-block.locked { opacity:0.35; }
+.media-lock-overlay, .checkin-lock-overlay { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.media-lock-text, .checkin-lock-text { background:rgba(11,17,30,0.92); border:1px solid rgba(0,210,255,0.25); color:#00d2ff; font-size:12px; padding:8px 14px; border-radius:999px; }
+.step-locked { cursor:not-allowed; }
+[data-theme="white"] .nav-dev { background:#f3f4f6; border-color:#e5e7eb; }
+[data-theme="white"] .nav-dev text { color:#9ca3af; }
+[data-theme="white"] .nav-dev.active { background:rgba(251,191,36,0.12); border-color:rgba(251,191,36,0.45); }
+[data-theme="white"] .nav-dev.active text { color:#d97706; }
+[data-theme="white"] .dev-action { background:#fffbeb; border-color:#fde68a; }
+[data-theme="white"] .dev-action text { color:#d97706; }
+[data-theme="white"] .dev-panel-label { color:#d97706; }
+[data-theme="white"] .dev-panel-hint { color:#9ca3af; }
+[data-theme="white"] .time-select { background:#f9fafb; border-color:#e5e7eb; }
+[data-theme="white"] .time-select-val { color:#1a1a2e; }
+[data-theme="white"] .time-select-unit { color:#9ca3af; }
+[data-theme="white"] .time-start-btn { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .time-start-btn text { color:#fff; }
+[data-theme="white"] .time-setup-hint { color:#9ca3af; }
+[data-theme="white"] .time-running-hint { color:#9ca3af; }
+[data-theme="white"] .time-expired-sub { color:#9ca3af; }
+[data-theme="white"] .media-lock-text, [data-theme="white"] .checkin-lock-text { background:#fff; border-color:#e5e7eb; color:#2563eb; }
 
 .divider { height:1px; background:linear-gradient(90deg,transparent,rgba(0,210,255,0.3),transparent); margin:12px 0; }
 .b-section { }
-.b-section.locked { opacity:0.25; pointer-events:none; }
+.step-preview-locked { cursor:not-allowed; }
+.step-preview-locked .step-box { border-style:dashed; opacity:0.85; }
 .lock-tip { text-align:center; color:rgba(255,255,255,0.4); font-size:12px; display:block; margin-top:6px; }
 
 .picker-panel { padding:16px 14px; margin-bottom:12px; background:rgba(13,23,40,0.6); box-shadow:0 0 24px rgba(0,210,255,0.08),inset 0 0 40px rgba(0,210,255,0.02); }
@@ -670,6 +1324,10 @@ function goBack() {
 [data-theme="white"] .card { background:#fff; border:2px solid #e5e7eb; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
 [data-theme="white"] .card::before, [data-theme="white"] .card::after { border-color:#2563eb; }
 [data-theme="white"] .plan-label { color:#2563eb; }
+[data-theme="white"] .plan-loading { color:#9ca3af; }
+[data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
+[data-theme="white"] .plan-ai-label { color:#2563eb; }
+[data-theme="white"] .plan-ai-text { color:#1a1a2e; }
 [data-theme="white"] .section-title { color:#1a1a2e; }
 [data-theme="white"] .step { background:#fff; border-left-color:#2563eb; box-shadow:0 2px 8px rgba(0,0,0,0.03); }
 [data-theme="white"] .step-num { background:#2563eb; }

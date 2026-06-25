@@ -132,3 +132,16 @@ def get_assessment(
         "talent_primary": row.talent_primary,
         "assessed_at": row.assessed_at.isoformat() if row.assessed_at else None,
     }
+
+
+@router.delete("/assessment/{assessment_id}")
+def delete_assessment_endpoint(
+    assessment_id: int,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    """删除历史测评（归档后从主表移除，定时全库备份保留副本）"""
+    try:
+        return assessment_service.delete_assessment(db, assessment_id, child_user_id)
+    except assessment_service.AssessmentError as e:
+        raise HTTPException(e.status_code, e.message) from e

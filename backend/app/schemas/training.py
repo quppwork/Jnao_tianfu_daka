@@ -26,6 +26,8 @@ class TrainingItemOut(BaseModel):
     duration_min: int | None
     instructions: str | None
     checkin_status: str
+    block: str | None = None
+    item_type: str | None = None
 
 
 class TrainingTodayResponse(BaseModel):
@@ -34,7 +36,19 @@ class TrainingTodayResponse(BaseModel):
     status: str
     report_text: str | None
     content_index: int
+    planned_minutes: int | None = None
     items: list[TrainingItemOut]
+
+
+class ScheduleRequest(BaseModel):
+    planned_minutes: int = Field(..., ge=5, le=480, description="今日计划训练总时长（分钟）")
+
+
+class TalentVideoResponse(BaseModel):
+    title: str
+    url: str
+    talent_code: int | None = None
+    source: str | None = None
 
 
 class CheckinRequest(BaseModel):
@@ -52,6 +66,35 @@ class CheckinRequest(BaseModel):
 class CheckinResponse(BaseModel):
     record_id: int
     plan_status: str
+
+
+class CheckinUpdateRequest(BaseModel):
+    ability_type: str | None = None
+    time_spent: str | None = None
+    content: str | None = None
+    result: str | None = None
+    note: str | None = None
+    attitude_pct: int | None = None
+    cards: list[dict] | None = None
+
+
+class CheckinRecordOut(BaseModel):
+    id: int
+    plan_id: int | None
+    item_id: int | None
+    ability_type: str | None
+    time_spent: str | None = None
+    content: str | None
+    result: str | None = None
+    note: str | None = None
+    attitude_pct: int | None
+    cards: list[dict] = Field(default_factory=list)
+    created_at: str | None = None
+
+
+class CheckinDeleteResponse(BaseModel):
+    deleted: bool
+    plan_status: str | None = None
 
 
 class TrainingProgressResponse(BaseModel):

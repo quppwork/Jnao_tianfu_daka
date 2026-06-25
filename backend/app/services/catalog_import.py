@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.talent_mapping import EXPECTED_COUNTS_BY_TAG
 from app.db.models import ContentItem
+from app.services.content_meta import build_instructions_meta
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CATALOG = PROJECT_ROOT / "docs" / "data" / "brain_power_audio_catalog.json"
@@ -46,6 +47,7 @@ def import_catalog(db: Session, path: Path | None = None, replace: bool = False)
                 lesson_sort=row.get("lesson_sort", 0),
                 play_url=row["play_url"],
                 content_type="audio",
+                instructions=build_instructions_meta(row, play_url=row["play_url"]),
                 status=1,
             )
         )
@@ -76,20 +78,21 @@ def _lesson_title_from_xet(row: dict) -> str:
     skill = row.get("skill", "")
     stage = row.get("stage", 0)
     part = row.get("part", 0)
-    if skill == "精力恢复":
-        return f"{row.get('talent_name', '')}精力恢复"
+    if skill in ("精力恢复", "高效作业"):
+        return f"{row.get('talent_name', '')}{skill}"
     return f"{row.get('talent_name', '')}{skill}{stage}阶段{part}"
 
 
 def import_xet_catalog(db: Session, data: dict, *, replace: bool = False) -> int:
-    """小鹅通目录（158 条脑力奥秘）→ content_item"""
+    """小鹅通目录 → content_item（支持 chaonaoaomi / xuekeaomi）"""
     items = data.get("items", [])
+    series_code = data.get("series_code") or "chaonaoaomi"
     if replace:
         db.query(ContentItem).delete()
         existing: set[str] = set()
     else:
         existing = {
-            f"{r.talent_code}:{r.lesson_sort}:{r.lesson_title}"
+            f"{parse_series_from_item(r)}:{r.talent_code}:{r.lesson_sort}:{r.lesson_title}"
             for r in db.scalars(select(ContentItem)).all()
         }
     inserted = 0
@@ -97,8 +100,10 @@ def import_xet_catalog(db: Session, data: dict, *, replace: bool = False) -> int
     for idx, row in enumerate(items, start=1):
         if not row.get("play_url"):
             continue
+        row_series = row.get("series") or series_code
+        row = {**row, "series": row_series}
         title = _lesson_title_from_xet(row)
-        key = f"{row['talent_code']}:{row.get('lesson_sort', 0)}:{title}"
+        key = f"{row_series}:{row['talent_code']}:{row.get('lesson_sort', 0)}:{title}"
         if key in existing:
             if replace:
                 continue
@@ -111,6 +116,7 @@ def import_xet_catalog(db: Session, data: dict, *, replace: bool = False) -> int
             )
             if item and item.play_url != row["play_url"]:
                 item.play_url = row["play_url"]
+                item.instructions = build_instructions_meta(row, play_url=row["play_url"])
                 updated += 1
             continue
         db.add(
@@ -122,9 +128,33 @@ def import_xet_catalog(db: Session, data: dict, *, replace: bool = False) -> int
                 lesson_sort=row.get("lesson_sort", 0),
                 play_url=row["play_url"],
                 content_type="audio",
+                instructions=build_instructions_meta(row, play_url=row["play_url"]),
                 status=1,
             )
         )
         inserted += 1
     db.commit()
     return inserted + updated
+
+
+def parse_series_from_item(item: ContentItem) -> str:
+    from app.services.content_meta import parse_item_meta
+
+    return parse_item_meta(item).get("series") or "chaonaoaomi"
+
+
+def import_all_xet_catalogs(db: Session, *, replace: bool = False) -> dict[str, int]:
+    """导入脑力奥秘 + 学科奥秘两份 catalog"""
+    paths = [
+        PROJECT_ROOT / "docs" / "data" / "xet_brain_power_catalog.json",
+        PROJECT_ROOT / "docs" / "data" / "xet_xuekeaomi_catalog.json",
+    ]
+    results: dict[str, int] = {}
+    for i, path in enumerate(paths):
+        if not path.exists():
+            results[path.name] = 0
+            continue
+        results[path.name] = import_catalog(
+            db, path, replace=replace and i == 0,
+        )
+    return results

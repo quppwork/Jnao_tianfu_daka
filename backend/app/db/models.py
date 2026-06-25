@@ -55,6 +55,18 @@ class TalentAssessment(Base):
     child_user: Mapped["ChildUser"] = relationship(back_populates="assessments")
 
 
+class TalentAssessmentArchive(Base):
+    """已删除测评归档 — 供恢复与审计，主表删除后保留快照"""
+
+    __tablename__ = "talent_assessment_archive"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    original_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class ContentItem(Base):
     __tablename__ = "content_item"
 
