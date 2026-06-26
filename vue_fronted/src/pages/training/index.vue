@@ -753,7 +753,7 @@ function resetAllLocalState() {
   submittedCards.value = []
   phaseRecordIds.value = {}
   primaryCheckinRecordId.value = null
-  summaryAttitude.value = null
+  summaryAttitude.value = 60
   attitudeTouched.value = false
   closeMedia()
 }
@@ -913,7 +913,7 @@ const showSummary = ref(false)
 const showHistory = ref(false)
 const checkinHistory = ref([])
 const submittedCards = ref([])
-const summaryAttitude = ref(null)
+const summaryAttitude = ref(60)
 const attitudeTouched = ref(false)
 const scores = [
   { pct:100, emoji:'🔴', desc:'身体已透支，精神还要求进步' },
@@ -1279,13 +1279,7 @@ async function persistPhaseCheckin(block, cardsList) {
     ability_type: cardsList.map(c => c.name).join('、'),
     content: cardsList.map(c => getCardSummary(c)).join('；'),
   }
-  if (attitudeTouched.value && summaryAttitude.value != null) {
-    const isNewPrimary = !primaryCheckinRecordId.value
-    const isPrimaryRecord = recordId && recordId === primaryCheckinRecordId.value
-    if (isNewPrimary || isPrimaryRecord) {
-      payload.attitude_pct = summaryAttitude.value
-    }
-  }
+  payload.attitude_pct = summaryAttitude.value
 
   const recordId = phaseRecordIds.value[block]
   if (!recordId) {
@@ -1603,7 +1597,7 @@ async function loadTodayPlan(silent = false) {
       submittedCards.value = []
       phaseRecordIds.value = {}
       primaryCheckinRecordId.value = null
-      summaryAttitude.value = null
+      summaryAttitude.value = 60
       attitudeTouched.value = false
     }
     lessonIndex.value = (result.data.content_index ?? 0) + 1
