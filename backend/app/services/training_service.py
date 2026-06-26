@@ -346,6 +346,100 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None) -> dic
     }
 
 
+def _has_plan_content(plan: TrainingPlan) -> bool:
+    """今日方案已生成 A/B 内容"""
+    return len(plan.items) > 1
+
+
+def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
+    """获取今日方案；若无则按训练日自动生成 A/B 内容"""
+    from app.services.training_schedule_service import ensure_today_plan_content
+
+    plan_date = plan_date or _today()
+    if not is_new_day_ready():
+        raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
+
+    assessment = get_latest_assessment(db, child_user_id)
+    if not has_valid_talent(assessment):
+        raise TrainingError("请先完成天赋测评", 403)
+
+    refresh_today_plan_if_talent_changed(db, child_user_id, plan_date=plan_date, assessment=assessment)
+
+    plan = ensure_today_plan_content(db, child_user_id, plan_date)
+    sync_pending_plan_content(db, child_user_id, assessment, plan_date=plan_date)
+    plan = _resolve_today_plan(db, child_user_id, plan_date)
+    if plan and _has_plan_content(plan):
+        return _plan_to_response(plan)
+
+    return empty_today_plan_response(db, child_user_id, plan_date)
+
+
+def _preview_content_index(db: Session, child_user_id: int, plan_date: date, assessment) -> int:
+    if not assessment or not has_valid_talent(assessment):
+        return 0
+    series = get_content_series(db, effective_talent_code(assessment), prefer_skill="影像追忆")
+    if not series:
+        return 0
+    return _compute_content_index(
+        db, child_user_id, plan_date, len(series), talent_primary=assessment.talent_primary
+    )
+
+
+def empty_today_plan_response(
+    db: Session,
+    child_user_id: int,
+    plan_date: date | None = None,
+    *,
+    now: datetime | None = None,
+) -> dict:
+    """无今日方案时的占位（如日切窗口）"""
+    now = now or training_now()
+    plan_date = plan_date or _today()
+    assessment = get_latest_assessment(db, child_user_id)
+    meta = training_day_meta(now, plan_date=plan_date)
+    return {
+        "plan_id": 0,
+        "plan_date": plan_date,
+        "status": "none",
+        "report_text": "",
+        "content_index": _preview_content_index(db, child_user_id, plan_date, assessment),
+        "planned_minutes": None,
+        "items": [],
+        "day_locked": False,
+        "globally_cutoff": False,
+        **meta,
+    }
+
+
+def create_plan_for_schedule(db: Session, child_user_id: int, plan_date: date | None = None) -> TrainingPlan:
+    """创建当日方案记录（内容由 ensure_today_plan_content 填充）"""
+    plan_date = plan_date or _today()
+    if not is_new_day_ready():
+        raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
+
+    assessment = ensure_assessment_for_training(db, child_user_id)
+    refresh_today_plan_if_talent_changed(db, child_user_id, plan_date=plan_date, assessment=assessment)
+
+    plan = _resolve_today_plan(db, child_user_id, plan_date)
+    if plan:
+        return plan
+
+    content_index = _preview_content_index(db, child_user_id, plan_date, assessment)
+    plan = TrainingPlan(
+        child_user_id=child_user_id,
+        plan_date=plan_date,
+        level=assessment.talent_primary,
+        report_text="",
+        content_index=content_index,
+        status="pending",
+        generated_at=datetime.now(timezone.utc),
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return _get_plan_by_date(db, child_user_id, plan_date)
+
+
 def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
     plan_date = plan_date or _today()
     if not is_new_day_ready():
@@ -422,8 +516,6 @@ def submit_checkin(
         raise TrainingError("训练计划不存在", 404)
     if is_plan_globally_cutoff(plan):
         raise TrainingError("训练日已于凌晨4点截止", 403)
-    if plan.status == "completed":
-        raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
 
     sorted_items = sorted(plan.items, key=lambda x: x.sort_order)
 

@@ -17,7 +17,10 @@ class TestModuleGrowth:
 
     def test_milestones_progress(self, client, user_ready_for_training):
         uid = user_ready_for_training
-        plan = client.get(f"/api/training/today?user_id={uid}").json()
+        plan = client.post(
+            f"/api/training/schedule?user_id={uid}",
+            json={"planned_minutes": 45},
+        ).json()
         client.post(
             f"/api/training/checkin?user_id={uid}",
             json={"plan_id": plan["plan_id"]},

@@ -17,12 +17,14 @@ from app.services.training_service import (
     _get_plan_by_date,
     _item_to_dict,
     _plan_to_response,
+    create_plan_for_schedule,
     get_content_series,
-    get_or_create_today_plan,
 )
 from app.services.training_curriculum import route_training_blocks
 from app.services.video_push_service import get_talent_training_video
-from app.services.training_day import get_training_day
+from app.services.training_day import get_training_day, is_new_day_ready
+
+DEFAULT_DAILY_PLAN_MINUTES = 45
 
 ROUTE_SYSTEM = """你是 JNAO 训练排课教练。根据学员今日可用训练总时长、天赋类型，安排「训练A」和「训练B」的音频组合。
 规则：
@@ -175,28 +177,20 @@ def _plan_to_schedule_response(plan: TrainingPlan, *, schedule_mode: str | None 
     return base
 
 
-async def schedule_training_by_duration(
+def _has_plan_content(plan: TrainingPlan) -> bool:
+    return len(plan.items) > 1
+
+
+def populate_plan_items(
     db: Session,
+    plan: TrainingPlan,
     child_user_id: int,
     planned_minutes: int,
     *,
     plan_date: date | None = None,
 ) -> dict:
-    if planned_minutes < 5:
-        raise TrainingError("训练时长至少 5 分钟")
-
-    plan_date = plan_date or get_training_day()
-    get_or_create_today_plan(db, child_user_id, plan_date)
-    plan = _get_plan_by_date(db, child_user_id, plan_date)
-    if not plan:
-        raise TrainingError("无法创建训练计划", 500)
-
-    if plan.status == "completed":
-        raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
-
-    if any(it.checkin_status == "done" for it in plan.items):
-        raise TrainingError("已有打卡进度，无法重新排课", 400)
-
+    """按默认/排课时长填充 A/B 训练项（视频 + 音频）"""
+    plan_date = plan_date or plan.plan_date
     assessment = get_latest_assessment(db, child_user_id)
     if not has_valid_talent(assessment):
         raise TrainingError("请先完成天赋测评", 403)
@@ -211,7 +205,6 @@ async def schedule_training_by_duration(
     )
     if not candidates_a:
         raise TrainingError("暂无可用脑力奥秘音频", 503)
-    # B 如果极速运算不足，混入学科奥秘补充
     if not candidates_b:
         candidates_b = _build_candidates(
             db, talent_code, plan.content_index, series="xuekeaomi", limit=pool_limit
@@ -224,7 +217,6 @@ async def schedule_training_by_duration(
         planned_minutes,
         seed_key=f"{child_user_id}:{plan_date.isoformat()}",
     )
-    schedule_mode = route.get("mode", "unknown")
 
     id_map = {c.id: c for c in candidates_a + candidates_b}
     for old in list(plan.items):
@@ -273,7 +265,79 @@ async def schedule_training_by_duration(
 
     plan.planned_minutes = planned_minutes
     if route.get("note"):
-        plan.report_text = f"{route['note']}（计划 {planned_minutes} 分钟）"
+        plan.report_text = f"{route['note']}（今日方案约 {planned_minutes} 分钟）"
+
+    db.flush()
+    return {**route, "mode": route.get("mode", "rule")}
+
+
+def ensure_today_plan_content(
+    db: Session,
+    child_user_id: int,
+    plan_date: date | None = None,
+    *,
+    content_minutes: int = DEFAULT_DAILY_PLAN_MINUTES,
+) -> TrainingPlan:
+    """新训练日自动生成今日 A/B 方案（进入训练页 / 凌晨4点后调用）"""
+    if not is_new_day_ready():
+        raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
+
+    plan_date = plan_date or get_training_day()
+    plan = create_plan_for_schedule(db, child_user_id, plan_date)
+    if not plan:
+        raise TrainingError("无法创建训练计划", 500)
+
+    if _has_plan_content(plan):
+        return plan
+
+    populate_plan_items(db, plan, child_user_id, content_minutes, plan_date=plan_date)
+    db.commit()
+    refreshed = _get_plan_by_date(db, child_user_id, plan_date)
+    if not refreshed or not _has_plan_content(refreshed):
+        raise TrainingError("今日方案生成失败", 500)
+    return refreshed
+
+
+async def schedule_training_by_duration(
+    db: Session,
+    child_user_id: int,
+    planned_minutes: int,
+    *,
+    plan_date: date | None = None,
+) -> dict:
+    """兼容接口：确保今日方案已生成；用户自选时长仅用于开始训练，不重新排课"""
+    if planned_minutes < 5:
+        raise TrainingError("训练时长至少 5 分钟")
+
+    plan_date = plan_date or get_training_day()
+    plan = ensure_today_plan_content(db, child_user_id, plan_date)
+    if plan.status == "completed":
+        raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
+
+    schedule_mode = "rule"
+    assessment = get_latest_assessment(db, child_user_id)
+    if assessment and has_valid_talent(assessment):
+        talent_code = effective_talent_code(assessment)
+        pool_limit = 80 if plan.content_index <= 0 else 24
+        candidates_a = _build_candidates(
+            db, talent_code, plan.content_index, series="chaonaoaomi", skill="影像追忆", limit=pool_limit
+        )
+        candidates_b = _build_candidates(
+            db, talent_code, plan.content_index, series="chaonaoaomi", skill="极速运算", limit=pool_limit
+        )
+        if candidates_a:
+            if not candidates_b:
+                candidates_b = _build_candidates(
+                    db, talent_code, plan.content_index, series="xuekeaomi", limit=pool_limit
+                )
+            route = route_training_blocks(
+                plan.content_index,
+                candidates_a,
+                candidates_b,
+                plan.planned_minutes or DEFAULT_DAILY_PLAN_MINUTES,
+                seed_key=f"{child_user_id}:{plan_date.isoformat()}",
+            )
+            schedule_mode = route.get("mode", "rule")
 
     db.commit()
     plan = _get_plan_by_date(db, child_user_id, plan_date)

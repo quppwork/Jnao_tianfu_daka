@@ -13,8 +13,8 @@ from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
     _plan_to_response,
-    get_or_create_today_plan,
     get_progress,
+    get_today_plan,
     purge_today_plan_without_assessment,
 )
 from app.services.training_day import get_training_day
@@ -178,10 +178,10 @@ def simulate_next_training_day(db: Session, child_user_id: int) -> dict:
     )
     db.commit()
 
-    new_plan = get_or_create_today_plan(db, child_user_id, today)
+    today_plan = get_today_plan(db, child_user_id, today)
     return {
         "action": "next_day",
         "previous_content_index": prev_index,
-        "today": new_plan,
+        "today": today_plan,
         "status": get_dev_training_status(db, child_user_id),
     }

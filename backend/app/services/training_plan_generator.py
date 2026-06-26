@@ -41,7 +41,7 @@ async def ensure_plan_report(
 ) -> dict:
     """获取今日方案，必要时用 AI 根据昨日打卡生成 report_text"""
     from app.services.training_day import is_new_day_ready, training_day_meta, training_now, get_training_day
-    from app.services.training_service import TrainingError
+    from app.services.training_service import TrainingError, get_today_plan
 
     if not is_new_day_ready():
         now = training_now()
@@ -60,7 +60,7 @@ async def ensure_plan_report(
         }
 
     try:
-        plan_data = get_or_create_today_plan(db, child_user_id, plan_date)
+        plan_data = get_today_plan(db, child_user_id, plan_date)
     except TrainingError as e:
         if e.status_code == 503:
             now = training_now()

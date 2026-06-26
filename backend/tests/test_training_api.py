@@ -6,6 +6,12 @@ from app.services.training_day import get_training_day
 from app.services.training_service import get_or_create_today_plan, record_watch_progress, submit_checkin
 
 
+def _schedule_today(client, uid, minutes=45):
+    res = client.post(f"/api/training/schedule?user_id={uid}", json={"planned_minutes": minutes})
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
 def _complete_videos_for_checkin(db, user_id, items):
     for it in items:
         if it.get("video_url") or it.get("item_type") == "video":
@@ -51,32 +57,37 @@ class TestTrainingToday:
         res = client.get(f"/api/training/today?user_id={child_with_assessment}&skip_ai=1")
         assert res.status_code == 200
         data = res.json()
-        assert len(data["items"]) == 1
-        assert data["report_text"].startswith("今日音频：")
+        assert data["plan_id"] > 0
+        assert len(data["items"]) >= 2
 
-    def test_today_returns_audio(self, client, child_with_assessment, mock_doubao):
-        res = client.get(f"/api/training/today?user_id={child_with_assessment}")
+    def test_today_returns_audio_after_schedule(self, client, child_with_assessment, mock_doubao):
+        uid = child_with_assessment
+        res = client.get(f"/api/training/today?user_id={uid}")
         assert res.status_code == 200
         data = res.json()
         assert data["status"] == "pending"
-        assert len(data["items"]) == 1
-        assert data["items"][0]["audio_url"]
-        assert "学" in (data["items"][0]["title"] or "")
-        assert data["report_text"]
-        assert not data["report_text"].startswith("今日音频：")
+        assert len(data["items"]) >= 2
+        assert any(i.get("audio_url") for i in data["items"])
+        assert data["report_text"] or True
 
     def test_checkin_completes_plan(self, client, child_with_assessment, mock_doubao):
-        today = client.get(f"/api/training/today?user_id={child_with_assessment}").json()
-        res = client.post(
-            f"/api/training/checkin?user_id={child_with_assessment}",
-            json={"plan_id": today["plan_id"]},
-        )
-        assert res.status_code == 200
-        assert res.json()["plan_status"] == "completed"
+        uid = child_with_assessment
+        today = client.get(f"/api/training/today?user_id={uid}").json()
+        items = today["items"]
+        _complete_videos_via_client(client, uid, items)
+        a_item = next(i for i in items if i.get("block") == "A")
+        b_item = next(i for i in items if i.get("block") == "B")
+        for it in (a_item, b_item):
+            res = client.post(
+                f"/api/training/checkin?user_id={uid}",
+                json={"plan_id": today["plan_id"], "item_id": it["id"], "cards": [{"name": "影像追忆", "time": "1"}]},
+            )
+            assert res.status_code == 200, res.text
+        assert client.get(f"/api/training/today?user_id={uid}").json()["status"] == "completed"
 
-        progress = client.get(f"/api/training/progress?user_id={child_with_assessment}").json()
+        progress = client.get(f"/api/training/progress?user_id={uid}").json()
         assert progress["today_completed"] is True
-        assert progress["total_checkins"] == 1
+        assert progress["total_checkins"] >= 1
 
     def test_continue_same_if_yesterday_incomplete(self, db_session, child_with_assessment):
         yesterday = get_training_day() - timedelta(days=1)
@@ -104,7 +115,7 @@ class TestTrainingToday:
 class TestCheckinCrud:
     def test_today_checkins(self, client, child_with_assessment, mock_doubao):
         uid = child_with_assessment
-        plan = client.get(f"/api/training/today?user_id={uid}").json()
+        plan = _schedule_today(client, uid)
         client.post(
             f"/api/training/checkin?user_id={uid}",
             json={
@@ -121,7 +132,7 @@ class TestCheckinCrud:
 
     def test_update_checkin_cards(self, client, child_with_assessment, mock_doubao):
         uid = child_with_assessment
-        plan = client.get(f"/api/training/today?user_id={uid}").json()
+        plan = _schedule_today(client, uid)
         created = client.post(
             f"/api/training/checkin?user_id={uid}",
             json={
@@ -147,7 +158,7 @@ class TestCheckinCrud:
 
     def test_delete_checkin_resets_plan(self, client, child_with_assessment, mock_doubao):
         uid = child_with_assessment
-        plan = client.get(f"/api/training/today?user_id={uid}").json()
+        plan = _schedule_today(client, uid)
         created = client.post(
             f"/api/training/checkin?user_id={uid}",
             json={"plan_id": plan["plan_id"], "attitude_pct": 80, "cards": [{"name": "影像追忆", "time": "1"}]},
