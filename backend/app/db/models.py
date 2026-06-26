@@ -166,7 +166,9 @@ class QaSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     messages: Mapped[list["QaMessage"]] = relationship(
-        back_populates="session", order_by="QaMessage.id"
+        back_populates="session",
+        order_by="QaMessage.id",
+        cascade="all, delete-orphan",
     )
 
 

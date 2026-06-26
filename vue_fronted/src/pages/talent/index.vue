@@ -32,6 +32,33 @@
               <text class="pcard-sub">自行评估完成 / 探索内在潜能</text>
             </view>
           </view>
+
+          <!-- 历史报告 -->
+          <view class="pcard pcard-gray pcard-in" style="width:160px;flex-shrink:0;margin-top:16px;animation-delay:0.7s" @tap="showHistory = true">
+            <view class="pcard-icon-wrap">
+              <svg viewBox="0 0 48 48" width="28" height="28" fill="none" stroke="#58a6ff" stroke-width="2"><rect x="6" y="4" width="36" height="40" rx="4"/><line x1="16" y1="14" x2="32" y2="14"/><line x1="16" y1="22" x2="28" y2="22"/></svg>
+            </view>
+            <text class="pcard-title">历史报告</text>
+            <text class="pcard-sub">{{ historyList.length ? historyList.length + ' 条记录' : '暂无记录' }}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- History Overlay -->
+      <view v-if="showHistory" class="notice-overlay" @tap="showHistory = false">
+        <view class="notice-card" style="max-width:340px;" @tap.stop>
+          <text class="notice-text" style="font-weight:700;margin-bottom:12px;display:block;">历史报告</text>
+          <view v-if="historyList.length" class="history-list">
+            <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item">
+              <view class="history-item-main" @tap="viewHistory(h)">
+                <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+                <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
+              </view>
+              <view class="history-del" @tap.stop="confirmDeleteHistory(h)"><text>✕</text></view>
+            </view>
+          </view>
+          <text v-else class="notice-text">暂无历史报告</text>
+          <view class="history-close" @tap="showHistory = false"><text>关闭</text></view>
         </view>
       </view>
 
@@ -162,10 +189,12 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
 import {
   ensureChildUser,
   ensureJnaoUid,
+  fetchAssessmentHistory,
+  deleteAssessmentReport,
   submitTalentReport,
 } from '@/utils/userApi.js'
 
@@ -176,6 +205,45 @@ const ageGateNotice = ref(false)
 const submitting = ref(false)
 const submitError = ref('')
 const compPhase = ref(0)
+const showHistory = ref(false)
+const historyList = ref([])
+
+async function loadHistory() {
+  try {
+    const uid = await ensureChildUser()
+    historyList.value = await fetchAssessmentHistory(uid)
+  } catch (_) { historyList.value = [] }
+}
+
+function viewHistory(h) {
+  showHistory.value = false
+  if (h.id) uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
+}
+
+function confirmDeleteHistory(h) {
+  if (!h?.id) return
+  uni.showModal({
+    title: '删除报告',
+    content: `确定删除「${h.talent_primary || h.talent || '测评'}」报告？`,
+    confirmText: '删除',
+    confirmColor: '#ef4444',
+    success: (res) => { if (res.confirm) deleteHistory(h.id) },
+  })
+}
+
+async function deleteHistory(assessmentId) {
+  try {
+    const uid = await ensureChildUser()
+    await deleteAssessmentReport(uid, assessmentId)
+    historyList.value = historyList.value.filter(h => h.id !== assessmentId)
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+  }
+}
+
+onMounted(loadHistory)
+
 const toast = ref({ text: '', variant: 'ack' })
 
 // Testing state
@@ -406,6 +474,7 @@ async function doSubmitReport() {
     const type = testType.value === '成人' ? 0 : 1
     const json = await submitTalentReport(childUserId, { answer: bits, jnaoUid, type })
     if (json.code !== 1) throw new Error('报告生成失败')
+    await loadHistory()
     const aid = json.assessment_id
     uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
   } catch (e) {
@@ -468,6 +537,7 @@ onBeforeUnmount(() => {
 .pcard-emoji { font-size:28px; }
 .pcard-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; margin-bottom:4px; display:block; }
 .pcard-sub { color:var(--text-dim); font-size:11px; text-align:center; line-height:1.4; display:block; }
+
 .notice-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
 .notice-card { background:var(--bg-card); border-radius:20px; padding:28px 24px; max-width:320px; width:100%; }
 .notice-text { color:var(--text); font-size:15px; line-height:1.7; text-align:center; }

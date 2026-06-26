@@ -30,7 +30,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { registerChild } from '@/utils/userApi.js'
+import { registerChild, saveProfile, fetchProfile } from '@/utils/userApi.js'
 
 const form = ref({ name: '', phone: '' })
 const submitting = ref(false)
@@ -47,6 +47,12 @@ async function doRegister() {
   submitting.value = true
   try {
     const data = await registerChild(form.value.phone.trim(), form.value.name.trim())
+    try {
+      const p = await fetchProfile(data.child_user_id)
+      await saveProfile(data.child_user_id, {
+        profile_json: { ...(p.profile_json || {}), role: 'student' },
+      })
+    } catch (_) { /* ignore */ }
     localStorage.setItem('jnao_user', JSON.stringify({
       name: data.nickname,
       phone: data.parent_phone,

@@ -1,4 +1,4 @@
-"""学科答疑拍图 — 本地暂存（OSS 未配置时）"""
+"""学科答疑拍图 — 仅本地存储（不上传 OSS）"""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ import base64
 import mimetypes
 import uuid
 from pathlib import Path
-
-from app.services.oss_client import is_oss_configured, public_url
 
 _UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "data" / "qa_uploads"
 _STORE: dict[str, dict] = {}
@@ -34,26 +32,7 @@ def save_qa_image(child_user_id: int, filename: str, raw: bytes, content_type: s
         "child_user_id": child_user_id,
     }
     _STORE[image_id] = meta
-    if is_oss_configured():
-        try:
-            meta["url"] = _upload_oss(path, child_user_id, image_id, ext)
-        except Exception:
-            pass
-    return {"image_id": image_id, "url": meta["url"]}
-
-
-def _upload_oss(path: Path, child_user_id: int, image_id: str, ext: str) -> str:
-    import oss2
-
-    from app.services.oss_client import _bucket_client, _oss_cfg
-
-    key = f"qa_uploads/{child_user_id}/{image_id}{ext}"
-    bucket = _bucket_client()
-    bucket.put_object_from_file(key, str(path))
-    cfg = _oss_cfg()
-    if cfg.get("signed_url"):
-        return bucket.sign_url("GET", key, cfg.get("sign_expires", 7200))
-    return public_url(key)
+    return {"image_id": image_id, "url": url}
 
 
 def get_qa_image(image_id: str, child_user_id: int) -> dict | None:

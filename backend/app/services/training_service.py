@@ -87,6 +87,22 @@ def _plan_matches_latest_talent(plan: TrainingPlan, assessment) -> bool:
     return plan.level == assessment.talent_primary
 
 
+def purge_today_plan_without_assessment(
+    db: Session,
+    child_user_id: int,
+    *,
+    plan_date: date | None = None,
+) -> bool:
+    """无有效天赋测评时清除今日未完成计划（重置天赋后不留脏数据）"""
+    plan_date = plan_date or date.today()
+    plan = _get_plan_by_date(db, child_user_id, plan_date)
+    if not plan or plan.status == "completed":
+        return False
+    _delete_training_plan(db, plan)
+    db.commit()
+    return True
+
+
 def refresh_today_plan_if_talent_changed(
     db: Session,
     child_user_id: int,
@@ -94,19 +110,125 @@ def refresh_today_plan_if_talent_changed(
     plan_date: date | None = None,
     assessment=None,
 ) -> bool:
-    """若今日未完成计划与最新天赋不一致，清除计划以便按新天赋重建"""
+    """天赋变更或无天赋时清除今日未完成计划，以便按最新天赋重建"""
     plan_date = plan_date or date.today()
-    assessment = assessment or get_latest_assessment(db, child_user_id)
-    if not assessment:
-        return False
+    assessment = assessment if assessment is not None else get_latest_assessment(db, child_user_id)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or plan.status == "completed":
         return False
+    if not assessment or not assessment.talent_code:
+        _delete_training_plan(db, plan)
+        db.commit()
+        return True
     if _plan_matches_latest_talent(plan, assessment):
         return False
     _delete_training_plan(db, plan)
     db.commit()
     return True
+
+
+def sync_pending_plan_content(
+    db: Session,
+    child_user_id: int,
+    assessment,
+    *,
+    plan_date: date | None = None,
+) -> bool:
+    """天赋未变时同步今日方案：推进 content_index、更新推送音频与 level"""
+    if not assessment or not assessment.talent_code:
+        return False
+    plan_date = plan_date or date.today()
+    plan = _get_plan_by_date(db, child_user_id, plan_date)
+    if not plan or plan.status == "completed":
+        return False
+    if not _plan_matches_latest_talent(plan, assessment):
+        return False
+
+    series = get_content_series(db, assessment.talent_code, prefer_skill="影像追忆")
+    if not series:
+        return False
+
+    content_index = _compute_content_index(
+        db, child_user_id, plan_date, len(series), talent_primary=assessment.talent_primary
+    )
+    content = series[content_index]
+    changed = False
+
+    if plan.content_index != content_index:
+        plan.content_index = content_index
+        changed = True
+    if plan.level != assessment.talent_primary:
+        plan.level = assessment.talent_primary
+        changed = True
+
+    # 仅同步「简单推送」单条音频计划；已排课的 A/B 方案保留结构
+    is_simple = len(plan.items) <= 1 and not plan.planned_minutes
+    if not is_simple:
+        if changed:
+            db.commit()
+        return changed
+
+    if not plan.items:
+        return changed
+
+    item = plan.items[0]
+    if (
+        item.content_item_id != content.id
+        or item.title != content.lesson_title
+        or item.audio_url != content.play_url
+    ):
+        item.title = content.lesson_title
+        item.audio_url = content.play_url
+        item.video_url = content.video_url
+        item.duration_min = content.duration_min
+        item.instructions = content.instructions
+        item.content_item_id = content.id
+        if item.checkin_status == "pending":
+            plan.report_text = f"今日音频：{content.lesson_title}"
+        changed = True
+
+    if changed:
+        db.commit()
+    return changed
+
+
+def ensure_assessment_for_training(db: Session, child_user_id: int):
+    """进入训练前优先校验最新天赋测评"""
+    assessment = get_latest_assessment(db, child_user_id)
+    if not assessment or not assessment.talent_code:
+        purge_today_plan_without_assessment(db, child_user_id)
+        raise TrainingError("请先完成天赋测评", 403)
+    return assessment
+
+
+def get_training_entry(db: Session, child_user_id: int) -> dict:
+    """训练页入口：优先检查最新天赋，并同步今日方案"""
+    assessment = get_latest_assessment(db, child_user_id)
+    if not assessment or not assessment.talent_code:
+        purge_today_plan_without_assessment(db, child_user_id)
+        return {
+            "has_assessment": False,
+            "needs_assessment": True,
+            "message": "需要先进行天赋测试才能帮你安排今日训练",
+            "assessment_id": None,
+            "talent_primary": None,
+            "talent_tag": None,
+            "talent_code": None,
+        }
+
+    refresh_today_plan_if_talent_changed(db, child_user_id, assessment=assessment)
+    sync_pending_plan_content(db, child_user_id, assessment)
+    progress = get_progress(db, child_user_id)
+    return {
+        "has_assessment": True,
+        "needs_assessment": False,
+        "message": None,
+        "assessment_id": assessment.id,
+        "talent_primary": assessment.talent_primary,
+        "talent_tag": assessment.talent_tag,
+        "talent_code": assessment.talent_code,
+        **progress,
+    }
 
 
 def _compute_content_index(
@@ -157,14 +279,14 @@ def _plan_to_response(plan: TrainingPlan) -> dict:
 
 def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
     plan_date = plan_date or date.today()
-    assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
-        raise TrainingError("请先完成天赋测评", 403)
+    assessment = ensure_assessment_for_training(db, child_user_id)
 
     refresh_today_plan_if_talent_changed(db, child_user_id, plan_date=plan_date, assessment=assessment)
 
     existing = _get_plan_by_date(db, child_user_id, plan_date)
     if existing:
+        sync_pending_plan_content(db, child_user_id, assessment, plan_date=plan_date)
+        existing = _get_plan_by_date(db, child_user_id, plan_date)
         return _plan_to_response(existing)
 
     series = get_content_series(db, assessment.talent_code, prefer_skill="影像追忆")
@@ -258,6 +380,14 @@ def submit_checkin(
     db.add(record)
     target_item.checkin_status = "done"
 
+    # 同 block 内所有 pending 项一并标记完成（前端一次打卡覆盖整个 block）
+    target_block = parse_item_instruction(target_item.instructions).get("block")
+    if target_block:
+        for it in plan.items:
+            it_block = parse_item_instruction(it.instructions).get("block")
+            if it_block == target_block and it.checkin_status == "pending":
+                it.checkin_status = "done"
+
     pending = [it for it in plan.items if it.checkin_status != "done"]
     plan.status = "pending" if pending else "completed"
     db.commit()
@@ -303,7 +433,22 @@ def _record_to_dict(record: TrainingRecord) -> dict:
     }
 
 
-def _sync_plan_after_record_change(db: Session, plan: TrainingPlan | None) -> str | None:
+def _item_block(item: TrainingItem) -> str | None:
+    return parse_item_instruction(item.instructions).get("block")
+
+
+def _revert_block_checkin(db: Session, plan: TrainingPlan, block: str) -> None:
+    for it in plan.items:
+        if _item_block(it) == block:
+            it.checkin_status = "pending"
+
+
+def _sync_plan_after_record_change(
+    db: Session,
+    plan: TrainingPlan | None,
+    *,
+    deleted_record: TrainingRecord | None = None,
+) -> str | None:
     if not plan:
         return None
     plan = db.scalar(
@@ -313,19 +458,19 @@ def _sync_plan_after_record_change(db: Session, plan: TrainingPlan | None) -> st
     )
     if not plan:
         return None
-    has_records = db.scalar(
-        select(func.count())
-        .select_from(TrainingRecord)
-        .where(TrainingRecord.plan_id == plan.id)
-    )
-    if has_records:
-        for item in plan.items:
-            item.checkin_status = "done"
-        plan.status = "completed"
-    else:
-        for item in plan.items:
-            item.checkin_status = "pending"
-        plan.status = "pending"
+
+    if deleted_record and deleted_record.item_id:
+        item = db.get(TrainingItem, deleted_record.item_id)
+        if item:
+            block = _item_block(item)
+            if block:
+                _revert_block_checkin(db, plan, block)
+            else:
+                # 简单推送计划无 block，直接回退该 item
+                item.checkin_status = "pending"
+
+    pending = [it for it in plan.items if it.checkin_status != "done"]
+    plan.status = "pending" if pending else "completed"
     return plan.status
 
 
@@ -406,13 +551,14 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
     plan = db.get(TrainingPlan, record.plan_id) if record.plan_id else None
     db.delete(record)
     db.flush()
-    plan_status = _sync_plan_after_record_change(db, plan)
+    plan_status = _sync_plan_after_record_change(db, plan, deleted_record=record)
     db.commit()
     return {"deleted": True, "plan_status": plan_status}
 
 
 def get_progress(db: Session, child_user_id: int) -> dict:
     assessment = get_latest_assessment(db, child_user_id)
+    has_assessment = bool(assessment and assessment.talent_code)
     total = db.scalar(
         select(func.count())
         .select_from(TrainingRecord)
@@ -422,8 +568,12 @@ def get_progress(db: Session, child_user_id: int) -> dict:
     return {
         "total_checkins": total,
         "content_index": today_plan.content_index if today_plan else 0,
-        "talent_code": assessment.talent_code if assessment else None,
-        "talent_tag": assessment.talent_tag if assessment else None,
+        "talent_code": assessment.talent_code if has_assessment else None,
+        "talent_tag": assessment.talent_tag if has_assessment else None,
+        "talent_primary": assessment.talent_primary if has_assessment else None,
+        "assessment_id": assessment.id if has_assessment else None,
+        "has_assessment": has_assessment,
+        "needs_assessment": not has_assessment,
         "today_completed": bool(today_plan and today_plan.status == "completed"),
     }
 

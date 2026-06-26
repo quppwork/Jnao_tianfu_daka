@@ -12,7 +12,7 @@
 
       <text class="nav-title">学科答疑</text>
 
-      <view class="nav-spacer"></view>
+      <view class="nav-history" @tap="openSessionSheet"><text>历史</text></view>
 
     </view>
 
@@ -34,7 +34,7 @@
 
       >
 
-        <text>{{ s }}</text>
+        <text>{{ subjectEmoji[s] || '' }} {{ s }}</text>
 
       </view>
 
@@ -70,7 +70,7 @@
 
         <view v-if="m.role !== 'user'" class="msg-avatar ai">
 
-          <text>宇</text>
+          <image class="avatar-img" src="/static/teacher-avatar.png" mode="aspectFill" />
 
         </view>
 
@@ -94,6 +94,8 @@
 
           <view v-else class="bubble-ai">
 
+            <text class="bubble-sender">张宇老师</text>
+
             <text class="bubble-text">{{ m.text }}</text>
 
           </view>
@@ -114,7 +116,7 @@
 
       <view v-if="loading" class="msg-row msg-ai">
 
-        <view class="msg-avatar ai"><text>宇</text></view>
+        <view class="msg-avatar ai"><image class="avatar-img" src="/static/teacher-avatar.png" mode="aspectFill" /></view>
 
         <view class="msg-body">
 
@@ -284,6 +286,35 @@
 
     </view>
 
+    <view v-if="showSessionSheet" class="sheet-mask" @tap="closeSessionSheet">
+      <view class="sheet-panel session-panel" @tap.stop>
+        <text class="sheet-title">对话历史</text>
+        <view class="session-new" @tap="startNewSession"><text>＋ 新建对话</text></view>
+        <scroll-view class="session-list" scroll-y>
+          <view v-for="s in sessionList" :key="s.id" class="session-row" :class="{ active: s.id === qaSessionId }" @tap="switchSession(s.id)">
+            <view class="session-info">
+              <text class="session-title">{{ s.title || '新对话' }}</text>
+              <text class="session-meta">{{ s.subject || '通用' }} · {{ formatSessionTime(s.created_at) }}</text>
+            </view>
+            <text class="session-del" @tap.stop="removeSession(s.id)">✕</text>
+          </view>
+          <text v-if="!sessionList.length" class="session-empty">暂无历史，开始新对话吧</text>
+        </scroll-view>
+        <view class="sheet-cancel" @tap="closeSessionSheet"><text>关闭</text></view>
+      </view>
+    </view>
+
+    <view v-if="deleteTargetId" class="delete-confirm-mask" @tap="cancelDeleteSession">
+      <view class="delete-confirm-card" @tap.stop>
+        <text class="delete-confirm-title">删除对话</text>
+        <text class="delete-confirm-desc">确定删除这条对话记录？删除后无法恢复。</text>
+        <view class="delete-confirm-actions">
+          <view class="delete-btn cancel" @tap="cancelDeleteSession"><text>取消</text></view>
+          <view class="delete-btn danger" @tap="confirmDeleteSession"><text>{{ deleteSubmitting ? '删除中...' : '删除' }}</text></view>
+        </view>
+      </view>
+    </view>
+
   </view>
 
 </template>
@@ -298,6 +329,12 @@ import {
 
   ensureChildUser,
 
+  fetchQaSessions,
+
+  createQaSession,
+
+  deleteQaSession,
+
   fetchQaSession,
 
   resolveQaImageUrl,
@@ -311,6 +348,10 @@ import {
   transcribeVoicePath,
 
   updateLearnerProfile,
+
+  fetchProfile,
+
+  gradeToSchoolStage,
 
 } from '@/utils/userApi.js'
 
@@ -330,6 +371,7 @@ const QA_VOICE_ENABLED = false
 
 
 const subjects = ['数学', '语文', '英语', '科学']
+const subjectEmoji = { 数学: '📐', 语文: '📖', 英语: '🔤', 科学: '🔬' }
 
 const subject = ref('数学')
 
@@ -352,6 +394,14 @@ const showImageSheet = ref(false)
 const pickingImage = ref(false)
 
 const showWebcam = ref(false)
+
+const showSessionSheet = ref(false)
+
+const sessionList = ref([])
+
+const deleteTargetId = ref(null)
+
+const deleteSubmitting = ref(false)
 
 const isDesktop = ref(false)
 
@@ -384,6 +434,8 @@ const messages = ref([
   { role: 'assistant', text: '你好！我是张宇老师 ✨ 可以拍照发题或打字提问～' },
 
 ])
+
+let qaLearnerDefaultApplied = false
 
 
 
@@ -655,17 +707,33 @@ function initBrowserSpeech() {
 
 
 
-async function ensureLearnerProfile(uid) {
+async function ensureLearnerProfile(uid, profileData = null) {
 
   try {
 
-    const key = 'jnao_learner_profile_set'
+    const profile = profileData || await fetchProfile(uid)
 
-    if (localStorage.getItem(key)) return
+    const grade = profile.profile_json?.grade
+
+    if (grade) {
+
+      await updateLearnerProfile(uid, {
+
+        grade,
+
+        school_stage: gradeToSchoolStage(grade),
+
+      })
+
+      return
+
+    }
+
+    if (qaLearnerDefaultApplied) return
 
     await updateLearnerProfile(uid, { grade: '四年级', age: 10, school_stage: 'primary_high' })
 
-    localStorage.setItem(key, '1')
+    qaLearnerDefaultApplied = true
 
   } catch (e) { /* ignore */ }
 
@@ -673,39 +741,231 @@ async function ensureLearnerProfile(uid) {
 
 
 
-async function loadSession() {
+const DEFAULT_GREETING = { role: 'assistant', text: '你好！我是张宇老师 ✨ 可以拍照发题或打字提问～' }
+
+
+
+function mapSessionMessages(data, uid) {
+
+  if (!data.messages?.length) return [DEFAULT_GREETING]
+
+  return data.messages.map(m => ({
+
+    role: m.role === 'user' ? 'user' : 'assistant',
+
+    text: m.content,
+
+    imageUrl: resolveQaImageUrl(m.image_url, uid) || null,
+
+  }))
+
+}
+
+
+
+async function loadSessionList() {
 
   try {
 
     const uid = await ensureChildUser()
 
-    await ensureLearnerProfile(uid)
+    sessionList.value = await fetchQaSessions(uid)
 
-    const sessions = await fetch(`/api/qa/sessions?user_id=${uid}`).then(r => r.json())
+  } catch (e) {
 
-    const latest = sessions.items?.[0]
+    sessionList.value = []
 
-    if (!latest) return
+  }
 
-    qaSessionId.value = latest.id
+}
 
-    const data = await fetchQaSession(uid, latest.id)
 
-    if (data.messages?.length) {
 
-      messages.value = data.messages.map(m => ({
+async function loadSession(sessionId = null) {
 
-        role: m.role === 'user' ? 'user' : 'assistant',
+  try {
 
-        text: m.content,
+    const uid = await ensureChildUser()
 
-        imageUrl: resolveQaImageUrl(m.image_url, uid) || null,
+    const profile = await fetchProfile(uid)
 
-      }))
+    await ensureLearnerProfile(uid, profile)
+
+    await loadSessionList()
+
+    let sid = sessionId
+
+    if (!sid) {
+
+      const latest = sessionList.value[0]
+
+      if (!latest) return
+
+      sid = latest.id
 
     }
 
+    qaSessionId.value = sid
+
+    const data = await fetchQaSession(uid, sid)
+
+    messages.value = mapSessionMessages(data, uid)
+
   } catch (e) { /* 新用户 */ }
+
+}
+
+
+
+function formatSessionTime(iso) {
+
+  if (!iso) return ''
+
+  const d = new Date(iso)
+
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+
+}
+
+
+
+function openSessionSheet() {
+
+  loadSessionList()
+
+  showSessionSheet.value = true
+
+}
+
+
+
+function closeSessionSheet() {
+
+  showSessionSheet.value = false
+
+}
+
+
+
+async function startNewSession() {
+
+  try {
+
+    const uid = await ensureChildUser()
+
+    const data = await createQaSession(uid, subject.value)
+
+    qaSessionId.value = data.id
+
+    messages.value = [DEFAULT_GREETING]
+
+    await loadSessionList()
+
+    closeSessionSheet()
+
+  } catch (e) {
+
+    uni.showToast({ title: '新建失败', icon: 'none' })
+
+  }
+
+}
+
+
+
+async function switchSession(sessionId) {
+
+  if (sessionId === qaSessionId.value) {
+
+    closeSessionSheet()
+
+    return
+
+  }
+
+  try {
+
+    const uid = await ensureChildUser()
+
+    qaSessionId.value = sessionId
+
+    const data = await fetchQaSession(uid, sessionId)
+
+    messages.value = mapSessionMessages(data, uid)
+
+    closeSessionSheet()
+
+    await nextTick()
+
+    scrollChat()
+
+  } catch (e) {
+
+    uni.showToast({ title: '加载失败', icon: 'none' })
+
+  }
+
+}
+
+
+
+function removeSession(sessionId) {
+
+  deleteTargetId.value = sessionId
+
+}
+
+
+
+function cancelDeleteSession() {
+
+  if (deleteSubmitting.value) return
+
+  deleteTargetId.value = null
+
+}
+
+
+
+async function confirmDeleteSession() {
+
+  const sessionId = deleteTargetId.value
+
+  if (!sessionId || deleteSubmitting.value) return
+
+  deleteSubmitting.value = true
+
+  try {
+
+    const uid = await ensureChildUser()
+
+    await deleteQaSession(uid, sessionId)
+
+    if (qaSessionId.value === sessionId) {
+
+      qaSessionId.value = null
+
+      messages.value = [DEFAULT_GREETING]
+
+    }
+
+    deleteTargetId.value = null
+
+    await loadSessionList()
+
+    if (!sessionList.value.length) closeSessionSheet()
+
+    uni.showToast({ title: '已删除', icon: 'none' })
+
+  } catch (e) {
+
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+
+  }
+
+  deleteSubmitting.value = false
 
 }
 
@@ -1191,6 +1451,8 @@ function scrollChat() {
 
 onMounted(async () => {
 
+  try { localStorage.removeItem('jnao_learner_profile_set') } catch (_) {}
+
   isDesktop.value = !isMobileH5()
 
   if (QA_VOICE_ENABLED) {
@@ -1249,7 +1511,7 @@ onBeforeUnmount(() => {
 
   margin: 0 auto;
 
-  background: #f7f8fa;
+  background: var(--bg);
 
   font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif;
 
@@ -1257,7 +1519,7 @@ onBeforeUnmount(() => {
 
   flex-direction: column;
 
-  color: #1a1a2e;
+  color: var(--text);
 
 }
 
@@ -1271,9 +1533,9 @@ onBeforeUnmount(() => {
 
   padding: 12px 16px;
 
-  background: #fff;
+  background: var(--bg-card);
 
-  border-bottom: 1px solid #e8eaed;
+  border-bottom: 1px solid var(--border);
 
   flex-shrink: 0;
 
@@ -1301,9 +1563,58 @@ onBeforeUnmount(() => {
 
 .nav-back:active { background: #f3f4f6; }
 
-.nav-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; color: #1a1a2e; }
+.nav-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; color: var(--text); }
 
 .nav-spacer { width: 36px; }
+.nav-history { padding: 6px 12px; border-radius: 999px; background: var(--accent-bg); border: 1px solid rgba(88,166,255,0.2); cursor: pointer; }
+.nav-history text { color: var(--accent); font-size: 13px; font-weight: 600; }
+.session-panel { max-height: 70vh; }
+.session-new { text-align: center; padding: 10px; margin-bottom: 8px; border: 1px dashed var(--border); border-radius: 10px; cursor: pointer; }
+.session-new text { color: var(--accent); font-size: 13px; font-weight: 600; }
+.session-list { max-height: 45vh; }
+.session-row { display: flex; align-items: center; gap: 8px; padding: 10px 8px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.session-row.active { background: var(--accent-bg); border-radius: 8px; }
+.session-info { flex: 1; min-width: 0; }
+.session-title { color: var(--text); font-size: 13px; font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-meta { color: var(--text-dim); font-size: 11px; display: block; margin-top: 2px; }
+.session-del { color: #f85149; font-size: 14px; padding: 0 4px; flex-shrink: 0; }
+.session-empty { color: var(--text-dim); font-size: 12px; text-align: center; padding: 16px 0; display: block; }
+
+.delete-confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.delete-confirm-card {
+  width: 100%;
+  max-width: 300px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 20px 18px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.delete-confirm-title { color: var(--text); font-size: 16px; font-weight: 700; display: block; text-align: center; margin-bottom: 8px; }
+
+.delete-confirm-desc { color: var(--text-dim); font-size: 13px; line-height: 1.5; display: block; text-align: center; margin-bottom: 18px; }
+
+.delete-confirm-actions { display: flex; gap: 10px; }
+
+.delete-btn { flex: 1; padding: 11px 0; border-radius: 10px; text-align: center; cursor: pointer; }
+
+.delete-btn.cancel { background: var(--bg-input); border: 1px solid var(--border); }
+
+.delete-btn.cancel text { color: var(--text-dim); font-size: 14px; }
+
+.delete-btn.danger { background: #ef4444; }
+
+.delete-btn.danger text { color: #fff; font-size: 14px; font-weight: 600; }
 
 
 
@@ -1313,11 +1624,11 @@ onBeforeUnmount(() => {
 
   gap: 8px;
 
-  padding: 10px 16px;
+  padding: 10px 16px 12px;
 
-  background: #fff;
+  background: var(--bg-card);
 
-  border-bottom: 1px solid #e8eaed;
+  border-bottom: 1px solid var(--border);
 
   flex-shrink: 0;
 
@@ -1327,33 +1638,35 @@ onBeforeUnmount(() => {
 
 .subject-chip {
 
-  padding: 6px 14px;
+  padding: 8px 16px;
 
   border-radius: 999px;
 
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
 
-  background: #fff;
+  background: var(--bg-input);
 
   cursor: pointer;
 
   flex-shrink: 0;
 
-  transition: all 0.15s;
+  transition: all 0.18s cubic-bezier(0.22,0.61,0.36,1);
 
 }
 
-.subject-chip text { font-size: 13px; color: #4b5563; }
+.subject-chip text { font-size: 13px; color: var(--text-dim); font-weight: 500; }
 
 .subject-chip.active {
 
-  border-color: #2563eb;
+  border-color: var(--accent);
 
-  background: rgba(37, 99, 235, 0.08);
+  background: var(--accent-bg);
+
+  box-shadow: 0 2px 8px var(--mic-shadow);
 
 }
 
-.subject-chip.active text { color: #2563eb; font-weight: 500; }
+.subject-chip.active text { color: var(--accent); font-weight: 600; }
 
 
 
@@ -1365,7 +1678,7 @@ onBeforeUnmount(() => {
 
   padding: 16px;
 
-  background: #fff;
+  background: var(--chat-surface);
 
   scrollbar-width: none;
 
@@ -1413,9 +1726,9 @@ onBeforeUnmount(() => {
 
 .msg-avatar {
 
-  width: 32px;
+  width: 36px;
 
-  height: 32px;
+  height: 36px;
 
   border-radius: 50%;
 
@@ -1427,27 +1740,31 @@ onBeforeUnmount(() => {
 
   justify-content: center;
 
-  font-size: 12px;
-
-  font-weight: 600;
+  overflow: hidden;
 
 }
 
 .msg-avatar.ai {
 
-  background: linear-gradient(135deg, #dbeafe, #eff6ff);
+  border: 2px solid var(--border);
 
-  color: #2563eb;
-
-  border: 1px solid rgba(37, 99, 235, 0.15);
+  box-shadow: var(--bubble-shadow);
 
 }
 
+.avatar-img { width: 100%; height: 100%; object-fit: cover; }
+
 .msg-avatar.user {
 
-  background: #f3f4f6;
+  background: var(--accent-bg);
 
-  color: #6b7280;
+  color: var(--accent);
+
+  font-size: 12px;
+
+  font-weight: 700;
+
+  border: 1px solid var(--border);
 
 }
 
@@ -1467,7 +1784,7 @@ onBeforeUnmount(() => {
 
 .bubble-user {
 
-  background: #2563eb;
+  background: linear-gradient(135deg, var(--accent), #3b82f6);
 
   color: #fff;
 
@@ -1475,13 +1792,13 @@ onBeforeUnmount(() => {
 
   border-bottom-right-radius: 6px;
 
-  padding: 10px 14px;
+  padding: 11px 14px;
 
-  font-size: 15px;
+  font-size: 14px;
 
   line-height: 1.65;
 
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+  box-shadow: var(--bubble-shadow);
 
   word-break: break-word;
 
@@ -1489,21 +1806,45 @@ onBeforeUnmount(() => {
 
 .bubble-user .bubble-text { color: #fff; white-space: pre-wrap; }
 
+.bubble-sender {
 
+  display: block;
 
-.bubble-ai {
+  font-size: 11px;
 
-  font-size: 15px;
+  color: var(--text-dim);
 
-  line-height: 1.75;
+  margin-bottom: 4px;
 
-  color: #1f2937;
-
-  word-break: break-word;
+  font-weight: 500;
 
 }
 
-.bubble-ai .bubble-text { white-space: pre-wrap; }
+.bubble-ai {
+
+  background: var(--chat-ai-bg);
+
+  border: 1px solid rgba(88,166,255,0.12);
+
+  border-radius: 18px;
+
+  border-bottom-left-radius: 6px;
+
+  padding: 10px 14px;
+
+  font-size: 14px;
+
+  line-height: 1.7;
+
+  color: var(--text);
+
+  word-break: break-word;
+
+  box-shadow: var(--bubble-shadow);
+
+}
+
+.bubble-ai .bubble-text { white-space: pre-wrap; color: var(--text); }
 
 
 
@@ -1617,9 +1958,11 @@ onBeforeUnmount(() => {
 
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
 
-  background: #f7f8fa;
+  background: var(--bg-card);
 
-  border-top: 1px solid #e8eaed;
+  border-top: 1px solid var(--border);
+
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.04);
 
 }
 
@@ -1715,15 +2058,15 @@ onBeforeUnmount(() => {
 
   gap: 8px;
 
-  background: #fff;
+  background: var(--bg-card);
 
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
 
   border-radius: 20px;
 
   padding: 12px 14px;
 
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--bubble-shadow);
 
   transition: border-color 0.2s, box-shadow 0.2s;
 
@@ -1731,9 +2074,9 @@ onBeforeUnmount(() => {
 
 .input-box.focused {
 
-  border-color: #2563eb;
+  border-color: var(--accent);
 
-  box-shadow: 0 2px 16px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 2px 16px var(--mic-shadow);
 
 }
 
@@ -1751,7 +2094,7 @@ onBeforeUnmount(() => {
 
   line-height: 1.5;
 
-  color: #1a1a2e;
+  color: var(--text);
 
   background: transparent;
 
@@ -1759,7 +2102,7 @@ onBeforeUnmount(() => {
 
 }
 
-.chat-input::placeholder { color: #9ca3af; }
+.chat-input::placeholder { color: var(--text-hint); }
 
 
 

@@ -1,4 +1,4 @@
-"""阿里云 OSS — 列举对象、生成签名播放 URL"""
+"""阿里云 OSS — 只读：列举已有对象、生成签名播放 URL（不向 OSS 写入用户数据）"""
 
 from __future__ import annotations
 
