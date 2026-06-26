@@ -111,7 +111,7 @@
       >
         <template v-if="submittedCards.length">
           <text class="summary-label">📝 打卡训练总结</text>
-          <text class="summary-text">今日已打卡 {{ submittedCards.length }} 项</text>
+          <text class="summary-text">今日已打卡 {{ submittedCards.length }} 项 · {{ checkedPhaseCount }} 个阶段</text>
           <text class="summary-more">点击管理打卡 ›</text>
           <view class="summary-attitude">
             <text class="sa-label">配合度</text>
@@ -181,7 +181,7 @@
           <view class="dev-actions">
             <view class="dev-action" @click="devResetTimer"><text>⏱ 重置计时</text></view>
             <view class="dev-action" @click="devSimulateExpire"><text>⏰ 模拟结束</text></view>
-            <view class="dev-action" @click="devUnlockB"><text>🔓 解锁 B</text></view>
+            <view class="dev-action" @click="devUnlockNextPhase"><text>🔓 解锁下阶段</text></view>
           </view>
           <view class="dev-actions">
             <view class="dev-action dev-action-danger" @click="devClearAllHistory"><text>🗑 清空历史</text></view>
@@ -191,56 +191,65 @@
         </view>
       </view>
 
-      <!-- Training A -->
-      <view id="phase-block-A" class="phase-section">
-      <text class="section-title">训练 A</text>
+      <!-- 训练阶段（动态 A/B/C…，依据今日方案） -->
+      <template v-for="(phase, pi) in planPhases" :key="phase.block">
+        <view v-if="pi > 0" class="divider"></view>
+        <view :id="'phase-block-' + phase.block" class="phase-section">
+          <text class="section-title" :class="{ dim: !phase.unlocked }">训练 {{ phase.block }}{{ phase.unlocked ? '' : ' 🔒' }}</text>
 
-      <view class="media-block" :class="{ locked: isMediaLocked }">
-        <view v-if="isMediaLocked" class="media-lock-overlay">
-          <text class="media-lock-text">{{ mediaLockText }}</text>
+          <view class="media-block" :class="{ locked: isPhaseMediaLocked(phase) }">
+            <view v-if="isPhaseMediaLocked(phase)" class="media-lock-overlay">
+              <text class="media-lock-text">{{ phaseMediaLockText(phase) }}</text>
+            </view>
+
+            <template v-if="phase.items.length">
+              <view
+                v-for="(item, idx) in phase.items"
+                :key="item.id || idx"
+                class="step"
+                :class="{
+                  'step-preview-locked': !phase.unlocked,
+                  'step-locked': phase.unlocked && isMediaLocked,
+                  'step-watched': phase.unlocked && watchedItemIds.has(item.id),
+                }"
+                @click="openPhaseMediaItem(item, phase)"
+              >
+                <view class="step-num" :class="{ 'step-num-done': watchedItemIds.has(item.id), dim: !phase.unlocked }">{{ idx + 1 }}</view>
+                <view class="step-content">
+                  <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">{{ itemLabel(item) }}</text>
+                  <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</view>
+                  <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">{{ itemStepHint(item, phase) }}</text>
+                </view>
+              </view>
+            </template>
+            <view v-else class="step dim-step">
+              <view class="step-num dim">1</view>
+              <view class="step-content">
+                <text class="step-label dim-text">训练项</text>
+                <view class="step-box dim-box">暂无内容</view>
+                <text class="step-time dim-text">请先生成今日方案</text>
+              </view>
+            </view>
+          </view>
+
+          <text class="lock-tip">{{ phaseTip(phase) }}</text>
+
+          <view class="checkin-block" :class="{ locked: !canPhaseCheckin(phase) }">
+            <view v-if="!canPhaseCheckin(phase)" class="checkin-lock-overlay">
+              <text class="checkin-lock-text">{{ phaseCheckinLockText(phase) }}</text>
+            </view>
+            <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
+              <text>{{ phase.allDone ? '✅ 训练 ' + phase.block + ' 已打卡' : '✅ 训练 ' + phase.block + ' 打卡' }}</text>
+            </view>
+          </view>
         </view>
+      </template>
 
-      <view class="step" :class="{ 'step-locked': isMediaLocked, 'step-watched': watchedItemIds.has(blockAVideo?.id) }" @click="openMediaItem(blockAVideo)">
-        <view class="step-num" :class="{ 'step-num-done': watchedItemIds.has(blockAVideo?.id) }">1</view>
-        <view class="step-content">
-          <text class="step-label">视频训练</text>
-          <view class="step-box">🎬 {{ blockAVideo?.title || '五者天赋视频' }}</view>
-          <text class="step-time">{{ isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : watchedItemIds.has(blockAVideo?.id) ? '✅ 已观看' : '▶ 点击播放' }}</text>
-        </view>
-      </view>
-
-      <view
-        v-for="(item, idx) in blockAAudios"
-        :key="item.id || idx"
-        class="step"
-        :class="{ 'step-locked': isMediaLocked, 'step-watched': watchedItemIds.has(item.id) }"
-        @click="openMediaItem(item)"
-      >
-        <view class="step-num" :class="{ 'step-num-done': watchedItemIds.has(item.id) }">{{ idx + 2 }}</view>
-        <view class="step-content">
-          <text class="step-label">音频训练</text>
-          <view class="step-box">{{ item.title || '训练音频' }}</view>
-          <text class="step-time">{{ item.audio_url ? (isMediaLocked && timerPhase === 'expired' ? '🔒 时长已到' : watchedItemIds.has(item.id) ? '✅ 已观看' : `▶ 约 ${item.duration_min || '?'} 分钟`) : '暂无推荐音频' }}</text>
-        </view>
-      </view>
-
-      </view>
-
-      <view class="checkin-block" :class="{ locked: isCheckinLocked }">
-        <view v-if="isCheckinLocked" class="checkin-lock-overlay">
-          <text class="checkin-lock-text">{{ checkinLockText }}</text>
-        </view>
-
-      <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker">
-        <text>✅ 训练 A 打卡</text>
-      </view>
-      </view>
-
-      <!-- 打卡弹窗 -->
-      <view v-if="showPicker" class="picker-overlay" @click="closePicker">
+      <!-- 打卡弹窗（各阶段共用） -->
+      <view v-if="showPicker && activePickerBlock" class="picker-overlay" @click="closePicker">
         <view class="picker-card checkin-modal" @click.stop>
           <view class="modal-header">
-            <text class="modal-title">训练 A 打卡</text>
+            <text class="modal-title">训练 {{ activePickerBlock }} 打卡</text>
             <view class="modal-close" @click="closePicker">✕</view>
           </view>
 
@@ -252,19 +261,19 @@
               <text class="pph-dot">◆</text>
             </view>
             <view class="picker-grid">
-              <view v-for="(item, ai) in abilities" :key="item" class="picker-item" :class="{ active: hasCard(item), 'ability-spark': sparkAbi === ai }" @click="toggleCard(item, ai)">
+              <view v-for="(item, ai) in abilities" :key="item" class="picker-item" :class="{ active: hasPickerCard(item), 'ability-spark': sparkAbi === ai }" @click="togglePickerCard(item, ai)">
                 <text class="pi-text">{{ item }}</text>
               </view>
             </view>
           </view>
 
           <!-- 已选卡片列表 -->
-          <TransitionGroup v-if="cards.length" name="card">
-            <view v-for="(card, idx) in cards" :key="card.name" class="form-card">
+          <TransitionGroup v-if="pickerCards.length" name="card">
+            <view v-for="(card, idx) in pickerCards" :key="card.name + '-' + idx" class="form-card">
             <view class="scan-line"></view>
             <view class="form-header">
               <text class="form-title">{{ card.name }} — 训练记录</text>
-              <view class="form-del" @click="removeCard(idx)">✕</view>
+              <view class="form-del" @click="removePickerCard(idx)">✕</view>
             </view>
 
             <template v-if="card.name === '极速运算'">
@@ -293,12 +302,12 @@
               <view class="form-row">
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
-                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
                       <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                      <text class="file-del" @click="removePickerFile(idx, fi)">✕</text>
                     </view>
                   </view>
                 </view>
@@ -347,12 +356,12 @@
               <view class="form-row">
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
-                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
                       <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                      <text class="file-del" @click="removePickerFile(idx, fi)">✕</text>
                     </view>
                   </view>
                 </view>
@@ -389,12 +398,12 @@
               <view class="form-row">
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
-                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
                       <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                      <text class="file-del" @click="removePickerFile(idx, fi)">✕</text>
                     </view>
                   </view>
                 </view>
@@ -420,13 +429,13 @@
               <view class="form-row">
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
-                  <view class="file-btn" @click="pickFile(idx)"><text>📷 选择文件</text></view>
+                  <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
                   <text class="file-hint" v-if="!card.files.length">支持图片和视频</text>
                   <view v-if="card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
                       <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                      <text class="file-del" @click="removeFile(idx, fi)">✕</text>
+                      <text class="file-del" @click="removePickerFile(idx, fi)">✕</text>
                     </view>
                   </view>
                 </view>
@@ -440,7 +449,7 @@
           </TransitionGroup>
 
           <view class="btn-checkin" @click="submitFormWithAnim" style="margin-top:8px;">
-            <text>{{ checkinSubmitting ? '提交中...' : '✅ 提交打卡 ' + (cards.length ? '(' + cards.length + ')' : '') }}</text>
+            <text>{{ checkinSubmitting ? '提交中...' : '✅ 提交打卡 ' + (pickerCards.length ? '(' + pickerCards.length + ')' : '') }}</text>
           </view>
         </view>
       </view>
@@ -465,136 +474,12 @@
           <view v-if="checkinHistory.length" class="history-list">
             <view v-for="(r, idx) in checkinHistory" :key="r.id || idx" class="history-row">
               <text class="hr-date">{{ formatHistoryDate(r.created_at) }}</text>
-              <text class="hr-meta">{{ r.ability_type || '训练' }} · {{ r.time_spent || 0 }}分钟</text>
+              <text class="hr-meta">{{ r.ability_type || '训练' }}{{ r.attitude_pct != null ? ' · 配合度' + r.attitude_pct + '%' : '' }}</text>
               <text v-if="r.note" class="hr-note">{{ r.note }}</text>
             </view>
           </view>
           <text v-else class="history-empty">暂无打卡记录</text>
           <view class="picker-close" @click="showHistory = false"><text>关闭</text></view>
-        </view>
-      </view>
-
-      </view>
-
-      <!-- Divider -->
-      <view class="divider"></view>
-
-      <!-- Training B：内容始终展示，播放需完成 A 打卡 -->
-      <view id="phase-block-B" class="b-section phase-section">
-        <text class="section-title" :class="{ dim: !bUnlocked }">训练 B {{ !bUnlocked ? '🔒' : '' }}</text>
-
-        <template v-if="blockBItems.length">
-          <view
-            v-for="(item, idx) in blockBItems"
-            :key="item.id || idx"
-            class="step"
-            :class="{
-              'step-preview-locked': !bUnlocked,
-              'step-locked': bUnlocked && isMediaLocked,
-            }"
-            @click="openBlockBItem(item)"
-          >
-            <view class="step-num" :class="{ dim: !bUnlocked }">{{ idx + 1 }}</view>
-            <view class="step-content">
-              <text class="step-label" :class="{ 'dim-text': !bUnlocked }">音频训练</text>
-              <view class="step-box" :class="{ 'dim-box': !bUnlocked }">🎧 {{ item.title || '训练音频' }}</view>
-              <text class="step-time" :class="{ 'dim-text': !bUnlocked }">
-                {{ !bUnlocked ? '🔒 完成 A 打卡后可播放' : (item.audio_url ? `▶ 约 ${item.duration_min || '?'} 分钟` : '暂无音频') }}
-              </text>
-            </view>
-          </view>
-        </template>
-        <template v-else>
-          <view class="step dim-step">
-            <view class="step-num dim">1</view>
-            <view class="step-content">
-              <text class="step-label dim-text">音频训练</text>
-              <view class="step-box dim-box">🎧 训练用音频</view>
-              <text class="step-time dim-text">{{ blockBEmptyHint }}</text>
-            </view>
-          </view>
-        </template>
-
-        <text class="lock-tip">{{ bTip }}</text>
-
-        <!-- 训练 B 打卡 -->
-        <view class="checkin-block" :class="{ locked: !bUnlocked || isCheckinLocked }">
-          <view v-if="!bUnlocked || isCheckinLocked" class="checkin-lock-overlay">
-            <text class="checkin-lock-text">{{ !bUnlocked ? '请先完成训练 A 打卡' : checkinLockText }}</text>
-          </view>
-          <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPickerB">
-            <text>✅ 训练 B 打卡</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 训练 B 打卡弹窗 -->
-      <view v-if="showPickerB" class="picker-overlay" @click="closePickerB">
-        <view class="picker-card checkin-modal" @click.stop>
-          <view class="modal-header">
-            <text class="modal-title">训练 B 打卡</text>
-            <view class="modal-close" @click="closePickerB">✕</view>
-          </view>
-
-          <view class="picker-panel" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
-            <view class="picker-panel-header">
-              <text class="pph-dot">◆</text>
-              <text class="pph-title">选择训练能力</text>
-              <text class="pph-dot">◆</text>
-            </view>
-            <view class="picker-grid">
-              <view v-for="item in abilities" :key="item" class="picker-item" :class="{ active: hasCardB(item) }" @click="toggleCardB(item)">
-                <text class="pi-text">{{ item }}</text>
-              </view>
-            </view>
-          </view>
-
-          <TransitionGroup v-if="cardsB.length" name="card">
-            <view v-for="(card, idx) in cardsB" :key="card.name" class="form-card">
-            <view class="scan-line"></view>
-            <view class="form-header">
-              <text class="form-title">{{ card.name }} — 训练记录</text>
-              <view class="form-del" @click="removeCardB(idx)">✕</view>
-            </view>
-            <template v-if="card.name === '极速运算'">
-              <view class="form-row"><text class="form-label">时间</text><input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" /></view>
-              <view class="form-row"><text class="form-label">内容</text>
-                <view class="form-tags">
-                  <text class="ftag" :class="{ on: card.tag === '加减法' }" @click="card.tag = '加减法'">加减法</text>
-                  <text class="ftag" :class="{ on: card.tag === '乘除法' }" @click="card.tag = '乘除法'">乘除法</text>
-                  <text class="ftag" :class="{ on: card.tag === '混合运算' }" @click="card.tag = '混合运算'">混合运算</text>
-                  <text class="ftag" :class="{ on: card.tag === '口算' }" @click="card.tag = '口算'">口算</text>
-                </view>
-              </view>
-              <view class="form-row"><text class="form-label">结果</text>
-                <view class="form-inline"><input class="form-input short" v-model="card.count" placeholder="题数" type="number" /><text class="form-unit">题</text><input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" /><text class="form-unit">%</text></view>
-              </view>
-            </template>
-            <template v-else>
-              <view class="form-row"><text class="form-label">时间</text><input class="form-input" v-model="card.time" placeholder="训练时长/分钟" /></view>
-              <view class="form-row"><text class="form-label">内容</text><textarea class="form-textarea" v-model="card.content" placeholder="训练了什么内容？" /></view>
-              <view class="form-row"><text class="form-label">结果</text><textarea class="form-textarea" v-model="card.result" placeholder="训练效果如何？" /></view>
-            </template>
-            <view class="form-row"><text class="form-label">图片/视频</text>
-              <view class="form-file-wrap">
-                <view class="file-btn" @click="pickFileB(idx)"><text>📷 选择文件</text></view>
-                <text class="file-hint" v-if="!card.files.length">支持图片和视频</text>
-                <view v-if="card.files.length" class="file-previews">
-                  <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
-                    <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
-                    <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                    <text class="file-del" @click="removeFileB(idx, fi)">✕</text>
-                  </view>
-                </view>
-              </view>
-            </view>
-            <view class="form-row"><text class="form-label">备注</text><textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" /></view>
-          </view>
-          </TransitionGroup>
-
-          <view class="btn-checkin" @click="submitFormB" style="margin-top:8px;">
-            <text>{{ checkinSubmittingB ? '提交中...' : '✅ 提交打卡 ' + (cardsB.length ? '(' + cardsB.length + ')' : '') }}</text>
-          </view>
         </view>
       </view>
 
@@ -766,7 +651,6 @@ function startTrainingTimer() {
       todayPlan.value = result.data
       applyPlanMedia(result.data)
       aiPlanText.value = result.data.report_text || ''
-      syncBlockBTip()
       nextTick(() => syncPhaseExpand())
     } catch (e) {
       uni.showToast({ title: e.message || '排课失败', icon: 'none' })
@@ -851,27 +735,27 @@ function formatHistoryDate(iso) {
 
 async function setAttitude(pct) {
   summaryAttitude.value = pct
+  attitudeTouched.value = true
+  if (!primaryCheckinRecordId.value) return
   try {
     const uid = await ensureChildUser()
-    await updateTrainingCheckin(uid, todayCheckinRecordId.value, { attitude_pct: pct })
+    await updateTrainingCheckin(uid, primaryCheckinRecordId.value, { attitude_pct: pct })
   } catch (_) { /* ignore */ }
 }
 
 function resetAllLocalState() {
   devResetTimer()
-  bUnlocked.value = false
-  cards.value = []
+  pickerCards.value = []
+  activePickerBlock.value = null
   watchedItemIds.value = new Set()
   showPicker.value = false
   showSummary.value = false
   submittedCards.value = []
-  todayCheckinRecordId.value = null
-  todayCheckinRecordIdB.value = null
-  cardsB.value = []
-  showPickerB.value = false
-  attitude.value = 60
+  phaseRecordIds.value = {}
+  primaryCheckinRecordId.value = null
+  summaryAttitude.value = null
+  attitudeTouched.value = false
   closeMedia()
-  syncBlockBTip()
 }
 
 async function loadDevStatus() {
@@ -918,7 +802,7 @@ async function devGoNextDay() {
     } else {
       await loadTodayPlan()
     }
-    syncBlockBTip()
+    nextTick(() => syncPhaseExpand())
     await loadDevStatus()
     const idx = res.today?.content_index ?? res.status?.content_index ?? '?'
     uni.showToast({ title: `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
@@ -986,10 +870,17 @@ function devSimulateExpire() {
   expireTrainingTimer()
 }
 
-function devUnlockB() {
-  bUnlocked.value = true
-  bTip.value = '✅ [DEV] 训练 B 已解锁'
-  uni.showToast({ title: '训练 B 已解锁', icon: 'none' })
+function devUnlockNextPhase() {
+  if (!devMode.value) return
+  const locked = planPhases.value.find(p => !p.unlocked)
+  if (!locked) {
+    uni.showToast({ title: '所有阶段已解锁', icon: 'none' })
+    return
+  }
+  const idx = planPhases.value.indexOf(locked)
+  if (idx > 0) markPhaseDoneLocally(planPhases.value[idx - 1].block)
+  nextTick(() => syncPhaseExpand())
+  uni.showToast({ title: `已解锁训练 ${locked.block}`, icon: 'none' })
 }
 
 async function devRefreshAiPlan() {
@@ -1016,15 +907,14 @@ async function devRefreshAiPlan() {
   uni.showToast({ title: 'AI 方案已刷新', icon: 'none' })
 }
 
-const bUnlocked = ref(false)
-const bTip = ref('⚠ 训练 A 未完成，B 暂不开放')
 const showPicker = ref(false)
+const activePickerBlock = ref(null)
 const showSummary = ref(false)
 const showHistory = ref(false)
 const checkinHistory = ref([])
 const submittedCards = ref([])
-const attitude = ref(60)
-const summaryAttitude = ref(60)
+const summaryAttitude = ref(null)
+const attitudeTouched = ref(false)
 const scores = [
   { pct:100, emoji:'🔴', desc:'身体已透支，精神还要求进步' },
   { pct:80,  emoji:'🟡', desc:'能完成任务，但还有余力学习' },
@@ -1045,29 +935,23 @@ const lessonIndex = ref(1)
 const needAssessment = ref(false)
 const showAssessmentModal = ref(false)
 const todayPlan = ref(null)
-const todayCheckinRecordId = ref(null)
+const phaseRecordIds = ref({})
+const primaryCheckinRecordId = ref(null)
 const planLoading = ref(false)
 const planJustGenerated = ref(false)
 const checkinSubmitting = ref(false)
-const checkinSubmittingB = ref(false)
-const showPickerB = ref(false)
-const cardsB = ref([])
-const todayCheckinRecordIdB = ref(null)
 
 const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
+const checkedPhaseCount = computed(() => new Set(submittedCards.value.map(c => c.phaseBlock).filter(Boolean)).size)
 
-const blockAItems = computed(() => {
-  const items = todayPlan.value?.items || []
-  const tagged = items.filter(i => i.block === 'A')
-  return tagged.length ? tagged : items
-})
-const blockBItems = computed(() => (todayPlan.value?.items || []).filter(i => i.block === 'B'))
-const blockAVideo = computed(() => blockAItems.value.find(i => i.item_type === 'video' || i.video_url))
-const blockAAudios = computed(() => blockAItems.value.filter(i => i.item_type === 'audio' || (i.audio_url && !i.video_url)))
-const blockBEmptyHint = computed(() => {
-  if (todayPlan.value?.planned_minutes) return '今日 B 段暂无额外音频'
-  return '请先点击「开始训练」生成训练 B'
-})
+function getPhaseItems(block) {
+  return (todayPlan.value?.items || []).filter(i => (i.block || 'A') === block)
+}
+
+function blockForItemId(itemId) {
+  const item = todayPlan.value?.items?.find(i => i.id === itemId)
+  return item?.block || 'A'
+}
 
 function buildPhaseSubtitle(items) {
   const tags = new Set()
@@ -1081,10 +965,7 @@ function buildPhaseSubtitle(items) {
 
 function isPhaseUnlocked(block, blockOrder, items) {
   const idx = blockOrder.indexOf(block)
-  if (idx <= 0) return true // 阶段 A 始终解锁
-  // 阶段 B 沿用 bUnlocked（A 打卡提交后立即解锁），不等 checkin_status
-  // 阶段 C/D 需前一阶段全部 checkin_status === 'done'
-  if (block === 'B') return bUnlocked.value
+  if (idx <= 0) return true
   const prevBlock = blockOrder[idx - 1]
   const prevItems = items.filter(i => (i.block || 'A') === prevBlock)
   return prevItems.length > 0 && prevItems.every(i => i.checkin_status === 'done')
@@ -1188,6 +1069,65 @@ function phaseMetaText(phase) {
   return `${phase.doneCount}/${phase.totalCount} · 进行中`
 }
 
+function itemLabel(item) {
+  if (item.item_type === 'video' || item.video_url) return '视频训练'
+  if (item.item_type === 'audio' || item.audio_url) return '音频训练'
+  return '训练项'
+}
+
+function itemStepHint(item, phase) {
+  if (!phase.unlocked) {
+    const idx = planPhases.value.findIndex(p => p.block === phase.block)
+    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
+    return prev ? `🔒 完成训练 ${prev} 打卡后解锁` : '🔒 待解锁'
+  }
+  if (isMediaLocked.value && timerPhase.value === 'expired') return '🔒 时长已到'
+  if (watchedItemIds.value.has(item.id)) return '✅ 已观看'
+  if (item.video_url) return '▶ 点击播放'
+  if (item.audio_url) return `▶ 约 ${item.duration_min || '?'} 分钟`
+  return '暂无资源'
+}
+
+function isPhaseMediaLocked(phase) {
+  if (devMode.value) return false
+  if (!phase.unlocked) return true
+  return isMediaLocked.value
+}
+
+function phaseMediaLockText(phase) {
+  if (!phase.unlocked) {
+    const idx = planPhases.value.findIndex(p => p.block === phase.block)
+    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
+    return prev ? `完成训练 ${prev} 打卡后解锁` : '待解锁'
+  }
+  return mediaLockText.value
+}
+
+function canPhaseCheckin(phase) {
+  if (!phase.unlocked) return false
+  if (!devMode.value && (planLoading.value || planJustGenerated.value || timerPhase.value === 'setup')) return false
+  return true
+}
+
+function phaseCheckinLockText(phase) {
+  if (!phase.unlocked) {
+    const idx = planPhases.value.findIndex(p => p.block === phase.block)
+    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
+    return prev ? `请先完成训练 ${prev} 打卡` : '待解锁'
+  }
+  return checkinLockText.value
+}
+
+function phaseTip(phase) {
+  if (!phase.unlocked) {
+    const idx = planPhases.value.findIndex(p => p.block === phase.block)
+    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
+    return prev ? `完成训练 ${prev} 打卡后解锁本阶段` : '待解锁'
+  }
+  if (phase.allDone) return `✅ 训练 ${phase.block} 已完成`
+  return `训练 ${phase.block} 共 ${phase.totalCount} 项`
+}
+
 function scrollToPhase(block) {
   const body = document.querySelector('.body')
   const target = document.getElementById(`phase-block-${block}`)
@@ -1197,27 +1137,24 @@ function scrollToPhase(block) {
   body.scrollTo({ top: body.scrollTop + targetTop - bodyTop - 12, behavior: 'smooth' })
 }
 
-function syncBlockBTip() {
-  if (!blockBItems.value.length) {
-    bTip.value = todayPlan.value?.planned_minutes
-      ? '今日训练 B 暂无额外音频'
-      : '请先点击「开始训练」查看训练 B 内容'
+function openPhaseMediaItem(item, phase) {
+  if (!item) return
+  if (!phase.unlocked && !devMode.value) {
+    const idx = planPhases.value.findIndex(p => p.block === phase.block)
+    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
+    uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
-  if (bUnlocked.value) {
-    bTip.value = '✅ A 已完成，开始训练 B'
-  } else {
-    bTip.value = `训练 B 共 ${blockBItems.value.length} 段，内容已排好，完成 A 打卡后可播放`
-  }
+  openMediaItem(item)
 }
 
 const videoHtml = computed(() => videoSrc.value ? `<video src="${videoSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
 const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
-const cards = ref([])
+const pickerCards = ref([])
 const sparkAbi = ref(-1)
 const abilities = ['超脑阅读','影像追忆','扫描速记','极速运算','极速学习','难题专练','文科扫书','理科扫书','高效作业','天赋绘画','音乐灵感','棋类专注']
 
-function hasCard(name) { return cards.value.some(c => c.name === name) }
+function hasPickerCard(name) { return pickerCards.value.some(c => c.name === name) }
 
 function newCard(name) {
   const base = { name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] }
@@ -1230,19 +1167,19 @@ function newCard(name) {
   return base
 }
 
-function toggleCard(name, abi) {
-  const idx = cards.value.findIndex(c => c.name === name)
+function togglePickerCard(name, abi) {
+  const idx = pickerCards.value.findIndex(c => c.name === name)
   if (idx >= 0) {
-    cards.value.splice(idx, 1)
+    pickerCards.value.splice(idx, 1)
   } else {
-    cards.value.push(newCard(name))
+    pickerCards.value.push(newCard(name))
   }
   sparkAbi.value = abi
   setTimeout(() => sparkAbi.value = -1, 1500)
 }
 
-function removeCard(idx) { cards.value.splice(idx, 1) }
-function pickFile(idx) {
+function removePickerCard(idx) { pickerCards.value.splice(idx, 1) }
+function pickPickerFile(idx) {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'image/*,video/*'
@@ -1252,13 +1189,13 @@ function pickFile(idx) {
     for (let i = 0; i < files.length; i++) {
       const f = files[i]
       const url = URL.createObjectURL(f)
-      cards.value[idx].files.push({ name: f.name, url, type: f.type.startsWith('video') ? 'video' : 'image' })
+      pickerCards.value[idx].files.push({ name: f.name, url, type: f.type.startsWith('video') ? 'video' : 'image' })
     }
   }
   input.click()
 }
-function removeFile(cardIdx, fileIdx) {
-  const card = cards.value[cardIdx]
+function removePickerFile(cardIdx, fileIdx) {
+  const card = pickerCards.value[cardIdx]
   URL.revokeObjectURL(card.files[fileIdx].url)
   card.files.splice(fileIdx, 1)
 }
@@ -1281,121 +1218,155 @@ function serializeCards(list) {
     backwardTime: c.backwardTime,
     backwardAcc: c.backwardAcc,
     tool: c.tool,
+    phaseBlock: c.phaseBlock,
     fileNames: (c.files || []).map(f => f.name),
   }))
 }
 
-function applyTodayCompletedState() {
-  bUnlocked.value = true
-  // 更新本地 item 状态 → 时间轴进度前进
-  const items = todayPlan.value?.items || []
-  for (const item of items) {
-    if (item.block === 'A' || (!item.block && items.indexOf(item) === 0)) {
-      item.checkin_status = 'done'
-    }
+function markPhaseDoneLocally(block) {
+  for (const item of getPhaseItems(block)) {
+    item.checkin_status = 'done'
   }
-  syncBlockBTip()
-  // A完成 → 折叠A，展开B
-  nextTick(() => syncPhaseExpand())
+}
+
+function cardsForBlock(block) {
+  return submittedCards.value.filter(c => c.phaseBlock === block)
 }
 
 async function loadTodayCheckinRecords(uid, planId) {
   try {
-    const items = await fetchTodayCheckins(uid)
-    const record = items[0] || (await fetchTrainingHistory(uid)).find(r => r.plan_id === planId)
-    if (!record) {
-      todayCheckinRecordId.value = null
-      return
+    const records = await fetchTodayCheckins(uid)
+    const sorted = [...records].sort((a, b) => (a.id || 0) - (b.id || 0))
+    phaseRecordIds.value = {}
+    primaryCheckinRecordId.value = null
+    submittedCards.value = []
+
+    if (!sorted.length) return
+
+    for (const record of sorted) {
+      const block = blockForItemId(record.item_id)
+      phaseRecordIds.value[block] = record.id
+      if (!primaryCheckinRecordId.value) primaryCheckinRecordId.value = record.id
+
+      const cards = Array.isArray(record.cards) && record.cards.length
+        ? record.cards
+        : (record.ability_type || record.content)
+          ? [{ name: record.ability_type || '训练记录', content: record.content || '', result: record.result || '', time: '', files: [] }]
+          : []
+
+      for (const c of cards) {
+        submittedCards.value.push({
+          ...c,
+          phaseBlock: c.phaseBlock || block,
+          recordId: record.id,
+          files: [],
+        })
+      }
     }
-    todayCheckinRecordId.value = record.id
-    if (record.attitude_pct) summaryAttitude.value = record.attitude_pct
-    if (Array.isArray(record.cards) && record.cards.length) {
-      submittedCards.value = record.cards.map(c => ({ ...c, files: [] }))
-      return
-    }
-    if (record.ability_type || record.content) {
-      submittedCards.value = [{
-        name: record.ability_type || '训练记录',
-        content: record.content || '',
-        result: record.result || '',
-        time: '',
-        files: [],
-      }]
+
+    const primary = sorted.find(r => r.id === primaryCheckinRecordId.value)
+    if (primary?.attitude_pct != null) {
+      summaryAttitude.value = primary.attitude_pct
+      attitudeTouched.value = true
     }
   } catch (_) { /* ignore */ }
 }
 
-async function persistCheckinCards(cardsList, attitudePct) {
+async function persistPhaseCheckin(block, cardsList) {
   const uid = await ensureChildUser()
   const payload = {
     cards: serializeCards(cardsList),
     ability_type: cardsList.map(c => c.name).join('、'),
     content: cardsList.map(c => getCardSummary(c)).join('；'),
   }
-  if (attitudePct != null) payload.attitude_pct = attitudePct
+  if (attitudeTouched.value && summaryAttitude.value != null) {
+    const isNewPrimary = !primaryCheckinRecordId.value
+    const isPrimaryRecord = recordId && recordId === primaryCheckinRecordId.value
+    if (isNewPrimary || isPrimaryRecord) {
+      payload.attitude_pct = summaryAttitude.value
+    }
+  }
 
-  if (!todayCheckinRecordId.value) {
-    if (!todayPlan.value?.plan_id || !cardsList.length) return null
+  const recordId = phaseRecordIds.value[block]
+  if (!recordId) {
+    const firstItem = getPhaseItems(block)[0]
+    if (!todayPlan.value?.plan_id || !firstItem) throw new Error('训练方案未就绪')
     const res = await submitTrainingCheckin(uid, {
       plan_id: todayPlan.value.plan_id,
-      item_id: todayPlan.value.items?.[0]?.id,
+      item_id: firstItem.id,
       ...payload,
     })
-    todayCheckinRecordId.value = res.record_id
+    phaseRecordIds.value[block] = res.record_id
+    if (!primaryCheckinRecordId.value) primaryCheckinRecordId.value = res.record_id
     if (todayPlan.value) todayPlan.value.status = res.plan_status
+    markPhaseDoneLocally(block)
     return res
   }
 
-  if (!cardsList.length) {
-    const res = await deleteTrainingCheckin(uid, todayCheckinRecordId.value)
-    todayCheckinRecordId.value = null
-    if (todayPlan.value) todayPlan.value.status = res.plan_status || 'pending'
-    bUnlocked.value = false
-    syncBlockBTip()
-    return res
-  }
-
-  const res = await updateTrainingCheckin(uid, todayCheckinRecordId.value, payload)
+  const res = await updateTrainingCheckin(uid, recordId, payload)
   if (todayPlan.value && res.plan_status) todayPlan.value.status = res.plan_status
+  markPhaseDoneLocally(block)
   return res
 }
 
-function autoDetectAbilities() {
-  const items = blockAItems.value
-  if (!items || !items.length) return
+async function deletePhaseCheckin(block) {
+  const recordId = phaseRecordIds.value[block]
+  if (!recordId) return null
+  const uid = await ensureChildUser()
+  const res = await deleteTrainingCheckin(uid, recordId)
+  delete phaseRecordIds.value[block]
+  submittedCards.value = submittedCards.value.filter(c => c.phaseBlock !== block)
+  for (const item of getPhaseItems(block)) item.checkin_status = 'pending'
+  if (primaryCheckinRecordId.value === recordId) {
+    const remaining = Object.values(phaseRecordIds.value)
+    primaryCheckinRecordId.value = remaining.length ? Math.min(...remaining) : null
+  }
+  if (todayPlan.value) todayPlan.value.status = res.plan_status || 'pending'
+  return res
+}
+
+function autoDetectAbilities(block) {
+  const items = getPhaseItems(block)
+  if (!items.length) return
   for (const item of items) {
     const title = (item.title || item.lesson_title || '').replace(/\s+/g, '')
     if (!title) continue
     for (const ability of abilities) {
-      if (title.includes(ability) && !hasCard(ability)) {
-        cards.value.push(newCard(ability))
+      if (title.includes(ability) && !hasPickerCard(ability)) {
+        pickerCards.value.push(newCard(ability))
       }
     }
   }
 }
 
-function openPicker() {
+function openPicker(block) {
   if (!guardCheckin()) return
-  if (todayCompleted.value) {
-    if (submittedCards.value.length) showSummary.value = true
-    else uni.showToast({ title: '今日训练已打卡完成', icon: 'none' })
+  const phase = planPhases.value.find(p => p.block === block)
+  if (!phase) return
+  if (!phase.unlocked) {
+    const idx = planPhases.value.indexOf(phase)
+    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
+    uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
-  // 自动识别已观看的训练项对应的能力
-  if (!cards.value.length) {
-    autoDetectAbilities()
+  if (todayCompleted.value && phase.allDone) {
+    if (submittedCards.value.length) showSummary.value = true
+    else uni.showToast({ title: '今日训练已全部完成', icon: 'none' })
+    return
   }
+  activePickerBlock.value = block
+  const existing = cardsForBlock(block)
+  pickerCards.value = existing.length
+    ? existing.map(c => ({ ...c, files: c.files ? [...c.files] : [] }))
+    : []
+  if (!pickerCards.value.length) autoDetectAbilities(block)
   showPicker.value = true
-  // 赛博点击特效
-  const btn = document.querySelector('.btn-cyber')
-  if (btn) {
-    btn.classList.add('spark')
-    setTimeout(() => btn.classList.remove('spark'), 400)
-  }
 }
 
 function closePicker() {
   showPicker.value = false
+  activePickerBlock.value = null
+  pickerCards.value = []
 }
 
 function submitFormWithAnim() {
@@ -1411,34 +1382,28 @@ function submitFormWithAnim() {
 
 async function submitForm() {
   if (!guardCheckin()) return
-  if (!todayPlan.value?.plan_id) {
+  const block = activePickerBlock.value
+  if (!block || !todayPlan.value?.plan_id) {
     uni.showToast({ title: '训练方案未加载，请稍后重试', icon: 'none' })
     return
   }
-  const isUpdate = Boolean(todayCheckinRecordId.value)
-  if (!isUpdate && todayCompleted.value) {
-    uni.showToast({ title: '今日已打卡完成', icon: 'none' })
-    return
-  }
-  const hasContent = cards.value.some(c => c.time || c.content || c.result || c.count || c.tag)
+  const hasContent = pickerCards.value.some(c => c.time || c.content || c.result || c.count || c.tag || c.wordCount || c.materialName)
   if (!hasContent) {
-    const btn = document.querySelector('.btn-checkin')
-    if (btn) { btn.classList.add('warn-flash'); setTimeout(() => btn.classList.remove('warn-flash'), 600) }
     uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 })
     return
   }
   checkinSubmitting.value = true
   try {
-    const merged = [...submittedCards.value.map(c => ({ ...c })), ...cards.value.map(c => ({ ...c }))]
-    await persistCheckinCards(merged, isUpdate ? undefined : attitude.value)
-    applyTodayCompletedState()
-    submittedCards.value = merged
-    cards.value = []
-    if (!isUpdate) { attitude.value = 60; summaryAttitude.value = attitude.value }
-    showPicker.value = false
-    // 静默刷新方案 → 同步后端 item 状态
-    loadTodayPlan()
-    uni.showToast({ title: isUpdate ? '✅ 打卡已更新' : '✅ 训练 A 打卡成功！', icon: 'none' })
+    const cardsList = pickerCards.value.map(c => ({ ...c, phaseBlock: block }))
+    await persistPhaseCheckin(block, cardsList)
+    submittedCards.value = [
+      ...submittedCards.value.filter(c => c.phaseBlock !== block),
+      ...cardsList.map(c => ({ ...c, files: c.files || [] })),
+    ]
+    closePicker()
+    nextTick(() => syncPhaseExpand())
+    loadTodayPlan(true)
+    uni.showToast({ title: `✅ 训练 ${block} 打卡成功！`, icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
   } finally {
@@ -1447,40 +1412,48 @@ async function submitForm() {
 }
 
 function getCardSummary(c) {
-  if (c.name === '极速运算') return c.name + '(' + (c.tag || '运算') + ',' + c.time + '分钟,' + c.count + '题,' + c.accuracy + '%)'
+  const prefix = c.phaseBlock ? `[${c.phaseBlock}] ` : ''
+  if (c.name === '极速运算') return prefix + c.name + '(' + (c.tag || '运算') + ',' + c.time + '分钟,' + c.count + '题,' + c.accuracy + '%)'
   if (c.name === '影像追忆') {
     const parts = ['工具' + (c.tool || '豆包')]
     if (c.time) parts.push(c.time + '分钟')
     if (c.content) parts.push('材料《' + c.content + '》')
     if (c.accuracy) parts.push('追忆率' + c.accuracy + '%')
-    return '影像追忆：' + parts.join('，')
+    return prefix + '影像追忆：' + parts.join('，')
   }
   if (c.name === '扫描速记') {
     const parts = [(c.materialType||'书') + '《' + (c.materialName||'?') + '》', (c.wordCount||'?') + '字']
     if (c.forwardTime || c.forwardAcc) parts.push('正背' + (c.forwardTime||'?') + '/' + (c.forwardAcc||'?'))
     if (c.backwardTime || c.backwardAcc) parts.push('倒背' + (c.backwardTime||'?') + '/' + (c.backwardAcc||'?'))
-    return '扫描速记：' + parts.join('，')
+    return prefix + '扫描速记：' + parts.join('，')
   }
-  return c.name + '(' + c.time + '分钟)'
+  return prefix + c.name + '(' + c.time + '分钟)'
 }
 
 function editCard(idx) {
   if (!guardCheckin()) return
   const c = submittedCards.value[idx]
-  cards.value.push({ ...c, files: c.files ? [...c.files] : [] })
+  activePickerBlock.value = c.phaseBlock || 'A'
+  pickerCards.value = [{ ...c, files: c.files ? [...c.files] : [] }]
   submittedCards.value.splice(idx, 1)
   showPicker.value = true
   showSummary.value = false
 }
 
 async function deleteCard(idx) {
+  const c = submittedCards.value[idx]
+  const block = c.phaseBlock || 'A'
   submittedCards.value.splice(idx, 1)
+  const remaining = cardsForBlock(block)
   checkinSubmitting.value = true
   try {
-    await persistCheckinCards(submittedCards.value.map(c => ({ ...c })))
-    if (!submittedCards.value.length) {
-      showSummary.value = false
+    if (!remaining.length) {
+      await deletePhaseCheckin(block)
+    } else {
+      await persistPhaseCheckin(block, remaining)
     }
+    if (!submittedCards.value.length) showSummary.value = false
+    nextTick(() => syncPhaseExpand())
     uni.showToast({ title: '已删除', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '删除失败', icon: 'none' })
@@ -1489,99 +1462,19 @@ async function deleteCard(idx) {
   }
 }
 
-// ── 训练 B 打卡 ──
-
-function hasCardB(name) { return cardsB.value.some(c => c.name === name) }
-
-function toggleCardB(name) {
-  const idx = cardsB.value.findIndex(c => c.name === name)
-  if (idx >= 0) { cardsB.value.splice(idx, 1) }
-  else { cardsB.value.push(newCardB(name)) }
-}
-
-function newCardB(name) {
-  return { name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] }
-}
-
-function removeCardB(idx) { cardsB.value.splice(idx, 1) }
-
-function pickFileB(idx) {
-  const input = document.createElement('input')
-  input.type = 'file'; input.accept = 'image/*,video/*'; input.multiple = true
-  input.onchange = (e) => {
-    for (let i = 0; i < e.target.files.length; i++) {
-      const f = e.target.files[i]
-      cardsB.value[idx].files.push({ name: f.name, url: URL.createObjectURL(f), type: f.type.startsWith('video') ? 'video' : 'image' })
-    }
-  }
-  input.click()
-}
-function removeFileB(cardIdx, fileIdx) { cardsB.value[cardIdx].files.splice(fileIdx, 1) }
-
-function autoDetectB() {
-  // 暂时默认选极速运算
-  if (!hasCardB('极速运算')) cardsB.value.push(newCardB('极速运算'))
-}
-
-function openPickerB() {
-  if (!guardCheckin()) return
-  if (!bUnlocked.value) { uni.showToast({ title: '请先完成训练 A 打卡', icon: 'none' }); return }
-  if (!cardsB.value.length) autoDetectB()
-  showPickerB.value = true
-}
-
-function closePickerB() { showPickerB.value = false }
-
-async function submitFormB() {
-  if (checkinSubmittingB.value) return
-  const hasContent = cardsB.value.some(c => c.time || c.content || c.result || c.count || c.tag)
-  if (!hasContent) { uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 }); return }
-  checkinSubmittingB.value = true
-  try {
-    const uid = await ensureChildUser()
-    const cardsList = cardsB.value.map(c => ({ ...c }))
-    const payload = {
-      cards: serializeCards(cardsList),
-      ability_type: cardsList.map(c => c.name).join('、'),
-      content: cardsList.map(c => getCardSummary(c)).join('；'),
-    }
-    if (!todayCheckinRecordIdB.value) {
-      if (!todayPlan.value?.plan_id) return
-      const res = await submitTrainingCheckin(uid, { plan_id: todayPlan.value.plan_id, item_id: todayPlan.value.items?.[0]?.id, ...payload })
-      todayCheckinRecordIdB.value = res.record_id
-    } else {
-      await updateTrainingCheckin(uid, todayCheckinRecordIdB.value, payload)
-    }
-    cardsB.value = []
-    showPickerB.value = false
-    uni.showToast({ title: '✅ 训练 B 打卡成功！', icon: 'none' })
-  } catch (e) {
-    uni.showToast({ title: e.message || '提交失败', icon: 'none' })
-  } finally { checkinSubmittingB.value = false }
-}
-
 function applyPlanMedia(plan) {
   const items = plan?.items || []
   const videoItem = items.find(i => i.item_type === 'video' || i.video_url)
   if (videoItem?.video_url) {
     videoSrc.value = videoItem.video_url
   }
-  const audios = items.filter(i => i.block === 'A' && i.audio_url)
-  const legacy = items.find(i => i.audio_url && !i.video_url)
-  const firstAudio = audios[0] || legacy
+  const firstBlock = items[0]?.block || 'A'
+  const firstAudio = items.find(i => (i.block || 'A') === firstBlock && i.audio_url)
+    || items.find(i => i.audio_url && !i.video_url)
   if (firstAudio) {
     audioSrc.value = firstAudio.audio_url
     audioTitle.value = `🎧 ${firstAudio.title || '今日训练音频'}`
   }
-}
-
-function openBlockBItem(item) {
-  if (!item) return
-  if (!bUnlocked.value && !devMode.value) {
-    uni.showToast({ title: '请先完成训练 A 打卡', icon: 'none' })
-    return
-  }
-  openMediaItem(item)
 }
 
 function openMediaItem(item) {
@@ -1608,13 +1501,15 @@ function openMediaItem(item) {
 
 function openMedia(type) {
   if (!guardMedia()) return
+  const firstPhase = planPhases.value[0]
   if (type === 'video') {
-    openMediaItem(blockAVideo.value || { video_url: videoSrc.value })
+    const video = firstPhase?.items?.find(i => i.video_url || i.item_type === 'video')
+    openMediaItem(video || { video_url: videoSrc.value })
     return
   }
   if (type === 'audio') {
-    openMediaItem(blockAAudios.value[0] || { audio_url: audioSrc.value, title: audioTitle.value })
-    return
+    const audio = firstPhase?.items?.find(i => i.audio_url)
+    openMediaItem(audio || { audio_url: audioSrc.value, title: audioTitle.value })
   }
 }
 function closeMedia() {
@@ -1670,10 +1565,10 @@ function dismissAssessmentModal() {
   showAssessmentModal.value = false
 }
 
-async function loadTodayPlan() {
-  if (planLoading.value) return
+async function loadTodayPlan(silent = false) {
+  if (planLoading.value && !silent) return
 
-  const isFirstLoad = !planAnimShownToday()
+  const isFirstLoad = !silent && !planAnimShownToday()
   if (isFirstLoad) {
     planLoading.value = true
     planJustGenerated.value = false
@@ -1691,7 +1586,7 @@ async function loadTodayPlan() {
       return
     }
 
-    const result = await fetchTrainingToday(uid, { skipAi: true })
+    const result = await fetchTrainingToday(uid, { skipAi: silent || !isFirstLoad })
     if (result.error === 'assessment') {
       needAssessment.value = true
       showAssessmentModal.value = true
@@ -1704,19 +1599,19 @@ async function loadTodayPlan() {
     if (result.error) throw new Error(result.message)
 
     todayPlan.value = result.data
-    submittedCards.value = []
-    todayCheckinRecordId.value = null
+    if (!silent) {
+      submittedCards.value = []
+      phaseRecordIds.value = {}
+      primaryCheckinRecordId.value = null
+      summaryAttitude.value = null
+      attitudeTouched.value = false
+    }
     lessonIndex.value = (result.data.content_index ?? 0) + 1
     aiPlanText.value = result.data.report_text || ''
     applyPlanMedia(result.data)
-    nextTick(() => syncPhaseExpand())
 
     await loadTodayCheckinRecords(uid, result.data.plan_id)
-    if (submittedCards.value.length > 0) {
-      applyTodayCompletedState()
-    } else {
-      syncBlockBTip()
-    }
+    nextTick(() => syncPhaseExpand())
 
     if (!talentLabel.value) {
       const progress = await fetchTrainingProgress(uid)
