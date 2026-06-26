@@ -80,14 +80,43 @@ def save_assessment(
     return record
 
 
+def effective_talent_code(row: TalentAssessment | None) -> int | None:
+    """与历史报告一致：优先库内 talent_code，否则从 talent_primary 解析"""
+    if not row:
+        return None
+    if row.talent_code:
+        return row.talent_code
+    return resolve_talent_code(row.talent_primary)
+
+
+def has_valid_talent(row: TalentAssessment | None) -> bool:
+    return effective_talent_code(row) is not None
+
+
+def _backfill_talent_fields(db: Session, row: TalentAssessment) -> TalentAssessment:
+    if row.talent_code:
+        return row
+    code = resolve_talent_code(row.talent_primary)
+    if not code:
+        return row
+    row.talent_code = code
+    row.talent_tag = resolve_talent_tag(code)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def get_latest_assessment(db: Session, child_user_id: int) -> TalentAssessment | None:
-    """取孩子用户最新一次天赋测评（按测评时间，其次 id）"""
-    return db.scalar(
+    """取最新测评 — 与历史报告列表一致按 id 降序，并补全缺失的 talent_code"""
+    row = db.scalar(
         select(TalentAssessment)
         .where(TalentAssessment.child_user_id == child_user_id)
-        .order_by(TalentAssessment.assessed_at.desc(), TalentAssessment.id.desc())
+        .order_by(TalentAssessment.id.desc())
         .limit(1)
     )
+    if not row:
+        return None
+    return _backfill_talent_fields(db, row)
 
 
 def sync_child_user_talent(db: Session, child_user_id: int) -> None:
@@ -97,12 +126,13 @@ def sync_child_user_talent(db: Session, child_user_id: int) -> None:
         return
     latest = get_latest_assessment(db, child_user_id)
     profile = dict(user.profile_json or {})
-    if latest and latest.talent_code:
+    code = effective_talent_code(latest)
+    if latest and code:
         user.training_level = latest.talent_primary
         profile.update(
             {
-                "talent_code": latest.talent_code,
-                "talent_tag": latest.talent_tag,
+                "talent_code": code,
+                "talent_tag": latest.talent_tag or resolve_talent_tag(code),
                 "talent_primary": latest.talent_primary,
                 "latest_assessment_id": latest.id,
             }

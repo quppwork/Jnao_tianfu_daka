@@ -17,12 +17,14 @@ from app.schemas.training import (
     TrainingEntryResponse,
     TrainingProgressResponse,
     TrainingTodayResponse,
+    WatchProgressRequest,
+    WatchProgressResponse,
     WindowResponse,
     WindowSetRequest,
     WindowStatusResponse,
 )
 from app.services import training_service
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
 from app.services.training_plan_generator import ensure_plan_report
 from app.services.training_schedule_service import schedule_training_by_duration
 from app.services.training_service import TrainingError
@@ -54,9 +56,28 @@ def talent_training_video(
 ):
     """按天赋返回固定训练视频（逐条视频推送见 video_push_service.get_item_training_video）"""
     assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
+    if not has_valid_talent(assessment):
         raise HTTPException(403, "请先完成天赋测评")
-    return get_talent_training_video(assessment.talent_code)
+    return get_talent_training_video(effective_talent_code(assessment))
+
+
+@router.post("/items/{item_id}/watch-progress", response_model=WatchProgressResponse)
+def report_watch_progress(
+    item_id: int,
+    req: WatchProgressRequest,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return training_service.record_watch_progress(
+            db,
+            child_user_id,
+            item_id,
+            watched_sec=req.watched_sec,
+            duration_sec=req.duration_sec,
+        )
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/entry", response_model=TrainingEntryResponse)

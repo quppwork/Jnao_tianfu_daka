@@ -12,9 +12,41 @@ from app.db.models import (
     TrainingRecord,
     TrainingWindow,
 )
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
 from app.services.content_meta import parse_item_instruction
 from app.services.oss_client import resolve_play_url
+from app.services.training_day import (
+    get_training_day,
+    is_plan_day_locked,
+    is_plan_globally_cutoff,
+    is_plan_stale,
+    is_new_day_ready,
+    training_day_meta,
+    training_now,
+)
+
+WATCH_COMPLETE_PCT = 90
+
+
+def _today() -> date:
+    return get_training_day()
+
+
+def _resolve_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> TrainingPlan | None:
+    """按训练日查找方案；兼容旧数据用日历日期入库的情况。"""
+    plan_date = plan_date or _today()
+    plan = _get_plan_by_date(db, child_user_id, plan_date)
+    if plan and is_plan_stale(plan):
+        return None
+    if plan:
+        return plan
+    now = training_now()
+    cal = now.date()
+    if plan_date != cal:
+        legacy = _get_plan_by_date(db, child_user_id, cal)
+        if legacy and not is_plan_stale(legacy) and is_plan_day_locked(legacy, now=now):
+            return legacy
+    return None
 
 
 class TrainingError(Exception):
@@ -94,7 +126,7 @@ def purge_today_plan_without_assessment(
     plan_date: date | None = None,
 ) -> bool:
     """无有效天赋测评时清除今日未完成计划（重置天赋后不留脏数据）"""
-    plan_date = plan_date or date.today()
+    plan_date = plan_date or _today()
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or plan.status == "completed":
         return False
@@ -111,12 +143,12 @@ def refresh_today_plan_if_talent_changed(
     assessment=None,
 ) -> bool:
     """天赋变更或无天赋时清除今日未完成计划，以便按最新天赋重建"""
-    plan_date = plan_date or date.today()
+    plan_date = plan_date or _today()
     assessment = assessment if assessment is not None else get_latest_assessment(db, child_user_id)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or plan.status == "completed":
         return False
-    if not assessment or not assessment.talent_code:
+    if not has_valid_talent(assessment):
         _delete_training_plan(db, plan)
         db.commit()
         return True
@@ -135,16 +167,17 @@ def sync_pending_plan_content(
     plan_date: date | None = None,
 ) -> bool:
     """天赋未变时同步今日方案：推进 content_index、更新推送音频与 level"""
-    if not assessment or not assessment.talent_code:
+    if not assessment or not has_valid_talent(assessment):
         return False
-    plan_date = plan_date or date.today()
+    plan_date = plan_date or _today()
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or plan.status == "completed":
         return False
     if not _plan_matches_latest_talent(plan, assessment):
         return False
 
-    series = get_content_series(db, assessment.talent_code, prefer_skill="影像追忆")
+    talent_code = effective_talent_code(assessment)
+    series = get_content_series(db, talent_code, prefer_skill="影像追忆")
     if not series:
         return False
 
@@ -195,7 +228,7 @@ def sync_pending_plan_content(
 def ensure_assessment_for_training(db: Session, child_user_id: int):
     """进入训练前优先校验最新天赋测评"""
     assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
+    if not has_valid_talent(assessment):
         purge_today_plan_without_assessment(db, child_user_id)
         raise TrainingError("请先完成天赋测评", 403)
     return assessment
@@ -204,7 +237,7 @@ def ensure_assessment_for_training(db: Session, child_user_id: int):
 def get_training_entry(db: Session, child_user_id: int) -> dict:
     """训练页入口：优先检查最新天赋，并同步今日方案"""
     assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
+    if not has_valid_talent(assessment):
         purge_today_plan_without_assessment(db, child_user_id)
         return {
             "has_assessment": False,
@@ -219,6 +252,11 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
     refresh_today_plan_if_talent_changed(db, child_user_id, assessment=assessment)
     sync_pending_plan_content(db, child_user_id, assessment)
     progress = get_progress(db, child_user_id)
+    now = training_now()
+    today_plan = _resolve_today_plan(db, child_user_id, _today())
+    meta = training_day_meta(now)
+    day_locked = is_plan_day_locked(today_plan, now=now) if today_plan else False
+    talent_code = effective_talent_code(assessment)
     return {
         "has_assessment": True,
         "needs_assessment": False,
@@ -226,7 +264,9 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
         "assessment_id": assessment.id,
         "talent_primary": assessment.talent_primary,
         "talent_tag": assessment.talent_tag,
-        "talent_code": assessment.talent_code,
+        "talent_code": talent_code,
+        "day_locked": day_locked,
+        **meta,
         **progress,
     }
 
@@ -247,10 +287,30 @@ def _compute_content_index(
     return y_plan.content_index
 
 
+def _item_is_video(item: TrainingItem) -> bool:
+    meta = parse_item_instruction(
+        item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
+    )
+    item_type = meta.get("item_type") or item.ability_type
+    return bool(item.video_url) or item_type == "video"
+
+
+def _watch_pct(item: TrainingItem) -> float:
+    wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
+    return float(wp.get("pct") or 0)
+
+
+def is_item_video_complete(item: TrainingItem) -> bool:
+    if not _item_is_video(item):
+        return True
+    return _watch_pct(item) >= WATCH_COMPLETE_PCT
+
+
 def _item_to_dict(item: TrainingItem) -> dict:
     meta = parse_item_instruction(
         item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
     )
+    wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
     return {
         "id": item.id,
         "sort_order": item.sort_order,
@@ -262,10 +322,16 @@ def _item_to_dict(item: TrainingItem) -> dict:
         "checkin_status": item.checkin_status,
         "block": meta.get("block"),
         "item_type": meta.get("item_type") or item.ability_type,
+        "watch_progress": wp,
+        "video_complete": is_item_video_complete(item),
     }
 
 
-def _plan_to_response(plan: TrainingPlan) -> dict:
+def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None) -> dict:
+    now = now or training_now()
+    meta = training_day_meta(now, plan_date=plan.plan_date)
+    locked = is_plan_day_locked(plan, now=now)
+    globally_cutoff = is_plan_globally_cutoff(plan, now=now)
     return {
         "plan_id": plan.id,
         "plan_date": plan.plan_date,
@@ -274,22 +340,27 @@ def _plan_to_response(plan: TrainingPlan) -> dict:
         "content_index": plan.content_index,
         "planned_minutes": plan.planned_minutes,
         "items": [_item_to_dict(item) for item in sorted(plan.items, key=lambda i: i.sort_order)],
+        "day_locked": locked,
+        "globally_cutoff": globally_cutoff,
+        **meta,
     }
 
 
 def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
-    plan_date = plan_date or date.today()
+    plan_date = plan_date or _today()
+    if not is_new_day_ready():
+        raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
     assessment = ensure_assessment_for_training(db, child_user_id)
 
     refresh_today_plan_if_talent_changed(db, child_user_id, plan_date=plan_date, assessment=assessment)
 
-    existing = _get_plan_by_date(db, child_user_id, plan_date)
+    existing = _resolve_today_plan(db, child_user_id, plan_date)
     if existing:
         sync_pending_plan_content(db, child_user_id, assessment, plan_date=plan_date)
-        existing = _get_plan_by_date(db, child_user_id, plan_date)
+        existing = _resolve_today_plan(db, child_user_id, plan_date)
         return _plan_to_response(existing)
 
-    series = get_content_series(db, assessment.talent_code, prefer_skill="影像追忆")
+    series = get_content_series(db, effective_talent_code(assessment), prefer_skill="影像追忆")
     if not series:
         raise TrainingError("暂无可用训练音频，请联系管理员导入资源", 503)
 
@@ -349,11 +420,14 @@ def submit_checkin(
     )
     if not plan or plan.child_user_id != child_user_id:
         raise TrainingError("训练计划不存在", 404)
+    if is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止", 403)
     if plan.status == "completed":
-        raise TrainingError("今日训练已完成打卡")
+        raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
+
+    sorted_items = sorted(plan.items, key=lambda x: x.sort_order)
 
     # 顺序打卡：必须按 sort_order 完成
-    sorted_items = sorted(plan.items, key=lambda x: x.sort_order)
     target_item = None
     if item_id:
         target_item = db.get(TrainingItem, item_id)
@@ -364,6 +438,8 @@ def submit_checkin(
         target_item = next((it for it in sorted_items if it.checkin_status != "done"), None)
     if not target_item or target_item.plan_id != plan.id:
         raise TrainingError("训练项不存在", 404)
+
+    target_block = parse_item_instruction(target_item.instructions).get("block")
 
     record = TrainingRecord(
         child_user_id=child_user_id,
@@ -381,7 +457,6 @@ def submit_checkin(
     target_item.checkin_status = "done"
 
     # 同 block 内所有 pending 项一并标记完成（前端一次打卡覆盖整个 block）
-    target_block = parse_item_instruction(target_item.instructions).get("block")
     if target_block:
         for it in plan.items:
             it_block = parse_item_instruction(it.instructions).get("block")
@@ -482,7 +557,7 @@ def get_checkin_record(db: Session, child_user_id: int, record_id: int) -> dict:
 
 
 def get_today_checkins(db: Session, child_user_id: int, plan_date: date | None = None) -> list[dict]:
-    plan_date = plan_date or date.today()
+    plan_date = plan_date or _today()
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan:
         return []
@@ -513,6 +588,10 @@ def update_checkin_record(
     record = db.get(TrainingRecord, record_id)
     if not record or record.child_user_id != child_user_id:
         raise TrainingError("打卡记录不存在", 404)
+
+    plan = db.get(TrainingPlan, record.plan_id) if record.plan_id else None
+    if plan and is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止，无法修改打卡", 403)
 
     if cards is not None:
         if not cards:
@@ -549,6 +628,8 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
         raise TrainingError("打卡记录不存在", 404)
 
     plan = db.get(TrainingPlan, record.plan_id) if record.plan_id else None
+    if plan and is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止，无法修改打卡", 403)
     db.delete(record)
     db.flush()
     plan_status = _sync_plan_after_record_change(db, plan, deleted_record=record)
@@ -558,17 +639,18 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
 
 def get_progress(db: Session, child_user_id: int) -> dict:
     assessment = get_latest_assessment(db, child_user_id)
-    has_assessment = bool(assessment and assessment.talent_code)
+    has_assessment = has_valid_talent(assessment)
     total = db.scalar(
         select(func.count())
         .select_from(TrainingRecord)
         .where(TrainingRecord.child_user_id == child_user_id)
     ) or 0
-    today_plan = _get_plan_by_date(db, child_user_id, date.today())
+    today_plan = _resolve_today_plan(db, child_user_id, _today())
+    code = effective_talent_code(assessment) if assessment else None
     return {
         "total_checkins": total,
         "content_index": today_plan.content_index if today_plan else 0,
-        "talent_code": assessment.talent_code if has_assessment else None,
+        "talent_code": code,
         "talent_tag": assessment.talent_tag if has_assessment else None,
         "talent_primary": assessment.talent_primary if has_assessment else None,
         "assessment_id": assessment.id if has_assessment else None,
@@ -581,7 +663,7 @@ def get_progress(db: Session, child_user_id: int) -> dict:
 def set_training_window(
     db: Session, child_user_id: int, start_time: str, end_time: str, train_date: date | None = None
 ) -> dict:
-    train_date = train_date or date.today()
+    train_date = train_date or _today()
     start = _parse_time(start_time)
     end = _parse_time(end_time)
     existing = db.scalar(
@@ -611,7 +693,7 @@ def set_training_window(
 
 
 def get_training_window(db: Session, child_user_id: int, train_date: date | None = None) -> dict | None:
-    train_date = train_date or date.today()
+    train_date = train_date or _today()
     row = db.scalar(
         select(TrainingWindow).where(
             TrainingWindow.child_user_id == child_user_id,
@@ -662,7 +744,7 @@ def get_plan_by_date(db: Session, child_user_id: int, plan_date: date) -> dict |
 
 def get_yesterday_training_context(db: Session, child_user_id: int, plan_date: date | None = None) -> str | None:
     """汇总昨日训练与打卡，供 AI 生成今日方案参考"""
-    plan_date = plan_date or date.today()
+    plan_date = plan_date or _today()
     yesterday = plan_date - timedelta(days=1)
     y_plan = _get_plan_by_date(db, child_user_id, yesterday)
     if not y_plan:
@@ -705,3 +787,43 @@ def get_checkin_history(db: Session, child_user_id: int, limit: int = 30) -> lis
         .limit(limit)
     ).all()
     return [_record_to_dict(r) for r in rows]
+
+
+def record_watch_progress(
+    db: Session,
+    child_user_id: int,
+    item_id: int,
+    *,
+    watched_sec: float,
+    duration_sec: float | None = None,
+) -> dict:
+    item = db.get(TrainingItem, item_id)
+    if not item:
+        raise TrainingError("训练项不存在", 404)
+    plan = db.get(TrainingPlan, item.plan_id)
+    if not plan or plan.child_user_id != child_user_id:
+        raise TrainingError("训练项不存在", 404)
+    if is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止", 403)
+
+    watched = max(0.0, float(watched_sec))
+    duration = max(0.0, float(duration_sec or 0))
+    prev = item.watch_progress if isinstance(item.watch_progress, dict) else {}
+    peak_watched = max(float(prev.get("watched_sec") or 0), watched)
+    if duration > 0:
+        pct = min(100.0, round(peak_watched / duration * 100, 1))
+    else:
+        pct = float(prev.get("pct") or 0)
+
+    item.watch_progress = {
+        "watched_sec": round(peak_watched, 1),
+        "duration_sec": round(duration, 1) if duration > 0 else prev.get("duration_sec"),
+        "pct": pct,
+    }
+    db.commit()
+    db.refresh(item)
+    return {
+        "item_id": item.id,
+        "watch_progress": item.watch_progress,
+        "video_complete": is_item_video_complete(item),
+    }

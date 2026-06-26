@@ -1,8 +1,25 @@
 """今日训练 API 测试"""
 
-from datetime import date, timedelta
+from datetime import timedelta
 
-from app.services.training_service import get_or_create_today_plan, submit_checkin
+from app.services.training_day import get_training_day
+from app.services.training_service import get_or_create_today_plan, record_watch_progress, submit_checkin
+
+
+def _complete_videos_for_checkin(db, user_id, items):
+    for it in items:
+        if it.get("video_url") or it.get("item_type") == "video":
+            record_watch_progress(db, user_id, it["id"], watched_sec=95, duration_sec=100)
+
+
+def _complete_videos_via_client(client, user_id, items):
+    for it in items:
+        if it.get("video_url") or it.get("item_type") == "video":
+            res = client.post(
+                f"/api/training/items/{it['id']}/watch-progress?user_id={user_id}",
+                json={"watched_sec": 95, "duration_sec": 100},
+            )
+            assert res.status_code == 200, res.text
 
 
 class TestTrainingToday:
@@ -62,19 +79,25 @@ class TestTrainingToday:
         assert progress["total_checkins"] == 1
 
     def test_continue_same_if_yesterday_incomplete(self, db_session, child_with_assessment):
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = get_training_day() - timedelta(days=1)
         plan_y = get_or_create_today_plan(db_session, child_with_assessment, yesterday)
         idx_y = plan_y["content_index"]
 
-        today_plan = get_or_create_today_plan(db_session, child_with_assessment, date.today())
+        today_plan = get_or_create_today_plan(db_session, child_with_assessment, get_training_day())
         assert today_plan["content_index"] == idx_y
 
     def test_next_item_if_yesterday_completed(self, db_session, child_with_assessment):
-        yesterday = date.today() - timedelta(days=1)
-        plan_y = get_or_create_today_plan(db_session, child_with_assessment, yesterday)
-        submit_checkin(db_session, child_with_assessment, plan_id=plan_y["plan_id"])
+        from app.db.models import TrainingPlan
 
-        today_plan = get_or_create_today_plan(db_session, child_with_assessment, date.today())
+        yesterday = get_training_day() - timedelta(days=1)
+        plan_y = get_or_create_today_plan(db_session, child_with_assessment, yesterday)
+        plan = db_session.get(TrainingPlan, plan_y["plan_id"])
+        plan.status = "completed"
+        for item in plan.items:
+            item.checkin_status = "done"
+        db_session.commit()
+
+        today_plan = get_or_create_today_plan(db_session, child_with_assessment, get_training_day())
         assert today_plan["content_index"] == plan_y["content_index"] + 1
 
 
@@ -276,6 +299,7 @@ class TestSequentialCheckinFlow:
         assert len(b_items) >= 1, f"应有至少1个B块项，实际: {len(b_items)}"
 
         # --- A 打卡一次 → 同 block 所有 A 项联动完成 ---
+        _complete_videos_via_client(client, uid, a_items)
         res = client.post(
             f"/api/training/checkin?user_id={uid}",
             json={
@@ -311,6 +335,7 @@ class TestSequentialCheckinFlow:
             assert "请按顺序完成训练项" in res2.text
 
         # --- B 打卡一次 → 同 block 所有 B 项联动完成 ---
+        _complete_videos_via_client(client, uid, b_items)
         res = client.post(
             f"/api/training/checkin?user_id={uid}",
             json={
@@ -359,6 +384,7 @@ class TestSequentialCheckinFlow:
         a_items = [i for i in items if i.get("block") == "A"]
 
         # 完成 A (一次打卡搞定所有 A 项)
+        _complete_videos_via_client(client, uid, a_items)
         res_a = client.post(
             f"/api/training/checkin?user_id={uid}",
             json={
@@ -390,6 +416,7 @@ class TestSequentialCheckinFlow:
     def test_complete_without_item_id(self, client, mock_doubao):
         """不传 item_id 时系统自动取第一个 pending 项，并联动完成同 block 全部项"""
         uid, items, plan_id = self._setup_user_with_schedule(client)
+        _complete_videos_via_client(client, uid, items)
 
         # 第一次不传 item_id → 自动选第一个 pending (A1) → 所有 A 项联动完成
         res = client.post(
@@ -428,6 +455,7 @@ class TestSequentialCheckinFlow:
         b_items = [i for i in items if i.get("block") == "B"]
 
         # 完成 A
+        _complete_videos_via_client(client, uid, a_items)
         client.post(
             f"/api/training/checkin?user_id={uid}",
             json={
@@ -439,6 +467,7 @@ class TestSequentialCheckinFlow:
         )
 
         # B 打卡传正确的 B 项 ID → 应该成功
+        _complete_videos_via_client(client, uid, b_items)
         res = client.post(
             f"/api/training/checkin?user_id={uid}",
             json={
