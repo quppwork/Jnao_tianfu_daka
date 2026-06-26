@@ -420,6 +420,8 @@ const messages = ref([
 
 ])
 
+let qaLearnerDefaultApplied = false
+
 
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
@@ -690,11 +692,11 @@ function initBrowserSpeech() {
 
 
 
-async function ensureLearnerProfile(uid) {
+async function ensureLearnerProfile(uid, profileData = null) {
 
   try {
 
-    const profile = await fetchProfile(uid)
+    const profile = profileData || await fetchProfile(uid)
 
     const grade = profile.profile_json?.grade
 
@@ -712,13 +714,11 @@ async function ensureLearnerProfile(uid) {
 
     }
 
-    const key = 'jnao_learner_profile_set'
-
-    if (localStorage.getItem(key)) return
+    if (qaLearnerDefaultApplied) return
 
     await updateLearnerProfile(uid, { grade: '四年级', age: 10, school_stage: 'primary_high' })
 
-    localStorage.setItem(key, '1')
+    qaLearnerDefaultApplied = true
 
   } catch (e) { /* ignore */ }
 
@@ -772,7 +772,9 @@ async function loadSession(sessionId = null) {
 
     const uid = await ensureChildUser()
 
-    await ensureLearnerProfile(uid)
+    const profile = await fetchProfile(uid)
+
+    await ensureLearnerProfile(uid, profile)
 
     await loadSessionList()
 
@@ -1415,6 +1417,8 @@ function scrollChat() {
 
 
 onMounted(async () => {
+
+  try { localStorage.removeItem('jnao_learner_profile_set') } catch (_) {}
 
   isDesktop.value = !isMobileH5()
 

@@ -24,6 +24,20 @@ export function clearChildUserId() {
     localStorage.removeItem(GUEST_PHONE_KEY)
     localStorage.removeItem(GUEST_NICKNAME_KEY)
   } catch (e) { /* ignore */ }
+  invalidateChildUserSession()
+}
+
+/** 会话内已验证 uid，避免重复 ping /api/user/profile */
+let _sessionValidatedUid = null
+let _validateInFlight = null
+
+export function invalidateChildUserSession() {
+  _sessionValidatedUid = null
+  _validateInFlight = null
+}
+
+export function markChildUserSessionValid(uid) {
+  if (uid) _sessionValidatedUid = uid
 }
 
 async function apiJson(url, options = {}) {
@@ -137,20 +151,37 @@ export async function loginOrRegisterChildUser({ nickname, phone } = {}) {
 /** 无则自动注册，返回 child_user_id（同一设备/浏览器会复用稳定身份） */
 export async function ensureChildUser(nickname = '学员') {
   const existing = getChildUserId()
+  if (existing && _sessionValidatedUid === existing) {
+    return existing
+  }
   if (existing) {
-    try {
-      await apiJson(withUser('/api/user/profile', existing))
-      return existing
-    } catch (e) {
-      if (e.status !== 404) return existing
-      clearChildUserId()
+    if (!_validateInFlight) {
+      _validateInFlight = (async () => {
+        try {
+          await apiJson(withUser('/api/user/profile', existing))
+          _sessionValidatedUid = existing
+        } catch (e) {
+          if (e.status === 404) {
+            clearChildUserId()
+          } else {
+            _sessionValidatedUid = existing
+          }
+        } finally {
+          _validateInFlight = null
+        }
+      })()
     }
+    await _validateInFlight
+    const uid = getChildUserId()
+    if (uid) return uid
   }
 
   const loginProfile = readLoginProfile()
   const nick = loginProfile?.nickname || getOrCreateGuestNickname(nickname)
   const phone = loginProfile?.phone || getOrCreateGuestPhone()
-  return registerChildUser(phone, nick)
+  const id = await registerChildUser(phone, nick)
+  _sessionValidatedUid = id
+  return id
 }
 
 /** JNAO 外部 API 用的 uid（存于 child_user.jnao_uid） */

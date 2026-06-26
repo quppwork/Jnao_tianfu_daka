@@ -149,6 +149,9 @@ import { ref, nextTick, onMounted } from 'vue'
 import {
   clearChildUserId,
   ensureChildUser,
+  getChildUserId,
+  markChildUserSessionValid,
+  invalidateChildUserSession,
   fetchGuideSession,
   sendGuideMessage,
   clearGuideSession,
@@ -214,59 +217,87 @@ async function sendMsg() {
   scrollChat()
 }
 
-async function loadGuideSession() {
+function applyProfileData(data, uid, { fetchLatest = true } = {}) {
+  if (data.nickname && data.nickname !== '学员') profile.value.name = data.nickname
+  if (data.parent_phone) profile.value.phone = data.parent_phone
+  let hasTalent = false
+  if (data.profile_json) {
+    if (data.profile_json.grade) profile.value.grade = data.profile_json.grade
+    if (data.profile_json.parentName) profile.value.parentName = data.profile_json.parentName
+    const tp = data.profile_json.talent_primary || data.profile_json.talent
+    const tt = data.profile_json.talent_tag
+    if (tp) {
+      hasTalent = true
+      profile.value.talent = tt ? `${tp}偏${tt}` : tp
+    }
+  }
+  const idx = gradeOptions.indexOf(profile.value.grade)
+  if (idx >= 0) gradeIndex.value = idx
+  if (fetchLatest && !hasTalent && uid) {
+    return fetchLatestAssessment(uid).then((latest) => {
+      if (latest?.talent_primary) {
+        profile.value.talent = latest.talent_tag
+          ? `${latest.talent_primary}偏${latest.talent_tag}`
+          : latest.talent_primary
+      }
+    }).catch(() => {})
+  }
+  return Promise.resolve()
+}
+
+async function initHome() {
   try {
-    const uid = await ensureChildUser()
-    const data = await fetchGuideSession(uid)
-    guideSessionId.value = data.session_id
-    messages.value = (data.messages || []).map(m => ({
+    let uid = getChildUserId()
+    if (!uid) uid = await ensureChildUser()
+    let profileData
+    let history
+    let guideData
+    try {
+      ;[profileData, history, guideData] = await Promise.all([
+        fetchProfile(uid),
+        fetchAssessmentHistory(uid),
+        fetchGuideSession(uid),
+      ])
+      markChildUserSessionValid(uid)
+    } catch (e) {
+      if (e.status === 404 && getChildUserId()) {
+        invalidateChildUserSession()
+        clearChildUserId()
+        uid = await ensureChildUser()
+        ;[profileData, history, guideData] = await Promise.all([
+          fetchProfile(uid),
+          fetchAssessmentHistory(uid),
+          fetchGuideSession(uid),
+        ])
+        markChildUserSessionValid(uid)
+      } else {
+        throw e
+      }
+    }
+    historyList.value = history
+    guideSessionId.value = guideData.session_id
+    messages.value = (guideData.messages || []).map(m => ({
       role: m.role === 'assistant' ? 'ai' : 'user',
       text: m.content,
     }))
     if (!messages.value.length) {
       messages.value = [{ role: 'ai', text: '你好！我是张宇老师 👋 想了解平台怎么用都可以问我～比如：天赋测试怎么做？知识答题在哪里？' }]
     }
-  } catch (e) {
-    messages.value = [{ role: 'ai', text: '你好！我是张宇老师 👋 想了解平台怎么用都可以问我～比如：天赋测试怎么做？知识答题在哪里？' }]
-  }
-}
-
-function onGradeChange(e) {
-  gradeIndex.value = e.detail.value
-  profile.value.grade = gradeOptions[e.detail.value]
+    await applyProfileData(profileData, uid)
+  } catch (_) {}
 }
 
 async function loadProfile() {
   try {
     const uid = await ensureChildUser()
     const data = await fetchProfile(uid)
-    if (data.nickname && data.nickname !== '学员') profile.value.name = data.nickname
-    if (data.parent_phone) profile.value.phone = data.parent_phone
-    if (data.profile_json) {
-      if (data.profile_json.grade) profile.value.grade = data.profile_json.grade
-      if (data.profile_json.parentName) profile.value.parentName = data.profile_json.parentName
-      const tp = data.profile_json.talent_primary || data.profile_json.talent
-      const tt = data.profile_json.talent_tag
-      if (tp) profile.value.talent = tt ? `${tp}偏${tt}` : tp
-    }
-    try {
-      const latest = await fetchLatestAssessment(uid)
-      if (latest?.talent_primary) {
-        profile.value.talent = latest.talent_tag
-          ? `${latest.talent_primary}偏${latest.talent_tag}`
-          : latest.talent_primary
-      }
-    } catch (_) { /* 尚未测评 */ }
-    const idx = gradeOptions.indexOf(profile.value.grade)
-    if (idx >= 0) gradeIndex.value = idx
+    await applyProfileData(data, uid)
   } catch (_) {}
 }
 
-async function loadHistory() {
-  try {
-    const uid = await ensureChildUser()
-    historyList.value = await fetchAssessmentHistory(uid)
-  } catch (_) { historyList.value = [] }
+function onGradeChange(e) {
+  gradeIndex.value = e.detail.value
+  profile.value.grade = gradeOptions[e.detail.value]
 }
 
 async function saveProfile() {
@@ -347,9 +378,7 @@ onMounted(() => {
       return
     }
   } catch (_) {}
-  loadProfile()
-  loadHistory()
-  loadGuideSession()
+  initHome()
 })
 
 function scrollChat() {

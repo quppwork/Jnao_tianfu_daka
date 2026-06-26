@@ -1651,6 +1651,7 @@ async function checkTrainingEntry(uid) {
 }
 
 async function refreshAiPlanInBackground(uid) {
+  if (aiPlanText.value?.trim()) return
   try {
     const result = await refreshTrainingReport(uid, false)
     if (result.data?.report_text) {
