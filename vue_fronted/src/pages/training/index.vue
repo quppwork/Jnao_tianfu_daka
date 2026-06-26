@@ -115,9 +115,20 @@
         @click="submittedCards.length ? showSummary = true : null"
       >
         <template v-if="submittedCards.length">
-          <text class="summary-label">📝 打卡训练总结</text>
-          <text class="summary-text">今日已打卡 {{ submittedCards.length }} 项 · {{ checkedPhaseCount }} 个阶段</text>
-          <text class="summary-more">点击管理打卡 ›</text>
+          <view class="summary-header">
+            <text class="summary-label">📝 已打卡 {{ submittedCards.length }} 项</text>
+            <text class="summary-more" @click.stop="showSummary = true">管理 ›</text>
+          </view>
+          <view class="summary-mini-cards">
+            <view v-for="(c, idx) in submittedCards" :key="idx" class="mini-card mini-card-v1" @click.stop="editCard(idx)">
+              <view class="mini-card-accent"></view>
+              <view class="mini-card-left">
+                <text class="mini-card-name">{{ c.name }}</text>
+                <text class="mini-card-summary">{{ miniCardSummary(c) }}</text>
+              </view>
+              <text class="mini-card-del" @click.stop="deleteCard(idx)">✕</text>
+            </view>
+          </view>
           <view class="summary-attitude">
             <text class="sa-label">配合度</text>
             <view class="sa-grid">
@@ -163,7 +174,9 @@
         </view>
 
         <view v-else-if="timerPhase === 'running'" class="time-running">
-          <text class="time-countdown">{{ countdownDisplay }}</text>
+          <view class="time-countdown">
+            <text v-for="(item, ci) in countdownChars" :key="ci" class="countdown-char" :class="{ 'char-changed': item.changed }">{{ item.ch }}</text>
+          </view>
           <text class="time-running-hint">剩余时间 · 今日计划 {{ durationLabel }}</text>
         </view>
 
@@ -474,21 +487,46 @@
         </view>
       </view>
 
-      <view v-if="showHistory" class="picker-overlay" @click="showHistory = false">
-        <view class="picker-card" @click.stop>
-          <text class="picker-title">📅 打卡记录</text>
-          <view v-if="checkinHistory.length" class="history-list">
-            <view v-for="(r, idx) in checkinHistory" :key="r.id || idx" class="history-row">
-              <text class="hr-date">{{ formatHistoryDate(r.created_at) }}</text>
-              <text class="hr-meta">{{ r.ability_type || '训练' }}{{ r.attitude_pct != null ? ' · 配合度' + r.attitude_pct + '%' : '' }}</text>
-              <text v-if="r.note" class="hr-note">{{ r.note }}</text>
-            </view>
-          </view>
-          <text v-else class="history-empty">暂无打卡记录</text>
-          <view class="picker-close" @click="showHistory = false"><text>关闭</text></view>
-        </view>
       </view>
 
+      <!-- Divider -->
+      <view class="divider"></view>
+
+      <!-- Training B -->
+      <view id="phase-block-B" class="b-section phase-section">
+        <text class="section-title" :class="{ dim: !bUnlocked }">训练 B {{ !bUnlocked ? '🔒' : '' }}</text>
+
+        <template v-if="blockBItems.length">
+          <view
+            v-for="(item, idx) in blockBItems"
+            :key="item.id || idx"
+            class="step"
+            :class="{
+              'step-preview-locked': !bUnlocked,
+              'step-locked': bUnlocked && isMediaLocked,
+            }"
+            @click="openBlockBItem(item)"
+          >
+            <view class="step-num" :class="{ dim: !bUnlocked }">{{ idx + 1 }}</view>
+            <view class="step-content">
+              <text class="step-label" :class="{ 'dim-text': !bUnlocked }">音频训练</text>
+              <view class="step-box" :class="{ 'dim-box': !bUnlocked }">🎧 {{ item.title || '训练音频' }}</view>
+              <text class="step-time" :class="{ 'dim-text': !bUnlocked }">
+                {{ !bUnlocked ? '🔒 完成 A 打卡后可播放' : (item.audio_url ? `▶ 约 ${item.duration_min || '?'} 分钟` : '暂无音频') }}
+              </text>
+            </view>
+          </view>
+        </template>
+        <template v-else>
+          <view class="step dim-step">
+            <view class="step-num dim">1</view>
+            <view class="step-content">
+              <text class="step-label dim-text">音频训练</text>
+              <view class="step-box dim-box">🎧 训练用音频</view>
+              <text class="step-time dim-text">{{ blockBEmptyHint }}</text>
+            </view>
+          </view>
+        </template>
       <view style="height:40px;"></view>
     </view>
 
@@ -530,6 +568,21 @@
           <text class="pa-icon" style="font-size:48px;display:block;text-align:center;margin-bottom:8px;">🎧</text>
           <view v-html="audioHtml"></view>
         </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 已打卡卡片滑动浏览（在 .app 外，避免 overflow:hidden 裁切） -->
+  <view v-if="showCardDetail" class="detail-overlay" @click="showCardDetail = false">
+    <view class="detail-test-card" @click.stop>
+      <text class="detail-slide-name">{{ submittedCards[detailCardIndex]?.name }}</text>
+      <view v-for="(val, key) in cardDetailFields(submittedCards[detailCardIndex])" :key="key" class="detail-row">
+        <text class="detail-label">{{ key }}</text>
+        <text class="detail-value">{{ val || '—' }}</text>
+      </view>
+      <view class="detail-actions">
+        <view class="btn-outline-sm" @click="editCardIntoForm(detailCardIndex); showCardDetail = false">✎ 编辑</view>
+        <view class="btn-del-sm" @click="deleteCard(detailCardIndex); showCardDetail = false">删除</view>
       </view>
     </view>
   </view>
@@ -605,9 +658,10 @@ const globalLockSub = computed(() => {
   if (isGlobalCutoff.value) return '全局截止，音视频与打卡已锁定'
   return `仍可继续打卡 · 今日计划 ${durationLabel.value}`
 })
-/** 音视频/打卡：计时结束或全局4点截止 */
+/** 音视频：计时结束或全局4点截止 */
 const isMediaLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup' || timerPhase.value === 'expired' || isGlobalCutoff.value))
-const isCheckinLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup' || timerPhase.value === 'expired' || isGlobalCutoff.value))
+/** 打卡：仅全局4点截止前可修改，不受 day_locked / 计时状态影响 */
+const isCheckinLocked = computed(() => !devMode.value && (isPageLoading.value || isGlobalCutoff.value))
 const mediaLockText = computed(() => {
   if (isPageLoading.value) return '方案生成中，请稍候...'
   if (dayTransition.value || todayPlan.value?.status === 'transition') return '训练日切换中，请稍候'
@@ -620,11 +674,16 @@ const checkinLockText = computed(() => {
   if (isPageLoading.value) return '方案生成中，请稍候...'
   if (dayTransition.value || todayPlan.value?.status === 'transition') return '训练日切换中，请稍候'
   if (isGlobalCutoff.value) return '凌晨4点训练日已截止，无法修改打卡'
-  if (timerPhase.value === 'expired') return '训练时长已到，无法修改打卡'
-  if (trainingDayLocked.value && timerPhase.value === 'setup') return dayLockText.value
-  return '请先设置时长并开始训练'
+  return ''
 })
 const countdownDisplay = computed(() => formatDuration(remainingSeconds.value))
+let _prevDisplay = ''
+const countdownChars = computed(() => {
+  const cur = countdownDisplay.value
+  const chars = cur.split('').map((ch, i) => ({ ch, changed: _prevDisplay[i] !== ch }))
+  _prevDisplay = cur
+  return chars
+})
 const durationLabel = computed(() => formatDuration(plannedDurationSec.value))
 
 function timerStorageKey() {
@@ -846,11 +905,14 @@ function guardMedia() {
   return true
 }
 
-function guardCheckin() {
+function guardCheckin(block) {
   if (devMode.value) return true
   if (isGlobalCutoff.value) {
     uni.showToast({ title: '训练日已截止，无法修改打卡', icon: 'none' })
     return false
+  }
+  if (block && (phaseRecordIds.value[block] || planPhases.value.find(p => p.block === block)?.allDone)) {
+    return true
   }
   if (timerPhase.value === 'expired') {
     uni.showToast({ title: '训练时长已到，无法修改打卡', icon: 'none' })
@@ -1327,9 +1389,14 @@ function canPhaseCheckin(phase) {
   if (!phase.unlocked) return false
   if (devMode.value) return true
   if (planLoading.value || planJustGenerated.value) return false
-  if (timerPhase.value === 'setup' || timerPhase.value === 'expired') return false
   if (isGlobalCutoff.value) return false
+  if (phase.allDone || phaseRecordIds.value[phase.block]) return true
+  if (timerPhase.value === 'setup' || timerPhase.value === 'expired') return false
   return true
+}
+
+function phaseHasCheckin(phase) {
+  return !!(phase.allDone || phaseRecordIds.value[phase.block])
 }
 
 function phaseCheckinLockText(phase) {
@@ -1338,6 +1405,9 @@ function phaseCheckinLockText(phase) {
     const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
     return prev ? `请先完成训练 ${prev} 打卡` : '待解锁'
   }
+  if (phaseHasCheckin(phase)) return checkinLockText.value
+  if (timerPhase.value === 'expired') return '训练时长已到，无法修改打卡'
+  if (timerPhase.value === 'setup') return '请先设置时长并开始训练'
   return checkinLockText.value
 }
 
@@ -1376,7 +1446,7 @@ function phaseTip(phase) {
     const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
     return prev ? `完成训练 ${prev} 打卡后解锁本阶段` : '待解锁'
   }
-  if (phase.allDone) return `✅ 训练 ${phase.block} 已完成`
+  if (phase.allDone) return ''
   return `训练 ${phase.block} 共 ${phase.totalCount} 项`
 }
 
@@ -1585,18 +1655,13 @@ function autoDetectAbilities(block) {
 }
 
 function openPicker(block) {
-  if (!guardCheckin()) return
+  if (!guardCheckin(block)) return
   const phase = planPhases.value.find(p => p.block === block)
   if (!phase) return
   if (!phase.unlocked) {
     const idx = planPhases.value.indexOf(phase)
     const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
-    return
-  }
-  if (todayCompleted.value && phase.allDone && timerPhase.value !== 'running') {
-    if (submittedCards.value.length) showSummary.value = true
-    else uni.showToast({ title: '今日训练已全部完成', icon: 'none' })
     return
   }
   activePickerBlock.value = block
@@ -1626,7 +1691,7 @@ function submitFormWithAnim() {
 }
 
 async function submitForm() {
-  if (!guardCheckin()) return
+  if (!guardCheckin(activePickerBlock.value)) return
   const block = activePickerBlock.value
   if (!block || !todayPlan.value?.plan_id) {
     uni.showToast({ title: '训练方案未加载，请稍后重试', icon: 'none' })
@@ -1639,12 +1704,24 @@ async function submitForm() {
   }
   checkinSubmitting.value = true
   try {
-    const cardsList = pickerCards.value.map(c => ({ ...c, phaseBlock: block }))
+    const cardsList = pickerCards.value.map(c => {
+      const { _editIndex, ...rest } = c
+      return { ...rest, phaseBlock: block }
+    })
     await persistPhaseCheckin(block, cardsList)
-    submittedCards.value = [
-      ...submittedCards.value.filter(c => c.phaseBlock !== block),
-      ...cardsList.map(c => ({ ...c, files: c.files || [] })),
-    ]
+    // 编辑：替换原位卡片；新建：追加
+    const editIdx = pickerCards.value[0]?._editIndex
+    if (editIdx !== undefined && editIdx >= 0) {
+      const updated = cardsList[0]
+      submittedCards.value = submittedCards.value.map((c, i) =>
+        i === editIdx ? { ...updated, files: updated.files || [] } : c
+      )
+    } else {
+      submittedCards.value = [
+        ...submittedCards.value.filter(c => c.phaseBlock !== block),
+        ...cardsList.map(c => ({ ...c, files: c.files || [] })),
+      ]
+    }
     closePicker()
     nextTick(() => syncPhaseExpand())
     loadTodayPlan(true)
@@ -1654,6 +1731,17 @@ async function submitForm() {
   } finally {
     checkinSubmitting.value = false
   }
+}
+
+function miniCardSummary(c) {
+  const parts = []
+  if (c.time) parts.push(c.time + 'min')
+  if (c.tag) parts.push(c.tag)
+  if (c.count) parts.push(c.count + '题')
+  if (c.accuracy) parts.push(c.accuracy + '%')
+  if (c.tool) parts.push(c.tool)
+  if (c.materialType) parts.push(c.materialType)
+  return parts.length ? parts.join(' · ') : '已记录'
 }
 
 function getCardSummary(c) {
@@ -1675,19 +1763,50 @@ function getCardSummary(c) {
   return prefix + c.name + '(' + c.time + '分钟)'
 }
 
+const showCardDetail = ref(false)
+const detailCardIndex = ref(-1)
+
+const easingSmooth = 'cubic-bezier(0.23,1,0.32,1)'
+
 function editCard(idx) {
-  if (!guardCheckin()) return
+  detailCardIndex.value = idx
+  showCardDetail.value = true
+}
+
+function onDetailSwipe(e) {
+  detailCardIndex.value = e.detail.current
+}
+
+function editCardIntoForm(idx) {
   const c = submittedCards.value[idx]
+  if (!guardCheckin(c.phaseBlock || 'A')) return
   activePickerBlock.value = c.phaseBlock || 'A'
-  pickerCards.value = [{ ...c, files: c.files ? [...c.files] : [] }]
-  submittedCards.value.splice(idx, 1)
+  pickerCards.value = [{ ...c, files: c.files ? [...c.files] : [], _editIndex: idx }]
   showPicker.value = true
-  showSummary.value = false
+}
+
+function cardDetailFields(c) {
+  const map = {}
+  if (c.time) map['时长'] = c.time + ' 分钟'
+  if (c.content) map['内容'] = c.content
+  if (c.result) map['结果'] = c.result
+  if (c.tag) map['类型'] = c.tag
+  if (c.count) map['题数'] = c.count + ' 题'
+  if (c.accuracy) map['正确率'] = c.accuracy + '%'
+  if (c.tool) map['工具'] = c.tool
+  if (c.materialType) map['材料类型'] = c.materialType
+  if (c.materialName) map['材料名称'] = c.materialName
+  if (c.wordCount) map['字数'] = c.wordCount + ' 字'
+  if (c.forwardTime || c.forwardAcc) map['正背'] = (c.forwardTime||'?') + ' / ' + (c.forwardAcc||'?')
+  if (c.backwardTime || c.backwardAcc) map['倒背'] = (c.backwardTime||'?') + ' / ' + (c.backwardAcc||'?')
+  if (c.note) map['备注'] = c.note
+  return map
 }
 
 async function deleteCard(idx) {
   const c = submittedCards.value[idx]
   const block = c.phaseBlock || 'A'
+  if (!guardCheckin(block)) return
   submittedCards.value.splice(idx, 1)
   const remaining = cardsForBlock(block)
   checkinSubmitting.value = true
@@ -1975,6 +2094,8 @@ function triggerGlitch() {
 .nav-actions { display:flex; align-items:center; gap:6px; }
 .nav-history { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-history text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
+[data-theme="white"] .nav-history { background:#f3f4f6; border-color:#e5e7eb; }
+[data-theme="white"] .nav-history text { color:#374151; }
 .history-list { max-height:50vh; overflow-y:auto; margin-bottom:8px; }
 .history-row { padding:8px 0; border-bottom:1px solid var(--border); }
 .hr-date { color:var(--text); font-size:12px; font-weight:600; display:block; }
@@ -2084,7 +2205,7 @@ function triggerGlitch() {
 .btn-checkin text { color:#00d2ff; font-size:15px; font-weight:600; }
 .btn-checkin:active { opacity:0.85; }
 
-.summary-card { border:2px dashed rgba(0,210,255,0.25); cursor:pointer; clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+.summary-card { border:2px solid rgba(0,210,255,0.15); cursor:pointer; clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
 .summary-card:active { background:#1a3040; }
 .summary-label { color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; display:block; margin-bottom:4px; }
 .summary-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.6; }
@@ -2625,4 +2746,232 @@ function triggerGlitch() {
 /* ── 训练项已完成标记 ── */
 .step-watched { border-left-color:#22c55e !important; opacity:0.7; }
 .step-num-done { background:#22c55e !important; }
+
+/* ── 已打卡迷你卡片 ── */
+.summary-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.summary-mini-cards { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+.mini-card {
+  display:flex; align-items:center; gap:8px;
+  background:rgba(0,210,255,0.04); border:1px solid rgba(0,210,255,0.1);
+  border-radius:8px; padding:10px 10px 10px 0;
+  cursor:pointer; transition:all 0.15s; position:relative; overflow:hidden;
+}
+.mini-card:active { background:rgba(0,210,255,0.1); border-color:rgba(0,210,255,0.3); }
+
+/* V1 — 左侧蓝色竖条 */
+.mini-card-v1 .mini-card-accent {
+  width:3px; height:60%; border-radius:0 2px 2px 0;
+  background:linear-gradient(180deg,#00d2ff,#0088cc);
+  box-shadow:0 0 8px rgba(0,210,255,0.4);
+  flex-shrink:0; align-self:center;
+}
+.mini-card-v1 { padding-left:8px; }
+
+/* V2 — 书签折角 */
+.mini-card-v2 {
+  padding-left:14px;
+  clip-path:polygon(0 0,100% 0,100% 100%,14px 100%,0 calc(100% - 12px),0 0);
+}
+.mini-card-v2 .mini-card-accent {
+  position:absolute; top:0; left:0; width:20px; height:20px;
+  background:linear-gradient(135deg,transparent 50%,rgba(0,210,255,0.3) 50%);
+  border-radius:0 0 4px 0;
+}
+.mini-card-v2 .mini-card-accent::after {
+  content:''; position:absolute; top:2px; left:2px; width:4px; height:4px;
+  border-radius:50%; background:#00d2ff; box-shadow:0 0 6px #00d2ff;
+}
+
+.mini-card-left { flex:1; min-width:0; }
+.mini-card-name { color:#fff; font-size:12px; font-weight:600; display:block; }
+.mini-card-summary { color:rgba(255,255,255,0.45); font-size:10px; display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mini-card-del { color:rgba(255,255,255,0.25); font-size:14px; padding:4px; flex-shrink:0; }
+.mini-card-del:active { color:#ff6b6b; }
+.summary-add-btn {
+  text-align:center; padding:10px; border-radius:10px;
+  background:linear-gradient(135deg,rgba(0,210,255,0.25),rgba(0,136,204,0.25));
+  box-shadow:0 0 20px rgba(0,210,255,0.15); cursor:pointer;
+  transition:all 0.15s; margin-bottom:10px;
+}
+.summary-add-btn text { color:#00d2ff; font-size:13px; font-weight:600; }
+.summary-add-btn:active { opacity:0.85; transform:scale(0.97); }
+[data-theme="white"] .summary-add-btn { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .summary-add-btn text { color:#fff; }
+
+/* ── 已打卡滑动详情弹窗 ── */
+.detail-overlay {
+  position:fixed; inset:0; z-index:500;
+  background:rgba(0,0,0,0.75);
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  display:flex; justify-content:center; padding:24px 0 40px;
+}
+.detail-test-card {
+  width:90%; max-width:340px; margin:auto;
+  background:#1a2840; border-radius:12px;
+  border:1.5px solid rgba(0,210,255,0.35);
+  box-shadow:0 0 24px rgba(0,210,255,0.12);
+  padding:16px;
+}
+.detail-swiper-wrap { width:90%; max-width:360px; }
+.detail-swiper { height:420px; }
+.detail-card-slide {
+  background:#1a2840; height:100%; border-radius:12px;
+  border:1.5px solid rgba(0,210,255,0.35);
+  box-shadow:0 0 24px rgba(0,210,255,0.12), 0 0 60px rgba(0,210,255,0.04), inset 0 0 40px rgba(0,210,255,0.02);
+  padding:10px 12px; margin:0 3px; display:flex; flex-direction:column;
+}
+.detail-slide-name { color:#fff; font-size:13px; font-weight:700; display:block; margin-bottom:4px; flex-shrink:0; }
+.detail-slide-body { flex:1; overflow-y:auto; min-height:0; padding-right:2px; }
+.detail-row { display:flex; align-items:flex-start; gap:6px; padding:6px 0; border-bottom:1px solid rgba(0,210,255,0.06); position:relative; }
+.detail-row::before { content:'›'; position:absolute; left:-6px; top:6px; color:rgba(0,210,255,0.25); font-size:9px; font-family:monospace; }
+.detail-label { color:rgba(0,210,255,0.55); font-size:9px; width:48px; flex-shrink:0; font-family:'SF Mono','Cascadia Code',monospace; letter-spacing:0.03em; }
+.detail-value { color:#fff; font-size:12px; flex:1; line-height:1.3; word-break:break-all; font-weight:500; }
+.detail-actions { display:flex; gap:6px; padding-top:8px; flex-shrink:0; border-top:1px solid rgba(0,210,255,0.08); }
+.detail-card-slide::before {
+  content:''; position:absolute; top:0; left:10%; width:80%; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,210,255,0.4),transparent);
+}
+.detail-card-slide::after {
+  content:''; position:absolute; bottom:0; left:10%; width:80%; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,210,255,0.15),transparent);
+}
+.btn-outline-sm {
+  flex:1; padding:10px; text-align:center;
+  border:1px solid rgba(0,210,255,0.4); border-radius:8px;
+  color:#00d2ff; font-size:12px; font-weight:600; cursor:pointer;
+  background:rgba(0,210,255,0.05);
+  transition:all 0.15s;
+}
+.btn-outline-sm:active { background:rgba(0,210,255,0.15); box-shadow:0 0 16px rgba(0,210,255,0.2); }
+.btn-del-sm {
+  flex:1; padding:10px; text-align:center;
+  border:1px solid rgba(239,68,68,0.2); border-radius:8px;
+  color:rgba(239,68,68,0.5); font-size:12px; font-weight:600; cursor:pointer;
+  background:rgba(239,68,68,0.03);
+  transition:all 0.15s;
+}
+.btn-del-sm:active { background:rgba(239,68,68,0.1); box-shadow:0 0 16px rgba(239,68,68,0.15); }
+[data-theme="white"] .detail-card-slide {
+  background:#fff; border-color:rgba(37,99,235,0.25);
+  box-shadow:0 0 24px rgba(37,99,235,0.06), 0 4px 20px rgba(0,0,0,0.04);
+}
+[data-theme="white"] .detail-slide-name { color:#1a1a2e; }
+[data-theme="white"] .detail-dot.active { background:#2563eb; box-shadow:0 0 6px rgba(37,99,235,0.3); }
+[data-theme="white"] .btn-outline-sm { border-color:#bfdbfe; color:#2563eb; background:#eff6ff; }
+[data-theme="white"] .btn-del-sm { border-color:rgba(239,68,68,0.2); }
+[data-theme="white"] .mini-card { background:#f9fafb; border-color:#e5e7eb; }
+[data-theme="white"] .mini-card:active { background:#eff6ff; border-color:#bfdbfe; }
+[data-theme="white"] .mini-card-v1 .mini-card-accent { background:linear-gradient(180deg,#2563eb,#1d4ed8); box-shadow:0 0 6px rgba(37,99,235,0.3); }
+[data-theme="white"] .mini-card-v2 .mini-card-accent { background:linear-gradient(135deg,transparent 50%,rgba(37,99,235,0.2) 50%); }
+[data-theme="white"] .mini-card-v2 .mini-card-accent::after { background:#2563eb; box-shadow:0 0 6px #2563eb; }
+[data-theme="white"] .mini-card-name { color:#1a1a2e; }
+[data-theme="white"] .mini-card-summary { color:#9ca3af; }
+[data-theme="white"] .mini-card-del { color:#d1d5db; }
+
+/* ═══════════════════════════════════════════
+   交互感增强
+   ═══════════════════════════════════════════ */
+
+/* 1. 全局按钮按压下沉 */
+.btn-checkin, .btn-cyber, .picker-item, .time-start-btn, .btn-outline, .btn-solid,
+.nav-back, .nav-dev, .btn-send, .btn-speaker {
+  transition:transform 0.12s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.12s ease, opacity 0.12s ease !important;
+}
+.btn-checkin:active, .picker-item:active, .time-start-btn:active {
+  transform:scale(0.94) !important;
+}
+.time-select:active, .nav-back:active, .nav-dev:active, .sa-item:active {
+  transform:scale(0.92);
+}
+.btn-checkin:active { box-shadow:0 0 4px rgba(0,210,255,0.1) !important; }
+
+/* 2. 卡片悬浮抬起 */
+.card {
+  transition:transform 0.25s cubic-bezier(0.25,0.8,0.25,1), box-shadow 0.25s ease !important;
+}
+@media (hover:hover) {
+  .card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,210,255,0.1), 0 0 40px rgba(0,210,255,0.04) !important; }
+}
+.card:active { transform:translateY(0) scale(0.985); }
+
+/* 3. 列表项依次入场 */
+.tl-phase {
+  animation:phaseSlideIn 0.4s cubic-bezier(0.25,0.8,0.25,1) both;
+}
+.tl-phase:nth-child(1) { animation-delay:0s; }
+.tl-phase:nth-child(2) { animation-delay:0.08s; }
+.tl-phase:nth-child(3) { animation-delay:0.16s; }
+.tl-phase:nth-child(4) { animation-delay:0.24s; }
+@keyframes phaseSlideIn {
+  from { opacity:0; transform:translateX(-12px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+/* 训练步骤依次滑入 */
+.step {
+  animation:stepSlideUp 0.35s cubic-bezier(0.25,0.8,0.25,1) both;
+}
+.step:nth-child(1) { animation-delay:0.05s; }
+.step:nth-child(2) { animation-delay:0.12s; }
+.step:nth-child(3) { animation-delay:0.19s; }
+@keyframes stepSlideUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* 4. 状态切换平滑过渡 */
+.tl-items {
+  transition:max-height 0.3s cubic-bezier(0.25,0.8,0.25,1), opacity 0.25s ease;
+  overflow:hidden;
+}
+.form-card {
+  transition:max-height 0.35s cubic-bezier(0.25,0.8,0.25,1), opacity 0.3s ease, padding 0.3s ease;
+}
+.time-setup, .time-running, .time-expired {
+  transition:opacity 0.3s ease, transform 0.3s cubic-bezier(0.25,0.8,0.25,1);
+}
+.plan-progress-fill {
+  transition:width 0.5s cubic-bezier(0.25,0.8,0.25,1) !important;
+}
+
+/* 5. 倒计时 — 仅变动数字跳动 */
+.countdown-char {
+  display:inline-block; transition:transform 0.15s ease;
+}
+.char-changed {
+  animation:charBounce 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes charBounce {
+  0% { transform:translateY(-3px) scale(1.15); color:#fff; }
+  100% { transform:translateY(0) scale(1); }
+}
+/* 训练步骤悬浮 */
+.step {
+  transition:transform 0.2s cubic-bezier(0.25,0.8,0.25,1), box-shadow 0.2s ease !important;
+}
+.step:hover {
+  transform:translateY(-3px) !important;
+  box-shadow:0 8px 24px rgba(0,210,255,0.2), 0 0 36px rgba(0,210,255,0.06) !important;
+}
+
+/* 6. 弹窗入场 */
+.picker-overlay {
+  animation:overlayFadeIn 0.25s ease-out;
+}
+@keyframes overlayFadeIn {
+  from { background:rgba(0,0,0,0); }
+  to   { background:rgba(0,0,0,0.75); }
+}
+.picker-card {
+  animation:modalSlideUp 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes modalSlideUp {
+  from { opacity:0; transform:translateY(40px) scale(0.95); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+.player-overlay {
+  animation:overlayFadeIn 0.2s ease-out;
+}
+.player-card {
+  animation:modalSlideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
 </style>
