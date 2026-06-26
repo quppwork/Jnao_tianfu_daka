@@ -120,6 +120,7 @@ class TrainingItem(Base):
     instructions: Mapped[str | None] = mapped_column(Text)
     content_item_id: Mapped[int | None] = mapped_column(Integer)
     checkin_status: Mapped[str] = mapped_column(String(20), default="pending")
+    watch_progress: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     plan: Mapped["TrainingPlan"] = relationship(back_populates="items")

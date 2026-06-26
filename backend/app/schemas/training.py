@@ -33,6 +33,19 @@ class TrainingItemOut(BaseModel):
     checkin_status: str
     block: str | None = None
     item_type: str | None = None
+    watch_progress: dict | None = None
+    video_complete: bool = False
+
+
+class WatchProgressRequest(BaseModel):
+    watched_sec: float = Field(..., ge=0)
+    duration_sec: float | None = Field(None, ge=0)
+
+
+class WatchProgressResponse(BaseModel):
+    item_id: int
+    watch_progress: dict
+    video_complete: bool
 
 
 class TrainingTodayResponse(BaseModel):
@@ -43,6 +56,20 @@ class TrainingTodayResponse(BaseModel):
     content_index: int
     planned_minutes: int | None = None
     items: list[TrainingItemOut]
+    day_locked: bool = False
+    globally_cutoff: bool = False
+    training_day: str | None = None
+    server_now: str | None = None
+    unlock_at: str | None = None
+    seconds_until_unlock: int | None = None
+    cutoff_at: str | None = None
+    new_day_at: str | None = None
+    seconds_until_cutoff: int | None = None
+    seconds_until_new_day: int | None = None
+    day_transition: bool = False
+    new_day_ready: bool = True
+    lesson_day: int | None = None
+    schedule_mode: str | None = None
 
 
 class ScheduleRequest(BaseModel):
@@ -125,6 +152,17 @@ class TrainingEntryResponse(BaseModel):
     total_checkins: int = 0
     content_index: int = 0
     today_completed: bool = False
+    day_locked: bool = False
+    training_day: str | None = None
+    server_now: str | None = None
+    unlock_at: str | None = None
+    seconds_until_unlock: int | None = None
+    cutoff_at: str | None = None
+    new_day_at: str | None = None
+    seconds_until_cutoff: int | None = None
+    seconds_until_new_day: int | None = None
+    day_transition: bool = False
+    new_day_ready: bool = True
 
 
 class WindowSetRequest(BaseModel):

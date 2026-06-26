@@ -190,6 +190,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import {
   ensureChildUser,
   ensureJnaoUid,
@@ -243,6 +244,7 @@ async function deleteHistory(assessmentId) {
 }
 
 onMounted(loadHistory)
+onShow(loadHistory)
 
 const toast = ref({ text: '', variant: 'ack' })
 

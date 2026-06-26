@@ -9,7 +9,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.db.models import ContentItem, TrainingItem, TrainingPlan
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
 from app.services.content_meta import estimate_duration_min, item_instruction
 from app.services.doubao_client import chat_completion, is_configured
 from app.services.training_service import (
@@ -22,6 +22,7 @@ from app.services.training_service import (
 )
 from app.services.training_curriculum import route_training_blocks
 from app.services.video_push_service import get_talent_training_video
+from app.services.training_day import get_training_day
 
 ROUTE_SYSTEM = """你是 JNAO 训练排课教练。根据学员今日可用训练总时长、天赋类型，安排「训练A」和「训练B」的音频组合。
 规则：
@@ -168,7 +169,7 @@ async def llm_route_training_blocks(
 def _plan_to_schedule_response(plan: TrainingPlan, *, schedule_mode: str | None = None) -> dict:
     base = _plan_to_response(plan)
     base["items"] = [_item_to_dict(i) for i in sorted(plan.items, key=lambda x: x.sort_order)]
-    base["training_day"] = plan.content_index + 1
+    base["lesson_day"] = plan.content_index + 1
     if schedule_mode:
         base["schedule_mode"] = schedule_mode
     return base
@@ -184,17 +185,23 @@ async def schedule_training_by_duration(
     if planned_minutes < 5:
         raise TrainingError("训练时长至少 5 分钟")
 
-    plan_date = plan_date or date.today()
+    plan_date = plan_date or get_training_day()
     get_or_create_today_plan(db, child_user_id, plan_date)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan:
         raise TrainingError("无法创建训练计划", 500)
 
+    if plan.status == "completed":
+        raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
+
+    if any(it.checkin_status == "done" for it in plan.items):
+        raise TrainingError("已有打卡进度，无法重新排课", 400)
+
     assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
+    if not has_valid_talent(assessment):
         raise TrainingError("请先完成天赋测评", 403)
 
-    talent_code = assessment.talent_code
+    talent_code = effective_talent_code(assessment)
     pool_limit = 80 if plan.content_index <= 0 else 24
     candidates_a = _build_candidates(
         db, talent_code, plan.content_index, series="chaonaoaomi", skill="影像追忆", limit=pool_limit

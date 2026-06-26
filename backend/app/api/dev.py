@@ -10,6 +10,7 @@ from app.services.dev_training_service import (
     reset_all_training,
     reset_talent_assessment,
     reset_today_training,
+    simulate_4am_cutoff,
     simulate_next_training_day,
 )
 from app.services.training_service import TrainingError
@@ -57,6 +58,18 @@ def dev_reset_talent(
 ):
     """清除天赋测评 + 今日训练（用于测试「需先测评」流程）"""
     return reset_talent_assessment(db, child_user_id)
+
+
+@router.post("/training/simulate-4am-cutoff")
+def dev_simulate_4am_cutoff(
+    _: None = Depends(_require_dev_mode),
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return simulate_4am_cutoff(db, child_user_id)
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.post("/training/next-day")

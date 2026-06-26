@@ -56,6 +56,9 @@ def get_session_factory():
 def init_db() -> None:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
+    from app.db.migrate import apply_schema_patches
+
+    apply_schema_patches(engine)
 
 
 def get_db() -> Generator[Session, None, None]:
