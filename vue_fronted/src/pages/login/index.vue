@@ -47,7 +47,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { loginUser } from '@/utils/userApi.js'
+import { loginUser, saveProfile, fetchProfile } from '@/utils/userApi.js'
 
 const form = ref({ name: '', phone: '', role: 'student' })
 const submitting = ref(false)
@@ -68,6 +68,12 @@ async function doLogin() {
   submitting.value = true
   try {
     const data = await loginUser(form.value.phone.trim(), form.value.name.trim())
+    try {
+      const p = await fetchProfile(data.child_user_id)
+      await saveProfile(data.child_user_id, {
+        profile_json: { ...(p.profile_json || {}), role: 'student' },
+      })
+    } catch (_) { /* ignore */ }
     localStorage.setItem('jnao_user', JSON.stringify({
       name: data.nickname,
       phone: data.parent_phone,

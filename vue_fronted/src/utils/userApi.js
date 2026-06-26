@@ -24,6 +24,20 @@ export function clearChildUserId() {
     localStorage.removeItem(GUEST_PHONE_KEY)
     localStorage.removeItem(GUEST_NICKNAME_KEY)
   } catch (e) { /* ignore */ }
+  invalidateChildUserSession()
+}
+
+/** 会话内已验证 uid，避免重复 ping /api/user/profile */
+let _sessionValidatedUid = null
+let _validateInFlight = null
+
+export function invalidateChildUserSession() {
+  _sessionValidatedUid = null
+  _validateInFlight = null
+}
+
+export function markChildUserSessionValid(uid) {
+  if (uid) _sessionValidatedUid = uid
 }
 
 async function apiJson(url, options = {}) {
@@ -137,20 +151,37 @@ export async function loginOrRegisterChildUser({ nickname, phone } = {}) {
 /** 无则自动注册，返回 child_user_id（同一设备/浏览器会复用稳定身份） */
 export async function ensureChildUser(nickname = '学员') {
   const existing = getChildUserId()
+  if (existing && _sessionValidatedUid === existing) {
+    return existing
+  }
   if (existing) {
-    try {
-      await apiJson(withUser('/api/user/profile', existing))
-      return existing
-    } catch (e) {
-      if (e.status !== 404) return existing
-      clearChildUserId()
+    if (!_validateInFlight) {
+      _validateInFlight = (async () => {
+        try {
+          await apiJson(withUser('/api/user/profile', existing))
+          _sessionValidatedUid = existing
+        } catch (e) {
+          if (e.status === 404) {
+            clearChildUserId()
+          } else {
+            _sessionValidatedUid = existing
+          }
+        } finally {
+          _validateInFlight = null
+        }
+      })()
     }
+    await _validateInFlight
+    const uid = getChildUserId()
+    if (uid) return uid
   }
 
   const loginProfile = readLoginProfile()
   const nick = loginProfile?.nickname || getOrCreateGuestNickname(nickname)
   const phone = loginProfile?.phone || getOrCreateGuestPhone()
-  return registerChildUser(phone, nick)
+  const id = await registerChildUser(phone, nick)
+  _sessionValidatedUid = id
+  return id
 }
 
 /** JNAO 外部 API 用的 uid（存于 child_user.jnao_uid） */
@@ -197,6 +228,19 @@ export async function deleteAssessmentReport(userId, assessmentId) {
   })
 }
 
+export async function fetchLatestAssessment(userId) {
+  return apiJson(withUser('/api/talent/assessment/latest', userId))
+}
+
+export function gradeToSchoolStage(grade) {
+  const g = String(grade || '')
+  if (['一年级', '二年级', '三年级'].includes(g)) return 'primary_low'
+  if (['四年级', '五年级', '六年级'].includes(g)) return 'primary_high'
+  if (['初一', '初二', '初三'].includes(g)) return 'junior'
+  if (['高一', '高二', '高三'].includes(g)) return 'senior'
+  return 'primary_high'
+}
+
 export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
   return apiJson('/api/talent/report', {
     method: 'POST',
@@ -212,9 +256,15 @@ export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
 
 // ── 今日训练 ──
 
-export async function fetchTrainingToday(userId) {
+export async function fetchTrainingEntry(userId) {
+  return apiJson(withUser('/api/training/entry', userId))
+}
+
+export async function fetchTrainingToday(userId, options = {}) {
+  const skipAi = options.skipAi ?? options.skip_ai ?? false
+  const base = skipAi ? '/api/training/today?skip_ai=1' : '/api/training/today'
   try {
-    const data = await apiJson(withUser('/api/training/today', userId))
+    const data = await apiJson(withUser(base, userId))
     return { data }
   } catch (e) {
     if (e.status === 403) {
@@ -301,6 +351,10 @@ export async function fetchGuideSession(userId) {
   return apiJson(withUser('/api/guide/session', userId))
 }
 
+export async function clearGuideSession(userId) {
+  return apiJson(withUser('/api/guide/clear', userId), { method: 'POST' })
+}
+
 export async function sendGuideMessage(userId, message, sessionId = null) {
   return apiJson(withUser('/api/guide/chat', userId), {
     method: 'POST',
@@ -310,6 +364,23 @@ export async function sendGuideMessage(userId, message, sessionId = null) {
 }
 
 // ── 学科答疑 ──
+
+export async function fetchQaSessions(userId) {
+  const data = await apiJson(withUser('/api/qa/sessions', userId))
+  return data.items || []
+}
+
+export async function createQaSession(userId, subject = null) {
+  return apiJson(withUser('/api/qa/sessions', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject: subject || null }),
+  })
+}
+
+export async function deleteQaSession(userId, sessionId) {
+  return apiJson(withUser(`/api/qa/sessions/${sessionId}`, userId), { method: 'DELETE' })
+}
 
 export async function fetchQaSession(userId, sessionId) {
   return apiJson(withUser(`/api/qa/sessions/${sessionId}`, userId))
@@ -381,6 +452,19 @@ export async function fetchGrowthTimeline(userId) {
   return data.items || []
 }
 
+export async function fetchGrowthSummary(userId) {
+  return apiJson(withUser('/api/growth/summary', userId))
+}
+
+export async function fetchGrowthMilestones(userId) {
+  const data = await apiJson(withUser('/api/growth/milestones', userId))
+  return data.items || []
+}
+
+export async function fetchGrowthShare(userId) {
+  return apiJson(withUser('/api/growth/share', userId))
+}
+
 // ── 开发者工具（JNAO_DEV_MODE=1）──
 
 export async function fetchDevTrainingStatus(userId) {
@@ -397,4 +481,8 @@ export async function devResetAllTraining(userId) {
 
 export async function devSimulateNextDay(userId) {
   return apiJson(withUser('/api/dev/training/next-day', userId), { method: 'POST' })
+}
+
+export async function devResetTalent(userId) {
+  return apiJson(withUser('/api/dev/training/reset-talent', userId), { method: 'POST' })
 }

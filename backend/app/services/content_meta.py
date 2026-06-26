@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 import re
 from typing import TYPE_CHECKING
 
@@ -65,15 +66,46 @@ def parse_item_meta(item: ContentItem) -> dict:
     }
 
 
+def probe_audio_duration(url: str, timeout: int = 15) -> int | None:
+    """用 mutagen 探测 OSS 音频真实时长（仅读 HTTP Range 头部，不下载完整文件）"""
+    try:
+        from urllib.parse import urlparse, urlunparse, quote
+        from urllib.request import Request, urlopen
+
+        from mutagen.mp3 import MP3
+
+        p = urlparse(url)
+        encoded = urlunparse((p.scheme, p.netloc, quote(p.path), p.params, p.query, p.fragment))
+        req = Request(encoded, headers={"Range": "bytes=0-131072"})
+        resp = urlopen(req, timeout=timeout)
+        data = resp.read()
+        audio = MP3(BytesIO(data))
+        secs = audio.info.length
+        if secs > 0:
+            return max(1, round(secs / 60))
+    except Exception:
+        pass
+    return None
+
+
 def estimate_duration_min(item: ContentItem) -> int:
     if item.duration_min and item.duration_min > 0:
         return int(item.duration_min)
     meta = parse_item_meta(item)
     if meta.get("duration_min"):
         return int(meta["duration_min"])
+    # 尝试 OSS 探测真实时长
+    url = item.play_url or ""
+    if url and ("oss-cn-beijing" in url or "aliyuncs.com" in url):
+        from app.services.oss_client import sign_play_url
+        signed = sign_play_url(url, expires=3600)
+        if signed:
+            probed = probe_audio_duration(signed)
+            if probed:
+                return probed
+    # 探测失败 → 文件大小估算：约 1MB ≈ 1 分钟
     size = int(meta.get("file_size_bytes") or 0)
     if size > 0:
-        # MP3 体积粗算：约 1MB ≈ 1 分钟
         return max(5, min(30, round(size / (1024 * 1024))))
     return 12
 

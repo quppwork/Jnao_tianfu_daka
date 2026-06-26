@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import QaMessage, QaSession
-from app.services.qa_prompt_builder import talent_coaching_hint
+from app.agents.shared.talent import talent_coaching_hint
 
 
 MISTAKE_PATTERNS: dict[str, str] = {
@@ -49,13 +49,9 @@ def build_coach_metadata(
 
 
 def recent_session_topics(db: Session, child_user_id: int, limit: int = 5) -> list[str]:
-    rows = db.scalars(
-        select(QaSession)
-        .where(QaSession.child_user_id == child_user_id)
-        .order_by(QaSession.id.desc())
-        .limit(limit)
-    ).all()
-    return [r.title for r in rows if r.title and r.title != "新对话"]
+    from app.agents.qa.memory import QaMemory
+
+    return QaMemory.recent_topics(db, child_user_id, limit=limit)
 
 
 def count_user_qa_turns(db: Session, child_user_id: int) -> int:
