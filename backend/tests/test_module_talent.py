@@ -33,6 +33,33 @@ class TestModuleTalent:
         assert latest.status_code == 200
         assert latest.json()["talent_code"] == 1
 
+    def test_latest_backfills_missing_talent_code(self, client, db_session, registered_user):
+        """历史有 talent_primary 但 talent_code 为空时，训练入口应仍识别为已测评"""
+        from app.db.models import TalentAssessment
+        from app.services.training_service import get_training_entry
+
+        uid = registered_user["child_user_id"]
+        row = TalentAssessment(
+            child_user_id=uid,
+            jnao_record_id="legacy-1",
+            answer_bitstring="1" * 35,
+            test_type=1,
+            talent_primary="学者",
+            talent_tag=None,
+            talent_code=None,
+        )
+        db_session.add(row)
+        db_session.commit()
+
+        entry = get_training_entry(db_session, uid)
+        assert entry["has_assessment"] is True
+        assert entry["needs_assessment"] is False
+        assert entry["talent_code"] == 1
+
+        latest = client.get(f"/api/talent/assessment/latest?user_id={uid}")
+        assert latest.status_code == 200
+        assert latest.json()["talent_code"] == 1
+
     def test_delete_assessment_archives(self, client: TestClient, mock_jnao, registered_user, db_session):
         uid = registered_user["child_user_id"]
         res = client.post(

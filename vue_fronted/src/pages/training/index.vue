@@ -44,7 +44,12 @@
 
         <!-- Plan content (loaded) -->
         <template v-else>
-          <view v-if="planPhases.length" class="plan-timeline">
+          <view v-if="todayPlan?.status === 'transition' || dayTransition" class="plan-transition-wrap">
+            <text class="plan-transition-icon">🌙</text>
+            <text class="plan-transition-title">训练日切换中</text>
+            <text class="plan-transition-sub">{{ aiPlanText || '约5分钟后开始新的一天' }}</text>
+          </view>
+          <view v-else-if="planPhases.length" class="plan-timeline">
             <view
               v-for="(phase, pi) in planPhases"
               :key="phase.block"
@@ -164,8 +169,8 @@
 
         <view v-else class="time-expired">
           <text class="time-expired-icon">🔒</text>
-          <text class="time-expired-text">训练时长已到，音视频已锁定</text>
-          <text class="time-expired-sub">仍可继续打卡 · 今日计划 {{ durationLabel }}</text>
+          <text class="time-expired-text">{{ globalLockTitle }}</text>
+          <text class="time-expired-sub">{{ globalLockSub }}</text>
         </view>
 
         <view v-if="devMode" class="dev-panel">
@@ -175,7 +180,8 @@
           </view>
           <view class="dev-actions">
             <view class="dev-action dev-action-primary" @click="devRefreshAll"><text>🔄 重置今日</text></view>
-            <view class="dev-action" @click="devGoNextDay"><text>➡️ 下一天</text></view>
+            <view class="dev-action" @click="devSimulate4amCutoffAction"><text>🌙 模拟4点</text></view>
+            <view class="dev-action" @click="devGoNextDay"><text>🌅 新一天</text></view>
             <view class="dev-action" @click="devRefreshAiPlan"><text>🤖 刷新 AI</text></view>
           </view>
           <view class="dev-actions">
@@ -187,12 +193,12 @@
             <view class="dev-action dev-action-danger" @click="devClearAllHistory"><text>🗑 清空历史</text></view>
             <view class="dev-action dev-action-danger" @click="devResetTalentAction"><text>🧬 重置天赋</text></view>
           </view>
-          <text class="dev-panel-hint">已跳过计时限制 · 重置今日 = 清空今日方案 + 重新加载（不删天赋测评）</text>
+          <text class="dev-panel-hint">模拟4点 = 全局截止并隐藏昨日内容 · 新一天 = 4:05 后切换</text>
         </view>
       </view>
 
       <!-- 训练阶段（动态 A/B/C…，依据今日方案） -->
-      <template v-for="(phase, pi) in planPhases" :key="phase.block">
+      <template v-if="!dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in planPhases" :key="phase.block">
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
           <text class="section-title" :class="{ dim: !phase.unlocked }">训练 {{ phase.block }}{{ phase.unlocked ? '' : ' 🔒' }}</text>
@@ -210,11 +216,11 @@
                 :class="{
                   'step-preview-locked': !phase.unlocked,
                   'step-locked': phase.unlocked && isMediaLocked,
-                  'step-watched': phase.unlocked && watchedItemIds.has(item.id),
+                  'step-watched': phase.unlocked && isItemWatched(item),
                 }"
                 @click="openPhaseMediaItem(item, phase)"
               >
-                <view class="step-num" :class="{ 'step-num-done': watchedItemIds.has(item.id), dim: !phase.unlocked }">{{ idx + 1 }}</view>
+                <view class="step-num" :class="{ 'step-num-done': isItemWatched(item), dim: !phase.unlocked }">{{ idx + 1 }}</view>
                 <view class="step-content">
                   <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">{{ itemLabel(item) }}</text>
                   <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</view>
@@ -507,7 +513,18 @@
           <view class="player-close" @click="closeMedia">✕</view>
         </view>
         <view v-if="mediaPlayer.type === 'video'" class="player-body">
-          <view v-html="videoHtml"></view>
+          <video
+            v-if="videoSrc"
+            ref="trainingVideoEl"
+            class="training-video"
+            :src="videoSrc"
+            controls
+            autoplay
+            @timeupdate="onVideoTimeUpdate"
+            @loadedmetadata="onVideoLoadedMetadata"
+            @pause="flushWatchProgress"
+          />
+          <text v-else>暂无视频资源</text>
         </view>
         <view v-if="mediaPlayer.type === 'audio'" class="player-body">
           <text class="pa-icon" style="font-size:48px;display:block;text-align:center;margin-bottom:8px;">🎧</text>
@@ -521,16 +538,23 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay, devResetTalent } from '@/utils/userApi.js'
+import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
 
-const TIMER_STORAGE_KEY = 'jnao_training_timer'
+const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
 const devMode = ref(getDevMode())
 const devStatusText = ref('')
 const timerPhase = ref('setup') // setup | running | expired
+const serverTimeOffsetMs = ref(0)
+const unlockAtMs = ref(null)
+const cutoffAtMs = ref(null)
+const newDayAtMs = ref(null)
+const dayTransition = ref(false)
+const trainingDayKey = ref('')
+let dayUnlockTickId = null
 const selectedHours = ref(1)
 const selectedMinutes = ref(30)
 const remainingSeconds = ref(0)
@@ -545,20 +569,115 @@ const hourLabels = HOUR_OPTIONS.map(h => `${h} 小时`)
 const minuteLabels = MINUTE_OPTIONS.map(m => `${m} 分钟`)
 const hourIndex = computed(() => Math.max(0, HOUR_OPTIONS.indexOf(selectedHours.value)))
 const minuteIndex = computed(() => Math.max(0, MINUTE_OPTIONS.indexOf(selectedMinutes.value)))
-const canStartTimer = computed(() => !planLoading.value && !planJustGenerated.value && (selectedHours.value > 0 || selectedMinutes.value > 0))
+const canStartTimer = computed(() => !trainingDayLocked.value && !planLoading.value && !planJustGenerated.value && (selectedHours.value > 0 || selectedMinutes.value > 0))
 const isPageLoading = computed(() => planLoading.value || planJustGenerated.value)
-const isMediaLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup' || timerPhase.value === 'expired'))
-const isCheckinLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup'))
+/** 训练日已完成（次日凌晨4点才能新开一天），仅禁止重新「开始训练」 */
+const trainingDayLocked = computed(() => todayPlan.value?.day_locked === true)
+const dayLockText = computed(() => {
+  if (!unlockAtMs.value) return '今日训练已完成，次日凌晨4点解锁'
+  const left = unlockAtMs.value - (Date.now() + serverTimeOffsetMs.value)
+  if (left <= 0) return '训练日已解锁，请刷新页面'
+  const h = Math.floor(left / 3600000)
+  const m = Math.floor((left % 3600000) / 60000)
+  return `今日训练已完成，${h}小时${m}分钟后解锁（凌晨4点）`
+})
+/** 全局凌晨4点截止或日切窗口 */
+const isGlobalCutoff = computed(() => {
+  if (dayTransition.value || todayPlan.value?.status === 'transition') return true
+  if (todayPlan.value?.globally_cutoff) return true
+  if (cutoffAtMs.value && nowSynced() >= cutoffAtMs.value) return true
+  return false
+})
+const globalLockTitle = computed(() => {
+  if (dayTransition.value || todayPlan.value?.status === 'transition') return '训练日切换中'
+  if (isGlobalCutoff.value && timerPhase.value !== 'expired') return '凌晨4点训练日已截止'
+  return '训练时长已到，音视频已锁定'
+})
+const globalLockSub = computed(() => {
+  if (dayTransition.value || todayPlan.value?.status === 'transition') {
+    const left = newDayAtMs.value ? newDayAtMs.value - nowSynced() : 0
+    if (left > 0) {
+      const m = Math.ceil(left / 60000)
+      return `约 ${m} 分钟后开始新的一天`
+    }
+    return '即将加载新一天训练'
+  }
+  if (isGlobalCutoff.value) return '全局截止，音视频与打卡已锁定'
+  return `仍可继续打卡 · 今日计划 ${durationLabel.value}`
+})
+/** 音视频/打卡：计时结束或全局4点截止 */
+const isMediaLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup' || timerPhase.value === 'expired' || isGlobalCutoff.value))
+const isCheckinLocked = computed(() => !devMode.value && (isPageLoading.value || timerPhase.value === 'setup' || timerPhase.value === 'expired' || isGlobalCutoff.value))
 const mediaLockText = computed(() => {
   if (isPageLoading.value) return '方案生成中，请稍候...'
-  return timerPhase.value === 'expired' ? '训练时长已到，音视频已锁定' : '请先设置时长并开始训练'
+  if (dayTransition.value || todayPlan.value?.status === 'transition') return '训练日切换中，请稍候'
+  if (isGlobalCutoff.value) return '凌晨4点训练日已截止'
+  if (timerPhase.value === 'expired') return '训练时长已到，音视频已锁定'
+  if (trainingDayLocked.value && timerPhase.value === 'setup') return dayLockText.value
+  return '请先设置时长并开始训练'
 })
 const checkinLockText = computed(() => {
   if (isPageLoading.value) return '方案生成中，请稍候...'
+  if (dayTransition.value || todayPlan.value?.status === 'transition') return '训练日切换中，请稍候'
+  if (isGlobalCutoff.value) return '凌晨4点训练日已截止，无法修改打卡'
+  if (timerPhase.value === 'expired') return '训练时长已到，无法修改打卡'
+  if (trainingDayLocked.value && timerPhase.value === 'setup') return dayLockText.value
   return '请先设置时长并开始训练'
 })
 const countdownDisplay = computed(() => formatDuration(remainingSeconds.value))
 const durationLabel = computed(() => formatDuration(plannedDurationSec.value))
+
+function timerStorageKey() {
+  return `${TIMER_STORAGE_KEY_PREFIX}_${trainingDayKey.value || 'default'}`
+}
+
+function nowSynced() {
+  return Date.now() + serverTimeOffsetMs.value
+}
+
+function applyServerTimeMeta(data) {
+  if (!data) return
+  if (data.server_now) {
+    serverTimeOffsetMs.value = new Date(data.server_now).getTime() - Date.now()
+  }
+  if (data.unlock_at) unlockAtMs.value = new Date(data.unlock_at).getTime()
+  if (data.cutoff_at) cutoffAtMs.value = new Date(data.cutoff_at).getTime()
+  if (data.new_day_at) newDayAtMs.value = new Date(data.new_day_at).getTime()
+  if (data.day_transition != null) dayTransition.value = !!data.day_transition
+  if (data.training_day) trainingDayKey.value = data.training_day
+}
+
+function checkGlobalSchedule() {
+  checkDayUnlock()
+  if (isGlobalCutoff.value && timerPhase.value === 'running') {
+    expireTrainingTimer(true)
+  }
+  const inTransition = dayTransition.value || todayPlan.value?.status === 'transition'
+  if (inTransition && newDayAtMs.value && nowSynced() >= newDayAtMs.value) {
+    resetAllLocalState()
+    loadTodayPlan(true)
+  }
+}
+
+function checkDayUnlock() {
+  if (!unlockAtMs.value || !trainingDayLocked.value) return
+  if (nowSynced() >= unlockAtMs.value) {
+    timerPhase.value = 'setup'
+    loadTodayPlan(true)
+  }
+}
+
+function startDayUnlockWatch() {
+  if (dayUnlockTickId != null) return
+  dayUnlockTickId = setInterval(checkGlobalSchedule, 15000)
+}
+
+function clearDayUnlockWatch() {
+  if (dayUnlockTickId != null) {
+    clearInterval(dayUnlockTickId)
+    dayUnlockTickId = null
+  }
+}
 
 function formatDuration(totalSec) {
   const sec = Math.max(0, totalSec)
@@ -585,13 +704,13 @@ function clearTimerTick() {
 
 function persistTimer(endAt, plannedSec) {
   try {
-    sessionStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify({ endAt, plannedSec }))
+    sessionStorage.setItem(timerStorageKey(), JSON.stringify({ endAt, plannedSec }))
   } catch (_) { /* ignore */ }
 }
 
 function readTimerData() {
   try {
-    const raw = sessionStorage.getItem(TIMER_STORAGE_KEY)
+    const raw = sessionStorage.getItem(timerStorageKey())
     if (!raw) return null
     const data = JSON.parse(raw)
     if (!data?.endAt) return null
@@ -601,12 +720,15 @@ function readTimerData() {
   }
 }
 
-function expireTrainingTimer() {
+function expireTrainingTimer(silent = false) {
   clearTimerTick()
   timerPhase.value = 'expired'
   remainingSeconds.value = 0
   closeMedia()
-  uni.showToast({ title: '训练时长已到，音视频已锁定', icon: 'none', duration: 2500 })
+  if (!silent) {
+    const msg = isGlobalCutoff.value ? '凌晨4点训练日已截止' : '训练时长已到，音视频已锁定'
+    uni.showToast({ title: msg, icon: 'none', duration: 2500 })
+  }
 }
 
 function syncTimerFromEndAt(endAt) {
@@ -629,6 +751,10 @@ function tickTrainingTimer() {
 }
 
 function startTrainingTimer() {
+  if (trainingDayLocked.value) {
+    uni.showToast({ title: dayLockText.value, icon: 'none', duration: 2500 })
+    return
+  }
   if (!canStartTimer.value) {
     uni.showToast({ title: '请至少选择 1 分钟', icon: 'none' })
     return
@@ -641,17 +767,21 @@ function startTrainingTimer() {
     try {
       uni.showLoading({ title: '正在排课...' })
       const uid = await ensureChildUser()
-      const result = await scheduleTrainingPlan(uid, plannedMin)
-      if (result.error === 'assessment') {
-        needAssessment.value = true
-        showAssessmentModal.value = true
-        return
+      const alreadyScheduled = todayPlan.value?.planned_minutes && (todayPlan.value?.items?.length || 0) > 1
+      if (!alreadyScheduled) {
+        const result = await scheduleTrainingPlan(uid, plannedMin)
+        if (result.error === 'assessment') {
+          needAssessment.value = true
+          showAssessmentModal.value = true
+          return
+        }
+        if (result.error) throw new Error(result.message)
+        todayPlan.value = result.data
+        applyServerTimeMeta(result.data)
+        applyPlanMedia(result.data)
+        aiPlanText.value = result.data.report_text || ''
+        nextTick(() => syncPhaseExpand())
       }
-      if (result.error) throw new Error(result.message)
-      todayPlan.value = result.data
-      applyPlanMedia(result.data)
-      aiPlanText.value = result.data.report_text || ''
-      nextTick(() => syncPhaseExpand())
     } catch (e) {
       uni.showToast({ title: e.message || '排课失败', icon: 'none' })
       return
@@ -685,6 +815,10 @@ function restoreTrainingTimer() {
 
 function guardMedia() {
   if (devMode.value) return true
+  if (isGlobalCutoff.value) {
+    uni.showToast({ title: '训练日已截止，无法播放', icon: 'none' })
+    return false
+  }
   if (timerPhase.value === 'expired') {
     uni.showToast({ title: '训练时长已到，无法播放', icon: 'none' })
     return false
@@ -698,6 +832,14 @@ function guardMedia() {
 
 function guardCheckin() {
   if (devMode.value) return true
+  if (isGlobalCutoff.value) {
+    uni.showToast({ title: '训练日已截止，无法修改打卡', icon: 'none' })
+    return false
+  }
+  if (timerPhase.value === 'expired') {
+    uni.showToast({ title: '训练时长已到，无法修改打卡', icon: 'none' })
+    return false
+  }
   if (timerPhase.value === 'setup') {
     uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
     return false
@@ -744,10 +886,11 @@ async function setAttitude(pct) {
 }
 
 function resetAllLocalState() {
-  devResetTimer()
+  devResetTimer(true)
   pickerCards.value = []
   activePickerBlock.value = null
   watchedItemIds.value = new Set()
+  watchProgressMap.value = {}
   showPicker.value = false
   showSummary.value = false
   submittedCards.value = []
@@ -782,6 +925,24 @@ async function devRefreshAll() {
     uni.showToast({ title: '今日已重置并刷新', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+async function devSimulate4amCutoffAction() {
+  if (!devMode.value) return
+  try {
+    uni.showLoading({ title: '模拟4点截止...' })
+    const uid = await ensureChildUser()
+    await devSimulate4amCutoff(uid)
+    resetAllLocalState()
+    expireTrainingTimer(true)
+    await loadTodayPlan(true)
+    await loadDevStatus()
+    uni.showToast({ title: '已模拟凌晨4点全局截止', icon: 'none', duration: 2500 })
+  } catch (e) {
+    uni.showToast({ title: e.message || '模拟失败', icon: 'none' })
   } finally {
     uni.hideLoading()
   }
@@ -854,14 +1015,14 @@ function clearTimerStorage() {
   } catch (_) { /* ignore */ }
 }
 
-function devResetTimer() {
+function devResetTimer(silent = false) {
   clearTimerTick()
   clearTimerStorage()
   timerPhase.value = 'setup'
   remainingSeconds.value = 0
   plannedDurationSec.value = 0
   closeMedia()
-  uni.showToast({ title: '计时已重置', icon: 'none' })
+  if (!silent) uni.showToast({ title: '计时已重置', icon: 'none' })
 }
 
 function devSimulateExpire() {
@@ -924,8 +1085,11 @@ const scores = [
   { pct:0,   emoji:'☠️', desc:'不完成任务，严重不配合训练' },
 ]
 const mediaPlayer = ref({ show: false, type: 'video' })
-const watchedItemIds = ref(new Set())    // 已观看的训练项 ID
-const lastOpenedItem = ref(null)          // 最近打开的媒体项
+const watchedItemIds = ref(new Set())
+const watchProgressMap = ref({})
+const trainingVideoEl = ref(null)
+let watchProgressSaveTimer = null
+const lastOpenedItem = ref(null)
 const videoSrc = ref('/static/training_video.mp4')
 const audioSrc = ref('')
 const audioTitle = ref('🎧 训练用音频')
@@ -1075,6 +1239,92 @@ function itemLabel(item) {
   return '训练项'
 }
 
+function isVideoItem(item) {
+  return item?.item_type === 'video' || !!item?.video_url
+}
+
+function isItemWatched(item) {
+  if (!item?.id) return false
+  if (isVideoItem(item)) return false
+  return watchedItemIds.value.has(item.id)
+}
+
+function hydrateWatchProgressFromPlan(plan) {
+  const map = { ...watchProgressMap.value }
+  for (const item of plan?.items || []) {
+    if (!item?.id) continue
+    if (item.watch_progress) map[item.id] = { ...item.watch_progress }
+  }
+  watchProgressMap.value = map
+}
+
+async function flushWatchProgress() {
+  const item = lastOpenedItem.value
+  const el = trainingVideoEl.value
+  if (!item?.id || !isVideoItem(item) || !el) return
+  const watchedSec = el.currentTime || 0
+  const durationSec = el.duration || 0
+  if (durationSec <= 0) return
+  const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
+  watchProgressMap.value = {
+    ...watchProgressMap.value,
+    [item.id]: { watched_sec: watchedSec, duration_sec: durationSec, pct },
+  }
+  try {
+    const uid = await ensureChildUser()
+    const res = await postTrainingWatchProgress(uid, item.id, {
+      watched_sec: watchedSec,
+      duration_sec: durationSec,
+    })
+    if (res?.watch_progress) {
+      watchProgressMap.value = { ...watchProgressMap.value, [item.id]: res.watch_progress }
+    }
+  } catch (_) { /* ignore */ }
+}
+
+function onVideoLoadedMetadata(e) {
+  const el = e?.target || trainingVideoEl.value
+  if (!el || !lastOpenedItem.value?.id) return
+  flushWatchProgress()
+}
+
+function onVideoTimeUpdate(e) {
+  const el = e?.target || trainingVideoEl.value
+  const item = lastOpenedItem.value
+  if (!el || !item?.id) return
+  const durationSec = el.duration || 0
+  if (durationSec <= 0) return
+  const watchedSec = el.currentTime || 0
+  const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
+  watchProgressMap.value = {
+    ...watchProgressMap.value,
+    [item.id]: { watched_sec: watchedSec, duration_sec: durationSec, pct },
+  }
+  if (watchProgressSaveTimer) return
+  watchProgressSaveTimer = setTimeout(() => {
+    watchProgressSaveTimer = null
+    flushWatchProgress()
+  }, 4000)
+}
+
+function canPhaseCheckin(phase) {
+  if (!phase.unlocked) return false
+  if (devMode.value) return true
+  if (planLoading.value || planJustGenerated.value) return false
+  if (timerPhase.value === 'setup' || timerPhase.value === 'expired') return false
+  if (isGlobalCutoff.value) return false
+  return true
+}
+
+function phaseCheckinLockText(phase) {
+  if (!phase.unlocked) {
+    const idx = planPhases.value.findIndex(p => p.block === phase.block)
+    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
+    return prev ? `请先完成训练 ${prev} 打卡` : '待解锁'
+  }
+  return checkinLockText.value
+}
+
 function itemStepHint(item, phase) {
   if (!phase.unlocked) {
     const idx = planPhases.value.findIndex(p => p.block === phase.block)
@@ -1082,7 +1332,8 @@ function itemStepHint(item, phase) {
     return prev ? `🔒 完成训练 ${prev} 打卡后解锁` : '🔒 待解锁'
   }
   if (isMediaLocked.value && timerPhase.value === 'expired') return '🔒 时长已到'
-  if (watchedItemIds.value.has(item.id)) return '✅ 已观看'
+  if (isGlobalCutoff.value) return '🔒 训练日已截止'
+  if (isItemWatched(item)) return '✅ 已观看'
   if (item.video_url) return '▶ 点击播放'
   if (item.audio_url) return `▶ 约 ${item.duration_min || '?'} 分钟`
   return '暂无资源'
@@ -1101,21 +1352,6 @@ function phaseMediaLockText(phase) {
     return prev ? `完成训练 ${prev} 打卡后解锁` : '待解锁'
   }
   return mediaLockText.value
-}
-
-function canPhaseCheckin(phase) {
-  if (!phase.unlocked) return false
-  if (!devMode.value && (planLoading.value || planJustGenerated.value || timerPhase.value === 'setup')) return false
-  return true
-}
-
-function phaseCheckinLockText(phase) {
-  if (!phase.unlocked) {
-    const idx = planPhases.value.findIndex(p => p.block === phase.block)
-    const prev = idx > 0 ? planPhases.value[idx - 1]?.block : ''
-    return prev ? `请先完成训练 ${prev} 打卡` : '待解锁'
-  }
-  return checkinLockText.value
 }
 
 function phaseTip(phase) {
@@ -1148,7 +1384,6 @@ function openPhaseMediaItem(item, phase) {
   openMediaItem(item)
 }
 
-const videoHtml = computed(() => videoSrc.value ? `<video src="${videoSrc.value}" controls autoplay style="width:100%;border-radius:10px;background:#000;"></video>` : '<text>暂无视频资源</text>')
 const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const pickerCards = ref([])
 const sparkAbi = ref(-1)
@@ -1343,7 +1578,7 @@ function openPicker(block) {
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
-  if (todayCompleted.value && phase.allDone) {
+  if (todayCompleted.value && phase.allDone && timerPhase.value !== 'running') {
     if (submittedCards.value.length) showSummary.value = true
     else uni.showToast({ title: '今日训练已全部完成', icon: 'none' })
     return
@@ -1507,9 +1742,15 @@ function openMedia(type) {
   }
 }
 function closeMedia() {
-  if (lastOpenedItem.value?.id) {
+  if (watchProgressSaveTimer) {
+    clearTimeout(watchProgressSaveTimer)
+    watchProgressSaveTimer = null
+  }
+  if (lastOpenedItem.value?.id && isVideoItem(lastOpenedItem.value)) {
+    flushWatchProgress()
+  } else if (lastOpenedItem.value?.id) {
     watchedItemIds.value.add(lastOpenedItem.value.id)
-    watchedItemIds.value = new Set(watchedItemIds.value) // 触发响应式
+    watchedItemIds.value = new Set(watchedItemIds.value)
   }
   mediaPlayer.value.show = false
 }
@@ -1520,19 +1761,49 @@ function applyTalentLabelFromTag(talentTag) {
   talentLabel.value = tagMap[talentTag] || `${talentTag}者`
 }
 
+async function resolveAssessmentFromHistory(uid) {
+  try {
+    const latest = await fetchLatestAssessment(uid)
+    if (latest?.talent_code || latest?.talent_primary) {
+      applyTalentLabelFromTag(latest.talent_tag)
+      return true
+    }
+  } catch (_) { /* try history list */ }
+  try {
+    const history = await fetchAssessmentHistory(uid)
+    const h = history?.[0]
+    if (h && (h.talent_primary || h.talent)) {
+      applyTalentLabelFromTag(h.talent_tag)
+      return true
+    }
+  } catch (_) { /* ignore */ }
+  return false
+}
+
 async function checkTrainingEntry(uid) {
   try {
     const entry = await fetchTrainingEntry(uid)
-    if (entry.needs_assessment || !entry.has_assessment) {
-      needAssessment.value = true
-      showAssessmentModal.value = true
-      return false
+    applyServerTimeMeta(entry)
+    if (!entry.needs_assessment && entry.has_assessment) {
+      needAssessment.value = false
+      showAssessmentModal.value = false
+      applyTalentLabelFromTag(entry.talent_tag)
+      return true
     }
-    needAssessment.value = false
-    showAssessmentModal.value = false
-    applyTalentLabelFromTag(entry.talent_tag)
-    return true
+    if (await resolveAssessmentFromHistory(uid)) {
+      needAssessment.value = false
+      showAssessmentModal.value = false
+      return true
+    }
+    needAssessment.value = true
+    showAssessmentModal.value = true
+    return false
   } catch (e) {
+    if (await resolveAssessmentFromHistory(uid)) {
+      needAssessment.value = false
+      showAssessmentModal.value = false
+      return true
+    }
     needAssessment.value = true
     showAssessmentModal.value = true
     return false
@@ -1593,6 +1864,15 @@ async function loadTodayPlan(silent = false) {
     if (result.error) throw new Error(result.message)
 
     todayPlan.value = result.data
+    applyServerTimeMeta(result.data)
+
+    if (result.data.status === 'transition' || !result.data.plan_id) {
+      resetAllLocalState()
+      aiPlanText.value = result.data.report_text || '训练日切换中'
+      if (isFirstLoad) planLoading.value = false
+      return
+    }
+
     if (!silent) {
       submittedCards.value = []
       phaseRecordIds.value = {}
@@ -1603,6 +1883,7 @@ async function loadTodayPlan(silent = false) {
     lessonIndex.value = (result.data.content_index ?? 0) + 1
     aiPlanText.value = result.data.report_text || ''
     applyPlanMedia(result.data)
+    hydrateWatchProgressFromPlan(result.data)
 
     await loadTodayCheckinRecords(uid, result.data.plan_id)
     nextTick(() => syncPhaseExpand())
@@ -1641,13 +1922,20 @@ function goTalent() {
   uni.navigateTo({ url: '/pages/talent/index' })
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await loadTodayPlan()
   restoreTrainingTimer()
-  loadTodayPlan()
+  startDayUnlockWatch()
   if (devMode.value) loadDevStatus()
 })
-onShow(loadTodayPlan)
-onUnmounted(clearTimerTick)
+onShow(async () => {
+  await loadTodayPlan(true)
+  restoreTrainingTimer()
+})
+onUnmounted(() => {
+  clearTimerTick()
+  clearDayUnlockWatch()
+})
 function goBack() {
   uni.navigateBack({ delta: 1 })
 }
@@ -1711,6 +1999,12 @@ function triggerGlitch() {
 .plan-done-sub { display:block; color:rgba(255,255,255,0.45); font-size:12px; }
 .plan-empty { padding:10px 0 4px; }
 .plan-empty-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.5; }
+.plan-transition-wrap { padding:16px 8px; text-align:center; }
+.plan-transition-icon { font-size:28px; display:block; margin-bottom:8px; }
+.plan-transition-title { color:#e6edf3; font-size:15px; font-weight:600; display:block; }
+.plan-transition-sub { color:rgba(255,255,255,0.5); font-size:12px; margin-top:6px; display:block; }
+.training-video { width:100%; border-radius:10px; background:#000; }
+.video-progress-hint { display:block; margin-top:8px; font-size:12px; color:rgba(255,255,255,0.65); text-align:center; }
 .plan-timeline { margin-top:2px; }
 .tl-phase { display:flex; gap:10px; align-items:stretch; }
 .tl-rail { display:flex; flex-direction:column; align-items:center; width:18px; flex-shrink:0; }
@@ -2058,6 +2352,10 @@ function triggerGlitch() {
 [data-theme="white"] .picker-overlay { background:rgba(0,0,0,0.4); }
 [data-theme="white"] .picker-card { background:#fff; border-color:#e5e7eb; }
 [data-theme="white"] .picker-card::before, [data-theme="white"] .picker-card::after { border-color:#2563eb; }
+[data-theme="white"] .assessment-modal-title { color:#1a1a2e; }
+[data-theme="white"] .assessment-modal-desc { color:#6b7280; }
+[data-theme="white"] .assessment-btn.secondary { background:#f3f4f6; border-color:#e5e7eb; }
+[data-theme="white"] .assessment-btn.secondary text { color:#6b7280; }
 [data-theme="white"] .picker-title { color:#1a1a2e; }
 [data-theme="white"] .modal-title { color:#1a1a2e; }
 [data-theme="white"] .modal-close { color:#9ca3af; }

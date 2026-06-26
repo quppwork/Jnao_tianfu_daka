@@ -321,6 +321,14 @@ export async function submitTrainingCheckin(userId, payload) {
   })
 }
 
+export async function postTrainingWatchProgress(userId, itemId, payload) {
+  return apiJson(withUser(`/api/training/items/${itemId}/watch-progress`, userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function fetchTodayCheckins(userId) {
   const data = await apiJson(withUser('/api/training/checkin/today', userId))
   return Array.isArray(data) ? data : []
@@ -481,6 +489,10 @@ export async function devResetAllTraining(userId) {
 
 export async function devSimulateNextDay(userId) {
   return apiJson(withUser('/api/dev/training/next-day', userId), { method: 'POST' })
+}
+
+export async function devSimulate4amCutoff(userId) {
+  return apiJson(withUser('/api/dev/training/simulate-4am-cutoff', userId), { method: 'POST' })
 }
 
 export async function devResetTalent(userId) {

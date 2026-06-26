@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import TrainingItem, TrainingPlan, TrainingRecord, TrainingWindow
-from app.services.assessment_service import delete_assessment, get_latest_assessment
+from app.services.assessment_service import delete_assessment, get_latest_assessment, has_valid_talent
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
@@ -17,6 +17,7 @@ from app.services.training_service import (
     get_progress,
     purge_today_plan_without_assessment,
 )
+from app.services.training_day import get_training_day
 
 
 def _delete_plan(db: Session, plan: TrainingPlan) -> None:
@@ -27,7 +28,7 @@ def _delete_plan(db: Session, plan: TrainingPlan) -> None:
 
 
 def get_dev_training_status(db: Session, child_user_id: int) -> dict:
-    today = date.today()
+    today = get_training_day()
     today_plan = _get_plan_by_date(db, child_user_id, today)
     yesterday_plan = _get_plan_by_date(db, child_user_id, today - timedelta(days=1))
     plan_count = db.scalar(
@@ -60,7 +61,7 @@ def get_dev_training_status(db: Session, child_user_id: int) -> dict:
 
 def reset_today_training(db: Session, child_user_id: int) -> dict:
     """清空今日计划、打卡、时段"""
-    today = date.today()
+    today = get_training_day()
     plan = _get_plan_by_date(db, child_user_id, today)
     deleted_plan = bool(plan)
     if plan:
@@ -116,17 +117,43 @@ def reset_talent_assessment(db: Session, child_user_id: int) -> dict:
     }
 
 
+def simulate_4am_cutoff(db: Session, child_user_id: int) -> dict:
+    """模拟凌晨 4 点全局截止：当前方案归档为昨日，不立即生成新方案"""
+    today = get_training_day()
+    plan = _get_plan_by_date(db, child_user_id, today)
+    if not plan:
+        plan = _get_plan_by_date(db, child_user_id, today - timedelta(days=1))
+    if not plan:
+        raise TrainingError("无进行中的训练方案", 404)
+
+    yesterday = today - timedelta(days=1)
+    old_yesterday = _get_plan_by_date(db, child_user_id, yesterday)
+    if old_yesterday and old_yesterday.id != plan.id:
+        _delete_plan(db, old_yesterday)
+
+    plan.plan_date = yesterday
+    db.execute(
+        delete(TrainingWindow).where(
+            TrainingWindow.child_user_id == child_user_id,
+            TrainingWindow.train_date == today,
+        )
+    )
+    db.commit()
+    return {
+        "action": "simulate_4am_cutoff",
+        "status": get_dev_training_status(db, child_user_id),
+    }
+
+
 def simulate_next_training_day(db: Session, child_user_id: int) -> dict:
     """
-    模拟进入下一天：
-    1. 今日计划标记完成并归档为「昨天」
-    2. 重新生成今日计划（content_index 按昨日完成情况推进）
+    模拟 4:05 新一天：归档当前方案并生成新训练日计划
     """
     assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
+    if not has_valid_talent(assessment):
         raise TrainingError("请先完成天赋测评", 403)
 
-    today = date.today()
+    today = get_training_day()
     yesterday = today - timedelta(days=1)
     today_plan = _get_plan_by_date(db, child_user_id, today)
     prev_index = today_plan.content_index if today_plan else None

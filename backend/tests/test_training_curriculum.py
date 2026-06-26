@@ -1,8 +1,10 @@
 """训练课表 — 首日固定 / 次日随机"""
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
+
+from app.services.training_day import get_training_day
 from app.services.training_curriculum import (
     is_first_training_day,
     route_day_one,
@@ -49,25 +51,31 @@ class TestScheduleDayProgression:
         uid = child_with_assessment
         plan = await schedule_training_by_duration(db_session, uid, 45)
         assert plan["schedule_mode"] == "day_one_fixed"
-        assert plan["training_day"] == 1
+        assert plan["lesson_day"] == 1
         assert "首日" in (plan.get("report_text") or "")
 
     @pytest.mark.asyncio
     async def test_day_two_schedule_random(self, db_session, child_with_assessment):
+        from app.db.models import TrainingPlan
+
         uid = child_with_assessment
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = get_training_day() - timedelta(days=1)
         y = get_or_create_today_plan(db_session, uid, yesterday)
-        submit_checkin(db_session, uid, plan_id=y["plan_id"])
-        get_or_create_today_plan(db_session, uid, date.today())
+        plan = db_session.get(TrainingPlan, y["plan_id"])
+        plan.status = "completed"
+        for item in plan.items:
+            item.checkin_status = "done"
+        db_session.commit()
+        get_or_create_today_plan(db_session, uid, get_training_day())
 
         plan = await schedule_training_by_duration(db_session, uid, 45)
         assert plan["schedule_mode"] == "random"
-        assert plan["training_day"] == 2
+        assert plan["lesson_day"] == 2
 
     def test_incomplete_yesterday_keeps_index(self, db_session, child_with_assessment):
         uid = child_with_assessment
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = get_training_day() - timedelta(days=1)
         y = get_or_create_today_plan(db_session, uid, yesterday)
-        today = get_or_create_today_plan(db_session, uid, date.today())
+        today = get_or_create_today_plan(db_session, uid, get_training_day())
         assert today["content_index"] == y["content_index"]
         assert today["content_index"] == 0
