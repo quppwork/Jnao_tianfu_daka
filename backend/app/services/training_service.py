@@ -380,6 +380,14 @@ def submit_checkin(
     db.add(record)
     target_item.checkin_status = "done"
 
+    # 同 block 内所有 pending 项一并标记完成（前端一次打卡覆盖整个 block）
+    target_block = parse_item_instruction(target_item.instructions).get("block")
+    if target_block:
+        for it in plan.items:
+            it_block = parse_item_instruction(it.instructions).get("block")
+            if it_block == target_block and it.checkin_status == "pending":
+                it.checkin_status = "done"
+
     pending = [it for it in plan.items if it.checkin_status != "done"]
     plan.status = "pending" if pending else "completed"
     db.commit()
@@ -425,7 +433,22 @@ def _record_to_dict(record: TrainingRecord) -> dict:
     }
 
 
-def _sync_plan_after_record_change(db: Session, plan: TrainingPlan | None) -> str | None:
+def _item_block(item: TrainingItem) -> str | None:
+    return parse_item_instruction(item.instructions).get("block")
+
+
+def _revert_block_checkin(db: Session, plan: TrainingPlan, block: str) -> None:
+    for it in plan.items:
+        if _item_block(it) == block:
+            it.checkin_status = "pending"
+
+
+def _sync_plan_after_record_change(
+    db: Session,
+    plan: TrainingPlan | None,
+    *,
+    deleted_record: TrainingRecord | None = None,
+) -> str | None:
     if not plan:
         return None
     plan = db.scalar(
@@ -435,19 +458,19 @@ def _sync_plan_after_record_change(db: Session, plan: TrainingPlan | None) -> st
     )
     if not plan:
         return None
-    has_records = db.scalar(
-        select(func.count())
-        .select_from(TrainingRecord)
-        .where(TrainingRecord.plan_id == plan.id)
-    )
-    if has_records:
-        for item in plan.items:
-            item.checkin_status = "done"
-        plan.status = "completed"
-    else:
-        for item in plan.items:
-            item.checkin_status = "pending"
-        plan.status = "pending"
+
+    if deleted_record and deleted_record.item_id:
+        item = db.get(TrainingItem, deleted_record.item_id)
+        if item:
+            block = _item_block(item)
+            if block:
+                _revert_block_checkin(db, plan, block)
+            else:
+                # 简单推送计划无 block，直接回退该 item
+                item.checkin_status = "pending"
+
+    pending = [it for it in plan.items if it.checkin_status != "done"]
+    plan.status = "pending" if pending else "completed"
     return plan.status
 
 
@@ -528,7 +551,7 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
     plan = db.get(TrainingPlan, record.plan_id) if record.plan_id else None
     db.delete(record)
     db.flush()
-    plan_status = _sync_plan_after_record_change(db, plan)
+    plan_status = _sync_plan_after_record_change(db, plan, deleted_record=record)
     db.commit()
     return {"deleted": True, "plan_status": plan_status}
 
