@@ -304,6 +304,17 @@
       </view>
     </view>
 
+    <view v-if="deleteTargetId" class="delete-confirm-mask" @tap="cancelDeleteSession">
+      <view class="delete-confirm-card" @tap.stop>
+        <text class="delete-confirm-title">删除对话</text>
+        <text class="delete-confirm-desc">确定删除这条对话记录？删除后无法恢复。</text>
+        <view class="delete-confirm-actions">
+          <view class="delete-btn cancel" @tap="cancelDeleteSession"><text>取消</text></view>
+          <view class="delete-btn danger" @tap="confirmDeleteSession"><text>{{ deleteSubmitting ? '删除中...' : '删除' }}</text></view>
+        </view>
+      </view>
+    </view>
+
   </view>
 
 </template>
@@ -387,6 +398,10 @@ const showWebcam = ref(false)
 const showSessionSheet = ref(false)
 
 const sessionList = ref([])
+
+const deleteTargetId = ref(null)
+
+const deleteSubmitting = ref(false)
 
 const isDesktop = ref(false)
 
@@ -898,41 +913,59 @@ async function switchSession(sessionId) {
 
 function removeSession(sessionId) {
 
-  uni.showModal({
+  deleteTargetId.value = sessionId
 
-    title: '删除对话',
+}
 
-    content: '确定删除这条对话记录？',
 
-    success: async (res) => {
 
-      if (!res.confirm) return
+function cancelDeleteSession() {
 
-      try {
+  if (deleteSubmitting.value) return
 
-        const uid = await ensureChildUser()
+  deleteTargetId.value = null
 
-        await deleteQaSession(uid, sessionId)
+}
 
-        if (qaSessionId.value === sessionId) {
 
-          qaSessionId.value = null
 
-          messages.value = [DEFAULT_GREETING]
+async function confirmDeleteSession() {
 
-        }
+  const sessionId = deleteTargetId.value
 
-        await loadSessionList()
+  if (!sessionId || deleteSubmitting.value) return
 
-      } catch (e) {
+  deleteSubmitting.value = true
 
-        uni.showToast({ title: '删除失败', icon: 'none' })
+  try {
 
-      }
+    const uid = await ensureChildUser()
 
-    },
+    await deleteQaSession(uid, sessionId)
 
-  })
+    if (qaSessionId.value === sessionId) {
+
+      qaSessionId.value = null
+
+      messages.value = [DEFAULT_GREETING]
+
+    }
+
+    deleteTargetId.value = null
+
+    await loadSessionList()
+
+    if (!sessionList.value.length) closeSessionSheet()
+
+    uni.showToast({ title: '已删除', icon: 'none' })
+
+  } catch (e) {
+
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+
+  }
+
+  deleteSubmitting.value = false
 
 }
 
@@ -1546,6 +1579,42 @@ onBeforeUnmount(() => {
 .session-meta { color: var(--text-dim); font-size: 11px; display: block; margin-top: 2px; }
 .session-del { color: #f85149; font-size: 14px; padding: 0 4px; flex-shrink: 0; }
 .session-empty { color: var(--text-dim); font-size: 12px; text-align: center; padding: 16px 0; display: block; }
+
+.delete-confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.delete-confirm-card {
+  width: 100%;
+  max-width: 300px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 20px 18px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.delete-confirm-title { color: var(--text); font-size: 16px; font-weight: 700; display: block; text-align: center; margin-bottom: 8px; }
+
+.delete-confirm-desc { color: var(--text-dim); font-size: 13px; line-height: 1.5; display: block; text-align: center; margin-bottom: 18px; }
+
+.delete-confirm-actions { display: flex; gap: 10px; }
+
+.delete-btn { flex: 1; padding: 11px 0; border-radius: 10px; text-align: center; cursor: pointer; }
+
+.delete-btn.cancel { background: var(--bg-input); border: 1px solid var(--border); }
+
+.delete-btn.cancel text { color: var(--text-dim); font-size: 14px; }
+
+.delete-btn.danger { background: #ef4444; }
+
+.delete-btn.danger text { color: #fff; font-size: 14px; font-weight: 600; }
 
 
 
