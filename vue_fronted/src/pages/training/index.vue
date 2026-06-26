@@ -702,10 +702,14 @@ function clearTimerTick() {
   }
 }
 
-function persistTimer(endAt, plannedSec) {
+function writeTimerStorage(payload) {
   try {
-    sessionStorage.setItem(timerStorageKey(), JSON.stringify({ endAt, plannedSec }))
+    sessionStorage.setItem(timerStorageKey(), JSON.stringify(payload))
   } catch (_) { /* ignore */ }
+}
+
+function persistTimer(endAt, plannedSec) {
+  writeTimerStorage({ phase: 'running', endAt, plannedSec })
 }
 
 function readTimerData() {
@@ -713,7 +717,7 @@ function readTimerData() {
     const raw = sessionStorage.getItem(timerStorageKey())
     if (!raw) return null
     const data = JSON.parse(raw)
-    if (!data?.endAt) return null
+    if (!data) return null
     return data
   } catch (_) {
     return null
@@ -722,6 +726,9 @@ function readTimerData() {
 
 function expireTrainingTimer(silent = false) {
   clearTimerTick()
+  const data = readTimerData()
+  const plannedSec = plannedDurationSec.value || data?.plannedSec || 0
+  writeTimerStorage({ phase: 'expired', plannedSec })
   timerPhase.value = 'expired'
   remainingSeconds.value = 0
   closeMedia()
@@ -732,9 +739,9 @@ function expireTrainingTimer(silent = false) {
 }
 
 function syncTimerFromEndAt(endAt) {
-  const left = Math.ceil((endAt - Date.now()) / 1000)
+  const left = Math.ceil((endAt - nowSynced()) / 1000)
   if (left <= 0) {
-    expireTrainingTimer()
+    expireTrainingTimer(true)
     return
   }
   timerPhase.value = 'running'
@@ -789,7 +796,7 @@ function startTrainingTimer() {
       uni.hideLoading()
     }
 
-    const endAt = Date.now() + totalSec * 1000
+    const endAt = nowSynced() + totalSec * 1000
     persistTimer(endAt, totalSec)
     syncTimerFromEndAt(endAt)
     clearTimerTick()
@@ -802,10 +809,19 @@ function restoreTrainingTimer() {
   const data = readTimerData()
   if (!data) return
   plannedDurationSec.value = data.plannedSec || 0
-  const left = Math.ceil((data.endAt - Date.now()) / 1000)
-  if (left <= 0) {
+  if (data.phase === 'expired') {
     timerPhase.value = 'expired'
     remainingSeconds.value = 0
+    clearTimerTick()
+    return
+  }
+  if (!data.endAt) return
+  const left = Math.ceil((data.endAt - nowSynced()) / 1000)
+  if (left <= 0) {
+    writeTimerStorage({ phase: 'expired', plannedSec: data.plannedSec || 0 })
+    timerPhase.value = 'expired'
+    remainingSeconds.value = 0
+    clearTimerTick()
     return
   }
   syncTimerFromEndAt(data.endAt)
@@ -1011,7 +1027,7 @@ async function devResetTalentAction() {
 
 function clearTimerStorage() {
   try {
-    sessionStorage.removeItem(TIMER_STORAGE_KEY)
+    sessionStorage.removeItem(timerStorageKey())
   } catch (_) { /* ignore */ }
 }
 
