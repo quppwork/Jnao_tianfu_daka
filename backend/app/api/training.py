@@ -13,6 +13,7 @@ from app.schemas.training import (
     CheckinResponse,
     CheckinUpdateRequest,
     ScheduleRequest,
+    OptionalChoiceRequest,
     TalentVideoResponse,
     TrainingEntryResponse,
     TrainingProgressResponse,
@@ -25,6 +26,7 @@ from app.schemas.training import (
 )
 from app.services import training_service
 from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
+from app.services.training_optional_service import accept_optional_training, decline_optional_training
 from app.services.training_plan_generator import ensure_plan_report
 from app.services.training_schedule_service import schedule_training_by_duration
 from app.services.training_service import TrainingError
@@ -44,6 +46,26 @@ async def schedule_training(
     try:
         return await schedule_training_by_duration(
             db, child_user_id, req.planned_minutes, plan_date=plan_date
+        )
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
+
+
+@router.post("/schedule/optional", response_model=TrainingTodayResponse)
+def schedule_optional_training(
+    req: OptionalChoiceRequest,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+    plan_date: date | None = Query(None),
+):
+    """孩子确认是否练习可选训练项（如高效作业），按天赋权重推荐"""
+    try:
+        if req.accept:
+            return accept_optional_training(
+                db, child_user_id, req.skill, plan_date=plan_date
+            )
+        return decline_optional_training(
+            db, child_user_id, req.skill, plan_date=plan_date
         )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
@@ -223,6 +245,19 @@ def window_status(
     db: Session = Depends(get_db),
 ):
     return training_service.get_window_status(db, child_user_id)
+
+
+@router.post("/plan/media-exhausted", response_model=TrainingTodayResponse)
+def mark_plan_media_exhausted(
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+    plan_date: date | None = Query(None),
+):
+    """设定时长用尽：隐藏音视频，打卡仍开放至训练日截止"""
+    try:
+        return training_service.mark_today_media_exhausted(db, child_user_id, plan_date)
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/report/today", response_model=TrainingTodayResponse)

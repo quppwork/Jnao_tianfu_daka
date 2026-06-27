@@ -89,6 +89,27 @@ def load_integration() -> dict:
     return _read_yaml("integration.yaml")
 
 
+# ============ Training curriculum (推课业务规则) ============
+
+@lru_cache(maxsize=1)
+def load_training_curriculum() -> dict:
+    """返回 training_curriculum.yaml — 主线 A→E、时长规则、天赋权重等"""
+    path = _CONFIG_DIR / "training_curriculum.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("training_curriculum.yaml")
+    return data if isinstance(data, dict) else {}
+
+
+@lru_cache(maxsize=1)
+def load_training_advance_rules() -> dict:
+    path = _CONFIG_DIR / "training_advance_rules.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("training_advance_rules.yaml")
+    return data if isinstance(data, dict) else {}
+
+
 # ============ Questions ============
 
 @lru_cache(maxsize=1)

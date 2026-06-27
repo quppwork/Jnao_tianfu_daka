@@ -35,6 +35,7 @@ class TrainingItemOut(BaseModel):
     item_type: str | None = None
     watch_progress: dict | None = None
     video_complete: bool = False
+    media_hidden: bool = False
 
 
 class WatchProgressRequest(BaseModel):
@@ -48,13 +49,30 @@ class WatchProgressResponse(BaseModel):
     video_complete: bool
 
 
+class OptionalOfferOut(BaseModel):
+    skill: str
+    weight: float = 0
+    suggested: bool = False
+    content_type: str = "audio"
+    requires_confirm: bool = True
+    status: str = "pending"  # pending | accepted | declined
+
+
+class OptionalChoiceRequest(BaseModel):
+    skill: str = Field(..., min_length=1, max_length=50)
+    accept: bool = Field(..., description="true=加入今日训练，false=今天不练")
+
+
 class TrainingTodayResponse(BaseModel):
     plan_id: int
     plan_date: date
     status: str
     report_text: str | None
     content_index: int
+    main_line: str | None = None
+    main_line_name: str | None = None
     planned_minutes: int | None = None
+    media_exhausted: bool = False
     items: list[TrainingItemOut]
     day_locked: bool = False
     globally_cutoff: bool = False
@@ -69,7 +87,9 @@ class TrainingTodayResponse(BaseModel):
     day_transition: bool = False
     new_day_ready: bool = True
     lesson_day: int | None = None
+    training_day_number: int | None = None
     schedule_mode: str | None = None
+    optional_offers: list[OptionalOfferOut] = Field(default_factory=list)
 
 
 class ScheduleRequest(BaseModel):

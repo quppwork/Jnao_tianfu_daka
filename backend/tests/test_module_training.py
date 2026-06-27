@@ -15,15 +15,20 @@ def _schedule_today(client, uid, minutes=45):
 class TestModuleTraining:
     def test_today_plan_has_audio(self, client, user_ready_for_training, mock_doubao):
         uid = user_ready_for_training
+        _schedule_today(client, uid)
         res = client.get(f"/api/training/today?user_id={uid}")
         assert res.status_code == 200
         data = res.json()
-        assert any(i.get("audio_url") for i in data["items"])
+        assert any(
+            i.get("audio_url") or i.get("item_type") == "placeholder"
+            for i in data["items"]
+        )
         assert data["status"] == "pending"
         assert data["report_text"]
 
     def test_checkin_flow(self, client, user_ready_for_training, mock_doubao):
         uid = user_ready_for_training
+        _schedule_today(client, uid)
         plan = client.get(f"/api/training/today?user_id={uid}").json()
         res = client.post(
             f"/api/training/checkin?user_id={uid}",
@@ -46,6 +51,7 @@ class TestModuleTraining:
 
     def test_ai_report_today(self, client, user_ready_for_training, mock_doubao):
         uid = user_ready_for_training
+        _schedule_today(client, uid)
         client.get(f"/api/training/today?user_id={uid}")
         res = client.get(f"/api/training/report/today?user_id={uid}")
         assert res.status_code == 200

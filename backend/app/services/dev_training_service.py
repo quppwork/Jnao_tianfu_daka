@@ -7,8 +7,14 @@ from datetime import date, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import TrainingItem, TrainingPlan, TrainingRecord, TrainingWindow
+from app.db.models import ChildUser, TrainingItem, TrainingPlan, TrainingRecord, TrainingWindow
 from app.services.assessment_service import delete_assessment, get_latest_assessment, has_valid_talent
+from app.services.child_training_state import (
+    _default_state,
+    bump_training_completed_day,
+    get_training_progress,
+    save_training_progress,
+)
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
@@ -27,6 +33,19 @@ def _delete_plan(db: Session, plan: TrainingPlan) -> None:
     db.delete(plan)
 
 
+def reset_training_progress(db: Session, child_user_id: int) -> dict:
+    """仅重置 profile 内 training_progress（回到主线 A），不删打卡历史"""
+    child = db.get(ChildUser, child_user_id)
+    if not child:
+        raise TrainingError("学员不存在", 404)
+    save_training_progress(db, child, _default_state())
+    db.commit()
+    return {
+        "action": "reset_progress",
+        "status": get_dev_training_status(db, child_user_id),
+    }
+
+
 def get_dev_training_status(db: Session, child_user_id: int) -> dict:
     today = get_training_day()
     today_plan = _get_plan_by_date(db, child_user_id, today)
@@ -42,6 +61,10 @@ def get_dev_training_status(db: Session, child_user_id: int) -> dict:
         .where(TrainingRecord.child_user_id == child_user_id)
     ) or 0
     progress = get_progress(db, child_user_id)
+    child = db.get(ChildUser, child_user_id)
+    from app.services.child_training_state import get_training_progress
+
+    tp = get_training_progress(child) if child else {}
     return {
         "today": today.isoformat(),
         "plan_count": plan_count,
@@ -54,6 +77,10 @@ def get_dev_training_status(db: Session, child_user_id: int) -> dict:
         "yesterday_status": yesterday_plan.status if yesterday_plan else None,
         "yesterday_content_index": yesterday_plan.content_index if yesterday_plan else None,
         "content_index": progress.get("content_index"),
+        "main_line": tp.get("main_line"),
+        "main_line_sessions": tp.get("main_line_sessions"),
+        "training_days": tp.get("training_days"),
+        "training_day_number": int(tp.get("training_days") or 0) + 1,
         "talent_code": progress.get("talent_code"),
         "talent_tag": progress.get("talent_tag"),
     }
@@ -92,6 +119,9 @@ def reset_all_training(db: Session, child_user_id: int) -> dict:
         db.execute(delete(TrainingPlan).where(TrainingPlan.id.in_(plan_ids)))
     db.execute(delete(TrainingRecord).where(TrainingRecord.child_user_id == child_user_id))
     db.execute(delete(TrainingWindow).where(TrainingWindow.child_user_id == child_user_id))
+    child = db.get(ChildUser, child_user_id)
+    if child:
+        save_training_progress(db, child, _default_state())
     db.commit()
     return {
         "action": "reset_all",
@@ -157,6 +187,13 @@ def simulate_next_training_day(db: Session, child_user_id: int) -> dict:
     yesterday = today - timedelta(days=1)
     today_plan = _get_plan_by_date(db, child_user_id, today)
     prev_index = today_plan.content_index if today_plan else None
+
+    child = db.get(ChildUser, child_user_id)
+    if child and today_plan:
+        state = get_training_progress(child)
+        bump_training_completed_day(state)
+        state["training_day_anchor"] = today.isoformat()
+        save_training_progress(db, child, state)
 
     if today_plan:
         today_plan.status = "completed"

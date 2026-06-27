@@ -1,0 +1,1117 @@
+{
+  "model": "by_talent",
+  "description": "三系列 OSS 按天赋合并；排课按 talent_code 查混合池，按技能阶段混合推送",
+  "source_index": "D:\\daka\\Jnao_tianfu_daka\\docs\\data\\oss_yinpin_index.json",
+  "total_oss_files": 511,
+  "unparsed_count": 5,
+  "unparsed_sample": [
+    "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-学.mp3",
+    "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-德.mp3",
+    "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-思.mp3",
+    "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-行.mp3",
+    "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-赢.mp3"
+  ],
+  "talents": {
+    "学者": {
+      "talent_code": 1,
+      "total_files": 100,
+      "files_by_series": {
+        "chaonaoaomi": 31,
+        "suzhiaomi": 13,
+        "xuekeaomi": 56
+      },
+      "skills": {
+        "天赋绘画": {
+          "skill_canonical": "天赋绘画",
+          "skill_oss": "绘画灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "学者绘画灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xue/学者绘画灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "影像追忆": {
+          "skill_canonical": "影像追忆",
+          "skill_oss": "影像追忆",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "学者影像追忆1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xue/学者影像追忆1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 9,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "我是冠军": {
+          "skill_canonical": "我是冠军",
+          "skill_oss": "我是冠军",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "学者我是冠军.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xue/学者我是冠军.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "扫描速记": {
+          "skill_canonical": "扫描速记",
+          "skill_oss": "扫描速记",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "学者扫描速记1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xue/学者扫描速记1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 6,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "数学奥秘": {
+          "skill_canonical": "数学奥秘",
+          "skill_oss": "数学奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "学者数学奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xue/学者数学奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "文科奥秘": {
+          "skill_canonical": "文科奥秘",
+          "skill_oss": "文科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "学者文科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xue/学者文科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "极速学习": {
+          "skill_canonical": "极速学习",
+          "skill_oss": "极速学习",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "学者极速学习2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xue/学者极速学习2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 8,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "极速运算": {
+          "skill_canonical": "极速运算",
+          "skill_oss": "极速运算",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "学者极速运算2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xue/学者极速运算2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "棋类专注": {
+          "skill_canonical": "棋类专注",
+          "skill_oss": "棋类专注",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "学者棋类专注.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xue/学者棋类专注.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "理科奥秘": {
+          "skill_canonical": "理科奥秘",
+          "skill_oss": "理科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "学者理科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xue/学者理科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 13,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "精力恢复": {
+          "skill_canonical": "精力恢复",
+          "skill_oss": "精力恢复",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "学者精力恢复.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xue/学者精力恢复.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "英语奥秘": {
+          "skill_canonical": "英语奥秘",
+          "skill_oss": "英语奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "学者英语奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xue/学者英语奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "超脑阅读": {
+          "skill_canonical": "超脑阅读",
+          "skill_oss": "超脑速读",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "学者超脑速读.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xue/学者超脑速读.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "音乐灵感": {
+          "skill_canonical": "音乐灵感",
+          "skill_oss": "音乐灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "学者音乐灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xue/学者音乐灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "高效作业": {
+          "skill_canonical": "高效作业",
+          "skill_oss": "高效作业",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "学者高效作业.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xue/学者高效作业.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        }
+      },
+      "skill_names": [
+        "天赋绘画",
+        "影像追忆",
+        "我是冠军",
+        "扫描速记",
+        "数学奥秘",
+        "文科奥秘",
+        "极速学习",
+        "极速运算",
+        "棋类专注",
+        "理科奥秘",
+        "精力恢复",
+        "英语奥秘",
+        "超脑阅读",
+        "音乐灵感",
+        "高效作业"
+      ]
+    },
+    "思者": {
+      "talent_code": 2,
+      "total_files": 101,
+      "files_by_series": {
+        "chaonaoaomi": 32,
+        "suzhiaomi": 12,
+        "xuekeaomi": 57
+      },
+      "skills": {
+        "天赋绘画": {
+          "skill_canonical": "天赋绘画",
+          "skill_oss": "绘画灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "思者绘画灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/si/思者绘画灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "影像追忆": {
+          "skill_canonical": "影像追忆",
+          "skill_oss": "影像追忆",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "思者影像追忆1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/si/思者影像追忆1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 9,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "我是冠军": {
+          "skill_canonical": "我是冠军",
+          "skill_oss": "我是冠军",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "思者我是冠军.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/si/思者我是冠军.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "扫描速记": {
+          "skill_canonical": "扫描速记",
+          "skill_oss": "扫描速记",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "思者扫描速记1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/si/思者扫描速记1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "数学奥秘": {
+          "skill_canonical": "数学奥秘",
+          "skill_oss": "数学奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "思者数学奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/si/思者数学奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "文科奥秘": {
+          "skill_canonical": "文科奥秘",
+          "skill_oss": "文科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "思者文科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/si/思者文科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "极速学习": {
+          "skill_canonical": "极速学习",
+          "skill_oss": "极速学习",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "思者极速学习2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/si/思者极速学习2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 8,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "极速运算": {
+          "skill_canonical": "极速运算",
+          "skill_oss": "极速运算",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "思者极速运算2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/si/思者极速运算2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "理科奥秘": {
+          "skill_canonical": "理科奥秘",
+          "skill_oss": "理科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "思者理科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/si/思者理科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "精力恢复": {
+          "skill_canonical": "精力恢复",
+          "skill_oss": "精力恢复",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "思者精力恢复.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/si/思者精力恢复.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "英语奥秘": {
+          "skill_canonical": "英语奥秘",
+          "skill_oss": "英语奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "思者英语奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/si/思者英语奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "超脑阅读": {
+          "skill_canonical": "超脑阅读",
+          "skill_oss": "超脑速读",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "思者超脑速读.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/si/思者超脑速读.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "音乐灵感": {
+          "skill_canonical": "音乐灵感",
+          "skill_oss": "音乐灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "思者音乐灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/si/思者音乐灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "高效作业": {
+          "skill_canonical": "高效作业",
+          "skill_oss": "高效作业",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "思者高效作业.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/si/思者高效作业.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        }
+      },
+      "skill_names": [
+        "天赋绘画",
+        "影像追忆",
+        "我是冠军",
+        "扫描速记",
+        "数学奥秘",
+        "文科奥秘",
+        "极速学习",
+        "极速运算",
+        "理科奥秘",
+        "精力恢复",
+        "英语奥秘",
+        "超脑阅读",
+        "音乐灵感",
+        "高效作业"
+      ]
+    },
+    "行者": {
+      "talent_code": 3,
+      "total_files": 101,
+      "files_by_series": {
+        "chaonaoaomi": 31,
+        "suzhiaomi": 13,
+        "xuekeaomi": 57
+      },
+      "skills": {
+        "天赋绘画": {
+          "skill_canonical": "天赋绘画",
+          "skill_oss": "绘画灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "行者绘画灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xing/行者绘画灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "影像追忆": {
+          "skill_canonical": "影像追忆",
+          "skill_oss": "影像追忆",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "行者影像追忆1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xing/行者影像追忆1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 9,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "我是冠军": {
+          "skill_canonical": "我是冠军",
+          "skill_oss": "我是冠军",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "行者我是冠军.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xing/行者我是冠军.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "扫描速记": {
+          "skill_canonical": "扫描速记",
+          "skill_oss": "扫描速记",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "行者扫描速记1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xing/行者扫描速记1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "数学奥秘": {
+          "skill_canonical": "数学奥秘",
+          "skill_oss": "数学奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "行者数学奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xing/行者数学奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "文科奥秘": {
+          "skill_canonical": "文科奥秘",
+          "skill_oss": "文科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "行者文科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xing/行者文科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "极速学习": {
+          "skill_canonical": "极速学习",
+          "skill_oss": "极速学习",
+          "first_stage": 3,
+          "first_part": 1,
+          "first_file": "行者极速学习3阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xing/行者极速学习3阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "极速运算": {
+          "skill_canonical": "极速运算",
+          "skill_oss": "极速运算",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "行者极速运算2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xing/行者极速运算2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "棋类专注": {
+          "skill_canonical": "棋类专注",
+          "skill_oss": "棋类专注",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "行者棋类专注.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xing/行者棋类专注.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "理科奥秘": {
+          "skill_canonical": "理科奥秘",
+          "skill_oss": "理科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "行者理科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xing/行者理科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "精力恢复": {
+          "skill_canonical": "精力恢复",
+          "skill_oss": "精力恢复",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "行者精力恢复.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/xing/行者精力恢复.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "英语奥秘": {
+          "skill_canonical": "英语奥秘",
+          "skill_oss": "英语奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "行者英语奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xing/行者英语奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "超脑阅读": {
+          "skill_canonical": "超脑阅读",
+          "skill_oss": "超脑速读",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "行者超脑速读.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xing/行者超脑速读.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "音乐灵感": {
+          "skill_canonical": "音乐灵感",
+          "skill_oss": "音乐灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "行者音乐灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/xing/行者音乐灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "高效作业": {
+          "skill_canonical": "高效作业",
+          "skill_oss": "高效作业",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "行者高效作业.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/xing/行者高效作业.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        }
+      },
+      "skill_names": [
+        "天赋绘画",
+        "影像追忆",
+        "我是冠军",
+        "扫描速记",
+        "数学奥秘",
+        "文科奥秘",
+        "极速学习",
+        "极速运算",
+        "棋类专注",
+        "理科奥秘",
+        "精力恢复",
+        "英语奥秘",
+        "超脑阅读",
+        "音乐灵感",
+        "高效作业"
+      ]
+    },
+    "德者": {
+      "talent_code": 4,
+      "total_files": 101,
+      "files_by_series": {
+        "chaonaoaomi": 31,
+        "suzhiaomi": 13,
+        "xuekeaomi": 57
+      },
+      "skills": {
+        "天赋绘画": {
+          "skill_canonical": "天赋绘画",
+          "skill_oss": "绘画灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "德者绘画灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/de/德者绘画灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "影像追忆": {
+          "skill_canonical": "影像追忆",
+          "skill_oss": "影像追忆",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "德者影像追忆1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/de/德者影像追忆1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 9,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "我是冠军": {
+          "skill_canonical": "我是冠军",
+          "skill_oss": "我是冠军",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "德者我是冠军.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/de/德者我是冠军.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "扫描速记": {
+          "skill_canonical": "扫描速记",
+          "skill_oss": "扫描速记",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "德者扫描速记1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/de/德者扫描速记1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "数学奥秘": {
+          "skill_canonical": "数学奥秘",
+          "skill_oss": "数学奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "德者数学奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/de/德者数学奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "文科奥秘": {
+          "skill_canonical": "文科奥秘",
+          "skill_oss": "文科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "德者文科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/de/德者文科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "极速学习": {
+          "skill_canonical": "极速学习",
+          "skill_oss": "极速学习",
+          "first_stage": 3,
+          "first_part": 1,
+          "first_file": "德者极速学习3阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/de/德者极速学习3阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "极速运算": {
+          "skill_canonical": "极速运算",
+          "skill_oss": "极速运算",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "德者极速运算2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/de/德者极速运算2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "理科奥秘": {
+          "skill_canonical": "理科奥秘",
+          "skill_oss": "理科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "德者理科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/de/德者理科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "精力恢复": {
+          "skill_canonical": "精力恢复",
+          "skill_oss": "精力恢复",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "德者精力恢复.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/de/德者精力恢复.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "考前减压": {
+          "skill_canonical": "考前减压",
+          "skill_oss": "考前减压",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "德者考前减压.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/de/德者考前减压.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "英语奥秘": {
+          "skill_canonical": "英语奥秘",
+          "skill_oss": "英语奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "德者英语奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/de/德者英语奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "超脑阅读": {
+          "skill_canonical": "超脑阅读",
+          "skill_oss": "超脑速读",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "德者超脑速读.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/de/德者超脑速读.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "音乐灵感": {
+          "skill_canonical": "音乐灵感",
+          "skill_oss": "音乐灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "德者音乐灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/de/德者音乐灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "高效作业": {
+          "skill_canonical": "高效作业",
+          "skill_oss": "高效作业",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "德者高效作业.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/de/德者高效作业.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        }
+      },
+      "skill_names": [
+        "天赋绘画",
+        "影像追忆",
+        "我是冠军",
+        "扫描速记",
+        "数学奥秘",
+        "文科奥秘",
+        "极速学习",
+        "极速运算",
+        "理科奥秘",
+        "精力恢复",
+        "考前减压",
+        "英语奥秘",
+        "超脑阅读",
+        "音乐灵感",
+        "高效作业"
+      ]
+    },
+    "赢者": {
+      "talent_code": 5,
+      "total_files": 103,
+      "files_by_series": {
+        "chaonaoaomi": 33,
+        "suzhiaomi": 13,
+        "xuekeaomi": 57
+      },
+      "skills": {
+        "天赋绘画": {
+          "skill_canonical": "天赋绘画",
+          "skill_oss": "绘画灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "赢者绘画灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/ying/赢者绘画灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "影像追忆": {
+          "skill_canonical": "影像追忆",
+          "skill_oss": "影像追忆",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "赢者影像追忆1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/ying/赢者影像追忆1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 9,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "我是冠军": {
+          "skill_canonical": "我是冠军",
+          "skill_oss": "我是冠军",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "赢者我是冠军.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/ying/赢者我是冠军.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "扫描速记": {
+          "skill_canonical": "扫描速记",
+          "skill_oss": "扫描速记",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "赢者扫描速记1阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/ying/赢者扫描速记1阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 7,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "数学奥秘": {
+          "skill_canonical": "数学奥秘",
+          "skill_oss": "数学奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "赢者数学奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/ying/赢者数学奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "文科奥秘": {
+          "skill_canonical": "文科奥秘",
+          "skill_oss": "文科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "赢者文科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/ying/赢者文科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "极速学习": {
+          "skill_canonical": "极速学习",
+          "skill_oss": "极速学习",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "赢者极速学习2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/ying/赢者极速学习2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 8,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "极速运算": {
+          "skill_canonical": "极速运算",
+          "skill_oss": "极速运算",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "赢者极速运算2阶段1.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/ying/赢者极速运算2阶段1.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 8,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "棋类专注": {
+          "skill_canonical": "棋类专注",
+          "skill_oss": "棋类专注",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "赢者棋类专注.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/ying/赢者棋类专注.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "理科奥秘": {
+          "skill_canonical": "理科奥秘",
+          "skill_oss": "理科奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "赢者理科奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/ying/赢者理科奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "精力恢复": {
+          "skill_canonical": "精力恢复",
+          "skill_oss": "精力恢复",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "赢者精力恢复.MP3",
+          "first_oss_key": "yinpin/chaonaoaomi/ying/赢者精力恢复.MP3",
+          "first_series": "chaonaoaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "chaonaoaomi"
+          ]
+        },
+        "英语奥秘": {
+          "skill_canonical": "英语奥秘",
+          "skill_oss": "英语奥秘",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "赢者英语奥秘1阶段1.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/ying/赢者英语奥秘1阶段1.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 14,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        },
+        "超脑阅读": {
+          "skill_canonical": "超脑阅读",
+          "skill_oss": "超脑速读",
+          "first_stage": 1,
+          "first_part": 1,
+          "first_file": "赢者超脑速读.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/ying/赢者超脑速读.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "音乐灵感": {
+          "skill_canonical": "音乐灵感",
+          "skill_oss": "音乐灵感",
+          "first_stage": 2,
+          "first_part": 1,
+          "first_file": "赢者音乐灵感2阶段1.MP3",
+          "first_oss_key": "yinpin/suzhiaomi/ying/赢者音乐灵感2阶段1.MP3",
+          "first_series": "suzhiaomi",
+          "total_lessons": 5,
+          "series_sources": [
+            "suzhiaomi"
+          ]
+        },
+        "高效作业": {
+          "skill_canonical": "高效作业",
+          "skill_oss": "高效作业",
+          "first_stage": 0,
+          "first_part": 1,
+          "first_file": "赢者高效作业.MP3",
+          "first_oss_key": "yinpin/xuekeaomi/ying/赢者高效作业.MP3",
+          "first_series": "xuekeaomi",
+          "total_lessons": 1,
+          "series_sources": [
+            "xuekeaomi"
+          ]
+        }
+      },
+      "skill_names": [
+        "天赋绘画",
+        "影像追忆",
+        "我是冠军",
+        "扫描速记",
+        "数学奥秘",
+        "文科奥秘",
+        "极速学习",
+        "极速运算",
+        "棋类专注",
+        "理科奥秘",
+        "精力恢复",
+        "英语奥秘",
+        "超脑阅读",
+        "音乐灵感",
+        "高效作业"
+      ]
+    }
+  }
+}

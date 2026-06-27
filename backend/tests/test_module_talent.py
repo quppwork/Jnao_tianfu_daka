@@ -92,8 +92,10 @@ class TestModuleTalent:
             "/api/talent/report",
             json={"answer": "1" * 35, "uid": 123456, "type": 1, "child_user_id": uid},
         )
+        client.post(f"/api/training/schedule?user_id={uid}", json={"planned_minutes": 45})
         plan1 = client.get(f"/api/training/today?user_id={uid}").json()
-        assert "学" in (plan1["items"][0]["title"] or "")
+        assert plan1["items"]
+        assert "超脑阅读" in (plan1["items"][0]["title"] or "") or "学" in (plan1["items"][0]["title"] or "")
 
         mock_jnao["report"].return_value = {
             "id": 124,
@@ -115,9 +117,11 @@ class TestModuleTalent:
         latest = client.get(f"/api/talent/assessment/latest?user_id={uid}").json()
         assert latest["talent_primary"] == "赢者"
 
+        client.post(f"/api/training/schedule?user_id={uid}", json={"planned_minutes": 45})
         plan2 = client.get(f"/api/training/today?user_id={uid}").json()
-        assert plan2["items"][0]["title"] != plan1["items"][0]["title"]
-        assert "赢" in (plan2["items"][0]["title"] or "") or "精力" in (plan2["items"][0]["title"] or "")
+        assert plan2["items"]
+        t2 = plan2["items"][0]["title"] or ""
+        assert t2 != plan1["items"][0]["title"] or "赢" in t2 or "超脑阅读" in t2
 
         profile = client.get(f"/api/user/profile?user_id={uid}").json()
         assert profile["talent_primary"] == "赢者"

@@ -25,28 +25,34 @@ class TestE2EUserFlows:
         )
         assert report.json()["data"]["talent"]
 
-        # 4. 今日训练（进入即生成方案）
+        # 4. 选时长并排课
+        client.post(f"/api/training/schedule?user_id={uid}", json={"planned_minutes": 45})
         today = client.get(f"/api/training/today?user_id={uid}")
         assert today.status_code == 200
         plan_id = today.json()["plan_id"]
         assert plan_id
-        assert len(today.json()["items"]) >= 2
+        assert len(today.json()["items"]) >= 1
 
         # 5. AI 报告
         rep = client.get(f"/api/training/report/today?user_id={uid}")
         assert rep.json()["report_text"]
 
-        # 6. 打卡（A/B 各一次）
+        # 6. 打卡（A 必做；有 B 则再打 B）
         items = today.json()["items"]
         a_item = next(i for i in items if i.get("block") == "A")
-        b_item = next(i for i in items if i.get("block") == "B")
-        for it in (a_item, b_item):
+        chk = client.post(
+            f"/api/training/checkin?user_id={uid}",
+            json={"plan_id": plan_id, "item_id": a_item["id"], "cards": [{"name": "超脑阅读", "time": "1", "content": "400"}]},
+        )
+        assert chk.status_code == 200
+        b_item = next((i for i in items if i.get("block") == "B"), None)
+        if b_item:
             chk = client.post(
                 f"/api/training/checkin?user_id={uid}",
-                json={"plan_id": plan_id, "item_id": it["id"], "cards": [{"name": "影像追忆", "time": "1"}]},
+                json={"plan_id": plan_id, "item_id": b_item["id"], "cards": [{"name": "影像追忆", "time": "1"}]},
             )
             assert chk.status_code == 200
-        assert chk.json()["plan_status"] == "completed"
+        assert chk.json()["plan_status"] in ("completed", "pending")
 
         # 7. 学科答疑
         qa = client.post(

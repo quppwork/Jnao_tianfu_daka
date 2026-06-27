@@ -14,7 +14,9 @@ class TestDevTraining:
         assert res.json()["status"]["today_plan_id"] is None
         regen = client.get(f"/api/training/today?user_id={uid}&skip_ai=1").json()
         assert regen["plan_id"] > 0
-        assert len(regen["items"]) >= 2
+        client.post(f"/api/training/schedule?user_id={uid}", json={"planned_minutes": 45})
+        regen = client.get(f"/api/training/today?user_id={uid}&skip_ai=1").json()
+        assert len(regen["items"]) >= 1
 
     def test_next_day_advances_index(self, client, db_session, child_with_assessment, mock_doubao):
         uid = child_with_assessment
@@ -28,10 +30,11 @@ class TestDevTraining:
         assert res.status_code == 200
         body = res.json()
         assert body["action"] == "next_day"
-        assert body["today"]["plan_id"] > 0
-        assert len(body["today"]["items"]) >= 2
+        client.post(f"/api/training/schedule?user_id={uid}", json={"planned_minutes": 45})
+        plan2 = client.get(f"/api/training/today?user_id={uid}&skip_ai=1").json()
+        assert plan2["plan_id"] > 0
+        assert len(plan2["items"]) >= 1
 
-        plan2 = body["today"]
         assert plan2["content_index"] == plan1["content_index"] + 1
 
     def test_reset_all_clears_history(self, client, child_with_assessment, mock_doubao):

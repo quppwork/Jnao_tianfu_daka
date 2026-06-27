@@ -21,6 +21,11 @@ def apply_schema_patches(engine: Engine) -> None:
             "watch_progress",
             "ALTER TABLE training_item ADD COLUMN watch_progress JSON",
         ),
+        (
+            "training_plan",
+            "media_exhausted",
+            "ALTER TABLE training_plan ADD COLUMN media_exhausted INTEGER DEFAULT 0",
+        ),
     ]
     dialect = engine.dialect.name
     for table, column, ddl in patches:

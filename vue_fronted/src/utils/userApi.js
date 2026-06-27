@@ -287,7 +287,7 @@ export async function refreshTrainingReport(userId, force = true) {
   }
 }
 
-/** 按训练时长排课：豆包路由 A/B 音频 + 天赋视频 */
+/** 按训练时长排课：框架内 LLM 路由生成 plan_item */
 export async function scheduleTrainingPlan(userId, plannedMinutes) {
   try {
     const data = await apiJson(withUser('/api/training/schedule', userId), {
@@ -302,6 +302,41 @@ export async function scheduleTrainingPlan(userId, plannedMinutes) {
     }
     return { error: 'api', message: e.message }
   }
+}
+
+/** 孩子确认是否练习可选训练项（高效作业等） */
+export async function confirmOptionalTraining(userId, skill, accept) {
+  try {
+    const data = await apiJson(withUser('/api/training/schedule/optional', userId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill, accept }),
+    })
+    return { data }
+  } catch (e) {
+    return { error: 'api', message: e.message }
+  }
+}
+
+/** 设定时长用尽 — 后端隐藏媒体 URL，打卡仍可用 */
+export async function markPlanMediaExhausted(userId) {
+  try {
+    const data = await apiJson(withUser('/api/training/plan/media-exhausted', userId), {
+      method: 'POST',
+    })
+    return { data }
+  } catch (e) {
+    return { error: 'api', message: e.message }
+  }
+}
+
+/** 记录今日训练时段（用于后端判断计时是否结束） */
+export async function setTrainingWindow(userId, startTime, endTime) {
+  return apiJson(withUser('/api/training/window', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ start_time: startTime, end_time: endTime }),
+  })
 }
 
 /** 天赋固定训练视频 */
@@ -481,6 +516,10 @@ export async function fetchDevTrainingStatus(userId) {
 
 export async function devResetTodayTraining(userId) {
   return apiJson(withUser('/api/dev/training/reset-today', userId), { method: 'POST' })
+}
+
+export async function devResetTrainingProgress(userId) {
+  return apiJson(withUser('/api/dev/training/reset-progress', userId), { method: 'POST' })
 }
 
 export async function devResetAllTraining(userId) {

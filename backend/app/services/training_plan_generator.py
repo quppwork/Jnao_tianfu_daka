@@ -8,7 +8,8 @@ from app.services.assessment_service import get_latest_assessment
 from app.services.doubao_client import chat_completion
 from app.services.training_service import get_or_create_today_plan, get_yesterday_training_context
 
-REPORT_SYSTEM = """你是 JNAO 训练教练。根据天赋、昨日打卡、今日音频，写 2-3 句今日指令，温暖简短，无 markdown。"""
+REPORT_SYSTEM = """你是陪伴孩子的训练老师。用简单、温暖的话告诉孩子今天怎么练（2-4 句）。
+说清楚：先练什么、再练什么、练完怎么打卡。不要用「主线」「训练块」「轮次」等技术词。"""
 
 
 async def generate_daily_report_text(
@@ -19,7 +20,7 @@ async def generate_daily_report_text(
     talent_primary: str | None,
     yesterday_summary: str | None = None,
 ) -> str:
-    context = f"天赋：{talent_primary or '未知'}；今日音频：{lesson_title}"
+    context = f"天赋：{talent_primary or '未知'}；今日训练：{lesson_title}"
     if yesterday_summary:
         context += f"；昨日：{yesterday_summary}"
     else:
@@ -89,7 +90,9 @@ async def ensure_plan_report(
     if not plan:
         return plan_data
 
-    needs_ai = force or not plan.report_text or plan.report_text.startswith("今日音频：")
+    from app.services.training_child_guide import is_technical_schedule_note
+
+    needs_ai = force or not plan.report_text or is_technical_schedule_note(plan.report_text)
     if not needs_ai:
         return plan_data
 

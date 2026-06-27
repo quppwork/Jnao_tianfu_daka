@@ -11,11 +11,8 @@ if TYPE_CHECKING:
     from app.db.models import ContentItem
 
 DEFAULT_DAY_ONE = {
-    "a_lessons": [
-        {"skill": "影像追忆", "stage": 1, "part": 1},
-        {"skill": "影像追忆", "stage": 1, "part": 2},
-    ],
-    "b_lessons": [{"skill": "数学奥秘", "stage": 1, "part": 1}],
+    "a_lessons": [{"skill": "超脑阅读", "stage": 1, "part": 1}],
+    "b_lessons": [],
 }
 
 
@@ -24,6 +21,14 @@ def _training_cfg() -> dict:
 
 
 def day_one_config() -> dict:
+    from config.loader import load_training_curriculum
+
+    yaml_cfg = load_training_curriculum().get("day_one") or {}
+    if yaml_cfg.get("a_lessons"):
+        return {
+            "a_lessons": yaml_cfg.get("a_lessons"),
+            "b_lessons": yaml_cfg.get("b_lessons") or [],
+        }
     cfg = _training_cfg().get("day_one") or {}
     return {
         "a_lessons": cfg.get("a_lessons") or DEFAULT_DAY_ONE["a_lessons"],
@@ -46,12 +51,31 @@ def _item_meta(item: ContentItem) -> dict:
     return parse_item_meta(item)
 
 
+SINGLE_FILE_SKILLS = frozenset({"高效作业", "精力恢复"})
+
+
 def _match_lesson(item: ContentItem, skill: str, stage: int, part: int) -> bool:
     meta = _item_meta(item)
-    if meta.get("skill") == skill and meta.get("stage") == stage and meta.get("part") == part:
+    item_skill = meta.get("skill")
+    if item_skill == skill and meta.get("stage") == stage and meta.get("part") == part:
         return True
     title = item.lesson_title or ""
-    return skill in title and f"{stage}阶段{part}" in title
+    # 学科奥秘：高效作业 / 精力恢复 — 每天赋单文件，无「N阶段M」
+    if skill in SINGLE_FILE_SKILLS:
+        if item_skill == skill:
+            return True
+        if skill in title and "阶段" not in title:
+            return True
+    # OSS「超脑速读」单文件 = 系统「超脑阅读」1阶段1
+    if skill == "超脑阅读" and stage == 1 and part == 1:
+        if "超脑速读" in title or "超脑阅读" in title:
+            s = meta.get("stage")
+            p = meta.get("part") or 1
+            if s in (None, 0, 1) and p == 1:
+                return True
+    if skill in title and f"{stage}阶段{part}" in title:
+        return True
+    return False
 
 
 def _find_lesson(pool: list[ContentItem], skill: str, stage: int, part: int) -> ContentItem | None:
@@ -79,15 +103,10 @@ def route_day_one(
     a_ids = _pick_fixed_ids(candidates_a, cfg["a_lessons"])
     b_ids = _pick_fixed_ids(candidates_b, cfg["b_lessons"])
 
-    if not a_ids and candidates_a:
-        a_ids = [candidates_a[0].id]
-    if not b_ids and candidates_b:
-        b_ids = [candidates_b[0].id]
-
     titles_a = [c.lesson_title for c in candidates_a if c.id in a_ids]
-    note = "首日固定体验课"
+    note = "主线A入门：超脑阅读"
     if titles_a:
-        note += f"：{titles_a[0]}"
+        note += f"（{titles_a[0]}）"
     return {
         "training_a_ids": a_ids,
         "training_b_ids": b_ids,

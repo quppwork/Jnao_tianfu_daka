@@ -96,6 +96,7 @@ class TrainingPlan(Base):
     report_text: Mapped[str | None] = mapped_column(Text)
     planned_minutes: Mapped[int | None] = mapped_column(Integer)
     content_index: Mapped[int] = mapped_column(Integer, default=0)
+    media_exhausted: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     generated_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

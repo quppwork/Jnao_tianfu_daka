@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
+    ChildUser,
     ContentItem,
     TrainingItem,
     TrainingPlan,
@@ -13,7 +14,13 @@ from app.db.models import (
     TrainingWindow,
 )
 from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
-from app.services.content_meta import parse_item_instruction
+from app.services.child_training_state import (
+    bump_training_completed_day,
+    get_training_progress,
+    save_training_progress,
+    training_day_number,
+)
+from app.services.content_meta import parse_item_instruction, resolve_training_item_title
 from app.services.oss_client import resolve_play_url
 from app.services.training_day import (
     get_training_day,
@@ -30,6 +37,32 @@ WATCH_COMPLETE_PCT = 90
 
 def _today() -> date:
     return get_training_day()
+
+
+def _sync_training_day_counter(db: Session, child_user_id: int, plan_date: date) -> None:
+    """进入新训练日：昨日已完成则累计训练天数（用于显示「第几天」）"""
+    child = db.get(ChildUser, child_user_id)
+    if not child:
+        return
+    state = get_training_progress(child)
+    today_str = plan_date.isoformat()
+    anchor = state.get("training_day_anchor")
+    if anchor == today_str:
+        return
+    if anchor:
+        yesterday = plan_date - timedelta(days=1)
+        y_plan = _get_plan_by_date(db, child_user_id, yesterday)
+        if y_plan and y_plan.status == "completed":
+            bump_training_completed_day(state)
+    state["training_day_anchor"] = today_str
+    save_training_progress(db, child, state)
+
+
+def _training_day_for_child(db: Session, child_user_id: int) -> int:
+    child = db.get(ChildUser, child_user_id)
+    if not child:
+        return 1
+    return training_day_number(get_training_progress(child))
 
 
 def _resolve_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> TrainingPlan | None:
@@ -306,40 +339,81 @@ def is_item_video_complete(item: TrainingItem) -> bool:
     return _watch_pct(item) >= WATCH_COMPLETE_PCT
 
 
-def _item_to_dict(item: TrainingItem) -> dict:
+def _should_hide_media(plan: TrainingPlan) -> bool:
+    return bool(getattr(plan, "media_exhausted", 0))
+
+
+def _item_to_dict(item: TrainingItem, *, hide_media: bool = False, content: ContentItem | None = None) -> dict:
     meta = parse_item_instruction(
         item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
     )
     wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
+    audio_url = None if hide_media else resolve_play_url(item.audio_url)
+    video_url = None if hide_media else item.video_url
     return {
         "id": item.id,
         "sort_order": item.sort_order,
-        "title": item.title,
-        "audio_url": resolve_play_url(item.audio_url),
-        "video_url": item.video_url,
+        "title": resolve_training_item_title(item, content),
+        "audio_url": audio_url,
+        "video_url": video_url,
         "duration_min": item.duration_min,
         "instructions": item.instructions,
         "checkin_status": item.checkin_status,
         "block": meta.get("block"),
-        "item_type": meta.get("item_type") or item.ability_type,
+        "item_type": meta.get("item_type") or item.ability_type or "audio",
         "watch_progress": wp,
         "video_complete": is_item_video_complete(item),
+        "media_hidden": hide_media,
     }
 
 
-def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None) -> dict:
+def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Session | None = None) -> dict:
     now = now or training_now()
     meta = training_day_meta(now, plan_date=plan.plan_date)
     locked = is_plan_day_locked(plan, now=now)
     globally_cutoff = is_plan_globally_cutoff(plan, now=now)
+    hide_media = _should_hide_media(plan)
+    content_map: dict[int, ContentItem] = {}
+    main_line_key = "A"
+    main_line_name = ""
+    if db is not None:
+        ids = [i.content_item_id for i in plan.items if i.content_item_id]
+        if ids:
+            for row in db.scalars(select(ContentItem).where(ContentItem.id.in_(ids))):
+                content_map[row.id] = row
+        from app.db.models import ChildUser
+        from app.services.child_training_state import get_training_progress
+        from config.loader import load_training_curriculum
+
+        child = db.get(ChildUser, plan.child_user_id)
+        if child:
+            tp = get_training_progress(child)
+            main_line_key = tp.get("main_line") or "A"
+            line = (load_training_curriculum().get("main_lines") or {}).get(main_line_key) or {}
+            main_line_name = line.get("name") or ""
+    training_day = _training_day_for_child(db, plan.child_user_id) if db is not None else 1
+    optional_offers: list[dict] = []
+    if db is not None and plan.items:
+        from app.services.training_optional_service import get_optional_offers_for_child
+
+        optional_offers = get_optional_offers_for_child(db, plan.child_user_id, plan)
     return {
         "plan_id": plan.id,
         "plan_date": plan.plan_date,
         "status": plan.status,
         "report_text": plan.report_text,
         "content_index": plan.content_index,
+        "main_line": main_line_key,
+        "main_line_name": main_line_name,
+        "lesson_day": training_day,
+        "training_day_number": training_day,
         "planned_minutes": plan.planned_minutes,
-        "items": [_item_to_dict(item) for item in sorted(plan.items, key=lambda i: i.sort_order)],
+        "media_exhausted": hide_media,
+        "items": [
+            _item_to_dict(item, hide_media=hide_media, content=content_map.get(item.content_item_id))
+            for item in sorted(plan.items, key=lambda i: i.sort_order)
+        ],
+        "optional_offers": optional_offers,
         "day_locked": locked,
         "globally_cutoff": globally_cutoff,
         **meta,
@@ -347,13 +421,55 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None) -> dic
 
 
 def _has_plan_content(plan: TrainingPlan) -> bool:
-    """今日方案已生成 A/B 内容"""
-    return len(plan.items) > 1
+    """今日方案已生成训练项"""
+    return len(plan.items) > 0
+
+
+def mark_plan_media_exhausted(db: Session, plan: TrainingPlan) -> bool:
+    """设定时长用尽：不再提供音视频，仍可打卡至训练日截止"""
+    if not plan or plan.media_exhausted:
+        return bool(plan and plan.media_exhausted)
+    plan.media_exhausted = 1
+    db.commit()
+    return True
+
+
+def mark_today_media_exhausted(
+    db: Session, child_user_id: int, plan_date: date | None = None
+) -> dict:
+    plan_date = plan_date or _today()
+    plan = _get_plan_by_date(db, child_user_id, plan_date)
+    if not plan:
+        raise TrainingError("训练计划不存在", 404)
+    if is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止", 403)
+    mark_plan_media_exhausted(db, plan)
+    db.refresh(plan)
+    return _plan_to_response(plan, db=db)
+
+
+def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: TrainingPlan | None) -> bool:
+    """计时窗口结束后自动标记媒体用尽"""
+    if not plan or plan.media_exhausted:
+        return bool(plan and plan.media_exhausted)
+    now = training_now()
+    row = db.scalar(
+        select(TrainingWindow).where(
+            TrainingWindow.child_user_id == child_user_id,
+            TrainingWindow.train_date == now.date(),
+        )
+    )
+    if not row:
+        return False
+    current = now.time()
+    if row.start_time <= current <= row.end_time:
+        return False
+    return mark_plan_media_exhausted(db, plan)
 
 
 def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
-    """获取今日方案；若无则按训练日自动生成 A/B 内容"""
-    from app.services.training_schedule_service import ensure_today_plan_content
+    """获取今日方案；无内容时需先 POST /schedule 选时长生成"""
+    from app.services.training_schedule_service import ensure_today_plan_shell
 
     plan_date = plan_date or _today()
     if not is_new_day_ready():
@@ -365,11 +481,25 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
 
     refresh_today_plan_if_talent_changed(db, child_user_id, plan_date=plan_date, assessment=assessment)
 
-    plan = ensure_today_plan_content(db, child_user_id, plan_date)
+    ensure_today_plan_shell(db, child_user_id, plan_date)
     sync_pending_plan_content(db, child_user_id, assessment, plan_date=plan_date)
     plan = _resolve_today_plan(db, child_user_id, plan_date)
-    if plan and _has_plan_content(plan):
-        return _plan_to_response(plan)
+    if plan:
+        from app.services.assessment_service import effective_talent_code
+        from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
+        from app.services.training_child_guide import build_coach_text_for_plan, is_technical_schedule_note
+
+        ensure_supplementary_catalogs(db)
+        code = effective_talent_code(assessment)
+        if repair_plan_media_items(db, plan, code):
+            db.commit()
+            plan = _resolve_today_plan(db, child_user_id, plan_date)
+        if plan and plan.items and is_technical_schedule_note(plan.report_text):
+            plan.report_text = build_coach_text_for_plan(plan)
+            db.commit()
+        sync_media_exhausted_from_window(db, child_user_id, plan)
+        plan = _resolve_today_plan(db, child_user_id, plan_date)
+        return _plan_to_response(plan, db=db)
 
     return empty_today_plan_response(db, child_user_id, plan_date)
 
@@ -435,6 +565,7 @@ def create_plan_for_schedule(db: Session, child_user_id: int, plan_date: date | 
         generated_at=datetime.now(timezone.utc),
     )
     db.add(plan)
+    _sync_training_day_counter(db, child_user_id, plan_date)
     db.commit()
     db.refresh(plan)
     return _get_plan_by_date(db, child_user_id, plan_date)
@@ -452,7 +583,7 @@ def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | 
     if existing:
         sync_pending_plan_content(db, child_user_id, assessment, plan_date=plan_date)
         existing = _resolve_today_plan(db, child_user_id, plan_date)
-        return _plan_to_response(existing)
+        return _plan_to_response(existing, db=db)
 
     series = get_content_series(db, effective_talent_code(assessment), prefer_skill="影像追忆")
     if not series:
@@ -473,6 +604,7 @@ def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | 
         generated_at=datetime.now(timezone.utc),
     )
     db.add(plan)
+    _sync_training_day_counter(db, child_user_id, plan_date)
     db.flush()
 
     item = TrainingItem(
@@ -490,7 +622,7 @@ def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | 
     db.commit()
     db.refresh(plan)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
-    return _plan_to_response(plan)
+    return _plan_to_response(plan, db=db)
 
 
 def submit_checkin(
@@ -557,9 +689,33 @@ def submit_checkin(
 
     pending = [it for it in plan.items if it.checkin_status != "done"]
     plan.status = "pending" if pending else "completed"
+
+    progress_delta = None
+    if cards:
+        from app.db.models import ChildUser
+
+        child = db.get(ChildUser, child_user_id)
+        assessment = get_latest_assessment(db, child_user_id)
+        if child and has_valid_talent(assessment):
+            from app.services.training_mastery import process_checkin_progress
+            from app.services.training_route_context import _child_grade
+
+            progress_delta = process_checkin_progress(
+                db,
+                child,
+                plan,
+                cards,
+                talent_code=effective_talent_code(assessment),
+                grade=_child_grade(db, child_user_id),
+            )
+            plan.content_index = progress_delta.get("content_index", plan.content_index)
+
     db.commit()
     db.refresh(record)
-    return {"record_id": record.id, "plan_status": plan.status}
+    out = {"record_id": record.id, "plan_status": plan.status}
+    if progress_delta:
+        out["training_progress"] = progress_delta
+    return out
 
 
 def _card_summary(c: dict) -> str:
@@ -819,19 +975,24 @@ def get_window_status(db: Session, child_user_id: int, now: datetime | None = No
         }
     current = now.time()
     in_window = row.start_time <= current <= row.end_time
-    return {
+    result = {
         "in_window": in_window,
         "train_date": train_date,
         "start_time": _format_time(row.start_time),
         "end_time": _format_time(row.end_time),
     }
+    if not in_window:
+        plan = _get_plan_by_date(db, child_user_id, train_date)
+        if plan:
+            sync_media_exhausted_from_window(db, child_user_id, plan)
+    return result
 
 
 def get_plan_by_date(db: Session, child_user_id: int, plan_date: date) -> dict | None:
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan:
         return None
-    return _plan_to_response(plan)
+    return _plan_to_response(plan, db=db)
 
 
 def get_yesterday_training_context(db: Session, child_user_id: int, plan_date: date | None = None) -> str | None:

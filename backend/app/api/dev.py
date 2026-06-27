@@ -10,6 +10,7 @@ from app.services.dev_training_service import (
     reset_all_training,
     reset_talent_assessment,
     reset_today_training,
+    reset_training_progress,
     simulate_4am_cutoff,
     simulate_next_training_day,
 )
@@ -30,6 +31,19 @@ def dev_training_status(
     db: Session = Depends(get_db),
 ):
     return get_dev_training_status(db, child_user_id)
+
+
+@router.post("/training/reset-progress")
+def dev_reset_progress(
+    _: None = Depends(_require_dev_mode),
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    """回到主线 A（不删历史打卡）"""
+    try:
+        return reset_training_progress(db, child_user_id)
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.post("/training/reset-today")

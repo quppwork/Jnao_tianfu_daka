@@ -80,6 +80,8 @@ def _lesson_title_from_xet(row: dict) -> str:
     part = row.get("part", 0)
     if skill in ("精力恢复", "高效作业"):
         return f"{row.get('talent_name', '')}{skill}"
+    if skill == "感知力" or row.get("skill_raw") == "多元感知":
+        return f"{row.get('talent_name', '')}多元感知"
     return f"{row.get('talent_name', '')}{skill}{stage}阶段{part}"
 
 
@@ -148,6 +150,8 @@ def import_all_xet_catalogs(db: Session, *, replace: bool = False) -> dict[str, 
     paths = [
         PROJECT_ROOT / "docs" / "data" / "xet_brain_power_catalog.json",
         PROJECT_ROOT / "docs" / "data" / "xet_xuekeaomi_catalog.json",
+        PROJECT_ROOT / "docs" / "data" / "xet_suzhiaomi_catalog.json",
+        PROJECT_ROOT / "docs" / "data" / "xet_duoyuanganzhi_catalog.json",
     ]
     results: dict[str, int] = {}
     for i, path in enumerate(paths):
