@@ -54,4 +54,4 @@ docs/打卡卡片制作进度.md
 *.avi
 *.mov
 *.wav
-*.ogg
+*.oggdata/*.db
