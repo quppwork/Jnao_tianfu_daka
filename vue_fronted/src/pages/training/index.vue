@@ -205,6 +205,7 @@
           <view v-if="coachGuideText" class="plan-ai-box">
             <text class="plan-ai-label">📋 今日怎么练</text>
             <text class="plan-ai-text">{{ coachGuideText }}</text>
+            <text class="plan-ai-hint">💡 点击 ▸ 展开查看课程，完成训练后打卡</text>
           </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
         </template>
@@ -2611,6 +2612,7 @@ function triggerGlitch() {
 .plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-top:12px; }
 .plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; display:block; margin-bottom:6px; }
 .plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
+.plan-ai-hint { color:rgba(255,255,255,0.4); font-size:11px; display:block; margin-top:8px; }
 .plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
 .phase-section { scroll-margin-top:12px; }
 
@@ -2901,6 +2903,7 @@ function triggerGlitch() {
 [data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
 [data-theme="white"] .plan-ai-label { color:#2563eb; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
+[data-theme="white"] .plan-ai-hint { color:#9ca3af; }
 [data-theme="white"] .section-title { color:#1a1a2e; }
 [data-theme="white"] .step { background:#fff; border-left-color:#2563eb; box-shadow:0 2px 8px rgba(0,0,0,0.03); }
 [data-theme="white"] .step-num { background:#2563eb; }
