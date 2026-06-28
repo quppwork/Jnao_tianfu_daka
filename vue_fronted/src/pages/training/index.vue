@@ -167,7 +167,7 @@
               <view class="tl-content">
                 <view class="tl-node-row" @click="togglePhase(phase.block)">
                   <view class="tl-phase-head">
-                    <text class="tl-phase-title">{{ phase.label }} · {{ phase.subtitle }}</text>
+                    <text class="tl-phase-title">{{ phase.label }}</text>
                     <view class="tl-phase-right">
                       <text class="tl-phase-meta">{{ phaseMetaText(phase) }}</text>
                       <text class="tl-phase-toggle">{{ planExpanded[phase.block] ? '▾' : '▸' }}</text>
@@ -182,10 +182,9 @@
                     @click="scrollToPhase(phase.block)"
                   >
                     <text class="tl-item-icon">{{ itemStatusIcon(item, phase) }}</text>
-                    <text class="tl-item-title">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</text>
+                    <text class="tl-item-title">{{ item.title || '训练项' }}</text>
                     <text class="tl-item-right">
                       <text v-if="item.duration_min" class="tl-item-dur">{{ item.duration_min }}分钟</text>
-                      <text class="tl-item-status" :class="itemStatusClass(item, phase)">{{ itemStatusLabel(item, phase) }}</text>
                     </text>
                   </view>
                 </view>
@@ -1566,7 +1565,7 @@ function syncPhaseExpand() {
     if (planExpanded.value[p.block] !== undefined) {
       next[p.block] = planExpanded.value[p.block]
     } else {
-      next[p.block] = p.unlocked && !p.allDone
+      next[p.block] = false
     }
   }
   planExpanded.value = next
