@@ -402,13 +402,17 @@
                   <text class="ftag" :class="{ on: card.tool === '自定义' }" @click="card.tool = '自定义'">自定义</text>
                 </view>
               </view>
-              <view class="form-row">
-                <text class="form-label">时长</text>
-                <input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" />
+              <view class="form-row" style="flex-wrap:nowrap;align-items:center;">
+                <text class="form-label">训练</text>
+                <text class="form-unit">用时</text>
+                <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
+                <text class="form-unit">分钟，看完</text>
+                <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
+                <text class="form-unit">字</text>
               </view>
               <view class="form-row">
                 <text class="form-label">材料</text>
-                <textarea class="form-textarea" v-model="card.content" placeholder="如：一卜语文重要知识点" />
+                <textarea class="form-textarea form-textarea-sm" v-model="card.content" placeholder="如：一卜语文重要知识点" />
               </view>
               <view class="form-row">
                 <text class="form-label">追忆率</text>
@@ -436,12 +440,15 @@
               </view>
             </template>
             <template v-else-if="card.name === '超脑阅读'">
-              <view class="form-row" style="flex-wrap:nowrap;">
-                <text class="form-label" style="width:auto;">训练：用时</text>
-                <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
-                <text class="form-unit">分钟，完成</text>
-                <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
-                <text class="form-unit">字</text>
+              <view class="form-row" style="flex-wrap:nowrap;align-items:center;">
+                <text class="form-label">训练</text>
+                <view style="display:flex;align-items:center;gap:3px;flex:1;justify-content:flex-end;">
+                  <text class="form-unit">用时</text>
+                  <input class="form-input micro" v-model.number="card.time" placeholder="0" type="number" />
+                  <text class="form-unit">分钟，完成</text>
+                  <input class="form-input micro" v-model.number="card.wordCount" placeholder="0" type="number" />
+                  <text class="form-unit">字</text>
+                </view>
               </view>
               <view class="form-row">
                 <text class="form-label">结果</text>
@@ -637,13 +644,19 @@
               <text v-for="t in ['书本','视频','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tool === t }" @click="detailEditCard.tool = t">{{ t }}</text>
             </view>
           </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">时长</text>
-            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" type="number" />
+          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
+            <text class="detail-form-label">训练</text>
+            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
+              <text class="detail-form-unit">用时</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
+              <text class="detail-form-unit">分钟，看完</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
+              <text class="detail-form-unit">字</text>
+            </view>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">材料</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练材料" />
+            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练材料" style="height:36px;padding:6px 10px;" />
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">追忆率</text>
@@ -654,17 +667,20 @@
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '超脑阅读'">
           <view style="display:flex;align-items:center;gap:4px;margin-bottom:10px;">
-            <text class="detail-form-label" style="width:auto;">训练：用时</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" />
-            <text class="detail-form-unit">分钟，完成</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" />
-            <text class="detail-form-unit">字</text>
+            <text class="detail-form-label" style="width:auto;">训练</text>
+            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
+              <text class="detail-form-unit">用时</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" />
+              <text class="detail-form-unit">分钟，完成</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" />
+              <text class="detail-form-unit">字</text>
+            </view>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">结果</text>
@@ -1825,7 +1841,7 @@ function newCard(name) {
     return { ...base, materialType: '书', materialName: '', wordCount: '', forwardTime: '', forwardAcc: '', backwardTime: '', backwardAcc: '' }
   }
   if (name === '影像追忆') {
-    return { ...base, tool: '书本' }
+    return { ...base, time: 0, wordCount: 0, tool: '书本' }
   }
   return base
 }
@@ -2848,7 +2864,7 @@ function triggerGlitch() {
 [data-theme="white"] .file-hint { color:#9ca3af; }
 
 .form-input.short { width:80px; flex:none; background:#fff; color:#0b111e; }
-.form-input.mini { width:56px; flex:none; background:#fff; color:#0b111e; padding:8px 6px; text-align:center; }
+.form-input.mini { width:40px; flex:none; background:#fff; color:#0b111e; padding:6px 0; text-align:center; appearance:textfield; -moz-appearance:textfield; -webkit-appearance:none; }
 .form-inline .form-unit { color:rgba(255,255,255,0.7); }
 .form-unit { color:rgba(255,255,255,0.5); font-size:12px; }
 
