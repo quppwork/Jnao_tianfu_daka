@@ -352,12 +352,13 @@
                 <text class="form-label">材料名称</text>
                 <input class="form-input" v-model="card.materialName" :placeholder="card.materialType === '书' ? '如：《西游记》' : card.materialType === '文章' ? '如：作文《我的姐姐》' : '如：圆周率前100位'" />
               </view>
-              <view class="form-row">
-                <text class="form-label">字数</text>
-                <view class="form-inline">
-                  <input class="form-input short" v-model="card.wordCount" placeholder="字数" type="number" />
-                  <text class="form-unit">字</text>
-                </view>
+              <view class="form-row" style="flex-wrap:nowrap;align-items:center;">
+                <text class="form-label">训练</text>
+                <text class="form-unit">用时</text>
+                <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
+                <text class="form-unit">分钟</text>
+                <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
+                <text class="form-unit">字</text>
               </view>
               <view class="form-row">
                 <text class="form-label">正背</text>
@@ -606,12 +607,13 @@
             <text class="detail-form-label">材料名称</text>
             <input class="detail-form-input" v-model="detailEditCard.materialName" placeholder="材料名称" />
           </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">字数</text>
-            <view class="detail-form-inline">
-              <input class="detail-form-input short" v-model="detailEditCard.wordCount" placeholder="字数" type="number" />
-              <text class="detail-form-unit">字</text>
-            </view>
+          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
+            <text class="detail-form-label">训练</text>
+            <text class="detail-form-unit">用时</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
+            <text class="detail-form-unit">分钟</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
+            <text class="detail-form-unit">字</text>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">正背</text>
