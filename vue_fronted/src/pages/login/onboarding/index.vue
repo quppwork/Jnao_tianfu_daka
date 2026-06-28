@@ -69,6 +69,7 @@
 
       <!-- ═══ Step 3: 老学员选天赋 ═══ -->
       <template v-if="step === 3 && studentType === 'returning'">
+        <view class="step-fade" key="step3">
         <text class="subtitle">完善信息 2/3</text>
         <text class="question">请问你的主天赋是什么？</text>
         <view class="talent-grid">
@@ -101,10 +102,12 @@
         <view class="btn-login" style="margin-top:18px" @click="confirmReturningTalent">
           <text>继续</text>
         </view>
+        </view>
       </template>
 
       <!-- ═══ Step 4: 老学员选训练能力 ═══ -->
       <template v-if="step === 4 && studentType === 'returning'">
+        <view class="step-fade" key="step4">
         <text class="subtitle">完善信息 3/3</text>
         <text class="question">请问之前做过哪些训练？</text>
         <text class="q-hint">可多选</text>
@@ -122,33 +125,36 @@
         <view class="btn-login" style="margin-top:18px" :style="{ opacity: selectedAbilities.length ? 1 : 0.4 }" @click="confirmAbilities">
           <text>继续</text>
         </view>
+        </view>
       </template>
 
       <!-- ═══ Step 5+: 老学员逐项填数据 ═══ -->
       <template v-if="step >= 5 && studentType === 'returning' && currentAbility">
-        <text class="subtitle">训练数据 {{ currentAbilityIndex + 1 }}/{{ selectedAbilityNames.length }}</text>
-        <text class="question">请填写「{{ currentAbility }}」数据</text>
-        <view class="form-list">
-          <view class="form-item">
-            <text class="form-label">第一次打卡时间</text>
-            <input class="form-field" v-model="currentForm.firstDate" placeholder="如：2025年3月 或 2025-03" />
-          </view>
-          <view class="form-item">
-            <text class="form-label">至今打卡次数（大概）</text>
-            <input class="form-field" v-model="currentForm.totalCount" type="number" placeholder="如：30" />
-          </view>
-          <view class="form-item">
-            <text class="form-label">最近一次打卡数据</text>
-            <view class="form-inline">
-              <input class="form-field short" v-model="currentForm.lastTime" type="number" placeholder="时长" />
-              <text class="form-unit">分钟</text>
-              <input class="form-field short" v-model="currentForm.lastResult" type="number" placeholder="正确率" />
-              <text class="form-unit">%</text>
+        <view class="step-fade" :key="'data-' + step">
+          <text class="subtitle">训练数据 {{ currentAbilityIndex + 1 }}/{{ selectedAbilityNames.length }}</text>
+          <text class="question">请填写「{{ currentAbility }}」数据</text>
+          <view class="form-list">
+            <view class="form-item">
+              <text class="form-label">第一次打卡时间</text>
+              <input class="form-field" v-model="formData[currentAbility].firstDate" placeholder="如：2025年3月 或 2025-03" />
+            </view>
+            <view class="form-item">
+              <text class="form-label">至今打卡次数（大概）</text>
+              <input class="form-field" v-model="formData[currentAbility].totalCount" type="number" placeholder="如：30" />
+            </view>
+            <view class="form-item">
+              <text class="form-label">最近一次打卡数据</text>
+              <view class="form-inline">
+                <input class="form-field short" v-model="formData[currentAbility].lastTime" type="number" placeholder="时长" />
+                <text class="form-unit">分钟</text>
+                <input class="form-field short" v-model="formData[currentAbility].lastResult" type="number" placeholder="正确率" />
+                <text class="form-unit">%</text>
+              </view>
             </view>
           </view>
-        </view>
-        <view class="btn-login" style="margin-top:18px" :style="{ opacity: canNextData ? 1 : 0.4 }" @click="nextDataStep">
-          <text>{{ isLastDataStep ? '完成' : '继续' }}</text>
+          <view class="btn-login" style="margin-top:18px" :style="{ opacity: canNextData ? 1 : 0.4 }" @click="nextDataStep">
+            <text>{{ isLastDataStep ? '完成' : '继续' }}</text>
+          </view>
         </view>
       </template>
 
@@ -196,17 +202,9 @@ const currentAbilityIndex = computed(() => step.value - 5)
 const currentAbility = computed(() => selectedAbilityNames.value[currentAbilityIndex.value] || '')
 const isLastDataStep = computed(() => currentAbilityIndex.value >= selectedAbilityNames.value.length - 1)
 
-const currentForm = computed(() => {
-  const key = currentAbility.value
-  if (!formData.value[key]) {
-    formData.value[key] = { firstDate: '', totalCount: '', lastTime: '', lastResult: '' }
-  }
-  return formData.value[key]
-})
-
 const canNextData = computed(() => {
-  const f = currentForm.value
-  return f.firstDate && f.totalCount && f.lastTime && f.lastResult
+  const f = formData.value[currentAbility.value]
+  return f && f.firstDate && f.totalCount && f.lastTime && f.lastResult
 })
 
 function selectStudentType(type) {
@@ -259,6 +257,12 @@ function toggleAbility(ai) {
 
 function confirmAbilities() {
   if (!selectedAbilities.value.length) { uni.showToast({ title: '请至少选择一项', icon: 'none' }); return }
+  // 预初始化所有选中能力的表单数据
+  for (const ab of selectedAbilityNames.value) {
+    if (!formData.value[ab]) {
+      formData.value[ab] = { firstDate: '', totalCount: '', lastTime: '', lastResult: '' }
+    }
+  }
   step.value = 5
 }
 
@@ -336,4 +340,7 @@ function goHome() {
 .btn-login:active { opacity:0.85; }
 
 @keyframes cardSpring { 0%{opacity:0;transform:scale(0.9) translateY(12px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
+
+.step-fade { animation: stepFadeIn 0.35s ease-out; }
+@keyframes stepFadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 </style>
