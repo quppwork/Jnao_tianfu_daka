@@ -120,8 +120,8 @@
         </template>
       </view>
 
-      <!-- Plan · 时间轴总览 -->
-      <view class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
+      <!-- Plan · 时间轴总览（开始训练后才显示） -->
+      <view v-if="timerPhase !== 'setup'" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
         <view class="plan-header">
           <text class="plan-label">📋 今日方案</text>
           <text v-if="talentLabel && !entryLoading && !scheduleLoading" class="plan-header-meta">{{ planHeaderMeta }}</text>
@@ -211,8 +211,8 @@
         </template>
       </view>
 
-      <!-- 训练阶段（动态 A/B/C…，依据今日方案） -->
-      <template v-if="!dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in planPhases" :key="phase.block">
+      <!-- 训练阶段（动态 A/B/C…，开始训练后显示） -->
+      <template v-if="timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in planPhases" :key="phase.block">
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
           <text class="section-title" :class="{ dim: !phase.unlocked }">
@@ -402,9 +402,9 @@
                   <text class="ftag" :class="{ on: card.tool === '自定义' }" @click="card.tool = '自定义'">自定义</text>
                 </view>
               </view>
-              <view class="form-row" style="flex-wrap:nowrap;align-items:center;">
+              <view class="form-row" style="align-items:center;white-space:nowrap;">
                 <text class="form-label">训练</text>
-                <text class="form-unit">用时</text>
+                <text class="form-unit" style="margin-left:-4px;">用时</text>
                 <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
                 <text class="form-unit">分钟，看完</text>
                 <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
@@ -440,15 +440,13 @@
               </view>
             </template>
             <template v-else-if="card.name === '超脑阅读'">
-              <view class="form-row" style="flex-wrap:nowrap;align-items:center;">
+              <view class="form-row" style="align-items:center;white-space:nowrap;">
                 <text class="form-label">训练</text>
-                <view style="display:flex;align-items:center;gap:3px;flex:1;justify-content:flex-end;">
-                  <text class="form-unit">用时</text>
-                  <input class="form-input micro" v-model.number="card.time" placeholder="0" type="number" />
-                  <text class="form-unit">分钟，完成</text>
-                  <input class="form-input micro" v-model.number="card.wordCount" placeholder="0" type="number" />
-                  <text class="form-unit">字</text>
-                </view>
+                <text class="form-unit" style="margin-left:-4px;">用时</text>
+                <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
+                <text class="form-unit">分钟，完成</text>
+                <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
+                <text class="form-unit">字</text>
               </view>
               <view class="form-row">
                 <text class="form-label">结果</text>
@@ -2714,7 +2712,7 @@ function triggerGlitch() {
 @keyframes guideBounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
 .time-pickers { display:flex; gap:10px; justify-content:center; max-width:280px; margin:0 auto; }
 .time-select { flex:1; background:rgba(0,210,255,0.05); border:1px solid rgba(0,210,255,0.2); border-radius:10px; padding:12px 10px; display:flex; align-items:baseline; justify-content:center; gap:4px; cursor:pointer; }
-.time-select-val { color:#1a1a2e; font-size:22px; font-weight:700; }
+.time-select-val { color:#e5e7eb; font-size:22px; font-weight:700; }
 .time-select-unit { color:#6b7280; font-size:12px; }
 .time-start-btn { background:linear-gradient(135deg,rgba(0,210,255,0.35),rgba(0,136,204,0.35)); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
 .time-start-btn text { color:#00d2ff; font-size:15px; font-weight:600; }
