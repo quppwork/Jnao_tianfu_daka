@@ -224,11 +224,14 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   if (data.profile_json) {
     if (data.profile_json.grade) profile.value.grade = data.profile_json.grade
     if (data.profile_json.parentName) profile.value.parentName = data.profile_json.parentName
+    const td = data.profile_json.talent_display
     const tp = data.profile_json.talent_primary || data.profile_json.talent
-    const tt = data.profile_json.talent_tag
-    if (tp) {
+    if (td) {
       hasTalent = true
-      profile.value.talent = tt ? `${tp}偏${tt}` : tp
+      profile.value.talent = td
+    } else if (tp) {
+      hasTalent = true
+      profile.value.talent = tp
     }
   }
   const idx = gradeOptions.indexOf(profile.value.grade)
@@ -236,9 +239,7 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   if (fetchLatest && !hasTalent && uid) {
     return fetchLatestAssessment(uid).then((latest) => {
       if (latest?.talent_primary) {
-        profile.value.talent = latest.talent_tag
-          ? `${latest.talent_primary}偏${latest.talent_tag}`
-          : latest.talent_primary
+        profile.value.talent = latest.talent_primary
       }
     }).catch(() => {})
   }

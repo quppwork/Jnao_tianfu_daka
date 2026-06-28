@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.core.talent_mapping import resolve_talent_code, resolve_talent_tag
+from app.core.talent_mapping import (
+    resolve_talent_code, resolve_talent_tag,
+    parse_check_talent, talent_display,
+)
 from app.db.models import ChildUser, TalentAssessment, TalentAssessmentArchive, TrainingRecord
 
 
@@ -114,9 +117,29 @@ def save_assessment(
     test_type: int,
     report: dict,
 ) -> TalentAssessment:
-    talent_primary = report.get("talent") or report.get("check_talent")
+    check_talent = report.get("check_talent")
+    talent_primary = report.get("talent")
+    talent_secondary = None
+    if not talent_primary and check_talent:
+        # fallback: 从 check_talent 取
+        if isinstance(check_talent, list) and check_talent:
+            talent_primary = check_talent[0]
+        elif isinstance(check_talent, str):
+            talent_primary = check_talent
     talent_code = resolve_talent_code(talent_primary)
     talent_tag = resolve_talent_tag(talent_code)
+    # 从 check_talent 拆出副天赋
+    sec_primary, sec_secondary = parse_check_talent(check_talent)
+    if sec_secondary and sec_secondary != talent_primary:
+        talent_secondary = sec_secondary
+    # check_talent 未提供副天赋时，从 attributeList 取最高 value 的非主天赋
+    if not talent_secondary and talent_code:
+        attr_list = (report.get("results") or {}).get("Attribute", {}).get("attributeList")
+        if isinstance(attr_list, list) and len(attr_list) >= 1:
+            sorted_attrs = sorted(attr_list, key=lambda a: a.get("value", 0), reverse=True)
+            second_name = sorted_attrs[0].get("name") if sorted_attrs else None
+            if second_name and second_name != talent_primary and resolve_talent_code(second_name):
+                talent_secondary = second_name
 
     # 检测当前有效天赋（可能是自选或之前测评）
     user = db.get(ChildUser, child_user_id)
@@ -256,11 +279,25 @@ def sync_child_user_talent(db: Session, child_user_id: int) -> None:
     if latest and code:
         # 有有效 JNAO 测评 → 使用测评结果
         user.training_level = latest.talent_primary
+        # 从 report_json 拆副天赋（check_talent 优先，否则 attributeList）
+        report = latest.report_json or {}
+        check = report.get("check_talent")
+        _, secondary = parse_check_talent(check)
+        if not secondary:
+            attr_list = (report.get("results") or {}).get("Attribute", {}).get("attributeList")
+            if isinstance(attr_list, list) and len(attr_list) >= 2:
+                sorted_attrs = sorted(attr_list, key=lambda a: a.get("value", 0), reverse=True)
+                second_name = sorted_attrs[1].get("name") if len(sorted_attrs) >= 2 else None
+                if second_name and second_name != latest.talent_primary and resolve_talent_code(second_name):
+                    secondary = second_name
+        talent_display_str = talent_display(latest.talent_primary, secondary)
         profile.update(
             {
                 "talent_code": code,
                 "talent_tag": latest.talent_tag or resolve_talent_tag(code),
                 "talent_primary": latest.talent_primary,
+                "talent_secondary": secondary,
+                "talent_display": talent_display_str,
                 "talent_source": "assessment",
                 "latest_assessment_id": latest.id,
             }
@@ -276,6 +313,8 @@ def sync_child_user_talent(db: Session, child_user_id: int) -> None:
                     "talent_code": self_code,
                     "talent_tag": resolve_talent_tag(self_code),
                     "talent_primary": self_name,
+                    "talent_secondary": None,
+                    "talent_display": talent_display(self_name, None),
                     "talent_source": "onboarding",
                 }
             )
