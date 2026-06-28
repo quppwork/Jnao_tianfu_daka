@@ -176,7 +176,22 @@ const talentColor = computed(() => TALENT_COLORS[report.value?.talent] || '#1717
 const talentLogo = computed(() => TALENT_LOGOS[report.value?.talent] || '')
 const talentDisplay = computed(() => {
   const ct = report.value?.check_talent
-  if (ct && ct.length >= 2) return ct[0] + '偏' + ct[1]
+  if (!ct) return report.value?.talent || '--'
+  // 数组格式：["学者","德者"]
+  if (Array.isArray(ct) && ct.length >= 2) {
+    const p = String(ct[0]).replace(/者$/, '')
+    const s = String(ct[1]).replace(/者$/, '')
+    return p + '偏' + s
+  }
+  // 字符串格式："学者偏德者"
+  if (typeof ct === 'string' && ct.includes('偏')) {
+    const parts = ct.split('偏')
+    if (parts.length === 2) {
+      const p = parts[0].replace(/者$/, '')
+      const s = parts[1].replace(/者$/, '')
+      return p + '偏' + s
+    }
+  }
   return report.value?.talent || '--'
 })
 const stateName = computed(() => report.value?.results?.State?.name || '--')
