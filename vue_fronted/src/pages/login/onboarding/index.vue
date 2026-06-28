@@ -69,7 +69,7 @@
 
       <!-- ═══ Step 3: 老学员选天赋 ═══ -->
       <template v-if="step === 3 && studentType === 'returning'">
-        <view class="step-fade" key="step3">
+        <view class="step-fade" key="s3">
         <text class="subtitle">完善信息 2/3</text>
         <text class="question">请问你的主天赋是什么？</text>
         <view class="talent-grid">
@@ -107,7 +107,7 @@
 
       <!-- ═══ Step 4: 老学员选训练能力 ═══ -->
       <template v-if="step === 4 && studentType === 'returning'">
-        <view class="step-fade" key="step4">
+        <view class="step-fade" key="s4">
         <text class="subtitle">完善信息 3/3</text>
         <text class="question">请问之前做过哪些训练？</text>
         <text class="q-hint">可多选</text>
@@ -130,31 +130,31 @@
 
       <!-- ═══ Step 5+: 老学员逐项填数据 ═══ -->
       <template v-if="step >= 5 && studentType === 'returning' && currentAbility">
-        <view class="step-fade" :key="'data-' + step">
-          <text class="subtitle">训练数据 {{ currentAbilityIndex + 1 }}/{{ selectedAbilityNames.length }}</text>
-          <text class="question">请填写「{{ currentAbility }}」数据</text>
-          <view class="form-list">
-            <view class="form-item">
-              <text class="form-label">第一次打卡时间</text>
-              <input class="form-field" v-model="currentForm.firstDate" placeholder="如：2025年3月 或 2025-03" />
-            </view>
-            <view class="form-item">
-              <text class="form-label">至今打卡次数（大概）</text>
-              <input class="form-field" v-model="currentForm.totalCount" type="number" placeholder="如：30" />
-            </view>
-            <view class="form-item">
-              <text class="form-label">最近一次打卡数据</text>
-              <view class="form-inline">
-                <input class="form-field short" v-model="currentForm.lastTime" type="number" placeholder="时长" />
-                <text class="form-unit">分钟</text>
-                <input class="form-field short" v-model="currentForm.lastResult" type="number" placeholder="正确率" />
-                <text class="form-unit">%</text>
-              </view>
+        <view class="step-fade" :key="'s5-' + step">
+        <text class="subtitle">训练数据 {{ currentAbilityIndex + 1 }}/{{ selectedAbilityNames.length }}</text>
+        <text class="question">请填写「{{ currentAbility }}」数据</text>
+        <view class="form-list">
+          <view class="form-item">
+            <text class="form-label">第一次打卡时间</text>
+            <input class="form-field" v-model="fFirstDate" placeholder="如：2025年3月 或 2025-03" />
+          </view>
+          <view class="form-item">
+            <text class="form-label">至今打卡次数（大概）</text>
+            <input class="form-field" v-model="fTotalCount" type="number" placeholder="如：30" />
+          </view>
+          <view class="form-item">
+            <text class="form-label">最近一次打卡数据</text>
+            <view class="form-inline">
+              <input class="form-field short" v-model="fLastTime" type="number" placeholder="时长" />
+              <text class="form-unit">分钟</text>
+              <input class="form-field short" v-model="fLastResult" type="number" placeholder="正确率" />
+              <text class="form-unit">%</text>
             </view>
           </view>
-          <view class="btn-login" style="margin-top:18px" :style="{ opacity: canNextData ? 1 : 0.4 }" @click="nextDataStep">
-            <text>{{ isLastDataStep ? '完成' : '继续' }}</text>
-          </view>
+        </view>
+        <view class="btn-login" style="margin-top:18px" :style="{ opacity: canNextData ? 1 : 0.4 }" @click="nextDataStep">
+          <text>{{ isLastDataStep ? '完成' : '继续' }}</text>
+        </view>
         </view>
       </template>
 
@@ -174,7 +174,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { getChildUserId, saveProfile } from '@/utils/userApi.js'
 
 const step = ref(1)
@@ -182,24 +182,10 @@ const studentType = ref('')
 const selectedTalent = ref('')
 const selectedAbilities = ref([])
 const formData = ref({})
-const currentForm = reactive({ firstDate: '', totalCount: '', lastTime: '', lastResult: '' })
-
-watch([() => step.value, currentAbility], () => {
-  if (step.value >= 5 && currentAbility.value) {
-    const saved = formData.value[currentAbility.value]
-    if (saved) {
-      currentForm.firstDate = saved.firstDate || ''
-      currentForm.totalCount = saved.totalCount || ''
-      currentForm.lastTime = saved.lastTime || ''
-      currentForm.lastResult = saved.lastResult || ''
-    } else {
-      currentForm.firstDate = ''
-      currentForm.totalCount = ''
-      currentForm.lastTime = ''
-      currentForm.lastResult = ''
-    }
-  }
-}, { immediate: true })
+const fFirstDate = ref('')
+const fTotalCount = ref('')
+const fLastTime = ref('')
+const fLastResult = ref('')
 
 const talents = [
   { name: '学者', color: '#12417A', desc: '逻辑思辨 · 知识探索', delay: '0.4s' },
@@ -220,8 +206,17 @@ const currentAbilityIndex = computed(() => step.value - 5)
 const currentAbility = computed(() => selectedAbilityNames.value[currentAbilityIndex.value] || '')
 const isLastDataStep = computed(() => currentAbilityIndex.value >= selectedAbilityNames.value.length - 1)
 
+function loadCurrentForm() {
+  const key = currentAbility.value
+  const saved = formData.value[key]
+  fFirstDate.value = saved?.firstDate || ''
+  fTotalCount.value = saved?.totalCount || ''
+  fLastTime.value = saved?.lastTime || ''
+  fLastResult.value = saved?.lastResult || ''
+}
+
 const canNextData = computed(() => {
-  return currentForm.firstDate && currentForm.totalCount && currentForm.lastTime && currentForm.lastResult
+  return fFirstDate.value && fTotalCount.value && fLastTime.value && fLastResult.value
 })
 
 function selectStudentType(type) {
@@ -274,24 +269,21 @@ function toggleAbility(ai) {
 
 function confirmAbilities() {
   if (!selectedAbilities.value.length) { uni.showToast({ title: '请至少选择一项', icon: 'none' }); return }
-  // 预初始化所有选中能力的表单数据
   for (const ab of selectedAbilityNames.value) {
-    if (!formData.value[ab]) {
-      formData.value[ab] = { firstDate: '', totalCount: '', lastTime: '', lastResult: '' }
-    }
+    if (!formData.value[ab]) formData.value[ab] = { firstDate: '', totalCount: '', lastTime: '', lastResult: '' }
   }
   step.value = 5
+  loadCurrentForm()
 }
 
 function nextDataStep() {
   if (!canNextData.value) return
-  // 保存当前表单到 formData
-  formData.value[currentAbility.value] = { ...currentForm }
-  if (isLastDataStep.value) {
-    step.value = 100
-  } else {
-    step.value++
+  formData.value[currentAbility.value] = {
+    firstDate: fFirstDate.value, totalCount: fTotalCount.value,
+    lastTime: fLastTime.value, lastResult: fLastResult.value,
   }
+  if (isLastDataStep.value) { step.value = 100 }
+  else { step.value++; loadCurrentForm() }
 }
 
 function goHome() {
@@ -300,7 +292,7 @@ function goHome() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; }
+.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; overflow-y:auto; }
 .card { width:100%; max-height:100%; overflow-y:auto; }
 .fixed-back { position:fixed; top:16px; left:16px; z-index:100; cursor:pointer; }
 .fixed-back text { color: var(--accent); font-size:14px; }
