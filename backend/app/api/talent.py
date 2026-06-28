@@ -43,6 +43,9 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
         record_id = await jnao_submit(req.answer, req.uid, req.type)
         report = await jnao_get_report(record_id)
         assessment_id = None
+        conflict = False
+        locked = False
+        lock_msg = None
         if req.child_user_id:
             row = assessment_service.save_assessment(
                 db,
@@ -53,7 +56,18 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
                 report=report,
             )
             assessment_id = row.id
-        return {"code": 1, "data": report, "assessment_id": assessment_id}
+            conflict = getattr(row, "_talent_conflict", False)
+            locked = getattr(row, "_talent_locked", False)
+            if locked:
+                lock_msg = assessment_service.TALENT_LOCK_MSG
+        return {
+            "code": 1,
+            "data": report,
+            "assessment_id": assessment_id,
+            "talent_conflict": conflict,
+            "talent_locked": locked,
+            "lock_message": lock_msg,
+        }
     except Exception as e:
         raise HTTPException(502, str(e)) from e
 
@@ -76,12 +90,18 @@ async def save_assessment_endpoint(
             test_type=req.type,
             report=report,
         )
+        user = db.get(assessment_service.ChildUser, child_user_id)
+        current = (user.profile_json or {}).get("talent_primary", "") if user else ""
         return {
             "code": 1,
             "data": report,
             "assessment_id": row.id,
             "talent_code": row.talent_code,
             "talent_tag": row.talent_tag,
+            "talent_conflict": getattr(row, "_talent_conflict", False),
+            "talent_locked": getattr(row, "_talent_locked", False),
+            "current_talent": current,
+            "lock_message": assessment_service.TALENT_LOCK_MSG if getattr(row, "_talent_locked", False) else None,
         }
     except Exception as e:
         raise HTTPException(502, str(e)) from e

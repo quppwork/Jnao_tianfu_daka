@@ -10,6 +10,39 @@
     <scroll-view class="body" scroll-y>
       <view class="content">
 
+        <!-- ══ 迷者警告 ══ -->
+        <view v-if="isMizhe" class="card mizhe-warn">
+          <view class="mizhe-icon">⚠️</view>
+          <text class="mizhe-title">测评结果不明确</text>
+          <text class="mizhe-desc">本次天赋测评未得出明确的五者天赋归属，建议重新测试以获得准确的训练方案。</text>
+          <view class="btn-solid mizhe-btn" @tap="reTestFromMizhe">
+            <text>🔄 重新测试</text>
+          </view>
+        </view>
+
+        <!-- ══ 天赋冲突弹窗 ══ -->
+        <view v-if="talentConflict" class="card conflict-warn">
+          <view class="conflict-icon">🔄</view>
+          <text class="conflict-title">天赋结果不一致</text>
+          <text class="conflict-desc">您之前设置的天赋是「{{ currentTalent }}」，本次测评结果为「{{ report?.talent || '--' }}」。是否用新结果替换？</text>
+          <view class="conflict-actions">
+            <view class="btn-outline conflict-btn" @tap="handleConflictResolve('keep_old')">
+              <text>保留「{{ currentTalent }}」</text>
+            </view>
+            <view class="btn-solid conflict-btn-new" @tap="handleConflictResolve('use_new')">
+              <text>使用「{{ report?.talent || '--' }}」</text>
+            </view>
+          </view>
+          <text v-if="resolving" class="conflict-hint">处理中...</text>
+        </view>
+
+        <!-- ══ 天赋锁定提示 ══ -->
+        <view v-if="talentLocked" class="card mizhe-warn">
+          <view class="mizhe-icon">🔒</view>
+          <text class="mizhe-title">天赋已锁定</text>
+          <text class="mizhe-desc">{{ lockMessage }}</text>
+        </view>
+
         <!-- ══ 1. Hero ══ -->
         <view class="card hero-row">
           <view class="hero-logo">
@@ -139,7 +172,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ensureChildUser, fetchAssessmentReport } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
-const TALENT_COLORS = { "学者":"#12417A","思者":"#FFB600","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
+const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
 const TALENT_LOGOS = { "学者":"/static/xue.jpg","思者":"/static/si.jpg","赢者":"/static/ying.jpg","德者":"/static/de.jpg","行者":"/static/xing.jpg" }
 
 const report = ref(null)
@@ -154,6 +187,17 @@ onMounted(async () => {
     const page = pages[pages.length - 1]
     const assessmentId = page?.options?.assessment_id
     const uid = await ensureChildUser()
+
+    // 冲突检测
+    if (page?.options?.talent_conflict === '1') {
+      talentConflict.value = true
+      currentTalent.value = decodeURIComponent(page?.options?.current_talent || '')
+    }
+    if (page?.options?.talent_locked === '1') {
+      talentLocked.value = true
+      lockMessage.value = decodeURIComponent(page?.options?.lock_message || '天赋已锁定')
+    }
+
     if (!assessmentId) {
       loadError.value = '缺少测评记录 ID'
       return
@@ -167,11 +211,38 @@ onMounted(async () => {
   }
 })
 
+const talentConflict = ref(false)
+const currentTalent = ref('')
+const talentLocked = ref(false)
+const lockMessage = ref('')
+const resolving = ref(false)
+
+async function handleConflictResolve(action) {
+  resolving.value = true
+  try {
+    const uid = await ensureChildUser()
+    const { resolveTalentConflict } = await import('@/utils/userApi.js')
+    await resolveTalentConflict(uid, action)
+    talentConflict.value = false
+    uni.showToast({ title: action === 'use_new' ? '已更新天赋' : '已保留原天赋', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '操作失败', icon: 'none' })
+  }
+  resolving.value = false
+}
+
+function reTestFromMizhe() {
+  uni.redirectTo({ url: '/pages/talent/index' })
+}
 function goBack() {
   uni.redirectTo({ url: '/pages/index' })
 }
 
 // Computed
+const isMizhe = computed(() => {
+  const t = report.value?.talent || report.value?.talent_primary || ''
+  return t === '迷者'
+})
 const talentColor = computed(() => TALENT_COLORS[report.value?.talent] || '#171717')
 const talentLogo = computed(() => TALENT_LOGOS[report.value?.talent] || '')
 const talentDisplay = computed(() => {
@@ -399,4 +470,22 @@ function openOldReport() {
 .collapse-wrap { font-size:12px; color:var(--text-dim); line-height:1.7; }
 .collapse-wrap.clamped { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .collapse-btn { width:100%; text-align:center; font-size:12px; color:var(--text-dim); padding:6px 0; cursor:pointer; display:block; }
+
+/* Conflict dialog */
+.conflict-warn { background:linear-gradient(135deg,rgba(88,166,255,0.08),rgba(99,102,241,0.05)); border:1.5px solid rgba(88,166,255,0.35); text-align:center; padding:20px 16px; }
+.conflict-icon { font-size:36px; display:block; margin-bottom:8px; }
+.conflict-title { color:#3b82f6; font-size:18px; font-weight:700; display:block; margin-bottom:6px; }
+.conflict-desc { color:var(--text-dim); font-size:13px; line-height:1.6; display:block; margin-bottom:16px; }
+.conflict-actions { display:flex; gap:10px; justify-content:center; }
+.conflict-btn { width:auto; padding:10px 20px; border:1px solid var(--border); border-radius:14px; cursor:pointer; }
+.conflict-btn text { color:var(--text); font-size:14px; }
+.conflict-btn-new { width:auto; padding:10px 20px; background:linear-gradient(135deg,var(--accent),#3b8bff); }
+.conflict-hint { color:var(--text-dim); font-size:12px; margin-top:10px; display:block; }
+
+/* Mizhe (迷者) warning */
+.mizhe-warn { background:linear-gradient(135deg,rgba(255,193,7,0.08),rgba(255,152,0,0.05)); border:1.5px solid rgba(255,152,0,0.35); text-align:center; padding:20px 16px; }
+.mizhe-icon { font-size:36px; display:block; margin-bottom:8px; }
+.mizhe-title { color:#e67e00; font-size:18px; font-weight:700; display:block; margin-bottom:6px; }
+.mizhe-desc { color:var(--text-dim); font-size:13px; line-height:1.6; display:block; margin-bottom:14px; }
+.mizhe-btn { background:linear-gradient(135deg,#f59e0b,#e67e00); display:inline-block; width:auto; padding:10px 28px; margin:0 auto; }
 </style>

@@ -164,7 +164,7 @@ import {
   gradeToSchoolStage,
 } from '@/utils/userApi.js'
 
-const isLight = ref(false)
+const isLight = ref(true)
 const inputText = ref('')
 const loading = ref(false)
 const guideSessionId = ref(null)

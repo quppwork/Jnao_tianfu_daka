@@ -147,9 +147,13 @@ def _delete_training_plan(db: Session, plan: TrainingPlan) -> None:
 
 
 def _plan_matches_latest_talent(plan: TrainingPlan, assessment) -> bool:
-    if not assessment or not assessment.talent_primary:
+    if isinstance(assessment, dict):
+        tp = assessment.get("talent_primary")
+    else:
+        tp = assessment.talent_primary if assessment else None
+    if not tp:
         return False
-    return plan.level == assessment.talent_primary
+    return plan.level == tp
 
 
 def purge_today_plan_without_assessment(
@@ -177,11 +181,18 @@ def refresh_today_plan_if_talent_changed(
 ) -> bool:
     """天赋变更或无天赋时清除今日未完成计划，以便按最新天赋重建"""
     plan_date = plan_date or _today()
-    assessment = assessment if assessment is not None else get_latest_assessment(db, child_user_id)
+    if assessment is None:
+        assessment = get_latest_assessment(db, child_user_id)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or plan.status == "completed":
         return False
-    if not has_valid_talent(assessment):
+    # 支持 dict (自选天赋) 和 TalentAssessment 两种输入
+    talent_code = None
+    if isinstance(assessment, dict):
+        talent_code = assessment.get("talent_code")
+    else:
+        talent_code = effective_talent_code(assessment)
+    if talent_code is None:
         _delete_training_plan(db, plan)
         db.commit()
         return True
@@ -200,7 +211,8 @@ def sync_pending_plan_content(
     plan_date: date | None = None,
 ) -> bool:
     """天赋未变时同步今日方案：推进 content_index、更新推送音频与 level"""
-    if not assessment or not has_valid_talent(assessment):
+    tc = _talent_attr(assessment, "talent_code")
+    if not assessment or not tc:
         return False
     plan_date = plan_date or _today()
     plan = _get_plan_by_date(db, child_user_id, plan_date)
@@ -209,13 +221,14 @@ def sync_pending_plan_content(
     if not _plan_matches_latest_talent(plan, assessment):
         return False
 
-    talent_code = effective_talent_code(assessment)
+    talent_code = _talent_attr(assessment, "talent_code")
+    talent_primary = _talent_attr(assessment, "talent_primary") or ""
     series = get_content_series(db, talent_code, prefer_skill="影像追忆")
     if not series:
         return False
 
     content_index = _compute_content_index(
-        db, child_user_id, plan_date, len(series), talent_primary=assessment.talent_primary
+        db, child_user_id, plan_date, len(series), talent_primary=talent_primary
     )
     content = series[content_index]
     changed = False
@@ -223,8 +236,8 @@ def sync_pending_plan_content(
     if plan.content_index != content_index:
         plan.content_index = content_index
         changed = True
-    if plan.level != assessment.talent_primary:
-        plan.level = assessment.talent_primary
+    if plan.level != talent_primary:
+        plan.level = talent_primary
         changed = True
 
     # 仅同步「简单推送」单条音频计划；已排课的 A/B 方案保留结构
@@ -258,19 +271,53 @@ def sync_pending_plan_content(
     return changed
 
 
-def ensure_assessment_for_training(db: Session, child_user_id: int):
-    """进入训练前优先校验最新天赋测评"""
+def _resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
+    """获取用户当前有效天赋信息（测评 or 自选）"""
+    from app.services.assessment_service import (
+        get_self_reported_talent_code,
+        get_self_reported_talent_name,
+    )
     assessment = get_latest_assessment(db, child_user_id)
-    if not has_valid_talent(assessment):
+    if has_valid_talent(assessment):
+        return {
+            "has_assessment": True,
+            "needs_assessment": False,
+            "assessment_id": assessment.id,
+            "talent_primary": assessment.talent_primary,
+            "talent_tag": assessment.talent_tag,
+            "talent_code": effective_talent_code(assessment),
+            "talent_source": "assessment",
+        }
+    # 无有效测评 → 尝试自选天赋
+    self_code = get_self_reported_talent_code(db, child_user_id)
+    if self_code:
+        from app.core.talent_mapping import resolve_talent_tag
+        self_name = get_self_reported_talent_name(db, child_user_id)
+        return {
+            "has_assessment": True,
+            "needs_assessment": False,
+            "assessment_id": None,
+            "talent_primary": self_name,
+            "talent_tag": resolve_talent_tag(self_code),
+            "talent_code": self_code,
+            "talent_source": "onboarding",
+        }
+    return None
+
+
+def ensure_assessment_for_training(db: Session, child_user_id: int):
+    """进入训练前优先校验最新天赋测评（含自选天赋）"""
+    talent = _resolve_effective_talent(db, child_user_id)
+    if not talent:
         purge_today_plan_without_assessment(db, child_user_id)
         raise TrainingError("请先完成天赋测评", 403)
-    return assessment
+    return talent
 
 
 def get_training_entry(db: Session, child_user_id: int) -> dict:
     """训练页入口：优先检查最新天赋，并同步今日方案"""
-    assessment = get_latest_assessment(db, child_user_id)
-    if not has_valid_talent(assessment):
+    talent = _resolve_effective_talent(db, child_user_id)
+    if not talent:
         purge_today_plan_without_assessment(db, child_user_id)
         return {
             "has_assessment": False,
@@ -282,22 +329,25 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
             "talent_code": None,
         }
 
-    refresh_today_plan_if_talent_changed(db, child_user_id, assessment=assessment)
-    sync_pending_plan_content(db, child_user_id, assessment)
+    refresh_today_plan_if_talent_changed(db, child_user_id, assessment=talent)
+    # sync_pending_plan_content needs an actual assessment row; skip for onboarding
+    if talent.get("talent_source") != "onboarding":
+        assessment_row = get_latest_assessment(db, child_user_id)
+        if assessment_row:
+            sync_pending_plan_content(db, child_user_id, assessment_row)
     progress = get_progress(db, child_user_id)
     now = training_now()
     today_plan = _resolve_today_plan(db, child_user_id, _today())
     meta = training_day_meta(now)
     day_locked = is_plan_day_locked(today_plan, now=now) if today_plan else False
-    talent_code = effective_talent_code(assessment)
     return {
         "has_assessment": True,
         "needs_assessment": False,
         "message": None,
-        "assessment_id": assessment.id,
-        "talent_primary": assessment.talent_primary,
-        "talent_tag": assessment.talent_tag,
-        "talent_code": talent_code,
+        "assessment_id": talent.get("assessment_id"),
+        "talent_primary": talent.get("talent_primary"),
+        "talent_tag": talent.get("talent_tag"),
+        "talent_code": talent.get("talent_code"),
         "day_locked": day_locked,
         **meta,
         **progress,
@@ -475,23 +525,25 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
     if not is_new_day_ready():
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
 
-    assessment = get_latest_assessment(db, child_user_id)
-    if not has_valid_talent(assessment):
+    talent = _resolve_effective_talent(db, child_user_id)
+    if not talent:
         raise TrainingError("请先完成天赋测评", 403)
 
-    refresh_today_plan_if_talent_changed(db, child_user_id, plan_date=plan_date, assessment=assessment)
+    # 获取实际 assessment 行（可能为 None，自选天赋场景）
+    assessment = get_latest_assessment(db, child_user_id)
+    refresh_today_plan_if_talent_changed(db, child_user_id, plan_date=plan_date, assessment=talent)
 
     ensure_today_plan_shell(db, child_user_id, plan_date)
-    sync_pending_plan_content(db, child_user_id, assessment, plan_date=plan_date)
+    if assessment:
+        sync_pending_plan_content(db, child_user_id, assessment, plan_date=plan_date)
     plan = _resolve_today_plan(db, child_user_id, plan_date)
     if plan:
-        from app.services.assessment_service import effective_talent_code
         from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
         from app.services.training_child_guide import build_coach_text_for_plan, is_technical_schedule_note
 
         ensure_supplementary_catalogs(db)
-        code = effective_talent_code(assessment)
-        if repair_plan_media_items(db, plan, code):
+        talent_code = talent.get("talent_code") if talent else None
+        if repair_plan_media_items(db, plan, talent_code):
             db.commit()
             plan = _resolve_today_plan(db, child_user_id, plan_date)
         if plan and plan.items and is_technical_schedule_note(plan.report_text):
@@ -504,14 +556,23 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
     return empty_today_plan_response(db, child_user_id, plan_date)
 
 
+def _talent_attr(assessment, key: str, default=None):
+    """兼容 dict 和 ORM 对象取天赋属性"""
+    if isinstance(assessment, dict):
+        return assessment.get(key, default)
+    return getattr(assessment, key, default)
+
+
 def _preview_content_index(db: Session, child_user_id: int, plan_date: date, assessment) -> int:
-    if not assessment or not has_valid_talent(assessment):
+    tc = _talent_attr(assessment, "talent_code")
+    tp = _talent_attr(assessment, "talent_primary")
+    if not tc:
         return 0
-    series = get_content_series(db, effective_talent_code(assessment), prefer_skill="影像追忆")
+    series = get_content_series(db, tc, prefer_skill="影像追忆")
     if not series:
         return 0
     return _compute_content_index(
-        db, child_user_id, plan_date, len(series), talent_primary=assessment.talent_primary
+        db, child_user_id, plan_date, len(series), talent_primary=tp
     )
 
 
@@ -555,10 +616,11 @@ def create_plan_for_schedule(db: Session, child_user_id: int, plan_date: date | 
         return plan
 
     content_index = _preview_content_index(db, child_user_id, plan_date, assessment)
+    talent_primary = _talent_attr(assessment, "talent_primary") or ""
     plan = TrainingPlan(
         child_user_id=child_user_id,
         plan_date=plan_date,
-        level=assessment.talent_primary,
+        level=talent_primary,
         report_text="",
         content_index=content_index,
         status="pending",
@@ -585,19 +647,21 @@ def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | 
         existing = _resolve_today_plan(db, child_user_id, plan_date)
         return _plan_to_response(existing, db=db)
 
-    series = get_content_series(db, effective_talent_code(assessment), prefer_skill="影像追忆")
+    talent_code = _talent_attr(assessment, "talent_code")
+    talent_primary = _talent_attr(assessment, "talent_primary") or ""
+    series = get_content_series(db, talent_code, prefer_skill="影像追忆")
     if not series:
         raise TrainingError("暂无可用训练音频，请联系管理员导入资源", 503)
 
     content_index = _compute_content_index(
-        db, child_user_id, plan_date, len(series), talent_primary=assessment.talent_primary
+        db, child_user_id, plan_date, len(series), talent_primary=talent_primary
     )
     content = series[content_index]
 
     plan = TrainingPlan(
         child_user_id=child_user_id,
         plan_date=plan_date,
-        level=assessment.talent_primary,
+        level=talent_primary,
         report_text=f"今日音频：{content.lesson_title}",
         content_index=content_index,
         status="pending",
@@ -886,24 +950,20 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
 
 
 def get_progress(db: Session, child_user_id: int) -> dict:
-    assessment = get_latest_assessment(db, child_user_id)
-    has_assessment = has_valid_talent(assessment)
+    talent = _resolve_effective_talent(db, child_user_id)
     total = db.scalar(
         select(func.count())
         .select_from(TrainingRecord)
         .where(TrainingRecord.child_user_id == child_user_id)
     ) or 0
     today_plan = _resolve_today_plan(db, child_user_id, _today())
-    code = effective_talent_code(assessment) if assessment else None
     return {
         "total_checkins": total,
         "content_index": today_plan.content_index if today_plan else 0,
-        "talent_code": code,
-        "talent_tag": assessment.talent_tag if has_assessment else None,
-        "talent_primary": assessment.talent_primary if has_assessment else None,
-        "assessment_id": assessment.id if has_assessment else None,
-        "has_assessment": has_assessment,
-        "needs_assessment": not has_assessment,
+        "talent_code": talent.get("talent_code") if talent else None,
+        "talent_tag": talent.get("talent_tag") if talent else None,
+        "talent_primary": talent.get("talent_primary") if talent else None,
+        "assessment_id": talent.get("assessment_id") if talent else None,
         "today_completed": bool(today_plan and today_plan.status == "completed"),
     }
 

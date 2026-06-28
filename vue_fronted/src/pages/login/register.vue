@@ -8,12 +8,12 @@
 
       <view class="form">
         <view class="input-wrap">
-          <text class="input-icon">👤</text>
-          <input class="login-input" v-model="form.name" placeholder="输入昵称（必填）" />
-        </view>
-        <view class="input-wrap">
           <text class="input-icon">📱</text>
           <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" />
+        </view>
+        <view class="input-wrap">
+          <text class="input-icon">👤</text>
+          <input class="login-input" v-model="form.name" placeholder="输入昵称（必填）" />
         </view>
 
         <view class="btn-login" @click="doRegister">
@@ -61,7 +61,7 @@ async function doRegister() {
     }))
     localStorage.setItem('jnao_logged_in', '1')
     uni.showToast({ title: '注册成功，' + data.nickname + '！', icon: 'none' })
-    setTimeout(() => { uni.redirectTo({ url: '/pages/index' }) }, 500)
+    setTimeout(() => { uni.redirectTo({ url: '/pages/login/onboarding' }) }, 500)
   } catch (e) {
     submitting.value = false
     uni.showToast({ title: '注册失败，请稍后重试', icon: 'none' })

@@ -241,6 +241,14 @@ export function gradeToSchoolStage(grade) {
   return 'primary_high'
 }
 
+export async function resolveTalentConflict(userId, action) {
+  return apiJson(withUser('/api/user/talent/resolve-conflict', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  })
+}
+
 export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
   return apiJson('/api/talent/report', {
     method: 'POST',

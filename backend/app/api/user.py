@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_child_user_id, get_db
-from app.services import user_service
+from app.services import assessment_service, user_service
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
@@ -68,3 +68,22 @@ def update_learner_profile(
     if not user:
         raise HTTPException(404, "用户不存在")
     return user_service.profile_to_dict(user, db)
+
+
+class TalentConflictResolve(BaseModel):
+    action: str = Field(..., pattern="^(keep_old|use_new)$")
+
+
+@router.post("/talent/resolve-conflict")
+def resolve_talent_conflict(
+    req: TalentConflictResolve,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    """解决天赋冲突：保留旧天赋或采用新测评结果"""
+    try:
+        return assessment_service.resolve_talent_conflict(
+            db, child_user_id, action=req.action
+        )
+    except assessment_service.AssessmentError as e:
+        raise HTTPException(e.status_code, e.message) from e
