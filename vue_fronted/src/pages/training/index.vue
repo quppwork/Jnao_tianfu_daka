@@ -2380,11 +2380,8 @@ async function loadTodayPlan(silent = true) {
 
     const result = await fetchTrainingToday(uid, { skipAi: true })
     if (result.error === 'assessment') {
-      needAssessment.value = true
-      showAssessmentModal.value = true
-      aiPlanText.value = ''
-      audioSrc.value = ''
-      audioTitle.value = '🎧 训练用音频'
+      // entry 已确认有天赋，today 403 可能是并发/缓存问题，不弹窗
+      uni.showToast({ title: result.message || '方案加载中，请稍后', icon: 'none' })
       entryLoading.value = false
       return
     }
