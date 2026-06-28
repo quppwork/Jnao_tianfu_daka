@@ -218,7 +218,7 @@
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
           <text class="section-title" :class="{ dim: !phase.unlocked }">
-            {{ phase.label }} · {{ phase.subtitle }}{{ phase.unlocked ? '' : ' 🔒' }}
+            {{ phase.label }}{{ phase.unlocked ? '' : ' 🔒' }}
           </text>
 
           <view class="media-block" :class="{ locked: isPhaseMediaLocked(phase) }">
@@ -227,6 +227,7 @@
             </view>
 
             <template v-if="phase.items.length">
+              <view class="step-grid">
               <view
                 v-for="(item, idx) in phase.items"
                 :key="item.id || idx"
@@ -244,6 +245,7 @@
                   <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</view>
                   <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">{{ itemStepHint(item, phase) }}</text>
                 </view>
+              </view>
               </view>
             </template>
             <view v-else class="step dim-step">
@@ -2623,6 +2625,8 @@ function triggerGlitch() {
 .section-title.dim { color:rgba(255,255,255,0.35); }
 
 .step { background:#243046; border-radius:6px; padding:14px; display:flex; gap:10px; align-items:flex-start; border-left:4px solid #00d2ff; margin-bottom:8px; cursor:pointer; transition:all 0.15s; position:relative; clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+.step-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.step-grid .step { width:calc(50% - 4px); flex:none; }
 .step:active { background:#1a3040; }
 .step.dim-step { border-left-color:rgba(255,255,255,0.1); }
 .step.dim-step::after { border-color:rgba(255,255,255,0.1); }
