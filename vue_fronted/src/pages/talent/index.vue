@@ -6,7 +6,9 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
       <text class="nav-title">天赋测试</text>
-      <view class="nav-spacer"></view>
+      <view class="nav-right" @tap="showHistory = true">
+        <text>历史报告</text>
+      </view>
     </view>
 
     <!-- ===== PRE-TEST PHASES ===== -->
@@ -33,32 +35,29 @@
             </view>
           </view>
 
-          <!-- 历史报告 -->
-          <view class="pcard pcard-gray pcard-in" style="width:160px;flex-shrink:0;margin-top:16px;animation-delay:0.7s" @tap="showHistory = true">
-            <view class="pcard-icon-wrap">
-              <svg viewBox="0 0 48 48" width="28" height="28" fill="none" stroke="#58a6ff" stroke-width="2"><rect x="6" y="4" width="36" height="40" rx="4"/><line x1="16" y1="14" x2="32" y2="14"/><line x1="16" y1="22" x2="28" y2="22"/></svg>
-            </view>
-            <text class="pcard-title">历史报告</text>
-            <text class="pcard-sub">{{ historyList.length ? historyList.length + ' 条记录' : '暂无记录' }}</text>
-          </view>
         </view>
       </view>
 
       <!-- History Overlay -->
-      <view v-if="showHistory" class="notice-overlay" @tap="showHistory = false">
-        <view class="notice-card" style="max-width:340px;" @tap.stop>
-          <text class="notice-text" style="font-weight:700;margin-bottom:12px;display:block;">历史报告</text>
-          <view v-if="historyList.length" class="history-list">
-            <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item">
-              <view class="history-item-main" @tap="viewHistory(h)">
-                <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
-                <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
+      <view v-if="showHistory" class="history-overlay" @tap="showHistory = false">
+        <view class="history-panel" @tap.stop>
+          <view class="history-header">
+            <text class="history-title">历史报告</text>
+            <view class="history-header-close" @tap="showHistory = false"><text>✕</text></view>
+          </view>
+          <view v-if="historyList.length" class="history-grid">
+            <view v-for="(h,i) in historyList" :key="h.id || i" class="history-box" @tap="viewHistory(h)">
+              <view class="history-box-row">
+                <view class="history-box-icon">
+                  <text>{{ talentEmoji[h.talent_primary] || '🧬' }}</text>
+                </view>
+                <text class="history-box-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+                <text class="history-box-time">{{ formatHistoryDate(h.create_time || h.assessed_at) }}</text>
+                <view class="history-box-del" @tap.stop="confirmDeleteHistory(h)"><text>✕</text></view>
               </view>
-              <view class="history-del" @tap.stop="confirmDeleteHistory(h)"><text>✕</text></view>
             </view>
           </view>
-          <text v-else class="notice-text">暂无历史报告</text>
-          <view class="history-close" @tap="showHistory = false"><text>关闭</text></view>
+          <text v-else class="history-empty">暂无历史报告</text>
         </view>
       </view>
 
@@ -491,6 +490,16 @@ function dismissNotice() {
   phase.value = 'confirm'
 }
 
+const talentEmoji = { 学者:'📚', 思者:'💡', 行者:'🏃', 德者:'⚖️', 赢者:'🏆' }
+
+function formatHistoryDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0,10)
+  const p = n => String(n).padStart(2,'0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
+}
+
 function goBack() {
   if (phase.value === 'ageGate') { phase.value = 'door'; testType.value = null; return }
   if (phase.value === 'confirm') { phase.value = testType.value === '成人' ? 'door' : 'ageGate'; return }
@@ -518,7 +527,8 @@ onBeforeUnmount(() => {
 .nav { display:flex; align-items:center; padding:14px 24px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
-.nav-spacer { width:36px; }
+.nav-right { cursor: pointer; }
+.nav-right text { color: var(--text-dim); font-size: 14px; }
 
 /* Pre-test */
 .phase { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:18vh 24px 0; }
@@ -546,17 +556,23 @@ onBeforeUnmount(() => {
 
 .history-hint { text-align:center; margin-bottom:8px; cursor:pointer; }
 .history-hint text { color:var(--text-dim); font-size:13px; }
-.history-list { max-height:300px; overflow-y:auto; margin-bottom:8px; }
-.history-item { padding:12px 0; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
-.history-item-main { flex:1; display:flex; justify-content:space-between; align-items:center; cursor:pointer; min-width:0; }
-.history-item-main:active { opacity:0.7; }
-.history-del { width:32px; height:32px; border-radius:8px; background:rgba(239,68,68,0.1); display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; }
-.history-del text { color:#ef4444; font-size:14px; font-weight:700; }
-.history-del:active { background:rgba(239,68,68,0.2); }
-.hi-talent { color:var(--accent); font-size:14px; font-weight:600; }
-.hi-time { color:var(--text-dim); font-size:11px; }
-.history-close { text-align:center; margin-top:10px; cursor:pointer; }
-.history-close text { color:var(--text-dim); font-size:14px; }
+.history-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
+.history-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px 16px; max-height:60vh; overflow-y:auto; }
+.history-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.history-title { font-size:17px; font-weight:700; color:var(--text); }
+.history-header-close { width:28px; height:28px; border-radius:50%; background:var(--bg-input); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.history-header-close text { font-size:14px; color:var(--text-dim); }
+.history-grid { display:flex; flex-direction:column; gap:8px; }
+.history-box { background:var(--bg-input); border-radius:14px; padding:14px; cursor:pointer; transition:background 0.15s; }
+.history-box:active { opacity:0.7; }
+.history-box-row { display:flex; align-items:center; gap:10px; }
+.history-box-icon { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.history-box-icon text { font-size:18px; }
+.history-box-talent { font-size:14px; font-weight:600; color:var(--text); }
+.history-box-time { font-size:12px; color:var(--text-dim); margin-left:auto; }
+.history-box-del { width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.history-box-del text { color:var(--text-dim); font-size:9px; }
+.history-empty { text-align:center; padding:32px 0; color:var(--text-dim); font-size:14px; }
 
 /* Testing */
 .test-top { display:flex; align-items:center; gap:10px; padding:12px 24px; }
