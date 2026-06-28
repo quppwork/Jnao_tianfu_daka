@@ -1,5 +1,8 @@
 <template>
   <view class="app">
+    <view v-if="step === 2" class="fixed-back" @tap="goBack">
+      <text>← 返回</text>
+    </view>
     <view class="card">
       <view class="logo-row">
         <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
@@ -102,6 +105,10 @@ async function selectStudentType(type) {
   step.value = 2
 }
 
+function goBack() {
+  step.value = 1
+}
+
 function selectTalent(name) {
   selectedTalent.value = name
 }
@@ -146,6 +153,8 @@ async function confirmTalent() {
 <style scoped>
 .app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; }
 .card { width:100%; }
+.fixed-back { position:fixed; top:16px; left:16px; z-index:100; cursor:pointer; }
+.fixed-back text { color: var(--accent); font-size:14px; }
 .logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:6px; }
 .logo-j { color:#dc2626; font-size:44px; font-weight:800; }
 .logo-nao { color:var(--text); font-size:34px; font-weight:700; }
