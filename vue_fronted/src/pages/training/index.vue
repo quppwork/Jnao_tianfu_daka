@@ -2625,8 +2625,8 @@ function triggerGlitch() {
 .section-title.dim { color:rgba(255,255,255,0.35); }
 
 .step { background:#243046; border-radius:6px; padding:14px; display:flex; gap:10px; align-items:flex-start; border-left:4px solid #00d2ff; margin-bottom:8px; cursor:pointer; transition:all 0.15s; position:relative; clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
-.step-grid { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
-.media-block .step-grid .step { width:calc(50% - 4px); flex:none; margin-bottom:0; }
+.step-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.step-grid .step { width:calc(50% - 4px); flex:none; }
 .step:active { background:#1a3040; }
 .step.dim-step { border-left-color:rgba(255,255,255,0.1); }
 .step.dim-step::after { border-color:rgba(255,255,255,0.1); }
@@ -2750,8 +2750,8 @@ function triggerGlitch() {
 .dev-action text { color:#fbbf24; font-size:11px; font-weight:600; }
 .dev-panel-hint { display:block; margin-top:8px; color:rgba(255,255,255,0.3); font-size:10px; text-align:center; }
 .media-block, .checkin-block { position:relative; }
-.media-block { display:flex; gap:8px; margin-bottom:18px; }
-.media-block .step { flex:1; min-width:0; margin-bottom:0; padding:10px 8px; }
+.media-block { margin-bottom:18px; }
+.media-block .step { margin-bottom:0; padding:10px 8px; }
 .media-block .step-box { font-size:14px; padding:12px 6px; }
 .media-block .step-label { font-size:11px; margin-bottom:4px; }
 .media-block .step-num { width:18px; height:18px; font-size:10px; }
