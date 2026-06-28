@@ -136,18 +136,18 @@
           <view class="form-list">
             <view class="form-item">
               <text class="form-label">第一次打卡时间</text>
-              <input class="form-field" v-model="formData[currentAbility].firstDate" placeholder="如：2025年3月 或 2025-03" />
+              <input class="form-field" v-model="currentForm.firstDate" placeholder="如：2025年3月 或 2025-03" />
             </view>
             <view class="form-item">
               <text class="form-label">至今打卡次数（大概）</text>
-              <input class="form-field" v-model="formData[currentAbility].totalCount" type="number" placeholder="如：30" />
+              <input class="form-field" v-model="currentForm.totalCount" type="number" placeholder="如：30" />
             </view>
             <view class="form-item">
               <text class="form-label">最近一次打卡数据</text>
               <view class="form-inline">
-                <input class="form-field short" v-model="formData[currentAbility].lastTime" type="number" placeholder="时长" />
+                <input class="form-field short" v-model="currentForm.lastTime" type="number" placeholder="时长" />
                 <text class="form-unit">分钟</text>
-                <input class="form-field short" v-model="formData[currentAbility].lastResult" type="number" placeholder="正确率" />
+                <input class="form-field short" v-model="currentForm.lastResult" type="number" placeholder="正确率" />
                 <text class="form-unit">%</text>
               </view>
             </view>
@@ -174,7 +174,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { getChildUserId, saveProfile } from '@/utils/userApi.js'
 
 const step = ref(1)
@@ -182,6 +182,24 @@ const studentType = ref('')
 const selectedTalent = ref('')
 const selectedAbilities = ref([])
 const formData = ref({})
+const currentForm = reactive({ firstDate: '', totalCount: '', lastTime: '', lastResult: '' })
+
+watch([() => step.value, currentAbility], () => {
+  if (step.value >= 5 && currentAbility.value) {
+    const saved = formData.value[currentAbility.value]
+    if (saved) {
+      currentForm.firstDate = saved.firstDate || ''
+      currentForm.totalCount = saved.totalCount || ''
+      currentForm.lastTime = saved.lastTime || ''
+      currentForm.lastResult = saved.lastResult || ''
+    } else {
+      currentForm.firstDate = ''
+      currentForm.totalCount = ''
+      currentForm.lastTime = ''
+      currentForm.lastResult = ''
+    }
+  }
+}, { immediate: true })
 
 const talents = [
   { name: '学者', color: '#12417A', desc: '逻辑思辨 · 知识探索', delay: '0.4s' },
@@ -203,8 +221,7 @@ const currentAbility = computed(() => selectedAbilityNames.value[currentAbilityI
 const isLastDataStep = computed(() => currentAbilityIndex.value >= selectedAbilityNames.value.length - 1)
 
 const canNextData = computed(() => {
-  const f = formData.value[currentAbility.value]
-  return f && f.firstDate && f.totalCount && f.lastTime && f.lastResult
+  return currentForm.firstDate && currentForm.totalCount && currentForm.lastTime && currentForm.lastResult
 })
 
 function selectStudentType(type) {
@@ -268,6 +285,8 @@ function confirmAbilities() {
 
 function nextDataStep() {
   if (!canNextData.value) return
+  // 保存当前表单到 formData
+  formData.value[currentAbility.value] = { ...currentForm }
   if (isLastDataStep.value) {
     step.value = 100
   } else {
@@ -281,7 +300,7 @@ function goHome() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; overflow-y:auto; }
+.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; }
 .card { width:100%; max-height:100%; overflow-y:auto; }
 .fixed-back { position:fixed; top:16px; left:16px; z-index:100; cursor:pointer; }
 .fixed-back text { color: var(--accent); font-size:14px; }
