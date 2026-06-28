@@ -477,7 +477,14 @@ async function doSubmitReport() {
     if (json.code !== 1) throw new Error('报告生成失败')
     await loadHistory()
     const aid = json.assessment_id
-    uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
+    let url = `/pages/report/index?assessment_id=${aid}`
+    if (json.talent_conflict) {
+      url += `&talent_conflict=1&current_talent=${encodeURIComponent(json.current_talent || '')}`
+    }
+    if (json.talent_locked) {
+      url += `&talent_locked=1&lock_message=${encodeURIComponent(json.lock_message || '')}`
+    }
+    uni.navigateTo({ url })
   } catch (e) {
     submitError.value = '提交失败：' + (e.message || '请稍后重试')
   }

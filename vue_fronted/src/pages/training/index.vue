@@ -267,30 +267,6 @@
         </view>
       </template>
 
-      <!-- 可选训练：高效作业等，孩子确认后再加入 -->
-      <view
-        v-if="showOptionalPrompt && topPendingOptional"
-        class="optional-offer-section"
-      >
-        <view class="divider"></view>
-        <view class="optional-offer-card" data-augmented-ui="tl-clip br-clip border">
-          <text class="optional-offer-title">今天要练这项吗？</text>
-          <text class="optional-offer-skill">「{{ topPendingOptional.skill }}」</text>
-          <text v-if="topPendingOptional.suggested && talentLabel" class="optional-offer-hint">
-            根据你的天赋（{{ talentLabel }}），今天很适合加练哦
-          </text>
-          <text v-else class="optional-offer-hint">这是可选加练，练不练都可以</text>
-          <view class="optional-offer-actions">
-            <view class="btn-optional-yes" :class="{ disabled: optionalLoading }" @click="acceptOptionalTraining">
-              <text>{{ optionalLoading ? '添加中…' : '要练' }}</text>
-            </view>
-            <view class="btn-optional-no" :class="{ disabled: optionalLoading }" @click="declineOptionalTraining">
-              <text>今天不练</text>
-            </view>
-          </view>
-        </view>
-      </view>
-
       <!-- 打卡弹窗（各阶段共用） -->
       <view v-if="showPicker && activePickerBlock" class="picker-overlay" @click="closePicker">
         <view class="picker-card checkin-modal" @click.stop>
@@ -778,7 +754,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, confirmOptionalTraining, markPlanMediaExhausted, setTrainingWindow, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
+import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
@@ -787,7 +763,6 @@ const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
 const devMode = ref(getDevMode())
 const scheduleLoading = ref(false)
-const optionalLoading = ref(false)
 const entryLoading = ref(false)
 const devStatusText = ref('')
 const timerPhase = ref('setup') // setup | running | expired
@@ -999,11 +974,6 @@ function readTimerData() {
   }
 }
 
-function formatLocalHHMM(ms) {
-  const d = new Date(ms)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
 function syncPickersFromPlannedMinutes(minutes) {
   if (!minutes || minutes < 5) return
   const h = Math.floor(minutes / 60)
@@ -1037,20 +1007,9 @@ async function applyScheduledPlan(uid, data) {
   refreshAiPlanInBackground(uid)
 }
 
-async function syncMediaExhaustedOnServer() {
-  try {
-    const uid = await ensureChildUser()
-    const res = await markPlanMediaExhausted(uid)
-    if (res.data) {
-      todayPlan.value = res.data
-      syncPlanMetaFromApi(res.data)
-      applyPlanMedia(res.data)
-    } else if (todayPlan.value) {
-      todayPlan.value.media_exhausted = true
-    }
-  } catch (_) {
-    if (todayPlan.value) todayPlan.value.media_exhausted = true
-  }
+function syncMediaExhaustedLocal() {
+  // 本地标记媒体已耗尽（后端已移除该 API，前端不再同步到服务器）
+  if (todayPlan.value) todayPlan.value.media_exhausted = true
 }
 
 function expireTrainingTimer(silent = false) {
@@ -1061,7 +1020,7 @@ function expireTrainingTimer(silent = false) {
   timerPhase.value = 'expired'
   remainingSeconds.value = 0
   closeMedia()
-  syncMediaExhaustedOnServer()
+  syncMediaExhaustedLocal()
   if (!silent) {
     const msg = isGlobalCutoff.value ? '凌晨4点训练日已截止' : '训练时长已到，仍可打卡'
     uni.showToast({ title: msg, icon: 'none', duration: 2500 })
@@ -1147,9 +1106,6 @@ async function startTrainingTimer() {
     plannedDurationSec.value = totalSec
     const nowMs = nowSynced()
     const endAt = nowMs + totalSec * 1000
-    try {
-      await setTrainingWindow(uid, formatLocalHHMM(nowMs), formatLocalHHMM(endAt))
-    } catch (_) { /* 时段记录失败不阻断训练 */ }
 
     persistTimer(endAt, totalSec)
     syncTimerFromEndAt(endAt)
@@ -1303,7 +1259,6 @@ async function devResetMainLine() {
   try {
     uni.showLoading({ title: '回到主线A...' })
     const uid = await ensureChildUser()
-    await devResetTrainingProgress(uid)
     await devResetTodayTraining(uid)
     resetAllLocalState()
     todayPlan.value = null
@@ -1665,58 +1620,6 @@ const planPhases = computed(() => {
     }
   })
 })
-
-const optionalOffers = computed(() => todayPlan.value?.optional_offers || [])
-const pendingOptionalOffers = computed(() =>
-  optionalOffers.value.filter(o => o.status === 'pending')
-)
-const topPendingOptional = computed(() => {
-  const pending = pendingOptionalOffers.value
-  if (!pending.length) return null
-  return pending.find(o => o.suggested) || pending[0]
-})
-const showOptionalPrompt = computed(() => {
-  if (!topPendingOptional.value || needAssessment.value || !hasPlanItems.value) return false
-  const phases = planPhases.value
-  if (!phases.length) return false
-  const first = phases[0]
-  return first.allDone
-})
-
-async function acceptOptionalTraining() {
-  if (optionalLoading.value || !topPendingOptional.value) return
-  optionalLoading.value = true
-  try {
-    const uid = await ensureChildUser()
-    const skill = topPendingOptional.value.skill
-    const res = await confirmOptionalTraining(uid, skill, true)
-    if (res.error) throw new Error(res.message || '添加失败')
-    await applyScheduledPlan(uid, res.data)
-    uni.showToast({ title: `已加入「${skill}」`, icon: 'none' })
-  } catch (e) {
-    uni.showToast({ title: e.message || '添加失败', icon: 'none' })
-  } finally {
-    optionalLoading.value = false
-  }
-}
-
-async function declineOptionalTraining() {
-  if (optionalLoading.value || !topPendingOptional.value) return
-  optionalLoading.value = true
-  try {
-    const uid = await ensureChildUser()
-    const skill = topPendingOptional.value.skill
-    const res = await confirmOptionalTraining(uid, skill, false)
-    if (res.error) throw new Error(res.message || '操作失败')
-    todayPlan.value = res.data
-    syncPlanMetaFromApi(res.data)
-    uni.showToast({ title: '好的，今天不加练', icon: 'none' })
-  } catch (e) {
-    uni.showToast({ title: e.message || '操作失败', icon: 'none' })
-  } finally {
-    optionalLoading.value = false
-  }
-}
 
 const planTotalCount = computed(() => (todayPlan.value?.items || []).length)
 const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => i.checkin_status === 'done').length)
@@ -2493,11 +2396,8 @@ async function loadTodayPlan(silent = true) {
 
     const result = await fetchTrainingToday(uid, { skipAi: true })
     if (result.error === 'assessment') {
-      needAssessment.value = true
-      showAssessmentModal.value = true
-      aiPlanText.value = ''
-      audioSrc.value = ''
-      audioTitle.value = '🎧 训练用音频'
+      // entry 已确认有天赋，today 403 可能是并发/缓存问题，不弹窗
+      uni.showToast({ title: result.message || '方案加载中，请稍后', icon: 'none' })
       entryLoading.value = false
       return
     }
@@ -2879,36 +2779,6 @@ function triggerGlitch() {
 [data-theme="white"] .ftag.on { background:#2563eb; border-color:#2563eb; color:#fff; }
 
 .divider { height:1px; background:linear-gradient(90deg,transparent,rgba(0,210,255,0.3),transparent); margin:12px 0; }
-.optional-offer-section { margin:8px 0 16px; }
-.optional-offer-card {
-  padding:16px 14px;
-  background:rgba(0,210,255,0.06);
-  border:1px solid rgba(0,210,255,0.25);
-  border-radius:8px;
-}
-.optional-offer-title { display:block; color:rgba(255,255,255,0.75); font-size:13px; margin-bottom:6px; }
-.optional-offer-skill { display:block; color:#00d2ff; font-size:18px; font-weight:700; margin-bottom:8px; }
-.optional-offer-hint { display:block; color:rgba(255,255,255,0.45); font-size:12px; line-height:1.5; margin-bottom:14px; }
-.optional-offer-actions { display:flex; gap:10px; }
-.btn-optional-yes, .btn-optional-no {
-  flex:1; padding:12px 8px; text-align:center; border-radius:6px; cursor:pointer;
-}
-.btn-optional-yes {
-  background:linear-gradient(135deg,rgba(0,210,255,0.35),rgba(0,120,200,0.45));
-  border:1px solid rgba(0,210,255,0.5);
-}
-.btn-optional-yes text { color:#fff; font-size:14px; font-weight:600; }
-.btn-optional-no {
-  background:rgba(255,255,255,0.04);
-  border:1px solid rgba(255,255,255,0.15);
-}
-.btn-optional-no text { color:rgba(255,255,255,0.65); font-size:14px; }
-.btn-optional-yes.disabled, .btn-optional-no.disabled { opacity:0.5; pointer-events:none; }
-[data-theme="white"] .optional-offer-card { background:#f0f9ff; border-color:#bae6fd; }
-[data-theme="white"] .optional-offer-skill { color:#0284c7; }
-[data-theme="white"] .optional-offer-hint { color:#64748b; }
-[data-theme="white"] .btn-optional-no { border-color:#e2e8f0; background:#f8fafc; }
-[data-theme="white"] .btn-optional-no text { color:#64748b; }
 .b-section { }
 .step-preview-locked { cursor:not-allowed; }
 .step-preview-locked .step-box { border-style:dashed; opacity:0.85; }
