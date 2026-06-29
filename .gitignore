@@ -13,6 +13,9 @@ __pycache__/
 .pytest_cache/
 backend/data/
 
+# SQLite databases
+data/*.db
+
 # Node
 node_modules/
 vue_fronted/.cert/
@@ -23,6 +26,7 @@ vue_fronted/.cert/
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # Logs
 logs/
