@@ -8,12 +8,12 @@
 
       <view class="form">
         <view class="input-wrap">
-          <text class="input-icon">👤</text>
-          <input class="login-input" v-model="form.name" placeholder="输入昵称（必填）" />
-        </view>
-        <view class="input-wrap">
           <text class="input-icon">📱</text>
           <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" />
+        </view>
+        <view class="input-wrap">
+          <text class="input-icon">👤</text>
+          <input class="login-input" v-model="form.name" placeholder="输入昵称（必填）" />
         </view>
 
         <view class="btn-login" @click="doRegister">
