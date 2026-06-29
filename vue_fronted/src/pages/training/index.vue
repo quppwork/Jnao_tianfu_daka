@@ -125,6 +125,7 @@
         <view class="plan-header">
           <text class="plan-label">📋 今日方案</text>
           <text v-if="talentLabel && !entryLoading && !scheduleLoading" class="plan-header-meta">{{ planHeaderMeta }}</text>
+          <text class="plan-hint">💡 点击 ▸ 展开查看课程</text>
         </view>
         <view v-if="scheduleLoading" class="plan-loading-wrap">
           <view class="plan-loading-ring">
@@ -203,10 +204,7 @@
           </view>
 
           <view v-if="coachGuideText" class="plan-ai-box">
-            <view class="plan-ai-header">
-              <text class="plan-ai-label">📋 今日怎么练</text>
-              <text class="plan-ai-hint">💡 点击 ▸ 展开查看课程</text>
-            </view>
+            <text class="plan-ai-label">📋 今日怎么练</text>
             <text class="plan-ai-text">{{ coachGuideText }}</text>
           </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
@@ -2614,10 +2612,10 @@ function triggerGlitch() {
 .plan-progress-fill { height:100%; background:linear-gradient(90deg,#00d2ff,#22c55e); border-radius:999px; transition:width 0.35s ease; box-shadow:0 0 10px rgba(0,210,255,0.35); }
 .plan-progress-text { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:10px; text-align:center; letter-spacing:0.04em; }
 .plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-top:12px; }
-.plan-ai-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
-.plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; }
+.plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; display:block; margin-bottom:6px; }
 .plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
-.plan-ai-hint { color:rgba(255,255,255,0.35); font-size:10px; }
+
+.plan-hint { color:rgba(255,255,255,0.35); font-size:10px; margin-left:auto; flex-shrink:0; }
 .plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
 .phase-section { scroll-margin-top:12px; }
 
@@ -2914,7 +2912,7 @@ function triggerGlitch() {
 [data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
 [data-theme="white"] .plan-ai-label { color:#2563eb; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
-[data-theme="white"] .plan-ai-hint { color:#9ca3af; }
+[data-theme="white"] .plan-hint { color:#9ca3af; }
 [data-theme="white"] .section-title { color:#1a1a2e; }
 [data-theme="white"] .step { background:#fff; border-left-color:#2563eb; box-shadow:0 2px 8px rgba(0,0,0,0.03); }
 [data-theme="white"] .step-num { background:#2563eb; }
