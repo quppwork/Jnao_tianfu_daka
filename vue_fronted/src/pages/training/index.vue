@@ -744,7 +744,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
-import { miniCardSummary } from '@/utils/trainingCardDisplay.js'
+import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -1818,7 +1818,7 @@ function openPhaseMediaItem(item, phase) {
 const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const pickerCards = ref([])
 const sparkAbi = ref(-1)
-const abilities = ['超脑阅读','影像追忆','扫描速记','极速运算','极速学习','难题专练','文科扫书','理科扫书','高效作业','天赋绘画','音乐灵感','棋类专注']
+const abilities = TRAINING_ABILITIES
 
 function hasPickerCard(name) { return pickerCards.value.some(c => c.name === name) }
 
@@ -2014,17 +2014,36 @@ async function deletePhaseCheckin(block) {
   return res
 }
 
-function autoDetectAbilities(block) {
-  const items = getPhaseItems(block)
-  if (!items.length) return
-  for (const item of items) {
-    const title = (item.title || item.lesson_title || '').replace(/\s+/g, '')
-    if (!title) continue
-    for (const ability of abilities) {
-      if (title.includes(ability) && !hasPickerCard(ability)) {
-        pickerCards.value.push(newCard(ability))
-      }
+function detectAbilitiesForBlock(block) {
+  const found = []
+  const seen = new Set()
+  for (const item of getPhaseItems(block)) {
+    const skill = resolvePlanItemSkill(item, abilities)
+    if (skill && !seen.has(skill)) {
+      seen.add(skill)
+      found.push(skill)
     }
+  }
+  return found
+}
+
+function autoDetectAbilities(block) {
+  const detected = detectAbilitiesForBlock(block)
+  if (!detected.length) return
+  let sparkIdx = -1
+  for (const ability of detected) {
+    if (hasPickerCard(ability)) continue
+    const card = newCard(ability)
+    const planItem = getPhaseItems(block).find(i => resolvePlanItemSkill(i, abilities) === ability)
+    if (planItem?.duration_min && !card.time) {
+      card.time = String(planItem.duration_min)
+    }
+    pickerCards.value.push(card)
+    if (sparkIdx < 0) sparkIdx = abilities.indexOf(ability)
+  }
+  if (sparkIdx >= 0) {
+    sparkAbi.value = sparkIdx
+    setTimeout(() => { sparkAbi.value = -1 }, 1500)
   }
 }
 
@@ -2047,6 +2066,7 @@ function openPicker(block) {
       : []
   } else {
     pickerCards.value = []
+    autoDetectAbilities(block)
   }
   showPicker.value = true
 }

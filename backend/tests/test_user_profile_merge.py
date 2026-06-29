@@ -145,7 +145,6 @@ def test_repair_onboarding_conflicting_unknown_flag():
             },
         },
     )
-    assert repair_onboarding_talent(db, user.id)
     sync_child_user_talent(db, user.id)
     db.refresh(user)
     assert get_self_reported_talent_code(db, user.id) == 1

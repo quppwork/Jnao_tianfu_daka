@@ -142,6 +142,7 @@ class TrainingRecord(Base):
     note: Mapped[str | None] = mapped_column(Text)
     attitude_pct: Mapped[int | None] = mapped_column(Integer)
     files_json: Mapped[dict | list | None] = mapped_column(JSON)
+    # 预留：家长/运营复核打卡质量（暂无 API，默认 approved）
     review_status: Mapped[str] = mapped_column(String(20), default="approved")
     reviewed_by: Mapped[int | None] = mapped_column(Integer)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -182,6 +183,7 @@ class QaMessage(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("qa_session.id"), nullable=False)
     role: Mapped[str] = mapped_column(String(10), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # 预留：语音提问/回复（当前仅文本+图片答疑）
     voice_url: Mapped[str | None] = mapped_column(String(500))
     image_url: Mapped[str | None] = mapped_column(String(500))
     meta_json: Mapped[dict | None] = mapped_column(JSON)

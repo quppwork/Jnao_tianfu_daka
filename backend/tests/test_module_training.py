@@ -94,6 +94,8 @@ class TestModuleTraining:
                 ability_type="极速运算",
                 attitude_pct=80,
                 content="完成20题",
+                result="正确率85%",
+                note="最后一题粗心",
             )
         )
         db_session.commit()

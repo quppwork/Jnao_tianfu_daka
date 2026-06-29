@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_child_user_id, get_db
 from app.services import assessment_service, user_service
+from app.services.onboarding_service import OnboardingError
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
@@ -44,14 +45,17 @@ def update_profile(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
 ):
-    user = user_service.update_profile(
-        db,
-        child_user_id,
-        nickname=req.nickname,
-        jnao_uid=req.jnao_uid,
-        profile_json=req.profile_json,
-        training_level=req.training_level,
-    )
+    try:
+        user = user_service.update_profile(
+            db,
+            child_user_id,
+            nickname=req.nickname,
+            jnao_uid=req.jnao_uid,
+            profile_json=req.profile_json,
+            training_level=req.training_level,
+        )
+    except OnboardingError as e:
+        raise HTTPException(e.status_code, e.message) from e
     if not user:
         raise HTTPException(404, "用户不存在")
     # 若 profile_json 包含 onboarding 自选天赋，同步提升到 child_user 顶层字段

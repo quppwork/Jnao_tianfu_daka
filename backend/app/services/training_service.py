@@ -1267,6 +1267,10 @@ def get_yesterday_training_context(db: Session, child_user_id: int, plan_date: d
             parts.append(f"能力打卡：{record.ability_type}")
         if record.content:
             parts.append(f"训练记录：{record.content}")
+        if record.result:
+            parts.append(f"训练效果：{record.result}")
+        if record.note:
+            parts.append(f"备注：{record.note}")
         if record.attitude_pct is not None:
             parts.append(f"配合度 {record.attitude_pct}%")
         cards = record.files_json if isinstance(record.files_json, list) else []
@@ -1274,6 +1278,20 @@ def get_yesterday_training_context(db: Session, child_user_id: int, plan_date: d
             names = [c.get("name") for c in cards if c.get("name")]
             if names:
                 parts.append(f"训练项：{'、'.join(names)}")
+            card_details: list[str] = []
+            for c in cards:
+                name = c.get("name")
+                if not name:
+                    continue
+                sub: list[str] = []
+                if c.get("result"):
+                    sub.append(f"效果「{c['result']}」")
+                if c.get("note"):
+                    sub.append(f"备注「{c['note']}」")
+                if sub:
+                    card_details.append(f"{name}（{'；'.join(sub)}）")
+            if card_details:
+                parts.append("分项反馈：" + "；".join(card_details))
     return "；".join(parts)
 
 

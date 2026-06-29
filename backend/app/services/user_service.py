@@ -4,10 +4,18 @@ from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser
 from app.services.assessment_service import enrich_profile_talent_fields
+from app.services.onboarding_service import (
+    merge_onboarding_into_profile,
+    validate_onboarding_merge,
+)
 
 
 def merge_profile_json(current: dict | None, patch: dict) -> dict:
-    """深度合并 profile_json — 引导页/onboarding 只提交部分字段时不覆盖已有数据"""
+    """深度合并 profile_json — onboarding 支持分步保存与老学员 prior_training_data"""
+    if patch.get("onboarding"):
+        current_ob = (current or {}).get("onboarding") if isinstance((current or {}).get("onboarding"), dict) else {}
+        validate_onboarding_merge(current_ob, patch["onboarding"])
+        return merge_onboarding_into_profile(current, patch)
     base = dict(current or {})
     for key, val in patch.items():
         if isinstance(val, dict) and isinstance(base.get(key), dict):

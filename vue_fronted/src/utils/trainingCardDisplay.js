@@ -1,5 +1,33 @@
 /** 训练打卡卡片展示 — 今日摘要与历史页共用 */
 
+export const TRAINING_ABILITIES = [
+  '超脑阅读', '影像追忆', '扫描速记', '极速运算', '极速学习', '难题专练',
+  '文科扫书', '理科扫书', '高效作业', '天赋绘画', '音乐灵感', '棋类专注',
+]
+
+/** 从今日方案训练项解析打卡能力名（instructions.skill / 标题匹配） */
+export function resolvePlanItemSkill(item, abilityList = TRAINING_ABILITIES) {
+  if (!item) return null
+  const inst = item.instructions
+  if (typeof inst === 'string' && inst.trim().startsWith('{')) {
+    try {
+      const payload = JSON.parse(inst)
+      const sk = (payload.skill || '').trim()
+      if (sk && abilityList.includes(sk)) return sk
+    } catch (_) { /* ignore */ }
+  }
+  const texts = [item.title, item.lesson_title, item.ability_type]
+    .filter(Boolean)
+    .map(s => String(s).replace(/\s+/g, ''))
+  for (const text of texts) {
+    for (const ability of abilityList) {
+      if (text.includes(ability)) return ability
+    }
+    if (text.includes('超脑速读')) return '超脑阅读'
+  }
+  return null
+}
+
 export function miniCardSummary(c) {
   if (!c) return '已记录'
   const parts = []

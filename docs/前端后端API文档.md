@@ -216,7 +216,7 @@ POST /api/chat       # 通用对话（不含引导人设）
 POST /api/chat/stream # SSE 流式对话
 ```
 
-**后端工作**: 调用豆包 LLM → 引导人设注入（张宇老师） → 返回回复。调试模式显示原始豆包输出。
+**后端工作**: 调用豆包 LLM → 引导人设注入（张宇老师） → 返回回复。**当前为静态人设**；读用户画像做个性化引导为预留能力（见 [数据闭环与预留说明.md](数据闭环与预留说明.md)）。
 
 ---
 
@@ -398,6 +398,7 @@ child_training_state (profile_json.training_progress)
 - 04:00-04:05 为日切冻结窗口
 - 昨日未完成 → 今日继续同方案
 - 昨日完成 → 推进到下一项/下一阶段
+- **昨日打卡 `result` / `note`（及分项 cards）→ `get_yesterday_training_context()` → 次日 AI 报告与排课**（见 [数据闭环与预留说明.md](数据闭环与预留说明.md)）
 ```
 
 ---
@@ -421,10 +422,12 @@ POST /api/qa/clear              # 清空当前会话
 **后端工作（POST /api/qa/chat）**:
 1. `detect_subject()` → 自动识别学科（数学/语文/英语）
 2. 错频道检测：数学标签问英语题 → 提醒切换学科
-3. `build_prompt()` → 按天赋类型 + 学科 + 年级 + 学段注入提示词
-4. 调用豆包 LLM
-5. `qa_coach` → 注入学习者辅导元数据（如思者过度思考提示、行者行动力提示）
-6. INSERT `qa_session` + `qa_message`
+3. `fetch_recent_coach_context_for_prompt()` → 读取近期 `meta_json` 中的 `mistake_pattern` / `coach_hint` 注入系统提示
+4. `build_qa_system_prompt()` → 天赋 + 学科 + 学段 + 教练上下文
+5. RAG 可选；调用豆包 LLM
+6. `build_coach_metadata()` → 本轮 `coach_hint` / `mistake_pattern` 写入 assistant 消息的 `meta_json`
+
+`qa_message.voice_url`：预留，当前未使用。
 
 ---
 

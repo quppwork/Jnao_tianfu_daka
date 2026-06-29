@@ -9,7 +9,7 @@ from app.db.models import ChildUser, QaMessage, QaSession
 from app.services.assessment_service import get_latest_assessment
 from app.services.doubao_client import chat_completion, vision_chat_completion
 from app.services.qa_cache import get_session_list, invalidate_session_list, set_session_list
-from app.services.qa_coach import build_coach_metadata
+from app.services.qa_coach import build_coach_metadata, fetch_recent_coach_context_for_prompt
 from app.services.qa_image_store import image_data_url
 from app.agents.qa.memory import QaMemory
 from app.agents.qa.prompt_builder import build_qa_system_prompt
@@ -182,6 +182,10 @@ async def chat(
             rag_sources = list(rag.get("sources") or [])
             rag_context = rag["answer"]
 
+    coach_context = fetch_recent_coach_context_for_prompt(
+        db, child_user_id, session_id=session.id
+    )
+
     system = build_qa_system_prompt(
         school_stage=school_stage,
         grade=profile.get("grade"),
@@ -191,6 +195,7 @@ async def chat(
         subject=subject or session.subject,
         rag_context=rag_context,
         ocr_preview=ocr_preview,
+        coach_context=coach_context,
     )
 
     user_row = QaMessage(
