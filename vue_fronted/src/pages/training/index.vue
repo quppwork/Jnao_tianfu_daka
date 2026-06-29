@@ -120,8 +120,8 @@
         </template>
       </view>
 
-      <!-- Plan · 时间轴总览 -->
-      <view class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
+      <!-- Plan · 时间轴总览（开始训练后才显示） -->
+      <view v-if="timerPhase !== 'setup'" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
         <view class="plan-header">
           <text class="plan-label">📋 今日方案</text>
           <text v-if="talentLabel && !entryLoading && !scheduleLoading" class="plan-header-meta">{{ planHeaderMeta }}</text>
@@ -167,7 +167,7 @@
               <view class="tl-content">
                 <view class="tl-node-row" @click="togglePhase(phase.block)">
                   <view class="tl-phase-head">
-                    <text class="tl-phase-title">{{ phase.label }} · {{ phase.subtitle }}</text>
+                    <text class="tl-phase-title">{{ phase.label }}</text>
                     <view class="tl-phase-right">
                       <text class="tl-phase-meta">{{ phaseMetaText(phase) }}</text>
                       <text class="tl-phase-toggle">{{ planExpanded[phase.block] ? '▾' : '▸' }}</text>
@@ -182,10 +182,9 @@
                     @click="scrollToPhase(phase.block)"
                   >
                     <text class="tl-item-icon">{{ itemStatusIcon(item, phase) }}</text>
-                    <text class="tl-item-title">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</text>
+                    <text class="tl-item-title">{{ item.title || '训练项' }}</text>
                     <text class="tl-item-right">
                       <text v-if="item.duration_min" class="tl-item-dur">{{ item.duration_min }}分钟</text>
-                      <text class="tl-item-status" :class="itemStatusClass(item, phase)">{{ itemStatusLabel(item, phase) }}</text>
                     </text>
                   </view>
                 </view>
@@ -204,19 +203,22 @@
           </view>
 
           <view v-if="coachGuideText" class="plan-ai-box">
-            <text class="plan-ai-label">📋 今日怎么练</text>
+            <view class="plan-ai-header">
+              <text class="plan-ai-label">📋 今日怎么练</text>
+              <text class="plan-ai-hint">💡 点击 ▸ 展开查看课程</text>
+            </view>
             <text class="plan-ai-text">{{ coachGuideText }}</text>
           </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
         </template>
       </view>
 
-      <!-- 训练阶段（动态 A/B/C…，依据今日方案） -->
-      <template v-if="!dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in planPhases" :key="phase.block">
+      <!-- 训练阶段（动态 A/B/C…，开始训练后显示） -->
+      <template v-if="timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in planPhases" :key="phase.block">
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
           <text class="section-title" :class="{ dim: !phase.unlocked }">
-            {{ phase.label }} · {{ phase.subtitle }}{{ phase.unlocked ? '' : ' 🔒' }}
+            {{ phase.label }}{{ phase.unlocked ? '' : ' 🔒' }}
           </text>
 
           <view class="media-block" :class="{ locked: isPhaseMediaLocked(phase) }">
@@ -225,6 +227,7 @@
             </view>
 
             <template v-if="phase.items.length">
+              <view class="step-grid">
               <view
                 v-for="(item, idx) in phase.items"
                 :key="item.id || idx"
@@ -242,6 +245,7 @@
                   <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</view>
                   <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">{{ itemStepHint(item, phase) }}</text>
                 </view>
+              </view>
               </view>
             </template>
             <view v-else class="step dim-step">
@@ -352,10 +356,13 @@
                 <text class="form-label">材料名称</text>
                 <input class="form-input" v-model="card.materialName" :placeholder="card.materialType === '书' ? '如：《西游记》' : card.materialType === '文章' ? '如：作文《我的姐姐》' : '如：圆周率前100位'" />
               </view>
-              <view class="form-row">
-                <text class="form-label">字数</text>
-                <view class="form-inline">
-                  <input class="form-input short" v-model="card.wordCount" placeholder="字数" type="number" />
+              <view class="form-row" style="align-items:center;white-space:nowrap;">
+                <text class="form-label">训练</text>
+                <view style="display:flex;align-items:center;gap:3px;flex:1;white-space:nowrap;">
+                  <text class="form-unit">用时</text>
+                  <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
+                  <text class="form-unit">分钟，记住</text>
+                  <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
                   <text class="form-unit">字</text>
                 </view>
               </view>
@@ -402,13 +409,17 @@
                   <text class="ftag" :class="{ on: card.tool === '自定义' }" @click="card.tool = '自定义'">自定义</text>
                 </view>
               </view>
-              <view class="form-row">
-                <text class="form-label">时长</text>
-                <input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" />
+              <view class="form-row" style="align-items:center;white-space:nowrap;">
+                <text class="form-label">训练</text>
+                <text class="form-unit" style="margin-left:-4px;">用时</text>
+                <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
+                <text class="form-unit">分钟，看完</text>
+                <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
+                <text class="form-unit">字</text>
               </view>
               <view class="form-row">
                 <text class="form-label">材料</text>
-                <textarea class="form-textarea" v-model="card.content" placeholder="如：一卜语文重要知识点" />
+                <textarea class="form-textarea form-textarea-sm" v-model="card.content" placeholder="如：一卜语文重要知识点" />
               </view>
               <view class="form-row">
                 <text class="form-label">追忆率</text>
@@ -436,8 +447,9 @@
               </view>
             </template>
             <template v-else-if="card.name === '超脑阅读'">
-              <view class="form-row" style="flex-wrap:nowrap;">
-                <text class="form-label" style="width:auto;">训练：用时</text>
+              <view class="form-row" style="align-items:center;white-space:nowrap;">
+                <text class="form-label">训练</text>
+                <text class="form-unit" style="margin-left:-4px;">用时</text>
                 <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
                 <text class="form-unit">分钟，完成</text>
                 <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
@@ -601,12 +613,13 @@
             <text class="detail-form-label">材料名称</text>
             <input class="detail-form-input" v-model="detailEditCard.materialName" placeholder="材料名称" />
           </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">字数</text>
-            <view class="detail-form-inline">
-              <input class="detail-form-input short" v-model="detailEditCard.wordCount" placeholder="字数" type="number" />
-              <text class="detail-form-unit">字</text>
-            </view>
+          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
+            <text class="detail-form-label">训练</text>
+            <text class="detail-form-unit">用时</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
+            <text class="detail-form-unit">分钟</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
+            <text class="detail-form-unit">字</text>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">正背</text>
@@ -637,13 +650,19 @@
               <text v-for="t in ['书本','视频','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tool === t }" @click="detailEditCard.tool = t">{{ t }}</text>
             </view>
           </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">时长</text>
-            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" type="number" />
+          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
+            <text class="detail-form-label">训练</text>
+            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
+              <text class="detail-form-unit">用时</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
+              <text class="detail-form-unit">分钟，看完</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
+              <text class="detail-form-unit">字</text>
+            </view>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">材料</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练材料" />
+            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练材料" style="height:36px;padding:6px 10px;" />
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">追忆率</text>
@@ -654,17 +673,20 @@
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '超脑阅读'">
           <view style="display:flex;align-items:center;gap:4px;margin-bottom:10px;">
-            <text class="detail-form-label" style="width:auto;">训练：用时</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" />
-            <text class="detail-form-unit">分钟，完成</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" />
-            <text class="detail-form-unit">字</text>
+            <text class="detail-form-label" style="width:auto;">训练</text>
+            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
+              <text class="detail-form-unit">用时</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" />
+              <text class="detail-form-unit">分钟，完成</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" />
+              <text class="detail-form-unit">字</text>
+            </view>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">结果</text>
@@ -1548,7 +1570,7 @@ function syncPhaseExpand() {
     if (planExpanded.value[p.block] !== undefined) {
       next[p.block] = planExpanded.value[p.block]
     } else {
-      next[p.block] = p.unlocked && !p.allDone
+      next[p.block] = false
     }
   }
   planExpanded.value = next
@@ -1825,7 +1847,7 @@ function newCard(name) {
     return { ...base, materialType: '书', materialName: '', wordCount: '', forwardTime: '', forwardAcc: '', backwardTime: '', backwardAcc: '' }
   }
   if (name === '影像追忆') {
-    return { ...base, tool: '书本' }
+    return { ...base, time: 0, wordCount: 0, tool: '书本' }
   }
   return base
 }
@@ -2592,8 +2614,10 @@ function triggerGlitch() {
 .plan-progress-fill { height:100%; background:linear-gradient(90deg,#00d2ff,#22c55e); border-radius:999px; transition:width 0.35s ease; box-shadow:0 0 10px rgba(0,210,255,0.35); }
 .plan-progress-text { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:10px; text-align:center; letter-spacing:0.04em; }
 .plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-top:12px; }
-.plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; display:block; margin-bottom:6px; }
+.plan-ai-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; }
 .plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
+.plan-ai-hint { color:rgba(255,255,255,0.35); font-size:10px; }
 .plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
 .phase-section { scroll-margin-top:12px; }
 
@@ -2601,6 +2625,8 @@ function triggerGlitch() {
 .section-title.dim { color:rgba(255,255,255,0.35); }
 
 .step { background:#243046; border-radius:6px; padding:14px; display:flex; gap:10px; align-items:flex-start; border-left:4px solid #00d2ff; margin-bottom:8px; cursor:pointer; transition:all 0.15s; position:relative; clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+.step-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.step-grid .step { width:calc(50% - 4px); flex:none; }
 .step:active { background:#1a3040; }
 .step.dim-step { border-left-color:rgba(255,255,255,0.1); }
 .step.dim-step::after { border-color:rgba(255,255,255,0.1); }
@@ -2698,7 +2724,7 @@ function triggerGlitch() {
 @keyframes guideBounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
 .time-pickers { display:flex; gap:10px; justify-content:center; max-width:280px; margin:0 auto; }
 .time-select { flex:1; background:rgba(0,210,255,0.05); border:1px solid rgba(0,210,255,0.2); border-radius:10px; padding:12px 10px; display:flex; align-items:baseline; justify-content:center; gap:4px; cursor:pointer; }
-.time-select-val { color:#1a1a2e; font-size:22px; font-weight:700; }
+.time-select-val { color:#e5e7eb; font-size:22px; font-weight:700; }
 .time-select-unit { color:#6b7280; font-size:12px; }
 .time-start-btn { background:linear-gradient(135deg,rgba(0,210,255,0.35),rgba(0,136,204,0.35)); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
 .time-start-btn text { color:#00d2ff; font-size:15px; font-weight:600; }
@@ -2724,8 +2750,8 @@ function triggerGlitch() {
 .dev-action text { color:#fbbf24; font-size:11px; font-weight:600; }
 .dev-panel-hint { display:block; margin-top:8px; color:rgba(255,255,255,0.3); font-size:10px; text-align:center; }
 .media-block, .checkin-block { position:relative; }
-.media-block { display:flex; gap:8px; margin-bottom:18px; }
-.media-block .step { flex:1; min-width:0; margin-bottom:0; padding:10px 8px; }
+.media-block { margin-bottom:18px; }
+.media-block .step { margin-bottom:0; padding:10px 8px; }
 .media-block .step-box { font-size:14px; padding:12px 6px; }
 .media-block .step-label { font-size:11px; margin-bottom:4px; }
 .media-block .step-num { width:18px; height:18px; font-size:10px; }
@@ -2848,7 +2874,7 @@ function triggerGlitch() {
 [data-theme="white"] .file-hint { color:#9ca3af; }
 
 .form-input.short { width:80px; flex:none; background:#fff; color:#0b111e; }
-.form-input.mini { width:56px; flex:none; background:#fff; color:#0b111e; padding:8px 6px; text-align:center; }
+.form-input.mini { width:40px; flex:none; background:#fff; color:#0b111e; padding:6px 0; text-align:center; appearance:textfield; -moz-appearance:textfield; -webkit-appearance:none; }
 .form-inline .form-unit { color:rgba(255,255,255,0.7); }
 .form-unit { color:rgba(255,255,255,0.5); font-size:12px; }
 
@@ -2884,6 +2910,7 @@ function triggerGlitch() {
 [data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
 [data-theme="white"] .plan-ai-label { color:#2563eb; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
+[data-theme="white"] .plan-ai-hint { color:#9ca3af; }
 [data-theme="white"] .section-title { color:#1a1a2e; }
 [data-theme="white"] .step { background:#fff; border-left-color:#2563eb; box-shadow:0 2px 8px rgba(0,0,0,0.03); }
 [data-theme="white"] .step-num { background:#2563eb; }
