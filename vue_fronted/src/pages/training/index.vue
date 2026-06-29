@@ -2430,7 +2430,6 @@ async function loadTodayPlan(silent = true) {
     }
     syncPlanMetaFromApi(result.data)
     aiPlanText.value = result.data.report_text || ''
-    syncPickersFromPlannedMinutes(result.data.planned_minutes)
     applyPlanMedia(result.data)
     hydrateWatchProgressFromPlan(result.data)
 
