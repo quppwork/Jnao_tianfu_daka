@@ -67,7 +67,7 @@
         </view>
       </template>
 
-      <!-- ═══ Step 3: 老学员选天赋 ═══ -->
+      <!-- ═══ Step 3: 老学员选天赋（必选，无"不知道"） ═══ -->
       <template v-if="step === 3 && studentType === 'returning'">
         <view class="step-fade" key="s3">
         <text class="subtitle">完善信息 2/3</text>
@@ -87,29 +87,37 @@
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" :stroke="t.color" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </view>
           </view>
-          <view
-            class="talent-card talent-unknown" :class="{ selected: selectedTalent === 'unknown' }"
-            style="animation-delay:1.0s" @click="selectTalent('unknown')"
-          >
-            <view class="talent-dot unknown-dot"></view>
-            <text class="talent-name unknown-name">不知道</text>
-            <text class="talent-desc">帮我测一测天赋</text>
-            <view v-if="selectedTalent === 'unknown'" class="talent-check">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#f0b90b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </view>
-          </view>
         </view>
-        <view class="btn-login" style="margin-top:18px" @click="confirmReturningTalent">
+        <view class="btn-login" style="margin-top:18px" :style="{ opacity: selectedTalent ? 1 : 0.4 }" @click="confirmReturningTalent">
           <text>继续</text>
         </view>
         </view>
       </template>
 
-      <!-- ═══ Step 4: 老学员选训练能力 ═══ -->
+      <!-- ═══ Step 4: 老学员选训练能力 + 总体数据 ═══ -->
       <template v-if="step === 4 && studentType === 'returning'">
         <view class="step-fade" key="s4">
         <text class="subtitle">完善信息 3/3</text>
-        <text class="question">请问之前做过哪些训练？</text>
+        <!-- 初次训练日期 -->
+        <view class="form-list" style="margin-bottom:16px">
+          <view class="form-item">
+            <text class="form-label">初次训练日期</text>
+            <picker mode="date" fields="month" :value="globalPickerDate" :end="todayStr" @change="onPickGlobalDate">
+              <view class="form-field picker-field">
+                <text :class="{ placeholder: !globalFirstDate }">{{ globalFirstDate || '点击选择年月' }}</text>
+                <text class="picker-arrow">▼</text>
+              </view>
+            </picker>
+          </view>
+          <view class="form-item">
+            <text class="form-label">训练总次数</text>
+            <view style="width:100%;">
+              <input v-model="globalTotalCount" placeholder="如：120" style="width:100%;height:44px;padding:0 14px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;" />
+            </view>
+          </view>
+        </view>
+        <!-- 训练项目选择 -->
+        <text class="question" style="margin-top:0">请问之前做过哪些训练？</text>
         <text class="q-hint">可多选</text>
         <view class="ability-grid">
           <view
@@ -133,27 +141,48 @@
         <view class="step-fade" :key="'s5-' + step">
         <text class="subtitle">训练数据 {{ currentAbilityIndex + 1 }}/{{ selectedAbilityNames.length }}</text>
         <text class="question">请填写「{{ currentAbility }}」数据</text>
+        <text class="q-hint">以下为选填，可留空</text>
         <view class="form-list">
+          <!-- 第一次打卡时间 — 年月选择器 -->
           <view class="form-item">
             <text class="form-label">第一次打卡时间</text>
-            <input class="form-field" v-model="fFirstDate" placeholder="如：2025年3月 或 2025-03" />
+            <picker mode="date" fields="month" :value="pickerDate" :end="todayStr" @change="onPickDate">
+              <view class="form-field picker-field">
+                <text :class="{ placeholder: !fFirstDate }">{{ fFirstDate || '点击选择年月' }}</text>
+                <text class="picker-arrow">▼</text>
+              </view>
+            </picker>
           </view>
+          <!-- 打卡次数 -->
           <view class="form-item">
-            <text class="form-label">至今打卡次数（大概）</text>
-            <input class="form-field" v-model="fTotalCount" type="number" placeholder="如：30" />
+            <text class="form-label">打卡次数</text>
+            <view style="width:100%;">
+              <input v-model="fTotalCount" placeholder="如：30" style="width:100%;height:44px;padding:0 14px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;" />
+            </view>
           </view>
+          <!-- 最近一次打卡 -->
           <view class="form-item">
             <text class="form-label">最近一次打卡数据</text>
-            <view class="form-inline">
-              <input class="form-field short" v-model="fLastTime" type="number" placeholder="时长" />
+            <view style="display:flex;align-items:center;gap:8px;">
+              <input v-model="fLastTime" placeholder="时长" style="width:80px;height:44px;padding:0 8px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;text-align:center;" />
               <text class="form-unit">分钟</text>
-              <input class="form-field short" v-model="fLastResult" type="number" placeholder="正确率" />
+              <input v-model="fLastResult" placeholder="正确率" style="width:80px;height:44px;padding:0 8px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;text-align:center;" />
               <text class="form-unit">%</text>
             </view>
           </view>
+          <!-- 备注 -->
+          <view class="form-item">
+            <text class="form-label">备注（可选）</text>
+            <view style="width:100%;">
+              <input v-model="fNote" placeholder="如：中途停过两个月、换过训练项目等" style="width:100%;height:44px;padding:0 14px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;" />
+            </view>
+          </view>
         </view>
-        <view class="btn-login" style="margin-top:18px" :style="{ opacity: canNextData ? 1 : 0.4 }" @click="nextDataStep">
+        <view class="btn-login" style="margin-top:18px" @click="nextDataStep">
           <text>{{ isLastDataStep ? '完成' : '继续' }}</text>
+        </view>
+        <view class="skip-hint" @click="nextDataStep">
+          <text>跳过此项 →</text>
         </view>
         </view>
       </template>
@@ -187,6 +216,37 @@ const fFirstDate = ref('')
 const fTotalCount = ref('')
 const fLastTime = ref('')
 const fLastResult = ref('')
+const fNote = ref('')
+
+// 全局训练数据（Step 4）
+const globalFirstDate = ref('')
+const globalTotalCount = ref('')
+
+// 日期选择器 — 默认当前年月，不晚于今天
+const todayStr = computed(() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+})
+const pickerDate = computed(() => {
+  const m = String(fFirstDate.value || '').match(/(\d{4}).*?(\d{1,2})/)
+  if (m) return `${m[1]}-${String(parseInt(m[2])).padStart(2, '0')}`
+  return todayStr.value
+})
+function onPickDate(e) {
+  const v = e.detail.value
+  const [y, mo] = v.split('-')
+  fFirstDate.value = `${y}年${parseInt(mo)}月`
+}
+const globalPickerDate = computed(() => {
+  const m = String(globalFirstDate.value || '').match(/(\d{4}).*?(\d{1,2})/)
+  if (m) return `${m[1]}-${String(parseInt(m[2])).padStart(2, '0')}`
+  return todayStr.value
+})
+function onPickGlobalDate(e) {
+  const v = e.detail.value
+  const [y, mo] = v.split('-')
+  globalFirstDate.value = `${y}年${parseInt(mo)}月`
+}
 
 const talents = [
   { name: '学者', color: '#12417A', desc: '逻辑思辨 · 知识探索', delay: '0.4s' },
@@ -214,11 +274,8 @@ function loadCurrentForm() {
   fTotalCount.value = saved?.totalCount || ''
   fLastTime.value = saved?.lastTime || ''
   fLastResult.value = saved?.lastResult || ''
+  fNote.value = saved?.note || ''
 }
-
-const canNextData = computed(() => {
-  return fFirstDate.value && fTotalCount.value && fLastTime.value && fLastResult.value
-})
 
 function selectStudentType(type) {
   studentType.value = type
@@ -253,6 +310,8 @@ function buildOnboardingPayload() {
     onboarding.talent_unknown = false
   }
   if (studentType.value === 'returning') {
+    onboarding.first_training_date = globalFirstDate.value || null
+    onboarding.total_training_sessions = globalTotalCount.value ? parseInt(globalTotalCount.value) || null : null
     onboarding.prior_abilities = selectedAbilityNames.value
     onboarding.prior_training_data = formData.value
   }
@@ -282,13 +341,12 @@ async function confirmTalent() {
 }
 
 async function confirmReturningTalent() {
-  if (!selectedTalent.value) { uni.showToast({ title: '请选择一个天赋', icon: 'none' }); return }
-  if (selectedTalent.value === 'unknown') {
-    try { await persistOnboarding() } catch (_) {}
-    goTalentTest()
-  } else {
-    step.value = 4
+  if (!selectedTalent.value || selectedTalent.value === 'unknown') {
+    uni.showToast({ title: '请选择一个天赋', icon: 'none' }); return
   }
+  // 老学员必选五者之一，选完立即落库
+  try { await persistOnboarding() } catch (_) {}
+  step.value = 4
 }
 
 function toggleAbility(ai) {
@@ -307,10 +365,10 @@ function confirmAbilities() {
 }
 
 function nextDataStep() {
-  if (!canNextData.value) return
   formData.value[currentAbility.value] = {
     firstDate: fFirstDate.value, totalCount: fTotalCount.value,
     lastTime: fLastTime.value, lastResult: fLastResult.value,
+    note: fNote.value,
   }
   if (isLastDataStep.value) { step.value = 100 }
   else { step.value++; loadCurrentForm() }
@@ -323,8 +381,8 @@ async function goHome() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; overflow-y:auto; }
-.card { width:100%; max-height:100%; overflow-y:auto; }
+.app { min-height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:60px; font-family:-apple-system,"PingFang SC",sans-serif; }
+.card { width:100%; padding-bottom:40px; }
 .fixed-back { position:fixed; top:16px; left:16px; z-index:100; cursor:pointer; }
 .fixed-back text { color: var(--accent); font-size:14px; }
 .logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:6px; }
@@ -370,10 +428,19 @@ async function goHome() {
 .form-list { display:flex; flex-direction:column; gap:16px; max-width:340px; margin:0 auto; }
 .form-item { }
 .form-label { color:var(--text-dim); font-size:13px; display:block; margin-bottom:6px; }
-.form-field { width:100%; padding:12px 14px; border:1.5px solid var(--border); border-radius:12px; font-size:14px; color:var(--text); background:var(--bg-card); outline:none; box-sizing:border-box; }
+.form-field { width:100%; padding:12px 14px; border:2px solid rgba(0,210,255,0.2); border-radius:10px; font-size:14px; color:#0b111e; background:#fff; outline:none; box-sizing:border-box; }
 .form-field.short { width:80px; flex:none; }
 .form-inline { display:flex; align-items:center; gap:8px; }
 .form-unit { color:var(--text-dim); font-size:13px; }
+
+/* ── Picker ── */
+.picker-field { display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+.picker-field .placeholder { color:var(--text-dim); }
+.picker-arrow { color:var(--text-dim); font-size:10px; margin-left:8px; }
+
+/* ── Skip hint ── */
+.skip-hint { text-align:center; margin-top:12px; cursor:pointer; }
+.skip-hint text { color:var(--text-dim); font-size:12px; }
 
 @keyframes checkPop { 0%{transform:scale(0)} 60%{transform:scale(1.3)} 100%{transform:scale(1)} }
 
@@ -383,6 +450,5 @@ async function goHome() {
 
 @keyframes cardSpring { 0%{opacity:0;transform:scale(0.9) translateY(12px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
 
-.step-fade { animation: stepFadeIn 0.35s ease-out; }
-@keyframes stepFadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.step-fade { }
 </style>
