@@ -7,9 +7,9 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
       <text class="nav-title cyber-glitch" @click="triggerGlitch">今日训练</text>
-      <view class="nav-actions">
-        <view class="nav-history" @click="showHistory = true"><text>记录</text></view>
-        <view class="nav-dev" :class="{ active: devMode }" @click="toggleDevMode">
+        <view class="nav-actions">
+        <view class="nav-history" @click.stop="openHistory"><text>历史</text></view>
+        <view class="nav-dev" :class="{ active: devMode }" @click.stop="toggleDevMode">
           <text>{{ devMode ? 'DEV ✓' : 'DEV' }}</text>
         </view>
       </view>
@@ -66,40 +66,46 @@
           <view v-if="devStatusText" class="dev-status">
             <text>{{ devStatusText }}</text>
           </view>
+          <text class="dev-section-label">今日操作</text>
           <view class="dev-actions">
-            <view class="dev-action dev-action-primary" @click="devRefreshAll"><text>🔄 重置今日</text></view>
-            <view class="dev-action" @click="devSimulate4amCutoffAction"><text>🌙 模拟4点</text></view>
-            <view class="dev-action" @click="devGoNextDay"><text>🌅 新一天</text></view>
-            <view class="dev-action" @click="devResetMainLine"><text>↩ 回主线A</text></view>
-            <view class="dev-action" @click="devRefreshAiPlan"><text>🤖 刷新 AI</text></view>
-          </view>
-          <view class="dev-actions">
+            <view class="dev-action dev-action-primary" @click="devResetToday"><text>🔄 重置今日</text></view>
             <view class="dev-action" @click="devResetTimer"><text>⏱ 重置计时</text></view>
             <view class="dev-action" @click="devSimulateExpire"><text>⏰ 模拟结束</text></view>
+          </view>
+          <text class="dev-section-label">日切 / 时间</text>
+          <view class="dev-actions">
+            <view class="dev-action" @click="devSimulate4amCutoffAction"><text>🌙 模拟4点</text></view>
+            <view class="dev-action" @click="devGoNextDay"><text>🌅 新一天</text></view>
+          </view>
+          <text class="dev-section-label">进度 / 内容</text>
+          <view class="dev-actions">
+            <view class="dev-action" @click="devResetMainLine"><text>↩ 回主线A</text></view>
+            <view class="dev-action" @click="devRefreshAiPlan"><text>🤖 刷新 AI</text></view>
             <view class="dev-action" @click="devUnlockNextPhase"><text>🔓 解锁下阶段</text></view>
           </view>
+          <text class="dev-section-label">危险操作</text>
           <view class="dev-actions">
             <view class="dev-action dev-action-danger" @click="devClearAllHistory"><text>🗑 清空历史</text></view>
             <view class="dev-action dev-action-danger" @click="devResetTalentAction"><text>🧬 重置天赋</text></view>
           </view>
-          <text class="dev-panel-hint">模拟4点 = 全局截止并隐藏昨日内容 · 新一天 = 4:05 后切换</text>
+          <text class="dev-panel-hint">重置今日 = 仅删今日方案与计时 · 模拟4点 = 虚拟时钟快进到截止 · 新一天 = 快进到 4:05</text>
         </view>
       </view>
 
-      <!-- Summary -->
+      <!-- Summary：今日打卡明细 + 配合度（历史记录在右上角） -->
       <view
         class="card summary-card"
         :class="{ 'summary-empty': !submittedCards.length }"
       >
         <template v-if="submittedCards.length">
           <view class="summary-header">
-            <text class="summary-label">📝 已打卡 {{ submittedCards.length }} 项</text>
+            <text class="summary-label">📝 今日已打卡 {{ submittedCards.length }} 项</text>
           </view>
           <view class="summary-mini-cards">
             <view v-for="(c, idx) in submittedCards" :key="idx" class="mini-card mini-card-v1" @click.stop="editCard(idx)">
               <view class="mini-card-accent"></view>
               <view class="mini-card-left">
-                <text class="mini-card-name">{{ c.name }}</text>
+                <text class="mini-card-name">{{ c.name }}{{ c.phaseBlock ? ` · 训练${c.phaseBlock}` : '' }}</text>
                 <text class="mini-card-summary">{{ miniCardSummary(c) }}</text>
               </view>
               <text class="mini-card-del" @click.stop="deleteCard(idx)">✕</text>
@@ -116,7 +122,7 @@
           </view>
         </template>
         <template v-else>
-          <text class="summary-empty-text">今日还未打卡 · 完成训练后点击下方按钮记录</text>
+          <text class="summary-empty-text">今日还未打卡 · 完成训练后在下方训练块打卡</text>
         </template>
       </view>
 
@@ -265,7 +271,7 @@
               <text class="checkin-lock-text">{{ phaseCheckinLockText(phase) }}</text>
             </view>
             <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
-              <text>{{ phase.allDone ? '✅ 训练 ' + phase.block + ' 已打卡' : '✅ 训练 ' + phase.block + ' 打卡' }}</text>
+              <text>{{ phase.allDone ? '✏️ 修改 ' + phase.block + ' 打卡' : '✅ 训练 ' + phase.block + ' 打卡' }}</text>
             </view>
           </view>
         </view>
@@ -729,39 +735,16 @@
         </template>
       </view>
     </view>
-
-    <!-- 训练历史弹窗 -->
-    <view v-if="showHistory" class="history-overlay" @tap="showHistory = false">
-      <view class="history-panel" @tap.stop>
-        <view class="history-header">
-          <text class="history-title">训练记录</text>
-          <view class="history-header-close" @tap="showHistory = false"><text>✕</text></view>
-        </view>
-        <view v-if="checkinHistory.length" class="history-grid">
-          <view v-for="(h, i) in checkinHistory" :key="i" class="history-card">
-            <view class="history-card-top">
-              <text class="history-card-name">{{ h.ability_type || '训练记录' }}</text>
-              <text class="history-card-date">{{ formatHistoryDate(h.created_at || h.checkin_at) }}</text>
-            </view>
-            <view v-if="h.content" class="history-card-content">
-              <text>{{ h.content }}</text>
-            </view>
-            <view v-if="h.result" class="history-card-result">
-              <text>结果：{{ h.result }}</text>
-            </view>
-          </view>
-        </view>
-        <text v-else class="history-empty">暂无训练记录</text>
-      </view>
-    </view>
   </view>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, fetchTrainingHistory, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
+import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
+import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
+import { miniCardSummary } from '@/utils/trainingCardDisplay.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -808,10 +791,8 @@ const planEmptyHint = computed(() => {
   return '选择训练时长，点击「开始训练」生成今日内容'
 })
 const timeSetupHint = computed(() => {
-  if (hasPlanItems.value && todayPlan.value?.planned_minutes) {
-    return `今日已安排约 ${todayPlan.value.planned_minutes} 分钟内容（可少于设定时长）· 点击开始训练`
-  }
-  return '选择时长后点击开始 — 将按孩子情况生成训练音频与打卡项'
+  if (scheduleLoading.value) return '正在按设定时长生成训练内容…'
+  return '选择时长后点击「开始训练」，将按孩子情况分配今日内容'
 })
 /** 训练日已完成（次日凌晨4点才能新开一天），仅禁止重新「开始训练」 */
 const trainingDayLocked = computed(() => todayPlan.value?.day_locked === true)
@@ -980,6 +961,11 @@ function readTimerData() {
   }
 }
 
+function resetDurationPickers() {
+  selectedHours.value = 0
+  selectedMinutes.value = 0
+}
+
 function syncPickersFromPlannedMinutes(minutes) {
   if (!minutes || minutes < 5) return
   const h = Math.floor(minutes / 60)
@@ -990,6 +976,15 @@ function syncPickersFromPlannedMinutes(minutes) {
     if (Math.abs(x - m) < Math.abs(best - m)) best = x
   }
   selectedMinutes.value = best
+}
+
+function syncPickersAfterTimerRestore(planMinutes) {
+  if (timerPhase.value === 'setup') {
+    resetDurationPickers()
+    return
+  }
+  const mins = planMinutes || Math.round((plannedDurationSec.value || 0) / 60)
+  syncPickersFromPlannedMinutes(mins)
 }
 
 function syncPlanMetaFromApi(data) {
@@ -1006,8 +1001,7 @@ async function applyScheduledPlan(uid, data) {
   aiPlanText.value = data.report_text || ''
   applyPlanMedia(data)
   hydrateWatchProgressFromPlan(data)
-  syncPickersFromPlannedMinutes(data.planned_minutes)
-  // 只有时长到了才锁定，视频看完不锁
+  // 时长选择器仅在用户本次已选；不在此回填 planned_minutes
   await loadTodayCheckinRecords(uid, data.plan_id)
   nextTick(() => syncPhaseExpand())
   refreshAiPlanInBackground(uid)
@@ -1155,6 +1149,7 @@ function restoreTrainingTimer() {
   syncTimerFromEndAt(data.endAt)
   clearTimerTick()
   timerTickId = setInterval(tickTrainingTimer, 1000)
+  syncPickersAfterTimerRestore(todayPlan.value?.planned_minutes)
 }
 
 function guardMedia() {
@@ -1183,10 +1178,6 @@ function guardCheckin(block) {
   if (block && (phaseRecordIds.value[block] || planPhases.value.find(p => p.block === block)?.allDone)) {
     return true
   }
-  if (timerPhase.value === 'expired') {
-    uni.showToast({ title: '训练时长已到，无法修改打卡', icon: 'none' })
-    return false
-  }
   if (timerPhase.value === 'setup') {
     uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
     return false
@@ -1204,23 +1195,14 @@ function toggleDevMode() {
   if (devMode.value) loadDevStatus()
 }
 
-async function openHistory() {
-  console.log('openHistory called')
-  showHistory.value = true
-  try {
-    const uid = await ensureChildUser()
-    checkinHistory.value = await fetchTrainingHistory(uid, 30)
-  } catch (_) {
-    // 弹窗已打开，静默加载
-  }
-}
-
-function formatHistoryDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ')
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+function openHistory() {
+  uni.navigateTo({
+    url: '/pages/training/history',
+    fail: (err) => {
+      console.error('openHistory failed', err)
+      uni.showToast({ title: '无法打开历史页', icon: 'none' })
+    },
+  })
 }
 
 async function setAttitude(pct) {
@@ -1254,7 +1236,8 @@ async function loadDevStatus() {
     const uid = await ensureChildUser()
     const s = await fetchDevTrainingStatus(uid)
     const tag = s.talent_tag || '?'
-    devStatusText.value = `主线 ${s.main_line ?? 'A'} · 第 ${s.training_day_number ?? 1} 天 · ${tag} · 计划 ${s.plan_count} 条 · 打卡 ${s.record_count} 条`
+    const clock = s.dev_time_override ? ` · 虚拟 ${s.dev_time_override.slice(0, 16).replace('T', ' ')}` : ''
+    devStatusText.value = `主线 ${s.main_line ?? 'A'} · 第 ${s.training_day_number ?? 1} 天 · ${tag} · 计划 ${s.plan_count} 条 · 打卡 ${s.record_count} 条${clock}`
   } catch (_) {
     devStatusText.value = ''
   }
@@ -1265,15 +1248,12 @@ async function devResetMainLine() {
   try {
     uni.showLoading({ title: '回到主线A...' })
     const uid = await ensureChildUser()
-    await devResetTodayTraining(uid)
-    resetAllLocalState()
-    todayPlan.value = null
-    lessonIndex.value = 1
+    await devResetTrainingProgress(uid)
     curMainLine.value = 'A'
     curMainLineName.value = ''
     await loadTodayPlan(true)
     await loadDevStatus()
-    uni.showToast({ title: '已回主线 A，请重新选时长', icon: 'none' })
+    uni.showToast({ title: '主线已回到 A（今日方案未删）', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '重置失败', icon: 'none' })
   } finally {
@@ -1281,22 +1261,23 @@ async function devResetMainLine() {
   }
 }
 
-async function devRefreshAll() {
+async function devResetToday() {
   if (!devMode.value) return
   try {
-    uni.showLoading({ title: '刷新全部...' })
+    uni.showLoading({ title: '重置今日...' })
     const uid = await ensureChildUser()
     await devResetTodayTraining(uid)
-    resetAllLocalState()
+    devResetTimer(true)
     todayPlan.value = null
     aiPlanText.value = ''
     videoSrc.value = ''
     audioSrc.value = ''
+    submittedCards.value = []
     await loadTodayPlan(true)
     await loadDevStatus()
-    uni.showToast({ title: '今日已重置并刷新', icon: 'none' })
+    uni.showToast({ title: '今日方案已清空（历史保留）', icon: 'none' })
   } catch (e) {
-    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+    uni.showToast({ title: e.message || '重置失败', icon: 'none' })
   } finally {
     uni.hideLoading()
   }
@@ -1307,16 +1288,19 @@ async function devSimulate4amCutoffAction() {
   try {
     uni.showLoading({ title: '模拟4点截止...' })
     const uid = await ensureChildUser()
-    await devSimulate4amCutoff(uid)
-    resetAllLocalState()
-    todayPlan.value = null
-    aiPlanText.value = ''
-    videoSrc.value = ''
-    audioSrc.value = ''
+    const res = await devSimulate4amCutoff(uid)
+    devResetTimer(true)
     expireTrainingTimer(true)
-    await loadTodayPlan(true)
+    if (res.today_plan?.plan_id) {
+      todayPlan.value = res.today_plan
+      applyPlanMedia(res.today_plan)
+      aiPlanText.value = res.today_plan.report_text || ''
+      syncPlanMetaFromApi(res.today_plan)
+    } else {
+      await loadTodayPlan(true)
+    }
     await loadDevStatus()
-    uni.showToast({ title: '已模拟凌晨4点全局截止', icon: 'none', duration: 2500 })
+    uni.showToast({ title: res.message || '已模拟凌晨4点全局截止', icon: 'none', duration: 2500 })
   } catch (e) {
     uni.showToast({ title: e.message || '模拟失败', icon: 'none' })
   } finally {
@@ -1330,7 +1314,7 @@ async function devGoNextDay() {
     uni.showLoading({ title: '模拟下一天...' })
     const uid = await ensureChildUser()
     const res = await devSimulateNextDay(uid)
-    resetAllLocalState()
+    devResetTimer(true)
     todayPlan.value = res.today?.plan_id ? res.today : (res.today || null)
     aiPlanText.value = res.today?.report_text || ''
     if (res.today?.plan_id) {
@@ -1346,7 +1330,7 @@ async function devGoNextDay() {
     nextTick(() => syncPhaseExpand())
     await loadDevStatus()
     const idx = res.today?.content_index ?? res.status?.content_index ?? '?'
-    uni.showToast({ title: `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
+    uni.showToast({ title: res.message || `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
   } catch (e) {
     uni.showToast({ title: e.message || '模拟失败', icon: 'none' })
   } finally {
@@ -1382,10 +1366,14 @@ async function devResetTalentAction() {
     const uid = await ensureChildUser()
     await devResetTalent(uid)
     resetAllLocalState()
-    needAssessment.value = true
-    showAssessmentModal.value = true
+    clearTalentState()
+    const talent = await refreshTalentState(uid)
+    needAssessment.value = !hasEffectiveTalent(talent)
+    showAssessmentModal.value = needAssessment.value
+    todayPlan.value = null
+    await loadTodayPlan(true)
     await loadDevStatus()
-    uni.showToast({ title: '天赋已重置', icon: 'none' })
+    uni.showToast({ title: '天赋测评已重置', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '重置失败', icon: 'none' })
   } finally {
@@ -1405,8 +1393,7 @@ function devResetTimer(silent = false) {
   timerPhase.value = 'setup'
   remainingSeconds.value = 0
   plannedDurationSec.value = 0
-  selectedHours.value = 0
-  selectedMinutes.value = 0
+  resetDurationPickers()
   closeMedia()
   if (!silent) uni.showToast({ title: '计时已重置', icon: 'none' })
 }
@@ -1414,8 +1401,7 @@ function devResetTimer(silent = false) {
 function devSimulateExpire() {
   clearTimerTick()
   clearTimerStorage()
-  selectedHours.value = 0
-  selectedMinutes.value = 0
+  resetDurationPickers()
   expireTrainingTimer()
 }
 
@@ -1458,8 +1444,6 @@ async function devRefreshAiPlan() {
 
 const showPicker = ref(false)
 const activePickerBlock = ref(null)
-const showHistory = ref(false)
-const checkinHistory = ref([])
 const submittedCards = ref([])
 const summaryAttitude = ref(60)
 const attitudeTouched = ref(false)
@@ -1841,13 +1825,13 @@ function hasPickerCard(name) { return pickerCards.value.some(c => c.name === nam
 function newCard(name) {
   const base = { name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] }
   if (name === '超脑阅读') {
-    return { ...base, time: 0, wordCount: 0 }
+    return { ...base, time: '', wordCount: '' }
   }
   if (name === '扫描速记') {
     return { ...base, materialType: '书', materialName: '', wordCount: '', forwardTime: '', forwardAcc: '', backwardTime: '', backwardAcc: '' }
   }
   if (name === '影像追忆') {
-    return { ...base, time: 0, wordCount: 0, tool: '书本' }
+    return { ...base, time: '', wordCount: '', tool: '书本' }
   }
   return base
 }
@@ -1886,26 +1870,33 @@ function removePickerFile(cardIdx, fileIdx) {
 }
 
 function serializeCards(list) {
-  return list.map(c => ({
-    name: c.name,
-    time: c.time,
-    content: c.content,
-    result: c.result,
-    tag: c.tag,
-    count: c.count,
-    accuracy: c.accuracy,
-    note: c.note,
-    wordCount: c.wordCount,
-    materialType: c.materialType,
-    materialName: c.materialName,
-    forwardTime: c.forwardTime,
-    forwardAcc: c.forwardAcc,
-    backwardTime: c.backwardTime,
-    backwardAcc: c.backwardAcc,
-    tool: c.tool,
-    phaseBlock: c.phaseBlock,
-    fileNames: (c.files || []).map(f => f.name),
-  }))
+  const wordCountSkills = new Set(['超脑阅读', '影像追忆', '扫描速记'])
+  return list.map(c => {
+    const wordCount = c.wordCount
+    const content = c.content || (wordCountSkills.has(c.name) && wordCount != null && wordCount !== ''
+      ? String(wordCount)
+      : c.content)
+    return {
+      name: c.name,
+      time: c.time,
+      content,
+      result: c.result,
+      tag: c.tag,
+      count: c.count,
+      accuracy: c.accuracy,
+      note: c.note,
+      wordCount,
+      materialType: c.materialType,
+      materialName: c.materialName,
+      forwardTime: c.forwardTime,
+      forwardAcc: c.forwardAcc,
+      backwardTime: c.backwardTime,
+      backwardAcc: c.backwardAcc,
+      tool: c.tool,
+      phaseBlock: c.phaseBlock,
+      fileNames: (c.files || []).map(f => f.name),
+    }
+  })
 }
 
 function markPhaseDoneLocally(block) {
@@ -1957,6 +1948,23 @@ async function loadTodayCheckinRecords(uid, planId) {
   } catch (_) { /* ignore */ }
 }
 
+function applyCheckinProgress(res) {
+  const tp = res?.training_progress
+  if (!tp) return
+  if (tp.advance_pending && tp.pending_main_line_to) {
+    const to = tp.pending_main_line_to
+    const detail = tp.advance_detail?.message
+    const hint = detail ? `（${detail}）` : ''
+    uni.showToast({
+      title: `达标！明日进入主线 ${to}${hint}`,
+      icon: 'none',
+      duration: 3500,
+    })
+  } else if (tp.advance_message && tp.advance_met === false) {
+    uni.showToast({ title: tp.advance_message, icon: 'none', duration: 2500 })
+  }
+}
+
 async function persistPhaseCheckin(block, cardsList) {
   const uid = await ensureChildUser()
   const payload = {
@@ -1979,12 +1987,14 @@ async function persistPhaseCheckin(block, cardsList) {
     if (!primaryCheckinRecordId.value) primaryCheckinRecordId.value = res.record_id
     if (todayPlan.value) todayPlan.value.status = res.plan_status
     markPhaseDoneLocally(block)
+    applyCheckinProgress(res)
     return res
   }
 
   const res = await updateTrainingCheckin(uid, recordId, payload)
   if (todayPlan.value && res.plan_status) todayPlan.value.status = res.plan_status
   markPhaseDoneLocally(block)
+  applyCheckinProgress(res)
   return res
 }
 
@@ -2029,11 +2039,15 @@ function openPicker(block) {
     return
   }
   activePickerBlock.value = block
-  const existing = cardsForBlock(block)
-  pickerCards.value = existing.length
-    ? existing.map(c => ({ ...c, files: c.files ? [...c.files] : [] }))
-    : []
-  if (!pickerCards.value.length) autoDetectAbilities(block)
+  const isEdit = phase.allDone && phaseRecordIds.value[block]
+  if (isEdit) {
+    const existing = cardsForBlock(block)
+    pickerCards.value = existing.length
+      ? existing.map(c => ({ ...c, files: c.files ? [...c.files] : [] }))
+      : []
+  } else {
+    pickerCards.value = []
+  }
   showPicker.value = true
 }
 
@@ -2073,19 +2087,8 @@ async function submitForm() {
       return { ...rest, phaseBlock: block }
     })
     await persistPhaseCheckin(block, cardsList)
-    // 编辑：替换原位卡片；新建：追加
-    const editIdx = pickerCards.value[0]?._editIndex
-    if (editIdx !== undefined && editIdx >= 0) {
-      const updated = cardsList[0]
-      submittedCards.value = submittedCards.value.map((c, i) =>
-        i === editIdx ? { ...updated, files: updated.files || [] } : c
-      )
-    } else {
-      submittedCards.value = [
-        ...submittedCards.value.filter(c => c.phaseBlock !== block),
-        ...cardsList.map(c => ({ ...c, files: c.files || [] })),
-      ]
-    }
+    const uid = await ensureChildUser()
+    await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
     closePicker()
     nextTick(() => syncPhaseExpand())
     loadTodayPlan(true)
@@ -2097,23 +2100,13 @@ async function submitForm() {
   }
 }
 
-function miniCardSummary(c) {
-  const parts = []
-  if (c.time) parts.push(c.time + 'min')
-  if (c.tag) parts.push(c.tag)
-  if (c.count) parts.push(c.count + '题')
-  if (c.accuracy) parts.push(c.accuracy + '%')
-  if (c.tool) parts.push(c.tool)
-  if (c.materialType) parts.push(c.materialType)
-  return parts.length ? parts.join(' · ') : '已记录'
-}
-
 function getCardSummary(c) {
   const prefix = c.phaseBlock ? `[${c.phaseBlock}] ` : ''
   if (c.name === '极速运算') return prefix + c.name + '(' + (c.tag || '运算') + ',' + c.time + '分钟,' + c.count + '题,' + c.accuracy + '%)'
   if (c.name === '影像追忆') {
     const parts = ['工具' + (c.tool || '豆包')]
     if (c.time) parts.push(c.time + '分钟')
+    if (c.wordCount) parts.push('看完' + c.wordCount + '字')
     if (c.content) parts.push('材料《' + c.content + '》')
     if (c.accuracy) parts.push('追忆率' + c.accuracy + '%')
     return prefix + '影像追忆：' + parts.join('，')
@@ -2180,6 +2173,8 @@ async function saveDetailEdit() {
   try {
     submittedCards.value[idx] = { ...card, files: card.files || [] }
     await persistPhaseCheckin(block, cardsForBlock(block))
+    const uid = await ensureChildUser()
+    await loadTodayCheckinRecords(uid, todayPlan.value?.plan_id)
     detailEditing.value = false
     detailEditCard.value = null
     uni.showToast({ title: '已保存', icon: 'none' })
@@ -2213,8 +2208,7 @@ async function deleteCard(idx) {
   const c = submittedCards.value[idx]
   const block = c.phaseBlock || 'A'
   if (!guardCheckin(block)) return
-  submittedCards.value.splice(idx, 1)
-  const remaining = cardsForBlock(block)
+  const remaining = submittedCards.value.filter((_, i) => i !== idx && (_.phaseBlock || 'A') === block)
   checkinSubmitting.value = true
   try {
     if (!remaining.length) {
@@ -2222,6 +2216,8 @@ async function deleteCard(idx) {
     } else {
       await persistPhaseCheckin(block, remaining)
     }
+    const uid = await ensureChildUser()
+    await loadTodayCheckinRecords(uid, todayPlan.value?.plan_id)
     if (!submittedCards.value.length) closeCardDetail()
     nextTick(() => syncPhaseExpand())
     uni.showToast({ title: '已删除', icon: 'none' })
@@ -2335,6 +2331,13 @@ async function resolveAssessmentFromHistory(uid) {
 
 async function checkTrainingEntry(uid) {
   try {
+    const talent = await ensureTalentState(uid)
+    if (hasEffectiveTalent(talent) && !talent.needs_assessment) {
+      needAssessment.value = false
+      showAssessmentModal.value = false
+      applyTalentLabelFromTag(talent.talent_tag)
+      return true
+    }
     const entry = await fetchTrainingEntry(uid)
     applyServerTimeMeta(entry)
     if (!entry.needs_assessment && entry.has_assessment) {
@@ -2352,6 +2355,15 @@ async function checkTrainingEntry(uid) {
     showAssessmentModal.value = true
     return false
   } catch (e) {
+    try {
+      const talent = await ensureTalentState(uid)
+      if (hasEffectiveTalent(talent) && !talent.needs_assessment) {
+        needAssessment.value = false
+        showAssessmentModal.value = false
+        applyTalentLabelFromTag(talent.talent_tag)
+        return true
+      }
+    } catch (_) { /* ignore */ }
     if (await resolveAssessmentFromHistory(uid)) {
       needAssessment.value = false
       showAssessmentModal.value = false
@@ -2432,13 +2444,13 @@ async function loadTodayPlan(silent = true) {
     }
     syncPlanMetaFromApi(result.data)
     aiPlanText.value = result.data.report_text || ''
-    syncPickersFromPlannedMinutes(result.data.planned_minutes)
     applyPlanMedia(result.data)
     hydrateWatchProgressFromPlan(result.data)
 
     if (result.data.items?.length) {
       restoreTrainingTimer()
     }
+    syncPickersAfterTimerRestore(result.data.planned_minutes)
 
     await loadTodayCheckinRecords(uid, result.data.plan_id)
     nextTick(() => syncPhaseExpand())
@@ -2504,12 +2516,12 @@ function triggerGlitch() {
 @import 'augmented-ui/augmented-ui.min.css';
 [data-augmented-ui].card, [data-augmented-ui].plan-card { --aug-border-bg:rgba(0,210,255,0.35); --aug-border-all:2px; }
 .app { height:100vh; max-width:480px; margin:0 auto; background:#0b111e; font-family:PingFang SC,Roboto,sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; }
-.nav { display:flex; align-items:center; padding:14px 14px 0; }
+.nav { display:flex; align-items:center; padding:14px 14px 0; position:relative; z-index:1001; }
+.nav-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:#fff; font-size:16px; font-weight:600; }
 .nav-dev { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.nav-actions { display:flex; align-items:center; gap:6px; }
-.nav-history { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.nav-history { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; z-index:1002; }
 .nav-history text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
 [data-theme="white"] .nav-history { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .nav-history text { color:#374151; }
@@ -2521,6 +2533,8 @@ function triggerGlitch() {
 .history-header-close { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .history-header-close text { font-size:14px; color:#9ca3af; }
 .history-grid { display:flex; flex-direction:column; gap:8px; }
+.history-day-label { display:block; font-size:12px; font-weight:600; color:#9ca3af; margin:10px 0 6px; padding-left:2px; }
+.history-card-meta text { font-size:12px; color:#9ca3af; margin-bottom:4px; display:block; }
 .history-card { background:rgba(255,255,255,0.05); border-radius:12px; padding:12px 14px; }
 .history-card-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
 .history-card-name { font-size:14px; font-weight:600; color:#00d2ff; }
@@ -2739,6 +2753,7 @@ function triggerGlitch() {
 .time-expired-sub { display:block; margin-top:4px; color:rgba(255,255,255,0.4); font-size:11px; }
 .dev-panel { margin-top:12px; padding-top:12px; border-top:1px dashed rgba(251,191,36,0.25); }
 .dev-panel-label { display:block; color:#fbbf24; font-size:11px; font-weight:700; margin-bottom:8px; }
+.dev-section-label { display:block; color:rgba(251,191,36,0.55); font-size:10px; font-weight:600; margin:8px 0 4px; }
 .dev-status { margin-bottom:8px; padding:6px 10px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px; }
 .dev-status text { color:rgba(251,191,36,0.9); font-size:10px; line-height:1.4; }
 .dev-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
