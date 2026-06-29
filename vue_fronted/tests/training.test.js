@@ -346,31 +346,8 @@ describe('边界条件', () => {
 
 // --- 能力自动识别测试 ---
 
-import { resolvePlanItemSkill, TRAINING_ABILITIES } from '../src/utils/trainingCardDisplay.js'
-
-describe('resolvePlanItemSkill — 能力识别', () => {
-  it('从 instructions.skill 识别', () => {
-    expect(resolvePlanItemSkill({
-      title: '训练音频',
-      instructions: JSON.stringify({ skill: '扫描速记', item_type: 'audio' }),
-    })).toBe('扫描速记')
-  })
-
-  it('匹配标题中的能力名', () => {
-    expect(resolvePlanItemSkill({ title: '极速运算基础训练' })).toBe('极速运算')
-  })
-
-  it('超脑速读映射为超脑阅读', () => {
-    expect(resolvePlanItemSkill({ title: '学者超脑速读' })).toBe('超脑阅读')
-  })
-
-  it('无匹配返回 null', () => {
-    expect(resolvePlanItemSkill({ title: '综合训练' })).toBeNull()
-  })
-})
-
 describe('autoDetectAbilities — 能力识别', () => {
-  const abilities = TRAINING_ABILITIES
+  const abilities = ['超脑阅读','影像追忆','扫描速记','极速运算','极速学习','难题专练','文科扫书','理科扫书','高效作业','天赋绘画','音乐灵感','棋类专注']
 
   it('匹配标题中的能力名', () => {
     const title = '极速运算基础训练'

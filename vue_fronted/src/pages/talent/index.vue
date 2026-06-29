@@ -189,7 +189,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
-import { onShow, onLoad } from '@dcloudio/uni-app'
+import { onShow } from '@dcloudio/uni-app'
 import {
   ensureChildUser,
   ensureJnaoUid,
@@ -197,10 +197,8 @@ import {
   deleteAssessmentReport,
   submitTalentReport,
 } from '@/utils/userApi.js'
-import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 
 // ── State ──
-const fromOnboarding = ref(false)
 const phase = ref('door')
 const testType = ref(null)
 const ageGateNotice = ref(false)
@@ -435,11 +433,7 @@ function handleChoice(choice) {
     }
   } else if (phase.value === 'confirm') {
     if (choice === '准备好了，开始吧') startTest()
-    else if (fromOnboarding.value) {
-      uni.navigateBack({ delta: 1 })
-    } else {
-      phase.value = 'door'; testType.value = null
-    }
+    else { phase.value = 'door'; testType.value = null }
   }
 }
 
@@ -490,8 +484,6 @@ async function doSubmitReport() {
     if (json.talent_locked) {
       url += `&talent_locked=1&lock_message=${encodeURIComponent(json.lock_message || '')}`
     }
-    clearTalentState()
-    await refreshTalentState(childUserId)
     uni.navigateTo({ url })
   } catch (e) {
     submitError.value = '提交失败：' + (e.message || '请稍后重试')
@@ -519,16 +511,9 @@ function goBack() {
   if (phase.value === 'ageGate') { phase.value = 'door'; testType.value = null; return }
   if (phase.value === 'confirm') { phase.value = testType.value === '成人' ? 'door' : 'ageGate'; return }
   if (phase.value === 'testing' || phase.value === 'completed') { phase.value = 'confirm'; return }
-  if (fromOnboarding.value) {
-    uni.navigateBack({ delta: 1 })
-    return
-  }
+  // door → back to home
   uni.navigateBack({ delta: 1 })
 }
-
-onLoad((opts) => {
-  fromOnboarding.value = opts?.from === 'onboarding'
-})
 
 // Watch for question change → restart countdown
 watch(() => tickRef.value, () => {

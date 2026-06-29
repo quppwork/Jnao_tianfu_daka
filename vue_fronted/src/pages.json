@@ -51,13 +51,6 @@
       }
     },
     {
-      "path": "pages/training/history",
-      "style": {
-        "navigationBarTitleText": "历史记录",
-        "navigationStyle": "custom"
-      }
-    },
-    {
       "path": "pages/qa/index",
       "style": {
         "navigationBarTitleText": "学科答疑",

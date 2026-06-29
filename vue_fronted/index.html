@@ -1,18 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <link rel="icon" href="static/logo.svg" />
-    <title>JNAO</title>
+    <link rel="icon" href="static/logo.svg">
     <script>
       // 主题检测 — 必须在任何渲染之前执行
       (function(){
-        var t = 'white';
-        try { t = localStorage.getItem('jnao_theme') || 'white'; } catch(e) {}
+        var t = 'dark';
+        try { t = localStorage.getItem('jnao_theme') || 'dark'; } catch(e) {}
         document.documentElement.setAttribute('data-theme', t);
       })();
+      const coverSupport = 'CSS' in window && typeof CSS.supports === 'function' && (CSS.supports('top: env(a)')
+  || CSS.supports('top: constant(a)'))
+      document.write(
+        `<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0${
+  coverSupport ? ', viewport-fit=cover' : ''}" />`)
     </script>
+    <title></title>
     <!--preload-links-->
     <!--app-context-->
     <style>
@@ -41,44 +45,24 @@
         --bubble-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 14px rgba(37,99,235,0.06);
         --splash-bg: #ffffff; --splash-text: #1a1a2e; --splash-sub: #6b7280;
       }
-
-      /* ===== Splash Screen ===== */
-      #initial-splash {
-        position: fixed; inset: 0; z-index: 99999;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        font-family: -apple-system, "PingFang SC", sans-serif;
-      }
-      .splash-row {
-        display: flex; align-items: baseline; gap: 12px; transform: translateY(-8vh);
-      }
-      .splash-logo {
-        font-size: 48px; font-weight: 700; letter-spacing: .04em;
-        animation: jr 0.6s 0.1s cubic-bezier(.22,.61,.36,1) both,
-                   jn 0.5s 0.9s cubic-bezier(.34,1.56,.64,1) both;
-      }
-      .splash-ai {
-        font-size: 48px; font-weight: 700; letter-spacing: .04em;
-        animation: as 0.5s 0.9s cubic-bezier(.34,1.56,.64,1) both;
-      }
-      .splash-j { color: #dc2626; }
-      .splash-tag {
-        margin-top: 16px; font-size: 13px; letter-spacing: .08em;
-        animation: fu 0.7s 0.5s ease-out both;
-      }
-      @keyframes jr { from{opacity:0;transform:scale(.6)} to{opacity:1;transform:scale(1)} }
-      @keyframes jn { 0%{transform:translateX(0)} 30%{transform:translateX(-12px)} 100%{transform:translateX(-4px)} }
-      @keyframes as { from{opacity:0;transform:translateX(50px)} 60%{opacity:1;transform:translateX(-3px)} to{opacity:1;transform:translateX(0)} }
-      @keyframes fu { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
     </style>
   </head>
   <body>
     <!-- Splash -->
-    <div id="initial-splash">
-      <div class="splash-row">
-        <span class="splash-logo"><span class="splash-j">J</span><span id="splash-nao">nao</span></span>
-        <span class="splash-ai" id="splash-ai">AI</span>
+    <div id="initial-splash" style="position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:-apple-system,PingFang SC,sans-serif;">
+      <div style="display:flex;align-items:baseline;gap:12px;transform:translateY(-8vh);">
+        <span id="splash-logo" style="font-size:48px;font-weight:700;letter-spacing:.04em;animation:jr 0.6s 0.1s cubic-bezier(.22,.61,.36,1) both,jn 0.5s 0.9s cubic-bezier(.34,1.56,.64,1) both;">
+          <span style="color:#dc2626">J</span><span id="splash-nao">nao</span>
+        </span>
+        <span id="splash-ai" style="font-size:48px;font-weight:700;letter-spacing:.04em;animation:as 0.5s 0.9s cubic-bezier(.34,1.56,.64,1) both;">AI</span>
       </div>
-      <span class="splash-tag" id="splash-tag">劲脑 · 智能工作台</span>
+      <span id="splash-tag" style="margin-top:16px;font-size:13px;letter-spacing:.08em;animation:fu 0.7s 0.5s ease-out both;">劲脑 · 智能工作台</span>
+      <style>
+        @keyframes jr { from{opacity:0;transform:scale(.6)} to{opacity:1;transform:scale(1)} }
+        @keyframes jn { 0%{transform:translateX(0)} 30%{transform:translateX(-12px)} 100%{transform:translateX(-4px)} }
+        @keyframes as { from{opacity:0;transform:translateX(50px)} 60%{opacity:1;transform:translateX(-3px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes fu { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+      </style>
     </div>
     <script>
       // Splash — 冷启动完整动画，热重载快速闪过

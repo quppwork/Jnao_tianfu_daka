@@ -27,10 +27,10 @@ $env:DOUBAO_LIVE_TEST="1"
 | `pages/index.vue` 首页 | `POST /api/guide/chat` | `test_module_home.py` |
 | `pages/talent/index.vue` 天赋测试 | `POST /api/talent/report` | `test_module_talent.py`, `test_talent_api.py` |
 | `pages/report/index.vue` 报告 | 测评结果来自 talent API | `test_module_talent.py` |
-| `pages/training/index.vue` 今日训练 | `/api/training/*` | `test_module_training.py`, `test_training_api.py`, `test_training_block_builder.py`, `test_training_child_guide.py`, `test_training_closed_loop.py`, `test_training_curriculum.py`, `test_training_curriculum_router.py`, `test_training_day.py`, `test_training_duration_pack.py`, `test_talent_content_pool.py` |
-| `pages/qa/index.vue` 学科答疑 | `POST /api/qa/chat` | `test_module_qa.py`, `test_qa_agent_prompts.py`, `test_qa_agent_router.py`, `test_qa_coach.py`, `test_qa_enhanced.py`, `test_qa_prompt_builder.py`, `test_qa_rag_router.py` |
+| `pages/training/index.vue` 今日训练 | `/api/training/*` | `test_module_training.py`, `test_training_api.py`, `test_training_block_builder.py`, `test_training_child_guide.py`, `test_training_closed_loop.py`, `test_training_curriculum.py`, `test_training_curriculum_router.py`, `test_training_day.py`, `test_training_duration_pack.py`, `test_talent_content_pool.py`, `test_training_carryover.py`, `test_training_day_settlement.py`, `test_training_yesterday_context.py` |
+| `pages/qa/index.vue` 学科答疑 | `POST /api/qa/chat` | `test_module_qa.py`, `test_qa_agent_prompts.py`, `test_qa_agent_router.py`, `test_qa_coach.py`, `test_qa_enhanced.py`, `test_qa_prompt_builder.py`, `test_qa_rag_router.py`, `test_qa_coach_context.py` |
 | `pages/growth/index.vue` 成长里程碑 | `/api/growth/*` | `test_module_growth.py` |
-| `pages/login/` 用户注册+引导 | `/api/auth/*`, `/api/user/profile` | `test_module_auth.py`, `test_workflow_onboarding.py` |
+| `pages/login/` 用户注册+引导 | `/api/auth/*`, `/api/user/profile` | `test_module_auth.py`, `test_workflow_onboarding.py`, `test_onboarding_returning.py`, `test_user_profile_merge.py` |
 | 资源库 | `/api/resources/*` | `test_training_api.py` |
 | 健康检查 | `GET /api/health` | `test_health_api.py` |
 | 通用对话 | `POST /api/chat` | `test_chat_api.py` |

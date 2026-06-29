@@ -27,14 +27,16 @@
 ```
 tianfu_daka/
 ├── backend/            # Python FastAPI 后端（端口 8012）
-│   ├── app/api/        # API 路由（training / talent / qa / growth / guide / user）
-│   ├── app/services/   # 业务逻辑层（状态机 + 规则引擎 + 排课算法）
+│   ├── app/api/        # API 路由（13 个模块）
+│   ├── app/services/   # 业务逻辑层（44 个服务，状态机+规则引擎+排课）
+│   ├── app/agents/     # AI Agent 层（人设+路由+记忆）
+│   ├── app/schemas/    # Pydantic 请求/响应模型
 │   ├── app/db/         # 数据库模型 + 迁移
 │   ├── config/         # YAML 配置（课程 / 进阶规则）
-│   └── tests/          # 后端测试（pytest，155+ 用例）
+│   └── tests/          # 后端测试（pytest，38 文件 160+ 用例）
 ├── vue_fronted/        # UniApp Vue 前端
 │   ├── src/pages/      # 页面（training / talent / qa / growth / report / login）
-│   └── tests/          # 前端测试（vitest，70 用例）
+│   └── tests/          # 前端测试（vitest，3 文件 89 用例）
 ├── docs/               # 项目文档
 ├── scripts/            # 启动/停止脚本
 ├── tests/              # 发烟测试 + 集成测试
