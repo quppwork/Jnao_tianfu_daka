@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_child_user_id, get_db
 from app.schemas.training import (
     CheckinDeleteResponse,
+    CheckinHistoryResponse,
     CheckinRecordOut,
     CheckinRequest,
     CheckinResponse,
@@ -76,11 +77,13 @@ def talent_training_video(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
 ):
-    """按天赋返回固定训练视频（逐条视频推送见 video_push_service.get_item_training_video）"""
-    assessment = get_latest_assessment(db, child_user_id)
-    if not has_valid_talent(assessment):
-        raise HTTPException(403, "请先完成天赋测评")
-    return get_talent_training_video(effective_talent_code(assessment))
+    """按天赋返回固定训练视频（支持测评结果或引导页自选天赋）"""
+    from app.services.training_service import _resolve_effective_talent
+
+    talent = _resolve_effective_talent(db, child_user_id)
+    if not talent or not talent.get("talent_code"):
+        raise HTTPException(403, "请先完成天赋测评或选择天赋")
+    return get_talent_training_video(talent["talent_code"])
 
 
 @router.post("/items/{item_id}/watch-progress", response_model=WatchProgressResponse)
@@ -285,10 +288,16 @@ def training_report_by_date(
     return data
 
 
-@router.get("/history")
+@router.get("/history", response_model=CheckinHistoryResponse)
 def training_history(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
-    limit: int = 30,
+    limit: int = Query(60, ge=1, le=200),
+    group_by_day: bool = Query(True),
+    exclude_today: bool = Query(False),
 ):
-    return {"items": training_service.get_checkin_history(db, child_user_id, limit)}
+    items = training_service.get_checkin_history(
+        db, child_user_id, limit, exclude_today=exclude_today
+    )
+    days = training_service.group_checkin_history_by_day(items) if group_by_day else []
+    return {"items": items, "days": days}

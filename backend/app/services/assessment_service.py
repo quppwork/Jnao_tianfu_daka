@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.talent_mapping import (
     resolve_talent_code, resolve_talent_tag,
-    parse_check_talent, talent_display,
+    parse_check_talent, talent_display, talent_primary_from_code,
 )
 from app.db.models import ChildUser, TalentAssessment, TalentAssessmentArchive, TrainingRecord
 
@@ -18,9 +18,59 @@ def get_self_reported_talent_code(db: Session, child_user_id: int) -> int | None
     if not user or not user.profile_json:
         return None
     onboarding = user.profile_json.get("onboarding") if isinstance(user.profile_json, dict) else {}
-    if not onboarding or onboarding.get("talent_unknown"):
+    if not onboarding:
         return None
-    return onboarding.get("self_reported_talent_code")
+    code = onboarding.get("self_reported_talent_code")
+    if code:
+        return int(code)
+    name = onboarding.get("self_reported_talent")
+    if name:
+        return resolve_talent_code(str(name).strip())
+    if onboarding.get("talent_unknown"):
+        return None
+    return None
+
+
+def enrich_profile_talent_fields(db: Session, child_user_id: int, data: dict) -> None:
+    """为 profile 响应填充有效天赋与引导/冲突状态（与训练 entry 一致）"""
+    user = db.get(ChildUser, child_user_id)
+    profile = dict(user.profile_json or {}) if user else {}
+    onboarding = profile.get("onboarding") if isinstance(profile.get("onboarding"), dict) else {}
+    data["onboarding_completed"] = bool(onboarding.get("completed_at"))
+    pending = profile.get("pending_talent")
+    if pending:
+        data["talent_conflict"] = True
+        data["pending_talent"] = pending
+        data["talent_code"] = profile.get("talent_code")
+        data["talent_tag"] = profile.get("talent_tag")
+        data["talent_primary"] = profile.get("talent_primary")
+        data["talent_source"] = profile.get("talent_source")
+        data["latest_assessment_id"] = pending.get("assessment_id")
+        return
+    if profile.get("talent_code"):
+        data["talent_code"] = profile.get("talent_code")
+        data["talent_tag"] = profile.get("talent_tag")
+        data["talent_primary"] = profile.get("talent_primary")
+        data["talent_source"] = profile.get("talent_source")
+        if profile.get("latest_assessment_id"):
+            data["latest_assessment_id"] = profile.get("latest_assessment_id")
+        return
+    latest = get_latest_assessment(db, child_user_id)
+    if latest and effective_talent_code(latest):
+        data["talent_code"] = latest.talent_code
+        data["talent_tag"] = latest.talent_tag
+        data["talent_primary"] = latest.talent_primary
+        data["talent_source"] = "assessment"
+        data["latest_assessment_id"] = latest.id
+        return
+    eff = resolve_effective_talent(db, child_user_id)
+    if eff and eff.get("talent_code"):
+        data["talent_code"] = eff.get("talent_code")
+        data["talent_tag"] = eff.get("talent_tag")
+        data["talent_primary"] = eff.get("talent_primary")
+        data["talent_source"] = eff.get("talent_source")
+        if eff.get("assessment_id"):
+            data["latest_assessment_id"] = eff.get("assessment_id")
 
 
 def get_self_reported_talent_name(db: Session, child_user_id: int) -> str | None:
@@ -29,9 +79,98 @@ def get_self_reported_talent_name(db: Session, child_user_id: int) -> str | None
     if not user or not user.profile_json:
         return None
     onboarding = user.profile_json.get("onboarding") if isinstance(user.profile_json, dict) else {}
-    if not onboarding or onboarding.get("talent_unknown"):
+    if not onboarding:
         return None
-    return onboarding.get("self_reported_talent")
+    name = onboarding.get("self_reported_talent")
+    if name:
+        return str(name).strip()
+    code = onboarding.get("self_reported_talent_code")
+    if code:
+        return talent_primary_from_code(int(code))
+    if onboarding.get("talent_unknown"):
+        return None
+    return None
+
+
+def repair_onboarding_talent(db: Session, child_user_id: int) -> bool:
+    """修正引导页脏数据：有 code/名称却 talent_unknown=true 等"""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    user = db.get(ChildUser, child_user_id)
+    if not user or not isinstance(user.profile_json, dict):
+        return False
+    profile = dict(user.profile_json)
+    raw_ob = profile.get("onboarding")
+    if not isinstance(raw_ob, dict):
+        return False
+    ob = dict(raw_ob)
+    changed = False
+    code = ob.get("self_reported_talent_code")
+    name = ob.get("self_reported_talent")
+    if code and not name:
+        fixed = talent_primary_from_code(int(code))
+        if fixed:
+            ob["self_reported_talent"] = fixed
+            changed = True
+            name = fixed
+    if name and not code:
+        fixed_code = resolve_talent_code(str(name).strip())
+        if fixed_code:
+            ob["self_reported_talent_code"] = fixed_code
+            changed = True
+    if (code or name or ob.get("self_reported_talent_code")) and ob.get("talent_unknown"):
+        ob["talent_unknown"] = False
+        changed = True
+    if changed:
+        profile["onboarding"] = ob
+        user.profile_json = profile
+        flag_modified(user, "profile_json")
+        db.commit()
+        db.refresh(user)
+    return changed
+
+
+def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
+    """当前可用于训练的天赋：JNAO 测评 > 引导页自选 > 无"""
+    repair_onboarding_talent(db, child_user_id)
+    assessment = get_latest_assessment(db, child_user_id)
+    if has_valid_talent(assessment):
+        return {
+            "has_assessment": True,
+            "needs_assessment": False,
+            "assessment_id": assessment.id,
+            "talent_primary": assessment.talent_primary,
+            "talent_tag": assessment.talent_tag,
+            "talent_code": effective_talent_code(assessment),
+            "talent_source": "assessment",
+        }
+    self_code = get_self_reported_talent_code(db, child_user_id)
+    if self_code:
+        from app.core.talent_mapping import resolve_talent_tag
+
+        self_name = get_self_reported_talent_name(db, child_user_id)
+        return {
+            "has_assessment": True,
+            "needs_assessment": False,
+            "assessment_id": None,
+            "talent_primary": self_name,
+            "talent_tag": resolve_talent_tag(self_code),
+            "talent_code": self_code,
+            "talent_source": "onboarding",
+        }
+    user = db.get(ChildUser, child_user_id)
+    profile = dict(user.profile_json or {}) if user else {}
+    if profile.get("talent_code") and profile.get("talent_source") in ("onboarding", "assessment"):
+        return {
+            "has_assessment": True,
+            "needs_assessment": False,
+            "assessment_id": profile.get("latest_assessment_id"),
+            "talent_primary": profile.get("talent_primary"),
+            "talent_tag": profile.get("talent_tag"),
+            "talent_code": profile.get("talent_code"),
+            "talent_source": profile.get("talent_source"),
+        }
+    return None
 
 
 def has_training_records(db: Session, child_user_id: int) -> bool:

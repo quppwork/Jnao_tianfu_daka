@@ -105,9 +105,11 @@ skill_progression:
   advance_by: mastery
   same_lesson_rounds_until: standard_met
 
-# 主线 A→B→… 自动进阶：仅看各主线 advance_rule（A=超脑阅读达标），无「训练 N 次」门槛
+# 主线 A→B→… 达标后次日生效；多轮同技能任一轮达标即可 pending 进阶
 main_line_advance:
   enabled: true
+  apply_on: next_training_day
+  any_round_met: true
 
 # 用户流程：先选时长 → 生成内容 → 按训练情况走规则
 flow:
@@ -137,7 +139,7 @@ llm_routing:
     - carryover_incomplete_first
   output_note_required: true
 
-# 感知力 = 多元感知（OSS duoyuanganzhi），排在超脑阅读之后，不占独立主线块
+# 感知力 = 多元感知（OSS duoyuanganzhi），辅助超脑阅读，不要求单独打卡、不纳入昨日续推
 perception:
   push_enabled: true
   follows_skill: 超脑阅读
@@ -145,6 +147,8 @@ perception:
   display_name: 多元感知
   checkin_fields: [card_count, accuracy_pct]
   count_toward_warning: false
+  skip_checkin: true
+  skip_carryover: true
 
 # 预警（本期关闭锁训；阈值预留，后续按训练项+音频时长动态配置）
 warning:
@@ -177,14 +181,15 @@ speed_calc:
   pass_accuracy_pct: 70
   judge_by_backend: false
 
-# 用户选时长 → 独立训练项数与每项轮次（每项 = 独立训练块，非 A/B 合并）
+# 用户选时长 → 训练块数与每项重复轮次（主练优先，辅练用剩余块；单技能重复上限 3 轮）
 duration_schedule:
+  max_rounds_per_skill: 3
   slots:
     - { min: 30, max: 45, items: 1, rounds_per_item: 1 }
     - { min: 45, max: 90, items: 2, rounds_per_item: 1 }
     - { min: 91, max: 120, items: 3, rounds_per_item: 2 }
     - { min: 120, max: 160, items: 5, rounds_per_item: 3 }
-    - { min: 160, max: 9999, items: 6, rounds_per_item: 4 }
+    - { min: 160, max: 9999, items: 6, rounds_per_item: 3 }
   dynamic_by_item_duration: true
 
 # 产品范围

@@ -6,14 +6,15 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from app.services.child_training_state import (
-    advance_main_line,
     bump_main_line_session,
     get_skill_position,
     main_line_index,
+    set_pending_main_line_advance,
     set_skill_position,
 )
 from app.services.content_meta import parse_item_meta
 from app.services.talent_content_pool import get_talent_content_pool
+from app.services.training_carryover import auto_complete_skipped_checkin_items
 from app.services.training_curriculum import _find_lesson
 from config.loader import load_training_advance_rules, load_training_curriculum
 
@@ -44,34 +45,105 @@ def _grade_band(grade: str | None) -> str | None:
     return None
 
 
+def _cards_for_skill(cards: list[dict], skill: str) -> list[dict]:
+    return [c for c in cards or [] if (c.get("name") or "").strip() == skill]
+
+
 def _card_for_skill(cards: list[dict], skill: str) -> dict | None:
-    for c in cards or []:
-        if (c.get("name") or "").strip() == skill:
-            return c
+    matched = _cards_for_skill(cards, skill)
+    return matched[0] if matched else None
+
+
+def _evaluate_advance_rule_any(
+    rule_key: str, cards: list[dict], skill: str, grade_band: str | None
+) -> dict | None:
+    """多轮打卡：同技能任一轮达标即视为达标，返回最优明细"""
+    matching = _cards_for_skill(cards, skill)
+    if not matching:
+        return None
+    last_detail: dict | None = None
+    for card in matching:
+        detail = evaluate_advance_rule(rule_key, card, grade_band)
+        last_detail = detail
+        if detail.get("met"):
+            return detail
+    return last_detail
+
+
+def _card_field_num(card: dict, *fields: str) -> float | None:
+    for key in fields:
+        val = _parse_num(card.get(key))
+        if val is not None:
+            return val
     return None
 
 
-def _rule_met(rule_key: str, card: dict, grade_band: str | None) -> bool:
+def evaluate_advance_rule(rule_key: str, card: dict, grade_band: str | None) -> dict:
+    """根据打卡卡片的用时/字数等字段，返回是否达标及明细（供 API 回传）。"""
     rules = (load_training_advance_rules().get("rules") or {})
     spec = rules.get(rule_key) or {}
     rtype = spec.get("type")
+    skill = spec.get("skill") or ""
+    base: dict[str, Any] = {
+        "rule_key": rule_key,
+        "skill": skill,
+        "rule_type": rtype,
+        "met": False,
+    }
     if rtype == "words_per_minute":
-        words = _parse_num(card.get("content"))
-        minutes = _parse_num(card.get("time")) or 1.0
-        if not words:
-            return False
-        wpm = words / max(minutes, 0.1)
-        return wpm >= float(spec.get("min_words") or 1000)
+        words = _card_field_num(card, "wordCount", "content", "words")
+        minutes = _card_field_num(card, "time", "minutes") or 0.0
+        required_wpm = float(spec.get("min_words") or 1000)
+        base["minutes"] = minutes
+        base["words"] = words
+        if not words or minutes <= 0:
+            base["message"] = "请填写用时（分钟）和完成字数"
+            return base
+        wpm = words / minutes
+        base["words_per_minute"] = round(wpm, 1)
+        base["required_wpm"] = required_wpm
+        base["met"] = wpm >= required_wpm
+        base["message"] = (
+            f"达标：{minutes:g}分钟{words:g}字（{base['words_per_minute']}字/分）"
+            if base["met"]
+            else f"未达标：需≥{required_wpm:g}字/分（当前{base['words_per_minute']}字/分）"
+        )
+        return base
     if rtype == "grade_min_words":
         targets = load_training_advance_rules().get("grade_word_targets") or {}
         band = grade_band or "primary_low"
         need = int(targets.get(band) or targets.get("primary_low") or 300)
-        words = _parse_num(card.get(spec.get("field") or "content"))
-        return words is not None and words >= need
+        field = spec.get("field") or "content"
+        words = _card_field_num(card, field, "wordCount", "content", "words")
+        base["grade_band"] = band
+        base["required_words"] = need
+        base["words"] = words
+        base["met"] = words is not None and words >= need
+        base["message"] = (
+            f"达标：完成{words:g}字（{band}段要求≥{need}字）"
+            if base["met"]
+            else f"未达标：{band}段需≥{need}字（当前{words or 0:g}字）"
+        )
+        return base
     if rtype == "accuracy_pct":
-        acc = _parse_num(card.get(spec.get("field") or "accuracy"))
-        return acc is not None and acc >= float(spec.get("min_pct") or 70)
-    return False
+        field = spec.get("field") or "accuracy"
+        acc = _card_field_num(card, field)
+        min_pct = float(spec.get("min_pct") or 70)
+        base["accuracy_pct"] = acc
+        base["required_pct"] = min_pct
+        base["met"] = acc is not None and acc >= min_pct
+        base["message"] = (
+            f"达标：正确率{acc:g}%"
+            if base["met"]
+            else f"未达标：需正确率≥{min_pct:g}%（当前{acc or 0:g}%）"
+        )
+        return base
+    base["message"] = "未知进阶规则"
+    return base
+
+
+def _rule_met(rule_key: str, card: dict, grade_band: str | None) -> bool:
+    return bool(evaluate_advance_rule(rule_key, card, grade_band).get("met"))
 
 
 def _next_lesson_in_pool(pool: list, skill: str, stage: int, part: int) -> tuple[int, int] | None:
@@ -83,26 +155,85 @@ def _next_lesson_in_pool(pool: list, skill: str, stage: int, part: int) -> tuple
 
 
 def evaluate_main_line_advance(state: dict, cards: list[dict], grade_band: str | None) -> bool:
+    return build_main_line_advance_eval(state, cards, grade_band).get("advance_met", False)
+
+
+def build_main_line_advance_eval(state: dict, cards: list[dict], grade_band: str | None) -> dict:
+    """当前主线进阶判定（含规则明细，未改 state）。"""
     cur = load_training_curriculum()
     adv_cfg = cur.get("main_line_advance") or {}
+    main_line = state.get("main_line") or "A"
+    out: dict[str, Any] = {
+        "main_line_from": main_line,
+        "main_line_to": None,
+        "advance_rule_key": None,
+        "advance_met": False,
+        "advance_detail": None,
+    }
     if not adv_cfg.get("enabled", True):
-        return False
+        out["message"] = "主线自动进阶已关闭"
+        return out
     min_sessions = int(adv_cfg.get("min_sessions_on_line") or 0)
     if min_sessions > 0 and int(state.get("main_line_sessions") or 0) < min_sessions:
-        return False
-    key = state.get("main_line") or "A"
-    spec = (cur.get("main_lines") or {}).get(key) or {}
+        out["message"] = f"主线 {main_line} 需累计训练 {min_sessions} 次后再判定进阶"
+        return out
+    spec = (cur.get("main_lines") or {}).get(main_line) or {}
     rule_key = spec.get("advance_rule")
     if not rule_key:
-        return False
+        out["message"] = f"主线 {main_line} 无进阶规则"
+        return out
+    out["advance_rule_key"] = rule_key
+    out["main_line_to"] = spec.get("advance_to")
     rules = (load_training_advance_rules().get("rules") or {})
     skill = (rules.get(rule_key) or {}).get("skill")
     if not skill:
-        return False
-    card = _card_for_skill(cards, skill)
-    if not card:
-        return False
-    return _rule_met(rule_key, card, grade_band)
+        out["message"] = f"进阶规则 {rule_key} 未配置技能"
+        return out
+    detail = _evaluate_advance_rule_any(rule_key, cards, skill, grade_band)
+    if not detail:
+        out["message"] = f"打卡中未找到「{skill}」训练记录"
+        return out
+    out["advance_detail"] = detail
+    out["advance_met"] = bool(detail.get("met"))
+    out["message"] = detail.get("message") or ""
+    return out
+
+
+def collect_plan_checkin_cards(
+    db: Session,
+    child_user_id: int,
+    plan_id: int,
+    *,
+    extra_cards: list[dict] | None = None,
+) -> list[dict]:
+    """汇总本方案当日全部打卡卡片（含多轮训练）；extra_cards 用于尚未 flush 的新记录"""
+    from sqlalchemy import select
+
+    from app.db.models import TrainingRecord
+
+    merged: list[dict] = []
+    rows = db.scalars(
+        select(TrainingRecord).where(
+            TrainingRecord.child_user_id == child_user_id,
+            TrainingRecord.plan_id == plan_id,
+        )
+    ).all()
+    for rec in rows:
+        fj = rec.files_json if isinstance(rec.files_json, list) else []
+        merged.extend(fj)
+    if extra_cards:
+        merged.extend(extra_cards)
+    return merged
+
+
+def _apply_advance_eval_to_state(state: dict, plan: TrainingPlan, advance_eval: dict) -> None:
+    if advance_eval.get("advance_met"):
+        to_line = advance_eval.get("main_line_to")
+        if to_line:
+            set_pending_main_line_advance(state, str(to_line))
+        auto_complete_skipped_checkin_items(plan)
+    else:
+        state["pending_main_line_to"] = None
 
 
 def bump_skill_after_checkin(db: Session, talent_code: int, state: dict, skill: str) -> None:
@@ -129,7 +260,11 @@ def process_checkin_progress(
     state = get_training_progress(child)
     grade_band = _grade_band(grade)
     bumped_skills: list[str] = []
-    main_advanced = False
+    main_line_before = state.get("main_line") or "A"
+    advance_cards = collect_plan_checkin_cards(db, child.id, plan.id, extra_cards=cards)
+    advance_eval = build_main_line_advance_eval(state, advance_cards, grade_band)
+
+    _apply_advance_eval_to_state(state, plan, advance_eval)
 
     skills_today: set[str] = set()
     for item in plan.items:
@@ -159,13 +294,56 @@ def process_checkin_progress(
         bumped_skills.append(skill)
 
     bump_main_line_session(state)
-    if evaluate_main_line_advance(state, cards, grade_band):
-        main_advanced = advance_main_line(state)
 
     save_training_progress(db, child, state)
+    main_line_after = state.get("main_line") or "A"
+    pending_to = state.get("pending_main_line_to")
     return {
-        "main_line": state.get("main_line"),
-        "main_line_advanced": main_advanced,
+        "main_line": main_line_after,
+        "main_line_from": main_line_before,
+        "main_line_to": pending_to if advance_eval.get("advance_met") else None,
+        "main_line_advanced": False,
+        "advance_pending": bool(advance_eval.get("advance_met") and pending_to),
+        "pending_main_line_to": pending_to,
+        "advance_met": bool(advance_eval.get("advance_met")),
+        "advance_rule_key": advance_eval.get("advance_rule_key"),
+        "advance_detail": advance_eval.get("advance_detail"),
+        "advance_message": advance_eval.get("message"),
         "skills_bumped": bumped_skills,
-        "content_index": main_line_index(state.get("main_line") or "A"),
+        "content_index": main_line_index(main_line_after),
+    }
+
+
+def reassess_main_line_from_plan(
+    db: Session,
+    child: ChildUser,
+    plan: TrainingPlan,
+    *,
+    talent_code: int,
+    grade: str | None,
+) -> dict:
+    """修改/删除打卡后，按本方案全部轮次重新判定进阶"""
+    from app.services.child_training_state import get_training_progress, save_training_progress
+
+    state = get_training_progress(child)
+    grade_band = _grade_band(grade)
+    main_line_before = state.get("main_line") or "A"
+    advance_cards = collect_plan_checkin_cards(db, child.id, plan.id)
+    advance_eval = build_main_line_advance_eval(state, advance_cards, grade_band)
+    _apply_advance_eval_to_state(state, plan, advance_eval)
+    save_training_progress(db, child, state)
+    main_line_after = state.get("main_line") or "A"
+    pending_to = state.get("pending_main_line_to")
+    return {
+        "main_line": main_line_after,
+        "main_line_from": main_line_before,
+        "main_line_to": pending_to if advance_eval.get("advance_met") else None,
+        "main_line_advanced": False,
+        "advance_pending": bool(advance_eval.get("advance_met") and pending_to),
+        "pending_main_line_to": pending_to,
+        "advance_met": bool(advance_eval.get("advance_met")),
+        "advance_rule_key": advance_eval.get("advance_rule_key"),
+        "advance_detail": advance_eval.get("advance_detail"),
+        "advance_message": advance_eval.get("message"),
+        "content_index": main_line_index(main_line_after),
     }

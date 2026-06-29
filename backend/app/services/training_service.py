@@ -16,6 +16,7 @@ from app.db.models import (
 from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
 from app.services.child_training_state import (
     bump_training_completed_day,
+    apply_pending_main_line_advance,
     get_training_progress,
     save_training_progress,
     training_day_number,
@@ -35,8 +36,20 @@ from app.services.training_day import (
 WATCH_COMPLETE_PCT = 90
 
 
+def _user_now(db: Session | None, child_user_id: int | None = None):
+    if db is not None and child_user_id is not None:
+        from app.services.dev_clock import resolve_training_now
+
+        return resolve_training_now(db, child_user_id)
+    return training_now()
+
+
 def _today() -> date:
     return get_training_day()
+
+
+def _today_for(db: Session | None, child_user_id: int | None = None) -> date:
+    return get_training_day(_user_now(db, child_user_id))
 
 
 def _sync_training_day_counter(db: Session, child_user_id: int, plan_date: date) -> None:
@@ -54,6 +67,7 @@ def _sync_training_day_counter(db: Session, child_user_id: int, plan_date: date)
         y_plan = _get_plan_by_date(db, child_user_id, yesterday)
         if y_plan and y_plan.status == "completed":
             bump_training_completed_day(state)
+    apply_pending_main_line_advance(state)
     state["training_day_anchor"] = today_str
     save_training_progress(db, child, state)
 
@@ -67,17 +81,17 @@ def _training_day_for_child(db: Session, child_user_id: int) -> int:
 
 def _resolve_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> TrainingPlan | None:
     """按训练日查找方案；兼容旧数据用日历日期入库的情况。"""
-    plan_date = plan_date or _today()
+    plan_date = plan_date or _today_for(db, child_user_id)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
-    if plan and is_plan_stale(plan):
+    if plan and is_plan_stale(plan, now=_user_now(db, child_user_id)):
         return None
     if plan:
         return plan
-    now = training_now()
+    now = _user_now(db, child_user_id)
     cal = now.date()
     if plan_date != cal:
         legacy = _get_plan_by_date(db, child_user_id, cal)
-        if legacy and not is_plan_stale(legacy) and is_plan_day_locked(legacy, now=now):
+        if legacy and not is_plan_stale(legacy, now=now) and is_plan_day_locked(legacy, now=now):
             return legacy
     return None
 
@@ -139,8 +153,18 @@ def _get_plan_by_date(db: Session, child_user_id: int, plan_date: date) -> Train
     )
 
 
+def _detach_checkin_records_from_plan(db: Session, plan: TrainingPlan) -> None:
+    """删除 plan 前保留打卡历史：写入 train_date 并解除关联"""
+    rows = db.scalars(select(TrainingRecord).where(TrainingRecord.plan_id == plan.id)).all()
+    for rec in rows:
+        if not rec.train_date and plan.plan_date:
+            rec.train_date = plan.plan_date
+        rec.plan_id = None
+        rec.item_id = None
+
+
 def _delete_training_plan(db: Session, plan: TrainingPlan) -> None:
-    db.execute(delete(TrainingRecord).where(TrainingRecord.plan_id == plan.id))
+    _detach_checkin_records_from_plan(db, plan)
     for item in list(plan.items):
         db.delete(item)
     db.delete(plan)
@@ -272,37 +296,9 @@ def sync_pending_plan_content(
 
 
 def _resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
-    """获取用户当前有效天赋信息（测评 or 自选）"""
-    from app.services.assessment_service import (
-        get_self_reported_talent_code,
-        get_self_reported_talent_name,
-    )
-    assessment = get_latest_assessment(db, child_user_id)
-    if has_valid_talent(assessment):
-        return {
-            "has_assessment": True,
-            "needs_assessment": False,
-            "assessment_id": assessment.id,
-            "talent_primary": assessment.talent_primary,
-            "talent_tag": assessment.talent_tag,
-            "talent_code": effective_talent_code(assessment),
-            "talent_source": "assessment",
-        }
-    # 无有效测评 → 尝试自选天赋
-    self_code = get_self_reported_talent_code(db, child_user_id)
-    if self_code:
-        from app.core.talent_mapping import resolve_talent_tag
-        self_name = get_self_reported_talent_name(db, child_user_id)
-        return {
-            "has_assessment": True,
-            "needs_assessment": False,
-            "assessment_id": None,
-            "talent_primary": self_name,
-            "talent_tag": resolve_talent_tag(self_code),
-            "talent_code": self_code,
-            "talent_source": "onboarding",
-        }
-    return None
+    from app.services.assessment_service import resolve_effective_talent
+
+    return resolve_effective_talent(db, child_user_id)
 
 
 def ensure_assessment_for_training(db: Session, child_user_id: int):
@@ -336,10 +332,15 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
         if assessment_row:
             sync_pending_plan_content(db, child_user_id, assessment_row)
     progress = get_progress(db, child_user_id)
-    now = training_now()
-    today_plan = _resolve_today_plan(db, child_user_id, _today())
+    now = _user_now(db, child_user_id)
+    today_plan = _resolve_today_plan(db, child_user_id, get_training_day(now))
     meta = training_day_meta(now)
     day_locked = is_plan_day_locked(today_plan, now=now) if today_plan else False
+    profile = {}
+    user = db.get(ChildUser, child_user_id)
+    if user and user.profile_json:
+        profile = dict(user.profile_json)
+    onboarding = profile.get("onboarding") if isinstance(profile.get("onboarding"), dict) else {}
     return {
         "has_assessment": True,
         "needs_assessment": False,
@@ -348,6 +349,10 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
         "talent_primary": talent.get("talent_primary"),
         "talent_tag": talent.get("talent_tag"),
         "talent_code": talent.get("talent_code"),
+        "talent_source": talent.get("talent_source"),
+        "talent_conflict": bool(profile.get("pending_talent")),
+        "pending_talent": profile.get("pending_talent"),
+        "onboarding_completed": bool(onboarding.get("completed_at")),
         "day_locked": day_locked,
         **meta,
         **progress,
@@ -418,7 +423,8 @@ def _item_to_dict(item: TrainingItem, *, hide_media: bool = False, content: Cont
 
 
 def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Session | None = None) -> dict:
-    now = now or training_now()
+    if now is None:
+        now = _user_now(db, plan.child_user_id) if db is not None else training_now()
     meta = training_day_meta(now, plan_date=plan.plan_date)
     locked = is_plan_day_locked(plan, now=now)
     globally_cutoff = is_plan_globally_cutoff(plan, now=now)
@@ -426,6 +432,9 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
     content_map: dict[int, ContentItem] = {}
     main_line_key = "A"
     main_line_name = ""
+    progress_main_line = "A"
+    progress_main_line_name = ""
+    pending_main_line_to = None
     if db is not None:
         ids = [i.content_item_id for i in plan.items if i.content_item_id]
         if ids:
@@ -433,14 +442,24 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
                 content_map[row.id] = row
         from app.db.models import ChildUser
         from app.services.child_training_state import get_training_progress
+        from app.services.training_carryover import main_line_key_from_plan_index
         from config.loader import load_training_curriculum
 
+        cur = load_training_curriculum()
+        plan_main_line = main_line_key_from_plan_index(plan.content_index)
+        plan_line = (cur.get("main_lines") or {}).get(plan_main_line) or {}
+        main_line_key = plan_main_line
+        main_line_name = plan_line.get("name") or ""
+        progress_main_line = plan_main_line
+        progress_main_line_name = main_line_name
+        pending_main_line_to = None
         child = db.get(ChildUser, plan.child_user_id)
         if child:
             tp = get_training_progress(child)
-            main_line_key = tp.get("main_line") or "A"
-            line = (load_training_curriculum().get("main_lines") or {}).get(main_line_key) or {}
-            main_line_name = line.get("name") or ""
+            pending_main_line_to = tp.get("pending_main_line_to")
+            progress_main_line = tp.get("main_line") or plan_main_line
+            progress_line = (cur.get("main_lines") or {}).get(progress_main_line) or {}
+            progress_main_line_name = progress_line.get("name") or ""
     training_day = _training_day_for_child(db, plan.child_user_id) if db is not None else 1
     optional_offers: list[dict] = []
     if db is not None and plan.items:
@@ -455,6 +474,9 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "content_index": plan.content_index,
         "main_line": main_line_key,
         "main_line_name": main_line_name,
+        "progress_main_line": progress_main_line,
+        "progress_main_line_name": progress_main_line_name,
+        "pending_main_line_to": pending_main_line_to,
         "lesson_day": training_day,
         "training_day_number": training_day,
         "planned_minutes": plan.planned_minutes,
@@ -502,7 +524,7 @@ def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: Trai
     """计时窗口结束后自动标记媒体用尽"""
     if not plan or plan.media_exhausted:
         return bool(plan and plan.media_exhausted)
-    now = training_now()
+    now = _user_now(db, child_user_id)
     row = db.scalar(
         select(TrainingWindow).where(
             TrainingWindow.child_user_id == child_user_id,
@@ -521,8 +543,8 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
     """获取今日方案；无内容时需先 POST /schedule 选时长生成"""
     from app.services.training_schedule_service import ensure_today_plan_shell
 
-    plan_date = plan_date or _today()
-    if not is_new_day_ready():
+    plan_date = plan_date or _today_for(db, child_user_id)
+    if not is_new_day_ready(_user_now(db, child_user_id)):
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
 
     talent = _resolve_effective_talent(db, child_user_id)
@@ -584,8 +606,8 @@ def empty_today_plan_response(
     now: datetime | None = None,
 ) -> dict:
     """无今日方案时的占位（如日切窗口）"""
-    now = now or training_now()
-    plan_date = plan_date or _today()
+    now = now or _user_now(db, child_user_id)
+    plan_date = plan_date or get_training_day(now)
     assessment = get_latest_assessment(db, child_user_id)
     meta = training_day_meta(now, plan_date=plan_date)
     return {
@@ -604,8 +626,8 @@ def empty_today_plan_response(
 
 def create_plan_for_schedule(db: Session, child_user_id: int, plan_date: date | None = None) -> TrainingPlan:
     """创建当日方案记录（内容由 ensure_today_plan_content 填充）"""
-    plan_date = plan_date or _today()
-    if not is_new_day_ready():
+    plan_date = plan_date or _today_for(db, child_user_id)
+    if not is_new_day_ready(_user_now(db, child_user_id)):
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
 
     assessment = ensure_assessment_for_training(db, child_user_id)
@@ -634,8 +656,8 @@ def create_plan_for_schedule(db: Session, child_user_id: int, plan_date: date | 
 
 
 def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
-    plan_date = plan_date or _today()
-    if not is_new_day_ready():
+    plan_date = plan_date or _today_for(db, child_user_id)
+    if not is_new_day_ready(_user_now(db, child_user_id)):
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
     assessment = ensure_assessment_for_training(db, child_user_id)
 
@@ -710,7 +732,8 @@ def submit_checkin(
     )
     if not plan or plan.child_user_id != child_user_id:
         raise TrainingError("训练计划不存在", 404)
-    if is_plan_globally_cutoff(plan):
+    now = _user_now(db, child_user_id)
+    if is_plan_globally_cutoff(plan, now=now):
         raise TrainingError("训练日已于凌晨4点截止", 403)
 
     sorted_items = sorted(plan.items, key=lambda x: x.sort_order)
@@ -729,10 +752,20 @@ def submit_checkin(
 
     target_block = parse_item_instruction(target_item.instructions).get("block")
 
+    ability_type, time_spent, content, result, note = _apply_card_fields_to_record(
+        cards=cards,
+        ability_type=ability_type,
+        time_spent=time_spent,
+        content=content,
+        result=result,
+        note=note,
+    )
+
     record = TrainingRecord(
         child_user_id=child_user_id,
         plan_id=plan.id,
         item_id=target_item.id,
+        train_date=plan.plan_date,
         ability_type=ability_type,
         time_spent=time_spent,
         content=content,
@@ -751,6 +784,10 @@ def submit_checkin(
             if it_block == target_block and it.checkin_status == "pending":
                 it.checkin_status = "done"
 
+    from app.services.training_carryover import auto_complete_skipped_checkin_items
+
+    auto_complete_skipped_checkin_items(plan)
+
     pending = [it for it in plan.items if it.checkin_status != "done"]
     plan.status = "pending" if pending else "completed"
 
@@ -759,8 +796,9 @@ def submit_checkin(
         from app.db.models import ChildUser
 
         child = db.get(ChildUser, child_user_id)
-        assessment = get_latest_assessment(db, child_user_id)
-        if child and has_valid_talent(assessment):
+        talent = _resolve_effective_talent(db, child_user_id)
+        talent_code = talent.get("talent_code") if talent else None
+        if child and talent_code:
             from app.services.training_mastery import process_checkin_progress
             from app.services.training_route_context import _child_grade
 
@@ -769,10 +807,11 @@ def submit_checkin(
                 child,
                 plan,
                 cards,
-                talent_code=effective_talent_code(assessment),
+                talent_code=talent_code,
                 grade=_child_grade(db, child_user_id),
             )
-            plan.content_index = progress_delta.get("content_index", plan.content_index)
+            if progress_delta and not progress_delta.get("main_line_advanced"):
+                plan.content_index = progress_delta.get("content_index", plan.content_index)
 
     db.commit()
     db.refresh(record)
@@ -790,11 +829,72 @@ def _card_summary(c: dict) -> str:
             f"{c.get('count') or '?'}题,{c.get('accuracy') or '?'}%)"
         )
     if name == "扫描速记":
+        material = c.get("materialName") or c.get("bookName") or "?"
         return (
-            f"扫描速记：用时{c.get('time') or '?'}，完成{c.get('wordCount') or '?'}字"
-            f"《{c.get('bookName') or '?'}》，{c.get('result') or '待选'}"
+            f"扫描速记：用时{c.get('time') or '?'}分钟，记住{c.get('wordCount') or '?'}字"
+            f"《{material}》"
         )
+    if name == "超脑阅读":
+        words = c.get("wordCount") or c.get("content") or "?"
+        return f"超脑阅读({c.get('time') or '?'}分钟,{words}字)"
+    if name == "影像追忆":
+        words = c.get("wordCount") or c.get("content") or "?"
+        return f"影像追忆({c.get('time') or '?'}分钟,{words}字)"
     return f"{name}({c.get('time') or '?'}分钟)"
+
+
+def _summarize_time_spent(cards: list[dict]) -> str | None:
+    parts: list[str] = []
+    total = 0.0
+    for c in cards or []:
+        t = c.get("time")
+        if t is None or t == "":
+            continue
+        try:
+            mins = float(t)
+        except (TypeError, ValueError):
+            continue
+        if mins <= 0:
+            continue
+        total += mins
+        name = c.get("name") or "训练"
+        parts.append(f"{name}{mins:g}分钟")
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    return f"合计{total:g}分钟（{'、'.join(parts)}）"
+
+
+def _summarize_results(cards: list[dict]) -> str | None:
+    parts = [str(c.get("result")).strip() for c in cards or [] if c.get("result")]
+    return "；".join(parts) if parts else None
+
+
+def _summarize_notes(cards: list[dict]) -> str | None:
+    parts = [str(c.get("note")).strip() for c in cards or [] if c.get("note")]
+    return "；".join(parts) if parts else None
+
+
+def _apply_card_fields_to_record(
+    *,
+    cards: list[dict] | None,
+    ability_type: str | None,
+    time_spent: str | None,
+    content: str | None,
+    result: str | None,
+    note: str | None,
+) -> tuple[str | None, str | None, str | None, str | None, str | None]:
+    if not cards:
+        return ability_type, time_spent, content, result, note
+    auto_ability, auto_content = _summarize_cards(cards)
+    return (
+        ability_type or auto_ability,
+        time_spent or _summarize_time_spent(cards),
+        content or auto_content,
+        result or _summarize_results(cards),
+        note or _summarize_notes(cards),
+    )
 
 
 def _summarize_cards(cards: list[dict]) -> tuple[str, str]:
@@ -804,20 +904,51 @@ def _summarize_cards(cards: list[dict]) -> tuple[str, str]:
     return ability_type, content
 
 
-def _record_to_dict(record: TrainingRecord) -> dict:
+def _record_to_dict(record: TrainingRecord, *, plan: TrainingPlan | None = None) -> dict:
+    created = record.created_at
+    train_date = None
+    if record.train_date:
+        train_date = record.train_date.isoformat()
+    elif plan and plan.plan_date:
+        train_date = plan.plan_date.isoformat()
+    elif created:
+        train_date = created.date().isoformat()
+    checkin_at = created.isoformat() if created else None
+    cards = record.files_json if isinstance(record.files_json, list) else []
+    phase_blocks = sorted({c.get("phaseBlock") for c in cards if c.get("phaseBlock")})
     return {
         "id": record.id,
         "plan_id": record.plan_id,
         "item_id": record.item_id,
+        "train_date": train_date,
+        "checkin_at": checkin_at,
+        "checkin_time": created.strftime("%H:%M") if created else None,
         "ability_type": record.ability_type,
         "time_spent": record.time_spent,
         "content": record.content,
         "result": record.result,
         "note": record.note,
         "attitude_pct": record.attitude_pct,
-        "cards": record.files_json if isinstance(record.files_json, list) else [],
-        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "phase_blocks": phase_blocks,
+        "cards": cards,
+        "created_at": checkin_at,
     }
+
+
+def group_checkin_history_by_day(items: list[dict]) -> list[dict]:
+    buckets: dict[str, list[dict]] = {}
+    for item in items:
+        day = item.get("train_date") or (item.get("checkin_at") or "")[:10] or "unknown"
+        buckets.setdefault(day, []).append(item)
+    out = []
+    for d in sorted(buckets.keys(), reverse=True):
+        recs = sorted(
+            buckets[d],
+            key=lambda x: x.get("checkin_at") or "",
+            reverse=True,
+        )
+        out.append({"date": d, "records": recs})
+    return out
 
 
 def _item_block(item: TrainingItem) -> str | None:
@@ -865,11 +996,12 @@ def get_checkin_record(db: Session, child_user_id: int, record_id: int) -> dict:
     record = db.get(TrainingRecord, record_id)
     if not record or record.child_user_id != child_user_id:
         raise TrainingError("打卡记录不存在", 404)
-    return _record_to_dict(record)
+    plan = db.get(TrainingPlan, record.plan_id) if record.plan_id else None
+    return _record_to_dict(record, plan=plan)
 
 
 def get_today_checkins(db: Session, child_user_id: int, plan_date: date | None = None) -> list[dict]:
-    plan_date = plan_date or _today()
+    plan_date = plan_date or _today_for(db, child_user_id)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan:
         return []
@@ -881,7 +1013,7 @@ def get_today_checkins(db: Session, child_user_id: int, plan_date: date | None =
         )
         .order_by(TrainingRecord.id.desc())
     ).all()
-    return [_record_to_dict(r) for r in rows]
+    return [_record_to_dict(r, plan=plan) for r in rows]
 
 
 def update_checkin_record(
@@ -909,29 +1041,61 @@ def update_checkin_record(
         if not cards:
             return delete_checkin_record(db, child_user_id, record_id)
         record.files_json = cards
-        auto_ability, auto_content = _summarize_cards(cards)
-        record.ability_type = ability_type if ability_type is not None else auto_ability
-        record.content = content if content is not None else auto_content
+        auto_ability, auto_time, auto_content, auto_result, auto_note = _apply_card_fields_to_record(
+            cards=cards,
+            ability_type=ability_type,
+            time_spent=time_spent,
+            content=content,
+            result=result,
+            note=note,
+        )
+        record.ability_type = auto_ability
+        record.time_spent = auto_time
+        record.content = auto_content
+        record.result = auto_result
+        record.note = auto_note
     else:
         if ability_type is not None:
             record.ability_type = ability_type
         if content is not None:
             record.content = content
 
-    if time_spent is not None:
+    if time_spent is not None and cards is None:
         record.time_spent = time_spent
-    if result is not None:
+    if result is not None and cards is None:
         record.result = result
-    if note is not None:
+    if note is not None and cards is None:
         record.note = note
     if attitude_pct is not None:
         record.attitude_pct = attitude_pct
 
     plan = db.get(TrainingPlan, record.plan_id) if record.plan_id else None
     plan_status = _sync_plan_after_record_change(db, plan)
+    progress_delta = None
+    if plan and cards is not None:
+        from app.db.models import ChildUser
+        from app.services.training_mastery import reassess_main_line_from_plan
+
+        child = db.get(ChildUser, child_user_id)
+        talent = _resolve_effective_talent(db, child_user_id)
+        talent_code = talent.get("talent_code") if talent else None
+        if child and talent_code:
+            db.flush()
+            from app.services.training_route_context import _child_grade
+
+            progress_delta = reassess_main_line_from_plan(
+                db,
+                child,
+                plan,
+                talent_code=talent_code,
+                grade=_child_grade(db, child_user_id),
+            )
     db.commit()
     db.refresh(record)
-    return {"record": _record_to_dict(record), "plan_status": plan_status}
+    out = {"record": _record_to_dict(record, plan=plan), "plan_status": plan_status}
+    if progress_delta:
+        out["training_progress"] = progress_delta
+    return out
 
 
 def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> dict:
@@ -945,8 +1109,29 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
     db.delete(record)
     db.flush()
     plan_status = _sync_plan_after_record_change(db, plan, deleted_record=record)
+    progress_delta = None
+    if plan:
+        from app.db.models import ChildUser
+        from app.services.training_mastery import reassess_main_line_from_plan
+
+        child = db.get(ChildUser, child_user_id)
+        talent = _resolve_effective_talent(db, child_user_id)
+        talent_code = talent.get("talent_code") if talent else None
+        if child and talent_code:
+            from app.services.training_route_context import _child_grade
+
+            progress_delta = reassess_main_line_from_plan(
+                db,
+                child,
+                plan,
+                talent_code=talent_code,
+                grade=_child_grade(db, child_user_id),
+            )
     db.commit()
-    return {"deleted": True, "plan_status": plan_status}
+    out = {"deleted": True, "plan_status": plan_status}
+    if progress_delta:
+        out["training_progress"] = progress_delta
+    return out
 
 
 def get_progress(db: Session, child_user_id: int) -> dict:
@@ -956,7 +1141,7 @@ def get_progress(db: Session, child_user_id: int) -> dict:
         .select_from(TrainingRecord)
         .where(TrainingRecord.child_user_id == child_user_id)
     ) or 0
-    today_plan = _resolve_today_plan(db, child_user_id, _today())
+    today_plan = _resolve_today_plan(db, child_user_id, _today_for(db, child_user_id))
     return {
         "total_checkins": total,
         "content_index": today_plan.content_index if today_plan else 0,
@@ -971,7 +1156,7 @@ def get_progress(db: Session, child_user_id: int) -> dict:
 def set_training_window(
     db: Session, child_user_id: int, start_time: str, end_time: str, train_date: date | None = None
 ) -> dict:
-    train_date = train_date or _today()
+    train_date = train_date or _today_for(db, child_user_id)
     start = _parse_time(start_time)
     end = _parse_time(end_time)
     existing = db.scalar(
@@ -1001,7 +1186,7 @@ def set_training_window(
 
 
 def get_training_window(db: Session, child_user_id: int, train_date: date | None = None) -> dict | None:
-    train_date = train_date or _today()
+    train_date = train_date or _today_for(db, child_user_id)
     row = db.scalar(
         select(TrainingWindow).where(
             TrainingWindow.child_user_id == child_user_id,
@@ -1018,7 +1203,7 @@ def get_training_window(db: Session, child_user_id: int, train_date: date | None
 
 
 def get_window_status(db: Session, child_user_id: int, now: datetime | None = None) -> dict:
-    now = now or datetime.now()
+    now = now or _user_now(db, child_user_id)
     train_date = now.date()
     row = db.scalar(
         select(TrainingWindow).where(
@@ -1092,14 +1277,57 @@ def get_yesterday_training_context(db: Session, child_user_id: int, plan_date: d
     return "；".join(parts)
 
 
-def get_checkin_history(db: Session, child_user_id: int, limit: int = 30) -> list[dict]:
+def get_checkin_history(
+    db: Session,
+    child_user_id: int,
+    limit: int = 60,
+    *,
+    exclude_today: bool = False,
+) -> list[dict]:
+    fetch_limit = min(limit * 5, 500) if exclude_today else limit
     rows = db.scalars(
         select(TrainingRecord)
         .where(TrainingRecord.child_user_id == child_user_id)
-        .order_by(TrainingRecord.id.desc())
-        .limit(limit)
+        .order_by(TrainingRecord.created_at.desc(), TrainingRecord.id.desc())
+        .limit(fetch_limit)
     ).all()
-    return [_record_to_dict(r) for r in rows]
+    plan_ids = {r.plan_id for r in rows if r.plan_id}
+    plans: dict[int, TrainingPlan] = {}
+    if plan_ids:
+        for plan in db.scalars(select(TrainingPlan).where(TrainingPlan.id.in_(plan_ids))).all():
+            plans[plan.id] = plan
+    changed = False
+    for rec in rows:
+        if not rec.train_date and rec.plan_id and plans.get(rec.plan_id):
+            rec.train_date = plans[rec.plan_id].plan_date
+            changed = True
+        elif not rec.train_date and rec.created_at:
+            rec.train_date = rec.created_at.date()
+            changed = True
+    if changed:
+        db.commit()
+
+    items = [_record_to_dict(r, plan=plans.get(r.plan_id) if r.plan_id else None) for r in rows]
+
+    if exclude_today:
+        today = _today_for(db, child_user_id)
+        today_plan = _get_plan_by_date(db, child_user_id, today)
+
+        def _is_active_today_record(item: dict) -> bool:
+            pid = item.get("plan_id")
+            plan = plans.get(pid) if pid else None
+            if today_plan and pid == today_plan.id:
+                return True
+            if plan and plan.plan_date == today:
+                return True
+            train_date = item.get("train_date")
+            if train_date == today.isoformat():
+                return True
+            return False
+
+        items = [item for item in items if not _is_active_today_record(item)]
+
+    return items[:limit]
 
 
 def record_watch_progress(

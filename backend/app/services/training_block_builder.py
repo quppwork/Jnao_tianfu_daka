@@ -237,39 +237,55 @@ def build_main_line_block_plan(
     mandatory, optional_markers = _flatten_mandatory_blocks(blocks)
     optional_offers = build_optional_offers(line_spec, talent_primary, optional_markers)
 
-    slots_left = num_blocks - carryover_slots
-    for i in range(slots_left):
-        slot_idx = carryover_slots + i + 1
-        if i < len(mandatory):
-            blk = mandatory[i]
-            skill = blk["skill"]
-            role = blk.get("role") or "primary"
-            _append_single_skill(
+    max_rounds = int(slot_cfg.get("max_rounds_per_skill") or 3)
+    rounds_per = min(int(slot_cfg.get("rounds_per_item") or 1), max_rounds)
+
+    slot_idx = carryover_slots + 1
+
+    def _emit_skill(skill: str, role: str, round_no: int) -> bool:
+        nonlocal slot_idx
+        if slot_idx > num_blocks or not skill:
+            return False
+        if skill == PERCEPTION_SKILL:
+            _append_perception(plan_items, pool, training_slot=slot_idx, role=role)
+        else:
+            stage, part = get_skill_position(state, skill)
+            _append_skill_rows(
                 plan_items,
                 pool,
-                state,
                 skill,
+                stage,
+                part,
                 training_slot=slot_idx,
                 role=role,
                 rounds=1,
             )
-            continue
+            if plan_items:
+                plan_items[-1]["round"] = round_no
+        slot_idx += 1
+        return True
 
-        if mandatory:
-            first = mandatory[0]
-            skill = first["skill"]
-            if skill != PERCEPTION_SKILL:
-                stage, part = get_skill_position(state, skill)
-                _append_skill_rows(
-                    plan_items,
-                    pool,
-                    skill,
-                    stage,
-                    part,
-                    training_slot=slot_idx,
-                    role="auxiliary",
-                    rounds=1,
-                )
+    primary_skill = mandatory[0]["skill"] if mandatory else None
+    aux_blocks = mandatory[1:]
+    if aux_blocks and talent_primary:
+        ranked = {o["skill"]: o["weight"] for o in _optional_ranked(line_spec, talent_primary)}
+        aux_order = line_spec.get("auxiliary_skills") or []
+        aux_blocks.sort(
+            key=lambda b: (
+                aux_order.index(b["skill"]) if b["skill"] in aux_order else 99,
+                -ranked.get(b["skill"], 0),
+            )
+        )
+    for r in range(1, rounds_per + 1):
+        if not _emit_skill(primary_skill, mandatory[0].get("role") or "primary", r):
+            break
+
+    for blk in aux_blocks:
+        skill = blk["skill"]
+        role = blk.get("role") or "synergy"
+        for r in range(1, rounds_per + 1):
+            if not _emit_skill(skill, role, r):
+                break
 
     plan_items = normalize_plan_items_by_duration(plan_items, planned_minutes)
 

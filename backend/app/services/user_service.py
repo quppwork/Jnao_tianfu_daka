@@ -3,7 +3,18 @@
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import enrich_profile_talent_fields
+
+
+def merge_profile_json(current: dict | None, patch: dict) -> dict:
+    """深度合并 profile_json — 引导页/onboarding 只提交部分字段时不覆盖已有数据"""
+    base = dict(current or {})
+    for key, val in patch.items():
+        if isinstance(val, dict) and isinstance(base.get(key), dict):
+            base[key] = {**base[key], **val}
+        else:
+            base[key] = val
+    return base
 
 
 def get_profile(db: Session, child_user_id: int) -> ChildUser | None:
@@ -27,7 +38,10 @@ def update_profile(
     if jnao_uid is not None:
         user.jnao_uid = jnao_uid
     if profile_json is not None:
-        user.profile_json = profile_json
+        user.profile_json = merge_profile_json(user.profile_json, profile_json)
+        from app.services.assessment_service import sync_child_user_talent
+
+        sync_child_user_talent(db, child_user_id)
     if training_level is not None:
         user.training_level = training_level
     db.commit()
@@ -59,10 +73,5 @@ def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
     if db is not None:
-        latest = get_latest_assessment(db, user.id)
-        if latest:
-            data["talent_code"] = latest.talent_code
-            data["talent_tag"] = latest.talent_tag
-            data["talent_primary"] = latest.talent_primary
-            data["latest_assessment_id"] = latest.id
+        enrich_profile_talent_fields(db, user.id, data)
     return data

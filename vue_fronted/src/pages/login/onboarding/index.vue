@@ -176,6 +176,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { getChildUserId, saveProfile } from '@/utils/userApi.js'
+import { TALENT_CODE_MAP, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 
 const step = ref(1)
 const studentType = ref('')
@@ -238,24 +239,53 @@ function goBack() {
 
 function selectTalent(name) { selectedTalent.value = name }
 
+function buildOnboardingPayload() {
+  const onboarding = {
+    student_type: studentType.value || 'new',
+    completed_at: new Date().toISOString(),
+  }
+  if (selectedTalent.value === 'unknown') {
+    onboarding.talent_unknown = true
+    onboarding.self_reported_talent = null
+  } else if (selectedTalent.value) {
+    onboarding.self_reported_talent = selectedTalent.value
+    onboarding.self_reported_talent_code = TALENT_CODE_MAP[selectedTalent.value] || null
+    onboarding.talent_unknown = false
+  }
+  if (studentType.value === 'returning') {
+    onboarding.prior_abilities = selectedAbilityNames.value
+    onboarding.prior_training_data = formData.value
+  }
+  return onboarding
+}
+
+async function persistOnboarding() {
+  const userId = getChildUserId()
+  if (!userId) return
+  clearTalentState()
+  await saveProfile(userId, { profile_json: { onboarding: buildOnboardingPayload() } })
+  await refreshTalentState(userId)
+}
+
+function goTalentTest() {
+  uni.navigateTo({ url: '/pages/talent/index?from=onboarding' })
+}
+
 async function confirmTalent() {
   if (!selectedTalent.value) { uni.showToast({ title: '请选择一个天赋或"不知道"', icon: 'none' }); return }
-  const userId = getChildUserId()
-  const onboarding = { student_type: 'new', completed_at: new Date().toISOString() }
-  if (selectedTalent.value === 'unknown') { onboarding.talent_unknown = true }
-  else { onboarding.self_reported_talent = selectedTalent.value }
-  try { await saveProfile(userId, { profile_json: { onboarding } }) } catch (_) {}
+  try { await persistOnboarding() } catch (_) {}
   if (selectedTalent.value === 'unknown') {
-    uni.redirectTo({ url: '/pages/talent/index' })
+    goTalentTest()
   } else {
     uni.redirectTo({ url: '/pages/index' })
   }
 }
 
-function confirmReturningTalent() {
+async function confirmReturningTalent() {
   if (!selectedTalent.value) { uni.showToast({ title: '请选择一个天赋', icon: 'none' }); return }
   if (selectedTalent.value === 'unknown') {
-    uni.redirectTo({ url: '/pages/talent/index' })
+    try { await persistOnboarding() } catch (_) {}
+    goTalentTest()
   } else {
     step.value = 4
   }
@@ -286,7 +316,8 @@ function nextDataStep() {
   else { step.value++; loadCurrentForm() }
 }
 
-function goHome() {
+async function goHome() {
+  try { await persistOnboarding() } catch (_) {}
   uni.redirectTo({ url: '/pages/index' })
 }
 </script>

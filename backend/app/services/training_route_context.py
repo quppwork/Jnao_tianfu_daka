@@ -10,7 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.assessment_service import get_latest_assessment
+from app.services.child_training_state import get_training_progress, main_line_index
 from app.services.content_meta import estimate_duration_min, parse_item_meta
+from app.services.training_carryover import (
+    item_skips_checkin,
+    main_line_key_from_plan_index,
+    should_carryover_item,
+    skill_from_training_item,
+)
 from app.services.training_day import get_training_day, training_now
 from app.services.training_service import WATCH_COMPLETE_PCT, get_yesterday_training_context
 from config.loader import load_training_curriculum
@@ -40,16 +47,22 @@ def _child_grade(db: Session, child_user_id: int) -> str | None:
 
 def duration_slot(planned_minutes: int) -> dict:
     cfg = load_training_curriculum().get("duration_schedule") or {}
+    max_rounds = int(cfg.get("max_rounds_per_skill") or 3)
     slots = cfg.get("slots") if isinstance(cfg, dict) else cfg
     if not isinstance(slots, list):
         slots = []
     for row in slots:
         if row.get("min") <= planned_minutes <= row.get("max"):
-            return row
-    return {"items": 1, "rounds_per_item": 1}
+            out = dict(row)
+            out["rounds_per_item"] = min(int(out.get("rounds_per_item") or 1), max_rounds)
+            out["max_rounds_per_skill"] = max_rounds
+            return out
+    return {"items": 1, "rounds_per_item": 1, "max_rounds_per_skill": max_rounds}
 
 
 def _item_incomplete(item: TrainingItem) -> bool:
+    if item_skips_checkin(item):
+        return False
     if item.checkin_status != "done":
         return True
     wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
@@ -77,6 +90,11 @@ def get_carryover_plan_items(
     if not y_plan:
         return []
 
+    child = db.get(ChildUser, child_user_id)
+    state = get_training_progress(child) if child else {}
+    current_line_index = main_line_index(state.get("main_line") or "A")
+    yesterday_line_key = main_line_key_from_plan_index(y_plan.content_index)
+
     items = db.scalars(
         select(TrainingItem)
         .where(TrainingItem.plan_id == y_plan.id)
@@ -87,21 +105,31 @@ def get_carryover_plan_items(
     for it in items:
         if not _item_incomplete(it):
             continue
+        if not should_carryover_item(
+            it,
+            yesterday_line_key=yesterday_line_key,
+            current_line_index=current_line_index,
+            yesterday_items=items,
+        ):
+            continue
         if not it.content_item_id:
             meta = {}
         else:
             ci = db.get(ContentItem, it.content_item_id)
             meta = parse_item_meta(ci) if ci else {}
+        skill = skill_from_training_item(it) or meta.get("skill")
         out.append(
             {
                 "source_item_id": it.id,
                 "content_item_id": it.content_item_id,
                 "title": it.title,
-                "skill": meta.get("skill"),
+                "skill": skill,
                 "stage": meta.get("stage"),
                 "part": meta.get("part"),
-                "duration_min": it.duration_min or estimate_duration_min(db.get(ContentItem, it.content_item_id)),
-                "reason": "昨日未听完或未打卡",
+                "duration_min": it.duration_min or estimate_duration_min(
+                    db.get(ContentItem, it.content_item_id)
+                ),
+                "reason": "昨日主练未完成",
             }
         )
     return out
@@ -145,21 +173,27 @@ def build_route_context(
     *,
     plan_date: date | None = None,
     assessment: Assessment | None = None,
+    talent_primary: str | None = None,
 ) -> dict:
     plan_date = plan_date or get_training_day()
-    assessment = assessment or get_latest_assessment(db, child_user_id)
+    if not talent_primary:
+        if assessment:
+            talent_primary = assessment.talent_primary
+        else:
+            from app.services.assessment_service import resolve_effective_talent
+
+            eff = resolve_effective_talent(db, child_user_id)
+            talent_primary = eff.get("talent_primary") if eff else None
     grade = _child_grade(db, child_user_id)
     slot = duration_slot(planned_minutes)
     carryover = get_carryover_plan_items(db, child_user_id, plan_date)
     yesterday_summary = get_yesterday_training_context(db, child_user_id, plan_date)
-
-    talent = assessment.talent_primary if assessment else None
     cur = load_training_curriculum()
     llm_cfg = cur.get("llm_routing") or {}
 
     return {
         "framework_summary": build_framework_summary(),
-        "talent_primary": talent,
+        "talent_primary": talent_primary,
         "grade": grade,
         "grade_band": _grade_band(grade),
         "planned_minutes": planned_minutes,

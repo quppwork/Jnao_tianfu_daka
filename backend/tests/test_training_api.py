@@ -48,6 +48,43 @@ class TestTrainingToday:
         assert body["needs_assessment"] is True
         assert body["has_assessment"] is False
 
+    def test_schedule_with_onboarding_talent(self, client, mock_doubao):
+        reg = client.post(
+            "/api/auth/register",
+            json={"parent_phone": "13900139111", "nickname": "引导学者"},
+        )
+        uid = reg.json()["child_user_id"]
+        client.put(
+            f"/api/user/profile?user_id={uid}",
+            json={
+                "profile_json": {
+                    "role": "student",
+                    "onboarding": {
+                        "student_type": "new",
+                        "completed_at": "2026-06-28T10:00:00Z",
+                        "self_reported_talent": "学者",
+                        "self_reported_talent_code": 1,
+                        "talent_unknown": False,
+                    },
+                },
+            },
+        )
+        entry = client.get(f"/api/training/entry?user_id={uid}")
+        assert entry.status_code == 200
+        body = entry.json()
+        assert body["has_assessment"] is True
+        assert body["needs_assessment"] is False
+        assert body["talent_primary"] == "学者"
+        res = client.post(f"/api/training/schedule?user_id={uid}", json={"planned_minutes": 30})
+        assert res.status_code == 200, res.text
+        assert len(res.json()["items"]) >= 1
+        latest = client.get(f"/api/talent/assessment/latest?user_id={uid}")
+        assert latest.status_code == 200
+        body = latest.json()
+        assert body["talent_primary"] == "学者"
+        assert body["talent_source"] == "onboarding"
+        assert body["id"] == 0
+
     def test_entry_with_assessment(self, client, child_with_assessment):
         res = client.get(f"/api/training/entry?user_id={child_with_assessment}")
         assert res.status_code == 200
@@ -143,6 +180,60 @@ class TestCheckinCrud:
         items = res.json()
         assert len(items) == 1
         assert items[0]["cards"][0]["name"] == "影像追忆"
+
+    def test_checkin_history_by_day(self, client, child_with_assessment, mock_doubao):
+        uid = child_with_assessment
+        plan = _schedule_today(client, uid)
+        client.post(
+            f"/api/training/checkin?user_id={uid}",
+            json={
+                "plan_id": plan["plan_id"],
+                "cards": [{"name": "超脑阅读", "time": 1, "wordCount": 1000, "phaseBlock": "A"}],
+            },
+        )
+        res = client.get(f"/api/training/history?user_id={uid}&limit=10")
+        assert res.status_code == 200
+        body = res.json()
+        assert len(body["items"]) >= 1
+        row = body["items"][0]
+        assert row["checkin_at"]
+        assert row["checkin_time"]
+        assert row["train_date"]
+        assert "超脑阅读" in row["content"]
+        assert row["time_spent"]
+        assert len(body["days"]) >= 1
+        assert len(body["days"][0]["records"]) >= 1
+
+        # 今日打卡不计入「历史」（exclude_today）
+        hist_only = client.get(f"/api/training/history?user_id={uid}&exclude_today=1").json()
+        assert len(hist_only["items"]) == 0
+        today_only = client.get(f"/api/training/checkin/today?user_id={uid}").json()
+        assert len(today_only) >= 1
+
+        next_day = client.post(f"/api/dev/training/next-day?user_id={uid}")
+        assert next_day.status_code == 200
+        hist_after = client.get(f"/api/training/history?user_id={uid}&exclude_today=1").json()
+        assert len(hist_after["items"]) >= 1
+        assert "超脑阅读" in hist_after["items"][0]["content"]
+        today_after = client.get(f"/api/training/checkin/today?user_id={uid}").json()
+        assert len(today_after) == 0
+
+    def test_checkin_history_survives_reset_today(self, client, db_session, child_with_assessment, mock_doubao):
+        uid = child_with_assessment
+        plan = _schedule_today(client, uid)
+        client.post(
+            f"/api/training/checkin?user_id={uid}",
+            json={
+                "plan_id": plan["plan_id"],
+                "cards": [{"name": "超脑阅读", "time": 1, "wordCount": 1000}],
+            },
+        )
+        res = client.post(f"/api/dev/training/reset-today?user_id={uid}")
+        assert res.status_code == 200
+        history = client.get(f"/api/training/history?user_id={uid}").json()
+        assert len(history["items"]) >= 1
+        assert history["items"][0]["train_date"]
+        assert "超脑阅读" in history["items"][0]["content"]
 
     def test_update_checkin_cards(self, client, child_with_assessment, mock_doubao):
         uid = child_with_assessment

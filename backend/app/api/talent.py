@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_child_user_id, get_db
+from app.db.models import ChildUser
 from app.models.requests import ReportRequest
 from app.schemas.training import AssessmentOut
 from app.services import assessment_service
@@ -46,7 +47,11 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
         conflict = False
         locked = False
         lock_msg = None
+        current_talent = None
         if req.child_user_id:
+            user = db.get(ChildUser, req.child_user_id)
+            if user and user.profile_json:
+                current_talent = (user.profile_json or {}).get("talent_primary")
             row = assessment_service.save_assessment(
                 db,
                 child_user_id=req.child_user_id,
@@ -60,6 +65,9 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
             locked = getattr(row, "_talent_locked", False)
             if locked:
                 lock_msg = assessment_service.TALENT_LOCK_MSG
+            if conflict and user:
+                db.refresh(user)
+                current_talent = (user.profile_json or {}).get("talent_primary") or current_talent
         return {
             "code": 1,
             "data": report,
@@ -67,6 +75,7 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
             "talent_conflict": conflict,
             "talent_locked": locked,
             "lock_message": lock_msg,
+            "current_talent": current_talent,
         }
     except Exception as e:
         raise HTTPException(502, str(e)) from e
@@ -90,7 +99,7 @@ async def save_assessment_endpoint(
             test_type=req.type,
             report=report,
         )
-        user = db.get(assessment_service.ChildUser, child_user_id)
+        user = db.get(ChildUser, child_user_id)
         current = (user.profile_json or {}).get("talent_primary", "") if user else ""
         return {
             "code": 1,
@@ -121,18 +130,37 @@ def latest_assessment(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
 ):
+    """最新测评；无 JNAO 记录时若有引导页自选天赋也返回 200"""
+    assessment_service.repair_onboarding_talent(db, child_user_id)
     row = assessment_service.get_latest_assessment(db, child_user_id)
-    if not row:
-        raise HTTPException(404, "尚未完成天赋测评")
-    return AssessmentOut(
-        id=row.id,
-        child_user_id=row.child_user_id,
-        talent_primary=row.talent_primary,
-        talent_tag=row.talent_tag,
-        talent_code=row.talent_code,
-        assessed_at=row.assessed_at.isoformat() if row.assessed_at else None,
-        jnao_record_id=row.jnao_record_id,
-    )
+    if row:
+        return AssessmentOut(
+            id=row.id,
+            child_user_id=row.child_user_id,
+            talent_primary=row.talent_primary,
+            talent_tag=row.talent_tag,
+            talent_code=row.talent_code,
+            assessed_at=row.assessed_at.isoformat() if row.assessed_at else None,
+            jnao_record_id=row.jnao_record_id,
+            talent_source="assessment",
+        )
+    eff = assessment_service.resolve_effective_talent(db, child_user_id)
+    if eff and eff.get("talent_code"):
+        user = db.get(ChildUser, child_user_id)
+        onboarding = {}
+        if user and isinstance(user.profile_json, dict):
+            onboarding = user.profile_json.get("onboarding") or {}
+        return AssessmentOut(
+            id=0,
+            child_user_id=child_user_id,
+            talent_primary=eff.get("talent_primary"),
+            talent_tag=eff.get("talent_tag"),
+            talent_code=eff.get("talent_code"),
+            assessed_at=onboarding.get("completed_at"),
+            jnao_record_id=None,
+            talent_source=eff.get("talent_source"),
+        )
+    raise HTTPException(404, "尚未完成天赋测评")
 
 
 @router.get("/assessment/{assessment_id}")

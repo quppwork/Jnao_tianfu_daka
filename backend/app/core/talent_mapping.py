@@ -10,6 +10,7 @@ TALENT_NAME_TO_CODE: dict[str, int] = {
 }
 
 TALENT_CODE_TO_TAG: dict[int, str] = {1: "学", 2: "思", 3: "行", 4: "德", 5: "赢"}
+TALENT_CODE_TO_NAME: dict[int, str] = {v: k for k, v in TALENT_NAME_TO_CODE.items()}
 TALENT_CODE_TO_COURSE: dict[int, int] = {1: 28, 2: 25, 3: 24, 4: 27, 5: 26}
 
 EXPECTED_COUNTS_BY_TAG = {"学": 9, "思": 8, "行": 8, "德": 8, "赢": 8}
@@ -58,3 +59,9 @@ def resolve_talent_tag(talent_code: int | None) -> str | None:
     if talent_code is None:
         return None
     return TALENT_CODE_TO_TAG.get(talent_code)
+
+
+def talent_primary_from_code(talent_code: int | None) -> str | None:
+    if talent_code is None:
+        return None
+    return TALENT_CODE_TO_NAME.get(int(talent_code))

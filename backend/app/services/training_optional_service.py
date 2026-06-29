@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload, Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan
-from app.services.assessment_service import effective_talent_code, get_latest_assessment
+from app.services.assessment_service import resolve_effective_talent
 from app.services.child_training_state import get_skill_position, get_training_progress
 from app.services.content_meta import content_display_title, estimate_duration_min, item_instruction, parse_item_meta
 from app.services.talent_content_pool import get_talent_content_pool
@@ -118,8 +118,8 @@ def get_optional_offers_for_child(
     child = db.get(ChildUser, child_user_id)
     if not child or not plan:
         return []
-    assessment = get_latest_assessment(db, child_user_id)
-    talent_primary = assessment.talent_primary if assessment else None
+    eff = resolve_effective_talent(db, child_user_id)
+    talent_primary = eff.get("talent_primary") if eff else None
     state = get_training_progress(child)
     main_key = state.get("main_line") or "A"
     line = (load_training_curriculum().get("main_lines") or {}).get(main_key) or {}
@@ -260,8 +260,10 @@ def accept_optional_training(
         plan = _get_plan_by_date(db, child_user_id, plan_date)
         return _plan_to_response(plan, db=db)
 
-    assessment = get_latest_assessment(db, child_user_id)
-    talent_code = effective_talent_code(assessment)
+    eff = resolve_effective_talent(db, child_user_id)
+    talent_code = eff.get("talent_code") if eff else None
+    if not talent_code:
+        raise TrainingError("请先完成天赋测评或选择天赋", 403)
     state = get_training_progress(child)
     next_slot = _max_training_slot(plan) + 1
 

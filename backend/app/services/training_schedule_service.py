@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload, Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
-from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
+from app.services.assessment_service import resolve_effective_talent
 from app.services.child_training_state import get_training_progress, main_line_index
 from app.services.content_meta import estimate_duration_min, item_instruction, parse_item_meta, content_display_title
 from app.services.talent_content_pool import (
@@ -30,6 +30,13 @@ from app.services.training_service import (
     create_plan_for_schedule,
 )
 from app.services.training_day import get_training_day, is_new_day_ready
+
+
+def _resolve_plan_date(db: Session, child_user_id: int, plan_date: date | None = None) -> date:
+    from app.services.dev_clock import resolve_training_now
+
+    now = resolve_training_now(db, child_user_id)
+    return plan_date or get_training_day(now)
 
 DEFAULT_DAILY_PLAN_MINUTES = 45
 
@@ -120,11 +127,12 @@ async def populate_plan_items(
     """按用户选定时长生成 plan_item（LLM 框架内路由 + 昨日未完成续推）"""
     ensure_supplementary_catalogs(db)
     plan_date = plan_date or plan.plan_date
-    assessment = get_latest_assessment(db, child_user_id)
-    if not has_valid_talent(assessment):
+    talent = resolve_effective_talent(db, child_user_id)
+    if not talent or not talent.get("talent_code"):
         raise TrainingError("请先完成天赋测评", 403)
 
-    talent_code = effective_talent_code(assessment)
+    talent_code = talent["talent_code"]
+    talent_primary = talent.get("talent_primary")
     child = db.get(ChildUser, child_user_id)
     state = get_training_progress(child) if child else {}
     plan.content_index = main_line_index(state.get("main_line") or "A")
@@ -145,7 +153,7 @@ async def populate_plan_items(
         planned_minutes,
         candidates,
         plan_date=plan_date,
-        assessment=assessment,
+        talent_primary=talent_primary,
     )
 
     carryover = ctx.get("carryover_items") or []
@@ -156,7 +164,7 @@ async def populate_plan_items(
         planned_minutes,
         content_index=plan.content_index,
         carryover=carryover,
-        talent_primary=assessment.talent_primary,
+        talent_primary=talent_primary,
     )
 
     cur = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum()
@@ -297,10 +305,13 @@ def ensure_today_plan_shell(
     plan_date: date | None = None,
 ) -> TrainingPlan:
     """仅创建当日空方案壳，不自动生成内容（等内容在选时长后生成）"""
-    if not is_new_day_ready():
+    from app.services.dev_clock import resolve_training_now
+
+    now = resolve_training_now(db, child_user_id)
+    if not is_new_day_ready(now):
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
 
-    plan_date = plan_date or get_training_day()
+    plan_date = _resolve_plan_date(db, child_user_id, plan_date)
     plan = create_plan_for_schedule(db, child_user_id, plan_date)
     if not plan:
         raise TrainingError("无法创建训练计划", 500)
@@ -318,7 +329,13 @@ async def schedule_training_by_duration(
     if planned_minutes < 5:
         raise TrainingError("训练时长至少 5 分钟")
 
-    plan_date = plan_date or get_training_day()
+    from app.services.dev_clock import resolve_training_now
+
+    now = resolve_training_now(db, child_user_id)
+    if not is_new_day_ready(now):
+        raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
+
+    plan_date = _resolve_plan_date(db, child_user_id, plan_date)
     plan = ensure_today_plan_shell(db, child_user_id, plan_date)
     if plan.status == "completed":
         raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)

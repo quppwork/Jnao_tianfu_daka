@@ -71,6 +71,8 @@ class TrainingTodayResponse(BaseModel):
     content_index: int
     main_line: str | None = None
     main_line_name: str | None = None
+    progress_main_line: str | None = None
+    progress_main_line_name: str | None = None
     planned_minutes: int | None = None
     media_exhausted: bool = False
     items: list[TrainingItemOut]
@@ -115,9 +117,41 @@ class CheckinRequest(BaseModel):
     cards: list[dict] | None = Field(None, max_length=20)
 
 
+class CheckinAdvanceDetail(BaseModel):
+    rule_key: str | None = None
+    skill: str | None = None
+    rule_type: str | None = None
+    met: bool = False
+    minutes: float | None = None
+    words: float | None = None
+    words_per_minute: float | None = None
+    required_wpm: float | None = None
+    grade_band: str | None = None
+    required_words: int | None = None
+    accuracy_pct: float | None = None
+    required_pct: float | None = None
+    message: str | None = None
+
+
+class CheckinTrainingProgress(BaseModel):
+    main_line: str | None = None
+    main_line_from: str | None = None
+    main_line_to: str | None = None
+    main_line_advanced: bool = False
+    advance_pending: bool = False
+    pending_main_line_to: str | None = None
+    advance_met: bool = False
+    advance_rule_key: str | None = None
+    advance_detail: CheckinAdvanceDetail | None = None
+    advance_message: str | None = None
+    skills_bumped: list[str] = Field(default_factory=list)
+    content_index: int | None = None
+
+
 class CheckinResponse(BaseModel):
     record_id: int
     plan_status: str
+    training_progress: CheckinTrainingProgress | None = None
 
 
 class CheckinUpdateRequest(BaseModel):
@@ -134,14 +168,28 @@ class CheckinRecordOut(BaseModel):
     id: int
     plan_id: int | None
     item_id: int | None
+    train_date: str | None = None
+    checkin_at: str | None = None
+    checkin_time: str | None = None
     ability_type: str | None
     time_spent: str | None = None
     content: str | None
     result: str | None = None
     note: str | None = None
     attitude_pct: int | None
+    phase_blocks: list[str] = Field(default_factory=list)
     cards: list[dict] = Field(default_factory=list)
     created_at: str | None = None
+
+
+class CheckinHistoryDayOut(BaseModel):
+    date: str
+    records: list[CheckinRecordOut]
+
+
+class CheckinHistoryResponse(BaseModel):
+    items: list[CheckinRecordOut]
+    days: list[CheckinHistoryDayOut] = Field(default_factory=list)
 
 
 class CheckinDeleteResponse(BaseModel):
@@ -169,6 +217,10 @@ class TrainingEntryResponse(BaseModel):
     talent_primary: str | None = None
     talent_tag: str | None = None
     talent_code: int | None = None
+    talent_source: str | None = None
+    talent_conflict: bool = False
+    pending_talent: dict | None = None
+    onboarding_completed: bool = False
     total_checkins: int = 0
     content_index: int = 0
     today_completed: bool = False
@@ -204,10 +256,11 @@ class WindowStatusResponse(BaseModel):
 
 
 class AssessmentOut(BaseModel):
-    id: int
+    id: int = 0
     child_user_id: int
     talent_primary: str | None
     talent_tag: str | None
     talent_code: int | None
     assessed_at: str | None
-    jnao_record_id: str | None
+    jnao_record_id: str | None = None
+    talent_source: str | None = None

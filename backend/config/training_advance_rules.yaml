@@ -1,7 +1,7 @@
 # 进阶判定 — 与 training_curriculum.yaml main_lines.advance_rule 对应
 
 grade_word_targets:
-  # 影像追忆 / 扫描速记：按年级段最低回忆/扫记字数（打卡 content 字段）
+  # 影像追忆 / 扫描速记：按年级段最低回忆/扫记字数（打卡 wordCount 或 content 字段）
   primary_low: 300
   primary_high: 500
   junior: 800

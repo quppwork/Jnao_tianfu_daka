@@ -24,6 +24,8 @@ def _default_state() -> dict:
         "main_line_sessions": 0,
         "training_days": 0,
         "training_day_anchor": None,
+        "pending_main_line_to": None,
+        "last_settled_plan_date": None,
     }
 
 
@@ -38,6 +40,8 @@ def get_training_progress(child: ChildUser) -> dict:
         "main_line_sessions": int(raw.get("main_line_sessions") or 0),
         "training_days": int(raw.get("training_days") or 0),
         "training_day_anchor": raw.get("training_day_anchor"),
+        "pending_main_line_to": raw.get("pending_main_line_to"),
+        "last_settled_plan_date": raw.get("last_settled_plan_date"),
     }
 
 
@@ -49,6 +53,8 @@ def save_training_progress(db: Session, child: ChildUser, state: dict) -> dict:
         "main_line_sessions": int(state.get("main_line_sessions") or 0),
         "training_days": int(state.get("training_days") or 0),
         "training_day_anchor": state.get("training_day_anchor"),
+        "pending_main_line_to": state.get("pending_main_line_to"),
+        "last_settled_plan_date": state.get("last_settled_plan_date"),
     }
     child.profile_json = pj
     db.flush()
@@ -87,6 +93,22 @@ def advance_main_line(state: dict) -> bool:
 
 def bump_main_line_session(state: dict) -> None:
     state["main_line_sessions"] = int(state.get("main_line_sessions") or 0) + 1
+
+
+def set_pending_main_line_advance(state: dict, to_line: str) -> None:
+    if to_line in MAIN_LINES:
+        state["pending_main_line_to"] = to_line
+
+
+def apply_pending_main_line_advance(state: dict) -> bool:
+    """新训练日生效：将昨日打卡达标的 pending 进阶写入 main_line"""
+    pending = state.get("pending_main_line_to")
+    if not pending or pending not in MAIN_LINES:
+        return False
+    state["main_line"] = pending
+    state["pending_main_line_to"] = None
+    state["main_line_sessions"] = 0
+    return True
 
 
 def training_day_number(state: dict) -> int:

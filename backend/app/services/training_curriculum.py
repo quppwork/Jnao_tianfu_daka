@@ -82,7 +82,24 @@ def _find_lesson(pool: list[ContentItem], skill: str, stage: int, part: int) -> 
     for item in pool:
         if _match_lesson(item, skill, stage, part):
             return item
-    return None
+    # 回退：同技能任意课（优先 stage/part 最小）
+    fallback: list[ContentItem] = []
+    for item in pool:
+        meta = _item_meta(item)
+        title = item.lesson_title or ""
+        if meta.get("skill") == skill or (skill in title and "阶段" in title):
+            fallback.append(item)
+    if not fallback:
+        return None
+    fallback.sort(
+        key=lambda x: (
+            _item_meta(x).get("stage") or 99,
+            _item_meta(x).get("part") or 99,
+            x.lesson_sort or 0,
+            x.id,
+        )
+    )
+    return fallback[0]
 
 
 def _pick_fixed_ids(pool: list[ContentItem], lessons: list[dict]) -> list[int]:

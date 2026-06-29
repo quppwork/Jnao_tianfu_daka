@@ -55,7 +55,8 @@ def update_profile(
     if not user:
         raise HTTPException(404, "用户不存在")
     # 若 profile_json 包含 onboarding 自选天赋，同步提升到 child_user 顶层字段
-    from app.services.assessment_service import sync_child_user_talent
+    from app.services.assessment_service import repair_onboarding_talent, sync_child_user_talent
+    repair_onboarding_talent(db, child_user_id)
     sync_child_user_talent(db, child_user_id)
     return user_service.profile_to_dict(user, db)
 

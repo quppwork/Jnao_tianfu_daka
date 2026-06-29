@@ -134,6 +134,7 @@ class TrainingRecord(Base):
     child_user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
     plan_id: Mapped[int | None] = mapped_column(Integer)
     item_id: Mapped[int | None] = mapped_column(Integer)
+    train_date: Mapped[date | None] = mapped_column(Date)
     ability_type: Mapped[str | None] = mapped_column(String(20))
     time_spent: Mapped[str | None] = mapped_column(String(50))
     content: Mapped[str | None] = mapped_column(Text)
