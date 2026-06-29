@@ -23,6 +23,7 @@ vue_fronted/.cert/
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # Logs
 logs/
