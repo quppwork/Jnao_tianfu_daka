@@ -324,11 +324,15 @@
               </view>
               <view class="form-row">
                 <text class="form-label">结果</text>
-                <view class="form-inline">
-                  <input class="form-input short" v-model="card.count" placeholder="题数" type="number" />
-                  <text class="form-unit">题</text>
-                  <input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" />
-                  <text class="form-unit">%</text>
+                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.count" placeholder="题数" type="number" />
+                    <text class="form-unit" style="width:24px;">题</text>
+                  </view>
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.accuracy" placeholder="正确率" type="number" />
+                    <text class="form-unit" style="width:24px;">%</text>
+                  </view>
                 </view>
               </view>
               <view class="form-row">
