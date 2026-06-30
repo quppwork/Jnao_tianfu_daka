@@ -348,9 +348,10 @@ export async function deleteTrainingCheckin(userId, recordId) {
   })
 }
 
-export async function fetchTrainingHistory(userId, limit = 30) {
-  const data = await apiJson(withUser(`/api/training/history?limit=${limit}`, userId))
-  return data.items || []
+export async function fetchTrainingHistory(userId, limit = 30, { excludeToday = false } = {}) {
+  const qs = `limit=${limit}&group_by_day=1${excludeToday ? '&exclude_today=1' : ''}`
+  const data = await apiJson(withUser(`/api/training/history?${qs}`, userId))
+  return { items: data.items || [], days: data.days || [] }
 }
 
 // ── 首页引导对话 ──
@@ -481,6 +482,10 @@ export async function fetchDevTrainingStatus(userId) {
 
 export async function devResetTodayTraining(userId) {
   return apiJson(withUser('/api/dev/training/reset-today', userId), { method: 'POST' })
+}
+
+export async function devResetTrainingProgress(userId) {
+  return apiJson(withUser('/api/dev/training/reset-progress', userId), { method: 'POST' })
 }
 
 export async function devResetAllTraining(userId) {

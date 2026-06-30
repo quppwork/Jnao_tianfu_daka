@@ -114,7 +114,7 @@ onShow(() => loadHistory(true))
   max-width: 480px;
   width: 100%;
   margin: 0 auto;
-  background: #0b111e;
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -126,7 +126,7 @@ onShow(() => loadHistory(true))
   display: flex;
   align-items: center;
   padding: 14px 14px 10px;
-  background: #0b111e;
+  background: var(--bg);
   box-sizing: border-box;
   width: 100%;
 }
@@ -134,8 +134,8 @@ onShow(() => loadHistory(true))
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(0, 210, 255, 0.08);
-  border: 1px solid rgba(0, 210, 255, 0.2);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -144,7 +144,7 @@ onShow(() => loadHistory(true))
 .nav-title {
   flex: 1;
   text-align: center;
-  color: #fff;
+  color: var(--text);
   font-size: 16px;
   font-weight: 600;
 }
@@ -153,15 +153,15 @@ onShow(() => loadHistory(true))
   height: 28px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .nav-refresh text {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--text-dim);
   font-size: 10px;
   font-weight: 700;
 }
@@ -182,15 +182,15 @@ onShow(() => loadHistory(true))
   display: block;
   font-size: 12px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--text-dim);
   margin: 8px 0 8px;
   padding-left: 2px;
 }
 .summary-card {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(0, 210, 255, 0.04);
-  border: 2px solid rgba(0, 210, 255, 0.15);
+  background: var(--bg-card);
+  border: 2px solid var(--border);
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 10px;
@@ -203,14 +203,15 @@ onShow(() => loadHistory(true))
   gap: 8px;
 }
 .summary-label {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-dim);
   font-size: 12px;
   font-weight: 500;
 }
 .summary-time {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-dim);
   font-size: 11px;
   flex-shrink: 0;
+  opacity: 0.7;
 }
 .summary-mini-cards {
   display: flex;
@@ -225,8 +226,8 @@ onShow(() => loadHistory(true))
   gap: 8px;
   width: 100%;
   box-sizing: border-box;
-  background: rgba(0, 210, 255, 0.04);
-  border: 1px solid rgba(0, 210, 255, 0.1);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 10px 10px 0;
   overflow: hidden;
@@ -239,8 +240,7 @@ onShow(() => loadHistory(true))
   height: 60%;
   min-height: 28px;
   border-radius: 0 2px 2px 0;
-  background: linear-gradient(180deg, #00d2ff, #0088cc);
-  box-shadow: 0 0 8px rgba(0, 210, 255, 0.4);
+  background: linear-gradient(180deg, var(--accent), #3b8bff);
   flex-shrink: 0;
   align-self: center;
 }
@@ -250,14 +250,14 @@ onShow(() => loadHistory(true))
   overflow: hidden;
 }
 .mini-card-name {
-  color: #fff;
+  color: var(--text);
   font-size: 12px;
   font-weight: 600;
   display: block;
   word-break: break-all;
 }
 .mini-card-summary {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--text-dim);
   font-size: 10px;
   display: block;
   margin-top: 2px;
@@ -265,23 +265,24 @@ onShow(() => loadHistory(true))
   word-break: break-all;
 }
 .mini-card-extra {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-dim);
   font-size: 10px;
   display: block;
   margin-top: 2px;
   line-height: 1.4;
   word-break: break-all;
+  opacity: 0.8;
 }
 .summary-attitude {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(0, 210, 255, 0.1);
+  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .sa-label {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-dim);
   font-size: 10px;
   font-weight: 500;
 }
@@ -291,11 +292,11 @@ onShow(() => loadHistory(true))
   gap: 6px;
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid #00d2ff;
-  background: rgba(0, 136, 204, 0.2);
+  border: 1px solid var(--accent);
+  background: var(--accent-bg);
 }
 .sa-pct {
-  color: #00d2ff;
+  color: var(--accent);
   font-size: 11px;
   font-weight: 700;
 }
@@ -305,7 +306,7 @@ onShow(() => loadHistory(true))
 .state-box {
   text-align: center;
   padding: 48px 16px;
-  color: #6b7280;
+  color: var(--text-dim);
   font-size: 14px;
   box-sizing: border-box;
 }
@@ -314,14 +315,14 @@ onShow(() => loadHistory(true))
 }
 .empty-title {
   display: block;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--text);
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 10px;
 }
 .empty-hint {
   display: block;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-dim);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -330,11 +331,17 @@ onShow(() => loadHistory(true))
   display: inline-flex;
   padding: 8px 20px;
   border-radius: 999px;
-  background: rgba(0, 210, 255, 0.15);
-  border: 1px solid rgba(0, 210, 255, 0.35);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
 }
 .retry-btn text {
-  color: #00d2ff;
+  color: var(--accent);
   font-size: 13px;
+}
+
+/* ── 白色主题覆盖 ── */
+[data-theme="white"] .mini-card-v1 .mini-card-accent {
+  background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  box-shadow: none;
 }
 </style>

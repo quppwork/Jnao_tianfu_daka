@@ -1,7 +1,8 @@
 # 前端-后端 API 文档
 
-> 最后更新：2026-06-29
+> 最后更新：2026-06-30
 > 按前端页面编排，请求/响应格式 + 后端业务逻辑
+> **API 覆盖率：45/45 前端调用有对应后端端点，零缺口**
 
 ---
 
@@ -511,3 +512,65 @@ onboarding:
 ```
 
 **后端只管存 JSON blob**，不解析 `prior_training_data` 内部字段。唯一提取的是 `self_reported_talent_code` 用于同步到 `child_user` 顶层。
+
+---
+
+## 附录：完整 API 对照表
+
+> 2026-06-30 全量扫描：前端 45 个 API 调用 ↔ 后端 45 个端点，零缺口。
+
+### 前端 userApi.js → 后端 对照
+
+| 前端函数 | 方法 | 路径 | 状态 |
+|----------|------|------|:--:|
+| `loginUser` | POST | `/api/auth/login` | ✅ |
+| `registerChild` | POST | `/api/auth/register` | ✅ |
+| `fetchProfile` | GET | `/api/user/profile` | ✅ |
+| `saveProfile` | PUT | `/api/user/profile` | ✅ |
+| `updateLearnerProfile` | PUT | `/api/user/learner-profile` | ✅ |
+| `submitTalentReport` | POST | `/api/talent/report` | ✅ |
+| `fetchLatestAssessment` | GET | `/api/talent/assessment/latest` | ✅ |
+| `fetchAssessmentHistory` | GET | `/api/talent/assessment/history` | ✅ |
+| `fetchAssessmentReport` | GET | `/api/talent/assessment/{id}` | ✅ |
+| `deleteAssessmentReport` | DELETE | `/api/talent/assessment/{id}` | ✅ |
+| `resolveTalentConflict` | POST | `/api/user/talent/resolve-conflict` | ✅ |
+| `fetchTrainingEntry` | GET | `/api/training/entry` | ✅ |
+| `fetchTrainingToday` | GET | `/api/training/today` | ✅ |
+| `scheduleTrainingPlan` | POST | `/api/training/schedule` | ✅ |
+| `submitTrainingCheckin` | POST | `/api/training/checkin` | ✅ |
+| `fetchTodayCheckins` | GET | `/api/training/checkin/today` | ✅ |
+| `updateTrainingCheckin` | PUT | `/api/training/checkin/{id}` | ✅ |
+| `deleteTrainingCheckin` | DELETE | `/api/training/checkin/{id}` | ✅ |
+| `fetchTrainingHistory` | GET | `/api/training/history` | ✅ |
+| `fetchTrainingProgress` | GET | `/api/training/progress` | ✅ |
+| `refreshTrainingReport` | GET | `/api/training/report/today` | ✅ |
+| `fetchTalentTrainingVideo` | GET | `/api/training/video/talent` | ✅ |
+| `postTrainingWatchProgress` | POST | `/api/training/items/{id}/watch-progress` | ✅ |
+| `sendGuideMessage` | POST | `/api/guide/chat` | ✅ |
+| `fetchGuideSession` | GET | `/api/guide/session` | ✅ |
+| `clearGuideSession` | POST | `/api/guide/clear` | ✅ |
+| `sendQaMessage` | POST | `/api/qa/chat` | ✅ |
+| `fetchQaSessions` | GET | `/api/qa/sessions` | ✅ |
+| `createQaSession` | POST | `/api/qa/sessions` | ✅ |
+| `deleteQaSession` | DELETE | `/api/qa/sessions/{id}` | ✅ |
+| `fetchQaSession` | GET | `/api/qa/sessions/{id}` | ✅ |
+| `uploadQaImage` | POST | `/api/qa/upload-image` | ✅ |
+| `fetchGrowthBadges` | GET | `/api/growth/badges` | ✅ |
+| `fetchGrowthTimeline` | GET | `/api/growth/timeline` | ✅ |
+| `fetchGrowthSummary` | GET | `/api/growth/summary` | ✅ |
+| `fetchGrowthMilestones` | GET | `/api/growth/milestones` | ✅ |
+| `fetchGrowthShare` | GET | `/api/growth/share` | ✅ |
+| `transcribeVoice` | POST | `/api/voice/asr` | ✅ |
+| `fetchDevTrainingStatus` | GET | `/api/dev/training/status` | ✅ |
+| `devResetTodayTraining` | POST | `/api/dev/training/reset-today` | ✅ |
+| `devResetTrainingProgress` | POST | `/api/dev/training/reset-progress` | ✅ |
+| `devResetAllTraining` | POST | `/api/dev/training/reset-all` | ✅ |
+| `devSimulateNextDay` | POST | `/api/dev/training/next-day` | ✅ |
+| `devSimulate4amCutoff` | POST | `/api/dev/training/simulate-4am-cutoff` | ✅ |
+| `devResetTalent` | POST | `/api/dev/training/reset-talent` | ✅ |
+
+### 后端有但前端 userApi.js 未直接调用的端点
+
+以下端点存在但在组件中内联调用或暂未使用，**不是缺口**：
+
+`GET /api/training/checkin/{id}` `POST /api/training/schedule/optional` `POST /api/training/window` `GET /api/training/window` `GET /api/training/window/status` `POST /api/training/plan/media-exhausted` `GET /api/training/report/{date}` `POST /api/talent/jnao/submit` `GET /api/talent/jnao/report/{id}` `POST /api/talent/assessment` `POST /api/chat` `GET /api/chat/stream` `POST /api/voice/tts` `GET /api/resources/oss/list` `GET /api/resources/list` `GET /api/resources/{id}` `GET /api/guide/debug` `GET /api/health`

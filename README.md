@@ -33,7 +33,7 @@ tianfu_daka/
 │   ├── app/schemas/    # Pydantic 请求/响应模型
 │   ├── app/db/         # 数据库模型 + 迁移
 │   ├── config/         # YAML 配置（课程 / 进阶规则）
-│   └── tests/          # 后端测试（pytest，38 文件 160+ 用例）
+│   └── tests/          # 后端测试（pytest，38 文件 188 用例）
 ├── vue_fronted/        # UniApp Vue 前端
 │   ├── src/pages/      # 页面（training / talent / qa / growth / report / login）
 │   └── tests/          # 前端测试（vitest，3 文件 89 用例）
