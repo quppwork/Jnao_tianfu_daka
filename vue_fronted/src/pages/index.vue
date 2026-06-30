@@ -221,10 +221,13 @@ async function sendMsg() {
 function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   if (data.nickname && data.nickname !== '学员') profile.value.name = data.nickname
   if (data.parent_phone) profile.value.phone = data.parent_phone
+  if (data.parent_name) profile.value.parentName = data.parent_name
   let hasTalent = false
   if (data.profile_json) {
     if (data.profile_json.grade) profile.value.grade = data.profile_json.grade
-    if (data.profile_json.parentName) profile.value.parentName = data.profile_json.parentName
+    if (!data.parent_name && data.profile_json.parentName) {
+      profile.value.parentName = data.profile_json.parentName
+    }
     const td = data.profile_json.talent_display
     const tp = data.profile_json.talent_primary || data.profile_json.talent
     const obName = data.profile_json.onboarding?.self_reported_talent

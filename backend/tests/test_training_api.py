@@ -295,6 +295,32 @@ class TestTrainingWindow:
         assert res.status_code == 200
         assert "in_window" in res.json()
 
+    def test_delete_window(self, client, child_with_assessment):
+        uid = child_with_assessment
+        client.post(
+            f"/api/training/window?user_id={uid}",
+            json={"start_time": "09:00", "end_time": "21:00"},
+        )
+        deleted = client.delete(f"/api/training/window?user_id={uid}")
+        assert deleted.status_code == 200
+        assert deleted.json()["deleted"] is True
+        missing = client.get(f"/api/training/window?user_id={uid}")
+        assert missing.status_code == 404
+
+    def test_today_includes_timer_fields(self, client, child_with_assessment):
+        uid = child_with_assessment
+        client.post(
+            f"/api/training/window?user_id={uid}",
+            json={"start_time": "09:00", "end_time": "10:00"},
+        )
+        today = client.get(f"/api/training/today?user_id={uid}").json()
+        assert today["timer_phase"] in ("running", "expired", "setup")
+        assert "timer_remaining_seconds" in today
+        client.delete(f"/api/training/window?user_id={uid}")
+        cleared = client.get(f"/api/training/today?user_id={uid}").json()
+        assert cleared["timer_phase"] == "setup"
+        assert cleared["timer_remaining_seconds"] is None
+
 
 class TestTalentAssessment:
     def test_latest_assessment(self, client, child_with_assessment):

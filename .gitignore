@@ -31,6 +31,8 @@ vue_fronted/.cert/
 # Logs
 logs/
 backups/
+debug-*.log
+.cursor/debug-*.log
 
 # Build output
 dist/

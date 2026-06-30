@@ -201,6 +201,7 @@ import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 
 // ── State ──
 const fromOnboarding = ref(false)
+const studentTypeFromOnboarding = ref('new')
 const phase = ref('door')
 const testType = ref(null)
 const ageGateNotice = ref(false)
@@ -490,6 +491,9 @@ async function doSubmitReport() {
     if (json.talent_locked) {
       url += `&talent_locked=1&lock_message=${encodeURIComponent(json.lock_message || '')}`
     }
+    if (fromOnboarding.value) {
+      url += `&from=onboarding&student_type=${encodeURIComponent(studentTypeFromOnboarding.value || 'new')}`
+    }
     clearTalentState()
     await refreshTalentState(childUserId)
     uni.navigateTo({ url })
@@ -528,6 +532,7 @@ function goBack() {
 
 onLoad((opts) => {
   fromOnboarding.value = opts?.from === 'onboarding'
+  studentTypeFromOnboarding.value = opts?.student_type || 'new'
 })
 
 // Watch for question change → restart countdown

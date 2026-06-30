@@ -1,5 +1,6 @@
 """用户资料"""
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser
@@ -69,6 +70,29 @@ def merge_learner_profile(db: Session, child_user_id: int, patch: dict) -> Child
     return user
 
 
+def resolve_parent_name_for_child(db: Session, child: ChildUser) -> str | None:
+    """从绑定关系或家长手机号解析家长昵称"""
+    from app.db.models import ParentChildBind
+    from app.services import auth_service
+
+    if child.role == auth_service.ROLE_PARENT:
+        return child.nickname
+
+    bind = db.scalar(
+        select(ParentChildBind)
+        .where(ParentChildBind.child_id == child.id)
+        .order_by(ParentChildBind.id.desc())
+        .limit(1)
+    )
+    if bind:
+        parent = db.get(ChildUser, bind.parent_id)
+        if parent and parent.role == auth_service.ROLE_PARENT:
+            return parent.nickname
+
+    parent = auth_service.find_parent_by_phone(db, child.parent_phone)
+    return parent.nickname if parent else None
+
+
 def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
     data = {
         "child_user_id": user.id,
@@ -82,4 +106,14 @@ def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
     }
     if db is not None:
         enrich_profile_talent_fields(db, user.id, data)
+        from app.services import auth_service
+
+        if (user.role or auth_service.ROLE_STUDENT) == auth_service.ROLE_STUDENT:
+            parent_name = resolve_parent_name_for_child(db, user)
+            if parent_name:
+                data["parent_name"] = parent_name
+                pj = dict(data["profile_json"])
+                if not pj.get("parentName"):
+                    pj["parentName"] = parent_name
+                    data["profile_json"] = pj
     return data

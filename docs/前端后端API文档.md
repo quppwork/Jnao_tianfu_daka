@@ -2,7 +2,7 @@
 
 > 最后更新：2026-06-30
 > 按前端页面编排，请求/响应格式 + 后端业务逻辑
-> **API 覆盖率：45/45 前端调用有对应后端端点，零缺口**
+> **API 覆盖率：45/45 前端核心调用有对应后端端点 + 家长端 8 个新端点**
 
 ---
 
@@ -41,11 +41,15 @@
 ### 流程图
 
 ```
-新学员: Step1 选类型 → Step2 选天赋(可"不知道") → 确认 → 跳天赋测试 或 首页
-老学员: Step1 选类型 → Step3 选天赋(必选五者) → 确认(立即保存)
-                     → Step4 填全局数据+选项目 → Step5+ 逐项详情
-                     → Step100 完成 → 保存完整数据 → 首页
+孩子登录 → 未完成 onboarding？→ 完善信息页
+  Step1 选新/老学员
+  Step2 开始天赋测试（新/老统一，不再自选五者）
+    → 天赋测试页 → 报告页
+    → 新学员：报告后进入首页（onboarding 完成）
+    → 老学员：报告后回到 Step4 补录训练历史 → Step100 → 首页
 ```
+
+**说明**：孩子账号由家长分配，注册环节不再进入 onboarding；信息填写在**首次登录后**进行。
 
 ### API 列表
 
@@ -145,9 +149,10 @@ PUT /api/user/profile
 | 字段 | 类型 | 步骤 | 校验规则 |
 |------|------|------|----------|
 | `student_type` | string | Step 1 | `"new"` / `"returning"` |
-| `self_reported_talent` | string | Step 3 | 五者之一；**老学员不可为 "unknown"**（前端拦截 + 后端 `talent_unknown:false`） |
-| `self_reported_talent_code` | int | Step 3 | TALENT_CODE_MAP 编码（学者=1, 思者=2, 行者=3, 德者=4, 赢者=5） |
-| `talent_unknown` | bool | Step 3 | 新学员可选 true（跳天赋测试）；老学员恒为 false |
+| `self_reported_talent` | string | Step 2（已废弃自选） | 现统一走天赋测评，不再自选五者 |
+| `self_reported_talent_code` | int | — | 由测评结果写入 `child_user.talent_code` |
+| `talent_unknown` | bool | Step 2 | 恒为 true（待测评） |
+| `talent_test_done` | bool | 测评后 | 天赋测试已完成 |
 | `first_training_date` | string\|null | Step 4 | 全局初次训练日期（年月选择器，如 "2025年3月"），可空 |
 | `total_training_sessions` | int\|null | Step 4 | 全局训练总次数（纯数字，`parseInt` 转换），可空 |
 | `prior_abilities` | string[] | Step 4 | 做过的训练项目名（12 选多） |
@@ -164,15 +169,17 @@ PUT /api/user/profile
 | `note` | string | 备注，自由文本 |
 
 **前端校验规则**:
-- Step 3 老学员：`!selectedTalent \|\| selectedTalent === 'unknown'` → toast "请选择一个天赋"，阻止继续
+- Step 2：点击「开始天赋测试」进入测评（新/老学员相同）
 - Step 4：至少选 1 个训练项目，否则 toast "请至少选择一项"
 - Step 5+：所有字段选填，可跳过，可留空
 
 **保存时机**:
 | 时机 | 触发函数 | 保存内容 |
 |------|----------|----------|
-| 老学员 Step 3 确认天赋 | `confirmReturningTalent()` → `persistOnboarding()` | 天赋信息（talent + talent_code + talent_unknown） |
-| Step 100 "开始训练" | `goHome()` → `persistOnboarding()` | 完整 JSON（含全局数据 + 项目列表 + 逐项详情） |
+| Step 2 进入天赋测试前 | `startTalentTest()` → `persistOnboarding()` | 学员类型 + `talent_unknown:true` |
+| 天赋报告返回（新学员） | `report/goBack` | `talent_test_done` + `completed_at` |
+| 天赋报告返回（老学员） | `report/goBack` | `talent_test_done`，跳转 resume Step 4 |
+| Step 100 "开始训练" | `goHome()` → `persistOnboarding({finalize})` | 完整 JSON（老学员含训练历史） |
 
 **后端工作**:
 1. `user_service.update_profile()` → 写入 `child_user.profile_json` 字段（JSON blob，不解析内部结构）
@@ -476,118 +483,131 @@ GET  /api/dev/oss/list                   # OSS 音频列表
 
 ---
 
-## 家长端 🚧
+## 家长端
 
-> **前端已完成，零后端依赖。** 当前所有逻辑走 localStorage，后端密码系统就绪后切换。
+> **已实现**：家长手机号+密码注册/登录；家长中心分配孩子账号；孩子账号+密码登录。短信验证等待后续接入。
 
-### 前端页面清单
+### 架构概览
 
-| 页面 | 文件 | 状态 |
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        child_user 统一用户表                  │
+├──────────────┬──────────────────────────────────────────────┤
+│ role=parent  │ parent_phone(唯一) + password_hash + nickname │
+│              │ child_quota — 可分配孩子名额（默认 5，可运营调整）│
+├──────────────┼──────────────────────────────────────────────┤
+│ role=student │ login_name(唯一) + password_hash + nickname   │
+│              │ parent_phone — 冗余家长手机号，便于旧逻辑兼容    │
+└──────────────┴──────────────────────────────────────────────┘
+                              │
+                    parent_child_bind
+                    (parent_id ↔ child_id)
+```
+
+**登录方式**：
+
+| 角色 | 方式 | 请求体 |
+|------|------|--------|
+| 家长 | 手机号 + 密码 | `{ parent_phone, password, role: "parent" }` |
+| 孩子 | 账号 + 密码 | `{ login_name, password }` |
+| 孩子（旧） | 手机号 + 昵称 | `{ parent_phone, nickname }` — 兼容无密码历史用户 |
+
+**流程**：
+
+```
+家长注册(register-parent) → POST /api/auth/register role=parent
+  → 家长中心 /pages/parent/index
+  → 添加孩子 POST /api/parent/children { login_name, nickname, password }
+  → 孩子登录 login/index 选「学生」+ 账号密码 → 学生首页
+```
+
+### 前端页面
+
+| 页面 | 文件 | 后端 |
 |------|------|:--:|
-| 登录页（含角色+模式切换） | `login/index.vue` | ✅ |
-| 学生注册页（含密码框） | `login/register.vue` | ✅ |
-| 家长注册页 | `login/register-parent.vue` | ✅ |
-| 家长首页 | `parent/index.vue` | ✅ |
+| 登录（角色+密码/旧手机号） | `login/index.vue` | ✅ |
+| 孩子账号说明 | `login/register.vue` | — |
+| 家长注册 | `login/register-parent.vue` | ✅ |
+| 家长中心（孩子管理） | `parent/index.vue` | ✅ |
 
-### 前端流程
+### 数据存储
 
-```
-登录页
-├── 默认模式：📱 手机号登录（当前学生闭环，调后端）
-├── 切换模式：🔒 密码登录（纯前端，等后端）
-├── 角色切换：学生 / 家长
-├── 选"学生" → 显示「注册孩子账户」→ /pages/login/register
-└── 选"家长" → 显示「注册家长账户」→ /pages/login/register-parent
-
-注册孩子账户（register.vue）
-├── 昵称 + 手机号 + 密码(选填) + 确认密码(选填)
-├── 调 POST /api/auth/register（密码暂不发送）
-└── 跳转 onboarding
-
-注册家长账户（register-parent.vue）
-├── 昵称 + 手机号 + 密码(≥6位) + 确认密码
-├── 当前纯前端写 localStorage
-└── 跳转 /pages/parent/index
-
-家长首页（parent/index.vue）
-├── 家长头像 + "已绑定 N 个孩子"
-├── 孩子卡片列表（当前模拟数据）
-├── 主题切换（暗黑/白色）
-└── 设置 → 退出登录（清 localStorage → 回登录页）
-```
-
----
-
-### 🔐 密码系统（待后端实现）
-
-**目标**：学生和家长均可通过 昵称+密码 登录，替代当前手机号查找模式。
-
-#### 数据库改动
+迁移脚本：`backend/migrations/009_parent_auth.sql`（`migrate.py` 幂等补丁）
 
 ```sql
--- child_user 表加字段
-ALTER TABLE child_user ADD COLUMN password_hash VARCHAR(128);
-ALTER TABLE child_user ADD COLUMN role VARCHAR(10) DEFAULT 'student';
--- role 取值: 'student' | 'parent'
+-- child_user 扩展
+password_hash   VARCHAR(128)   -- bcrypt
+role            VARCHAR(10)    -- student | parent
+login_name      VARCHAR(50)    -- 孩子登录账号，全局唯一
+child_quota     INT            -- 仅家长：可分配名额，NULL=默认 5
 
--- 家长-孩子绑定表
-CREATE TABLE parent_child_bind (
-    id          SERIAL PRIMARY KEY,
-    parent_id   INT NOT NULL REFERENCES child_user(id),
-    child_id    INT NOT NULL REFERENCES child_user(id),
-    created_at  DATETIME DEFAULT NOW(),
-    UNIQUE(parent_id, child_id)
-);
+-- 家长-孩子多对多绑定（当前业务为一对多）
+parent_child_bind (parent_id, child_id, created_at)
 ```
 
-#### 接口改动
+### 认证 API
 
-**1. 注册接口（扩展已有 `POST /api/auth/register`）**
+#### 注册 `POST /api/auth/register`
 
-| 参数 | 类型 | 变动 |
+| 参数 | 类型 | 说明 |
 |------|------|------|
-| parent_phone | string | 保持 |
-| nickname | string | 保持 |
-| password | string | 🆕 密码，≥6位，后端 bcrypt 哈希存入 `password_hash` |
-| role | string | 🆕 `student` / `parent`，默认 `student` |
+| parent_phone | string | 家长手机号 |
+| nickname | string | 昵称/姓名 |
+| password | string | ≥6 位；家长必填 |
+| role | string | `parent` / `student`（默认 student） |
+| login_name | string | 可选，学生自助注册时 |
 
-**2. 登录接口（扩展已有 `POST /api/auth/login`）**
+**家长响应**：`{ child_user_id, parent_phone, nickname, role: "parent" }`
 
-新增支持密码登录：
-```json
-// 现有：手机号登录
-{ "parent_phone": "139...", "nickname": "小明" }
+#### 登录 `POST /api/auth/login`
 
-// 新增：密码登录
-{ "nickname": "小明", "password": "123456" }
-```
+见上表三种方式。响应增加 `role`、`login_name` 字段。
 
-后端逻辑：
-1. 收到 `password` 字段 → 按昵称查用户 → bcrypt 验证 `password_hash`
-2. 收到 `parent_phone` 字段 → 现有逻辑不变
-3. 返回增加 `role` 字段：`{ child_user_id, nickname, role, ... }`
-
-**3. 家长接口（新增）**
+### 家长 API
 
 ```
-GET  /api/parent/children?user_id={uid}
-→ { children: [{ id, nickname, talent, training_days, checkins, grade }] }
+GET  /api/parent/quota?user_id={parent_id}
+→ { limit, used, remaining, can_add }    # 名额查询（预留运营调价入口）
 
-POST /api/parent/bind
-← { child_phone, child_nickname }
-→ { child_id, nickname }
+GET  /api/parent/children?user_id={parent_id}
+→ { children: [{ id, login_name, nickname, talent, training_days, checkins, grade }] }
 
-DELETE /api/parent/children/{child_id}?user_id={uid}
+POST /api/parent/children?user_id={parent_id}
+← { login_name, nickname, password }
+→ 新建孩子并自动绑定
+
+PUT  /api/parent/children/{child_id}?user_id={parent_id}
+← { nickname?, password? }
+
+DELETE /api/parent/children/{child_id}?user_id={parent_id}
+→ 解除绑定（不删孩子训练数据）
+
+GET  /api/parent/children/{child_id}/summary?user_id={parent_id}   # 预留
+→ { id, login_name, nickname, talent, training_days, checkins, grade, school_stage }
 ```
 
-#### 前端切换计划
+### 预留能力
 
-| 当前 | 后端就绪后 |
-|------|-----------|
-| 密码登录 → localStorage | → `POST /api/auth/login` + password |
-| 家长注册 → localStorage | → `POST /api/auth/register` + password + role |
-| 家长首页 → 模拟数据 | → `GET /api/parent/children` |
-| 登录页切换钮 | → 去掉，统一用密码登录 |
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| 短信验证码注册/登录 | 待接入 | 前端可增验证码输入框，后端增 `/api/auth/sms/send` + 校验 |
+| 孩子名额条件发放 | 接口已留 | `child_quota` 字段 + `GET /api/parent/quota`；运营后台可改 quota |
+| 家长查看孩子详情 | 接口已留 | `GET .../summary`，可扩展最近训练、测评摘要 |
+| JWT / Session | 待接入 | 当前仍 `user_id` Query 鉴权，与全站一致 |
+
+### 前端 API（userApi.js）
+
+| 函数 | 路径 |
+|------|------|
+| `registerParent` | POST `/api/auth/register` |
+| `loginParent` | POST `/api/auth/login` |
+| `loginStudent` | POST `/api/auth/login` |
+| `fetchParentChildren` | GET `/api/parent/children` |
+| `fetchParentQuota` | GET `/api/parent/quota` |
+| `createParentChild` | POST `/api/parent/children` |
+| `updateParentChild` | PUT `/api/parent/children/{id}` |
+| `deleteParentChild` | DELETE `/api/parent/children/{id}` |
+| `fetchChildSummary` | GET `/api/parent/children/{id}/summary` |
 
 ---
 
@@ -595,13 +615,18 @@ DELETE /api/parent/children/{child_id}?user_id={uid}
 
 ```
 Step 1  选"老学员"         → 前端本地
-Step 3  选天赋 → 确认      → PUT /api/user/profile  立即保存天赋
-                              sync_child_user_talent() → child_user.talent_code 写入
+Step 2  开始天赋测试        → 天赋测试 → 报告 → 回到 Step 4
 Step 4  全局数据+选项目     → 纯前端本地
 Step 5+ 逐项填详情          → 纯前端本地
 Step 100 "开始训练"         → PUT /api/user/profile  保存完整 JSON blob
                               redirect → 首页 → GET /api/training/entry
-                              → GET /api/training/today → 排课引擎运行
+```
+
+## 新学员全链路
+
+```
+Step 1  选"新学员"
+Step 2  开始天赋测试 → 报告 → 首页（onboarding 完成）
 ```
 
 ### onboarding JSON schema（给后端看）

@@ -89,3 +89,64 @@ def apply_schema_patches(engine: Engine) -> None:
                         """
                     )
                 )
+
+    _apply_parent_auth_patches(engine)
+
+
+def _apply_parent_auth_patches(engine: Engine) -> None:
+    """家长/孩子账号：列 + parent_child_bind 表"""
+    dialect = engine.dialect.name
+    child_cols = _column_names(engine, "child_user")
+
+    col_ddls: list[tuple[str, str]] = [
+        ("password_hash", "ALTER TABLE child_user ADD COLUMN password_hash VARCHAR(128)"),
+        ("role", "ALTER TABLE child_user ADD COLUMN role VARCHAR(10) DEFAULT 'student'"),
+        ("login_name", "ALTER TABLE child_user ADD COLUMN login_name VARCHAR(50)"),
+        ("child_quota", "ALTER TABLE child_user ADD COLUMN child_quota INTEGER"),
+    ]
+    for column, ddl in col_ddls:
+        if column in child_cols:
+            continue
+        stmt = ddl
+        if dialect == "mysql" and "JSON" not in ddl:
+            stmt = ddl.replace(" INTEGER", " INT NULL")
+        with engine.begin() as conn:
+            conn.execute(text(stmt))
+
+    insp = inspect(engine)
+    if "parent_child_bind" not in insp.get_table_names():
+        if dialect == "mysql":
+            ddl = """
+                CREATE TABLE parent_child_bind (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    parent_id INT NOT NULL,
+                    child_id INT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_parent_child (parent_id, child_id),
+                    FOREIGN KEY (parent_id) REFERENCES child_user(id),
+                    FOREIGN KEY (child_id) REFERENCES child_user(id)
+                )
+            """
+        else:
+            ddl = """
+                CREATE TABLE parent_child_bind (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    parent_id INTEGER NOT NULL,
+                    child_id INTEGER NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (parent_id, child_id),
+                    FOREIGN KEY (parent_id) REFERENCES child_user(id),
+                    FOREIGN KEY (child_id) REFERENCES child_user(id)
+                )
+            """
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+
+    if dialect == "sqlite":
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uk_child_user_login_name "
+                    "ON child_user(login_name) WHERE login_name IS NOT NULL"
+                )
+            )

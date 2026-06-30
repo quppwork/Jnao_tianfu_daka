@@ -42,28 +42,40 @@
 
 <script setup>
 import { ref } from 'vue'
+import { registerParent } from '@/utils/userApi.js'
 
 const form = ref({ name: '', phone: '', password: '', confirm: '' })
 const submitting = ref(false)
 
-function doRegister() {
+async function doRegister() {
   if (!form.value.name.trim()) { uni.showToast({ title: '请输入昵称', icon: 'none' }); return }
   if (!form.value.phone.trim() || form.value.phone.trim().length < 11) { uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return }
   if (!form.value.password.trim() || form.value.password.trim().length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
   if (form.value.password.trim() !== form.value.confirm.trim()) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
 
   submitting.value = true
-  // TODO: 后端密码系统就绪后，调用 POST /api/auth/register 并传入 password 和 role
-  // const data = await registerParent(form.value.phone.trim(), form.value.name.trim(), form.value.password.trim())
-
-  // 纯前端：写 localStorage 即完成
-  localStorage.setItem('jnao_user', JSON.stringify({
-    name: form.value.name.trim(), phone: form.value.phone.trim(),
-    role: 'parent', loginTime: new Date().toISOString()
-  }))
-  localStorage.setItem('jnao_logged_in', '1')
-  uni.showToast({ title: '注册成功！欢迎，' + form.value.name.trim(), icon: 'none' })
-  setTimeout(() => { uni.redirectTo({ url: '/pages/parent/index' }) }, 600)
+  try {
+    const data = await registerParent(
+      form.value.phone.trim(),
+      form.value.name.trim(),
+      form.value.password.trim(),
+    )
+    localStorage.setItem('jnao_user', JSON.stringify({
+      id: data.child_user_id,
+      name: data.nickname,
+      phone: data.parent_phone,
+      role: 'parent',
+      loginTime: new Date().toISOString(),
+    }))
+    localStorage.setItem('jnao_logged_in', '1')
+    uni.showToast({ title: '注册成功！欢迎，' + data.nickname, icon: 'none' })
+    setTimeout(() => { uni.redirectTo({ url: '/pages/parent/index' }) }, 600)
+  } catch (e) {
+    submitting.value = false
+    if (e.status === 409) uni.showToast({ title: '该手机号已注册', icon: 'none' })
+    else if (!e.status) uni.showToast({ title: '无法连接服务器，请确认后端已启动', icon: 'none', duration: 2500 })
+    else uni.showToast({ title: e.message || '注册失败，请稍后重试', icon: 'none' })
+  }
 }
 
 function goBack() {
@@ -79,7 +91,6 @@ function goBack() {
 .logo-nao { color:var(--text); font-size:34px; font-weight:700; }
 .logo-ai { color:var(--text); font-size:34px; font-weight:300; }
 .subtitle { color:var(--text-dim); font-size:13px; text-align:center; display:block; margin-bottom:28px; letter-spacing:0.06em; }
-.form { }
 .input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:14px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); }
 .input-wrap:focus-within { border-color:#a78bfa; }
 .input-icon { font-size:16px; margin-right:10px; }

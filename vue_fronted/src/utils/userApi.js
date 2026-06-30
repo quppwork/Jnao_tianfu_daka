@@ -78,7 +78,7 @@ function getOrCreateGuestPhone() {
   }
 }
 
-/** 登录：验证手机+昵称，不存在则报错 */
+/** 登录：验证手机+昵称，不存在则报错（兼容旧流程） */
 export async function loginUser(phone, nickname) {
   const data = await apiJson('/api/auth/login', {
     method: 'POST',
@@ -89,15 +89,109 @@ export async function loginUser(phone, nickname) {
   return data
 }
 
-/** 注册：用手机+昵称创建新用户 */
-export async function registerChild(phone, nickname) {
-  const data = await apiJson('/api/auth/register', {
+/** 家长登录：手机号 + 密码 */
+export async function loginParent(phone, password) {
+  const data = await apiJson('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parent_phone: phone, nickname }),
+    body: JSON.stringify({ parent_phone: phone, password, role: 'parent' }),
   })
   setChildUserId(data.child_user_id)
   return data
+}
+
+/** 孩子登录：账号 + 密码 */
+export async function loginStudent(loginName, password) {
+  const data = await apiJson('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login_name: loginName, password }),
+  })
+  setChildUserId(data.child_user_id)
+  return data
+}
+
+/** 注册家长账户 */
+export async function registerParent(phone, nickname, password) {
+  const data = await apiJson('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      parent_phone: phone,
+      nickname,
+      password,
+      role: 'parent',
+    }),
+  })
+  setChildUserId(data.child_user_id)
+  return data
+}
+
+/** 孩子是否仍需完成登录后引导（onboarding） */
+export async function studentNeedsOnboarding(userId) {
+  try {
+    const profile = await fetchProfile(userId)
+    return !profile.profile_json?.onboarding?.completed_at
+  } catch (e) {
+    return true
+  }
+}
+
+/** 注册：用手机+昵称创建新用户（学生，兼容旧流程） */
+export async function registerChild(phone, nickname, password = null) {
+  const body = { parent_phone: phone, nickname, role: 'student' }
+  if (password) body.password = password
+  const data = await apiJson('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  setChildUserId(data.child_user_id)
+  return data
+}
+
+// ── 家长端 ──
+
+export async function fetchParentChildren(parentId) {
+  const data = await apiJson(withUser('/api/parent/children', parentId))
+  return data.children || []
+}
+
+export async function fetchParentQuota(parentId) {
+  return apiJson(withUser('/api/parent/quota', parentId))
+}
+
+export async function createParentChild(parentId, { loginName, nickname, password }) {
+  return apiJson(withUser('/api/parent/children', parentId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      login_name: loginName,
+      nickname,
+      password,
+    }),
+  })
+}
+
+export async function updateParentChild(parentId, childId, { nickname, password } = {}) {
+  const body = {}
+  if (nickname != null) body.nickname = nickname
+  if (password != null) body.password = password
+  return apiJson(withUser(`/api/parent/children/${childId}`, parentId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteParentChild(parentId, childId) {
+  return apiJson(withUser(`/api/parent/children/${childId}`, parentId), {
+    method: 'DELETE',
+  })
+}
+
+export async function fetchChildSummary(parentId, childId) {
+  return apiJson(withUser(`/api/parent/children/${childId}/summary`, parentId))
 }
 
 function getOrCreateGuestNickname(fallback = '学员') {
@@ -345,6 +439,14 @@ export async function setTrainingWindow(userId, startTime, endTime) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ start_time: startTime, end_time: endTime }),
   })
+}
+
+export async function fetchTrainingWindow(userId) {
+  return apiJson(withUser('/api/training/window', userId))
+}
+
+export async function clearTrainingWindow(userId) {
+  return apiJson(withUser('/api/training/window', userId), { method: 'DELETE' })
 }
 
 /** 天赋固定训练视频 */
