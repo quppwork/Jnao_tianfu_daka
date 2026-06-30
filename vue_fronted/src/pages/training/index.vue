@@ -209,11 +209,11 @@
           </view>
 
           <view v-if="coachGuideText" class="plan-ai-box">
-            <view class="plan-ai-header">
+            <view class="plan-ai-header" @click="coachCollapsed = !coachCollapsed">
               <text class="plan-ai-label">📋 今日怎么练</text>
-              <text class="plan-ai-hint">💡 点击 ▸ 展开查看课程</text>
+              <text class="plan-ai-hint">{{ coachCollapsed ? '▸ 点击展开内容' : '▾ 点击收起内容' }}</text>
             </view>
-            <text class="plan-ai-text">{{ coachGuideText }}</text>
+            <text v-if="!coachCollapsed" class="plan-ai-text">{{ coachGuideText }}</text>
           </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
         </template>
@@ -1489,6 +1489,7 @@ const audioTitle = ref('🎧 训练用音频')
 const talentLabel = ref('')
 const aiPlanText = ref('')
 
+const coachCollapsed = ref(false)
 const coachGuideText = computed(() => {
   const t = (aiPlanText.value || todayPlan.value?.report_text || '').trim()
   if (!t) return ''
@@ -2687,6 +2688,7 @@ function triggerGlitch() {
 .plan-ai-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
 .plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; }
 .plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
+.plan-ai-header { cursor:pointer; }
 .plan-ai-hint { color:rgba(255,255,255,0.35); font-size:10px; }
 .plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
 .phase-section { scroll-margin-top:12px; }
