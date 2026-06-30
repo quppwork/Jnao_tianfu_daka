@@ -8,9 +8,23 @@
       }
     },
     {
+      "path": "pages/parent/index",
+      "style": {
+        "navigationBarTitleText": "家长中心",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/login/register",
       "style": {
-        "navigationBarTitleText": "注册",
+        "navigationBarTitleText": "注册孩子账户",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/register-parent",
+      "style": {
+        "navigationBarTitleText": "注册家长账户",
         "navigationStyle": "custom"
       }
     },

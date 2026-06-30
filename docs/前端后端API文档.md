@@ -476,6 +476,121 @@ GET  /api/dev/oss/list                   # OSS 音频列表
 
 ---
 
+## 家长端 🚧
+
+> **前端已完成，零后端依赖。** 当前所有逻辑走 localStorage，后端密码系统就绪后切换。
+
+### 前端页面清单
+
+| 页面 | 文件 | 状态 |
+|------|------|:--:|
+| 登录页（含角色+模式切换） | `login/index.vue` | ✅ |
+| 学生注册页（含密码框） | `login/register.vue` | ✅ |
+| 家长注册页 | `login/register-parent.vue` | ✅ |
+| 家长首页 | `parent/index.vue` | ✅ |
+
+### 前端流程
+
+```
+登录页
+├── 默认模式：📱 手机号登录（当前学生闭环，调后端）
+├── 切换模式：🔒 密码登录（纯前端，等后端）
+├── 角色切换：学生 / 家长
+├── 选"学生" → 显示「注册孩子账户」→ /pages/login/register
+└── 选"家长" → 显示「注册家长账户」→ /pages/login/register-parent
+
+注册孩子账户（register.vue）
+├── 昵称 + 手机号 + 密码(选填) + 确认密码(选填)
+├── 调 POST /api/auth/register（密码暂不发送）
+└── 跳转 onboarding
+
+注册家长账户（register-parent.vue）
+├── 昵称 + 手机号 + 密码(≥6位) + 确认密码
+├── 当前纯前端写 localStorage
+└── 跳转 /pages/parent/index
+
+家长首页（parent/index.vue）
+├── 家长头像 + "已绑定 N 个孩子"
+├── 孩子卡片列表（当前模拟数据）
+├── 主题切换（暗黑/白色）
+└── 设置 → 退出登录（清 localStorage → 回登录页）
+```
+
+---
+
+### 🔐 密码系统（待后端实现）
+
+**目标**：学生和家长均可通过 昵称+密码 登录，替代当前手机号查找模式。
+
+#### 数据库改动
+
+```sql
+-- child_user 表加字段
+ALTER TABLE child_user ADD COLUMN password_hash VARCHAR(128);
+ALTER TABLE child_user ADD COLUMN role VARCHAR(10) DEFAULT 'student';
+-- role 取值: 'student' | 'parent'
+
+-- 家长-孩子绑定表
+CREATE TABLE parent_child_bind (
+    id          SERIAL PRIMARY KEY,
+    parent_id   INT NOT NULL REFERENCES child_user(id),
+    child_id    INT NOT NULL REFERENCES child_user(id),
+    created_at  DATETIME DEFAULT NOW(),
+    UNIQUE(parent_id, child_id)
+);
+```
+
+#### 接口改动
+
+**1. 注册接口（扩展已有 `POST /api/auth/register`）**
+
+| 参数 | 类型 | 变动 |
+|------|------|------|
+| parent_phone | string | 保持 |
+| nickname | string | 保持 |
+| password | string | 🆕 密码，≥6位，后端 bcrypt 哈希存入 `password_hash` |
+| role | string | 🆕 `student` / `parent`，默认 `student` |
+
+**2. 登录接口（扩展已有 `POST /api/auth/login`）**
+
+新增支持密码登录：
+```json
+// 现有：手机号登录
+{ "parent_phone": "139...", "nickname": "小明" }
+
+// 新增：密码登录
+{ "nickname": "小明", "password": "123456" }
+```
+
+后端逻辑：
+1. 收到 `password` 字段 → 按昵称查用户 → bcrypt 验证 `password_hash`
+2. 收到 `parent_phone` 字段 → 现有逻辑不变
+3. 返回增加 `role` 字段：`{ child_user_id, nickname, role, ... }`
+
+**3. 家长接口（新增）**
+
+```
+GET  /api/parent/children?user_id={uid}
+→ { children: [{ id, nickname, talent, training_days, checkins, grade }] }
+
+POST /api/parent/bind
+← { child_phone, child_nickname }
+→ { child_id, nickname }
+
+DELETE /api/parent/children/{child_id}?user_id={uid}
+```
+
+#### 前端切换计划
+
+| 当前 | 后端就绪后 |
+|------|-----------|
+| 密码登录 → localStorage | → `POST /api/auth/login` + password |
+| 家长注册 → localStorage | → `POST /api/auth/register` + password + role |
+| 家长首页 → 模拟数据 | → `GET /api/parent/children` |
+| 登录页切换钮 | → 去掉，统一用密码登录 |
+
+---
+
 ## 老学员注册全链路（总结）
 
 ```
