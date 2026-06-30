@@ -432,13 +432,18 @@
                   <text class="ftag" :class="{ on: card.tool === '自定义' }" @click="card.tool = '自定义'">自定义</text>
                 </view>
               </view>
-              <view class="form-row" style="align-items:center;white-space:nowrap;">
+              <view class="form-row">
                 <text class="form-label">训练</text>
-                <text class="form-unit" style="margin-left:-4px;">用时</text>
-                <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
-                <text class="form-unit">分钟，看完</text>
-                <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
-                <text class="form-unit">字</text>
+                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <text class="form-unit" style="width:32px;">分钟</text>
+                  </view>
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="看完" type="number" />
+                    <text class="form-unit" style="width:32px;">字</text>
+                  </view>
+                </view>
               </view>
               <view class="form-row">
                 <text class="form-label">材料</text>
@@ -470,13 +475,18 @@
               </view>
             </template>
             <template v-else-if="card.name === '超脑阅读'">
-              <view class="form-row" style="align-items:center;white-space:nowrap;">
+              <view class="form-row">
                 <text class="form-label">训练</text>
-                <text class="form-unit" style="margin-left:-4px;">用时</text>
-                <input class="form-input mini" v-model.number="card.time" placeholder="0" type="number" />
-                <text class="form-unit">分钟，完成</text>
-                <input class="form-input mini" v-model.number="card.wordCount" placeholder="0" type="number" />
-                <text class="form-unit">字</text>
+                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <text class="form-unit" style="width:32px;">分钟</text>
+                  </view>
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="完成" type="number" />
+                    <text class="form-unit" style="width:32px;">字</text>
+                  </view>
+                </view>
               </view>
               <view class="form-row">
                 <text class="form-label">结果</text>
