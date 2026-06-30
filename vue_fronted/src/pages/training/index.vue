@@ -769,8 +769,8 @@ const plannedDurationSec = ref(0)
 let timerTickId = null
 
 function todayAnimKey() { return 'jnao_plan_anim_' + new Date().toDateString() }
-function planAnimShownToday() { try { return sessionStorage.getItem(todayAnimKey()) === '1' } catch (_) { return false } }
-function markPlanAnimShown() { try { sessionStorage.setItem(todayAnimKey(), '1') } catch (_) {} }
+function planAnimShownToday() { try { return localStorage.getItem(todayAnimKey()) === '1' } catch (_) { return false } }
+function markPlanAnimShown() { try { localStorage.setItem(todayAnimKey(), '1') } catch (_) {} }
 
 const hourLabels = HOUR_OPTIONS.map(h => `${h} 小时`)
 const minuteLabels = MINUTE_OPTIONS.map(m => `${m} 分钟`)
@@ -941,7 +941,7 @@ function clearTimerTick() {
 
 function writeTimerStorage(payload) {
   try {
-    sessionStorage.setItem(timerStorageKey(), JSON.stringify(payload))
+    localStorage.setItem(timerStorageKey(), JSON.stringify(payload))
   } catch (_) { /* ignore */ }
 }
 
@@ -951,14 +951,10 @@ function persistTimer(endAt, plannedSec) {
 
 function readTimerData() {
   try {
-    const raw = sessionStorage.getItem(timerStorageKey())
+    const raw = localStorage.getItem(timerStorageKey())
     if (!raw) return null
-    const data = JSON.parse(raw)
-    if (!data) return null
-    return data
-  } catch (_) {
-    return null
-  }
+    return JSON.parse(raw) || null
+  } catch (_) { return null }
 }
 
 function resetDurationPickers() {
@@ -1382,14 +1378,13 @@ async function devResetTalentAction() {
 }
 
 function clearTimerStorage() {
-  try {
-    sessionStorage.removeItem(timerStorageKey())
-  } catch (_) { /* ignore */ }
+  try { localStorage.removeItem(timerStorageKey()) } catch (_) { /* ignore */ }
 }
 
 function devResetTimer(silent = false) {
   clearTimerTick()
-  clearTimerStorage()
+  // 不清除 timerStorage — 让 restoreTrainingTimer 在 onShow 时有机会恢复
+  // clearTimerStorage() 只在用户主动点"重置计时"或训练过期时调用
   timerPhase.value = 'setup'
   remainingSeconds.value = 0
   plannedDurationSec.value = 0
@@ -2513,6 +2508,20 @@ onMounted(async () => {
 })
 onShow(async () => {
   await loadTodayPlan(true)
+  // loadTodayPlan 内部可能因 transition/无 plan_id 调了 resetAllLocalState
+  // 此时 trainingDayKey 已由 applyServerTimeMeta 设置，可以正确读存储
+  const snap = readTimerData()
+  if (snap && snap.phase === 'running' && snap.endAt) {
+    const left = Math.max(0, Math.ceil((snap.endAt - nowSynced()) / 1000))
+    if (left > 0) {
+      syncTimerFromEndAt(snap.endAt)
+      if (timerPhase.value !== 'running') timerPhase.value = 'running'
+      clearTimerTick()
+      timerTickId = setInterval(tickTrainingTimer, 1000)
+      plannedDurationSec.value = snap.plannedSec || plannedDurationSec.value
+      return
+    }
+  }
   restoreTrainingTimer()
 })
 onUnmounted(() => {

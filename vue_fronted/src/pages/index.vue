@@ -163,8 +163,9 @@ import {
   updateLearnerProfile,
   gradeToSchoolStage,
 } from '@/utils/userApi.js'
+import { refreshTalentState } from '@/utils/talentState.js'
 
-const isLight = ref(false)
+const isLight = ref(true)
 const inputText = ref('')
 const loading = ref(false)
 const guideSessionId = ref(null)
@@ -224,11 +225,24 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   if (data.profile_json) {
     if (data.profile_json.grade) profile.value.grade = data.profile_json.grade
     if (data.profile_json.parentName) profile.value.parentName = data.profile_json.parentName
+    const td = data.profile_json.talent_display
     const tp = data.profile_json.talent_primary || data.profile_json.talent
-    const tt = data.profile_json.talent_tag
-    if (tp) {
+    const obName = data.profile_json.onboarding?.self_reported_talent
+    if (td) {
       hasTalent = true
-      profile.value.talent = tt ? `${tp}偏${tt}` : tp
+      profile.value.talent = td
+    } else if (tp) {
+      hasTalent = true
+      profile.value.talent = tp
+    } else if (data.talent_primary) {
+      hasTalent = true
+      profile.value.talent = data.talent_primary
+    } else if (obName) {
+      hasTalent = true
+      profile.value.talent = obName
+    } else if (data.training_level && data.training_level !== '学员') {
+      hasTalent = true
+      profile.value.talent = data.training_level
     }
   }
   const idx = gradeOptions.indexOf(profile.value.grade)
@@ -236,9 +250,7 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   if (fetchLatest && !hasTalent && uid) {
     return fetchLatestAssessment(uid).then((latest) => {
       if (latest?.talent_primary) {
-        profile.value.talent = latest.talent_tag
-          ? `${latest.talent_primary}偏${latest.talent_tag}`
-          : latest.talent_primary
+        profile.value.talent = latest.talent_primary
       }
     }).catch(() => {})
   }
@@ -258,6 +270,7 @@ async function initHome() {
         fetchAssessmentHistory(uid),
         fetchGuideSession(uid),
       ])
+      await refreshTalentState(uid).catch(() => {})
       markChildUserSessionValid(uid)
     } catch (e) {
       if (e.status === 404 && getChildUserId()) {

@@ -114,7 +114,7 @@ onShow(() => loadHistory(true))
   max-width: 480px;
   width: 100%;
   margin: 0 auto;
-  background: var(--bg);
+  background: #0b111e;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -126,7 +126,7 @@ onShow(() => loadHistory(true))
   display: flex;
   align-items: center;
   padding: 14px 14px 10px;
-  background: var(--bg);
+  background: #0b111e;
   box-sizing: border-box;
   width: 100%;
 }
@@ -134,8 +134,8 @@ onShow(() => loadHistory(true))
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: rgba(0, 210, 255, 0.08);
+  border: 1px solid rgba(0, 210, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -144,7 +144,7 @@ onShow(() => loadHistory(true))
 .nav-title {
   flex: 1;
   text-align: center;
-  color: var(--text);
+  color: #fff;
   font-size: 16px;
   font-weight: 600;
 }
@@ -153,15 +153,15 @@ onShow(() => loadHistory(true))
   height: 28px;
   padding: 0 8px;
   border-radius: 999px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .nav-refresh text {
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 10px;
   font-weight: 700;
 }
@@ -182,15 +182,15 @@ onShow(() => loadHistory(true))
   display: block;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-dim);
+  color: #9ca3af;
   margin: 8px 0 8px;
   padding-left: 2px;
 }
 .summary-card {
   width: 100%;
   box-sizing: border-box;
-  background: var(--bg-card);
-  border: 2px solid var(--border);
+  background: rgba(0, 210, 255, 0.04);
+  border: 2px solid rgba(0, 210, 255, 0.15);
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 10px;
@@ -203,15 +203,14 @@ onShow(() => loadHistory(true))
   gap: 8px;
 }
 .summary-label {
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
   font-weight: 500;
 }
 .summary-time {
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.35);
   font-size: 11px;
   flex-shrink: 0;
-  opacity: 0.7;
 }
 .summary-mini-cards {
   display: flex;
@@ -226,8 +225,8 @@ onShow(() => loadHistory(true))
   gap: 8px;
   width: 100%;
   box-sizing: border-box;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: rgba(0, 210, 255, 0.04);
+  border: 1px solid rgba(0, 210, 255, 0.1);
   border-radius: 8px;
   padding: 10px 10px 10px 0;
   overflow: hidden;
@@ -240,7 +239,8 @@ onShow(() => loadHistory(true))
   height: 60%;
   min-height: 28px;
   border-radius: 0 2px 2px 0;
-  background: linear-gradient(180deg, var(--accent), #3b8bff);
+  background: linear-gradient(180deg, #00d2ff, #0088cc);
+  box-shadow: 0 0 8px rgba(0, 210, 255, 0.4);
   flex-shrink: 0;
   align-self: center;
 }
@@ -250,14 +250,14 @@ onShow(() => loadHistory(true))
   overflow: hidden;
 }
 .mini-card-name {
-  color: var(--text);
+  color: #fff;
   font-size: 12px;
   font-weight: 600;
   display: block;
   word-break: break-all;
 }
 .mini-card-summary {
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.45);
   font-size: 10px;
   display: block;
   margin-top: 2px;
@@ -265,24 +265,23 @@ onShow(() => loadHistory(true))
   word-break: break-all;
 }
 .mini-card-extra {
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.4);
   font-size: 10px;
   display: block;
   margin-top: 2px;
   line-height: 1.4;
   word-break: break-all;
-  opacity: 0.8;
 }
 .summary-attitude {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(0, 210, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .sa-label {
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.4);
   font-size: 10px;
   font-weight: 500;
 }
@@ -292,11 +291,11 @@ onShow(() => loadHistory(true))
   gap: 6px;
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid var(--accent);
-  background: var(--accent-bg);
+  border: 1px solid #00d2ff;
+  background: rgba(0, 136, 204, 0.2);
 }
 .sa-pct {
-  color: var(--accent);
+  color: #00d2ff;
   font-size: 11px;
   font-weight: 700;
 }
@@ -306,7 +305,7 @@ onShow(() => loadHistory(true))
 .state-box {
   text-align: center;
   padding: 48px 16px;
-  color: var(--text-dim);
+  color: #6b7280;
   font-size: 14px;
   box-sizing: border-box;
 }
@@ -315,14 +314,14 @@ onShow(() => loadHistory(true))
 }
 .empty-title {
   display: block;
-  color: var(--text);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 10px;
 }
 .empty-hint {
   display: block;
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.35);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -331,17 +330,11 @@ onShow(() => loadHistory(true))
   display: inline-flex;
   padding: 8px 20px;
   border-radius: 999px;
-  background: var(--accent-bg);
-  border: 1px solid var(--accent);
+  background: rgba(0, 210, 255, 0.15);
+  border: 1px solid rgba(0, 210, 255, 0.35);
 }
 .retry-btn text {
-  color: var(--accent);
+  color: #00d2ff;
   font-size: 13px;
-}
-
-/* ── 白色主题覆盖 ── */
-[data-theme="white"] .mini-card-v1 .mini-card-accent {
-  background: linear-gradient(180deg, #2563eb, #1d4ed8);
-  box-shadow: none;
 }
 </style>
