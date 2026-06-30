@@ -378,18 +378,28 @@
               </view>
               <view class="form-row">
                 <text class="form-label">正背</text>
-                <view class="form-inline">
-                  <input class="form-input short" v-model="card.forwardTime" placeholder="用时" />
-                  <text class="form-unit">·</text>
-                  <input class="form-input short" v-model="card.forwardAcc" placeholder="准确度" />
+                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardTime" placeholder="用时" type="number" />
+                    <text class="form-unit" style="width:32px;">分钟</text>
+                  </view>
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardAcc" placeholder="正确率" type="number" />
+                    <text class="form-unit" style="width:24px;">%</text>
+                  </view>
                 </view>
               </view>
               <view class="form-row">
                 <text class="form-label">倒背</text>
-                <view class="form-inline">
-                  <input class="form-input short" v-model="card.backwardTime" placeholder="用时" />
-                  <text class="form-unit">·</text>
-                  <input class="form-input short" v-model="card.backwardAcc" placeholder="准确度" />
+                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardTime" placeholder="用时" type="number" />
+                    <text class="form-unit" style="width:32px;">分钟</text>
+                  </view>
+                  <view style="display:flex;align-items:center;gap:6px;">
+                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
+                    <text class="form-unit" style="width:24px;">%</text>
+                  </view>
                 </view>
               </view>
               <view class="form-row">
