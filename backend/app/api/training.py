@@ -242,6 +242,15 @@ def get_window(
     return row
 
 
+@router.delete("/window")
+def delete_window(
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    deleted = training_service.clear_training_window(db, child_user_id)
+    return {"deleted": deleted}
+
+
 @router.get("/window/status", response_model=WindowStatusResponse)
 def window_status(
     child_user_id: int = Depends(get_child_user_id),

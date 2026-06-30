@@ -11,17 +11,6 @@ class RegisterRequest(BaseModel):
     jnao_uid: str | None = None
 
 
-class LoginRequest(BaseModel):
-    nickname: str = Field(..., min_length=1, max_length=50)
-    parent_phone: str | None = None
-
-
-class RegisterResponse(BaseModel):
-    child_user_id: int
-    parent_phone: str
-    nickname: str
-
-
 class TrainingItemOut(BaseModel):
     id: int
     sort_order: int
@@ -92,6 +81,10 @@ class TrainingTodayResponse(BaseModel):
     training_day_number: int | None = None
     schedule_mode: str | None = None
     optional_offers: list[OptionalOfferOut] = Field(default_factory=list)
+    timer_phase: str | None = None
+    timer_end_at: str | None = None
+    timer_planned_seconds: int | None = None
+    timer_remaining_seconds: int | None = None
 
 
 class ScheduleRequest(BaseModel):

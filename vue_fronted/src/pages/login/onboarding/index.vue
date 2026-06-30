@@ -18,79 +18,31 @@
               <svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="24" cy="16" r="7"/><path d="M16 44c0-6 4-11 8-11s8 5 8 11"/><circle cx="24" cy="16" r="9" stroke-dasharray="3 3" opacity="0.4"/><line x1="20" y1="20" x2="16" y2="24" stroke-width="2.5" stroke-linecap="round"/><line x1="28" y1="20" x2="32" y2="24" stroke-width="2.5" stroke-linecap="round"/></svg>
             </view>
             <text class="pcard-title">新学员</text>
-            <text class="pcard-sub">第一次使用 Jnao · 设置天赋</text>
+            <text class="pcard-sub">第一次使用 Jnao · 完成天赋测试</text>
           </view>
           <view class="pcard pcard-in" style="animation-delay:0.55s" @tap="selectStudentType('returning')">
             <view class="pcard-icon-wrap">
               <svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="24" cy="14" r="8"/><path d="M10 44c0-7 6.3-13 14-13s14 6 14 13"/><path d="M24 24v6" stroke-width="2.5" stroke-linecap="round"/></svg>
             </view>
             <text class="pcard-title">老学员</text>
-            <text class="pcard-sub">已有训练经验 · 快速设置</text>
+            <text class="pcard-sub">已有训练经验 · 补录历史数据</text>
           </view>
         </view>
       </template>
 
-      <!-- ═══ Step 2: 选天赋（仅新学员） ═══ -->
-      <template v-if="step === 2 && studentType === 'new'">
-        <text class="subtitle">完善信息 2/2</text>
-        <text class="question">请问你的主天赋是什么？</text>
-        <view class="talent-grid">
-          <view
-            v-for="t in talents"
-            :key="t.name"
-            class="talent-card"
-            :class="{ selected: selectedTalent === t.name }"
-            :style="{ animationDelay: t.delay, borderColor: selectedTalent === t.name ? t.color : 'var(--border)', background: selectedTalent === t.name ? t.color + '14' : 'var(--bg-card)' }"
-            @click="selectTalent(t.name)"
-          >
-            <view class="talent-dot" :style="{ background: t.color }"></view>
-            <text class="talent-name" :style="{ color: t.color }">{{ t.name }}</text>
-            <text class="talent-desc">{{ t.desc }}</text>
-            <view v-if="selectedTalent === t.name" class="talent-check">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" :stroke="t.color" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <!-- ═══ Step 2: 天赋测试（新/老学员统一） ═══ -->
+      <template v-if="step === 2">
+        <text class="subtitle">{{ studentType === 'returning' ? '完善信息 2/3' : '完善信息 2/2' }}</text>
+        <text class="question">接下来请完成天赋测试</text>
+        <text class="q-hint">通过专业测评了解主天赋，为训练方案提供依据</text>
+        <view class="card-row single-card">
+          <view class="pcard pcard-in pcard-test" style="animation-delay:0.4s" @tap="startTalentTest">
+            <view class="pcard-icon-wrap">
+              <text style="font-size:32px">🎯</text>
             </view>
+            <text class="pcard-title">开始天赋测试</text>
+            <text class="pcard-sub">约 5 分钟 · 35 道选择题</text>
           </view>
-          <view
-            class="talent-card talent-unknown" :class="{ selected: selectedTalent === 'unknown' }"
-            style="animation-delay:1.0s" @click="selectTalent('unknown')"
-          >
-            <view class="talent-dot unknown-dot"></view>
-            <text class="talent-name unknown-name">不知道</text>
-            <text class="talent-desc">帮我测一测天赋</text>
-            <view v-if="selectedTalent === 'unknown'" class="talent-check">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#f0b90b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </view>
-          </view>
-        </view>
-        <view class="btn-login" style="margin-top:18px" @click="confirmTalent">
-          <text>确认并完成</text>
-        </view>
-      </template>
-
-      <!-- ═══ Step 3: 老学员选天赋（必选，无"不知道"） ═══ -->
-      <template v-if="step === 3 && studentType === 'returning'">
-        <view class="step-fade" key="s3">
-        <text class="subtitle">完善信息 2/3</text>
-        <text class="question">请问你的主天赋是什么？</text>
-        <view class="talent-grid">
-          <view
-            v-for="t in talents"
-            :key="t.name"
-            class="talent-card" :class="{ selected: selectedTalent === t.name }"
-            :style="{ animationDelay: t.delay, borderColor: selectedTalent === t.name ? t.color : 'var(--border)', background: selectedTalent === t.name ? t.color + '14' : 'var(--bg-card)' }"
-            @click="selectTalent(t.name)"
-          >
-            <view class="talent-dot" :style="{ background: t.color }"></view>
-            <text class="talent-name" :style="{ color: t.color }">{{ t.name }}</text>
-            <text class="talent-desc">{{ t.desc }}</text>
-            <view v-if="selectedTalent === t.name" class="talent-check">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" :stroke="t.color" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </view>
-          </view>
-        </view>
-        <view class="btn-login" style="margin-top:18px" :style="{ opacity: selectedTalent ? 1 : 0.4 }" @click="confirmReturningTalent">
-          <text>继续</text>
-        </view>
         </view>
       </template>
 
@@ -203,13 +155,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { getChildUserId, saveProfile } from '@/utils/userApi.js'
-import { TALENT_CODE_MAP, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
+import { ref, computed, onMounted } from 'vue'
+import { getChildUserId, saveProfile, fetchProfile } from '@/utils/userApi.js'
+import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 
 const step = ref(1)
 const studentType = ref('')
-const selectedTalent = ref('')
 const selectedAbilities = ref([])
 const formData = ref({})
 const fFirstDate = ref('')
@@ -248,13 +199,6 @@ function onPickGlobalDate(e) {
   globalFirstDate.value = `${y}年${parseInt(mo)}月`
 }
 
-const talents = [
-  { name: '学者', color: '#12417A', desc: '逻辑思辨 · 知识探索', delay: '0.4s' },
-  { name: '思者', color: '#22C55E', desc: '创意灵性 · 直觉洞察', delay: '0.5s' },
-  { name: '行者', color: '#A57A1A', desc: '实践行动 · 执行推进', delay: '0.6s' },
-  { name: '德者', color: '#582E1F', desc: '共情利他 · 关系建设', delay: '0.7s' },
-  { name: '赢者', color: '#960D24', desc: '目标驱动 · 领导统领', delay: '0.8s' },
-]
 
 const allAbilities = [
   '超脑阅读','影像追忆','扫描速记','极速运算',
@@ -279,35 +223,24 @@ function loadCurrentForm() {
 
 function selectStudentType(type) {
   studentType.value = type
-  if (type === 'new') {
-    step.value = 2
-  } else {
-    step.value = 3
-  }
+  step.value = 2
 }
 
 function goBack() {
-  if (step.value === 3) { step.value = 1; return }
-  if (step.value === 4) { step.value = 3; selectedTalent.value = ''; return }
+  if (step.value === 4) { step.value = 2; return }
   if (step.value === 5) { step.value = 4; return }
   if (step.value > 5) { step.value--; return }
+  if (step.value === 2) { step.value = 1; return }
   step.value = 1
 }
 
-function selectTalent(name) { selectedTalent.value = name }
-
-function buildOnboardingPayload() {
+function buildOnboardingPayload({ finalize = false } = {}) {
   const onboarding = {
     student_type: studentType.value || 'new',
-    completed_at: new Date().toISOString(),
+    talent_unknown: true,
   }
-  if (selectedTalent.value === 'unknown') {
-    onboarding.talent_unknown = true
-    onboarding.self_reported_talent = null
-  } else if (selectedTalent.value) {
-    onboarding.self_reported_talent = selectedTalent.value
-    onboarding.self_reported_talent_code = TALENT_CODE_MAP[selectedTalent.value] || null
-    onboarding.talent_unknown = false
+  if (finalize) {
+    onboarding.completed_at = new Date().toISOString()
   }
   if (studentType.value === 'returning') {
     onboarding.first_training_date = globalFirstDate.value || null
@@ -318,35 +251,24 @@ function buildOnboardingPayload() {
   return onboarding
 }
 
-async function persistOnboarding() {
+async function persistOnboarding({ finalize = false } = {}) {
   const userId = getChildUserId()
   if (!userId) return
   clearTalentState()
-  await saveProfile(userId, { profile_json: { onboarding: buildOnboardingPayload() } })
+  let existing = {}
+  try {
+    const p = await fetchProfile(userId)
+    existing = p.profile_json?.onboarding || {}
+  } catch (_) {}
+  const onboarding = { ...existing, ...buildOnboardingPayload({ finalize }) }
+  await saveProfile(userId, { profile_json: { onboarding } })
   await refreshTalentState(userId)
 }
 
-function goTalentTest() {
-  uni.navigateTo({ url: '/pages/talent/index?from=onboarding' })
-}
-
-async function confirmTalent() {
-  if (!selectedTalent.value) { uni.showToast({ title: '请选择一个天赋或"不知道"', icon: 'none' }); return }
+async function startTalentTest() {
   try { await persistOnboarding() } catch (_) {}
-  if (selectedTalent.value === 'unknown') {
-    goTalentTest()
-  } else {
-    uni.redirectTo({ url: '/pages/index' })
-  }
-}
-
-async function confirmReturningTalent() {
-  if (!selectedTalent.value || selectedTalent.value === 'unknown') {
-    uni.showToast({ title: '请选择一个天赋', icon: 'none' }); return
-  }
-  // 老学员必选五者之一，选完立即落库
-  try { await persistOnboarding() } catch (_) {}
-  step.value = 4
+  const st = studentType.value || 'new'
+  uni.navigateTo({ url: `/pages/talent/index?from=onboarding&student_type=${st}` })
 }
 
 function toggleAbility(ai) {
@@ -375,9 +297,46 @@ function nextDataStep() {
 }
 
 async function goHome() {
-  try { await persistOnboarding() } catch (_) {}
+  try { await persistOnboarding({ finalize: true }) } catch (_) {}
   uni.redirectTo({ url: '/pages/index' })
 }
+
+onMounted(async () => {
+  const pages = getCurrentPages()
+  const opts = pages[pages.length - 1]?.options || {}
+  if (opts.resume === '4') {
+    studentType.value = 'returning'
+    step.value = 4
+    return
+  }
+  const uid = getChildUserId()
+  if (!uid) {
+    uni.redirectTo({ url: '/pages/login/index' })
+    return
+  }
+  try {
+    const p = await fetchProfile(uid)
+    const ob = p.profile_json?.onboarding || {}
+    if (ob.completed_at) {
+      uni.redirectTo({ url: '/pages/index' })
+      return
+    }
+    if (ob.student_type) studentType.value = ob.student_type
+    if (ob.talent_test_done && ob.student_type === 'returning') {
+      step.value = 4
+      globalFirstDate.value = ob.first_training_date || ''
+      globalTotalCount.value = ob.total_training_sessions ? String(ob.total_training_sessions) : ''
+      if (ob.prior_abilities?.length) {
+        selectedAbilities.value = ob.prior_abilities
+          .map((n) => allAbilities.indexOf(n))
+          .filter((i) => i >= 0)
+      }
+      formData.value = ob.prior_training_data || {}
+    } else if (ob.student_type) {
+      step.value = 2
+    }
+  } catch (_) {}
+})
 </script>
 
 <style scoped>
@@ -395,6 +354,9 @@ async function goHome() {
 
 /* ── Card row ── */
 .card-row { display:flex; gap:14px; width:100%; max-width:340px; margin:24px auto 0; }
+.card-row.single-card { justify-content:center; }
+.card-row.single-card .pcard { max-width:220px; }
+.pcard-test { border-color:var(--accent); }
 .pcard { flex:1; aspect-ratio:1; background:var(--bg-card); border-radius:18px; border:2px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 10px; cursor:pointer; transition:all 0.15s; opacity:0; transform:scale(0.9) translateY(12px); }
 .pcard:active { transform:scale(0.95) !important; }
 .pcard-in { animation:cardSpring 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards; }

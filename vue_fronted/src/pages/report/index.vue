@@ -169,7 +169,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ensureChildUser, fetchAssessmentReport } from '@/utils/userApi.js'
+import { ensureChildUser, fetchAssessmentReport, fetchProfile, saveProfile } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
@@ -180,12 +180,16 @@ const testType = ref('成人')
 const isBackup = ref(false)
 const collapseOpen = ref({})
 const loadError = ref('')
+const fromOnboarding = ref(false)
+const studentTypeFromOb = ref('new')
 
 onMounted(async () => {
   try {
     const pages = getCurrentPages()
     const page = pages[pages.length - 1]
     const assessmentId = page?.options?.assessment_id
+    fromOnboarding.value = page?.options?.from === 'onboarding'
+    studentTypeFromOb.value = page?.options?.student_type || 'new'
     const uid = await ensureChildUser()
 
     // 冲突检测
@@ -232,9 +236,40 @@ async function handleConflictResolve(action) {
 }
 
 function reTestFromMizhe() {
-  uni.redirectTo({ url: '/pages/talent/index' })
+  const st = studentTypeFromOb.value
+  const q = fromOnboarding.value
+    ? `?from=onboarding&student_type=${encodeURIComponent(st)}`
+    : ''
+  uni.redirectTo({ url: `/pages/talent/index${q}` })
 }
-function goBack() {
+async function goBack() {
+  if (fromOnboarding.value) {
+    const uid = await ensureChildUser()
+    let ob = {}
+    try {
+      const p = await fetchProfile(uid)
+      ob = p.profile_json?.onboarding || {}
+    } catch (_) {}
+    const st = studentTypeFromOb.value || ob.student_type || 'new'
+    const patch = {
+      ...ob,
+      student_type: st,
+      talent_test_done: true,
+      talent_unknown: true,
+    }
+    if (st !== 'returning') {
+      patch.completed_at = new Date().toISOString()
+    }
+    try {
+      await saveProfile(uid, { profile_json: { onboarding: patch } })
+    } catch (_) {}
+    if (st === 'returning') {
+      uni.redirectTo({ url: '/pages/login/onboarding/index?resume=4' })
+    } else {
+      uni.redirectTo({ url: '/pages/index' })
+    }
+    return
+  }
   uni.redirectTo({ url: '/pages/index' })
 }
 

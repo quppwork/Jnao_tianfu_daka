@@ -31,6 +31,7 @@ from app.services.training_day import (
     is_new_day_ready,
     training_day_meta,
     training_now,
+    TZ,
 )
 
 WATCH_COMPLETE_PCT = 90
@@ -422,6 +423,63 @@ def _item_to_dict(item: TrainingItem, *, hide_media: bool = False, content: Cont
     }
 
 
+def _build_timer_fields(
+    db: Session,
+    child_user_id: int,
+    plan: TrainingPlan | None,
+    now: datetime,
+) -> dict:
+    """计时状态以 TrainingWindow + 方案为准，供前端唯一可信来源。"""
+    setup = {
+        "timer_phase": "setup",
+        "timer_end_at": None,
+        "timer_planned_seconds": None,
+        "timer_remaining_seconds": None,
+    }
+    if not plan or not _has_plan_content(plan):
+        return setup
+
+    planned_sec_from_plan = (plan.planned_minutes or 0) * 60
+    if plan.media_exhausted:
+        return {
+            "timer_phase": "expired",
+            "timer_end_at": None,
+            "timer_planned_seconds": planned_sec_from_plan or None,
+            "timer_remaining_seconds": 0,
+        }
+
+    train_date = _today_for(db, child_user_id)
+    row = db.scalar(
+        select(TrainingWindow).where(
+            TrainingWindow.child_user_id == child_user_id,
+            TrainingWindow.train_date == train_date,
+        )
+    )
+    if not row:
+        return setup
+
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=TZ)
+    start_dt = datetime.combine(train_date, row.start_time, tzinfo=TZ)
+    end_dt = datetime.combine(train_date, row.end_time, tzinfo=TZ)
+    planned_sec = max(0, int((end_dt - start_dt).total_seconds()))
+    remaining = max(0, int((end_dt - now).total_seconds()))
+
+    if remaining <= 0:
+        return {
+            "timer_phase": "expired",
+            "timer_end_at": end_dt.isoformat(),
+            "timer_planned_seconds": planned_sec,
+            "timer_remaining_seconds": 0,
+        }
+    return {
+        "timer_phase": "running",
+        "timer_end_at": end_dt.isoformat(),
+        "timer_planned_seconds": planned_sec,
+        "timer_remaining_seconds": remaining,
+    }
+
+
 def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Session | None = None) -> dict:
     if now is None:
         now = _user_now(db, plan.child_user_id) if db is not None else training_now()
@@ -466,6 +524,12 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         from app.services.training_optional_service import get_optional_offers_for_child
 
         optional_offers = get_optional_offers_for_child(db, plan.child_user_id, plan)
+    timer_fields = _build_timer_fields(db, plan.child_user_id, plan, now) if db is not None else {
+        "timer_phase": "setup",
+        "timer_end_at": None,
+        "timer_planned_seconds": None,
+        "timer_remaining_seconds": None,
+    }
     return {
         "plan_id": plan.id,
         "plan_date": plan.plan_date,
@@ -489,6 +553,7 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "day_locked": locked,
         "globally_cutoff": globally_cutoff,
         **meta,
+        **timer_fields,
     }
 
 
@@ -525,10 +590,11 @@ def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: Trai
     if not plan or plan.media_exhausted:
         return bool(plan and plan.media_exhausted)
     now = _user_now(db, child_user_id)
+    train_date = _today_for(db, child_user_id)
     row = db.scalar(
         select(TrainingWindow).where(
             TrainingWindow.child_user_id == child_user_id,
-            TrainingWindow.train_date == now.date(),
+            TrainingWindow.train_date == train_date,
         )
     )
     if not row:
@@ -620,6 +686,10 @@ def empty_today_plan_response(
         "items": [],
         "day_locked": False,
         "globally_cutoff": False,
+        "timer_phase": "setup",
+        "timer_end_at": None,
+        "timer_planned_seconds": None,
+        "timer_remaining_seconds": None,
         **meta,
     }
 
@@ -1202,9 +1272,23 @@ def get_training_window(db: Session, child_user_id: int, train_date: date | None
     }
 
 
+def clear_training_window(
+    db: Session, child_user_id: int, train_date: date | None = None
+) -> bool:
+    train_date = train_date or _today_for(db, child_user_id)
+    result = db.execute(
+        delete(TrainingWindow).where(
+            TrainingWindow.child_user_id == child_user_id,
+            TrainingWindow.train_date == train_date,
+        )
+    )
+    db.commit()
+    return result.rowcount > 0
+
+
 def get_window_status(db: Session, child_user_id: int, now: datetime | None = None) -> dict:
     now = now or _user_now(db, child_user_id)
-    train_date = now.date()
+    train_date = _today_for(db, child_user_id)
     row = db.scalar(
         select(TrainingWindow).where(
             TrainingWindow.child_user_id == child_user_id,

@@ -741,7 +741,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -858,11 +858,25 @@ const countdownChars = computed(() => {
 const durationLabel = computed(() => formatDuration(plannedDurationSec.value))
 
 function timerStorageKey() {
-  return `${TIMER_STORAGE_KEY_PREFIX}_${trainingDayKey.value || 'default'}`
+  const uid = getChildUserId()
+  const day = trainingDayKey.value || 'default'
+  return `${TIMER_STORAGE_KEY_PREFIX}_${uid || 0}_${day}`
 }
 
 function nowSynced() {
   return Date.now() + serverTimeOffsetMs.value
+}
+
+function formatWindowTime(ms) {
+  const s = new Date(ms).toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' })
+  const timePart = s.split(' ')[1] || '00:00:00'
+  const [hh, mm] = timePart.split(':')
+  return `${hh}:${mm}`
+}
+
+function applyDevTimeOverride(iso) {
+  if (!iso) return
+  serverTimeOffsetMs.value = new Date(iso).getTime() - Date.now()
 }
 
 function applyServerTimeMeta(data) {
@@ -941,20 +955,109 @@ function clearTimerTick() {
 
 function writeTimerStorage(payload) {
   try {
-    localStorage.setItem(timerStorageKey(), JSON.stringify(payload))
+    const data = { ...payload, trainingDay: trainingDayKey.value || payload.trainingDay || null }
+    localStorage.setItem(timerStorageKey(), JSON.stringify(data))
   } catch (_) { /* ignore */ }
 }
 
-function persistTimer(endAt, plannedSec) {
-  writeTimerStorage({ phase: 'running', endAt, plannedSec })
+function persistTimer(endAt, plannedSec, planId = null) {
+  writeTimerStorage({
+    phase: 'running',
+    endAt,
+    plannedSec,
+    planId: planId ?? todayPlan.value?.plan_id ?? null,
+  })
 }
 
 function readTimerData() {
   try {
-    const raw = localStorage.getItem(timerStorageKey())
+    let raw = localStorage.getItem(timerStorageKey())
+    // 仅在 trainingDay 尚未从服务端加载时，才按 userId 前缀扫缓存（进页秒开）
+    if (!raw && !trainingDayKey.value) {
+      const uid = getChildUserId()
+      if (uid) {
+        const prefix = `${TIMER_STORAGE_KEY_PREFIX}_${uid}_`
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key?.startsWith(prefix)) {
+            raw = localStorage.getItem(key)
+            break
+          }
+        }
+      }
+    }
     if (!raw) return null
     return JSON.parse(raw) || null
   } catch (_) { return null }
+}
+
+function clearAllTimerKeysForUser(uid = getChildUserId()) {
+  if (!uid) return
+  const prefix = `${TIMER_STORAGE_KEY_PREFIX}_${uid}_`
+  try {
+    const keys = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(prefix)) keys.push(key)
+    }
+    keys.forEach((key) => localStorage.removeItem(key))
+  } catch (_) { /* ignore */ }
+}
+
+function resetTimerToSetup() {
+  clearTimerTick()
+  timerPhase.value = 'setup'
+  remainingSeconds.value = 0
+  plannedDurationSec.value = 0
+  resetDurationPickers()
+  closeMedia()
+}
+
+function clearTimerSession() {
+  clearAllTimerKeysForUser()
+  ensureChildUser().then((uid) => clearTrainingWindow(uid)).catch(() => {})
+}
+
+function applyTimerFromServer(data) {
+  if (!data) return
+  const phase = data.timer_phase || 'setup'
+
+  if (phase === 'setup') {
+    clearAllTimerKeysForUser()
+    resetTimerToSetup()
+    return
+  }
+
+  if (phase === 'expired') {
+    clearTimerTick()
+    timerPhase.value = 'expired'
+    remainingSeconds.value = 0
+    plannedDurationSec.value = data.timer_planned_seconds || (data.planned_minutes || 0) * 60
+    writeTimerStorage({
+      phase: 'expired',
+      plannedSec: plannedDurationSec.value,
+      planId: data.plan_id || null,
+    })
+    return
+  }
+
+  const endAt = data.timer_end_at ? new Date(data.timer_end_at).getTime() : null
+  const plannedSec = data.timer_planned_seconds || 0
+  let remaining = data.timer_remaining_seconds
+  if (remaining == null && endAt) {
+    remaining = Math.max(0, Math.ceil((endAt - nowSynced()) / 1000))
+  }
+  if (!endAt || remaining <= 0) {
+    applyTimerFromServer({ ...data, timer_phase: 'expired' })
+    return
+  }
+
+  plannedDurationSec.value = plannedSec
+  remainingSeconds.value = remaining
+  timerPhase.value = 'running'
+  persistTimer(endAt, plannedSec, data.plan_id)
+  clearTimerTick()
+  timerTickId = setInterval(tickTrainingTimer, 1000)
 }
 
 function resetDurationPickers() {
@@ -1003,20 +1106,29 @@ async function applyScheduledPlan(uid, data) {
   refreshAiPlanInBackground(uid)
 }
 
-function syncMediaExhaustedLocal() {
-  // 本地标记媒体已耗尽（后端已移除该 API，前端不再同步到服务器）
+function syncMediaExhausted() {
   if (todayPlan.value) todayPlan.value.media_exhausted = true
+  ensureChildUser()
+    .then((uid) => markPlanMediaExhausted(uid))
+    .then((res) => {
+      if (res?.data && todayPlan.value) Object.assign(todayPlan.value, res.data)
+    })
+    .catch(() => {})
 }
 
 function expireTrainingTimer(silent = false) {
   clearTimerTick()
   const data = readTimerData()
   const plannedSec = plannedDurationSec.value || data?.plannedSec || 0
-  writeTimerStorage({ phase: 'expired', plannedSec })
+  writeTimerStorage({
+    phase: 'expired',
+    plannedSec,
+    planId: data?.planId ?? todayPlan.value?.plan_id ?? null,
+  })
   timerPhase.value = 'expired'
   remainingSeconds.value = 0
   closeMedia()
-  syncMediaExhaustedLocal()
+  syncMediaExhausted()
   if (!silent) {
     const msg = isGlobalCutoff.value ? '凌晨4点训练日已截止' : '训练时长已到，仍可打卡'
     uni.showToast({ title: msg, icon: 'none', duration: 2500 })
@@ -1103,49 +1215,38 @@ async function startTrainingTimer() {
     const nowMs = nowSynced()
     const endAt = nowMs + totalSec * 1000
 
-    persistTimer(endAt, totalSec)
-    syncTimerFromEndAt(endAt)
-    clearTimerTick()
-    timerTickId = setInterval(tickTrainingTimer, 1000)
+    try {
+      await setTrainingWindow(uid, formatWindowTime(nowMs), formatWindowTime(endAt))
+      const synced = await fetchTrainingToday(uid, { skipAi: true })
+      if (!synced.error && synced.data) {
+        applyServerTimeMeta(synced.data)
+        applyTimerFromServer(synced.data)
+        syncPickersAfterTimerRestore(synced.data.planned_minutes)
+      } else {
+        applyTimerFromServer({
+          timer_phase: 'running',
+          timer_end_at: new Date(endAt).toISOString(),
+          timer_planned_seconds: totalSec,
+          timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
+          plan_id: todayPlan.value?.plan_id,
+        })
+      }
+    } catch (_) {
+      applyTimerFromServer({
+        timer_phase: 'running',
+        timer_end_at: new Date(endAt).toISOString(),
+        timer_planned_seconds: totalSec,
+        timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
+        plan_id: todayPlan.value?.plan_id,
+      })
+    }
+
     uni.showToast({ title: '训练已开始', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '开始训练失败', icon: 'none', duration: 2500 })
   } finally {
     scheduleLoading.value = false
   }
-}
-
-function restoreTrainingTimer() {
-  const data = readTimerData()
-  if (!data) return
-
-  // sessionStorage 里的过期数据不可靠：用户可能只是选了时长但没开始
-  // 服务器端 todayPlan 才是权威来源
-  if (data.phase === 'expired') {
-    // 服务器确认训练日未锁 → 清除旧的过期状态，允许重新开始
-    if (!trainingDayLocked.value) {
-      clearTimerStorage()
-      return
-    }
-    plannedDurationSec.value = data.plannedSec || 0
-    timerPhase.value = 'expired'
-    remainingSeconds.value = 0
-    clearTimerTick()
-    return
-  }
-  if (!data.endAt) return
-  const left = Math.ceil((data.endAt - nowSynced()) / 1000)
-  if (left <= 0) {
-    writeTimerStorage({ phase: 'expired', plannedSec: data.plannedSec || 0 })
-    timerPhase.value = 'expired'
-    remainingSeconds.value = 0
-    clearTimerTick()
-    return
-  }
-  syncTimerFromEndAt(data.endAt)
-  clearTimerTick()
-  timerTickId = setInterval(tickTrainingTimer, 1000)
-  syncPickersAfterTimerRestore(todayPlan.value?.planned_minutes)
 }
 
 function guardMedia() {
@@ -1212,7 +1313,8 @@ async function setAttitude(pct) {
 }
 
 function resetAllLocalState() {
-  devResetTimer(true)
+  clearTimerSession()
+  resetTimerToSetup()
   pickerCards.value = []
   activePickerBlock.value = null
   watchedItemIds.value = new Set()
@@ -1285,6 +1387,7 @@ async function devSimulate4amCutoffAction() {
     uni.showLoading({ title: '模拟4点截止...' })
     const uid = await ensureChildUser()
     const res = await devSimulate4amCutoff(uid)
+    applyDevTimeOverride(res.dev_time_override)
     devResetTimer(true)
     expireTrainingTimer(true)
     if (res.today_plan?.plan_id) {
@@ -1310,6 +1413,7 @@ async function devGoNextDay() {
     uni.showLoading({ title: '模拟下一天...' })
     const uid = await ensureChildUser()
     const res = await devSimulateNextDay(uid)
+    applyDevTimeOverride(res.dev_time_override)
     devResetTimer(true)
     todayPlan.value = res.today?.plan_id ? res.today : (res.today || null)
     aiPlanText.value = res.today?.report_text || ''
@@ -1378,18 +1482,12 @@ async function devResetTalentAction() {
 }
 
 function clearTimerStorage() {
-  try { localStorage.removeItem(timerStorageKey()) } catch (_) { /* ignore */ }
+  clearAllTimerKeysForUser()
 }
 
 function devResetTimer(silent = false) {
-  clearTimerTick()
-  // 不清除 timerStorage — 让 restoreTrainingTimer 在 onShow 时有机会恢复
-  // clearTimerStorage() 只在用户主动点"重置计时"或训练过期时调用
-  timerPhase.value = 'setup'
-  remainingSeconds.value = 0
-  plannedDurationSec.value = 0
-  resetDurationPickers()
-  closeMedia()
+  clearTimerSession()
+  resetTimerToSetup()
   if (!silent) uni.showToast({ title: '计时已重置', icon: 'none' })
 }
 
@@ -2438,6 +2536,7 @@ async function loadTodayPlan(silent = true) {
 
     todayPlan.value = result.data
     applyServerTimeMeta(result.data)
+    applyTimerFromServer(result.data)
 
     if (result.data.status === 'transition' || !result.data.plan_id) {
       resetAllLocalState()
@@ -2462,9 +2561,6 @@ async function loadTodayPlan(silent = true) {
     applyPlanMedia(result.data)
     hydrateWatchProgressFromPlan(result.data)
 
-    if (result.data.items?.length) {
-      restoreTrainingTimer()
-    }
     syncPickersAfterTimerRestore(result.data.planned_minutes)
 
     await loadTodayCheckinRecords(uid, result.data.plan_id)
@@ -2495,7 +2591,6 @@ let idleGuideTimer = null
 
 onMounted(async () => {
   await loadTodayPlan()
-  restoreTrainingTimer()
   startDayUnlockWatch()
   if (devMode.value) loadDevStatus()
   idleGuideTimer = setTimeout(() => {
@@ -2508,21 +2603,6 @@ onMounted(async () => {
 })
 onShow(async () => {
   await loadTodayPlan(true)
-  // loadTodayPlan 内部可能因 transition/无 plan_id 调了 resetAllLocalState
-  // 此时 trainingDayKey 已由 applyServerTimeMeta 设置，可以正确读存储
-  const snap = readTimerData()
-  if (snap && snap.phase === 'running' && snap.endAt) {
-    const left = Math.max(0, Math.ceil((snap.endAt - nowSynced()) / 1000))
-    if (left > 0) {
-      syncTimerFromEndAt(snap.endAt)
-      if (timerPhase.value !== 'running') timerPhase.value = 'running'
-      clearTimerTick()
-      timerTickId = setInterval(tickTrainingTimer, 1000)
-      plannedDurationSec.value = snap.plannedSec || plannedDurationSec.value
-      return
-    }
-  }
-  restoreTrainingTimer()
 })
 onUnmounted(() => {
   clearTimerTick()

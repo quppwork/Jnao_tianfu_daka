@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import auth, chat, dev, growth, guide, health, qa, resources, talent, training, user, voice
+from app.api import auth, chat, dev, growth, guide, health, parent, qa, resources, talent, training, user, voice
 from app.core.logger import setup_logging
 from app.core.security import get_cors_origins, is_debug_routes_enabled
 from app.db.models import ContentItem
@@ -98,6 +98,7 @@ app.include_router(chat.router)
 app.include_router(guide.router)
 app.include_router(voice.router)
 app.include_router(auth.router)
+app.include_router(parent.router)
 app.include_router(user.router)
 app.include_router(training.router)
 app.include_router(dev.router)
