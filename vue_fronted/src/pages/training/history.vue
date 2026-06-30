@@ -337,4 +337,28 @@ onShow(() => loadHistory(true))
   color: #00d2ff;
   font-size: 13px;
 }
+
+[data-theme="white"] .app { background: #f0f2f5; }
+[data-theme="white"] .nav { background: #f0f2f5; }
+[data-theme="white"] .nav-title { color: #1a1a2e; }
+[data-theme="white"] .nav-back { background: #f3f4f6; border-color: #e5e7eb; }
+[data-theme="white"] .nav-refresh { background: #f3f4f6; border-color: #e5e7eb; }
+[data-theme="white"] .nav-refresh text { color: #374151; }
+[data-theme="white"] .day-label { color: #6b7280; }
+[data-theme="white"] .summary-card { background: #fff; border-color: #e5e7eb; }
+[data-theme="white"] .summary-label { color: #6b7280; }
+[data-theme="white"] .summary-time { color: #9ca3af; }
+[data-theme="white"] .mini-card { background: #f9fafb; border-color: #e5e7eb; }
+[data-theme="white"] .mini-card-name { color: #1a1a2e; }
+[data-theme="white"] .mini-card-summary { color: #6b7280; }
+[data-theme="white"] .mini-card-extra { color: #9ca3af; }
+[data-theme="white"] .mini-card-v1 .mini-card-accent { background: linear-gradient(180deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .sa-label { color: #6b7280; }
+[data-theme="white"] .sa-badge { border-color: #2563eb; background: rgba(37,99,235,0.08); }
+[data-theme="white"] .sa-pct { color: #2563eb; }
+[data-theme="white"] .empty-title { color: #6b7280; }
+[data-theme="white"] .empty-hint { color: #9ca3af; }
+[data-theme="white"] .state-box { color: #9ca3af; }
+[data-theme="white"] .retry-btn { background: #f3f4f6; border-color: #d1d5db; }
+[data-theme="white"] .retry-btn text { color: #2563eb; }
 </style>
