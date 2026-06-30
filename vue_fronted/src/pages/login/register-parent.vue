@@ -4,7 +4,7 @@
       <view class="logo-row">
         <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
       </view>
-      <text class="subtitle">注册新账号</text>
+      <text class="subtitle">注册家长账户</text>
 
       <view class="form">
         <view class="input-wrap">
@@ -24,8 +24,12 @@
           <input class="login-input" v-model="form.confirm" placeholder="再次输入密码" type="password" />
         </view>
 
+        <view class="hint-text">
+          <text>注册即代表您同意《用户协议》和《隐私政策》</text>
+        </view>
+
         <view class="btn-login" @click="doRegister">
-          <text>{{ submitting ? '注册中...' : '注册并登录' }}</text>
+          <text>{{ submitting ? '注册中...' : '注册并进入家长中心' }}</text>
         </view>
 
         <view class="btn-back" @click="goBack">
@@ -38,39 +42,28 @@
 
 <script setup>
 import { ref } from 'vue'
-import { registerChild, saveProfile, fetchProfile } from '@/utils/userApi.js'
 
 const form = ref({ name: '', phone: '', password: '', confirm: '' })
 const submitting = ref(false)
 
-async function doRegister() {
+function doRegister() {
   if (!form.value.name.trim()) { uni.showToast({ title: '请输入昵称', icon: 'none' }); return }
   if (!form.value.phone.trim() || form.value.phone.trim().length < 11) { uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return }
-  // 密码：纯前端校验，暂不发送后端
-  if (form.value.password.trim() && form.value.password.trim().length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
-  if (form.value.password.trim() && form.value.password.trim() !== form.value.confirm.trim()) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
+  if (!form.value.password.trim() || form.value.password.trim().length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
+  if (form.value.password.trim() !== form.value.confirm.trim()) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
+
   submitting.value = true
-  try {
-    const data = await registerChild(form.value.phone.trim(), form.value.name.trim())
-    try {
-      const p = await fetchProfile(data.child_user_id)
-      await saveProfile(data.child_user_id, {
-        profile_json: { ...(p.profile_json || {}), role: 'student' },
-      })
-    } catch (_) { /* ignore */ }
-    localStorage.setItem('jnao_user', JSON.stringify({
-      name: data.nickname,
-      phone: data.parent_phone,
-      role: 'student',
-      loginTime: new Date().toISOString()
-    }))
-    localStorage.setItem('jnao_logged_in', '1')
-    uni.showToast({ title: '注册成功，' + data.nickname + '！', icon: 'none' })
-    setTimeout(() => { uni.redirectTo({ url: '/pages/login/onboarding/index' }) }, 500)
-  } catch (e) {
-    submitting.value = false
-    uni.showToast({ title: '注册失败，请稍后重试', icon: 'none' })
-  }
+  // TODO: 后端密码系统就绪后，调用 POST /api/auth/register 并传入 password 和 role
+  // const data = await registerParent(form.value.phone.trim(), form.value.name.trim(), form.value.password.trim())
+
+  // 纯前端：写 localStorage 即完成
+  localStorage.setItem('jnao_user', JSON.stringify({
+    name: form.value.name.trim(), phone: form.value.phone.trim(),
+    role: 'parent', loginTime: new Date().toISOString()
+  }))
+  localStorage.setItem('jnao_logged_in', '1')
+  uni.showToast({ title: '注册成功！欢迎，' + form.value.name.trim(), icon: 'none' })
+  setTimeout(() => { uni.redirectTo({ url: '/pages/parent/index' }) }, 600)
 }
 
 function goBack() {
@@ -88,9 +81,12 @@ function goBack() {
 .subtitle { color:var(--text-dim); font-size:13px; text-align:center; display:block; margin-bottom:28px; letter-spacing:0.06em; }
 .form { }
 .input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:14px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); }
+.input-wrap:focus-within { border-color:#a78bfa; }
 .input-icon { font-size:16px; margin-right:10px; }
 .login-input { flex:1; padding:14px 0; font-size:15px; color:var(--text); }
-.btn-login { background:linear-gradient(135deg,var(--accent),#3b8bff); border-radius:14px; padding:15px; text-align:center; cursor:pointer; }
+.hint-text { text-align:center; margin:4px 0 16px; }
+.hint-text text { color:var(--text-dim); font-size:11px; opacity:0.6; }
+.btn-login { background:linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius:14px; padding:15px; text-align:center; cursor:pointer; box-shadow:0 4px 20px rgba(139,92,246,0.25); }
 .btn-login text { color:#fff; font-size:16px; font-weight:700; }
 .btn-login:active { opacity:0.85; }
 .btn-back { border:1.5px solid var(--border); border-radius:14px; padding:13px; text-align:center; cursor:pointer; margin-top:10px; }

@@ -14,9 +14,21 @@
           <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
           <input class="login-input" v-model="form.name" placeholder="输入昵称" />
         </view>
-        <view class="input-wrap">
+
+        <!-- 手机号（默认） -->
+        <view class="input-wrap" v-if="loginMode === 'phone'">
           <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
           <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" />
+        </view>
+        <!-- 密码 -->
+        <view class="input-wrap" v-else>
+          <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <input class="login-input" v-model="form.password" placeholder="密码" type="password" />
+        </view>
+
+        <!-- 切换登录方式 -->
+        <view class="mode-switch" @click="toggleLoginMode">
+          <text>{{ loginMode === 'phone' ? '🔒 使用密码登录' : '📱 使用手机号登录' }}</text>
         </view>
 
         <view class="role-row">
@@ -34,8 +46,11 @@
           <text>{{ submitting ? '登录中...' : '进入平台' }}</text>
         </view>
 
-        <view class="btn-register" @click="goRegister">
-          <text>注册新账号</text>
+        <view v-if="form.role === 'student'" class="btn-register" @click="goRegister">
+          <text>注册孩子账户</text>
+        </view>
+        <view v-else class="btn-register" style="border-color:rgba(139,92,246,0.3); background:rgba(139,92,246,0.04)" @click="goParentRegister">
+          <text style="color:#a78bfa">注册家长账户</text>
         </view>
       </view>
     </view>
@@ -47,54 +62,59 @@
 
 <script setup>
 import { ref } from 'vue'
-import { loginUser, saveProfile, fetchProfile } from '@/utils/userApi.js'
+import { loginUser } from '@/utils/userApi.js'
 
-const form = ref({ name: '', phone: '', role: 'student' })
+const form = ref({ name: '', phone: '', password: '', role: 'student' })
+const loginMode = ref('phone') // 'phone' | 'password' — 默认手机号（当前闭环）
 const submitting = ref(false)
 
+function toggleLoginMode() {
+  loginMode.value = loginMode.value === 'phone' ? 'password' : 'phone'
+}
+
 async function doLogin() {
-  if (form.value.role === 'parent') {
-    uni.showToast({ title: '家长模式暂未开放，敬请期待', icon: 'none', duration: 2000 })
+  if (!form.value.name.trim()) { uni.showToast({ title: '请输入昵称', icon: 'none' }); return }
+
+  // ── 密码登录模式（纯前端，不调后端）──
+  if (loginMode.value === 'password') {
+    if (!form.value.password.trim() || form.value.password.trim().length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
+    localStorage.setItem('jnao_user', JSON.stringify({
+      name: form.value.name.trim(), phone: form.value.phone.trim() || '',
+      role: form.value.role, loginTime: new Date().toISOString()
+    }))
+    localStorage.setItem('jnao_logged_in', '1')
+    uni.showToast({ title: '欢迎，' + form.value.name.trim() + '！', icon: 'none' })
+    const target = form.value.role === 'parent' ? '/pages/parent/index' : '/pages/index'
+    setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
     return
   }
-  if (!form.value.name.trim()) {
-    uni.showToast({ title: '请输入昵称', icon: 'none' })
-    return
-  }
-  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
-    uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
-    return
-  }
+
+  // ── 手机号登录（当前闭环，调后端）──
+  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) { uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return }
   submitting.value = true
   try {
     const data = await loginUser(form.value.phone.trim(), form.value.name.trim())
-    try {
-      const p = await fetchProfile(data.child_user_id)
-      await saveProfile(data.child_user_id, {
-        profile_json: { ...(p.profile_json || {}), role: 'student' },
-      })
-    } catch (_) { /* ignore */ }
     localStorage.setItem('jnao_user', JSON.stringify({
-      name: data.nickname,
-      phone: data.parent_phone,
-      role: form.value.role,
-      loginTime: new Date().toISOString()
+      name: data.nickname, phone: data.parent_phone,
+      role: form.value.role, loginTime: new Date().toISOString()
     }))
     localStorage.setItem('jnao_logged_in', '1')
     uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
-    setTimeout(() => { uni.redirectTo({ url: '/pages/index' }) }, 500)
+    const target = form.value.role === 'parent' ? '/pages/parent/index' : '/pages/index'
+    setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
   } catch (e) {
     submitting.value = false
-    if (e.status === 404) {
-      uni.showToast({ title: '用户不存在，请先注册', icon: 'none', duration: 2000 })
-    } else {
-      uni.showToast({ title: '登录失败，请稍后重试', icon: 'none' })
-    }
+    if (e.status === 404) { uni.showToast({ title: '用户不存在，请先注册', icon: 'none', duration: 2000 }) }
+    else { uni.showToast({ title: '登录失败，请稍后重试', icon: 'none' }) }
   }
 }
 
 function goRegister() {
   uni.navigateTo({ url: '/pages/login/register' })
+}
+
+function goParentRegister() {
+  uni.navigateTo({ url: '/pages/login/register-parent' })
 }
 
 </script>
@@ -121,6 +141,8 @@ function goRegister() {
 .input-wrap:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,0.1); }
 .input-icon { flex-shrink:0; margin-right:10px; opacity:0.5; }
 .login-input { flex:1; padding:14px 0; font-size:15px; color:var(--text); }
+.mode-switch { text-align:center; margin-bottom:8px; cursor:pointer; }
+.mode-switch text { color:var(--text-dim); font-size:12px; opacity:0.6; }
 .role-row { display:flex; gap:10px; margin-bottom:22px; }
 .role-item { flex:1; background:rgba(255,255,255,0.03); border-radius:12px; padding:14px; text-align:center; border:1.5px solid rgba(255,255,255,0.06); cursor:pointer; transition:all 0.2s; }
 .role-item.active { border-color:var(--accent); background:var(--accent-bg); box-shadow:0 0 16px rgba(88,166,255,0.1); }
