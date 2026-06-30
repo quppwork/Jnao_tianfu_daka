@@ -3338,7 +3338,7 @@ function triggerGlitch() {
 .detail-slide-body { flex:1; overflow-y:auto; min-height:0; padding-right:2px; }
 .detail-row { display:flex; align-items:flex-start; gap:6px; padding:6px 0; border-bottom:1px solid rgba(0,210,255,0.06); position:relative; }
 .detail-row::before { content:'›'; position:absolute; left:-6px; top:6px; color:rgba(0,210,255,0.25); font-size:9px; font-family:monospace; }
-.detail-label { color:#fff; font-size:13px; width:56px; flex-shrink:0; font-weight:500; }
+.detail-label { color:#fff; font-size:12px; width:56px; flex-shrink:0; font-weight:500; }
 .detail-value { color:rgba(0,210,255,0.55); font-size:11px; flex:1; line-height:1.4; word-break:break-all; }
 
 [data-theme="white"] .detail-label { color:#1a1a2e; }
