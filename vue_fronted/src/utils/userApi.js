@@ -137,19 +137,6 @@ export async function studentNeedsOnboarding(userId) {
   }
 }
 
-/** 注册：用手机+昵称创建新用户（学生，兼容旧流程） */
-export async function registerChild(phone, nickname, password = null) {
-  const body = { parent_phone: phone, nickname, role: 'student' }
-  if (password) body.password = password
-  const data = await apiJson('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  setChildUserId(data.child_user_id)
-  return data
-}
-
 // ── 家长端 ──
 
 export async function fetchParentChildren(parentId) {
@@ -190,10 +177,6 @@ export async function deleteParentChild(parentId, childId) {
   })
 }
 
-export async function fetchChildSummary(parentId, childId) {
-  return apiJson(withUser(`/api/parent/children/${childId}/summary`, parentId))
-}
-
 function getOrCreateGuestNickname(fallback = '学员') {
   try {
     const saved = localStorage.getItem(GUEST_NICKNAME_KEY)
@@ -232,14 +215,6 @@ async function registerChildUser(parentPhone, nickname) {
     localStorage.setItem(GUEST_NICKNAME_KEY, nickname)
   } catch (e) { /* ignore */ }
   return data.child_user_id
-}
-
-/** 登录页：用手机号+昵称绑定已有账号或注册 */
-export async function loginOrRegisterChildUser({ nickname, phone } = {}) {
-  const loginProfile = readLoginProfile()
-  const nick = (nickname || loginProfile?.nickname || getOrCreateGuestNickname()).trim() || '学员'
-  const parentPhone = (phone || loginProfile?.phone || getOrCreateGuestPhone()).trim() || getOrCreateGuestPhone()
-  return registerChildUser(parentPhone, nick)
 }
 
 /** 无则自动注册，返回 child_user_id（同一设备/浏览器会复用稳定身份） */
@@ -406,20 +381,6 @@ export async function scheduleTrainingPlan(userId, plannedMinutes) {
   }
 }
 
-/** 孩子确认是否练习可选训练项（高效作业等） */
-export async function confirmOptionalTraining(userId, skill, accept) {
-  try {
-    const data = await apiJson(withUser('/api/training/schedule/optional', userId), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skill, accept }),
-    })
-    return { data }
-  } catch (e) {
-    return { error: 'api', message: e.message }
-  }
-}
-
 /** 设定时长用尽 — 后端隐藏媒体 URL，打卡仍可用 */
 export async function markPlanMediaExhausted(userId) {
   try {
@@ -439,10 +400,6 @@ export async function setTrainingWindow(userId, startTime, endTime) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ start_time: startTime, end_time: endTime }),
   })
-}
-
-export async function fetchTrainingWindow(userId) {
-  return apiJson(withUser('/api/training/window', userId))
 }
 
 export async function clearTrainingWindow(userId) {

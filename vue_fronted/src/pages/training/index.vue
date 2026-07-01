@@ -1944,15 +1944,15 @@ const abilities = TRAINING_ABILITIES
 function hasPickerCard(name) { return pickerCards.value.some(c => c.name === name) }
 
 function newCard(name) {
-  const base = { name, time: '0', content: '0', result: '0', tag: '', count: '0', accuracy: '0', note: '', files: [] }
+  const base = { name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] }
   if (name === '超脑阅读') {
-    return { ...base, time: '0', wordCount: '0' }
+    return { ...base, time: '', wordCount: '' }
   }
   if (name === '扫描速记') {
-    return { ...base, materialType: '书', materialName: '', wordCount: '0', forwardTime: '0', forwardAcc: '0', backwardTime: '0', backwardAcc: '0' }
+    return { ...base, materialType: '书', materialName: '', wordCount: '', forwardTime: '', forwardAcc: '', backwardTime: '', backwardAcc: '' }
   }
   if (name === '影像追忆') {
-    return { ...base, time: '0', wordCount: '0', tool: '书本' }
+    return { ...base, time: '', wordCount: '', tool: '书本' }
   }
   return base
 }
@@ -2777,8 +2777,8 @@ function triggerGlitch() {
 .section-title.dim { color:rgba(255,255,255,0.35); }
 
 .step { background:#243046; border-radius:6px; padding:14px; display:flex; gap:10px; align-items:flex-start; border-left:4px solid #00d2ff; margin-bottom:8px; cursor:pointer; transition:all 0.15s; position:relative; clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
-.step-grid { display:flex; flex-wrap:wrap; gap:8px; }
-.step-grid .step { width:calc(50% - 4px); flex:none; }
+.step-grid { display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box; }
+.step-grid .step { width:100%; box-sizing:border-box; max-width:100%; }
 .step:active { background:#1a3040; }
 .step.dim-step { border-left-color:rgba(255,255,255,0.1); }
 .step.dim-step::after { border-color:rgba(255,255,255,0.1); }
