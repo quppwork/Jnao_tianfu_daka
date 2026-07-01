@@ -1,11 +1,21 @@
 <template>
-  <view class="app" v-if="loadError && !report">
-    <view class="nav"><view class="nav-back" @click="goBack"><text class="nav-back-text">← 首页</text></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
-    <view style="padding:40px 20px;text-align:center;color:#888;">{{ loadError }}</view>
+  <!-- 加载中 -->
+  <view class="app" v-if="loading">
+    <view class="nav"><view class="nav-back" @click="goBack"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
+    <view class="loading-wrap">
+      <view class="loading-spinner"></view>
+      <text class="loading-text">报告加载中...</text>
+    </view>
   </view>
+  <!-- 加载失败 -->
+  <view class="app" v-else-if="loadError">
+    <view class="nav"><view class="nav-back" @click="goBack"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
+    <view style="padding:40px 20px;text-align:center;color:var(--text-dim);">{{ loadError }}</view>
+  </view>
+  <!-- 报告内容 -->
   <view class="app" v-else-if="report">
     <!-- Nav -->
-    <view class="nav"><view class="nav-back" @click="goBack"><text class="nav-back-text">← 首页</text></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
+    <view class="nav"><view class="nav-back" @click="goBack"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
 
     <scroll-view class="body" scroll-y>
       <view class="content">
@@ -168,13 +178,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ensureChildUser, fetchAssessmentReport, fetchProfile, saveProfile } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
 const TALENT_LOGOS = { "学者":"/static/xue.jpg","思者":"/static/si.jpg","赢者":"/static/ying.jpg","德者":"/static/de.jpg","行者":"/static/xing.jpg" }
 
+const loading = ref(true)
 const report = ref(null)
 const testType = ref('成人')
 const isBackup = ref(false)
@@ -182,8 +193,19 @@ const collapseOpen = ref({})
 const loadError = ref('')
 const fromOnboarding = ref(false)
 const studentTypeFromOb = ref('new')
+const themeVersion = ref(0)
+const isLightTheme = computed(() => {
+  void themeVersion.value
+  return document.documentElement.getAttribute('data-theme') === 'white'
+})
+let themeObserver = null
+let prevTheme = null
 
 onMounted(async () => {
+  // 报告页强制白色主题
+  prevTheme = document.documentElement.getAttribute('data-theme') || null
+  document.documentElement.setAttribute('data-theme', 'white')
+
   try {
     const pages = getCurrentPages()
     const page = pages[pages.length - 1]
@@ -209,9 +231,15 @@ onMounted(async () => {
     const json = await fetchAssessmentReport(uid, assessmentId)
     if (json.code !== 1) throw new Error('报告加载失败')
     report.value = json.data
+
+    // 监听主题切换，触发 SVG 重绘
+    themeObserver = new MutationObserver(() => { themeVersion.value++ })
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
   } catch (e) {
     loadError.value = e.message || '报告加载失败'
     console.error('报告加载失败:', e)
+  } finally {
+    loading.value = false
   }
 })
 
@@ -383,8 +411,16 @@ function radarVertices(scale) {
   return RADAR_OUTER.map(v => `${RADAR_CX+(v.x-RADAR_CX)*scale},${RADAR_CY+(v.y-RADAR_CY)*scale}`).join(' ')
 }
 
-// ── Mood SVG ──
+// ── Radar SVG (theme-aware) ──
 const radarSvgHtml = computed(() => {
+  const light = isLightTheme.value
+  const gridStroke = light ? '#e5e7eb' : '#30363d'
+  const dataStroke = light ? '#6b7280' : '#8b949e'
+  const dataFill = light ? 'rgba(100,100,100,0.06)' : 'rgba(128,128,128,0.06)'
+  const dotStrong = light ? '#4b5563' : '#c9d1d9'
+  const dotWeak = light ? '#9ca3af' : '#8b949e'
+  const labelFill = light ? '#1f2937' : '#c9d1d9'
+
   const sorted = RADAR_LABELS.map(name => Ability.value.find(d => d.abilityName === name) || { abilityName: name, value: 0 })
   const dataPts = sorted.map((d,i) => {
     const r = Math.min(100,Math.max(0,d.value))/100
@@ -395,30 +431,35 @@ const radarSvgHtml = computed(() => {
     const r = Math.min(100,Math.max(0,d.value))/100
     const v = RADAR_OUTER[i]
     const x = RADAR_CX+(v.x-RADAR_CX)*r, y = RADAR_CY+(v.y-RADAR_CY)*r
-    return `<circle cx="${x}" cy="${y}" r="3" fill="${r>=0.5?'#c9d1d9':'#8b949e'}"/>`
+    return `<circle cx="${x}" cy="${y}" r="3" fill="${r>=0.5 ? dotStrong : dotWeak}"/>`
   }).join('')
   const labels = RADAR_LABEL_POS.map((l,i) =>
-    `<text x="${l.x}" y="${l.y}" font-size="10" fill="#1f2937" text-anchor="${l.a}" font-weight="600">${RADAR_LABELS[i]}</text>`
+    `<text x="${l.x}" y="${l.y}" font-size="10" fill="${labelFill}" text-anchor="${l.a}" font-weight="600">${RADAR_LABELS[i]}</text>`
   ).join('')
   return `<svg viewBox="-10 -5 150 130" style="display:block;width:220px;height:auto;margin:0 auto;overflow:visible;">
-    <polygon points="${radarVertices(1)}" fill="none" stroke="#30363d" stroke-width="1"/>
-    <polygon points="${radarVertices(0.75)}" fill="none" stroke="#30363d" stroke-width="1"/>
-    <polygon points="${radarVertices(0.5)}" fill="none" stroke="#30363d" stroke-width="1"/>
-    <polygon points="${dataPts}" fill="rgba(128,128,128,0.06)" stroke="#8b949e" stroke-width="1.5" stroke-linejoin="round"/>
+    <polygon points="${radarVertices(1)}" fill="none" stroke="${gridStroke}" stroke-width="1"/>
+    <polygon points="${radarVertices(0.75)}" fill="none" stroke="${gridStroke}" stroke-width="1"/>
+    <polygon points="${radarVertices(0.5)}" fill="none" stroke="${gridStroke}" stroke-width="1"/>
+    <polygon points="${dataPts}" fill="${dataFill}" stroke="${dataStroke}" stroke-width="1.5" stroke-linejoin="round"/>
     ${dots}${labels}</svg>`
 })
 
 const moodSvgHtml = computed(() => {
+  const light = isLightTheme.value
+  const trackBg = light ? '#e5e7eb' : '#30363d'
+  const textFill = light ? '#6b7280' : '#8b949e'
+  const circleStroke = light ? '#f9fafb' : '#fff'
+
   const px = moodPx(stateName.value)
   return `<svg width="180" height="44" viewBox="0 0 180 44" style="display:block;margin:0 auto;">
-    <rect x="10" y="30" width="160" height="4" rx="2" fill="#30363d"/>
+    <rect x="10" y="30" width="160" height="4" rx="2" fill="${trackBg}"/>
     <rect x="10" y="30" width="50" height="4" rx="2" fill="#5c4030"/>
     <rect x="90" y="30" width="50" height="4" rx="2" fill="#3a4a5c"/>
     <rect x="140" y="30" width="30" height="4" rx="2" fill="#3a5c3a"/>
-    <circle cx="${px}" cy="32" r="6" fill="#a07050" stroke="#fff" stroke-width="2"/>
-    <text x="35" y="22" font-size="7" fill="#8b949e" text-anchor="middle">低迷</text>
-    <text x="90" y="14" font-size="7" fill="#8b949e" text-anchor="middle">平稳</text>
-    <text x="140" y="22" font-size="7" fill="#8b949e" text-anchor="middle">高涨</text>
+    <circle cx="${px}" cy="32" r="6" fill="#a07050" stroke="${circleStroke}" stroke-width="2"/>
+    <text x="35" y="22" font-size="7" fill="${textFill}" text-anchor="middle">低迷</text>
+    <text x="90" y="14" font-size="7" fill="${textFill}" text-anchor="middle">平稳</text>
+    <text x="140" y="22" font-size="7" fill="${textFill}" text-anchor="middle">高涨</text>
   </svg>`
 })
 
@@ -426,6 +467,16 @@ function moodPx(name) {
   const idx = STATE_LABELS.indexOf(name)
   return idx >= 0 ? 155 - idx * (110/7) : 100
 }
+
+onBeforeUnmount(() => {
+  if (themeObserver) { themeObserver.disconnect(); themeObserver = null }
+  // 恢复用户原来的主题
+  if (prevTheme) {
+    document.documentElement.setAttribute('data-theme', prevTheme)
+  } else {
+    document.documentElement.removeAttribute('data-theme')
+  }
+})
 
 function reTest() { goBack() }
 function openOldReport() {
@@ -439,22 +490,27 @@ function openOldReport() {
 </script>
 
 <style scoped>
-.app { min-height:100vh; max-width:480px; margin:0 auto; background:#fafafa; font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; }
+.app { min-height:100vh; max-width:480px; margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; }
+
+/* Loading */
+.loading-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding-bottom:80px; }
+.loading-spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+.loading-text { color:var(--text-dim); font-size:14px; }
+@keyframes spin { to { transform:rotate(360deg); } }
 .nav { display:flex; align-items:center; padding:14px 24px 0; }
-.nav-back { padding:6px 12px; border-radius:18px; background:var(--bg-card); display:flex; align-items:center; cursor:pointer; }
-.nav-back-text { color:var(--accent); font-size:13px; }
+.nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
 .nav-spacer { width:36px; }
 .body { flex:1; overflow-y:auto; }
 .content { padding:16px 20px 0; }
 
-.card { background:var(--bg-card); border-radius:16px; padding:16px; margin-bottom:10px; border-bottom:1px solid var(--border); }
+.card { background:var(--bg-card); border-radius:16px; padding:16px; margin-bottom:10px; border:1px solid var(--border); }
 
 /* Hero */
 .hero-row { display:flex; gap:12px; align-items:center; }
 .hero-logo { width:80px; height:80px; flex-shrink:0; }
 .hero-logo-img { width:100%; height:100%; }
-.hero-logo-text { font-size:32px; font-weight:700; color:#9ca3af; }
+.hero-logo-text { font-size:32px; font-weight:700; color:var(--text-dim); }
 .hero-info { flex:1; min-width:0; }
 .hero-label { font-size:11px; color:var(--text-dim); display:block; margin-bottom:2px; }
 .hero-name { font-size:20px; font-weight:700; color:var(--text); display:block; }
@@ -476,7 +532,7 @@ function openOldReport() {
 .trait-grade { font-size:9px; color:var(--text-dim); display:block; margin-top:2px; }
 
 .card-label { font-size:12px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.4px; display:block; margin-bottom:6px; }
-.words-block { margin-top:12px; }
+.words-block { margin-top:12px; font-size:13px; color:var(--text-dim); line-height:1.6; }
 
 /* Ability */
 .ab-row { display:flex; align-items:center; gap:8px; padding:4px 0; }
@@ -487,7 +543,7 @@ function openOldReport() {
 .ab-rating { width:36px; text-align:right; font-size:10px; color:var(--text-dim); }
 .ab-warn { color:#c06040; }
 .ab-desp-block { margin-top:12px; }
-.ab-desp { margin-bottom:8px; }
+.ab-desp { margin-bottom:8px; font-size:13px; color:var(--text-dim); line-height:1.6; }
 .ab-desp-name { font-size:12px; font-weight:600; color:var(--text); display:block; margin-bottom:2px; }
 
 /* State */
@@ -524,12 +580,12 @@ function openOldReport() {
 /* ── Conflict dialog ── */
 .conflict-warn { background:linear-gradient(135deg,rgba(88,166,255,0.08),rgba(99,102,241,0.05)); border:1.5px solid rgba(88,166,255,0.35); text-align:center; padding:20px 16px; }
 .conflict-icon { font-size:36px; display:block; margin-bottom:8px; }
-.conflict-title { color:#3b82f6; font-size:18px; font-weight:700; display:block; margin-bottom:6px; }
+.conflict-title { color:var(--accent); font-size:18px; font-weight:700; display:block; margin-bottom:6px; }
 .conflict-desc { color:var(--text-dim); font-size:13px; line-height:1.6; display:block; margin-bottom:16px; }
 .conflict-actions { display:flex; gap:10px; justify-content:center; }
 .conflict-btn { width:auto; padding:10px 20px; border:1px solid var(--border); border-radius:14px; cursor:pointer; }
 .conflict-btn text { color:var(--text); font-size:14px; }
-.conflict-btn-new { width:auto; padding:10px 20px; background:linear-gradient(135deg,var(--accent),#3b8bff); }
+.conflict-btn-new { width:auto; padding:10px 20px; background:linear-gradient(135deg,var(--accent),#6366f1); }
 .conflict-hint { color:var(--text-dim); font-size:12px; margin-top:10px; display:block; }
 
 /* ── Mizhe (迷者) warning ── */

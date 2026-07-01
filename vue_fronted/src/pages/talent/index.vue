@@ -68,7 +68,7 @@
               <text class="pcard-title">已满18岁</text>
               <text class="pcard-sub">进入成人测试</text>
             </view>
-            <view class="pcard pcard-gold pcard-in" style="background:#fff;" @tap="handleChoice('未满18岁')">
+            <view class="pcard pcard-in" @tap="handleChoice('未满18岁')">
               <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;"><image src="/static/kid-icon-clean.png" mode="aspectFit" style="width:120px;height:190px;" /></view>
               <text class="pcard-title">未满18岁</text>
               <text class="pcard-sub">家长辅助完成孩子测试</text>
@@ -83,17 +83,25 @@
       <!-- CONFIRM -->
       <view v-if="phase === 'confirm'" class="phase" key="confirm">
         <view class="phase-inner">
-          <text class="msg-title">好的，{{ testType || '成人' }}测试。</text>
-          <text class="msg-sub">根据实际情况选择即可</text>
-          <text class="msg-ready">准备好了吗？</text>
+          <text class="msg-title" style="font-size:28px;">好的！{{ testType || '成人' }}测试</text>
           <view class="card-row">
-            <view class="pcard pcard-in" @tap="handleChoice('准备好了，开始吧')">
-              <text class="pcard-emoji">✅</text>
-              <text class="pcard-title">准备好了，开始吧</text>
+            <view class="pcard pcard-in" @tap="handleChoice('准备好了')">
+              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
+                <image src="/static/confirm-hero.png" mode="aspectFit" style="width:120px;height:190px;" />
+              </view>
+              <view style="flex:1;"></view>
+              <text class="pcard-title" style="font-size:20px;">准备好了</text>
+              <text class="pcard-sub">开始答题</text>
+              <view style="height:28px;flex-shrink:0;"></view>
             </view>
-            <view class="pcard pcard-gray pcard-in" @tap="handleChoice('稍后再说')">
-              <text class="pcard-emoji">⏸</text>
-              <text class="pcard-title" style="color:var(--text-dim);">稍后再说</text>
+            <view class="pcard pcard-in" @tap="handleChoice('稍后再说')">
+              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
+                <image src="/static/confirm-later.png" mode="aspectFit" style="width:150px;height:210px;margin-top:-6px;" />
+              </view>
+              <view style="flex:1;"></view>
+              <text class="pcard-title" style="font-size:20px;">稍后再说</text>
+              <text class="pcard-sub">返回首页</text>
+              <view style="height:28px;flex-shrink:0;"></view>
             </view>
           </view>
         </view>
@@ -432,7 +440,7 @@ function handleChoice(choice) {
       noticeTimer = setTimeout(() => { ageGateNotice.value = false; phase.value = 'confirm' }, 2200)
     }
   } else if (phase.value === 'confirm') {
-    if (choice === '准备好了，开始吧') startTest()
+    if (choice === '准备好了') startTest()
     else if (fromOnboarding.value) {
       uni.navigateBack({ delta: 1 })
     } else {
