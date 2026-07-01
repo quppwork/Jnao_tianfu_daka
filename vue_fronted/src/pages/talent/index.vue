@@ -16,19 +16,22 @@
       <!-- DOOR -->
       <view v-if="phase === 'door'" class="phase" key="door">
         <view class="phase-inner">
-          <text class="msg-title" style="font-size:28px;">请选择测试对象</text>
+          <text class="msg-title">天赋测试</text>
+          <text class="msg-sub">完成 35 道题目，发现你的主导天赋类型</text>
           <view class="card-row">
-            <view class="pcard pcard-in" style="flex:1.5;animation-delay:0.4s;justify-content:flex-start;padding-top:20px;" @tap="handleChoice('孩子测试')">
-              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
-                <image src="/static/blue-figure.png" mode="aspectFit" style="width:120px;height:190px;" />
+            <view class="pcard pcard-in" style="animation-delay:0.4s" @tap="handleChoice('孩子测试')">
+              <view class="pcard-icon-wrap">
+                <svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="16" cy="16" r="8"/><circle cx="34" cy="14" r="6"/><path d="M4 44c0-8.8 5.4-16 12-16s12 7.2 12 16"/><path d="M30 42c0-5.3 3.6-9.7 8-9.7s8 4.4 8 9.7"/></svg>
               </view>
-              <text class="pcard-title" style="font-size:20px;">给孩子测</text>
-              <text class="pcard-sub" style="font-size:14px;">请家长操作</text>
+              <text class="pcard-title">孩子测试</text>
+              <text class="pcard-sub">家长辅助完成</text>
             </view>
-            <view class="pcard pcard-in" style="flex:1.5;animation-delay:0.55s" @tap="handleChoice('成人测试')">
-              <image src="/static/self-icon-clean.png" mode="aspectFit" style="width:90px;height:160px;margin-bottom:8px;transform:translateY(-10px);" />
-              <text class="pcard-title" style="font-size:20px;">给自己测</text>
-              <text class="pcard-sub" style="font-size:14px;">成年人使用</text>
+            <view class="pcard pcard-in" style="animation-delay:0.55s" @tap="handleChoice('成人测试')">
+              <view class="pcard-icon-wrap">
+                <svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="24" cy="15" r="9"/><path d="M8 44c0-8.8 7.2-16 16-16s16 7.2 16 16"/></svg>
+              </view>
+              <text class="pcard-title">成人测试</text>
+              <text class="pcard-sub">自行评估</text>
             </view>
           </view>
 
@@ -63,13 +66,13 @@
         <view class="phase-inner">
           <text class="msg-title">注意！请确认您的孩子是否满18岁</text>
           <view class="card-row">
-            <view class="pcard pcard-in" @tap="handleChoice('已满18岁')">
-              <image src="/static/adult-icon-clean.png" mode="aspectFit" style="width:110px;height:190px;margin-bottom:8px;transform:translateY(-10px);" />
+            <view class="pcard pcard-blue pcard-in" @tap="handleChoice('已满18岁')">
+              <view class="pcard-icon-wrap"><svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="24" cy="15" r="9"/><path d="M8 44c0-8.8 7.2-16 16-16s16 7.2 16 16"/></svg></view>
               <text class="pcard-title">已满18岁</text>
               <text class="pcard-sub">进入成人测试</text>
             </view>
-            <view class="pcard pcard-gold pcard-in" style="background:#fff;" @tap="handleChoice('未满18岁')">
-              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;"><image src="/static/kid-icon-clean.png" mode="aspectFit" style="width:120px;height:190px;" /></view>
+            <view class="pcard pcard-gold pcard-in" @tap="handleChoice('未满18岁')">
+              <view class="pcard-icon-wrap pcard-icon-gold"><svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#f0a040" stroke-width="2"><circle cx="16" cy="16" r="8"/><circle cx="34" cy="14" r="6"/><path d="M4 44c0-8.8 5.4-16 12-16s12 7.2 12 16"/><path d="M30 42c0-5.3 3.6-9.7 8-9.7s8 4.4 8 9.7"/></svg></view>
               <text class="pcard-title">未满18岁</text>
               <text class="pcard-sub">家长辅助完成孩子测试</text>
             </view>
@@ -84,10 +87,10 @@
       <view v-if="phase === 'confirm'" class="phase" key="confirm">
         <view class="phase-inner">
           <text class="msg-title">好的，{{ testType || '成人' }}测试。</text>
-          <text class="msg-sub">根据实际情况选择即可</text>
+          <text class="msg-sub">共 35 道题，每题两个选项：「完全符合」或「有差异」。根据实际情况选择即可，大约需要 10-15 分钟。</text>
           <text class="msg-ready">准备好了吗？</text>
           <view class="card-row">
-            <view class="pcard pcard-in" @tap="handleChoice('准备好了，开始吧')">
+            <view class="pcard pcard-blue pcard-in" @tap="handleChoice('准备好了，开始吧')">
               <text class="pcard-emoji">✅</text>
               <text class="pcard-title">准备好了，开始吧</text>
             </view>
@@ -131,7 +134,7 @@
               <view class="cd-ring-wrap">
                 <svg viewBox="0 0 36 36" class="cd-svg">
                   <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(88,166,255,0.12)" stroke-width="2.5"/>
-                  <circle cx="18" cy="18" r="15.5" fill="none" :stroke="cdUrgent ? '#ff6b6b' : '#286bea'" stroke-width="2.5" stroke-linecap="round"
+                  <circle cx="18" cy="18" r="15.5" fill="none" :stroke="cdUrgent ? '#ff6b6b' : '#58a6ff'" stroke-width="2.5" stroke-linecap="round"
                     :stroke-dasharray="cdPct + ' 100'" pathLength="100"/>
                 </svg>
                 <text class="cd-num" :class="{ 'cd-urgent': cdUrgent }">{{ cdLeft }}</text>
@@ -557,14 +560,14 @@ onBeforeUnmount(() => {
 /* Pre-test */
 .phase { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:18vh 24px 0; }
 .phase-inner { display:flex; flex-direction:column; align-items:center; width:100%; }
-.msg-title { color:var(--text); font-size:19px; font-weight:600; text-align:center; line-height:1.5; margin-bottom:8px; }
+.msg-title { color:var(--text); font-size:20px; font-weight:700; text-align:center; line-height:1.4; margin-bottom:6px; }
 .msg-sub { color:var(--text-dim); font-size:14px; text-align:center; line-height:1.6; max-width:300px; }
 .msg-ready { color:var(--text); font-size:16px; font-weight:500; text-align:center; margin:14px 0 20px; }
 .card-row { display:flex; gap:14px; width:100%; max-width:340px; margin-top:24px; }
-.pcard { flex:1; min-height:260px; background:var(--bg-card); border-radius:18px; border:2px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 10px; cursor:pointer; transition:all 0.15s; opacity:0; transform:scale(0.9) translateY(12px); }
+.pcard { flex:1; aspect-ratio:1; background:var(--bg-card); border-radius:18px; border:2px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 10px; cursor:pointer; transition:all 0.15s; opacity:0; transform:scale(0.9) translateY(12px); }
 .pcard:active { transform:scale(0.95) !important; }
 .pcard-in { animation:cardSpring 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-.{ border-color:var(--accent); background:var(--accent-bg); }
+.pcard-blue { border-color:var(--accent); background:var(--accent-bg); }
 .pcard-gold { border-color:rgba(240,160,64,0.3); background:rgba(240,160,64,0.06); }
 .pcard-gray { border-color:var(--border); opacity:0.6; }
 .pcard-gray:active { opacity:1; }

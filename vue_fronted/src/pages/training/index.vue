@@ -1944,15 +1944,15 @@ const abilities = TRAINING_ABILITIES
 function hasPickerCard(name) { return pickerCards.value.some(c => c.name === name) }
 
 function newCard(name) {
-  const base = { name, time: '', content: '', result: '', tag: '', count: '', accuracy: '', note: '', files: [] }
+  const base = { name, time: '0', content: '0', result: '0', tag: '', count: '0', accuracy: '0', note: '', files: [] }
   if (name === '超脑阅读') {
-    return { ...base, time: '', wordCount: '' }
+    return { ...base, time: '0', wordCount: '0' }
   }
   if (name === '扫描速记') {
-    return { ...base, materialType: '书', materialName: '', wordCount: '', forwardTime: '', forwardAcc: '', backwardTime: '', backwardAcc: '' }
+    return { ...base, materialType: '书', materialName: '', wordCount: '0', forwardTime: '0', forwardAcc: '0', backwardTime: '0', backwardAcc: '0' }
   }
   if (name === '影像追忆') {
-    return { ...base, time: '', wordCount: '', tool: '书本' }
+    return { ...base, time: '0', wordCount: '0', tool: '书本' }
   }
   return base
 }
