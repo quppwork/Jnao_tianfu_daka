@@ -141,16 +141,16 @@ async function copyShare() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; box-sizing:border-box; }
 .nav { display:flex; align-items:center; padding:14px 14px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
 .nav-spacer { width:36px; }
-.body { flex:1; overflow-y:auto; padding:12px 16px 0; scrollbar-width:none; }
+.body { flex:1; overflow-y:auto; overflow-x:hidden; padding:12px 14px 0; box-sizing:border-box; width:100%; }
 .body::-webkit-scrollbar { display:none; }
 .sec-title { color:var(--text); font-size:15px; font-weight:700; display:block; margin:0 0 12px; }
 
-.summary-card { background:linear-gradient(135deg, rgba(88,166,255,0.12), rgba(124,58,237,0.08)); border:1px solid var(--border); border-radius:16px; padding:18px; margin-bottom:20px; text-align:center; }
+.summary-card { background:linear-gradient(135deg, rgba(88,166,255,0.12), rgba(124,58,237,0.08)); border:1px solid var(--border); border-radius:16px; padding:18px; margin-bottom:20px; text-align:center; box-sizing:border-box; }
 .sum-honor { color:var(--accent); font-size:20px; font-weight:800; display:block; margin-bottom:4px; }
 .sum-nick { color:var(--text-dim); font-size:13px; display:block; margin-bottom:12px; }
 .sum-stats { display:flex; justify-content:space-around; margin-bottom:8px; }
@@ -160,15 +160,15 @@ async function copyShare() {
 .sum-talent { color:var(--text-dim); font-size:12px; display:block; margin-top:8px; }
 
 .milestone-list { margin-bottom:20px; }
-.ms-item { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:12px; margin-bottom:8px; background:var(--bg-card); opacity:0.45; }
+.ms-item { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:12px; margin-bottom:8px; background:var(--bg-card); opacity:0.45; box-sizing:border-box; }
 .ms-item.achieved { opacity:1; border:1px solid rgba(88,166,255,0.25); }
 .ms-dot { width:22px; height:22px; border-radius:50%; background:var(--bg); border:2px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--accent); margin-top:2px; }
 .ms-item.achieved .ms-dot { background:var(--accent-bg); border-color:var(--accent); }
 .ms-level { color:var(--text); font-size:13px; font-weight:600; display:block; }
 .ms-cond { color:var(--text-dim); font-size:11px; display:block; margin-top:2px; }
 
-.badge-row { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:20px; }
-.badge-item { text-align:center; width:calc(33.33% - 10px); }
+.badge-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
+.badge-item { text-align:center; }
 .badge-item.locked { opacity:0.35; }
 .badge-circle { width:50px; height:50px; border-radius:50%; margin:0 auto 4px; display:flex; align-items:center; justify-content:center; font-size:22px; }
 .badge-circle.earned { background:var(--accent-bg); }
@@ -176,7 +176,7 @@ async function copyShare() {
 .badge-name { color:var(--text); font-size:11px; font-weight:600; display:block; }
 .badge-cond { color:var(--text-dim); font-size:9px; display:block; margin-top:1px; }
 
-.timeline { position:relative; padding-left:20px; margin-bottom:20px; }
+.timeline { position:relative; padding-left:20px; margin-bottom:20px; box-sizing:border-box; }
 .tl-line { position:absolute; left:6px; top:4px; bottom:4px; width:2px; background:var(--border); }
 .tl-item { position:relative; margin-bottom:14px; }
 .tl-item.future { opacity:0.35; }
@@ -185,10 +185,10 @@ async function copyShare() {
 .tl-title { color:var(--text); font-size:13px; font-weight:600; display:block; }
 .tl-date { color:var(--text-dim); font-size:11px; display:block; margin-top:2px; }
 
-.share-card { background:var(--bg-card); border-radius:16px; padding:20px; text-align:center; margin-bottom:20px; border:1px dashed var(--border); }
+.share-card { background:var(--bg-card); border-radius:16px; padding:20px; text-align:center; margin-bottom:20px; border:1px dashed var(--border); box-sizing:border-box; }
 .share-title { color:var(--text); font-size:15px; font-weight:700; display:block; margin-bottom:4px; }
 .share-hint { color:var(--text-dim); font-size:12px; display:block; margin-bottom:12px; }
-.share-preview { background:var(--bg); border-radius:10px; padding:12px; text-align:left; font-size:11px; color:var(--text-dim); line-height:1.5; margin-bottom:12px; white-space:pre-wrap; max-height:120px; overflow-y:auto; }
+.share-preview { background:var(--bg); border-radius:10px; padding:12px; text-align:left; font-size:11px; color:var(--text-dim); line-height:1.5; margin-bottom:12px; white-space:pre-wrap; max-height:120px; overflow-y:auto; box-sizing:border-box; }
 .share-btn { background:var(--accent); border-radius:12px; padding:12px; display:inline-block; cursor:pointer; }
 .share-btn text { color:#fff; font-size:14px; font-weight:600; }
 .share-btn:active { opacity:0.85; }

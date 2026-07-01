@@ -28,6 +28,7 @@ export function resolvePlanItemSkill(item, abilityList = TRAINING_ABILITIES) {
   return null
 }
 
+/** 打卡卡片一行摘要：用时+题数+正确率拼接，如 "20min · 30题 · 85%" */
 export function miniCardSummary(c) {
   if (!c) return '已记录'
   const parts = []

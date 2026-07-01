@@ -1,9 +1,32 @@
-/** 后端 API — 用户身份与各模块数据（仅存 child_user_id 于 localStorage） */
+/**
+ * 后端 API 封装层 — 所有前后端通信的统一入口
+ *
+ * 架构约定:
+ * - 用户标识: localStorage 存 child_user_id，请求通过 Query ?user_id= 传递
+ * - 认证方式: 明文 user_id（MVP 阶段，生产需升级为 JWT）
+ * - 数据流:   Vue 页面 → userApi.js → fetch() → FastAPI → Service → DB
+ * - 错误处理: 非 2xx 响应抛出 Error，调用方 try/catch
+ *
+ * 模块索引:
+ *   L1-40    身份管理 (localStorage 读写 + 会话缓存)
+ *   L43-61   底层 HTTP (apiJson / withUser / resolveQaImageUrl)
+ *   L69-140  认证流程 (登录/注册/家长/学生)
+ *   L140-180 家长端 (孩子 CRUD)
+ *   L206-265 自动登录 (ensureChildUser — 全局入口)
+ *   L269-280 用户资料 (profile CRUD)
+ *   L283-320 天赋测评 (assessment CRUD + 冲突解决)
+ *   L322-430 今日训练 (排课/打卡/窗口/媒体/历史)
+ *   L431-470 学科答疑 (QA 会话 + 消息 + 图片)
+ *   L471-490 成长里程碑 (徽章/时间线/摘要/分享)
+ *   L491-520 语音 + 开发者工具
+ */
 
+// ── localStorage 键名 ──
 const CHILD_KEY = 'jnao_child_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
 
+/** 读取当前登录的 child_user_id，无则返回 null */
 export function getChildUserId() {
   try {
     const raw = localStorage.getItem(CHILD_KEY)
@@ -40,6 +63,7 @@ export function markChildUserSessionValid(uid) {
   if (uid) _sessionValidatedUid = uid
 }
 
+/** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
 async function apiJson(url, options = {}) {
   const res = await fetch(url, options)
   const data = await res.json().catch(() => ({}))
@@ -52,6 +76,7 @@ async function apiJson(url, options = {}) {
   return data
 }
 
+/** 给 URL 拼接 ?user_id= 查询参数 */
 function withUser(url, userId) {
   const sep = url.includes('?') ? '&' : '?'
   return `${url}${sep}user_id=${userId}`
@@ -79,6 +104,7 @@ function getOrCreateGuestPhone() {
 }
 
 /** 登录：验证手机+昵称，不存在则报错（兼容旧流程） */
+/** 学生登录：手机号+昵称 → POST /api/auth/login → 返回 child_user_id */
 export async function loginUser(phone, nickname) {
   const data = await apiJson('/api/auth/login', {
     method: 'POST',
@@ -217,7 +243,11 @@ async function registerChildUser(parentPhone, nickname) {
   return data.child_user_id
 }
 
-/** 无则自动注册，返回 child_user_id（同一设备/浏览器会复用稳定身份） */
+/**
+ * 全局用户入口 — 所有页面 onMounted 第一个调用的函数
+ * 流程: localStorage 有 ID → 调 /api/user/profile 验证 → 200=复用, 404=重新注册
+ * 返回有效的 child_user_id，保证后续 API 调用不会 401
+ */
 export async function ensureChildUser(nickname = '学员') {
   const existing = getChildUserId()
   if (existing && _sessionValidatedUid === existing) {
@@ -331,12 +361,14 @@ export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
   })
 }
 
-// ── 今日训练 ──
+// ── 今日训练（核心模块：入口→排课→打卡→历史）──
 
+/** 训练入口：校验天赋状态 + 检查今日方案是否存在 */
 export async function fetchTrainingEntry(userId) {
   return apiJson(withUser('/api/training/entry', userId))
 }
 
+/** 获取今日训练方案，skipAi=1 跳过 LLM 报告生成（首屏加速） */
 export async function fetchTrainingToday(userId, options = {}) {
   const skipAi = options.skipAi ?? options.skip_ai ?? false
   const base = skipAi ? '/api/training/today?skip_ai=1' : '/api/training/today'
