@@ -43,6 +43,9 @@ def create_child(
     login_name: str,
     nickname: str,
     password: str,
+    grade: str | None = None,
+    age: int | None = None,
+    region: str | None = None,
 ) -> ChildUser:
     parent = _require_parent(db, parent_id)
     if not auth_service.parent_can_add_child(db, parent):
@@ -63,6 +66,16 @@ def create_child(
     auth_service.bind_parent_child(db, parent_id, child.id)
     pj = dict(child.profile_json or {})
     pj["parentName"] = parent.nickname
+    # 🆕 存储孩子基本信息
+    learner = dict(pj.get("learner") or {})
+    if grade is not None:
+        learner["grade"] = grade
+    if age is not None:
+        learner["age"] = age
+    if region is not None:
+        learner["region"] = region
+    if learner:
+        pj["learner"] = learner
     child.profile_json = pj
     db.commit()
     db.refresh(child)
@@ -76,6 +89,9 @@ def update_child(
     *,
     nickname: str | None = None,
     password: str | None = None,
+    grade: str | None = None,
+    age: int | None = None,
+    region: str | None = None,
 ) -> ChildUser:
     _require_parent(db, parent_id)
     if not auth_service.get_parent_child_bind(db, parent_id, child_id):
@@ -89,6 +105,18 @@ def update_child(
         child.nickname = nickname.strip()
     if password is not None:
         child.password_hash = hash_password(password)
+    # 🆕 更新孩子基本信息
+    pj = dict(child.profile_json or {})
+    learner = dict(pj.get("learner") or {})
+    if grade is not None:
+        learner["grade"] = grade
+    if age is not None:
+        learner["age"] = age
+    if region is not None:
+        learner["region"] = region
+    if learner:
+        pj["learner"] = learner
+    child.profile_json = pj
     db.commit()
     db.refresh(child)
     return child

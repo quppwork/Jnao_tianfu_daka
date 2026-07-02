@@ -16,8 +16,8 @@ from app.db.models import (
 from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
 from app.services.child_training_state import (
     bump_training_completed_day,
-    apply_pending_main_line_advance,
     get_training_progress,
+    overall_tier,
     save_training_progress,
     training_day_number,
 )
@@ -68,7 +68,7 @@ def _sync_training_day_counter(db: Session, child_user_id: int, plan_date: date)
         y_plan = _get_plan_by_date(db, child_user_id, yesterday)
         if y_plan and y_plan.status == "completed":
             bump_training_completed_day(state)
-    apply_pending_main_line_advance(state)
+    # v2.0: Tier 晋级在打卡时实时判定，不再 pending
     state["training_day_anchor"] = today_str
     save_training_progress(db, child, state)
 
@@ -499,25 +499,15 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
             for row in db.scalars(select(ContentItem).where(ContentItem.id.in_(ids))):
                 content_map[row.id] = row
         from app.db.models import ChildUser
-        from app.services.child_training_state import get_training_progress
-        from app.services.training_carryover import main_line_key_from_plan_index
-        from config.loader import load_training_curriculum
+        from app.services.child_training_state import get_training_progress, overall_tier
 
-        cur = load_training_curriculum()
-        plan_main_line = main_line_key_from_plan_index(plan.content_index)
-        plan_line = (cur.get("main_lines") or {}).get(plan_main_line) or {}
-        main_line_key = plan_main_line
-        main_line_name = plan_line.get("name") or ""
-        progress_main_line = plan_main_line
-        progress_main_line_name = main_line_name
-        pending_main_line_to = None
         child = db.get(ChildUser, plan.child_user_id)
-        if child:
-            tp = get_training_progress(child)
-            pending_main_line_to = tp.get("pending_main_line_to")
-            progress_main_line = tp.get("main_line") or plan_main_line
-            progress_line = (cur.get("main_lines") or {}).get(progress_main_line) or {}
-            progress_main_line_name = progress_line.get("name") or ""
+        tp = get_training_progress(child) if child else {}
+        main_line_key = f"T{tp.get('training_days', 0)}"  # v2.0: tier-based, not main_line
+        main_line_name = f"整体 Tier {overall_tier(tp)}"
+        progress_main_line = main_line_key
+        progress_main_line_name = main_line_name
+        pending_main_line_to = None  # v2.0: Tier晋级实时判定，无pending
     training_day = _training_day_for_child(db, plan.child_user_id) if db is not None else 1
     optional_offers: list[dict] = []
     if db is not None and plan.items:
@@ -549,6 +539,7 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
             _item_to_dict(item, hide_media=hide_media, content=content_map.get(item.content_item_id))
             for item in sorted(plan.items, key=lambda i: i.sort_order)
         ],
+        "overall_tier": overall_tier(tp) if tp else 1,  # 🆕 v2.0
         "optional_offers": optional_offers,
         "day_locked": locked,
         "globally_cutoff": globally_cutoff,
@@ -870,7 +861,7 @@ def submit_checkin(
         talent_code = talent.get("talent_code") if talent else None
         if child and talent_code:
             from app.services.training_mastery import process_checkin_progress
-            from app.services.training_route_context import _child_grade
+            from app.services.child_training_state import child_grade
 
             progress_delta = process_checkin_progress(
                 db,
@@ -878,7 +869,7 @@ def submit_checkin(
                 plan,
                 cards,
                 talent_code=talent_code,
-                grade=_child_grade(db, child_user_id),
+                grade=child_grade(child),
             )
             if progress_delta and not progress_delta.get("main_line_advanced"):
                 plan.content_index = progress_delta.get("content_index", plan.content_index)
@@ -1151,14 +1142,14 @@ def update_checkin_record(
         talent_code = talent.get("talent_code") if talent else None
         if child and talent_code:
             db.flush()
-            from app.services.training_route_context import _child_grade
+            from app.services.child_training_state import child_grade
 
             progress_delta = reassess_main_line_from_plan(
                 db,
                 child,
                 plan,
                 talent_code=talent_code,
-                grade=_child_grade(db, child_user_id),
+                grade=child_grade(child),
             )
     db.commit()
     db.refresh(record)
@@ -1188,14 +1179,14 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
         talent = _resolve_effective_talent(db, child_user_id)
         talent_code = talent.get("talent_code") if talent else None
         if child and talent_code:
-            from app.services.training_route_context import _child_grade
+            from app.services.child_training_state import child_grade
 
             progress_delta = reassess_main_line_from_plan(
                 db,
                 child,
                 plan,
                 talent_code=talent_code,
-                grade=_child_grade(db, child_user_id),
+                grade=child_grade(child),
             )
     db.commit()
     out = {"deleted": True, "plan_status": plan_status}

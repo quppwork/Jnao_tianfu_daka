@@ -1,3 +1,4 @@
+import pytest
 # -*- coding: utf-8 -*-
 """profile_json 合并与引导/onboarding 天赋同步"""
 

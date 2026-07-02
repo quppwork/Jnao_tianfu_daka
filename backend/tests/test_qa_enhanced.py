@@ -1,3 +1,4 @@
+import pytest
 """学科答疑增强 API — 画像 / 拍图 / RAG / 教练元数据"""
 
 import io

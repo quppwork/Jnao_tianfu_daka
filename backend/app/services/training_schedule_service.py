@@ -9,23 +9,15 @@ from sqlalchemy.orm import selectinload, Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.assessment_service import resolve_effective_talent
-from app.services.child_training_state import get_training_progress, main_line_index
+from app.services.child_training_state import get_training_progress, overall_tier, get_skill_oss_position
 from app.services.content_meta import estimate_duration_min, item_instruction, parse_item_meta, content_display_title
-from app.services.talent_content_pool import (
-    get_talent_content_pool,
-    split_pool_for_training_blocks,
-)
-from app.services.training_block_builder import normalize_plan_items_by_duration
+from app.services.talent_content_pool import get_talent_content_pool
 from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
 from app.services.training_child_guide import build_coach_text_for_plan
-from app.services.training_curriculum_router import filter_candidates_for_main_line
-from app.services.training_curriculum_scheduler import build_curriculum_schedule
-from app.services.training_route_context import build_route_context, duration_slot
-from app.services.training_route_llm import llm_route_training_plan
+from app.services.training_formula_engine import expand_formula
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
-    _item_to_dict,
     _plan_to_response,
     create_plan_for_schedule,
 )
@@ -124,7 +116,7 @@ async def populate_plan_items(
     *,
     plan_date: date | None = None,
 ) -> dict:
-    """按用户选定时长生成 plan_item（LLM 框架内路由 + 昨日未完成续推）"""
+    """v2.0: 公式引擎展开 → 取各技能 OSS 音频 → 生成 plan_items"""
     ensure_supplementary_catalogs(db)
     plan_date = plan_date or plan.plan_date
     talent = resolve_effective_talent(db, child_user_id)
@@ -132,159 +124,112 @@ async def populate_plan_items(
         raise TrainingError("请先完成天赋测评", 403)
 
     talent_code = talent["talent_code"]
-    talent_primary = talent.get("talent_primary")
     child = db.get(ChildUser, child_user_id)
     state = get_training_progress(child) if child else {}
-    plan.content_index = main_line_index(state.get("main_line") or "A")
 
+    # v2.0: overall_tier 替代 content_index
+    o_tier = overall_tier(state)
+    plan.content_index = o_tier
+
+    # 获取年级 → 学段
+    from app.services.child_training_state import child_grade
+    child = db.get(ChildUser, child_user_id)
+    grade = child_grade(child) if child else ""
+    from app.services.training_mastery import _grade_band
+    grade_band = _grade_band(grade) or "primary_low"
+
+    # 公式引擎展开技能组合
+    formula_result = expand_formula(planned_minutes, overall_tier=o_tier, grade_band=grade_band)
+    slots = formula_result["slots"]
+
+    # OSS 音频池
     talent_pool = get_talent_content_pool(db, talent_code)
-    candidates = _build_full_candidate_pool(db, talent_code, plan.content_index)
-    if not candidates:
-        raise TrainingError("暂无可用训练音频", 503)
-
-    main_key = state.get("main_line") or "A"
-    candidates_a, candidates_b = split_pool_for_training_blocks(talent_pool, main_key)
-    if not candidates_a:
-        candidates_a = get_talent_content_pool(db, talent_code, skill="超脑阅读", limit=48)
-
-    ctx = build_route_context(
-        db,
-        child_user_id,
-        planned_minutes,
-        candidates,
-        plan_date=plan_date,
-        talent_primary=talent_primary,
-    )
-
-    carryover = ctx.get("carryover_items") or []
-    route = build_curriculum_schedule(
-        db,
-        child_user_id,
-        talent_code,
-        planned_minutes,
-        content_index=plan.content_index,
-        carryover=carryover,
-        talent_primary=talent_primary,
-    )
-
-    cur = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum()
-    llm_cfg = cur.get("llm_routing") or {}
-    if not route.get("plan_items") and llm_cfg.get("enabled"):
-        filtered = filter_candidates_for_main_line(candidates, main_key)
-        filtered_ids = {x.id for x in filtered}
-        ctx["candidates"] = [c for c in (ctx.get("candidates") or []) if c.get("id") in filtered_ids]
-        ctx["candidate_ids"] = filtered_ids
-        route = await llm_route_training_plan(
-            ctx,
-            content_index=plan.content_index,
-            candidates_a=filter_candidates_for_main_line(candidates_a, main_key),
-            candidates_b=filter_candidates_for_main_line(candidates_b or [], main_key),
-            seed_key=f"{child_user_id}:{plan_date.isoformat()}",
-        )
-
-    route["plan_items"] = normalize_plan_items_by_duration(
-        route.get("plan_items") or [], planned_minutes
-    )
-
     id_map = {c.id: c for c in talent_pool}
+
+    # 清除旧 items
     for old in list(plan.items):
         db.delete(old)
     db.flush()
 
     sort_order = 1
 
+    def _find_content_for_skill(skill_name: str) -> ContentItem | None:
+        """在 OSS 池中查找该技能当前 stage/part 对应的音频"""
+        stage, part = get_skill_oss_position(state, skill_name)
+        for item in talent_pool:
+            meta = parse_item_meta(item)
+            if meta.get("skill") == skill_name:
+                s = meta.get("stage", 0)
+                p = meta.get("part", 0)
+                if s == stage and p == part:
+                    return item
+        # fallback: 找该技能任意第一个可用音频
+        for item in talent_pool:
+            meta = parse_item_meta(item)
+            if meta.get("skill") == skill_name:
+                return item
+        return None
+
     def _add_item(
         *,
         content: ContentItem | None = None,
-        placeholder_skill: str | None = None,
-        block: str,
-        role: str,
-        round_no: int,
-        item_type: str = "audio",
+        skill_name: str = "",
+        is_elective: bool = False,
+        blocks_next: bool = True,
     ) -> None:
         nonlocal sort_order
-        if placeholder_skill:
-            title = (
-                f"{placeholder_skill}（占位）"
-                if placeholder_skill == "开口窍"
-                else "多元感知（待同步）"
-                if placeholder_skill == "感知力"
-                else f"{placeholder_skill}（待同步）"
-            )
-            ability = "perception" if placeholder_skill == "感知力" else "placeholder"
-            inst_type = "perception" if placeholder_skill == "感知力" else "placeholder"
+        if content:
+            meta = parse_item_meta(content)
+            inst = item_instruction("A", meta.get("content_type") or "audio")
+            try:
+                payload = __import__("json").loads(inst)
+                payload["skill"] = meta.get("skill") or skill_name
+                payload["item_type"] = "elective" if is_elective else "required"
+                payload["blocks_next"] = blocks_next
+                inst = __import__("json").dumps(payload, ensure_ascii=False)
+            except Exception:
+                pass
+            title = content_display_title(content)
             db.add(
                 TrainingItem(
                     plan_id=plan.id,
                     sort_order=sort_order,
-                    ability_type=ability,
+                    ability_type="audio",
                     title=title,
-                    duration_min=0,
-                    instructions=item_instruction(block, inst_type),
+                    duration_min=estimate_duration_min(content),
+                    audio_url=content.play_url,
+                    video_url=content.video_url,
+                    content_item_id=content.id,
+                    instructions=inst,
                     checkin_status="pending",
                 )
             )
-            sort_order += 1
-            return
-        if not content:
-            return
-        meta = parse_item_meta(content)
-        resolved_type = item_type or meta.get("content_type") or "audio"
-        if resolved_type == "perception" or meta.get("skill") == "感知力":
-            resolved_type = "perception"
-        inst = item_instruction(block, resolved_type)
-        try:
-            payload = __import__("json").loads(inst)
-            payload["skill"] = meta.get("skill") or payload.get("skill")
-            payload["role"] = role
-            payload["round"] = round_no
-            inst = __import__("json").dumps(payload, ensure_ascii=False)
-        except Exception:
-            pass
-        title = content_display_title(content)
-        if meta.get("skill") == "感知力" or "多元感知" in title:
-            title = title if "多元感知" in title else f"{title}多元感知"
-        db.add(
-            TrainingItem(
-                plan_id=plan.id,
-                sort_order=sort_order,
-                ability_type="perception" if resolved_type == "perception" else "audio",
-                title=title,
-                duration_min=estimate_duration_min(content),
-                audio_url=content.play_url,
-                video_url=content.video_url,
-                content_item_id=content.id,
-                instructions=inst,
-                checkin_status="pending",
+        else:
+            # 占位：OSS 中找不到该技能的音频
+            db.add(
+                TrainingItem(
+                    plan_id=plan.id,
+                    sort_order=sort_order,
+                    ability_type="placeholder",
+                    title=f"{skill_name}（待同步）",
+                    duration_min=0,
+                    instructions=item_instruction("A", "placeholder"),
+                    checkin_status="pending",
+                )
             )
-        )
         sort_order += 1
 
-    for row in route.get("plan_items") or []:
-        slot = int(row.get("training_slot") or 1)
-        block = "A" if slot == 1 else "B" if slot == 2 else f"T{slot}"
-        role = row.get("role") or "primary"
-        round_no = int(row.get("round") or 1)
-        item_type = row.get("item_type") or "audio"
-        ph = row.get("placeholder_skill")
-        if ph:
-            _add_item(
-                placeholder_skill=str(ph),
-                block=block,
-                role=role,
-                round_no=round_no,
-                item_type=item_type,
-            )
-            continue
-        cid = row.get("content_item_id")
-        content = id_map.get(cid) or db.get(ContentItem, cid)
-        _add_item(
-            content=content,
-            block=block,
-            role=role,
-            round_no=round_no,
-            item_type=item_type,
-        )
+    # 遍历公式槽位，为每个技能取对应 OSS 音频
+    elective_rules = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum().get("elective_rules") or {}
+    for skill_name in slots:
+        is_elective = skill_name in elective_rules
+        er = elective_rules.get(skill_name, {})
+        blocks_next = not is_elective  # 选修不阻塞
+        if is_elective:
+            blocks_next = er.get("blocks_next", False)
+
+        content = _find_content_for_skill(skill_name)
+        _add_item(content=content, skill_name=skill_name, is_elective=is_elective, blocks_next=blocks_next)
 
     plan.planned_minutes = planned_minutes
     plan.media_exhausted = 0
@@ -293,10 +238,16 @@ async def populate_plan_items(
         select(TrainingPlan).options(selectinload(TrainingPlan.items)).where(TrainingPlan.id == plan.id)
     )
     repair_plan_media_items(db, plan, talent_code)
-    plan.report_text = build_coach_text_for_plan(plan, main_line=route.get("main_line"))
+    plan.report_text = build_coach_text_for_plan(plan)
 
     db.flush()
-    return {**route, "mode": route.get("mode", "rule")}
+    return {
+        "formula_slots": slots,
+        "c_note": formula_result.get("c_note"),
+        "exam_note": formula_result.get("exam_note"),
+        "elective_notes": formula_result.get("elective_notes", []),
+        "mode": "formula_v2",
+    }
 
 
 def ensure_today_plan_shell(

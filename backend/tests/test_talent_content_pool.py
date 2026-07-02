@@ -1,3 +1,4 @@
+import pytest
 """天赋混合内容池"""
 
 from app.services.talent_content_pool import (

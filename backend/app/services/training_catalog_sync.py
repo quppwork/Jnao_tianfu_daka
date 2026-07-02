@@ -10,10 +10,21 @@ from sqlalchemy.orm import Session
 
 from app.db.models import ContentItem, TrainingItem, TrainingPlan
 from app.services.catalog_import import import_catalog
-from app.services.child_training_state import get_skill_position, get_training_progress
+from app.services.child_training_state import get_skill_oss_position, get_training_progress
 from app.services.content_meta import content_display_title, parse_item_instruction, parse_item_meta
 from app.services.talent_content_pool import get_talent_content_pool
-from app.services.training_block_builder import _find_perception_item
+
+
+def _find_perception_item(pool: list) -> object | None:
+    """在 OSS 池中查找感知力/多元感知音频"""
+    for item in pool:
+        meta = parse_item_meta(item)
+        if meta.get("series") == "duoyuanganzhi" or meta.get("skill") == "感知力":
+            return item
+        title = (item.lesson_title or "") + (meta.get("oss_key") or "")
+        if "多元感知" in title:
+            return item
+    return None
 from app.services.training_carryover import skill_from_training_item
 from app.services.training_curriculum import _find_lesson
 
@@ -99,7 +110,7 @@ def repair_plan_media_items(db: Session, plan: TrainingPlan, talent_code: int) -
         if not skill:
             continue
 
-        stage, part = get_skill_position(state, skill)
+        stage, part = get_skill_oss_position(state, skill)
         found = _find_lesson(pool, skill, stage, part)
         if found:
             _attach_content_to_item(item, found, skill=skill)

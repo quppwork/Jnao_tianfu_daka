@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, TrainingPlan, TrainingRecord
 from app.services.child_training_state import (
-    apply_pending_main_line_advance,
     bump_training_completed_day,
     get_training_progress,
     save_training_progress,
@@ -97,7 +96,8 @@ def settle_training_day(db: Session, child_user_id: int, plan_date: date) -> dic
             bump_training_completed_day(state)
             training_days_bumped = True
 
-    pending_applied = apply_pending_main_line_advance(state)
+    # v2.0: Tier 晋级在打卡时实时判定，不再 pending 次日生效
+    pending_applied = False
     state["training_day_anchor"] = _next_training_day(plan_date).isoformat()
     state["last_settled_plan_date"] = plan_key
     save_training_progress(db, child, state)

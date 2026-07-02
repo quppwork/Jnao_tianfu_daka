@@ -178,6 +178,8 @@ def child_summary(db: Session, child: ChildUser) -> dict:
         "training_days": _training_days(db, child.id),
         "checkins": _checkin_count(db, child.id),
         "grade": learner.get("grade"),
+        "age": learner.get("age"),
+        "region": learner.get("region"),
     }
 
 

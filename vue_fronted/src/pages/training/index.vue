@@ -216,15 +216,20 @@
             <text v-if="!coachCollapsed" class="plan-ai-text">{{ coachGuideText }}</text>
           </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
+
+          <!-- 🆕 v2.0 选修入口 -->
+          <view v-if="timerPhase !== 'setup' && todayPlan?.plan_id" class="elective-entry" @click="openElectiveModal">
+            <text>🧩 选修技能</text>
+          </view>
         </template>
       </view>
 
-      <!-- 训练阶段（动态 A/B/C…，开始训练后显示） -->
+      <!-- 训练阶段（v2.0：逐个训练项） -->
       <template v-if="timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in planPhases" :key="phase.block">
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
-          <text class="section-title" :class="{ dim: !phase.unlocked }">
-            {{ phase.label }}{{ phase.unlocked ? '' : ' 🔒' }}
+          <text class="section-title" :class="{ dim: !phase.unlocked, elective: phase.isElective }">
+            {{ phase.label }}{{ phase.unlocked ? '' : ' 🔒' }}{{ phase.isElective ? ' 🆓' : '' }}
           </text>
 
           <view class="media-block" :class="{ locked: isPhaseMediaLocked(phase) }">
@@ -309,6 +314,13 @@
             </view>
 
             <template v-if="card.name === '极速运算'">
+              <view class="form-row">
+                <text class="form-label">完成状态</text>
+                <view class="form-tags">
+                  <text class="ftag" :class="{ on: card.completed }" @click="card.completed = true">✓ 已完成</text>
+                  <text class="ftag" :class="{ on: !card.completed }" @click="card.completed = false">✗ 未完成</text>
+                </view>
+              </view>
               <view class="form-row">
                 <text class="form-label">时间</text>
                 <input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" />
@@ -403,6 +415,13 @@
                     <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
                     <text class="form-unit" style="width:24px;">%</text>
                   </view>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">倒背验证</text>
+                <view class="form-tags">
+                  <text class="ftag" :class="{ on: card.reverseRecite }" @click="card.reverseRecite = true">✓ 可逐字倒背</text>
+                  <text class="ftag" :class="{ on: !card.reverseRecite }" @click="card.reverseRecite = false">✗ 暂不能</text>
                 </view>
               </view>
               <view class="form-row">
@@ -552,6 +571,34 @@
       </view>
 
       </view>
+
+    <!-- 🆕 v2.0 选修弹窗 -->
+    <view v-if="showElectiveModal" class="picker-overlay" @click="closeElectiveModal">
+      <view class="picker-card elective-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">🧩 选修技能</text>
+          <view class="modal-close" @click="closeElectiveModal">✕</view>
+        </view>
+        <view v-if="!electiveOffers.length" style="padding:16px;text-align:center;color:#8b949e;">
+          暂无可用选修技能
+        </view>
+        <view v-for="offer in electiveOffers" :key="offer.skill" class="elective-item">
+          <view class="elective-info">
+            <text class="elective-name">{{ offer.skill }}</text>
+            <text class="elective-hint" v-if="!offer.available">{{ offer.reason }}</text>
+            <text class="elective-hint" v-else-if="offer.has_checkin">可打卡记录</text>
+            <text class="elective-hint" v-else>纯播放，无需打卡</text>
+          </view>
+          <view
+            class="elective-btn"
+            :class="{ disabled: !offer.available }"
+            @click="offer.available && onElectiveCheckin(offer.skill)"
+          >
+            <text>{{ offer.available ? (offer.has_checkin ? '打卡' : '开始') : '不可用' }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
 
     <!-- 天赋测评引导 -->
     <view v-if="showAssessmentModal" class="picker-overlay" @click="dismissAssessmentModal">
@@ -768,10 +815,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, setDevMode } from '@/utils/devMode.js'
-import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
+import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -1116,8 +1163,7 @@ function syncPickersAfterTimerRestore(planMinutes) {
 function syncPlanMetaFromApi(data) {
   if (!data) return
   lessonIndex.value = data.training_day_number ?? data.lesson_day ?? (data.content_index ?? 0) + 1
-  if (data.main_line) curMainLine.value = data.main_line
-  if (data.main_line_name) curMainLineName.value = data.main_line_name
+  if (data.overall_tier != null) overallTier.value = data.overall_tier
 }
 
 async function applyScheduledPlan(uid, data) {
@@ -1374,11 +1420,10 @@ async function devResetMainLine() {
     uni.showLoading({ title: '回到主线A...' })
     const uid = await ensureChildUser()
     await devResetTrainingProgress(uid)
-    curMainLine.value = 'A'
-    curMainLineName.value = ''
+    overallTier.value = 1
     await loadTodayPlan(true)
     await loadDevStatus()
-    uni.showToast({ title: '主线已回到 A（今日方案未删）', icon: 'none' })
+    uni.showToast({ title: 'Tier 已回到 1（今日方案未删）', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '重置失败', icon: 'none' })
   } finally {
@@ -1566,6 +1611,29 @@ const showPicker = ref(false)
 const activePickerBlock = ref(null)
 const submittedCards = ref([])
 const summaryAttitude = ref(60)
+
+// 🆕 v2.0 选修弹窗
+const showElectiveModal = ref(false)
+const electiveOffers = ref([])
+async function loadElectiveOffers() {
+  if (!todayPlan.value?.planned_minutes) return
+  try {
+    const { offers } = await fetchElectiveList(todayPlan.value.planned_minutes, overallTier.value)
+    electiveOffers.value = offers || []
+  } catch (_) { electiveOffers.value = [] }
+}
+function openElectiveModal() { showElectiveModal.value = true }
+function closeElectiveModal() { showElectiveModal.value = false }
+async function onElectiveCheckin(skill) {
+  const uid = await ensureChildUser()
+  await submitElectiveCheckin(uid, {
+    plan_id: todayPlan.value?.plan_id,
+    skill,
+    cards: [{ name: skill }],
+  })
+  uni.showToast({ title: `${skill} 已记录`, icon: 'none' })
+  closeElectiveModal()
+}
 const attitudeTouched = ref(false)
 const scores = [
   { pct:100, emoji:'🔴', desc:'身体已透支，精神还要求进步' },
@@ -1597,12 +1665,14 @@ const coachGuideText = computed(() => {
 const lessonIndex = ref(1)
 const curMainLine = ref('A')
 const curMainLineName = ref('')
+// 🆕 v2.0
+const overallTier = ref(1)
+const skillTierProgress = ref({})
 
 const planHeaderMeta = computed(() => {
   const parts = [talentLabel.value]
-  const ml = curMainLine.value || todayPlan.value?.main_line || 'A'
-  const mlName = curMainLineName.value || todayPlan.value?.main_line_name
-  parts.push(`主线 ${ml}${mlName ? `（${mlName}）` : ''}`)
+  const tier = overallTier.value || todayPlan.value?.overall_tier || 1
+  parts.push(`Tier ${tier}`)
   const day = todayPlan.value?.training_day_number ?? todayPlan.value?.lesson_day ?? lessonIndex.value
   if (day) parts.push(`第 ${day} 天`)
   return parts.filter(Boolean).join(' · ')
@@ -1685,52 +1755,54 @@ const planPhases = computed(() => {
   const items = todayPlan.value?.items || []
   if (!items.length) return []
 
-  const blockOrder = []
-  const seen = new Set()
-  for (const item of items) {
-    const b = item.block || 'A'
-    if (!seen.has(b)) {
-      seen.add(b)
-      blockOrder.push(b)
-    }
-  }
+  // v2.0: 每个 item 独立为一个 phase，按 sort_order 顺序
+  const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  let prevDone = true  // first item always unlocked
 
-    return blockOrder.map(block => {
-    const phaseItems = items.filter(i => (i.block || 'A') === block)
-    const unlocked = isPhaseUnlocked(block, blockOrder, items)
-    const doneCount = phaseItems.filter(i => i.checkin_status === 'done').length
-    const allDone = phaseItems.length > 0 && doneCount === phaseItems.length
+  return sorted.map((item, idx) => {
+    const inst = parseItemInstructions(item.instructions)
+    const isRequired = inst.item_type !== 'elective' && inst.blocks_next !== false
+    const unlocked = isRequired ? prevDone : true  // elective always unlocked
+    const isDone = item.checkin_status === 'done'
+
+    // Update prevDone for next iteration
+    if (isRequired && !isDone) prevDone = false
+
+    const skillName = inst.skill || resolvePlanItemSkill(item) || ''
+    const isElective = !isRequired
+    const label = isElective ? `${skillName || '选修'}（选修）` : `${idx + 1}. ${skillName || '训练'}`
+
     let nodeIcon = '○'
     let nodeClass = 'tl-node-locked'
     if (unlocked) {
-      nodeIcon = '●'
-      nodeClass = allDone ? 'tl-node-done' : 'tl-node-active'
+      nodeIcon = isDone ? '✓' : '●'
+      nodeClass = isDone ? 'tl-node-done' : 'tl-node-active'
     }
-    const label = (() => {
-      try {
-        const inst = phaseItems.find(i => i.instructions?.trim()?.startsWith('{'))?.instructions
-        if (inst) {
-          const p = JSON.parse(inst)
-          if (p.role === 'synergy') return `训练 ${block}（配合主线）`
-        }
-      } catch (_) { /* ignore */ }
-      return `训练 ${block}`
-    })()
-    const subtitle = buildPhaseSubtitle(phaseItems)
+
     return {
-      block,
+      block: String(idx + 1),
+      itemId: item.id,
       label,
-      subtitle,
-      items: phaseItems,
+      subtitle: item.title || '',
+      items: [item],
       unlocked,
-      allDone,
-      doneCount,
-      totalCount: phaseItems.length,
+      allDone: isDone,
+      doneCount: isDone ? 1 : 0,
+      totalCount: 1,
       nodeIcon,
       nodeClass,
+      isElective,
+      skillName,
     }
   })
 })
+
+function parseItemInstructions(instructions) {
+  if (typeof instructions === 'string' && instructions.trim().startsWith('{')) {
+    try { return JSON.parse(instructions) } catch (_) { /* */ }
+  }
+  return {}
+}
 
 const planTotalCount = computed(() => (todayPlan.value?.items || []).length)
 const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => i.checkin_status === 'done').length)
@@ -2015,6 +2087,8 @@ function serializeCards(list) {
       backwardAcc: c.backwardAcc,
       tool: c.tool,
       phaseBlock: c.phaseBlock,
+      reverseRecite: c.reverseRecite || false,     // 🆕 v2.0
+      completed: c.completed || false,              // 🆕 v2.0
       fileNames: (c.files || []).map(f => f.name),
     }
   })
@@ -2072,17 +2146,32 @@ async function loadTodayCheckinRecords(uid, planId) {
 function applyCheckinProgress(res) {
   const tp = res?.training_progress
   if (!tp) return
-  if (tp.advance_pending && tp.pending_main_line_to) {
-    const to = tp.pending_main_line_to
-    const detail = tp.advance_detail?.message
-    const hint = detail ? `（${detail}）` : ''
-    uni.showToast({
-      title: `达标！明日进入主线 ${to}${hint}`,
-      icon: 'none',
-      duration: 3500,
-    })
-  } else if (tp.advance_message && tp.advance_met === false) {
-    uni.showToast({ title: tp.advance_message, icon: 'none', duration: 2500 })
+  // 🆕 v2.0: per-skill tier results
+  if (tp.overall_tier != null) overallTier.value = tp.overall_tier
+  const sr = tp.skill_results
+  if (sr) {
+    skillTierProgress.value = sr
+    for (const [skill, result] of Object.entries(sr)) {
+      if (result.tier_advanced) {
+        uni.showToast({
+          title: `🎉 ${skill} 晋级 Tier ${result.tier_after}！`,
+          icon: 'none',
+          duration: 3000,
+        })
+      } else if (result.passed && result.consecutive_pass >= 2) {
+        uni.showToast({
+          title: `${skill} 连续 ${result.consecutive_pass} 次达标`,
+          icon: 'none',
+          duration: 2000,
+        })
+      } else if (!result.passed) {
+        uni.showToast({
+          title: `${skill} 未达标，计数重置`,
+          icon: 'none',
+          duration: 2000,
+        })
+      }
+    }
   }
 }
 
@@ -2839,6 +2928,28 @@ function triggerGlitch() {
 .assessment-btn text { font-size:14px; font-weight:600; }
 .assessment-btn.secondary { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); }
 .assessment-btn.secondary text { color:rgba(255,255,255,0.7); }
+
+/* 🆕 v2.0 选修弹窗 */
+.elective-entry {
+  margin-top: 10px; padding: 8px 12px; border-radius: 8px;
+  background: rgba(139, 92, 246, 0.12); border: 1px dashed rgba(139, 92, 246, 0.3);
+  cursor: pointer; text-align: center;
+}
+.elective-entry text { color: #a78bfa; font-size: 13px; }
+.elective-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.elective-info { display: flex; flex-direction: column; gap: 2px; }
+.elective-name { color: #e6edf3; font-size: 15px; font-weight: 600; }
+.elective-hint { color: #8b949e; font-size: 12px; }
+.elective-btn {
+  padding: 6px 14px; border-radius: 6px; background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.4); cursor: pointer;
+}
+.elective-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.elective-btn text { color: #a78bfa; font-size: 13px; font-weight: 600; }
+.section-title.elective { color: #a78bfa; }
 .assessment-btn.primary { background:linear-gradient(135deg,#00d2ff,#3b8bff); }
 .assessment-btn.primary text { color:#fff; }
 .checkin-modal .picker-panel { margin-bottom:10px; }

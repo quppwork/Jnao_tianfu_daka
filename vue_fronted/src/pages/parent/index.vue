@@ -60,6 +60,21 @@
         <view class="input-wrap">
           <input class="form-input" v-model="childForm.password" :placeholder="editingChild ? '新密码（留空不改）' : '登录密码（至少6位）'" type="password" />
         </view>
+        <view class="input-wrap">
+          <picker class="form-picker" :range="ageOptions" :value="ageIndex" @change="onAgeChange">
+            <view class="form-picker-display" :class="{ placeholder: !childForm.age }">
+              {{ childForm.age ? childForm.age + ' 岁' : '请选择年龄' }}
+            </view>
+          </picker>
+        </view>
+        <view class="input-wrap">
+          <picker class="form-picker" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
+            <view class="form-picker-display" :class="{ placeholder: !childForm.grade }">
+              {{ childForm.grade || '请选择年级' }}
+            </view>
+          </picker>
+        </view>
+        <!-- region 后端已建字段，前端暂不使用：profile_json.learner.region -->
         <view class="btn-save" @click="saveChild">
           <text>{{ saving ? '保存中...' : '保存' }}</text>
         </view>
@@ -83,7 +98,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   getChildUserId,
   fetchParentChildren,
@@ -103,7 +118,25 @@ const loading = ref(true)
 const saving = ref(false)
 const isLight = ref(false)
 const editingChild = ref(null)
-const childForm = ref({ loginName: '', nickname: '', password: '' })
+const childForm = ref({ loginName: '', nickname: '', password: '', age: null, grade: '' })
+
+const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120
+const ageIndex = computed(() => {
+  const idx = ageOptions.indexOf(childForm.value.age)
+  return idx >= 0 ? idx : 0
+})
+function onAgeChange(e) {
+  childForm.value.age = ageOptions[e.detail.value] || null
+}
+
+const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
+const gradeIndex = computed(() => {
+  const idx = gradeOptions.indexOf(childForm.value.grade)
+  return idx >= 0 ? idx : 0
+})
+function onGradeChange(e) {
+  childForm.value.grade = gradeOptions[e.detail.value] || ''
+}
 
 onMounted(() => loadData())
 
@@ -144,13 +177,13 @@ function openAddChild() {
     return
   }
   editingChild.value = null
-  childForm.value = { loginName: '', nickname: '', password: '' }
+  childForm.value = { loginName: '', nickname: '', password: '', age: null, grade: '' }
   showChildForm.value = true
 }
 
 function openEditChild(child) {
   editingChild.value = child
-  childForm.value = { loginName: child.login_name || '', nickname: child.nickname || '', password: '' }
+  childForm.value = { loginName: child.login_name || '', nickname: child.nickname || '', password: '', age: child.age || null, grade: child.grade || '' }
   showChildForm.value = true
 }
 
@@ -166,7 +199,7 @@ async function saveChild() {
   saving.value = true
   try {
     if (editingChild.value) {
-      const body = { nickname: nick }
+      const body = { nickname: nick, grade: childForm.value.grade || null, age: childForm.value.age || null }
       if (pwd) {
         if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
         body.password = pwd
@@ -176,7 +209,11 @@ async function saveChild() {
       const loginName = childForm.value.loginName.trim()
       if (!loginName || loginName.length < 2) { uni.showToast({ title: '账号至少2位', icon: 'none' }); saving.value = false; return }
       if (!pwd || pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
-      await createParentChild(parentId.value, { loginName, nickname: nick, password: pwd })
+      await createParentChild(parentId.value, {
+        loginName, nickname: nick, password: pwd,
+        grade: childForm.value.grade || null,
+        age: childForm.value.age || null,
+      })
     }
     closeChildForm()
     await loadData()
@@ -256,6 +293,9 @@ function doLogout() {
 .settings-title { color:var(--text); font-size:17px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
 .input-wrap { background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:0 12px; margin-bottom:10px; }
 .form-input { width:100%; padding:12px 0; font-size:14px; color:var(--text); border:none; background:transparent; }
+.form-picker { width:100%; padding:12px 0; }
+.form-picker-display { font-size:14px; color:var(--text); }
+.form-picker-display.placeholder { color:var(--text-dim); }
 .btn-save { background:linear-gradient(135deg,#8b5cf6,#7c3aed); border-radius:12px; padding:13px; text-align:center; margin-top:8px; cursor:pointer; }
 .btn-save text { color:#fff; font-weight:600; }
 .btn-delete { margin-top:10px; padding:12px; text-align:center; border-radius:12px; background:rgba(220,38,38,0.08); cursor:pointer; }

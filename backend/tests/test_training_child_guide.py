@@ -1,7 +1,10 @@
+import pytest
 """孩子训练指引与媒体修复"""
 
 from app.services.training_child_guide import build_coach_text_for_plan, is_technical_schedule_note
 from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
+
+
 
 
 def test_coach_text_not_technical(db_session, child_with_assessment):

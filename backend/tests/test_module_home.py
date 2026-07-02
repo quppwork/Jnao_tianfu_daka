@@ -1,3 +1,4 @@
+import pytest
 """首页 index.vue — 引导对话 /api/guide/*"""
 
 from fastapi.testclient import TestClient

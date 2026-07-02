@@ -1,3 +1,4 @@
+import pytest
 # -*- coding: utf-8 -*-
 """Full workflow test suite for registration → onboarding → training → conflict → lock"""
 import sys, json, os
@@ -24,6 +25,8 @@ from app.services.assessment_service import (
 )
 from app.services.training_service import get_training_entry, _resolve_effective_talent
 from app.core.talent_mapping import resolve_talent_code
+
+
 
 init_db()
 db = get_session_factory()()

@@ -1,3 +1,4 @@
+import pytest
 """POST /api/chat — 豆包对话"""
 
 from unittest.mock import AsyncMock, patch

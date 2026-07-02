@@ -1,3 +1,4 @@
+import pytest
 # -*- coding: utf-8 -*-
 """答疑 coach_hint / mistake_pattern 跨轮复用"""
 

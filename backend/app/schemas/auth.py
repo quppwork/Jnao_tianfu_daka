@@ -36,11 +36,18 @@ class CreateChildRequest(BaseModel):
     login_name: str = Field(..., min_length=2, max_length=50)
     nickname: str = Field(..., min_length=1, max_length=50)
     password: str = Field(..., min_length=6, max_length=128)
+    grade: str | None = Field(None, max_length=20)       # 🆕 年级
+    age: int | None = Field(None, ge=3, le=25)            # 🆕 年龄
+    # --- 以下字段已建表，前端暂不使用，请勿删除 ---
+    region: str | None = Field(None, max_length=50)       # 🆕 地区（前端暂不采集）
 
 
 class UpdateChildRequest(BaseModel):
     nickname: str | None = Field(None, min_length=1, max_length=50)
     password: str | None = Field(None, min_length=6, max_length=128)
+    grade: str | None = Field(None, max_length=20)        # 🆕
+    age: int | None = Field(None, ge=3, le=25)            # 🆕
+    region: str | None = Field(None, max_length=50)       # 🆕
 
 
 class ChildSummaryOut(BaseModel):
@@ -51,6 +58,8 @@ class ChildSummaryOut(BaseModel):
     training_days: int = 0
     checkins: int = 0
     grade: str | None = None
+    age: int | None = None                                 # 🆕
+    region: str | None = None                               # 🆕
 
 
 class ParentChildrenResponse(BaseModel):

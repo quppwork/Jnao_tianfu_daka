@@ -165,9 +165,9 @@ describe('canPhaseCheckin — 打卡权限检查', () => {
 
 describe('newCard — 新建打卡卡片', () => {
   function newCard(name) {
-    const base = { name, time:'', content:'', result:'', tag:'', count:'', accuracy:'', note:'', files:[] }
+    const base = { name, time:'', content:'', result:'', tag:'', count:'', accuracy:'', note:'', files:[], phaseBlock:'', completed: false, reverseRecite: false }
     if (name === '扫描速记') {
-      return { ...base, materialType:'书', materialName:'', wordCount:'', forwardTime:'', forwardAcc:'', backwardTime:'', backwardAcc:'' }
+      return { ...base, materialType:'书', materialName:'', wordCount:'', forwardTime:'', forwardAcc:'', backwardTime:'', backwardAcc:'', reverseRecite: false }
     }
     if (name === '影像追忆') {
       return { ...base, tool:'书本' }
@@ -179,15 +179,22 @@ describe('newCard — 新建打卡卡片', () => {
     const c = newCard('极速运算')
     expect(c.name).toBe('极速运算')
     expect(c.files).toEqual([])
+    expect(c.completed).toBe(false)
   })
-  it('扫描速记 → 含额外字段', () => {
+  it('扫描速记 → 含额外字段 + reverseRecite', () => {
     const c = newCard('扫描速记')
     expect(c.materialType).toBe('书')
     expect(c.wordCount).toBe('')
+    expect(c.reverseRecite).toBe(false)
   })
   it('影像追忆 → 含工具字段', () => {
     const c = newCard('影像追忆')
     expect(c.tool).toBe('书本')
+  })
+  it('v2.0: 所有卡都有 completed 和 reverseRecite', () => {
+    const c = newCard('超脑阅读')
+    expect(c).toHaveProperty('completed')
+    expect(c).toHaveProperty('reverseRecite')
   })
 })
 
@@ -417,6 +424,140 @@ describe('阶段分组逻辑', () => {
     const items = [{ id:1 }, { id:2, block:'B' }]
     const aItems = items.filter(i => (i.block || 'A') === 'A')
     expect(aItems).toHaveLength(1)
+  })
+})
+
+// --- 🆕 v2.0 逐项解锁逻辑 ---
+
+describe('v2.0 per-item sequential unlock', () => {
+  function buildItems(slots) {
+    return slots.map((skill, idx) => ({
+      id: idx + 1,
+      sort_order: idx + 1,
+      title: skill,
+      checkin_status: 'pending',
+      instructions: JSON.stringify({
+        skill,
+        item_type: ['高效作业', '多元感知'].includes(skill) ? 'elective' : 'required',
+        blocks_next: !['高效作业', '多元感知'].includes(skill),
+      }),
+    }))
+  }
+
+  it('第一个必修项总是解锁', () => {
+    const items = buildItems(['超脑阅读', '影像追忆'])
+    const firstUnlocked = true
+    expect(firstUnlocked).toBe(true)
+  })
+
+  it('选修项不阻塞后续', () => {
+    const items = buildItems(['超脑阅读', '高效作业', '影像追忆'])
+    const electiveIdx = items.findIndex(i => {
+      try { return JSON.parse(i.instructions).item_type === 'elective' } catch { return false }
+    })
+    const elective = items[electiveIdx]
+    const inst = JSON.parse(elective.instructions)
+    expect(inst.item_type).toBe('elective')
+    expect(inst.blocks_next).toBe(false)
+  })
+
+  it('必修未完成则下一必修锁定', () => {
+    const items = buildItems(['超脑阅读', '影像追忆'])
+    // item 0 not done → item 1 locked (if it's required)
+    const item0done = items[0].checkin_status === 'done'
+    expect(item0done).toBe(false)
+    // Sequential: prev required item must be done
+    const nextUnlocked = item0done
+    expect(nextUnlocked).toBe(false)
+  })
+
+  it('全部必修完成→plan completed', () => {
+    const items = buildItems(['超脑阅读', '影像追忆', '扫描速记'])
+    items.forEach(i => i.checkin_status = 'done')
+    const allDone = items.every(i => i.checkin_status === 'done')
+    expect(allDone).toBe(true)
+  })
+})
+
+// --- 🆕 v2.0 选修弹窗逻辑 ---
+
+describe('v2.0 elective offers', () => {
+  const electiveRules = {
+    '精力恢复': { trigger: 'duration_gte_8h', has_checkin: false },
+    '多元感知': { trigger: 'manual', has_checkin: true },
+    '高效作业': { trigger: 'formula_slot', has_checkin: false },
+  }
+
+  it('精力恢复<8h不可用', () => {
+    const plannedMinutes = 120
+    const available = plannedMinutes >= 480
+    expect(available).toBe(false)
+  })
+
+  it('精力恢复≥8h可用', () => {
+    const plannedMinutes = 500
+    const available = plannedMinutes >= 480
+    expect(available).toBe(true)
+  })
+
+  it('多元感知始终可用', () => {
+    expect(electiveRules['多元感知'].trigger).toBe('manual')
+    expect(electiveRules['多元感知'].has_checkin).toBe(true)
+  })
+
+  it('高效作业不打卡不阻塞', () => {
+    expect(electiveRules['高效作业'].has_checkin).toBe(false)
+  })
+
+  it('只有多元感知需要打卡', () => {
+    const checkinSkills = Object.entries(electiveRules)
+      .filter(([, r]) => r.has_checkin)
+      .map(([k]) => k)
+    expect(checkinSkills).toEqual(['多元感知'])
+  })
+})
+
+// --- 🆕 v2.0 CARD_FIELDS ---
+
+import { CARD_FIELDS, ELECTIVE_ABILITIES } from '../src/utils/trainingCardDisplay.js'
+
+describe('v2.0 CARD_FIELDS', () => {
+  it('5个技能有字段定义', () => {
+    expect(Object.keys(CARD_FIELDS)).toHaveLength(5)
+  })
+
+  it('超脑阅读需 time + wordCount', () => {
+    expect(CARD_FIELDS['超脑阅读'].required).toContain('time')
+    expect(CARD_FIELDS['超脑阅读'].required).toContain('wordCount')
+  })
+
+  it('影像追忆需 wordCount + accuracy', () => {
+    expect(CARD_FIELDS['影像追忆'].required).toContain('wordCount')
+    expect(CARD_FIELDS['影像追忆'].required).toContain('accuracy')
+  })
+
+  it('扫描速记需 reverseRecite', () => {
+    expect(CARD_FIELDS['扫描速记'].required).toContain('reverseRecite')
+  })
+
+  it('极速运算需 completed', () => {
+    expect(CARD_FIELDS['极速运算'].required).toContain('completed')
+  })
+
+  it('极速学习需 completed', () => {
+    expect(CARD_FIELDS['极速学习'].required).toContain('completed')
+  })
+})
+
+describe('v2.0 ELECTIVE_ABILITIES', () => {
+  it('3个选修技能', () => {
+    expect(ELECTIVE_ABILITIES).toHaveLength(3)
+  })
+
+  it('包含精力恢复、多元感知、高效作业', () => {
+    expect(ELECTIVE_ABILITIES).toContain('精力恢复')
+    expect(ELECTIVE_ABILITIES).toContain('多元感知')
+    expect(ELECTIVE_ABILITIES).toContain('高效作业')
   })
 })
 

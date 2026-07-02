@@ -1,3 +1,4 @@
+import pytest
 """学科答疑 pages/qa/index.vue"""
 
 from fastapi.testclient import TestClient

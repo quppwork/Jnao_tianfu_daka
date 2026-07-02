@@ -294,11 +294,180 @@ GET /api/talent/assessment/{assessment_id}?user_id={uid}
 
 ---
 
-## 今日训练
+## 今日训练（v2.0）
 
 **前端**: `vue_fronted/src/pages/training/index.vue`
 **后端**: `app/api/training.py`
-**核心引擎**: `training_service.py` + `training_schedule_service.py` + `training_block_builder.py` + `training_duration_pack.py` + `training_day.py` + `child_training_state.py`
+**核心引擎**: `training_formula_engine.py` + `training_mastery.py` + `child_training_state.py`
+
+### API 列表
+
+| 方法 | 路径 | 说明 | v2.0 |
+|------|------|------|:--:|
+| GET | `/api/training/entry` | 训练入口：校验天赋 + 检查方案 | 🟡 |
+| POST | `/api/training/schedule` | 选时长 → 公式引擎生成方案 | 🔄 |
+| GET | `/api/training/today` | 今日训练方案（含 AI 报告） | 🟡 |
+| POST | `/api/training/checkin` | 提交打卡 → Tier 晋级判定 | 🔄 |
+| GET | `/api/training/checkin/today` | 今日打卡记录 | 🟢 |
+| GET | `/api/training/checkin/{id}` | 单条打卡详情 | 🟢 |
+| PUT | `/api/training/checkin/{id}` | 更新打卡卡片 | 🟢 |
+| DELETE | `/api/training/checkin/{id}` | 删除打卡（回退晋级） | 🟢 |
+| GET | `/api/training/elective/list` | 🆕 可选修技能列表 | 🆕 |
+| POST | `/api/training/elective` | 🆕 提交选修打卡 | 🆕 |
+| GET | `/api/training/progress` | Tier 晋级进度 + OSS 状态 | 🔄 |
+| GET | `/api/training/history` | 历史训练方案 | 🟢 |
+| POST | `/api/training/window` | 设置训练时段 | 🟢 |
+| GET | `/api/training/window` | 查询当前窗口 | 🟢 |
+| DELETE | `/api/training/window` | 删除时段 | 🟢 |
+| GET | `/api/training/window/status` | 窗口状态 | 🟢 |
+| GET | `/api/training/video/talent` | 天赋训练视频 | 🟢 |
+| POST | `/api/training/items/{id}/watch-progress` | 视频进度上报 | 🟢 |
+| POST | `/api/training/plan/media-exhausted` | 时长用尽标记 | 🟢 |
+| GET | `/api/training/report/today` | 今日 AI 报告 | 🟢 |
+| GET | `/api/training/report/{date}` | 指定日报告 | 🟢 |
+
+---
+### POST /api/training/schedule
+
+```json
+// Request
+{ "planned_minutes": 120 }
+
+// Response (v2.0)
+{
+  "plan_id": 1,
+  "plan_date": "2026-07-02",
+  "status": "pending",
+  "overall_tier": 1,
+  "planned_minutes": 120,
+  "items": [
+    {
+      "id": 1,
+      "sort_order": 1,
+      "title": "学者超脑速读",
+      "ability_type": "audio",
+      "duration_min": 5,
+      "play_url": "https://oss.../xue/学者超脑速读.MP3",
+      "instructions": "{\"skill\": \"超脑阅读\", \"item_type\": \"required\", \"blocks_next\": true}",
+      "checkin_status": "pending"
+    }
+  ],
+  "report_text": "今天专注阅读速度..."
+}
+```
+
+---
+### POST /api/training/checkin（🆕 v2.0 返回体）
+
+```json
+// Request
+{
+  "plan_id": 1,
+  "item_id": 1,
+  "cards": [
+    { "name": "超脑阅读", "time": "2.5", "wordCount": "900" }
+  ]
+}
+
+// Response (v2.0)
+{
+  "record_id": 1,
+  "plan_status": "pending",
+  "training_progress": {
+    "overall_tier": 1,
+    "skill_results": {
+      "超脑阅读": {
+        "tier_before": 1,
+        "tier_after": 1,
+        "passed": true,
+        "consecutive_pass": 1,
+        "tier_advanced": false,
+        "oss_advanced": false,
+        "threshold_detail": {
+          "skill": "超脑阅读",
+          "tier": 1,
+          "rule_type": "wpm",
+          "passed": true,
+          "wpm": 360.0,
+          "required_wpm": 266.7,
+          "detail": "达标：2.5分钟900字（360.0字/分 ≥ 266.7字/分）"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+### 打卡卡片字段规范
+
+| 技能 | 必填字段 | 可选字段 | 判定方式 |
+|------|---------|---------|---------|
+| 超脑阅读 | `name`, `time`, `wordCount` | — | wordCount/time ≥ 阈值 |
+| 影像追忆 | `name`, `wordCount`, `accuracy` | `time` | wordCount≥阈值 AND accuracy≥阈值 |
+| 扫描速记 | `name`, `wordCount`, `time`, `reverseRecite` | — | wordCount/time≥阈值 AND reverseRecite=true |
+| 极速运算 | `name`, `completed` | `correctCount`, `totalCount` | completed=true |
+| 极速学习 | `name`, `completed` | — | completed=true |
+
+---
+### GET /api/training/elective/list
+
+```
+Query: planned_minutes=120&overall_tier=1
+Response:
+{
+  "offers": [
+    { "skill": "精力恢复", "available": false, "reason": "训练时长未达8小时", "has_checkin": false },
+    { "skill": "多元感知", "available": true, "reason": "", "has_checkin": true },
+    { "skill": "高效作业", "available": true, "reason": "", "has_checkin": false }
+  ]
+}
+```
+
+---
+### GET /api/training/progress（🆕 v2.0）
+
+```json
+{
+  "overall_tier": 1,
+  "skills": {
+    "超脑阅读": { "tier": 1, "oss_stage": 0, "oss_part": 0, "consecutive_pass": 2 },
+    "影像追忆": { "tier": 1, "oss_stage": 1, "oss_part": 1, "consecutive_pass": 1 },
+    "扫描速记": { "tier": 1, "oss_stage": 1, "oss_part": 1, "consecutive_pass": 0 },
+    "极速运算": { "tier": 1, "oss_stage": 2, "oss_part": 1, "consecutive_pass": 0 },
+    "极速学习": { "tier": 1, "oss_stage": 2, "oss_part": 1, "consecutive_pass": 0 }
+  },
+  "training_days": 3
+}
+```
+
+---
+### 排课引擎流程（v2.0）
+
+```
+POST /api/training/schedule { planned_minutes: 120 }
+  1. 读取 child_training_state → 各技能 Tier + OSS stage/part
+  2. overall_tier = min(所有技能 tier)
+  3. 公式引擎 expand_formula(120, overall_tier, grade_band)
+     → ["超脑阅读", "影像追忆", "影像追忆", "扫描速记", "高效作业"]
+  4. 遍历 slots → 取各技能当前 OSS (stage,part) 音频
+  5. 生成 TrainingItem（required 标记 blocks_next=true, elective 标记 false）
+```
+
+### 晋级流程（v2.0）
+
+```
+POST /api/training/checkin { cards }
+  1. 解析 cards → 提取技能名 + 打卡值
+  2. 查 training_tier_thresholds.yaml → 技能Tier×学段→阈值
+  3. 比对判定 pass/fail
+  4. pass → consecutive_pass += 1; fail → consecutive_pass = 0
+  5. consecutive_pass ≥ 3 → 技能 Tier += 1, 计数重置
+  6. pass → 推进 OSS stage/part (有则取、无则跳)
+  7. overall_tier = min(所有技能 tier)
+  8. 返回 per-skill 结果 + overall_tier
+```
+**核心引擎**: `training_schedule_service.py` + `training_formula_engine.py` + `training_mastery.py` + `child_training_state.py` + `training_day.py`
 
 ### API 列表
 
@@ -325,7 +494,7 @@ GET  /api/training/window               # 查询当前窗口
 GET  /api/training/window/status        # 窗口状态（是否在窗口内）
 
 # 进度 + 历史
-GET  /api/training/progress             # 主线阶段 A-E + 技能 stage/part + 训练天数
+GET  /api/training/progress             # 各技能Tier晋级状态 + OSS stage/part + 训练天数（🔄 v2.0）
 GET  /api/training/history              # 历史训练方案列表
 
 # 报告 + 资源
@@ -343,70 +512,83 @@ POST /api/training/plan/media-exhausted       # 标记媒体已用完
 GET  /api/training/status               # 全局训练状态
 ```
 
-### 今日方案响应
+### 今日方案响应（🔄 v2.0）
 
 ```json
 {
   "plan_id": 1,
-  "plan_date": "2026-06-29",
+  "plan_date": "2026-07-02",
   "status": "in_progress",
+  "overall_tier": 1,
+  "schedule_mode": "formula",
   "items": [
     {
       "id": 1,
-      "item_type": "a_lesson",
+      "sort_order": 1,
+      "skill": "超脑阅读",
+      "tier": 1,
+      "item_type": "required",
+      "blocks_next": true,
+      "checkin_fields": ["time", "wordCount"],
       "status": "pending",
-      "title": "学者影像追忆1阶段1",
-      "duration_min": 15,
+      "title": "学者超脑速读",
+      "duration_min": 5,
       "content_type": "audio",
-      "play_url": "https://oss-cn-beijing.aliyuncs.com/...",
-      "instructions": "专注回忆画面细节..."
+      "play_url": "https://oss-cn-beijing.aliyuncs.com/..."
     }
   ],
-  "coach_text": "今天专注阅读速度，目标 800 字/分钟",
-  "schedule_mode": "day_one"
+  "elective_offers": [
+    {"skill": "多元感知", "available": true},
+    {"skill": "精力恢复", "available": false, "reason": "训练时长未达8小时"}
+  ],
+  "coach_text": "今天专注阅读速度，目标 800 字/3分钟"
 }
 ```
 
-### 排课引擎流程
+### 排课引擎流程（🔄 v2.0）
 
 ```
-GET /api/training/today
-  → get_today_plan()                   已有方案 → 直接返回
-  → schedule_training_by_duration()    无方案 → 启动排课:
-      1. 读取 child_user.talent_code + content_index
-      2. 首日固定（training_curriculum.yaml day_one）
-         次日随机（after_day_one.strategy = "random"）
-      3. 主线 A-E 排课（training_curriculum.py）
-      4. 背包填充：按时长选训练项数量 + 轮次（training_duration_pack.py）
-      5. 依赖校验：A→B 顺序，先看后练（training_block_builder.py）
-      6. 从 content_item 表匹配音频/视频
-      7. LLM 生成教练文案（training_child_guide.py）
-      8. 训练日锁定：凌晨 4:00 截止，4:00-4:05 日切窗口（training_day.py）
+POST /api/training/schedule { planned_minutes: 120 }
+  → schedule_training_by_duration()
+      1. 读取 child_training_state → 各技能 Tier + OSS stage/part
+      2. 计算 overall_tier = min(所有技能 tier)
+      3. 公式引擎展开（training_formula_engine.py）
+         时长 → 技能组合 slots（Tier1: A+nB+C+高效作业）
+      4. 遍历 slots → 取各技能当前 OSS (stage,part) 对应音频
+      5. 生成 TrainingItem（必修标记blocks_next=true，选修标记false）
+      6. LLM 生成教练文案（training_child_guide.py）
+      7. 训练日锁定：凌晨 4:00（training_day.py）
 ```
 
-### 打卡校验
+### 打卡校验（🔄 v2.0）
 
 1. `plan_id` 必须属于当前用户
 2. `item_id` 必须属于该 plan
-3. **顺序校验**：A 方案所有项完成 → 才能打卡 B 方案
-4. 所有项完成 → `training_plan.status = "completed"` → `bump_training_completed_day()`
+3. **顺序校验**：必修技能严格按 sort_order，前一项完成→解锁下一项
+4. **选修不阻塞**：item_type=elective 的项跳过不阻塞后续
+5. 打卡卡片 → per-skill 判定达标/连续计数/Tier晋级/OSS推进
+6. 所有必修项完成 → `training_plan.status = "completed"`
 
-### 状态机
+### 状态机（🔄 v2.0 重构）
 
 ```
 child_training_state (profile_json.training_progress)
-├── main_line: "A"|"B"|"C"|"D"|"E"    主线阶段
-├── skills: { "超脑阅读": {stage,part}, ... }  各技能进度
-├── main_line_sessions: int            当前主线已训练天数
+├── overall_tier: int                   min(所有技能 tier)
+├── skills: {
+│     "超脑阅读": { tier, oss_stage, oss_part, consecutive_pass },
+│     "影像追忆": { tier, oss_stage, oss_part, consecutive_pass },
+│     ...
+│   }
 ├── training_days: int                 总训练天数
 └── training_day_anchor: date          训练日起始锚点
 
 训练日规则:
 - 当日 04:00 ~ 次日 03:59:59 为同一训练日
 - 04:00-04:05 为日切冻结窗口
-- 昨日未完成 → 今日继续同方案
-- 昨日完成 → 推进到下一项/下一阶段
-- **昨日打卡 `result` / `note`（及分项 cards）→ `get_yesterday_training_context()` → 次日 AI 报告与排课**（见 [数据闭环与预留说明.md](数据闭环与预留说明.md)）
+- 昨日未完成 → 今日续推（按技能 carryover）
+- 连续3次达标 → 技能 Tier+1
+- 不达标 → consecutive_pass 重置为 0
+- 整体 Tier = min(所有技能 Tier) ← 最低原则
 ```
 
 ---

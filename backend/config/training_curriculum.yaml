@@ -1,205 +1,156 @@
-# 训练推课体系 — 业务规则（经产品确认，改参数无需改代码）
+# 训练推课体系 — 业务规则 v2.0
 # 加载：config.loader.load_training_curriculum()
+# 变更：从 main_lines 主线模型 → duration_formula 多技能并行公式引擎
 
-version: 1
+version: 2
 
-# ── 阶段概念（两套，不混用）──
-# main_line: 文档主线 A→E，决定「主练/辅练」与默认技能组合
-# promote_tier: 一～五晋级表（六～九本期不纳入）
-# oss_stage/part: 单技能 OSS 课序，按 mastery 推进，与 promote_tier 数字不一一对应
+# ══════════════════════════════════════════════════
+# 一、技能定义
+# ══════════════════════════════════════════════════
 
-main_lines:
-  A:
-    name: 入门
-    primary_skills: [超脑阅读]
-    training_blocks:
-      - slot: 1
-        role: primary
-        skills: [超脑阅读]
-      - slot: 2
-        role: perception
-        skills: [感知力]
-      - pick: optional_weighted
-        role: optional
-        requires_child_confirm: true
-    optional:
-      - skill: 开口窍
-        content_type: video
-        push_empty_placeholder: true   # OSS 分类占位，内容暂空
-        weight_by_talent:
-          行者: 1.0
-          德者: 1.0
-          学者: 0.4
-          思者: 0.4
-          赢者: 0.4
-      - skill: 高效作业
-        content_type: audio
-        oss_series: xuekeaomi
-        filename_contains: 高效作业
-        weight_by_talent:
-          思者: 1.0
-          赢者: 1.0
-          学者: 0.5
-          行者: 0.5
-          德者: 0.5
-    advance_to: B
-    advance_rule: 超脑阅读_一分钟1000字
-  B:
-    name: 影像追忆为主
-    primary_skills: [影像追忆]
-    auxiliary_skills: [超脑阅读]
-    training_blocks:
-      - slot: 1
-        role: primary
-        skills: [影像追忆]
-      - slot: 2
-        role: synergy
-        synergy_label: 配合主线A
-        skills: [超脑阅读]
-      - slot: 3
-        role: perception
-        skills: [感知力]
-    primary_aux_ratio: [0.7, 0.3]
-    advance_to: C
-    advance_rule: 影像追忆_年级表
-  C:
-    name: 扫描速记为主
-    primary_skills: [扫描速记]
-    auxiliary_skills: [影像追忆, 超脑阅读]
-    training_blocks:
-      - slot: 1
-        role: primary
-        skills: [扫描速记]
-      - slot: 2
-        role: synergy
-        synergy_label: 配合前期主线
-        skills: [影像追忆, 超脑阅读]
-        after_skills: [感知力]
-    primary_aux_ratio: [0.7, 0.3]
-    advance_to: D
-    advance_rule: 扫描速记_年级表
-  D:
-    name: 极速运算必做
-    primary_skills: [极速运算]
-    optional_skills: [扫描速记, 影像追忆]
-    primary_aux_ratio: [0.7, 0.3]
-    advance_to: E
-    advance_rule: 极速运算_70pct_打卡
-  E:
-    name: 极速学习为主
-    primary_skills: [极速学习]
-    optional_skills: [极速运算]
-    primary_aux_ratio: [0.7, 0.3]
+skills:
+  # 必修技能（5个）— 严格按序打卡，阻塞后续
+  required:
+    - 超脑阅读    # A — 单音频，无 OSS stage，各 Tier 复用
+    - 影像追忆    # B — OSS stage 1-5
+    - 扫描速记    # C — OSS stage 1-5，Tier 1 练但不考
+    - 极速运算    # D — OSS stage 2-5，Tier 3 开始出现
+    - 极速学习    # E — OSS stage 2/3-5（起点因天赋而异），Tier 4 开始考核
 
-# 首日固定（文档 A 阶段：超脑阅读）
-day_one:
-  main_line: A
-  a_lessons:
-    - { skill: 超脑阅读, stage: 1, part: 1 }
-  b_lessons: []   # 由时长规则动态填充辅练/可选
+  # 选修技能（3个）— 不阻塞后续，独立弹窗/入口
+  elective:
+    - 精力恢复    # 训练时长 ≥ 8h 时弹出，无打卡
+    - 多元感知    # 可打可不打，有打卡按钮+卡片
+    - 高效作业    # 不打卡，播放音频即可
 
-# 技能课序：每技能独立 stage/part，废弃全局 content_index
-skill_progression:
-  mode: per_skill
-  on_incomplete_yesterday: retry_incomplete_plan_item   # 按 plan_item：未听完或未打卡
-  advance_by: mastery
-  same_lesson_rounds_until: standard_met
+# ══════════════════════════════════════════════════
+# 二、选修技能行为规则
+# ══════════════════════════════════════════════════
 
-# 主线 A→B→… 达标后次日生效；多轮同技能任一轮达标即可 pending 进阶
-main_line_advance:
-  enabled: true
-  apply_on: next_training_day
-  any_round_met: true
+elective_rules:
+  精力恢复:
+    trigger: duration_gte_8h        # 用户选择训练时长 ≥ 8h 时触发
+    has_checkin: false              # 无打卡按钮
+    blocks_next: false              # 不阻塞后续
+    display_order: after_required   # 在必修项之后展示
 
-# 用户流程：先选时长 → 生成内容 → 按训练情况走规则
-flow:
-  order: [select_duration, generate_plan, train, checkin]
-  auto_generate_on_page_enter: false
-  include_talent_intro_video: false   # 不再自动塞五者天赋视频
-  checkin_until: training_day_cutoff
+  多元感知:
+    trigger: manual                 # 用户主动触发（始终可用）
+    has_checkin: true               # 有打卡按钮 + 打卡卡片
+    checkin_fields: [card_count, accuracy_pct]
+    blocks_next: false              # 可打可不打，不阻塞
 
-# 设定时长 vs 实际训练
-media_budget:
-  content_may_be_less_than_planned: true
-  on_exceed_planned_minutes:
-    hide_audio_video: true
-    allow_checkin: true
-  trigger: timer_or_window_end          # 计时结束或超出 window.end_time
+  高效作业:
+    trigger: formula_slot           # 时长公式中包含时自动展示
+    has_checkin: false              # 无打卡
+    blocks_next: false              # 不阻塞
+    skip_carryover: true            # 不纳入昨日续推
 
-# LLM 在框架内路由（非写死规则表；候选池+约束由后端校验）
-llm_routing:
-  enabled: true
-  provider: doubao
-  fallback: rule                        # LLM 失败时用规则装箱
-  must_respect:
-    - candidate_pool_only              # 只能选候选 content_item_id
-    - duration_schedule_table
-    - main_line_primary_aux_ratio
-    - talent_skill_weights
-    - carryover_incomplete_first
-  output_note_required: true
+# ══════════════════════════════════════════════════
+# 三、时长 → 技能公式（核心排课引擎）
+# ══════════════════════════════════════════════════
 
-# 感知力 = 多元感知（OSS duoyuanganzhi），辅助超脑阅读，不要求单独打卡、不纳入昨日续推
-perception:
-  push_enabled: true
-  follows_skill: 超脑阅读
-  oss_series: duoyuanganzhi
-  display_name: 多元感知
-  checkin_fields: [card_count, accuracy_pct]
-  count_toward_warning: false
-  skip_checkin: true
-  skip_carryover: true
+duration_formula:
+  - minutes: 20
+    slots: [A]                                          # 超脑阅读 ×1
 
-# 预警（本期关闭锁训；阈值预留，后续按训练项+音频时长动态配置）
-warning:
-  enabled: false
-  lock_training: false
-  default_min_duration_min: 10   # 全局基础参考，暂不启用分级锁训
+  - minutes: 40
+    slots: [A, B]                                       # 超脑+影像追忆
 
-# 主练/辅练时间切分
-mix_ratio:
-  primary: 0.7
-  auxiliary: 0.3
+  - minutes: [60, 120]
+    primary_school: [A, B, C]                           # 小学：+扫描速记
+    junior_high:    [A, B, C]                           # 初高中：同公式
+    junior_high_c_note: "不建议"                         # 但 C 标注不建议
 
-# 不达标时降级顺序
-demotion:
-  order: [target_words, difficulty_tier]   # 先降目标字数，再降难度档（扫描速记高/中/低）
+  - minutes: [121, 180]
+    primary_school: [A, B, B, C, 高效作业]               # 2B = 影像追忆×2
+    junior_high:    [A, B, B, C, 高效作业]
+    junior_high_c_note: "不建议"
+    tier_replace:                                       # ≥3阶替换规则
+      "高效作业": "极速学习"                              # 高效作业 → E
+    exam_note: "建议准备2套以上试卷"
 
-# 扫描速记难度档（高阶学生：单日限时内背 10 万字）
-scan_memory_tiers:
-  high:
-    daily_word_target: 100000
-    within_single_day: true
-    progress_rule: positive_vs_negative_5x   # 阶段内每步对比：正向≥负向×5
-  mid:
-    rule: time_reduce_1pct_per_session       # 字数、准确率不变，用时每次 -1%
-  low:
-    rule: fixed_words_compress_time          # 固定字数（年级表），准确率95%，压缩用时
+  - minutes: [181, 240]
+    primary_school: [A, B, B, C, 高效作业]
+    junior_high:    [A, B, B, C, 高效作业]
+    junior_high_c_note: "不建议"
+    tier_replace:
+      "高效作业": ["极速学习", "极速学习"]                # ≥3阶：高效作业 → 2E
+    exam_note: "建议准备3套以上试卷"
 
-# 极速运算过关（仅信打卡自填；位数部分正确也算对由用户打卡体现）
-speed_calc:
-  pass_accuracy_pct: 70
-  judge_by_backend: false
+  - minutes: [241, 300]
+    primary_school: [A, B, B, B, C, 高效作业]            # 3B = 影像追忆×3
+    junior_high:    [A, B, B, B, C, 高效作业]
+    junior_high_c_note: "不建议"
+    tier_replace:
+      "高效作业": ["极速学习", "极速学习", "极速学习"]     # ≥3阶：高效作业 → 3E
+    exam_note: "建议准备4套以上试卷"
 
-# 用户选时长 → 训练块数与每项重复轮次（主练优先，辅练用剩余块；单技能重复上限 3 轮）
-duration_schedule:
-  max_rounds_per_skill: 3
-  slots:
-    - { min: 30, max: 45, items: 1, rounds_per_item: 1 }
-    - { min: 45, max: 90, items: 2, rounds_per_item: 1 }
-    - { min: 91, max: 120, items: 3, rounds_per_item: 2 }
-    - { min: 120, max: 160, items: 5, rounds_per_item: 3 }
-    - { min: 160, max: 9999, items: 6, rounds_per_item: 3 }
-  dynamic_by_item_duration: true
+# ══════════════════════════════════════════════════
+# 四、学段行为
+# ══════════════════════════════════════════════════
 
-# 产品范围
-scope:
-  promote_tiers_in_logic: [1, 2, 3, 4, 5]
-  exclude_tiers: [6, 7, 8, 9]
-
-# 年级段（与 profile.grade 映射，晋级表见 promote_tier_*.yaml 或内嵌表）
 grade_bands:
-  primary_low: [一年级, 二年级, 三年级]
+  primary_low:  [一年级, 二年级, 三年级]
   primary_high: [四年级, 五年级, 六年级]
-  junior: [初一, 初二, 初三]
-  senior: [高一, 高二, 高三]
+  junior:       [初一, 初二, 初三]
+  senior:       [高一, 高二, 高三]
+
+grade_behavior:
+  junior_high_c: not_recommended     # 展示但标注"不建议"
+  senior_high_c: not_recommended
+
+# 初高中极速运算可选修（Tier 3+）
+optional_in_grades:
+  极速运算:
+    junior: true
+    senior: true
+
+# ══════════════════════════════════════════════════
+# 五、感知力（多元感知 OSS）
+# ══════════════════════════════════════════════════
+
+perception:
+  display_name: 多元感知
+  oss_series: duoyuanganzhi
+  skill_name: 感知力
+  # v2.0：从必修辅助改为选修，不再自动附在超脑阅读后面
+  push_enabled: true
+  skip_checkin: false               # v2.0：可打卡
+
+# ══════════════════════════════════════════════════
+# 六、LLM 辅助（非核心调度）
+# ══════════════════════════════════════════════════
+
+llm_routing:
+  enabled: false                     # v2.0：核心调度不走 LLM
+  provider: doubao
+  usage: coach_text_only             # 仅用于生成教练文案
+
+# ══════════════════════════════════════════════════
+# 七、训练日
+# ══════════════════════════════════════════════════
+
+training_day:
+  cutoff_hour: 4                     # 凌晨 4:00 日切
+  freeze_minutes: 5                  # 4:00-4:05 冻结窗口
+
+# ══════════════════════════════════════════════════
+# 八、版本范围
+# ══════════════════════════════════════════════════
+
+scope:
+  current_tier_formulas: [1]         # 当前只实现 Tier 1 的时长公式
+  current_tier_thresholds: [1]       # 当前只实现 Tier 1 的达标标准
+  exclude_tiers: [6, 7, 8, 9]       # 六阶及以上暂不纳入
+
+# ══════════════════════════════════════════════════
+# 九、槽位符号映射（供公式引擎解析）
+# ══════════════════════════════════════════════════
+
+slot_mapping:
+  A: 超脑阅读
+  B: 影像追忆
+  C: 扫描速记
+  D: 极速运算
+  E: 极速学习

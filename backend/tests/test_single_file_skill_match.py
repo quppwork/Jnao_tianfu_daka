@@ -1,3 +1,4 @@
+import pytest
 """高效作业等单文件技能与 _find_lesson 匹配"""
 
 from app.services.training_curriculum import _find_lesson

@@ -174,7 +174,7 @@ export async function fetchParentQuota(parentId) {
   return apiJson(withUser('/api/parent/quota', parentId))
 }
 
-export async function createParentChild(parentId, { loginName, nickname, password }) {
+export async function createParentChild(parentId, { loginName, nickname, password, grade, age }) {
   return apiJson(withUser('/api/parent/children', parentId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -182,14 +182,18 @@ export async function createParentChild(parentId, { loginName, nickname, passwor
       login_name: loginName,
       nickname,
       password,
+      grade: grade || null,
+      age: age || null,
     }),
   })
 }
 
-export async function updateParentChild(parentId, childId, { nickname, password } = {}) {
+export async function updateParentChild(parentId, childId, { nickname, password, grade, age } = {}) {
   const body = {}
   if (nickname != null) body.nickname = nickname
   if (password != null) body.password = password
+  if (grade != null) body.grade = grade
+  if (age != null) body.age = age
   return apiJson(withUser(`/api/parent/children/${childId}`, parentId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -486,6 +490,23 @@ export async function fetchTrainingHistory(userId, limit = 30, { excludeToday = 
   const qs = `limit=${limit}&group_by_day=1${excludeToday ? '&exclude_today=1' : ''}`
   const data = await apiJson(withUser(`/api/training/history?${qs}`, userId))
   return { items: data.items || [], days: data.days || [] }
+}
+
+// ── v2.0 选修弹窗 ──
+
+/** 获取可用的选修技能列表 */
+export async function fetchElectiveList(plannedMinutes = 0, overallTier = 1) {
+  const data = await apiJson(`/api/training/elective/list?planned_minutes=${plannedMinutes}&overall_tier=${overallTier}`)
+  return { offers: data.offers || [] }
+}
+
+/** 提交选修打卡（多元感知等） */
+export async function submitElectiveCheckin(userId, payload) {
+  return apiJson(withUser('/api/training/elective', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
 }
 
 // ── 首页引导对话 ──

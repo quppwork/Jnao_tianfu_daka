@@ -65,6 +65,8 @@ class TrainingTodayResponse(BaseModel):
     planned_minutes: int | None = None
     media_exhausted: bool = False
     items: list[TrainingItemOut]
+    overall_tier: int | None = None          # 🆕 v2.0
+    optional_offers: list[dict] | None = None
     day_locked: bool = False
     globally_cutoff: bool = False
     training_day: str | None = None
@@ -127,6 +129,10 @@ class CheckinAdvanceDetail(BaseModel):
 
 
 class CheckinTrainingProgress(BaseModel):
+    # ── v2.0 新字段 ──
+    overall_tier: int | None = None               # 🆕 整体 Tier
+    skill_results: dict | None = None             # 🆕 { skill: { tier_before, tier_after, passed, tier_advanced, ... } }
+    # ── v1.0 兼容（保留）──
     main_line: str | None = None
     main_line_from: str | None = None
     main_line_to: str | None = None
@@ -139,6 +145,16 @@ class CheckinTrainingProgress(BaseModel):
     advance_message: str | None = None
     skills_bumped: list[str] = Field(default_factory=list)
     content_index: int | None = None
+
+
+class SkillResult(BaseModel):
+    """🆕 v2.0 单技能打卡结果"""
+    tier_before: int = 1
+    tier_after: int = 1
+    passed: bool = False
+    consecutive_pass: int = 0
+    tier_advanced: bool = False
+    oss_advanced: bool = False
 
 
 class CheckinResponse(BaseModel):

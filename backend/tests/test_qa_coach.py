@@ -1,3 +1,4 @@
+import pytest
 """教练元数据 — 错题模式检测"""
 
 from app.services.qa_coach import build_coach_metadata, detect_mistake_pattern

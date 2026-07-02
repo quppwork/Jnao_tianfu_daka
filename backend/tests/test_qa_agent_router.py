@@ -1,3 +1,4 @@
+import pytest
 """QA Agent 学科路由测试"""
 
 from app.agents.qa.router import check_subject_mismatch, detect_subject, mismatch_reply

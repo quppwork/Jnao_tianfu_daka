@@ -1,3 +1,4 @@
+import pytest
 """家长/孩子账号体系"""
 
 from fastapi.testclient import TestClient

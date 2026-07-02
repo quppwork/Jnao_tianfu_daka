@@ -41,6 +41,9 @@ def create_child(
         login_name=req.login_name,
         nickname=req.nickname,
         password=req.password,
+        grade=req.grade,
+        age=req.age,
+        region=req.region,
     )
     from app.services import auth_service
 
@@ -60,6 +63,9 @@ def update_child(
         child_id,
         nickname=req.nickname,
         password=req.password,
+        grade=req.grade,
+        age=req.age,
+        region=req.region,
     )
     from app.services import auth_service
 

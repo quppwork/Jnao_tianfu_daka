@@ -19,6 +19,7 @@ from app.db.models import (
     ChildUser,
     GuideMessage,
     GuideSession,
+    ParentChildBind,
     QaMessage,
     QaSession,
     TalentAssessment,
@@ -35,16 +36,23 @@ def main() -> None:
     init_db()
     db = get_session_factory()()
     try:
-        db.execute(delete(TrainingRecord))
-        db.execute(delete(TrainingItem))
-        db.execute(delete(TrainingPlan))
-        db.execute(delete(TrainingWindow))
-        db.execute(delete(TalentAssessment))
+        # FK 依赖顺序：先删子表，再删父表
+        # 1. 最底层的子记录（无其他表依赖它们）
+        db.execute(delete(TrainingRecord))      # FK→child_user, FK→training_plan
+        db.execute(delete(TrainingItem))         # FK→training_plan
+        db.execute(delete(QaMessage))            # FK→qa_session
+        db.execute(delete(GuideMessage))         # FK→guide_session
+
+        # 2. 中间层
+        db.execute(delete(QaSession))            # 引用 child_user_id
+        db.execute(delete(GuideSession))          # 引用 child_user_id
+        db.execute(delete(TrainingPlan))          # FK→child_user
+        db.execute(delete(TrainingWindow))        # 引用 child_user_id
+        db.execute(delete(TalentAssessment))      # FK→child_user
         db.execute(delete(TalentAssessmentArchive))
-        db.execute(delete(QaMessage))
-        db.execute(delete(QaSession))
-        db.execute(delete(GuideMessage))
-        db.execute(delete(GuideSession))
+        db.execute(delete(ParentChildBind))       # FK→child_user (parent_id, child_id)
+
+        # 3. 根表
         db.execute(delete(ChildUser))
         db.commit()
         print("OK: 已清空学员、训练、测评、答疑与引导会话数据")

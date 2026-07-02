@@ -1,3 +1,4 @@
+import pytest
 """QA Agent 分学科提示词测试"""
 
 from app.agents.qa.prompt_builder import build_qa_system_prompt

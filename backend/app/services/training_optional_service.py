@@ -9,13 +9,24 @@ from sqlalchemy.orm import selectinload, Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan
 from app.services.assessment_service import resolve_effective_talent
-from app.services.child_training_state import get_skill_position, get_training_progress
+from app.services.child_training_state import get_skill_oss_position, get_training_progress
 from app.services.content_meta import content_display_title, estimate_duration_min, item_instruction, parse_item_meta
 from app.services.talent_content_pool import get_talent_content_pool
-from app.services.training_block_builder import build_optional_offers, _append_single_skill
 from app.services.training_catalog_sync import repair_plan_media_items
 from app.services.training_child_guide import build_coach_text_for_plan
-from app.services.training_duration_pack import _optional_ranked
+# v2.0: _optional_ranked inlined from deleted training_duration_pack
+def _optional_ranked(line_spec: dict, talent_primary: str | None) -> list[dict]:
+    ranked = []
+    for opt in line_spec.get("optional") or []:
+        if not isinstance(opt, dict) or not opt.get("skill"):
+            continue
+        weights = opt.get("weight_by_talent") or {}
+        w = float(weights.get(talent_primary or "") or 0)
+        if w <= 0:
+            w = 0.25
+        ranked.append({"skill": opt["skill"], "weight": w, "push_empty_placeholder": bool(opt.get("push_empty_placeholder")), "content_type": opt.get("content_type") or "audio"})
+    ranked.sort(key=lambda x: -x["weight"])
+    return ranked
 from app.services.training_service import TrainingError, _get_plan_by_date, _plan_to_response
 from app.services.training_day import get_training_day
 from config.loader import load_training_curriculum
@@ -115,17 +126,8 @@ def get_optional_offers_for_child(
     child_user_id: int,
     plan: TrainingPlan,
 ) -> list[dict]:
-    child = db.get(ChildUser, child_user_id)
-    if not child or not plan:
-        return []
-    eff = resolve_effective_talent(db, child_user_id)
-    talent_primary = eff.get("talent_primary") if eff else None
-    state = get_training_progress(child)
-    main_key = state.get("main_line") or "A"
-    line = (load_training_curriculum().get("main_lines") or {}).get(main_key) or {}
-    offers = build_optional_offers(line, talent_primary)
-    daily = _optional_daily(child, plan.plan_date)
-    return _merge_offer_status(offers, plan, daily.get("declined") or [])
+    """v2.0: 选修由 formula_engine + elective_service 管理，此处返回空"""
+    return []
 
 
 def _add_optional_plan_row(

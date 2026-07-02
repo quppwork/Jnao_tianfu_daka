@@ -1,3 +1,4 @@
+import pytest
 # -*- coding: utf-8 -*-
 """onboarding 老学员注册 — 对齐 docs/前端后端API文档.md"""
 

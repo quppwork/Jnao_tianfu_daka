@@ -1,3 +1,4 @@
+import pytest
 """音频目录导入测试"""
 
 from app.services.catalog_import import counts_match_expected, validate_catalog_counts
