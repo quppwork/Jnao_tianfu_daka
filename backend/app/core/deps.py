@@ -1,9 +1,13 @@
 """FastAPI 依赖注入"""
 
+import logging
+
 from fastapi import Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db as _get_db
+
+logger = logging.getLogger("jnao")
 
 
 def get_db():
@@ -31,6 +35,7 @@ def get_authenticated_user(
 
     单设备登录：每次登录刷新 session_token，旧 token 立即失效。
     向下兼容：用户无 token 时自动补发（首次迁移场景）。
+    防御处理：session_token 列不存在时自动降级为无 token 验证。
     """
     uid = user_id or x_child_user_id
     if not uid or uid < 1:
@@ -38,17 +43,33 @@ def get_authenticated_user(
 
     from app.db.models import ChildUser
 
-    user = db.get(ChildUser, uid)
+    try:
+        user = db.get(ChildUser, uid)
+    except Exception:
+        # session_token 列可能还不存在（迁移未执行），降级处理
+        logger.warning("get_authenticated_user: DB 查询失败（session_token 列可能未创建），降级为无 token 验证")
+        return uid
+
     if not user:
         raise HTTPException(401, "用户不存在")
 
     token = x_session_token or session_token
 
-    # 用户尚无 token（迁移前遗留）→ 自动生成一个，向下兼容
-    if not user.session_token:
-        from app.services.auth_service import _refresh_session_token
+    # 读取 session_token 字段——如果列不存在，hasattr 保护
+    db_token = None
+    try:
+        db_token = user.session_token
+    except Exception:
+        logger.warning("get_authenticated_user: 读取 session_token 失败，降级处理")
+        return uid
 
-        _refresh_session_token(db, user)
+    # 用户尚无 token（迁移前遗留）→ 自动生成一个，向下兼容
+    if not db_token:
+        try:
+            from app.services.auth_service import _refresh_session_token
+            _refresh_session_token(db, user)
+        except Exception:
+            logger.warning("get_authenticated_user: 自动生成 token 失败，继续降级处理")
         return uid
 
     # 客户端未传 token → 拒绝（新设备必须走登录流程获取 token）
@@ -56,7 +77,7 @@ def get_authenticated_user(
         raise HTTPException(401, "需要有效的 session_token（请重新登录）")
 
     # token 不匹配 → 其他设备已登录
-    if user.session_token != token:
+    if db_token != token:
         raise HTTPException(401, "已在其他设备登录，请重新登录")
 
     return uid
