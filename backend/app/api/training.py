@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_child_user_id, get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.schemas.training import (
     CheckinDeleteResponse,
     CheckinHistoryResponse,
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/api/training", tags=["training"])
 @router.post("/schedule", response_model=TrainingTodayResponse)
 async def schedule_training(
     req: ScheduleRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     plan_date: date | None = Query(None),
 ):
@@ -55,7 +55,7 @@ async def schedule_training(
 @router.post("/schedule/optional", response_model=TrainingTodayResponse)
 def schedule_optional_training(
     req: OptionalChoiceRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     plan_date: date | None = Query(None),
 ):
@@ -74,7 +74,7 @@ def schedule_optional_training(
 
 @router.get("/video/talent", response_model=TalentVideoResponse)
 def talent_training_video(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     """按天赋返回固定训练视频（支持测评结果或引导页自选天赋）"""
@@ -90,7 +90,7 @@ def talent_training_video(
 def report_watch_progress(
     item_id: int,
     req: WatchProgressRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -107,7 +107,7 @@ def report_watch_progress(
 
 @router.get("/entry", response_model=TrainingEntryResponse)
 def training_entry(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     """训练页入口：优先检查最新天赋并同步今日方案状态"""
@@ -116,7 +116,7 @@ def training_entry(
 
 @router.get("/today", response_model=TrainingTodayResponse)
 async def training_today(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     plan_date: date | None = Query(None),
     skip_ai: bool = Query(False, description="跳过 AI 生成，加快首屏"),
@@ -131,7 +131,7 @@ async def training_today(
 @router.post("/checkin", response_model=CheckinResponse)
 def training_checkin(
     req: CheckinRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -154,7 +154,7 @@ def training_checkin(
 
 @router.get("/checkin/today", response_model=list[CheckinRecordOut])
 def checkin_today(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     plan_date: date | None = Query(None),
 ):
@@ -164,7 +164,7 @@ def checkin_today(
 @router.get("/checkin/{record_id}", response_model=CheckinRecordOut)
 def get_checkin(
     record_id: int,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -177,7 +177,7 @@ def get_checkin(
 def update_checkin(
     record_id: int,
     req: CheckinUpdateRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -200,7 +200,7 @@ def update_checkin(
 @router.delete("/checkin/{record_id}", response_model=CheckinDeleteResponse)
 def delete_checkin(
     record_id: int,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -223,7 +223,7 @@ def elective_list(
 @router.post("/elective")
 def elective_checkin(
     req: dict,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     """提交选修打卡（多元感知等）"""
@@ -241,7 +241,7 @@ def elective_checkin(
 
 @router.get("/progress", response_model=TrainingProgressResponse)
 def training_progress(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     return training_service.get_progress(db, child_user_id)
@@ -250,7 +250,7 @@ def training_progress(
 @router.post("/window", response_model=WindowResponse)
 def set_window(
     req: WindowSetRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -263,7 +263,7 @@ def set_window(
 
 @router.get("/window", response_model=WindowResponse)
 def get_window(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     row = training_service.get_training_window(db, child_user_id)
@@ -274,7 +274,7 @@ def get_window(
 
 @router.delete("/window")
 def delete_window(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     deleted = training_service.clear_training_window(db, child_user_id)
@@ -283,7 +283,7 @@ def delete_window(
 
 @router.get("/window/status", response_model=WindowStatusResponse)
 def window_status(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     return training_service.get_window_status(db, child_user_id)
@@ -291,7 +291,7 @@ def window_status(
 
 @router.post("/plan/media-exhausted", response_model=TrainingTodayResponse)
 def mark_plan_media_exhausted(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     plan_date: date | None = Query(None),
 ):
@@ -304,7 +304,7 @@ def mark_plan_media_exhausted(
 
 @router.get("/report/today", response_model=TrainingTodayResponse)
 async def training_report_today(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     force: bool = Query(False, description="强制重新生成 AI 方案"),
     skip_ai: bool = Query(False),
@@ -318,7 +318,7 @@ async def training_report_today(
 @router.get("/report/{plan_date}", response_model=TrainingTodayResponse)
 def training_report_by_date(
     plan_date: date,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     data = training_service.get_plan_by_date(db, child_user_id, plan_date)
@@ -329,7 +329,7 @@ def training_report_by_date(
 
 @router.get("/history", response_model=CheckinHistoryResponse)
 def training_history(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     limit: int = Query(60, ge=1, le=200),
     group_by_day: bool = Query(True),

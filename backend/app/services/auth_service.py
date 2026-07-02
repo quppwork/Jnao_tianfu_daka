@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import secrets
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,20 @@ from app.db.models import ChildUser, ParentChildBind, TalentAssessment, Training
 ROLE_PARENT = "parent"
 ROLE_STUDENT = "student"
 DEFAULT_CHILD_QUOTA = 5
+
+
+def _generate_session_token() -> str:
+    """生成 64 字符随机 session token，新登录时旧 token 失效"""
+    return secrets.token_hex(32)
+
+
+def _refresh_session_token(db: Session, user: ChildUser) -> str:
+    """刷新用户 session token 并持久化，返回新 token"""
+    token = _generate_session_token()
+    user.session_token = token
+    db.commit()
+    db.refresh(user)
+    return token
 
 
 def register_child(
@@ -32,6 +48,7 @@ def register_child(
         login_name=login_name,
         password_hash=hash_password(password) if password else None,
         child_quota=child_quota if role == ROLE_PARENT else None,
+        session_token=_generate_session_token(),
     )
     db.add(user)
     db.commit()

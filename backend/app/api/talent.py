@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_child_user_id, get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.db.models import ChildUser
 from app.models.requests import ReportRequest
 from app.schemas.training import AssessmentOut
@@ -84,7 +84,7 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
 @router.post("/assessment")
 async def save_assessment_endpoint(
     req: ReportRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     """测评完成并落库（需 user_id / X-Child-User-Id）"""
@@ -118,7 +118,7 @@ async def save_assessment_endpoint(
 
 @router.get("/assessment/history")
 def assessment_history(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     limit: int = 30,
 ):
@@ -127,7 +127,7 @@ def assessment_history(
 
 @router.get("/assessment/latest", response_model=AssessmentOut)
 def latest_assessment(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     """最新测评；无 JNAO 记录时若有引导页自选天赋也返回 200"""
@@ -166,7 +166,7 @@ def latest_assessment(
 @router.get("/assessment/{assessment_id}")
 def get_assessment(
     assessment_id: int,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     row = assessment_service.get_assessment_by_id(db, assessment_id, child_user_id)
@@ -185,7 +185,7 @@ def get_assessment(
 @router.delete("/assessment/{assessment_id}")
 def delete_assessment_endpoint(
     assessment_id: int,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     """删除历史测评（归档后从主表移除，定时全库备份保留副本）"""

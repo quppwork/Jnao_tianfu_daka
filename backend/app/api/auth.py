@@ -17,6 +17,7 @@ def _to_response(user) -> AuthResponse:
         nickname=user.nickname,
         role=user.role or auth_service.ROLE_STUDENT,
         login_name=user.login_name,
+        session_token=user.session_token,
     )
 
 
@@ -67,6 +68,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         user = auth_service.login_parent_by_password(db, req.parent_phone, req.password)
         if not user:
             raise HTTPException(401, "手机号或密码错误")
+        auth_service._refresh_session_token(db, user)
         return _to_response(user)
 
     # 学生：账号 + 密码
@@ -74,6 +76,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         user = auth_service.login_student_by_password(db, req.login_name, req.password)
         if not user:
             raise HTTPException(401, "账号或密码错误")
+        auth_service._refresh_session_token(db, user)
         return _to_response(user)
 
     # 兼容旧流程：手机号 + 昵称（无密码）
@@ -81,6 +84,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         user = auth_service.find_child_by_phone(db, req.parent_phone, req.nickname)
         if not user:
             raise HTTPException(404, "用户不存在，请先注册")
+        auth_service._refresh_session_token(db, user)
         return _to_response(user)
 
     raise HTTPException(400, "请提供有效的登录信息")

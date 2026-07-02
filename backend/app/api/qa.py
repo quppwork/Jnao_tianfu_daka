@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_child_user_id, get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.services import qa_service
 from app.services.qa_image_store import get_qa_image, save_qa_image
 
@@ -31,7 +31,7 @@ class QaSessionCreateRequest(BaseModel):
 @router.post("/chat")
 async def qa_chat(
     req: QaChatRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -50,7 +50,7 @@ async def qa_chat(
 
 @router.post("/upload-image")
 async def qa_upload_image(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
 ):
@@ -67,7 +67,7 @@ async def qa_upload_image(
 @router.get("/images/{image_id}")
 def qa_get_image(
     image_id: str,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
 ):
     meta = get_qa_image(image_id, child_user_id)
     if not meta:
@@ -80,7 +80,7 @@ def qa_get_image(
 
 @router.get("/sessions")
 def list_sessions(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     return {"items": qa_service.list_sessions(db, child_user_id)}
@@ -89,7 +89,7 @@ def list_sessions(
 @router.post("/sessions")
 def create_session(
     req: QaSessionCreateRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     session = qa_service.create_session(db, child_user_id, req.subject)
@@ -99,7 +99,7 @@ def create_session(
 @router.get("/sessions/{session_id}")
 def get_session(
     session_id: int,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     messages = qa_service.get_session_messages(db, session_id, child_user_id)
@@ -111,7 +111,7 @@ def get_session(
 @router.delete("/sessions/{session_id}")
 def delete_session(
     session_id: int,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     if not qa_service.delete_session(db, session_id, child_user_id):

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_child_user_id, get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.services import assessment_service, user_service
 from app.services.onboarding_service import OnboardingError
 
@@ -30,7 +30,7 @@ class LearnerProfileUpdate(BaseModel):
 
 @router.get("/profile")
 def get_profile(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     user = user_service.get_profile(db, child_user_id)
@@ -42,7 +42,7 @@ def get_profile(
 @router.put("/profile")
 def update_profile(
     req: ProfileUpdateRequest,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -68,7 +68,7 @@ def update_profile(
 @router.put("/learner-profile")
 def update_learner_profile(
     req: LearnerProfileUpdate,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     patch = req.model_dump(exclude_none=True)
@@ -85,7 +85,7 @@ class TalentConflictResolve(BaseModel):
 @router.post("/talent/resolve-conflict")
 def resolve_talent_conflict(
     req: TalentConflictResolve,
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     """解决天赋冲突：保留旧天赋或采用新测评结果"""

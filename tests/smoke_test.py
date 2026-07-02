@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db
+from app.core.deps import get_authenticated_user, get_child_user_id, get_db
 from app.db.base import Base
 from app.db.session import get_session_factory, init_db
 from app.services.catalog_import import import_all_xet_catalogs
@@ -74,6 +74,7 @@ def _make_client(db_session):
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_authenticated_user] = get_child_user_id
         with TestClient(app) as tc:
             yield tc
         app.dependency_overrides.clear()

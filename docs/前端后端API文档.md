@@ -1,8 +1,8 @@
 # 前端-后端 API 文档
 
-> 最后更新：2026-06-30
+> 最后更新：2026-07-02
 > 按前端页面编排，请求/响应格式 + 后端业务逻辑
-> **API 覆盖率：45/45 前端核心调用有对应后端端点 + 家长端 8 个新端点**
+> **API 覆盖率：45/45 前端核心调用 + 家长端 9 个端点 + 训练 v2.0 新增端点**
 
 ---
 
@@ -467,100 +467,10 @@ POST /api/training/checkin { cards }
   7. overall_tier = min(所有技能 tier)
   8. 返回 per-skill 结果 + overall_tier
 ```
+
 **核心引擎**: `training_schedule_service.py` + `training_formula_engine.py` + `training_mastery.py` + `child_training_state.py` + `training_day.py`
 
-### API 列表
-
-```
-# 入口 + 方案
-GET  /api/training/entry                # 训练入口（校验天赋 + 检查方案）
-GET  /api/training/today                # 今日训练方案（无方案时自动排课）
-GET  /api/training/today?skip_ai=1      # 跳过 AI 报告，快速返回
-
-# 打卡
-POST /api/training/checkin              # { plan_id, item_id, action, cards? }
-GET  /api/training/checkin/today        # 今日所有打卡记录
-GET  /api/training/checkin/{id}         # 单条打卡
-PUT  /api/training/checkin/{id}         # 更新打卡卡片
-DELETE /api/training/checkin/{id}        # 删除打卡（回退方案状态）
-
-# 排课
-POST /api/training/schedule             # { planned_minutes: 45 }  手动排课
-POST /api/training/schedule/optional    # { item_id, action }  可选训练确认
-
-# 时段窗口
-POST /api/training/window               # { start_time: "08:00", end_time: "09:00" }
-GET  /api/training/window               # 查询当前窗口
-GET  /api/training/window/status        # 窗口状态（是否在窗口内）
-
-# 进度 + 历史
-GET  /api/training/progress             # 各技能Tier晋级状态 + OSS stage/part + 训练天数（🔄 v2.0）
-GET  /api/training/history              # 历史训练方案列表
-
-# 报告 + 资源
-GET  /api/training/report/today         # 今日 AI 训练报告
-GET  /api/training/report/{date}        # 指定日期的训练报告
-GET  /api/training/resources/list       # 资源库
-GET  /api/training/resources/{id}       # 资源详情
-
-# 视频 + 进度
-GET  /api/training/video/talent         # 天赋相关训练视频
-POST /api/training/items/{id}/watch-progress  # 视频观看进度上报
-POST /api/training/plan/media-exhausted       # 标记媒体已用完
-
-# 训练状态
-GET  /api/training/status               # 全局训练状态
-```
-
-### 今日方案响应（🔄 v2.0）
-
-```json
-{
-  "plan_id": 1,
-  "plan_date": "2026-07-02",
-  "status": "in_progress",
-  "overall_tier": 1,
-  "schedule_mode": "formula",
-  "items": [
-    {
-      "id": 1,
-      "sort_order": 1,
-      "skill": "超脑阅读",
-      "tier": 1,
-      "item_type": "required",
-      "blocks_next": true,
-      "checkin_fields": ["time", "wordCount"],
-      "status": "pending",
-      "title": "学者超脑速读",
-      "duration_min": 5,
-      "content_type": "audio",
-      "play_url": "https://oss-cn-beijing.aliyuncs.com/..."
-    }
-  ],
-  "elective_offers": [
-    {"skill": "多元感知", "available": true},
-    {"skill": "精力恢复", "available": false, "reason": "训练时长未达8小时"}
-  ],
-  "coach_text": "今天专注阅读速度，目标 800 字/3分钟"
-}
-```
-
-### 排课引擎流程（🔄 v2.0）
-
-```
-POST /api/training/schedule { planned_minutes: 120 }
-  → schedule_training_by_duration()
-      1. 读取 child_training_state → 各技能 Tier + OSS stage/part
-      2. 计算 overall_tier = min(所有技能 tier)
-      3. 公式引擎展开（training_formula_engine.py）
-         时长 → 技能组合 slots（Tier1: A+nB+C+高效作业）
-      4. 遍历 slots → 取各技能当前 OSS (stage,part) 对应音频
-      5. 生成 TrainingItem（必修标记blocks_next=true，选修标记false）
-      6. LLM 生成教练文案（training_child_guide.py）
-      7. 训练日锁定：凌晨 4:00（training_day.py）
-```
-
-### 打卡校验（🔄 v2.0）
+### 打卡校验（v2.0）
 
 1. `plan_id` 必须属于当前用户
 2. `item_id` 必须属于该 plan
@@ -569,7 +479,7 @@ POST /api/training/schedule { planned_minutes: 120 }
 5. 打卡卡片 → per-skill 判定达标/连续计数/Tier晋级/OSS推进
 6. 所有必修项完成 → `training_plan.status = "completed"`
 
-### 状态机（🔄 v2.0 重构）
+### 状态机（v2.0 重构）
 
 ```
 child_training_state (profile_json.training_progress)

@@ -103,6 +103,7 @@ def _apply_parent_auth_patches(engine: Engine) -> None:
         ("role", "ALTER TABLE child_user ADD COLUMN role VARCHAR(10) DEFAULT 'student'"),
         ("login_name", "ALTER TABLE child_user ADD COLUMN login_name VARCHAR(50)"),
         ("child_quota", "ALTER TABLE child_user ADD COLUMN child_quota INTEGER"),
+        ("session_token", "ALTER TABLE child_user ADD COLUMN session_token VARCHAR(64)"),
     ]
     for column, ddl in col_ddls:
         if column in child_cols:
@@ -141,6 +142,25 @@ def _apply_parent_auth_patches(engine: Engine) -> None:
             """
         with engine.begin() as conn:
             conn.execute(text(ddl))
+
+    # 单设备登录：为现有用户补充 session_token
+    if "session_token" in _column_names(engine, "child_user"):
+        with engine.begin() as conn:
+            if dialect == "sqlite":
+                # SQLite 不支持 uuid，用随机 hex 字符串
+                conn.execute(
+                    text(
+                        "UPDATE child_user SET session_token = hex(randomblob(32)) "
+                        "WHERE session_token IS NULL"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        "UPDATE child_user SET session_token = REPLACE(UUID(), '-', '') "
+                        "WHERE session_token IS NULL"
+                    )
+                )
 
     if dialect == "sqlite":
         with engine.begin() as conn:

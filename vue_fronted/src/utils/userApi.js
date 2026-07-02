@@ -25,6 +25,7 @@
 const CHILD_KEY = 'jnao_child_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
+const SESSION_TOKEN_KEY = 'jnao_session_token'
 
 /** 读取当前登录的 child_user_id，无则返回 null */
 export function getChildUserId() {
@@ -46,8 +47,28 @@ export function clearChildUserId() {
     localStorage.removeItem(CHILD_KEY)
     localStorage.removeItem(GUEST_PHONE_KEY)
     localStorage.removeItem(GUEST_NICKNAME_KEY)
+    localStorage.removeItem(SESSION_TOKEN_KEY)
   } catch (e) { /* ignore */ }
   invalidateChildUserSession()
+}
+
+/** 读取 session_token */
+export function getSessionToken() {
+  try {
+    return localStorage.getItem(SESSION_TOKEN_KEY) || ''
+  } catch (e) { /* ignore */ }
+  return ''
+}
+
+/** 存储 session_token */
+export function setSessionToken(token) {
+  try {
+    if (token) {
+      localStorage.setItem(SESSION_TOKEN_KEY, token)
+    } else {
+      localStorage.removeItem(SESSION_TOKEN_KEY)
+    }
+  } catch (e) { /* ignore */ }
 }
 
 /** 会话内已验证 uid，避免重复 ping /api/user/profile */
@@ -68,6 +89,13 @@ async function apiJson(url, options = {}) {
   const res = await fetch(url, options)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
+    // 单设备登录：token 失效 → 清除登录态，触发重新登录
+    if (res.status === 401) {
+      const msg = data.detail || ''
+      if (msg.includes('已在其他设备登录') || msg.includes('重新登录')) {
+        clearChildUserId()
+      }
+    }
     const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
     err.status = res.status
     err.data = data
@@ -76,10 +104,16 @@ async function apiJson(url, options = {}) {
   return data
 }
 
-/** 给 URL 拼接 ?user_id= 查询参数 */
+/** 给 URL 拼接 ?user_id= 和 &session_token= 查询参数 */
 function withUser(url, userId) {
-  const sep = url.includes('?') ? '&' : '?'
-  return `${url}${sep}user_id=${userId}`
+  let result = url
+  const sep = result.includes('?') ? '&' : '?'
+  result = `${result}${sep}user_id=${userId}`
+  const token = getSessionToken()
+  if (token) {
+    result = `${result}&session_token=${encodeURIComponent(token)}`
+  }
+  return result
 }
 
 /** 答疑图片需带 user_id 鉴权，否则 <img> 请求会 401 */
@@ -103,6 +137,14 @@ function getOrCreateGuestPhone() {
   }
 }
 
+/** 登录后存储 user_id + session_token */
+function _storeAuth(data) {
+  setChildUserId(data.child_user_id)
+  if (data.session_token) {
+    setSessionToken(data.session_token)
+  }
+}
+
 /** 登录：验证手机+昵称，不存在则报错（兼容旧流程） */
 /** 学生登录：手机号+昵称 → POST /api/auth/login → 返回 child_user_id */
 export async function loginUser(phone, nickname) {
@@ -111,7 +153,7 @@ export async function loginUser(phone, nickname) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ parent_phone: phone, nickname }),
   })
-  setChildUserId(data.child_user_id)
+  _storeAuth(data)
   return data
 }
 
@@ -122,7 +164,7 @@ export async function loginParent(phone, password) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ parent_phone: phone, password, role: 'parent' }),
   })
-  setChildUserId(data.child_user_id)
+  _storeAuth(data)
   return data
 }
 
@@ -133,7 +175,7 @@ export async function loginStudent(loginName, password) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ login_name: loginName, password }),
   })
-  setChildUserId(data.child_user_id)
+  _storeAuth(data)
   return data
 }
 
@@ -149,7 +191,7 @@ export async function registerParent(phone, nickname, password) {
       role: 'parent',
     }),
   })
-  setChildUserId(data.child_user_id)
+  _storeAuth(data)
   return data
 }
 
@@ -239,7 +281,7 @@ async function registerChildUser(parentPhone, nickname) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ parent_phone: parentPhone, nickname }),
   })
-  setChildUserId(data.child_user_id)
+  _storeAuth(data)
   try {
     localStorage.setItem(GUEST_PHONE_KEY, parentPhone)
     localStorage.setItem(GUEST_NICKNAME_KEY, nickname)
@@ -264,7 +306,7 @@ export async function ensureChildUser(nickname = '学员') {
           await apiJson(withUser('/api/user/profile', existing))
           _sessionValidatedUid = existing
         } catch (e) {
-          if (e.status === 404) {
+          if (e.status === 404 || e.status === 401) {
             clearChildUserId()
           } else {
             _sessionValidatedUid = existing

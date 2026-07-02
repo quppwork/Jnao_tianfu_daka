@@ -1,6 +1,6 @@
 """Root integration tests — validate real backend API with HTTP calls.
 
-These tests require backend to be running: uvicorn main:app --port 8011
+These tests require backend to be running: python main.py (port 8012)
 
 Run:  cd tests && pytest . -v
 Skip: pytest . -v --ignore=tests  (when backend is not running)
@@ -10,12 +10,35 @@ import json
 import urllib.request
 import urllib.error
 
-BASE = "http://127.0.0.1:8011/api"
+BASE = "http://127.0.0.1:8012/api"
+
+# 单设备登录：先注册获取 session_token，后续请求携带之
+_TOKEN_CACHE = None
 
 
-def api_post(path: str, data: dict) -> tuple[int, dict]:
-    """Helper: POST JSON to backend, return (status_code, response_json)."""
+def _get_token() -> str:
+    global _TOKEN_CACHE
+    if _TOKEN_CACHE:
+        return _TOKEN_CACHE
+    import random
+    phone = f"139{random.randint(10000000, 99999999)}"
+    data = api_post("/auth/register", {"parent_phone": phone, "nickname": "集成测试"})
+    _TOKEN_CACHE = data[1].get("session_token", "")
+    return _TOKEN_CACHE
+
+
+def _auth_url(path: str) -> str:
     url = f"{BASE}{path}"
+    sep = "&" if "?" in url else "?"
+    token = _get_token()
+    if token and "session_token=" not in url:
+        url = f"{url}{sep}session_token={token}"
+    return url
+
+
+def api_post(path: str, data: dict, auth: bool = True) -> tuple[int, dict]:
+    """Helper: POST JSON to backend, return (status_code, response_json)."""
+    url = _auth_url(path) if auth else f"{BASE}{path}"
     body = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST",
         headers={"Content-Type": "application/json"})
@@ -26,9 +49,9 @@ def api_post(path: str, data: dict) -> tuple[int, dict]:
         return e.code, {"error": str(e)}
 
 
-def api_get(path: str) -> tuple[int, dict]:
+def api_get(path: str, auth: bool = True) -> tuple[int, dict]:
     """Helper: GET JSON from backend."""
-    url = f"{BASE}{path}"
+    url = _auth_url(path) if auth else f"{BASE}{path}"
     try:
         with urllib.request.urlopen(url) as resp:
             return resp.status, json.loads(resp.read())
@@ -96,7 +119,7 @@ class TestChatIntegration:
 
 def test_backend_serves_openapi():
     """OpenAPI schema is accessible."""
-    url = "http://127.0.0.1:8011/openapi.json"
+    url = "http://127.0.0.1:8012/openapi.json"
     try:
         with urllib.request.urlopen(url) as resp:
             assert resp.status == 200
@@ -108,7 +131,7 @@ def test_backend_serves_openapi():
 
 def test_backend_cors_headers():
     """CORS headers are present."""
-    req = urllib.request.Request("http://127.0.0.1:8011/api/health", method="OPTIONS")
+    req = urllib.request.Request("http://127.0.0.1:8012/api/health", method="OPTIONS")
     try:
         with urllib.request.urlopen(req) as resp:
             headers = dict(resp.headers)

@@ -838,12 +838,8 @@ def submit_checkin(
     db.add(record)
     target_item.checkin_status = "done"
 
-    # 同 block 内所有 pending 项一并标记完成（前端一次打卡覆盖整个 block）
-    if target_block:
-        for it in plan.items:
-            it_block = parse_item_instruction(it.instructions).get("block")
-            if it_block == target_block and it.checkin_status == "pending":
-                it.checkin_status = "done"
+    # v2.0: 各技能独立打卡，不再按 block 批量标记完成。
+    # pre-v2.0 的 block 批量逻辑已移除。
 
     from app.services.training_carryover import auto_complete_skipped_checkin_items
 

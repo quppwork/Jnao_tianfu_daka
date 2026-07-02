@@ -1236,17 +1236,12 @@ function maxBlocksForMinutes(minutes) {
 }
 
 function isPlanStructureStale(plannedMinutes) {
+  // v2.0: each item is an independent training unit; structure is stale only if
+  // the item count exceeds the expected max for the planned duration
   const items = todayPlan.value?.items || []
   if (!items.length) return false
   const maxBlocks = maxBlocksForMinutes(plannedMinutes)
-  if (items.length > maxBlocks) return true
-  const byBlock = {}
-  for (const item of items) {
-    const b = item.block || 'A'
-    byBlock[b] = (byBlock[b] || 0) + 1
-    if (byBlock[b] > 1) return true
-  }
-  return false
+  return items.length > maxBlocks
 }
 
 async function startTrainingTimer() {
@@ -1689,12 +1684,16 @@ const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
 const checkedPhaseCount = computed(() => new Set(submittedCards.value.map(c => c.phaseBlock).filter(Boolean)).size)
 
 function getPhaseItems(block) {
-  return (todayPlan.value?.items || []).filter(i => (i.block || 'A') === block)
+  // v2.0: planPhases uses index-based block ("1","2","3"), each phase has exactly one item
+  const phase = planPhases.value.find(p => p.block === block)
+  if (!phase || phase.itemId == null) return []
+  return (todayPlan.value?.items || []).filter(i => i.id === phase.itemId)
 }
 
 function blockForItemId(itemId) {
-  const item = todayPlan.value?.items?.find(i => i.id === itemId)
-  return item?.block || 'A'
+  // v2.0: find which phase contains this item by matching phase.itemId
+  const phase = planPhases.value.find(p => p.itemId === itemId)
+  return phase ? phase.block : '1'
 }
 
 function buildPhaseSubtitle(items) {
@@ -1722,12 +1721,10 @@ const mediaPlayerTitle = computed(() => {
   return mp.type === 'video' ? '🎬 视频训练' : '🎧 音频训练'
 })
 
-function isPhaseUnlocked(block, blockOrder, items) {
-  const idx = blockOrder.indexOf(block)
-  if (idx <= 0) return true
-  const prevBlock = blockOrder[idx - 1]
-  const prevItems = items.filter(i => (i.block || 'A') === prevBlock)
-  return prevItems.length > 0 && prevItems.every(i => i.checkin_status === 'done')
+function isPhaseUnlocked(block) {
+  // v2.0: use planPhases which pre-calculates unlocked status
+  const phase = planPhases.value.find(p => p.block === block)
+  return phase ? phase.unlocked : true
 }
 
 const planExpanded = ref({})

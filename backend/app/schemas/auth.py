@@ -26,6 +26,7 @@ class AuthResponse(BaseModel):
     nickname: str
     role: str = "student"
     login_name: str | None = None
+    session_token: str | None = None
 
 
 # 兼容旧引用

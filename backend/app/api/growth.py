@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_child_user_id, get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.services import growth_service
 
 router = APIRouter(prefix="/api/growth", tags=["growth"])
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/growth", tags=["growth"])
 
 @router.get("/badges")
 def get_badges(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     return {"items": growth_service.get_badges(db, child_user_id)}
@@ -19,7 +19,7 @@ def get_badges(
 
 @router.get("/milestones")
 def get_milestones(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     return {"items": growth_service.get_milestones(db, child_user_id)}
@@ -27,7 +27,7 @@ def get_milestones(
 
 @router.get("/timeline")
 def get_timeline(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
     limit: int = Query(40, ge=1, le=100),
 ):
@@ -36,7 +36,7 @@ def get_timeline(
 
 @router.get("/summary")
 def get_summary(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     return growth_service.get_summary(db, child_user_id)
@@ -44,7 +44,7 @@ def get_summary(
 
 @router.get("/share")
 def get_share(
-    child_user_id: int = Depends(get_child_user_id),
+    child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     return growth_service.get_share(db, child_user_id)

@@ -32,6 +32,7 @@ class ChildUser(Base):
     profile_json: Mapped[dict | None] = mapped_column(JSON)
     training_level: Mapped[str | None] = mapped_column(String(20))
     is_qingbei: Mapped[int] = mapped_column(Integer, default=0)
+    session_token: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
