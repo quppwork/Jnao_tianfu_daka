@@ -73,17 +73,6 @@
           <view class="stat"><text class="stat-val">{{ stateName }}</text><text class="stat-label">能量状态</text></view>
         </view>
 
-        <!-- ══ 3. Traits ══ -->
-        <view class="card" v-if="traits.length">
-          <text class="sec-title">天赋特质</text>
-          <view class="traits-row">
-            <view v-for="t in traits" :key="t.id" class="trait">
-              <text class="trait-name">{{ t.name }}求{{ traitSuffix(t.name) }}</text>
-              <text class="trait-grade">Lv.{{ t.grade }} · 值 {{ t.value }}</text>
-            </view>
-          </view>
-        </view>
-
         <!-- ══ 4. 双重属性 ══ -->
         <view class="card" v-if="suppDesp">
           <text class="card-label">{{ talentDisplay }} · 双重属性详解</text>
@@ -108,7 +97,7 @@
           <text class="sec-title">综合能力</text>
           <!-- Radar SVG -->
           <view v-html="radarSvgHtml" class="radar-wrap"></view>
-          <view v-for="ab in Ability" :key="ab.abilityID" class="ab-row">
+          <view v-for="ab in sortedAbilities" :key="ab.abilityName" class="ab-row">
             <text class="ab-name">{{ ab.abilityName }}</text>
             <view class="ab-bar"><view class="ab-fill" :style="{ width: Math.min(ab.value||0,100) + '%', background: talentColor }"></view></view>
             <text class="ab-val">{{ ab.value }}</text>
@@ -332,7 +321,15 @@ const stateName = computed(() => report.value?.results?.State?.name || '--')
 const talentVal = computed(() => report.value?.results?.Talent?.value || report.value?.results?.State?.id || '--')
 const attrShort = computed(() => stripHtml(report.value?.results?.Attribute?.desp || '').slice(0, 80))
 const suppDesp = computed(() => report.value?.results?.Attribute?.SupplementDesp || '')
-const Ability = computed(() => Array.isArray(report.value?.results?.Ability) ? report.value.results.Ability : [])
+const Ability = computed(() => {
+  const list = Array.isArray(report.value?.results?.Ability) ? [...report.value.results.Ability] : []
+  // 公信力(C)在 Talent 字段里，不在 Ability 数组中，需要补进去
+  const t = report.value?.results?.Talent
+  if (t?.abilityName && t?.abilityID && !list.find(a => a.abilityID === t.abilityID)) {
+    list.push({ abilityName: t.abilityName, abilityID: t.abilityID, value: t.value || 0, desp: '', grade: t.grade || 0 })
+  }
+  return list
+})
 
 const traits = computed(() => {
   const A = report.value?.results?.Attribute
@@ -342,9 +339,9 @@ const traits = computed(() => {
   return list.sort((a,b)=>["A","B","C","D","E"].indexOf(a.id)-["A","B","C","D","E"].indexOf(b.id))
 })
 
-function traitSuffix(name) {
-  const m = {"学者":"智","思者":"思","行者":"行","赢者":"赢","德者":"德","迷者":"知"}
-  return m[name]||'知'
+function traitSuffix(id) {
+  const m = {"A":"智","B":"仁","C":"礼","D":"信","E":"义"}
+  return m[id]||'知'
 }
 
 // Parse talent.desp
@@ -406,6 +403,7 @@ function cleanDesp(desp, name) {
 const RADAR_OUTER = [{x:65,y:8},{x:118,y:45},{x:98,y:105},{x:32,y:105},{x:12,y:45}]
 const RADAR_CX = 65, RADAR_CY = 61.6
 const RADAR_LABELS = ['协调力','执行力','公信力','领导力','创新力']
+const sortedAbilities = computed(() => RADAR_LABELS.map(name => Ability.value.find(d => d.abilityName === name) || { abilityName: name, value: 0, abilityID: name }))
 const RADAR_LABEL_POS = [{x:65,y:3,a:'middle'},{x:128,y:48,a:'start'},{x:100,y:113,a:'middle'},{x:30,y:113,a:'middle'},{x:-2,y:48,a:'end'}]
 function radarVertices(scale) {
   return RADAR_OUTER.map(v => `${RADAR_CX+(v.x-RADAR_CX)*scale},${RADAR_CY+(v.y-RADAR_CY)*scale}`).join(' ')

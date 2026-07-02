@@ -63,16 +63,15 @@
 
     <!-- Bottom Input -->
     <view class="input-panel">
-      <textarea class="chat-input" v-model="inputText" placeholder="输入问题... Shift+Enter 换行" :disabled="loading" @keydown="onKeyDown" :rows="1" />
-      <view class="btn-send" @click="sendMsg">
-        <text style="color:#fff;font-size:18px;">➤</text>
-      </view>
-      <view class="input-actions">
-        <view class="btn-speaker" @click="speakLast">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-        </view>
-        <view class="btn-mic" :class="{ 'mic-recording': recording }" @click="voicePlaceholder">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      <view class="input-wrap">
+        <textarea class="chat-input" v-model="inputText" placeholder="输入问题..." :disabled="loading" @keydown="onKeyDown" :rows="1" />
+        <view class="input-btns">
+          <view class="btn-mic" :class="{ 'mic-recording': recording }" @click="voicePlaceholder">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </view>
+          <view class="btn-send" @click="sendMsg">
+            <text style="color:#fff;font-size:14px;">➤</text>
+          </view>
         </view>
       </view>
     </view>
@@ -533,15 +532,16 @@ function onNavTap() {
 .chat-bbl.me { background:var(--chat-me-bg); color:var(--text-sub); border-bottom-right-radius:4px; }
 [data-theme="white"] .chat-bbl.me { background:#eef2ff; color:#1e293b; border:1px solid #e0e7ff; }
 
-.input-panel { margin:8px 14px 14px; background:var(--bg-card); border-radius:18px; padding:8px 10px; display:flex; align-items:center; gap:8px; border:1px solid var(--border); }
-.chat-input { flex:1; background:var(--bg-input); border-radius:12px; padding:10px 14px; font-size:13px; color:var(--text); border:none; outline:none; resize:none; height:38px; line-height:18px; overflow-y:auto; }
+.input-panel { margin:8px 14px 14px; }
+.input-wrap { position:relative; display:flex; align-items:center; background:rgba(255,255,255,0.1); border-radius:24px; padding:4px; border:1px solid rgba(255,255,255,0.15); }
+[data-theme="white"] .input-wrap { background:#f3f4f6; border-color:#d1d5db; }
+.chat-input { flex:1; background:transparent; border-radius:20px; padding:8px 8px 8px 14px; font-size:13px; color:var(--text); border:none; outline:none; resize:none; height:36px; line-height:20px; overflow-y:auto; }
+.input-btns { display:flex; align-items:center; gap:6px; flex-shrink:0; padding-right:4px; }
 .loading-dots { animation:dotPulse 1.4s infinite; }
 @keyframes dotPulse { 0%,80%,100% { opacity:0.2 } 40% { opacity:1 } }
-.input-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
-.btn-speaker { width:36px; height:36px; border-radius:50%; border:1.5px solid rgba(139,148,158,0.3); display:flex; align-items:center; justify-content:center; }
-.btn-send { width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex !important; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.btn-send { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex !important; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .btn-send:active { opacity:0.8; }
-.btn-mic { width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--accent),#3b8bff); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px var(--mic-shadow); transition:all 0.2s; }
+.btn-mic { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--accent),#3b8bff); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px var(--mic-shadow); transition:all 0.2s; }
 .btn-mic.mic-recording { background:#ff4444 !important; box-shadow:0 0 0 6px rgba(255,68,68,0.3); animation:micPulse 1s infinite; }
 @keyframes micPulse { 0%,100% { box-shadow:0 0 0 6px rgba(255,68,68,0.3) } 50% { box-shadow:0 0 0 14px rgba(255,68,68,0) } }
 

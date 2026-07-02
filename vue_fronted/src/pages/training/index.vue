@@ -2932,10 +2932,10 @@ function triggerGlitch() {
 /* 🆕 v2.0 选修弹窗 */
 .elective-entry {
   margin-top: 10px; padding: 8px 12px; border-radius: 8px;
-  background: rgba(139, 92, 246, 0.12); border: 1px dashed rgba(139, 92, 246, 0.3);
+  background: rgba(0, 210, 255, 0.06); border: 1px solid rgba(0, 210, 255, 0.18);
   cursor: pointer; text-align: center;
 }
-.elective-entry text { color: #a78bfa; font-size: 13px; }
+.elective-entry text { color: #00d2ff; font-size: 13px; }
 .elective-item {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -3172,6 +3172,8 @@ function triggerGlitch() {
 [data-theme="white"] .plan-done-title { color:#16a34a; }
 [data-theme="white"] .plan-done-sub { color:#6b7280; }
 [data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
+[data-theme="white"] .elective-entry { background:#eff6ff; border-color:#bfdbfe; }
+[data-theme="white"] .elective-entry text { color:#2563eb; }
 [data-theme="white"] .plan-ai-label { color:#2563eb; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
 [data-theme="white"] .plan-ai-hint { color:#9ca3af; }
