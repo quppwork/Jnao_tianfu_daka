@@ -1794,67 +1794,33 @@ onBeforeUnmount(() => {
 
 
 .bubble-user {
-
-  background: linear-gradient(135deg, var(--accent), #3b82f6);
-
-  color: #fff;
-
-  border-radius: 18px;
-
-  border-bottom-right-radius: 6px;
-
-  padding: 11px 14px;
-
-  font-size: 14px;
-
-  line-height: 1.65;
-
-  box-shadow: var(--bubble-shadow);
-
+  background: var(--chat-me-bg);
+  color: var(--text-sub);
+  border-radius: 14px;
+  border-bottom-right-radius: 4px;
+  padding: 9px 13px;
+  font-size: 13px;
+  line-height: 1.55;
   word-break: break-word;
-
 }
-
-.bubble-user .bubble-text { color: #fff; white-space: pre-wrap; }
-
+.bubble-user .bubble-text { color: var(--text-sub); white-space: pre-wrap; }
 .bubble-sender {
-
   display: block;
-
   font-size: 11px;
-
   color: var(--text-dim);
-
   margin-bottom: 4px;
-
   font-weight: 500;
-
 }
-
 .bubble-ai {
-
   background: var(--chat-ai-bg);
-
-  border: 1px solid rgba(88,166,255,0.12);
-
-  border-radius: 18px;
-
-  border-bottom-left-radius: 6px;
-
-  padding: 10px 14px;
-
-  font-size: 14px;
-
-  line-height: 1.7;
-
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  padding: 9px 13px;
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--text);
-
   word-break: break-word;
-
-  box-shadow: var(--bubble-shadow);
-
 }
-
 .bubble-ai .bubble-text { white-space: pre-wrap; color: var(--text); }
 
 
