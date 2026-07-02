@@ -104,6 +104,68 @@ async function apiJson(url, options = {}) {
   return data
 }
 
+/** POST + SSE 流式读取（首页引导 / 学科答疑） */
+async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 401) {
+      const msg = data.detail || ''
+      if (msg.includes('已在其他设备登录') || msg.includes('重新登录')) {
+        clearChildUserId()
+      }
+    }
+    const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
+    err.status = res.status
+    throw err
+  }
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('流式响应不可用')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalPayload = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let sep
+    while ((sep = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, sep)
+      buffer = buffer.slice(sep + 2)
+      const line = block.split('\n').find(l => l.startsWith('data: '))
+      if (!line) continue
+      const raw = line.slice(6).trim()
+      if (raw === '[DONE]') continue
+      let evt
+      try {
+        evt = JSON.parse(raw)
+      } catch {
+        evt = { type: 'token', content: raw }
+      }
+      if (evt.type === 'token' && evt.content) {
+        onToken?.(evt.content, evt)
+      } else if (evt.type === 'done') {
+        finalPayload = evt
+        onDone?.(evt)
+      } else if (evt.type === 'error') {
+        const msg = evt.message || '流式请求失败'
+        onError?.(msg)
+        throw new Error(msg)
+      }
+    }
+  }
+  return finalPayload
+}
+
 /** 给 URL 拼接 ?user_id= 和 &session_token= 查询参数 */
 function withUser(url, userId) {
   let result = url
@@ -569,6 +631,14 @@ export async function sendGuideMessage(userId, message, sessionId = null) {
   })
 }
 
+export function sendGuideMessageStream(userId, message, sessionId = null, handlers = {}) {
+  return streamPostSse(
+    withUser('/api/guide/chat/stream', userId),
+    { message, session_id: sessionId },
+    handlers,
+  )
+}
+
 // ── 学科答疑 ──
 
 export async function fetchQaSessions(userId) {
@@ -607,6 +677,23 @@ export async function sendQaMessage(userId, message, sessionId = null, options =
       use_rag: useRag,
     }),
   })
+}
+
+export function sendQaMessageStream(userId, message, sessionId = null, options = {}, handlers = {}) {
+  const subject = typeof options === 'string' ? options : options.subject
+  const imageId = options.image_id || options.imageId || null
+  const useRag = options.use_rag ?? options.useRag ?? null
+  return streamPostSse(
+    withUser('/api/qa/chat/stream', userId),
+    {
+      message,
+      session_id: sessionId,
+      subject: subject || null,
+      image_id: imageId,
+      use_rag: useRag,
+    },
+    handlers,
+  )
 }
 
 export async function uploadQaImage(userId, file) {

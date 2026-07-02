@@ -1131,7 +1131,7 @@ def update_checkin_record(
     progress_delta = None
     if plan and cards is not None:
         from app.db.models import ChildUser
-        from app.services.training_mastery import reassess_main_line_from_plan
+        from app.services.training_mastery import process_checkin_progress
 
         child = db.get(ChildUser, child_user_id)
         talent = _resolve_effective_talent(db, child_user_id)
@@ -1140,10 +1140,11 @@ def update_checkin_record(
             db.flush()
             from app.services.child_training_state import child_grade
 
-            progress_delta = reassess_main_line_from_plan(
+            progress_delta = process_checkin_progress(
                 db,
                 child,
                 plan,
+                [],
                 talent_code=talent_code,
                 grade=child_grade(child),
             )
@@ -1169,7 +1170,7 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
     progress_delta = None
     if plan:
         from app.db.models import ChildUser
-        from app.services.training_mastery import reassess_main_line_from_plan
+        from app.services.training_mastery import process_checkin_progress
 
         child = db.get(ChildUser, child_user_id)
         talent = _resolve_effective_talent(db, child_user_id)
@@ -1177,10 +1178,11 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
         if child and talent_code:
             from app.services.child_training_state import child_grade
 
-            progress_delta = reassess_main_line_from_plan(
+            progress_delta = process_checkin_progress(
                 db,
                 child,
                 plan,
+                [],
                 talent_code=talent_code,
                 grade=child_grade(child),
             )

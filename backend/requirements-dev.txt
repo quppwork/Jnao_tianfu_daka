@@ -1,0 +1,8 @@
+# 开发 / 测试额外依赖（本地 pip install -r requirements-dev.txt）
+-r requirements-prod.txt
+pytest>=9.0
+pytest-asyncio>=1.0
+alembic>=1.14.0
+
+# 本地语音识别 ASR（生产默认不装，见 requirements-voice.txt）
+faster-whisper>=1.0.0

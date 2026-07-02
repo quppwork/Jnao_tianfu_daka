@@ -41,6 +41,23 @@ def post(path, body):
     return api("POST", path, body)
 
 
+def register_guide_user():
+    """引导对话需 child user_id（与 test_e2e_flows 一致）"""
+    code, data = post("/api/auth/register", {
+        "parent_phone": "13800006666",
+        "nickname": "工作流引导测试",
+    })
+    assert code == 200, f"register failed {code}: {data}"
+    return data["child_user_id"]
+
+
+GUIDE_USER_ID = register_guide_user()
+
+
+def guide_post(message: str):
+    return post(f"/api/guide/chat?user_id={GUIDE_USER_ID}", {"message": message})
+
+
 # ═══════════════════════════════════════════════
 #  流程线一：天赋测试
 # ═══════════════════════════════════════════════
@@ -136,7 +153,7 @@ print("\n📋 流程线二：首页引导对话")
 
 def test_guide_chat_basic():
     """基本对话"""
-    code, data = post("/api/guide/chat", {"message": "你好"})
+    code, data = guide_post("你好")
     assert code == 200, f"status code {code}"
     assert "reply" in data, f"no reply: {data}"
     assert len(data["reply"]) > 5, f"reply too short: {data['reply']}"
@@ -146,7 +163,7 @@ test("基本对话：你好→AI回复", test_guide_chat_basic)
 
 def test_guide_chat_talent():
     """询问天赋测试"""
-    code, data = post("/api/guide/chat", {"message": "天赋测试怎么做"})
+    code, data = guide_post("天赋测试怎么做")
     assert code == 200
     assert len(data["reply"]) > 10
 
@@ -154,12 +171,11 @@ test("询问功能：天赋测试怎么做→AI回答", test_guide_chat_talent)
 
 
 def test_guide_chat_empty():
-    """空消息"""
-    code, data = post("/api/guide/chat", {"message": ""})
-    assert code == 200
-    assert "请输入" in data["reply"]
+    """空消息 → 422（Pydantic 校验，与 test_module_home 一致）"""
+    code, data = guide_post("")
+    assert code == 422, f"expected 422 got {code}: {data}"
 
-test("空消息→提示输入", test_guide_chat_empty)
+test("空消息→422", test_guide_chat_empty)
 
 
 def test_guide_debug_config():

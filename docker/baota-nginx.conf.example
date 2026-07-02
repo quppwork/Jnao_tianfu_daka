@@ -1,0 +1,22 @@
+# 宝塔面板 → 网站 → 你的域名 → 设置 → 配置文件
+# 在 server { ... } 块内，用以下内容替换或合并 location / 段。
+# 前提：docker compose 已启动，前端监听 127.0.0.1:5185
+
+location / {
+    proxy_pass http://127.0.0.1:5185;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    client_max_body_size 20m;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+}
+
+# 说明：
+# - 前端容器内 Nginx 已将 /api 转发到后端，宝塔只需反代到前端即可
+# - SSL 在宝塔「SSL」页签申请 Let's Encrypt 或上传证书
+# - 申请证书后 SITE_DOMAIN 填 https://你的域名

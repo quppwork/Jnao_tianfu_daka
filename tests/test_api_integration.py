@@ -1,16 +1,20 @@
 """Root integration tests — validate real backend API with HTTP calls.
 
-These tests require backend to be running: python main.py (port 8012)
+These tests require backend to be running: uvicorn main:app --port 8012
 
-Run:  cd tests && pytest . -v
-Skip: pytest . -v --ignore=tests  (when backend is not running)
+Run:  python -m pytest tests/test_api_integration.py -v
+Skip: when backend is not running (ConnectionRefused)
 """
 
 import json
+import os
 import urllib.request
 import urllib.error
 
-BASE = "http://127.0.0.1:8012/api"
+_API_HOST = os.environ.get("JNAO_API_HOST", "127.0.0.1")
+_API_PORT = os.environ.get("JNAO_API_PORT", "8012")
+_ORIGIN = f"http://{_API_HOST}:{_API_PORT}"
+BASE = f"{_ORIGIN}/api"
 
 # 单设备登录：先注册获取 session_token，后续请求携带之
 _TOKEN_CACHE = None
@@ -119,7 +123,7 @@ class TestChatIntegration:
 
 def test_backend_serves_openapi():
     """OpenAPI schema is accessible."""
-    url = "http://127.0.0.1:8012/openapi.json"
+    url = f"{_ORIGIN}/openapi.json"
     try:
         with urllib.request.urlopen(url) as resp:
             assert resp.status == 200
@@ -131,7 +135,7 @@ def test_backend_serves_openapi():
 
 def test_backend_cors_headers():
     """CORS headers are present."""
-    req = urllib.request.Request("http://127.0.0.1:8012/api/health", method="OPTIONS")
+    req = urllib.request.Request(f"{_ORIGIN}/api/health", method="OPTIONS")
     try:
         with urllib.request.urlopen(req) as resp:
             headers = dict(resp.headers)

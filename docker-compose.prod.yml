@@ -1,0 +1,70 @@
+# 宝塔 / 阿里云生产部署（使用已有 RDS MySQL）
+# 用法: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# 若需 Docker 内置 MySQL，改用:
+# docker compose -f docker-compose.prod.yml -f docker-compose.prod.mysql.yml --env-file .env.production up -d --build
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: jnao-daka-backend:latest
+    container_name: jnao-daka-backend
+    restart: unless-stopped
+    volumes:
+      - backend_data:/app/data
+      - ./docs/data:/catalog_data:ro
+    env_file:
+      - .env.production
+    environment:
+      JNAO_HOST: 0.0.0.0
+      JNAO_PORT: "8012"
+      JNAO_ENV: production
+      JNAO_DEV_MODE: "0"
+      JNAO_DEBUG_ROUTES: "0"
+      TIANFU_RAG_MOCK: ${TIANFU_RAG_MOCK:-1}
+      DATABASE_URL: ${DATABASE_URL}
+      CORS_ORIGINS: ${SITE_DOMAIN}
+      DOUBAO_API_KEY: ${DOUBAO_API_KEY}
+      DOUBAO_API_BASE: ${DOUBAO_API_BASE:-https://ark.cn-beijing.volces.com/api/v3}
+      DOUBAO_CHAT_MODEL: ${DOUBAO_CHAT_MODEL:-doubao-seed-1-6-250615}
+      DOUBAO_VISION_MODEL: ${DOUBAO_VISION_MODEL:-doubao-seed-1-6-250615}
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
+      OSS_BUCKET: ${OSS_BUCKET:-jnao-talent-ai}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
+      OSS_PREFIX: ${OSS_PREFIX:-yinpin/}
+      SPEECH_APP_ID: ${SPEECH_APP_ID:-}
+      SPEECH_ACCESS_TOKEN: ${SPEECH_ACCESS_TOKEN:-}
+      CATALOG_DATA_DIR: /catalog_data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8012/api/ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - jnao_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: jnao-daka-frontend:latest
+    container_name: jnao-daka-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-5185}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - jnao_net
+
+volumes:
+  backend_data:
+
+networks:
+  jnao_net:
+    driver: bridge

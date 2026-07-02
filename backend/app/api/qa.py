@@ -3,11 +3,12 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_user, get_db
+from app.core.sse import SSE_HEADERS, emit_event_stream, sse_done, sse_json
 from app.services import qa_service
 from app.services.qa_image_store import get_qa_image, save_qa_image
 
@@ -46,6 +47,35 @@ async def qa_chat(
         )
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+
+
+@router.post("/chat/stream")
+async def qa_chat_stream(
+    req: QaChatRequest,
+    child_user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """SSE 流式学科答疑"""
+
+    async def events():
+        try:
+            async for chunk in emit_event_stream(
+                qa_service.chat_stream(
+                    db,
+                    child_user_id,
+                    req.message,
+                    session_id=req.session_id,
+                    subject=req.subject,
+                    image_id=req.image_id,
+                    use_rag=req.use_rag,
+                )
+            ):
+                yield chunk
+        except ValueError as e:
+            yield sse_json({"type": "error", "message": str(e)})
+            yield sse_done()
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.post("/upload-image")

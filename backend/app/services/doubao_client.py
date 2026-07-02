@@ -236,3 +236,87 @@ async def chat_completion_stream(
             yield full
         else:
             yield f"[ERROR] {e}"
+
+
+async def vision_chat_completion_stream(
+    *,
+    system_prompt: str,
+    user_message: str,
+    image_data_url: str,
+    history: list[dict] | None = None,
+    max_tokens: int = 800,
+) -> AsyncIterator[str]:
+    """多模态流式输出"""
+    cfg = _cfg()
+    if not cfg["api_key"]:
+        yield "[ERROR] 豆包 API 未配置"
+        return
+
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        for item in history[-8:]:
+            role = "assistant" if item.get("role") in ("assistant", "ai", "bot") else "user"
+            content = item.get("content") or item.get("text") or ""
+            if content:
+                messages.append({"role": role, "content": content})
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_message},
+                {"type": "image_url", "image_url": {"url": image_data_url}},
+            ],
+        }
+    )
+    payload = {
+        "model": cfg["vision_model"],
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            async with client.stream(
+                "POST",
+                f"{cfg['api_base']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            ) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    logger.error(f"Doubao vision stream error {resp.status_code}: {body[:200]}")
+                    yield "[ERROR] 豆包识图服务异常"
+                    return
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    chunk = line[6:].strip()
+                    if chunk == "[DONE]":
+                        break
+                    try:
+                        import json
+
+                        data = json.loads(chunk)
+                        delta = data["choices"][0].get("delta", {})
+                        text = delta.get("content", "")
+                        if text:
+                            yield text
+                    except Exception:
+                        continue
+    except Exception as e:
+        logger.error(f"Doubao vision stream failed: {e}")
+        full = await vision_chat_completion(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            image_data_url=image_data_url,
+            history=history,
+            max_tokens=max_tokens,
+        )
+        if full:
+            yield full
+        else:
+            yield f"[ERROR] {e}"

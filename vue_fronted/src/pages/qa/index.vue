@@ -339,7 +339,7 @@ import {
 
   resolveQaImageUrl,
 
-  sendQaMessage,
+  sendQaMessageStream,
 
   uploadQaImage,
 
@@ -1407,29 +1407,40 @@ async function sendMsg() {
 
     }
 
-    const data = await sendQaMessage(uid, text, qaSessionId.value, {
+    const aiIdx = messages.value.length
+    messages.value.push({ role: 'assistant', text: '' })
+    loading.value = false
+    await nextTick()
+    scrollChat()
 
+    await sendQaMessageStream(uid, text, qaSessionId.value, {
       subject: subject.value,
-
       image_id: imageId,
-
+    }, {
+      onToken(chunk) {
+        messages.value[aiIdx].text += chunk
+        scrollChat()
+      },
+      onDone(data) {
+        qaSessionId.value = data.session_id
+        coachHint.value = data.coach_hint || ''
+        if (data.reply) messages.value[aiIdx].text = data.reply
+      },
     })
-
-    qaSessionId.value = data.session_id
-
-    coachHint.value = data.coach_hint || ''
-
-    messages.value.push({ role: 'assistant', text: data.reply || '抱歉，AI 暂时无法响应' })
 
   } catch (e) {
 
     const errText = e?.message || '请求失败，请稍后再试'
 
-    messages.value.push({ role: 'assistant', text: `出错了：${errText}` })
+    if (messages.value.length && messages.value[messages.value.length - 1].role === 'assistant' && !messages.value[messages.value.length - 1].text) {
+      messages.value[messages.value.length - 1].text = `出错了：${errText}`
+    } else {
+      messages.value.push({ role: 'assistant', text: `出错了：${errText}` })
+    }
 
+  } finally {
+    loading.value = false
   }
-
-  loading.value = false
 
   await nextTick()
 

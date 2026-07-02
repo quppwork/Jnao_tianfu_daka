@@ -1,5 +1,8 @@
 """首页引导对话 — 会话持久化"""
 
+from collections.abc import AsyncIterator
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -76,6 +79,43 @@ async def chat(
     db.commit()
 
     return {"session_id": session.id, "reply": reply}
+
+
+async def chat_stream(
+    db: Session,
+    child_user_id: int,
+    message: str,
+    *,
+    session_id: int | None = None,
+) -> AsyncIterator[tuple[str, Any]]:
+    """流式对话：yield ('token', str) 后 yield ('done', dict)。"""
+    session = _get_or_create_session(db, child_user_id, session_id)
+    history = _session_messages(session)
+
+    db.add(GuideMessage(session_id=session.id, role="user", content=message))
+    if not session.title or session.title == "首页助手":
+        session.title = message[:30]
+    db.commit()
+
+    from app.services.doubao_client import chat_completion_stream
+
+    parts: list[str] = []
+    async for token in chat_completion_stream(
+        system_prompt=SYSTEM_PROMPT,
+        user_message=message,
+        history=history,
+        max_tokens=800,
+    ):
+        if token.startswith("[ERROR]"):
+            yield ("error", token)
+            return
+        parts.append(token)
+        yield ("token", token)
+
+    reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+    db.add(GuideMessage(session_id=session.id, role="assistant", content=reply))
+    db.commit()
+    yield ("done", {"session_id": session.id, "reply": reply})
 
 
 def clear_sessions(db: Session, child_user_id: int) -> int:

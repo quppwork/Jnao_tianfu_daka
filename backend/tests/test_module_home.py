@@ -48,3 +48,17 @@ class TestModuleHome:
         """首页也可走 /api/chat"""
         res = client.post("/api/chat", json={"message": "你好"})
         assert res.json()["data"]["answer_mode"] == "doubao"
+
+    def test_guide_chat_stream(self, client: TestClient, registered_user, mock_doubao):
+        uid = registered_user["child_user_id"]
+        with client.stream(
+            "POST",
+            f"/api/guide/chat/stream?user_id={uid}",
+            json={"message": "怎么开始训练？"},
+        ) as resp:
+            assert resp.status_code == 200
+            assert "text/event-stream" in resp.headers["content-type"]
+            body = resp.read().decode()
+            assert '"type": "token"' in body
+            assert '"type": "done"' in body
+            assert "session_id" in body

@@ -1,0 +1,2 @@
+# 可选：本地 Whisper 语音识别（需 Dockerfile 安装 ffmpeg）
+faster-whisper>=1.0.0

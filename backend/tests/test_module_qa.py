@@ -96,3 +96,17 @@ class TestModuleQa:
         assert data["suggested_subject"] == "英语"
         assert "英语" in data["reply"]
         assert mock_doubao["chat"].call_count == 0
+
+    def test_qa_chat_stream(self, client: TestClient, child_with_assessment, mock_doubao):
+        uid = child_with_assessment
+        with client.stream(
+            "POST",
+            f"/api/qa/chat/stream?user_id={uid}",
+            json={"message": "分数加法怎么算？", "subject": "数学"},
+        ) as resp:
+            assert resp.status_code == 200
+            assert "text/event-stream" in resp.headers["content-type"]
+            body = resp.read().decode()
+            assert '"type": "token"' in body
+            assert '"type": "done"' in body
+            assert "session_id" in body

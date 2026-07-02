@@ -1,0 +1,14 @@
+**/.git
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/dist
+**/logs
+**/.env
+**/.cursor
+**/.codegraph
+backend/data/*.db
+*.md

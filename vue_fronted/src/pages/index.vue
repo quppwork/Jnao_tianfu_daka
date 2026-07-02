@@ -153,7 +153,7 @@ import {
   markChildUserSessionValid,
   invalidateChildUserSession,
   fetchGuideSession,
-  sendGuideMessage,
+  sendGuideMessageStream,
   clearGuideSession,
   fetchProfile,
   saveProfile as saveProfileToDb,
@@ -202,18 +202,28 @@ async function sendMsg() {
   if (!text || loading.value) return
   messages.value.push({ role: 'user', text })
   inputText.value = ''
-  loading.value = true
+  const aiIdx = messages.value.length
+  messages.value.push({ role: 'ai', text: '' })
+  loading.value = false
   await nextTick()
   scrollChat()
   try {
     const uid = await ensureChildUser()
-    const data = await sendGuideMessage(uid, text, guideSessionId.value)
-    guideSessionId.value = data.session_id
-    messages.value.push({ role: 'ai', text: data.reply || '抱歉，AI 暂时无法响应' })
+    await sendGuideMessageStream(uid, text, guideSessionId.value, {
+      onToken(chunk) {
+        messages.value[aiIdx].text += chunk
+        scrollChat()
+      },
+      onDone(data) {
+        guideSessionId.value = data.session_id
+        if (data.reply) messages.value[aiIdx].text = data.reply
+      },
+    })
   } catch (e) {
-    messages.value.push({ role: 'ai', text: '网络错误，请稍后再试' })
+    if (!messages.value[aiIdx].text) {
+      messages.value[aiIdx].text = e?.message || '网络错误，请稍后再试'
+    }
   }
-  loading.value = false
   await nextTick()
   scrollChat()
 }

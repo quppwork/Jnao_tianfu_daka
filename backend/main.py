@@ -8,7 +8,7 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

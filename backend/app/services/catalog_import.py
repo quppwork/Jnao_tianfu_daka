@@ -1,6 +1,7 @@
 """音频目录 JSON → content_item"""
 
 import json
+import os
 from pathlib import Path
 
 from sqlalchemy import select
@@ -10,8 +11,23 @@ from app.core.talent_mapping import EXPECTED_COUNTS_BY_TAG
 from app.db.models import ContentItem
 from app.services.content_meta import build_instructions_meta
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_CATALOG = PROJECT_ROOT / "docs" / "data" / "xet_brain_power_catalog.json"
+
+def catalog_data_dir() -> Path:
+    """catalog JSON 目录：本地=项目 docs/data；Docker=CATALOG_DATA_DIR 或 /catalog_data"""
+    env = os.getenv("CATALOG_DATA_DIR", "").strip()
+    if env:
+        return Path(env)
+    backend_root = Path(__file__).resolve().parents[2]
+    monorepo = backend_root.parent
+    if (monorepo / "docs" / "data").is_dir():
+        return monorepo / "docs" / "data"
+    docker_fallback = Path("/catalog_data")
+    if docker_fallback.is_dir():
+        return docker_fallback
+    return monorepo / "docs" / "data"
+
+
+DEFAULT_CATALOG = catalog_data_dir() / "xet_brain_power_catalog.json"
 
 
 def catalog_path() -> Path:
@@ -146,12 +162,13 @@ def parse_series_from_item(item: ContentItem) -> str:
 
 
 def import_all_xet_catalogs(db: Session, *, replace: bool = False) -> dict[str, int]:
-    """导入脑力奥秘 + 学科奥秘两份 catalog"""
+    """导入脑力奥秘 + 学科奥秘等 catalog"""
+    base = catalog_data_dir()
     paths = [
-        PROJECT_ROOT / "docs" / "data" / "xet_brain_power_catalog.json",
-        PROJECT_ROOT / "docs" / "data" / "xet_xuekeaomi_catalog.json",
-        PROJECT_ROOT / "docs" / "data" / "xet_suzhiaomi_catalog.json",
-        PROJECT_ROOT / "docs" / "data" / "xet_duoyuanganzhi_catalog.json",
+        base / "xet_brain_power_catalog.json",
+        base / "xet_xuekeaomi_catalog.json",
+        base / "xet_suzhiaomi_catalog.json",
+        base / "xet_duoyuanganzhi_catalog.json",
     ]
     results: dict[str, int] = {}
     for i, path in enumerate(paths):

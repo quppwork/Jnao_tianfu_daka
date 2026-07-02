@@ -1,0 +1,32 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    image: jnao-daka-backend:local
+    container_name: jnao-daka-backend
+    ports:
+      - "8012:8012"
+    volumes:
+      - backend_data:/app/data
+    environment:
+      JNAO_HOST: 0.0.0.0
+      JNAO_PORT: "8012"
+      DATABASE_URL: sqlite:///./data/jnao_daka.db
+      TIANFU_RAG_MOCK: "1"
+      CORS_ORIGINS: http://localhost:5185,http://127.0.0.1:5185
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: jnao-daka-frontend:local
+    container_name: jnao-daka-frontend
+    ports:
+      - "5185:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend_data:

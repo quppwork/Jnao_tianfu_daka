@@ -2240,12 +2240,7 @@ function autoDetectAbilities(block) {
   let sparkIdx = -1
   for (const ability of detected) {
     if (hasPickerCard(ability)) continue
-    const card = newCard(ability)
-    const planItem = getPhaseItems(block).find(i => resolvePlanItemSkill(i, abilities) === ability)
-    if (planItem?.duration_min && !card.time) {
-      card.time = String(planItem.duration_min)
-    }
-    pickerCards.value.push(card)
+    pickerCards.value.push(newCard(ability))
     if (sparkIdx < 0) sparkIdx = abilities.indexOf(ability)
   }
   if (sparkIdx >= 0) {

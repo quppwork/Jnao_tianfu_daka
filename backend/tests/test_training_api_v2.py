@@ -104,6 +104,23 @@ class TestCheckinV2:
         assert res.status_code == 200
         assert len(res.json()) >= 1
 
+    def test_update_checkin_after_submit(self, client, user_ready_for_training):
+        """再次提交同 block 走 PUT，v2.0 应重算进度而非 ImportError 500"""
+        uid = user_ready_for_training
+        sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
+        plan = sched.json()
+        created = client.post("/api/training/checkin", json={
+            "plan_id": plan["plan_id"], "item_id": plan["items"][0]["id"],
+            "cards": [{"name": "超脑阅读", "time": "1", "wordCount": "1000"}],
+        }, **_auth(uid))
+        assert created.status_code == 200
+        record_id = created.json()["record_id"]
+        updated = client.put(f"/api/training/checkin/{record_id}", json={
+            "cards": [{"name": "超脑阅读", "time": "2", "wordCount": "1200"}],
+        }, **_auth(uid))
+        assert updated.status_code == 200
+        assert updated.json().get("plan_status")
+
 
 class TestElectiveV2:
     """选修弹窗"""

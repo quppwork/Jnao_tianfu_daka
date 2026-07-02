@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from typing import Any
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -259,6 +262,207 @@ async def chat(
         "ocr_preview": ocr_preview,
         "recent_topics": coach_meta.get("recent_topics"),
     }
+
+
+async def chat_stream(
+    db: Session,
+    child_user_id: int,
+    message: str,
+    *,
+    session_id: int | None = None,
+    subject: str | None = None,
+    image_id: str | None = None,
+    use_rag: bool | None = None,
+) -> AsyncIterator[tuple[str, Any]]:
+    """流式学科答疑。yield ('token', str) 后 yield ('done', dict)。"""
+    message = sanitize_text(message)
+    if not message and not image_id:
+        yield ("error", "消息不能为空")
+        return
+
+    subject = sanitize_subject(subject)
+    user = db.get(ChildUser, child_user_id)
+    profile = _learner_profile(user)
+    assessment = get_latest_assessment(db, child_user_id)
+    talent = assessment.talent_primary if assessment else None
+    report_json = assessment.report_json if assessment else None
+
+    school_stage = infer_school_stage(
+        grade=profile.get("grade"),
+        age=profile.get("age"),
+        school_stage=profile.get("school_stage"),
+    )
+
+    session = None
+    if session_id:
+        session = db.get(QaSession, session_id)
+        if not session or session.child_user_id != child_user_id:
+            yield ("error", "会话不存在")
+            return
+    else:
+        session = create_session(db, child_user_id, subject)
+
+    active_subject = subject or session.subject
+    mismatch = None if image_id else check_subject_mismatch(message, active_subject)
+    if mismatch:
+        QaMemory.append_message(db, session_id=session.id, role="user", content=message)
+        if session.title == "新对话":
+            session.title = session_title_from_message(message)
+        reply = mismatch_reply(mismatch)
+        QaMemory.append_message(
+            db,
+            session_id=session.id,
+            role="assistant",
+            content=reply,
+            meta_json={
+                "subject_mismatch": True,
+                "suggested_subject": mismatch.detected,
+                "selected_subject": mismatch.selected,
+            },
+        )
+        db.commit()
+        invalidate_session_list(child_user_id)
+        yield ("token", reply)
+        yield (
+            "done",
+            {
+                "session_id": session.id,
+                "reply": reply,
+                "talent_primary": talent,
+                "school_stage": school_stage,
+                "subject_mismatch": True,
+                "suggested_subject": mismatch.detected,
+                "selected_subject": mismatch.selected,
+            },
+        )
+        return
+
+    history = QaMemory.load_chat_history(session, limit=10)
+    coach_meta = build_coach_metadata(
+        talent_primary=talent,
+        report_json=report_json,
+        school_stage=school_stage,
+        message=message,
+    )
+    topics = QaMemory.recent_topics(db, child_user_id)
+    if topics:
+        coach_meta["recent_topics"] = topics[:3]
+
+    ocr_preview = None
+    image_url = None
+    has_image = bool(image_id)
+    if image_id:
+        data_url = image_data_url(image_id, child_user_id)
+        if not data_url:
+            yield ("error", "图片不存在或已过期")
+            return
+        image_url = f"/api/qa/images/{image_id}?user_id={child_user_id}"
+        ocr_preview = await vision_chat_completion(
+            system_prompt="你是 OCR 助手。请简要识别图片中的学科题目文字与关键条件，不要解题。",
+            user_message="请识别图中题目，列出已知条件和问题。",
+            image_data_url=data_url,
+            max_tokens=400,
+        )
+
+    rag_used = False
+    rag_sources: list[str] = []
+    rag_context = None
+    if should_use_rag(message, subject=subject or session.subject, has_image=has_image, use_rag=use_rag):
+        rag = await rag_chat(
+            message,
+            user_id=f"child_{child_user_id}",
+            subject=subject or session.subject,
+        )
+        if rag and rag.get("answer"):
+            rag_used = True
+            rag_sources = list(rag.get("sources") or [])
+            rag_context = rag["answer"]
+
+    coach_context = fetch_recent_coach_context_for_prompt(db, child_user_id, session_id=session.id)
+    system = build_qa_system_prompt(
+        school_stage=school_stage,
+        grade=profile.get("grade"),
+        age=profile.get("age"),
+        talent_primary=talent,
+        report_json=report_json,
+        subject=subject or session.subject,
+        rag_context=rag_context,
+        ocr_preview=ocr_preview,
+        coach_context=coach_context,
+    )
+
+    user_row = QaMessage(
+        session_id=session.id,
+        role="user",
+        content=message,
+        image_url=image_url,
+        meta_json={"image_id": image_id} if image_id else None,
+    )
+    db.add(user_row)
+    if session.title == "新对话":
+        session.title = session_title_from_message(message)
+    db.commit()
+
+    from app.services.doubao_client import chat_completion_stream, vision_chat_completion_stream
+
+    parts: list[str] = []
+    if has_image and image_id:
+        data_url = image_data_url(image_id, child_user_id) or ""
+        token_iter = vision_chat_completion_stream(
+            system_prompt=system,
+            user_message=message,
+            image_data_url=data_url,
+            history=history,
+            max_tokens=900,
+        )
+    else:
+        token_iter = chat_completion_stream(
+            system_prompt=system,
+            user_message=message,
+            history=history,
+            max_tokens=900,
+        )
+
+    async for token in token_iter:
+        if token.startswith("[ERROR]"):
+            yield ("error", token)
+            return
+        parts.append(token)
+        yield ("token", token)
+
+    reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+    assistant_meta = {
+        **coach_meta,
+        "rag_used": rag_used,
+        "rag_sources": rag_sources,
+        "ocr_preview": ocr_preview,
+    }
+    db.add(
+        QaMessage(
+            session_id=session.id,
+            role="assistant",
+            content=reply,
+            meta_json=assistant_meta,
+        )
+    )
+    db.commit()
+    invalidate_session_list(child_user_id)
+
+    yield (
+        "done",
+        {
+            "session_id": session.id,
+            "reply": reply,
+            "talent_primary": talent,
+            "school_stage": school_stage,
+            "coach_hint": coach_meta.get("coach_hint"),
+            "mistake_pattern": coach_meta.get("mistake_pattern"),
+            "rag_used": rag_used,
+            "rag_sources": rag_sources,
+            "ocr_preview": ocr_preview,
+            "recent_topics": coach_meta.get("recent_topics"),
+        },
+    )
 
 
 def count_user_messages(db: Session, child_user_id: int) -> int:
