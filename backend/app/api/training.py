@@ -8,21 +8,26 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_child_user_id, get_db
 from app.schemas.training import (
     CheckinDeleteResponse,
+    CheckinHistoryResponse,
     CheckinRecordOut,
     CheckinRequest,
     CheckinResponse,
     CheckinUpdateRequest,
     ScheduleRequest,
+    OptionalChoiceRequest,
     TalentVideoResponse,
     TrainingEntryResponse,
     TrainingProgressResponse,
     TrainingTodayResponse,
+    WatchProgressRequest,
+    WatchProgressResponse,
     WindowResponse,
     WindowSetRequest,
     WindowStatusResponse,
 )
 from app.services import training_service
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
+from app.services.training_elective_service import get_elective_offers, submit_elective_checkin
 from app.services.training_plan_generator import ensure_plan_report
 from app.services.training_schedule_service import schedule_training_by_duration
 from app.services.training_service import TrainingError
@@ -47,16 +52,57 @@ async def schedule_training(
         raise HTTPException(e.status_code, e.message) from e
 
 
+@router.post("/schedule/optional", response_model=TrainingTodayResponse)
+def schedule_optional_training(
+    req: OptionalChoiceRequest,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+    plan_date: date | None = Query(None),
+):
+    """孩子确认是否练习可选训练项（如高效作业），按天赋权重推荐"""
+    try:
+        if req.accept:
+            return accept_optional_training(
+                db, child_user_id, req.skill, plan_date=plan_date
+            )
+        return decline_optional_training(
+            db, child_user_id, req.skill, plan_date=plan_date
+        )
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
+
+
 @router.get("/video/talent", response_model=TalentVideoResponse)
 def talent_training_video(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
 ):
-    """按天赋返回固定训练视频（逐条视频推送见 video_push_service.get_item_training_video）"""
-    assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
-        raise HTTPException(403, "请先完成天赋测评")
-    return get_talent_training_video(assessment.talent_code)
+    """按天赋返回固定训练视频（支持测评结果或引导页自选天赋）"""
+    from app.services.training_service import _resolve_effective_talent
+
+    talent = _resolve_effective_talent(db, child_user_id)
+    if not talent or not talent.get("talent_code"):
+        raise HTTPException(403, "请先完成天赋测评或选择天赋")
+    return get_talent_training_video(talent["talent_code"])
+
+
+@router.post("/items/{item_id}/watch-progress", response_model=WatchProgressResponse)
+def report_watch_progress(
+    item_id: int,
+    req: WatchProgressRequest,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return training_service.record_watch_progress(
+            db,
+            child_user_id,
+            item_id,
+            watched_sec=req.watched_sec,
+            duration_sec=req.duration_sec,
+        )
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/entry", response_model=TrainingEntryResponse)
@@ -163,6 +209,36 @@ def delete_checkin(
         raise HTTPException(e.status_code, e.message) from e
 
 
+# ── v2.0 选修弹窗 ──
+
+@router.get("/elective/list")
+def elective_list(
+    planned_minutes: int = Query(0, description="今日训练时长（分钟）"),
+    overall_tier: int = Query(1, description="整体 Tier"),
+):
+    """获取可用的选修技能列表"""
+    return {"offers": get_elective_offers(planned_minutes, overall_tier)}
+
+
+@router.post("/elective")
+def elective_checkin(
+    req: dict,
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    """提交选修打卡（多元感知等）"""
+    try:
+        return submit_elective_checkin(
+            db,
+            child_user_id,
+            plan_id=req.get("plan_id", 0),
+            skill=req.get("skill", ""),
+            cards=req.get("cards"),
+        )
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
 @router.get("/progress", response_model=TrainingProgressResponse)
 def training_progress(
     child_user_id: int = Depends(get_child_user_id),
@@ -196,12 +272,34 @@ def get_window(
     return row
 
 
+@router.delete("/window")
+def delete_window(
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+):
+    deleted = training_service.clear_training_window(db, child_user_id)
+    return {"deleted": deleted}
+
+
 @router.get("/window/status", response_model=WindowStatusResponse)
 def window_status(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
 ):
     return training_service.get_window_status(db, child_user_id)
+
+
+@router.post("/plan/media-exhausted", response_model=TrainingTodayResponse)
+def mark_plan_media_exhausted(
+    child_user_id: int = Depends(get_child_user_id),
+    db: Session = Depends(get_db),
+    plan_date: date | None = Query(None),
+):
+    """设定时长用尽：隐藏音视频，打卡仍开放至训练日截止"""
+    try:
+        return training_service.mark_today_media_exhausted(db, child_user_id, plan_date)
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/report/today", response_model=TrainingTodayResponse)
@@ -229,10 +327,16 @@ def training_report_by_date(
     return data
 
 
-@router.get("/history")
+@router.get("/history", response_model=CheckinHistoryResponse)
 def training_history(
     child_user_id: int = Depends(get_child_user_id),
     db: Session = Depends(get_db),
-    limit: int = 30,
+    limit: int = Query(60, ge=1, le=200),
+    group_by_day: bool = Query(True),
+    exclude_today: bool = Query(False),
 ):
-    return {"items": training_service.get_checkin_history(db, child_user_id, limit)}
+    items = training_service.get_checkin_history(
+        db, child_user_id, limit, exclude_today=exclude_today
+    )
+    days = training_service.group_checkin_history_by_day(items) if group_by_day else []
+    return {"items": items, "days": days}

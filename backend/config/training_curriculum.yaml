@@ -1,0 +1,156 @@
+# 训练推课体系 — 业务规则 v2.0
+# 加载：config.loader.load_training_curriculum()
+# 变更：从 main_lines 主线模型 → duration_formula 多技能并行公式引擎
+
+version: 2
+
+# ══════════════════════════════════════════════════
+# 一、技能定义
+# ══════════════════════════════════════════════════
+
+skills:
+  # 必修技能（5个）— 严格按序打卡，阻塞后续
+  required:
+    - 超脑阅读    # A — 单音频，无 OSS stage，各 Tier 复用
+    - 影像追忆    # B — OSS stage 1-5
+    - 扫描速记    # C — OSS stage 1-5，Tier 1 练但不考
+    - 极速运算    # D — OSS stage 2-5，Tier 3 开始出现
+    - 极速学习    # E — OSS stage 2/3-5（起点因天赋而异），Tier 4 开始考核
+
+  # 选修技能（3个）— 不阻塞后续，独立弹窗/入口
+  elective:
+    - 精力恢复    # 训练时长 ≥ 8h 时弹出，无打卡
+    - 多元感知    # 可打可不打，有打卡按钮+卡片
+    - 高效作业    # 不打卡，播放音频即可
+
+# ══════════════════════════════════════════════════
+# 二、选修技能行为规则
+# ══════════════════════════════════════════════════
+
+elective_rules:
+  精力恢复:
+    trigger: duration_gte_8h        # 用户选择训练时长 ≥ 8h 时触发
+    has_checkin: false              # 无打卡按钮
+    blocks_next: false              # 不阻塞后续
+    display_order: after_required   # 在必修项之后展示
+
+  多元感知:
+    trigger: manual                 # 用户主动触发（始终可用）
+    has_checkin: true               # 有打卡按钮 + 打卡卡片
+    checkin_fields: [card_count, accuracy_pct]
+    blocks_next: false              # 可打可不打，不阻塞
+
+  高效作业:
+    trigger: formula_slot           # 时长公式中包含时自动展示
+    has_checkin: false              # 无打卡
+    blocks_next: false              # 不阻塞
+    skip_carryover: true            # 不纳入昨日续推
+
+# ══════════════════════════════════════════════════
+# 三、时长 → 技能公式（核心排课引擎）
+# ══════════════════════════════════════════════════
+
+duration_formula:
+  - minutes: 20
+    slots: [A]                                          # 超脑阅读 ×1
+
+  - minutes: 40
+    slots: [A, B]                                       # 超脑+影像追忆
+
+  - minutes: [60, 120]
+    primary_school: [A, B, C]                           # 小学：+扫描速记
+    junior_high:    [A, B, C]                           # 初高中：同公式
+    junior_high_c_note: "不建议"                         # 但 C 标注不建议
+
+  - minutes: [121, 180]
+    primary_school: [A, B, B, C, 高效作业]               # 2B = 影像追忆×2
+    junior_high:    [A, B, B, C, 高效作业]
+    junior_high_c_note: "不建议"
+    tier_replace:                                       # ≥3阶替换规则
+      "高效作业": "极速学习"                              # 高效作业 → E
+    exam_note: "建议准备2套以上试卷"
+
+  - minutes: [181, 240]
+    primary_school: [A, B, B, C, 高效作业]
+    junior_high:    [A, B, B, C, 高效作业]
+    junior_high_c_note: "不建议"
+    tier_replace:
+      "高效作业": ["极速学习", "极速学习"]                # ≥3阶：高效作业 → 2E
+    exam_note: "建议准备3套以上试卷"
+
+  - minutes: [241, 300]
+    primary_school: [A, B, B, B, C, 高效作业]            # 3B = 影像追忆×3
+    junior_high:    [A, B, B, B, C, 高效作业]
+    junior_high_c_note: "不建议"
+    tier_replace:
+      "高效作业": ["极速学习", "极速学习", "极速学习"]     # ≥3阶：高效作业 → 3E
+    exam_note: "建议准备4套以上试卷"
+
+# ══════════════════════════════════════════════════
+# 四、学段行为
+# ══════════════════════════════════════════════════
+
+grade_bands:
+  primary_low:  [一年级, 二年级, 三年级]
+  primary_high: [四年级, 五年级, 六年级]
+  junior:       [初一, 初二, 初三]
+  senior:       [高一, 高二, 高三]
+
+grade_behavior:
+  junior_high_c: not_recommended     # 展示但标注"不建议"
+  senior_high_c: not_recommended
+
+# 初高中极速运算可选修（Tier 3+）
+optional_in_grades:
+  极速运算:
+    junior: true
+    senior: true
+
+# ══════════════════════════════════════════════════
+# 五、感知力（多元感知 OSS）
+# ══════════════════════════════════════════════════
+
+perception:
+  display_name: 多元感知
+  oss_series: duoyuanganzhi
+  skill_name: 感知力
+  # v2.0：从必修辅助改为选修，不再自动附在超脑阅读后面
+  push_enabled: true
+  skip_checkin: false               # v2.0：可打卡
+
+# ══════════════════════════════════════════════════
+# 六、LLM 辅助（非核心调度）
+# ══════════════════════════════════════════════════
+
+llm_routing:
+  enabled: false                     # v2.0：核心调度不走 LLM
+  provider: doubao
+  usage: coach_text_only             # 仅用于生成教练文案
+
+# ══════════════════════════════════════════════════
+# 七、训练日
+# ══════════════════════════════════════════════════
+
+training_day:
+  cutoff_hour: 4                     # 凌晨 4:00 日切
+  freeze_minutes: 5                  # 4:00-4:05 冻结窗口
+
+# ══════════════════════════════════════════════════
+# 八、版本范围
+# ══════════════════════════════════════════════════
+
+scope:
+  current_tier_formulas: [1]         # 当前只实现 Tier 1 的时长公式
+  current_tier_thresholds: [1]       # 当前只实现 Tier 1 的达标标准
+  exclude_tiers: [6, 7, 8, 9]       # 六阶及以上暂不纳入
+
+# ══════════════════════════════════════════════════
+# 九、槽位符号映射（供公式引擎解析）
+# ══════════════════════════════════════════════════
+
+slot_mapping:
+  A: 超脑阅读
+  B: 影像追忆
+  C: 扫描速记
+  D: 极速运算
+  E: 极速学习

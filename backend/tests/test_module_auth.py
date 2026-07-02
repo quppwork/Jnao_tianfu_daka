@@ -1,3 +1,4 @@
+import pytest
 """用户注册登录 — 前端进入 App 前置"""
 
 from fastapi.testclient import TestClient

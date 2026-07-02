@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from app.db.models import ContentItem
 
 SKILL_PATTERNS = (
+    "超脑阅读",
+    "超脑速读",
     "影像追忆",
     "扫描速记",
     "极速学习",
@@ -21,23 +23,31 @@ SKILL_PATTERNS = (
     "理科奥秘",
     "英语奥秘",
     "高效作业",
+    "多元感知",
+    "感知力",
     "超能力",
     "专注力",
 )
 
 SERIES_FROM_URL = (
+    ("suzhiaomi", "suzhiaomi"),
     ("xuekeaomi", "xuekeaomi"),
     ("chaonengli", "chaonengli"),
     ("zhuanzhuli", "zhuanzhuli"),
     ("chaonaoaomi", "chaonaoaomi"),
+    ("duoyuanganzhi", "duoyuanganzhi"),
 )
 
 
 def skill_from_title(title: str | None) -> str:
     if not title:
         return "训练"
+    if "超脑速读" in title:
+        return "超脑阅读"
     for skill in SKILL_PATTERNS:
         if skill in title:
+            if skill == "超脑速读":
+                return "超脑阅读"
             return skill
     return "训练"
 
@@ -141,3 +151,30 @@ def is_json_instruction(raw: str | None) -> bool:
     if not raw:
         return False
     return raw.strip().startswith("{")
+
+
+def content_display_title(content) -> str:
+    """ContentItem 展示名"""
+    if content.lesson_title and str(content.lesson_title).strip():
+        return str(content.lesson_title).strip()
+    meta = parse_item_meta(content)
+    if meta.get("skill"):
+        return str(meta["skill"])
+    return "训练音频"
+
+
+def resolve_training_item_title(item, content=None) -> str:
+    """训练项展示名：lesson_title → skill → 默认"""
+    if item.title and str(item.title).strip():
+        return str(item.title).strip()
+    if content and content.lesson_title and str(content.lesson_title).strip():
+        return str(content.lesson_title).strip()
+    inst = parse_item_instruction(
+        item.instructions if is_json_instruction(item.instructions) else None
+    )
+    skill = inst.get("skill")
+    if skill:
+        return str(skill)
+    if item.ability_type == "placeholder":
+        return "占位训练"
+    return "训练项"

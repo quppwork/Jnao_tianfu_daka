@@ -6,7 +6,9 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
       <text class="nav-title">天赋测试</text>
-      <view class="nav-spacer"></view>
+      <view class="nav-right" @tap="showHistory = true">
+        <text>历史报告</text>
+      </view>
     </view>
 
     <!-- ===== PRE-TEST PHASES ===== -->
@@ -14,51 +16,45 @@
       <!-- DOOR -->
       <view v-if="phase === 'door'" class="phase" key="door">
         <view class="phase-inner">
-          <text class="msg-title">首先我们来打开 Jnao 的大门，测试一下天赋吧！</text>
-          <text class="msg-sub">以下您将完成 35 道题目，请问你想进行哪种类型的天赋测试呢？</text>
+          <text class="msg-title" style="font-size:28px;">请选择测试对象</text>
           <view class="card-row">
-            <view class="pcard pcard-in" style="animation-delay:0.4s" @tap="handleChoice('孩子测试')">
-              <view class="pcard-icon-wrap">
-                <svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="16" cy="16" r="8"/><circle cx="34" cy="14" r="6"/><path d="M4 44c0-8.8 5.4-16 12-16s12 7.2 12 16"/><path d="M30 42c0-5.3 3.6-9.7 8-9.7s8 4.4 8 9.7"/></svg>
+            <view class="pcard pcard-in" style="flex:1.5;animation-delay:0.4s;justify-content:flex-start;padding-top:20px;" @tap="handleChoice('孩子测试')">
+              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
+                <image src="/static/blue-figure.png" mode="aspectFit" style="width:120px;height:190px;" />
               </view>
-              <text class="pcard-title">孩子测试</text>
-              <text class="pcard-sub">家长辅助完成 / 了解孩子的天赋</text>
+              <text class="pcard-title" style="font-size:20px;">给孩子测</text>
+              <text class="pcard-sub" style="font-size:14px;">请家长操作</text>
             </view>
-            <view class="pcard pcard-in" style="animation-delay:0.55s" @tap="handleChoice('成人测试')">
-              <view class="pcard-icon-wrap">
-                <svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="24" cy="15" r="9"/><path d="M8 44c0-8.8 7.2-16 16-16s16 7.2 16 16"/></svg>
-              </view>
-              <text class="pcard-title">成人测试</text>
-              <text class="pcard-sub">自行评估完成 / 探索内在潜能</text>
+            <view class="pcard pcard-in" style="flex:1.5;animation-delay:0.55s" @tap="handleChoice('成人测试')">
+              <image src="/static/self-icon-clean.png" mode="aspectFit" style="width:90px;height:160px;margin-bottom:8px;transform:translateY(-10px);" />
+              <text class="pcard-title" style="font-size:20px;">给自己测</text>
+              <text class="pcard-sub" style="font-size:14px;">成年人使用</text>
             </view>
           </view>
 
-          <!-- 历史报告 -->
-          <view class="pcard pcard-gray pcard-in" style="width:160px;flex-shrink:0;margin-top:16px;animation-delay:0.7s" @tap="showHistory = true">
-            <view class="pcard-icon-wrap">
-              <svg viewBox="0 0 48 48" width="28" height="28" fill="none" stroke="#58a6ff" stroke-width="2"><rect x="6" y="4" width="36" height="40" rx="4"/><line x1="16" y1="14" x2="32" y2="14"/><line x1="16" y1="22" x2="28" y2="22"/></svg>
-            </view>
-            <text class="pcard-title">历史报告</text>
-            <text class="pcard-sub">{{ historyList.length ? historyList.length + ' 条记录' : '暂无记录' }}</text>
-          </view>
         </view>
       </view>
 
       <!-- History Overlay -->
-      <view v-if="showHistory" class="notice-overlay" @tap="showHistory = false">
-        <view class="notice-card" style="max-width:340px;" @tap.stop>
-          <text class="notice-text" style="font-weight:700;margin-bottom:12px;display:block;">历史报告</text>
-          <view v-if="historyList.length" class="history-list">
-            <view v-for="(h,i) in historyList" :key="h.id || i" class="history-item">
-              <view class="history-item-main" @tap="viewHistory(h)">
-                <text class="hi-talent">{{ h.talent_primary || h.talent || '--' }}</text>
-                <text class="hi-time">{{ h.create_time || h.assessed_at }}</text>
+      <view v-if="showHistory" class="history-overlay" @tap="showHistory = false">
+        <view class="history-panel" @tap.stop>
+          <view class="history-header">
+            <text class="history-title">历史报告</text>
+            <view class="history-header-close" @tap="showHistory = false"><text>✕</text></view>
+          </view>
+          <view v-if="historyList.length" class="history-grid">
+            <view v-for="(h,i) in historyList" :key="h.id || i" class="history-box" @tap="viewHistory(h)">
+              <view class="history-box-row">
+                <view class="history-box-icon">
+                  <text>{{ talentEmoji[h.talent_primary] || '🧬' }}</text>
+                </view>
+                <text class="history-box-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+                <text class="history-box-time">{{ formatHistoryDate(h.create_time || h.assessed_at) }}</text>
+                <view class="history-box-del" @tap.stop="confirmDeleteHistory(h)"><text>✕</text></view>
               </view>
-              <view class="history-del" @tap.stop="confirmDeleteHistory(h)"><text>✕</text></view>
             </view>
           </view>
-          <text v-else class="notice-text">暂无历史报告</text>
-          <view class="history-close" @tap="showHistory = false"><text>关闭</text></view>
+          <text v-else class="history-empty">暂无历史报告</text>
         </view>
       </view>
 
@@ -67,13 +63,13 @@
         <view class="phase-inner">
           <text class="msg-title">注意！请确认您的孩子是否满18岁</text>
           <view class="card-row">
-            <view class="pcard pcard-blue pcard-in" @tap="handleChoice('已满18岁')">
-              <view class="pcard-icon-wrap"><svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="24" cy="15" r="9"/><path d="M8 44c0-8.8 7.2-16 16-16s16 7.2 16 16"/></svg></view>
+            <view class="pcard pcard-in" @tap="handleChoice('已满18岁')">
+              <image src="/static/adult-icon-clean.png" mode="aspectFit" style="width:110px;height:190px;margin-bottom:8px;transform:translateY(-10px);" />
               <text class="pcard-title">已满18岁</text>
               <text class="pcard-sub">进入成人测试</text>
             </view>
-            <view class="pcard pcard-gold pcard-in" @tap="handleChoice('未满18岁')">
-              <view class="pcard-icon-wrap pcard-icon-gold"><svg viewBox="0 0 48 48" width="36" height="36" fill="none" stroke="#f0a040" stroke-width="2"><circle cx="16" cy="16" r="8"/><circle cx="34" cy="14" r="6"/><path d="M4 44c0-8.8 5.4-16 12-16s12 7.2 12 16"/><path d="M30 42c0-5.3 3.6-9.7 8-9.7s8 4.4 8 9.7"/></svg></view>
+            <view class="pcard pcard-in" @tap="handleChoice('未满18岁')">
+              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;"><image src="/static/kid-icon-clean.png" mode="aspectFit" style="width:120px;height:190px;" /></view>
               <text class="pcard-title">未满18岁</text>
               <text class="pcard-sub">家长辅助完成孩子测试</text>
             </view>
@@ -87,17 +83,25 @@
       <!-- CONFIRM -->
       <view v-if="phase === 'confirm'" class="phase" key="confirm">
         <view class="phase-inner">
-          <text class="msg-title">好的，{{ testType || '成人' }}测试。</text>
-          <text class="msg-sub">共 35 道题，每题两个选项：「完全符合」或「有差异」。根据实际情况选择即可，大约需要 10-15 分钟。</text>
-          <text class="msg-ready">准备好了吗？</text>
+          <text class="msg-title" style="font-size:28px;">好的！{{ testType || '成人' }}测试</text>
           <view class="card-row">
-            <view class="pcard pcard-blue pcard-in" @tap="handleChoice('准备好了，开始吧')">
-              <text class="pcard-emoji">✅</text>
-              <text class="pcard-title">准备好了，开始吧</text>
+            <view class="pcard pcard-in" @tap="handleChoice('准备好了')">
+              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
+                <image src="/static/confirm-hero.png" mode="aspectFit" style="width:120px;height:190px;" />
+              </view>
+              <view style="flex:1;"></view>
+              <text class="pcard-title" style="font-size:20px;">准备好了</text>
+              <text class="pcard-sub">开始答题</text>
+              <view style="height:28px;flex-shrink:0;"></view>
             </view>
-            <view class="pcard pcard-gray pcard-in" @tap="handleChoice('稍后再说')">
-              <text class="pcard-emoji">⏸</text>
-              <text class="pcard-title" style="color:var(--text-dim);">稍后再说</text>
+            <view class="pcard pcard-in" @tap="handleChoice('稍后再说')">
+              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
+                <image src="/static/confirm-later.png" mode="aspectFit" style="width:150px;height:210px;margin-top:-6px;" />
+              </view>
+              <view style="flex:1;"></view>
+              <text class="pcard-title" style="font-size:20px;">稍后再说</text>
+              <text class="pcard-sub">返回首页</text>
+              <view style="height:28px;flex-shrink:0;"></view>
             </view>
           </view>
         </view>
@@ -135,7 +139,7 @@
               <view class="cd-ring-wrap">
                 <svg viewBox="0 0 36 36" class="cd-svg">
                   <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(88,166,255,0.12)" stroke-width="2.5"/>
-                  <circle cx="18" cy="18" r="15.5" fill="none" :stroke="cdUrgent ? '#ff6b6b' : '#58a6ff'" stroke-width="2.5" stroke-linecap="round"
+                  <circle cx="18" cy="18" r="15.5" fill="none" :stroke="cdUrgent ? '#ff6b6b' : '#286bea'" stroke-width="2.5" stroke-linecap="round"
                     :stroke-dasharray="cdPct + ' 100'" pathLength="100"/>
                 </svg>
                 <text class="cd-num" :class="{ 'cd-urgent': cdUrgent }">{{ cdLeft }}</text>
@@ -190,6 +194,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onBeforeUnmount, watch, onMounted } from 'vue'
+import { onShow, onLoad } from '@dcloudio/uni-app'
 import {
   ensureChildUser,
   ensureJnaoUid,
@@ -197,8 +202,11 @@ import {
   deleteAssessmentReport,
   submitTalentReport,
 } from '@/utils/userApi.js'
+import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 
 // ── State ──
+const fromOnboarding = ref(false)
+const studentTypeFromOnboarding = ref('new')
 const phase = ref('door')
 const testType = ref(null)
 const ageGateNotice = ref(false)
@@ -243,6 +251,7 @@ async function deleteHistory(assessmentId) {
 }
 
 onMounted(loadHistory)
+onShow(loadHistory)
 
 const toast = ref({ text: '', variant: 'ack' })
 
@@ -431,8 +440,12 @@ function handleChoice(choice) {
       noticeTimer = setTimeout(() => { ageGateNotice.value = false; phase.value = 'confirm' }, 2200)
     }
   } else if (phase.value === 'confirm') {
-    if (choice === '准备好了，开始吧') startTest()
-    else { phase.value = 'door'; testType.value = null }
+    if (choice === '准备好了') startTest()
+    else if (fromOnboarding.value) {
+      uni.navigateBack({ delta: 1 })
+    } else {
+      phase.value = 'door'; testType.value = null
+    }
   }
 }
 
@@ -476,7 +489,19 @@ async function doSubmitReport() {
     if (json.code !== 1) throw new Error('报告生成失败')
     await loadHistory()
     const aid = json.assessment_id
-    uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
+    let url = `/pages/report/index?assessment_id=${aid}`
+    if (json.talent_conflict) {
+      url += `&talent_conflict=1&current_talent=${encodeURIComponent(json.current_talent || '')}`
+    }
+    if (json.talent_locked) {
+      url += `&talent_locked=1&lock_message=${encodeURIComponent(json.lock_message || '')}`
+    }
+    if (fromOnboarding.value) {
+      url += `&from=onboarding&student_type=${encodeURIComponent(studentTypeFromOnboarding.value || 'new')}`
+    }
+    clearTalentState()
+    await refreshTalentState(childUserId)
+    uni.navigateTo({ url })
   } catch (e) {
     submitError.value = '提交失败：' + (e.message || '请稍后重试')
   }
@@ -489,13 +514,31 @@ function dismissNotice() {
   phase.value = 'confirm'
 }
 
+const talentEmoji = { 学者:'📚', 思者:'💡', 行者:'🏃', 德者:'⚖️', 赢者:'🏆' }
+
+function formatHistoryDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0,10)
+  const p = n => String(n).padStart(2,'0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
+}
+
 function goBack() {
   if (phase.value === 'ageGate') { phase.value = 'door'; testType.value = null; return }
   if (phase.value === 'confirm') { phase.value = testType.value === '成人' ? 'door' : 'ageGate'; return }
   if (phase.value === 'testing' || phase.value === 'completed') { phase.value = 'confirm'; return }
-  // door → back to home
+  if (fromOnboarding.value) {
+    uni.navigateBack({ delta: 1 })
+    return
+  }
   uni.navigateBack({ delta: 1 })
 }
+
+onLoad((opts) => {
+  fromOnboarding.value = opts?.from === 'onboarding'
+  studentTypeFromOnboarding.value = opts?.student_type || 'new'
+})
 
 // Watch for question change → restart countdown
 watch(() => tickRef.value, () => {
@@ -516,7 +559,8 @@ onBeforeUnmount(() => {
 .nav { display:flex; align-items:center; padding:14px 24px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
-.nav-spacer { width:36px; }
+.nav-right { cursor: pointer; }
+.nav-right text { color: var(--text-dim); font-size: 14px; }
 
 /* Pre-test */
 .phase { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:18vh 24px 0; }
@@ -525,10 +569,9 @@ onBeforeUnmount(() => {
 .msg-sub { color:var(--text-dim); font-size:14px; text-align:center; line-height:1.6; max-width:300px; }
 .msg-ready { color:var(--text); font-size:16px; font-weight:500; text-align:center; margin:14px 0 20px; }
 .card-row { display:flex; gap:14px; width:100%; max-width:340px; margin-top:24px; }
-.pcard { flex:1; aspect-ratio:1; background:var(--bg-card); border-radius:18px; border:2px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 10px; cursor:pointer; transition:all 0.15s; opacity:0; transform:scale(0.9) translateY(12px); }
+.pcard { flex:1; min-height:260px; background:var(--bg-card); border-radius:18px; border:2px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 10px; cursor:pointer; transition:all 0.15s; opacity:0; transform:scale(0.9) translateY(12px); }
 .pcard:active { transform:scale(0.95) !important; }
 .pcard-in { animation:cardSpring 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-.pcard-blue { border-color:var(--accent); background:var(--accent-bg); }
 .pcard-gold { border-color:rgba(240,160,64,0.3); background:rgba(240,160,64,0.06); }
 .pcard-gray { border-color:var(--border); opacity:0.6; }
 .pcard-gray:active { opacity:1; }
@@ -544,17 +587,23 @@ onBeforeUnmount(() => {
 
 .history-hint { text-align:center; margin-bottom:8px; cursor:pointer; }
 .history-hint text { color:var(--text-dim); font-size:13px; }
-.history-list { max-height:300px; overflow-y:auto; margin-bottom:8px; }
-.history-item { padding:12px 0; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
-.history-item-main { flex:1; display:flex; justify-content:space-between; align-items:center; cursor:pointer; min-width:0; }
-.history-item-main:active { opacity:0.7; }
-.history-del { width:32px; height:32px; border-radius:8px; background:rgba(239,68,68,0.1); display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; }
-.history-del text { color:#ef4444; font-size:14px; font-weight:700; }
-.history-del:active { background:rgba(239,68,68,0.2); }
-.hi-talent { color:var(--accent); font-size:14px; font-weight:600; }
-.hi-time { color:var(--text-dim); font-size:11px; }
-.history-close { text-align:center; margin-top:10px; cursor:pointer; }
-.history-close text { color:var(--text-dim); font-size:14px; }
+.history-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
+.history-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px 16px; max-height:60vh; overflow-y:auto; }
+.history-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.history-title { font-size:17px; font-weight:700; color:var(--text); }
+.history-header-close { width:28px; height:28px; border-radius:50%; background:var(--bg-input); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.history-header-close text { font-size:14px; color:var(--text-dim); }
+.history-grid { display:flex; flex-direction:column; gap:8px; }
+.history-box { background:var(--bg-input); border-radius:14px; padding:14px; cursor:pointer; transition:background 0.15s; }
+.history-box:active { opacity:0.7; }
+.history-box-row { display:flex; align-items:center; gap:10px; }
+.history-box-icon { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.history-box-icon text { font-size:18px; }
+.history-box-talent { font-size:14px; font-weight:600; color:var(--text); }
+.history-box-time { font-size:12px; color:var(--text-dim); margin-left:auto; }
+.history-box-del { width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.history-box-del text { color:var(--text-dim); font-size:9px; }
+.history-empty { text-align:center; padding:32px 0; color:var(--text-dim); font-size:14px; }
 
 /* Testing */
 .test-top { display:flex; align-items:center; gap:10px; padding:12px 24px; }

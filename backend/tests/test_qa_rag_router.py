@@ -1,3 +1,4 @@
+import pytest
 """学科答疑 RAG 路由规则"""
 
 from app.services.qa_rag_router import should_use_rag

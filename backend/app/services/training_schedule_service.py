@@ -1,39 +1,39 @@
-"""训练排程 — 按时长匹配音频、豆包路由 A/B 训练块"""
+"""训练排程 — 先选时长再生成；框架内 LLM 路由 + plan_item 续推"""
 
 from __future__ import annotations
 
-import json
-import re
 from datetime import date
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload, Session
 
-from app.db.models import ContentItem, TrainingItem, TrainingPlan
-from app.services.assessment_service import get_latest_assessment
-from app.services.content_meta import estimate_duration_min, item_instruction
-from app.services.doubao_client import chat_completion, is_configured
+from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
+from app.services.assessment_service import resolve_effective_talent
+from app.services.child_training_state import get_training_progress, overall_tier, get_skill_oss_position
+from app.services.content_meta import estimate_duration_min, item_instruction, parse_item_meta, content_display_title
+from app.services.talent_content_pool import get_talent_content_pool
+from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
+from app.services.training_child_guide import build_coach_text_for_plan
+from app.services.training_formula_engine import expand_formula
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
-    _item_to_dict,
     _plan_to_response,
-    get_content_series,
-    get_or_create_today_plan,
+    create_plan_for_schedule,
 )
-from app.services.training_curriculum import route_training_blocks
-from app.services.video_push_service import get_talent_training_video
+from app.services.training_day import get_training_day, is_new_day_ready
 
-ROUTE_SYSTEM = """你是 JNAO 训练排课教练。根据学员今日可用训练总时长、天赋类型，安排「训练A」和「训练B」的音频组合。
-规则：
-1. 训练A 只能从「脑力奥秘 training_a_candidates」中选 1-3 条（热身/基础）
-2. 训练B 只能从「学科奥秘 training_b_candidates」中选 0-4 条（强化/学科）
-3. 总音频时长尽量接近目标时长（可略少 5 分钟内），A/B 的 id 不可重复
-4. 只输出 JSON：{"training_a_ids":[1,2],"training_b_ids":[3],"note":"一句话说明"}"""
+
+def _resolve_plan_date(db: Session, child_user_id: int, plan_date: date | None = None) -> date:
+    from app.services.dev_clock import resolve_training_now
+
+    now = resolve_training_now(db, child_user_id)
+    return plan_date or get_training_day(now)
+
+DEFAULT_DAILY_PLAN_MINUTES = 45
 
 
 def _candidate_dict(item: ContentItem) -> dict:
-    from app.services.content_meta import parse_item_meta
-
     meta = parse_item_meta(item)
     return {
         "id": item.id,
@@ -45,133 +45,228 @@ def _candidate_dict(item: ContentItem) -> dict:
     }
 
 
-def _build_candidates(
+def _build_full_candidate_pool(
     db: Session,
     talent_code: int,
-    start_index: int,
-    *,
-    series: str = "chaonaoaomi",
-    skill: str | None = None,
-    limit: int = 24,
+    content_index: int,
 ) -> list[ContentItem]:
-    items = get_content_series(db, talent_code, series=series)
-    if not items:
-        return []
-    if skill:
-        preferred = [i for i in items if _get_skill(i) == skill]
-        others = [i for i in items if _get_skill(i) != skill]
-        ordered = preferred + others
-        ordered = ordered[start_index % max(1, len(ordered)):] + ordered[:start_index % max(1, len(ordered))]
-    else:
-        ordered = items[start_index:] + items[:start_index]
-    return ordered[:limit]
-
-
-def _get_skill(item: ContentItem) -> str:
-    from app.services.content_meta import parse_item_meta
-    return (parse_item_meta(item) or {}).get("skill", "")
-
-
-def _pick_by_duration(items: list[ContentItem], budget_min: int) -> list[ContentItem]:
-    picked: list[ContentItem] = []
-    total = 0
-    for item in items:
-        dur = estimate_duration_min(item)
-        if picked and total + dur > budget_min:
-            continue
-        if not picked or total + dur <= budget_min:
-            picked.append(item)
-            total += dur
-        if total >= budget_min * 0.85:
-            break
-    if not picked and items:
-        picked.append(items[0])
-    return picked
-
-
-def _fallback_route(
-    candidates_a: list[ContentItem],
-    candidates_b: list[ContentItem],
-    planned_minutes: int,
-) -> dict:
-    """无豆包时的规则路由：A=脑力奥秘，B=学科奥秘"""
-    video_reserve = 5
-    audio_budget = max(10, planned_minutes - video_reserve)
-    a_budget = max(10, int(audio_budget * 0.45))
-    b_budget = audio_budget - a_budget
-
-    block_a = _pick_by_duration(candidates_a, a_budget)
-    block_b = _pick_by_duration(candidates_b, b_budget)
-
-    return {
-        "training_a_ids": [c.id for c in block_a],
-        "training_b_ids": [c.id for c in block_b],
-        "note": f"已按 {planned_minutes} 分钟安排脑力奥秘(A)+学科奥秘(B)（规则模式）",
-    }
-
-
-async def llm_route_training_blocks(
-    planned_minutes: int,
-    talent_primary: str | None,
-    candidates_a: list[ContentItem],
-    candidates_b: list[ContentItem],
-    yesterday_summary: str | None = None,
-) -> dict:
-    if not candidates_a and not candidates_b:
-        return {"training_a_ids": [], "training_b_ids": [], "note": "暂无候选音频"}
-
-    if not candidates_a:
-        return _fallback_route(candidates_a, candidates_b, planned_minutes)
-    if not is_configured():
-        return _fallback_route(candidates_a, candidates_b, planned_minutes)
-
-    ctx = (
-        f"学员天赋：{talent_primary or '未知'}\n"
-        f"今日训练总时长：{planned_minutes} 分钟\n"
-        f"training_a_candidates（脑力奥秘）：{json.dumps([_candidate_dict(c) for c in candidates_a], ensure_ascii=False)}\n"
-        f"training_b_candidates（学科奥秘）：{json.dumps([_candidate_dict(c) for c in candidates_b], ensure_ascii=False)}\n"
+    """该天赋全部系列混合候选池（不按 OSS 系列拆分）"""
+    pool_limit = 80 if content_index <= 0 else 48
+    return get_talent_content_pool(
+        db,
+        talent_code,
+        start_index=content_index,
+        limit=pool_limit,
     )
-    if yesterday_summary:
-        ctx += f"昨日打卡：{yesterday_summary}\n"
-
-    try:
-        raw = await chat_completion(
-            system_prompt=ROUTE_SYSTEM, user_message=ctx, timeout=10
-        )
-    except Exception:
-        return _fallback_route(candidates_a, candidates_b, planned_minutes)
-    if not raw:
-        return _fallback_route(candidates_a, candidates_b, planned_minutes)
-
-    match = re.search(r"\{[\s\S]*\}", raw)
-    if not match:
-        return _fallback_route(candidates_a, candidates_b, planned_minutes)
-
-    valid_a = {c.id for c in candidates_a}
-    valid_b = {c.id for c in candidates_b}
-    try:
-        data = json.loads(match.group())
-        a_ids = [int(x) for x in data.get("training_a_ids", []) if int(x) in valid_a]
-        b_ids = [int(x) for x in data.get("training_b_ids", []) if int(x) in valid_b]
-        b_ids = [i for i in b_ids if i not in a_ids]
-        if not a_ids:
-            raise ValueError("empty a")
-        return {
-            "training_a_ids": a_ids,
-            "training_b_ids": b_ids,
-            "note": data.get("note") or "豆包已安排今日训练",
-        }
-    except (json.JSONDecodeError, ValueError, TypeError):
-        return _fallback_route(candidates_a, candidates_b, planned_minutes)
 
 
-def _plan_to_schedule_response(plan: TrainingPlan, *, schedule_mode: str | None = None) -> dict:
-    base = _plan_to_response(plan)
-    base["items"] = [_item_to_dict(i) for i in sorted(plan.items, key=lambda x: x.sort_order)]
-    base["training_day"] = plan.content_index + 1
+def _plan_has_started(db: Session, plan: TrainingPlan) -> bool:
+    if plan.status == "completed":
+        return True
+    rec = db.scalar(
+        select(TrainingRecord.id).where(TrainingRecord.plan_id == plan.id).limit(1)
+    )
+    if rec:
+        return True
+    for it in plan.items:
+        wp = it.watch_progress if isinstance(it.watch_progress, dict) else {}
+        if float(wp.get("pct") or 0) > 0:
+            return True
+    return False
+
+
+def _plan_to_schedule_response(
+    db: Session, plan: TrainingPlan, *, schedule_mode: str | None = None
+) -> dict:
+    base = _plan_to_response(plan, db=db)
     if schedule_mode:
         base["schedule_mode"] = schedule_mode
     return base
+
+
+def _has_plan_content(plan: TrainingPlan) -> bool:
+    return len(plan.items) > 0
+
+
+def _plan_structure_invalid(plan: TrainingPlan, planned_minutes: int) -> bool:
+    """同一训练块多项、或超出时长表块数 → 旧排课结构，需重生成"""
+    from app.services.content_meta import parse_item_instruction
+
+    slot_cfg = duration_slot(planned_minutes)
+    max_blocks = int(slot_cfg.get("items") or 1)
+    if len(plan.items) > max_blocks:
+        return True
+    block_counts: dict[str, int] = {}
+    for item in plan.items:
+        meta = parse_item_instruction(
+            item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
+        )
+        block = meta.get("block") or "A"
+        block_counts[block] = block_counts.get(block, 0) + 1
+        if block_counts[block] > 1:
+            return True
+    return False
+
+
+async def populate_plan_items(
+    db: Session,
+    plan: TrainingPlan,
+    child_user_id: int,
+    planned_minutes: int,
+    *,
+    plan_date: date | None = None,
+) -> dict:
+    """v2.0: 公式引擎展开 → 取各技能 OSS 音频 → 生成 plan_items"""
+    ensure_supplementary_catalogs(db)
+    plan_date = plan_date or plan.plan_date
+    talent = resolve_effective_talent(db, child_user_id)
+    if not talent or not talent.get("talent_code"):
+        raise TrainingError("请先完成天赋测评", 403)
+
+    talent_code = talent["talent_code"]
+    child = db.get(ChildUser, child_user_id)
+    state = get_training_progress(child) if child else {}
+
+    # v2.0: overall_tier 替代 content_index
+    o_tier = overall_tier(state)
+    plan.content_index = o_tier
+
+    # 获取年级 → 学段
+    from app.services.child_training_state import child_grade
+    child = db.get(ChildUser, child_user_id)
+    grade = child_grade(child) if child else ""
+    from app.services.training_mastery import _grade_band
+    grade_band = _grade_band(grade) or "primary_low"
+
+    # 公式引擎展开技能组合
+    formula_result = expand_formula(planned_minutes, overall_tier=o_tier, grade_band=grade_band)
+    slots = formula_result["slots"]
+
+    # OSS 音频池
+    talent_pool = get_talent_content_pool(db, talent_code)
+    id_map = {c.id: c for c in talent_pool}
+
+    # 清除旧 items
+    for old in list(plan.items):
+        db.delete(old)
+    db.flush()
+
+    sort_order = 1
+
+    def _find_content_for_skill(skill_name: str) -> ContentItem | None:
+        """在 OSS 池中查找该技能当前 stage/part 对应的音频"""
+        stage, part = get_skill_oss_position(state, skill_name)
+        for item in talent_pool:
+            meta = parse_item_meta(item)
+            if meta.get("skill") == skill_name:
+                s = meta.get("stage", 0)
+                p = meta.get("part", 0)
+                if s == stage and p == part:
+                    return item
+        # fallback: 找该技能任意第一个可用音频
+        for item in talent_pool:
+            meta = parse_item_meta(item)
+            if meta.get("skill") == skill_name:
+                return item
+        return None
+
+    def _add_item(
+        *,
+        content: ContentItem | None = None,
+        skill_name: str = "",
+        is_elective: bool = False,
+        blocks_next: bool = True,
+    ) -> None:
+        nonlocal sort_order
+        if content:
+            meta = parse_item_meta(content)
+            inst = item_instruction("A", meta.get("content_type") or "audio")
+            try:
+                payload = __import__("json").loads(inst)
+                payload["skill"] = meta.get("skill") or skill_name
+                payload["item_type"] = "elective" if is_elective else "required"
+                payload["blocks_next"] = blocks_next
+                inst = __import__("json").dumps(payload, ensure_ascii=False)
+            except Exception:
+                pass
+            title = content_display_title(content)
+            db.add(
+                TrainingItem(
+                    plan_id=plan.id,
+                    sort_order=sort_order,
+                    ability_type="audio",
+                    title=title,
+                    duration_min=estimate_duration_min(content),
+                    audio_url=content.play_url,
+                    video_url=content.video_url,
+                    content_item_id=content.id,
+                    instructions=inst,
+                    checkin_status="pending",
+                )
+            )
+        else:
+            # 占位：OSS 中找不到该技能的音频
+            db.add(
+                TrainingItem(
+                    plan_id=plan.id,
+                    sort_order=sort_order,
+                    ability_type="placeholder",
+                    title=f"{skill_name}（待同步）",
+                    duration_min=0,
+                    instructions=item_instruction("A", "placeholder"),
+                    checkin_status="pending",
+                )
+            )
+        sort_order += 1
+
+    # 遍历公式槽位，为每个技能取对应 OSS 音频
+    elective_rules = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum().get("elective_rules") or {}
+    for skill_name in slots:
+        is_elective = skill_name in elective_rules
+        er = elective_rules.get(skill_name, {})
+        blocks_next = not is_elective  # 选修不阻塞
+        if is_elective:
+            blocks_next = er.get("blocks_next", False)
+
+        content = _find_content_for_skill(skill_name)
+        _add_item(content=content, skill_name=skill_name, is_elective=is_elective, blocks_next=blocks_next)
+
+    plan.planned_minutes = planned_minutes
+    plan.media_exhausted = 0
+    db.flush()
+    plan = db.scalar(
+        select(TrainingPlan).options(selectinload(TrainingPlan.items)).where(TrainingPlan.id == plan.id)
+    )
+    repair_plan_media_items(db, plan, talent_code)
+    plan.report_text = build_coach_text_for_plan(plan)
+
+    db.flush()
+    return {
+        "formula_slots": slots,
+        "c_note": formula_result.get("c_note"),
+        "exam_note": formula_result.get("exam_note"),
+        "elective_notes": formula_result.get("elective_notes", []),
+        "mode": "formula_v2",
+    }
+
+
+def ensure_today_plan_shell(
+    db: Session,
+    child_user_id: int,
+    plan_date: date | None = None,
+) -> TrainingPlan:
+    """仅创建当日空方案壳，不自动生成内容（等内容在选时长后生成）"""
+    from app.services.dev_clock import resolve_training_now
+
+    now = resolve_training_now(db, child_user_id)
+    if not is_new_day_ready(now):
+        raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
+
+    plan_date = _resolve_plan_date(db, child_user_id, plan_date)
+    plan = create_plan_for_schedule(db, child_user_id, plan_date)
+    if not plan:
+        raise TrainingError("无法创建训练计划", 500)
+    return plan
 
 
 async def schedule_training_by_duration(
@@ -181,93 +276,48 @@ async def schedule_training_by_duration(
     *,
     plan_date: date | None = None,
 ) -> dict:
+    """用户选定时长 → 生成今日 plan_item（LLM 框架内路由）"""
     if planned_minutes < 5:
         raise TrainingError("训练时长至少 5 分钟")
 
-    plan_date = plan_date or date.today()
-    get_or_create_today_plan(db, child_user_id, plan_date)
-    plan = _get_plan_by_date(db, child_user_id, plan_date)
-    if not plan:
-        raise TrainingError("无法创建训练计划", 500)
+    from app.services.dev_clock import resolve_training_now
 
-    assessment = get_latest_assessment(db, child_user_id)
-    if not assessment or not assessment.talent_code:
-        raise TrainingError("请先完成天赋测评", 403)
+    now = resolve_training_now(db, child_user_id)
+    if not is_new_day_ready(now):
+        raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
 
-    talent_code = assessment.talent_code
-    pool_limit = 80 if plan.content_index <= 0 else 24
-    candidates_a = _build_candidates(
-        db, talent_code, plan.content_index, series="chaonaoaomi", skill="影像追忆", limit=pool_limit
-    )
-    candidates_b = _build_candidates(
-        db, talent_code, plan.content_index, series="chaonaoaomi", skill="极速运算", limit=pool_limit
-    )
-    if not candidates_a:
-        raise TrainingError("暂无可用脑力奥秘音频", 503)
-    # B 如果极速运算不足，混入学科奥秘补充
-    if not candidates_b:
-        candidates_b = _build_candidates(
-            db, talent_code, plan.content_index, series="xuekeaomi", limit=pool_limit
+    plan_date = _resolve_plan_date(db, child_user_id, plan_date)
+    plan = ensure_today_plan_shell(db, child_user_id, plan_date)
+    if plan.status == "completed":
+        raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
+
+    if not _plan_has_started(db, plan) or _plan_structure_invalid(plan, planned_minutes):
+        route = await populate_plan_items(
+            db, plan, child_user_id, planned_minutes, plan_date=plan_date
         )
-
-    route = route_training_blocks(
-        plan.content_index,
-        candidates_a,
-        candidates_b,
-        planned_minutes,
-        seed_key=f"{child_user_id}:{plan_date.isoformat()}",
-    )
-    schedule_mode = route.get("mode", "unknown")
-
-    id_map = {c.id: c for c in candidates_a + candidates_b}
-    for old in list(plan.items):
-        db.delete(old)
-    db.flush()
-
-    sort_order = 1
-    video = get_talent_training_video(talent_code)
-    db.add(
-        TrainingItem(
-            plan_id=plan.id,
-            sort_order=sort_order,
-            ability_type="video",
-            title=video["title"],
-            duration_min=5,
-            video_url=video["url"],
-            instructions=item_instruction("A", "video"),
-            checkin_status="pending",
-        )
-    )
-    sort_order += 1
-
-    def _add_audios(ids: list[int], block: str) -> None:
-        nonlocal sort_order
-        for cid in ids:
-            content = id_map.get(cid) or db.get(ContentItem, cid)
-            if not content:
-                continue
-            db.add(
-                TrainingItem(
-                    plan_id=plan.id,
-                    sort_order=sort_order,
-                    ability_type="audio",
-                    title=content.lesson_title,
-                    duration_min=estimate_duration_min(content),
-                    audio_url=content.play_url,
-                    content_item_id=content.id,
-                    instructions=item_instruction(block, "audio"),
-                    checkin_status="pending",
-                )
-            )
-            sort_order += 1
-
-    _add_audios(route["training_a_ids"], "A")
-    _add_audios(route["training_b_ids"], "B")
-
-    plan.planned_minutes = planned_minutes
-    if route.get("note"):
-        plan.report_text = f"{route['note']}（计划 {planned_minutes} 分钟）"
+        schedule_mode = route.get("mode", "rule")
+    elif not _has_plan_content(plan) or plan.planned_minutes != planned_minutes:
+        raise TrainingError("训练已开始，无法更改今日设定时长", 403)
+    else:
+        schedule_mode = "existing"
 
     db.commit()
     plan = _get_plan_by_date(db, child_user_id, plan_date)
-    return _plan_to_schedule_response(plan, schedule_mode=schedule_mode)
+    if not plan or not _has_plan_content(plan):
+        raise TrainingError("今日方案生成失败", 500)
+    if plan.items:
+        plan.report_text = build_coach_text_for_plan(plan)
+        db.commit()
+    return _plan_to_schedule_response(db, plan, schedule_mode=schedule_mode)
+
+
+# 兼容旧调用
+def ensure_today_plan_content(
+    db: Session,
+    child_user_id: int,
+    plan_date: date | None = None,
+    *,
+    content_minutes: int = DEFAULT_DAILY_PLAN_MINUTES,
+) -> TrainingPlan:
+    """兼容：仅确保方案壳存在，不自动填充（需 POST /schedule）"""
+    return ensure_today_plan_shell(db, child_user_id, plan_date)

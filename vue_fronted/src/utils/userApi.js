@@ -1,9 +1,32 @@
-/** 后端 API — 用户身份与各模块数据（仅存 child_user_id 于 localStorage） */
+/**
+ * 后端 API 封装层 — 所有前后端通信的统一入口
+ *
+ * 架构约定:
+ * - 用户标识: localStorage 存 child_user_id，请求通过 Query ?user_id= 传递
+ * - 认证方式: 明文 user_id（MVP 阶段，生产需升级为 JWT）
+ * - 数据流:   Vue 页面 → userApi.js → fetch() → FastAPI → Service → DB
+ * - 错误处理: 非 2xx 响应抛出 Error，调用方 try/catch
+ *
+ * 模块索引:
+ *   L1-40    身份管理 (localStorage 读写 + 会话缓存)
+ *   L43-61   底层 HTTP (apiJson / withUser / resolveQaImageUrl)
+ *   L69-140  认证流程 (登录/注册/家长/学生)
+ *   L140-180 家长端 (孩子 CRUD)
+ *   L206-265 自动登录 (ensureChildUser — 全局入口)
+ *   L269-280 用户资料 (profile CRUD)
+ *   L283-320 天赋测评 (assessment CRUD + 冲突解决)
+ *   L322-430 今日训练 (排课/打卡/窗口/媒体/历史)
+ *   L431-470 学科答疑 (QA 会话 + 消息 + 图片)
+ *   L471-490 成长里程碑 (徽章/时间线/摘要/分享)
+ *   L491-520 语音 + 开发者工具
+ */
 
+// ── localStorage 键名 ──
 const CHILD_KEY = 'jnao_child_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
 
+/** 读取当前登录的 child_user_id，无则返回 null */
 export function getChildUserId() {
   try {
     const raw = localStorage.getItem(CHILD_KEY)
@@ -40,6 +63,7 @@ export function markChildUserSessionValid(uid) {
   if (uid) _sessionValidatedUid = uid
 }
 
+/** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
 async function apiJson(url, options = {}) {
   const res = await fetch(url, options)
   const data = await res.json().catch(() => ({}))
@@ -52,6 +76,7 @@ async function apiJson(url, options = {}) {
   return data
 }
 
+/** 给 URL 拼接 ?user_id= 查询参数 */
 function withUser(url, userId) {
   const sep = url.includes('?') ? '&' : '?'
   return `${url}${sep}user_id=${userId}`
@@ -78,7 +103,8 @@ function getOrCreateGuestPhone() {
   }
 }
 
-/** 登录：验证手机+昵称，不存在则报错 */
+/** 登录：验证手机+昵称，不存在则报错（兼容旧流程） */
+/** 学生登录：手机号+昵称 → POST /api/auth/login → 返回 child_user_id */
 export async function loginUser(phone, nickname) {
   const data = await apiJson('/api/auth/login', {
     method: 'POST',
@@ -89,15 +115,96 @@ export async function loginUser(phone, nickname) {
   return data
 }
 
-/** 注册：用手机+昵称创建新用户 */
-export async function registerChild(phone, nickname) {
-  const data = await apiJson('/api/auth/register', {
+/** 家长登录：手机号 + 密码 */
+export async function loginParent(phone, password) {
+  const data = await apiJson('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parent_phone: phone, nickname }),
+    body: JSON.stringify({ parent_phone: phone, password, role: 'parent' }),
   })
   setChildUserId(data.child_user_id)
   return data
+}
+
+/** 孩子登录：账号 + 密码 */
+export async function loginStudent(loginName, password) {
+  const data = await apiJson('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login_name: loginName, password }),
+  })
+  setChildUserId(data.child_user_id)
+  return data
+}
+
+/** 注册家长账户 */
+export async function registerParent(phone, nickname, password) {
+  const data = await apiJson('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      parent_phone: phone,
+      nickname,
+      password,
+      role: 'parent',
+    }),
+  })
+  setChildUserId(data.child_user_id)
+  return data
+}
+
+/** 孩子是否仍需完成登录后引导（onboarding） */
+export async function studentNeedsOnboarding(userId) {
+  try {
+    const profile = await fetchProfile(userId)
+    return !profile.profile_json?.onboarding?.completed_at
+  } catch (e) {
+    return true
+  }
+}
+
+// ── 家长端 ──
+
+export async function fetchParentChildren(parentId) {
+  const data = await apiJson(withUser('/api/parent/children', parentId))
+  return data.children || []
+}
+
+export async function fetchParentQuota(parentId) {
+  return apiJson(withUser('/api/parent/quota', parentId))
+}
+
+export async function createParentChild(parentId, { loginName, nickname, password, grade, age }) {
+  return apiJson(withUser('/api/parent/children', parentId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      login_name: loginName,
+      nickname,
+      password,
+      grade: grade || null,
+      age: age || null,
+    }),
+  })
+}
+
+export async function updateParentChild(parentId, childId, { nickname, password, grade, age } = {}) {
+  const body = {}
+  if (nickname != null) body.nickname = nickname
+  if (password != null) body.password = password
+  if (grade != null) body.grade = grade
+  if (age != null) body.age = age
+  return apiJson(withUser(`/api/parent/children/${childId}`, parentId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteParentChild(parentId, childId) {
+  return apiJson(withUser(`/api/parent/children/${childId}`, parentId), {
+    method: 'DELETE',
+  })
 }
 
 function getOrCreateGuestNickname(fallback = '学员') {
@@ -140,15 +247,11 @@ async function registerChildUser(parentPhone, nickname) {
   return data.child_user_id
 }
 
-/** 登录页：用手机号+昵称绑定已有账号或注册 */
-export async function loginOrRegisterChildUser({ nickname, phone } = {}) {
-  const loginProfile = readLoginProfile()
-  const nick = (nickname || loginProfile?.nickname || getOrCreateGuestNickname()).trim() || '学员'
-  const parentPhone = (phone || loginProfile?.phone || getOrCreateGuestPhone()).trim() || getOrCreateGuestPhone()
-  return registerChildUser(parentPhone, nick)
-}
-
-/** 无则自动注册，返回 child_user_id（同一设备/浏览器会复用稳定身份） */
+/**
+ * 全局用户入口 — 所有页面 onMounted 第一个调用的函数
+ * 流程: localStorage 有 ID → 调 /api/user/profile 验证 → 200=复用, 404=重新注册
+ * 返回有效的 child_user_id，保证后续 API 调用不会 401
+ */
 export async function ensureChildUser(nickname = '学员') {
   const existing = getChildUserId()
   if (existing && _sessionValidatedUid === existing) {
@@ -241,6 +344,14 @@ export function gradeToSchoolStage(grade) {
   return 'primary_high'
 }
 
+export async function resolveTalentConflict(userId, action) {
+  return apiJson(withUser('/api/user/talent/resolve-conflict', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  })
+}
+
 export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
   return apiJson('/api/talent/report', {
     method: 'POST',
@@ -254,12 +365,14 @@ export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
   })
 }
 
-// ── 今日训练 ──
+// ── 今日训练（核心模块：入口→排课→打卡→历史）──
 
+/** 训练入口：校验天赋状态 + 检查今日方案是否存在 */
 export async function fetchTrainingEntry(userId) {
   return apiJson(withUser('/api/training/entry', userId))
 }
 
+/** 获取今日训练方案，skipAi=1 跳过 LLM 报告生成（首屏加速） */
 export async function fetchTrainingToday(userId, options = {}) {
   const skipAi = options.skipAi ?? options.skip_ai ?? false
   const base = skipAi ? '/api/training/today?skip_ai=1' : '/api/training/today'
@@ -287,7 +400,7 @@ export async function refreshTrainingReport(userId, force = true) {
   }
 }
 
-/** 按训练时长排课：豆包路由 A/B 音频 + 天赋视频 */
+/** 按训练时长排课：框架内 LLM 路由生成 plan_item */
 export async function scheduleTrainingPlan(userId, plannedMinutes) {
   try {
     const data = await apiJson(withUser('/api/training/schedule', userId), {
@@ -304,6 +417,31 @@ export async function scheduleTrainingPlan(userId, plannedMinutes) {
   }
 }
 
+/** 设定时长用尽 — 后端隐藏媒体 URL，打卡仍可用 */
+export async function markPlanMediaExhausted(userId) {
+  try {
+    const data = await apiJson(withUser('/api/training/plan/media-exhausted', userId), {
+      method: 'POST',
+    })
+    return { data }
+  } catch (e) {
+    return { error: 'api', message: e.message }
+  }
+}
+
+/** 记录今日训练时段（用于后端判断计时是否结束） */
+export async function setTrainingWindow(userId, startTime, endTime) {
+  return apiJson(withUser('/api/training/window', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ start_time: startTime, end_time: endTime }),
+  })
+}
+
+export async function clearTrainingWindow(userId) {
+  return apiJson(withUser('/api/training/window', userId), { method: 'DELETE' })
+}
+
 /** 天赋固定训练视频 */
 export async function fetchTalentTrainingVideo(userId) {
   return apiJson(withUser('/api/training/video/talent', userId))
@@ -315,6 +453,14 @@ export async function fetchTrainingProgress(userId) {
 
 export async function submitTrainingCheckin(userId, payload) {
   return apiJson(withUser('/api/training/checkin', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function postTrainingWatchProgress(userId, itemId, payload) {
+  return apiJson(withUser(`/api/training/items/${itemId}/watch-progress`, userId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -340,9 +486,27 @@ export async function deleteTrainingCheckin(userId, recordId) {
   })
 }
 
-export async function fetchTrainingHistory(userId, limit = 30) {
-  const data = await apiJson(withUser(`/api/training/history?limit=${limit}`, userId))
-  return data.items || []
+export async function fetchTrainingHistory(userId, limit = 30, { excludeToday = false } = {}) {
+  const qs = `limit=${limit}&group_by_day=1${excludeToday ? '&exclude_today=1' : ''}`
+  const data = await apiJson(withUser(`/api/training/history?${qs}`, userId))
+  return { items: data.items || [], days: data.days || [] }
+}
+
+// ── v2.0 选修弹窗 ──
+
+/** 获取可用的选修技能列表 */
+export async function fetchElectiveList(plannedMinutes = 0, overallTier = 1) {
+  const data = await apiJson(`/api/training/elective/list?planned_minutes=${plannedMinutes}&overall_tier=${overallTier}`)
+  return { offers: data.offers || [] }
+}
+
+/** 提交选修打卡（多元感知等） */
+export async function submitElectiveCheckin(userId, payload) {
+  return apiJson(withUser('/api/training/elective', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
 }
 
 // ── 首页引导对话 ──
@@ -475,12 +639,20 @@ export async function devResetTodayTraining(userId) {
   return apiJson(withUser('/api/dev/training/reset-today', userId), { method: 'POST' })
 }
 
+export async function devResetTrainingProgress(userId) {
+  return apiJson(withUser('/api/dev/training/reset-progress', userId), { method: 'POST' })
+}
+
 export async function devResetAllTraining(userId) {
   return apiJson(withUser('/api/dev/training/reset-all', userId), { method: 'POST' })
 }
 
 export async function devSimulateNextDay(userId) {
   return apiJson(withUser('/api/dev/training/next-day', userId), { method: 'POST' })
+}
+
+export async function devSimulate4amCutoff(userId) {
+  return apiJson(withUser('/api/dev/training/simulate-4am-cutoff', userId), { method: 'POST' })
 }
 
 export async function devResetTalent(userId) {

@@ -1,9 +1,29 @@
 """用户资料"""
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import enrich_profile_talent_fields
+from app.services.onboarding_service import (
+    merge_onboarding_into_profile,
+    validate_onboarding_merge,
+)
+
+
+def merge_profile_json(current: dict | None, patch: dict) -> dict:
+    """深度合并 profile_json — onboarding 支持分步保存与老学员 prior_training_data"""
+    if patch.get("onboarding"):
+        current_ob = (current or {}).get("onboarding") if isinstance((current or {}).get("onboarding"), dict) else {}
+        validate_onboarding_merge(current_ob, patch["onboarding"])
+        return merge_onboarding_into_profile(current, patch)
+    base = dict(current or {})
+    for key, val in patch.items():
+        if isinstance(val, dict) and isinstance(base.get(key), dict):
+            base[key] = {**base[key], **val}
+        else:
+            base[key] = val
+    return base
 
 
 def get_profile(db: Session, child_user_id: int) -> ChildUser | None:
@@ -27,7 +47,10 @@ def update_profile(
     if jnao_uid is not None:
         user.jnao_uid = jnao_uid
     if profile_json is not None:
-        user.profile_json = profile_json
+        user.profile_json = merge_profile_json(user.profile_json, profile_json)
+        from app.services.assessment_service import sync_child_user_talent
+
+        sync_child_user_talent(db, child_user_id)
     if training_level is not None:
         user.training_level = training_level
     db.commit()
@@ -47,6 +70,29 @@ def merge_learner_profile(db: Session, child_user_id: int, patch: dict) -> Child
     return user
 
 
+def resolve_parent_name_for_child(db: Session, child: ChildUser) -> str | None:
+    """从绑定关系或家长手机号解析家长昵称"""
+    from app.db.models import ParentChildBind
+    from app.services import auth_service
+
+    if child.role == auth_service.ROLE_PARENT:
+        return child.nickname
+
+    bind = db.scalar(
+        select(ParentChildBind)
+        .where(ParentChildBind.child_id == child.id)
+        .order_by(ParentChildBind.id.desc())
+        .limit(1)
+    )
+    if bind:
+        parent = db.get(ChildUser, bind.parent_id)
+        if parent and parent.role == auth_service.ROLE_PARENT:
+            return parent.nickname
+
+    parent = auth_service.find_parent_by_phone(db, child.parent_phone)
+    return parent.nickname if parent else None
+
+
 def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
     data = {
         "child_user_id": user.id,
@@ -59,10 +105,15 @@ def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
     if db is not None:
-        latest = get_latest_assessment(db, user.id)
-        if latest:
-            data["talent_code"] = latest.talent_code
-            data["talent_tag"] = latest.talent_tag
-            data["talent_primary"] = latest.talent_primary
-            data["latest_assessment_id"] = latest.id
+        enrich_profile_talent_fields(db, user.id, data)
+        from app.services import auth_service
+
+        if (user.role or auth_service.ROLE_STUDENT) == auth_service.ROLE_STUDENT:
+            parent_name = resolve_parent_name_for_child(db, user)
+            if parent_name:
+                data["parent_name"] = parent_name
+                pj = dict(data["profile_json"])
+                if not pj.get("parentName"):
+                    pj["parentName"] = parent_name
+                    data["profile_json"] = pj
     return data

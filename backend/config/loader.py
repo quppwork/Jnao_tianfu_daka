@@ -89,6 +89,40 @@ def load_integration() -> dict:
     return _read_yaml("integration.yaml")
 
 
+# ============ Training curriculum (推课业务规则 v2.0) ============
+
+@lru_cache(maxsize=1)
+def load_training_curriculum() -> dict:
+    """返回 training_curriculum.yaml — 时长公式 / 技能分类 / 选修规则"""
+    path = _CONFIG_DIR / "training_curriculum.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("training_curriculum.yaml")
+    return data if isinstance(data, dict) else {}
+
+
+@lru_cache(maxsize=1)
+def load_training_tier_thresholds() -> dict:
+    """🆕 v2.0 返回 training_tier_thresholds.yaml — 技能 Tier×学段→达标阈值"""
+    path = _CONFIG_DIR / "training_tier_thresholds.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("training_tier_thresholds.yaml")
+    return data if isinstance(data, dict) else {}
+
+
+# ============ Legacy (v1.0 兼容，后续废弃) ============
+
+@lru_cache(maxsize=1)
+def load_training_advance_rules() -> dict:
+    """@deprecated v2.0: 使用 load_training_tier_thresholds() 替代"""
+    path = _CONFIG_DIR / "training_advance_rules.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("training_advance_rules.yaml")
+    return data if isinstance(data, dict) else {}
+
+
 # ============ Questions ============
 
 @lru_cache(maxsize=1)

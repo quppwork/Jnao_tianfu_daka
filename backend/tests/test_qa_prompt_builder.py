@@ -1,3 +1,4 @@
+import pytest
 """学科答疑 Prompt 构建 — 学段 + 天赋画像"""
 
 from app.services.qa_prompt_builder import (

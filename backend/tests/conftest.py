@@ -17,7 +17,7 @@ from app.db.base import Base
 from app.db.session import get_session_factory, init_db
 from app.services.assessment_service import save_assessment
 from app.services.auth_service import register_child
-from app.services.catalog_import import import_catalog
+from app.services.catalog_import import import_all_xet_catalogs
 
 # 前端模块 ↔ API 映射见 backend/tests/README.md
 
@@ -26,7 +26,7 @@ from app.services.catalog_import import import_catalog
 def db_session() -> Session:
     init_db()
     session = get_session_factory()()
-    import_catalog(session, replace=True)
+    import_all_xet_catalogs(session, replace=True)
     yield session
     session.rollback()
     for table in reversed(Base.metadata.sorted_tables):

@@ -8,9 +8,30 @@
       }
     },
     {
+      "path": "pages/parent/index",
+      "style": {
+        "navigationBarTitleText": "家长中心",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/login/register",
       "style": {
-        "navigationBarTitleText": "注册",
+        "navigationBarTitleText": "注册孩子账户",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/register-parent",
+      "style": {
+        "navigationBarTitleText": "注册家长账户",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/onboarding/index",
+      "style": {
+        "navigationBarTitleText": "完善信息",
         "navigationStyle": "custom"
       }
     },
@@ -44,6 +65,13 @@
       }
     },
     {
+      "path": "pages/training/history",
+      "style": {
+        "navigationBarTitleText": "历史记录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/qa/index",
       "style": {
         "navigationBarTitleText": "学科答疑",
@@ -59,7 +87,7 @@
     }
   ],
   "globalStyle": {
-    "backgroundColor": "#0a0e14",
+    "backgroundColor": "#f0f2f5",
     "navigationBarBackgroundColor": "#0d1117",
     "navigationBarTextStyle": "white",
     "navigationStyle": "custom"

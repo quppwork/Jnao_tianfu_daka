@@ -20,6 +20,7 @@ def build_qa_system_prompt(
     subject: str | None = None,
     rag_context: str | None = None,
     ocr_preview: str | None = None,
+    coach_context: str | None = None,
 ) -> str:
     lines = [BASE_PERSONA, STAGE_RULES.get(school_stage, STAGE_RULES["primary_high"])]
 
@@ -36,6 +37,8 @@ def build_qa_system_prompt(
     if age:
         lines.append(f"年龄：{age} 岁。")
     lines.append(talent_coaching_hint(talent_primary, report_json))
+    if coach_context:
+        lines.append(coach_context)
     if ocr_preview:
         lines.append(f"题目识别预览：{ocr_preview}")
     if rag_context:

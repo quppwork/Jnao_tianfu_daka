@@ -1,3 +1,4 @@
+import pytest
 """Backend API tests — talent report endpoint"""
 
 import pytest

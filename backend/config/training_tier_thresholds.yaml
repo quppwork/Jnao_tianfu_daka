@@ -1,0 +1,167 @@
+# 技能 Tier × 学段 → 达标阈值
+# 每次打卡时：技能名 + 该技能当前 Tier + 用户学段 → 查表判定是否达标
+# v2.0 新建，替代 training_advance_rules.yaml
+
+version: 1
+
+# ── 晋级规则 ──
+advance_rule:
+  consecutive_pass: 3               # 连续达标次数 → Tier+1
+  reset_on_fail: true               # 不达标 → 计数重置为 0
+  per_skill_independent: true       # 各技能独立判定
+  oss_advance_on_pass: true         # 达标时推进 OSS stage/part（有则取、无则跳）
+
+# ── 学段映射 ──
+grade_bands:
+  primary_low:  [一年级, 二年级, 三年级]
+  primary_high: [四年级, 五年级, 六年级]
+  junior:       [初一, 初二, 初三]
+  senior:       [高一, 高二, 高三]
+
+# ── 达标题型定义 ──
+# type: wpm       = wordCount / time ≥ 阈值（字/分钟）
+# type: recall    = wordCount ≥ 阈值 AND accuracy_pct ≥ 阈值
+# type: memory    = wordCount / time ≥ 阈值 AND reverse_recite == true
+# type: speed_calc= digits 匹配 + correctCount/totalCount ≥ 阈值（或仅判定完成）
+# type: program   = 项目完成判定（如"火箭提分营"完成5天）
+
+# ══════════════════════════════════════════════════
+# Tier 1 达标标准（当前版本全部量化）
+# Tier 2+ 持续补充
+# ══════════════════════════════════════════════════
+
+tier_thresholds:
+
+  # ──── 超脑阅读 ────
+  超脑阅读:
+    1:
+      primary_low:  { type: wpm, words: 800,  minutes: 3 }
+      primary_high: { type: wpm, words: 1000, minutes: 3 }
+      junior:       { type: wpm, words: 1800, minutes: 3 }
+      senior:       { type: wpm, words: 2000, minutes: 3 }
+    2:
+      primary_low:  { type: wpm, words: 2000, minutes: 5 }
+      primary_high: { type: wpm, words: 2500, minutes: 5 }
+      junior:       { type: wpm, words: 4000, minutes: 5 }
+      senior:       { type: wpm, words: 5000, minutes: 5 }
+    # Tier 3+ 超脑阅读无晋级要求（只练不考）
+
+  # ──── 影像追忆 ────
+  影像追忆:
+    1:
+      primary_low:  { type: recall, words: 1500, accuracy_pct: 75 }
+      primary_high: { type: recall, words: 3000, accuracy_pct: 75, minutes: 4 }
+      junior:       { type: recall, words: 5000, accuracy_pct: 80, minutes: 5 }
+      senior:       { type: recall, words: 6000, accuracy_pct: 80, minutes: 6 }
+    2:
+      primary_low:  { type: recall, words: 2000, accuracy_pct: 80, minutes: 5 }
+      primary_high: { type: recall, words: 3500, accuracy_pct: 80, minutes: 5 }
+      junior:       { type: recall, words: 6000, accuracy_pct: 85, minutes: 6 }
+      senior:       { type: recall, words: 7000, accuracy_pct: 85, minutes: 8 }
+    3:
+      primary_low:  { type: recall, words: 4000, accuracy_pct: 80, minutes: 6 }
+      primary_high: { type: recall, words: 5000, accuracy_pct: 80, minutes: 8 }
+      junior:       { type: recall, words: 8000, accuracy_pct: 85, minutes: 10 }
+      senior:       { type: recall, words: 10000, accuracy_pct: 85, minutes: 10 }
+    4:
+      primary_low:  { type: recall, words: 6000, accuracy_pct: 80, minutes: 6 }
+      primary_high: { type: recall, words: 8000, accuracy_pct: 80, minutes: 8 }
+      junior:       { type: recall, words: 12000, accuracy_pct: 85, minutes: 10 }
+      senior:       { type: recall, words: 10000, accuracy_pct: 85, minutes: 10 }
+    5:
+      primary_low:  { type: recall, words: 100000, accuracy_pct: 85, minutes: 60 }
+      primary_high: { type: recall, words: 100000, accuracy_pct: 85, minutes: 60 }
+      junior:       { type: recall, words: 100000, accuracy_pct: 85, minutes: 60 }
+      senior:       { type: recall, words: 100000, accuracy_pct: 85, minutes: 60 }
+
+  # ──── 扫描速记 ────
+  扫描速记:
+    # Tier 1: 练但不考（训练先行、考核滞后）
+    1:
+      primary_low:  null
+      primary_high: null
+      junior:       null
+      senior:       null
+    2:
+      primary_low:  { type: memory, words_per_min: 80,  reverse_recite: true }
+      primary_high: { type: memory, words_per_min: 100, reverse_recite: true }
+      junior:       { type: memory, words_per_min: 80,  reverse_recite: true }
+      senior:       { type: memory, words_per_min: 60,  reverse_recite: true }
+    3:
+      primary_low:  { type: memory, words_per_min: 120, reverse_recite: true }
+      primary_high: { type: memory, words_per_min: 150, reverse_recite: true }
+      junior:       { type: memory, words_per_min: 120, reverse_recite: true }
+      senior:       { type: memory, words_per_min: 100, reverse_recite: true }
+    4:
+      primary_low:  { type: memory, words_per_min: 250, reverse_recite: true }
+      primary_high: { type: memory, words_per_min: 300, reverse_recite: true }
+      junior:       { type: memory, words_per_min: 250, reverse_recite: true }
+      senior:       { type: memory, words_per_min: 200, reverse_recite: true }
+    5:
+      primary_low:  { type: memory, words_per_min: 300, reverse_recite: true }
+      primary_high: { type: memory, words_per_min: 300, reverse_recite: true }
+      junior:       { type: memory, words_per_min: 300, reverse_recite: true }
+      senior:       { type: memory, words_per_min: 300, reverse_recite: true }
+
+  # ──── 极速运算 ────
+  极速运算:
+    # Tier 1-2: 不出现
+    1:
+      primary_low:  null
+      primary_high: null
+      junior:       null
+      senior:       null
+    2:
+      primary_low:  null
+      primary_high: null
+      junior:       null
+      senior:       null
+    3:
+      primary_low:  { type: speed_calc, digits: [5,5] }
+      primary_high: { type: speed_calc, digits: [5,5] }
+      junior:       { type: speed_calc, digits: [4,4], optional: true }
+      senior:       { type: speed_calc, digits: [3,3], optional: true }
+    4:
+      primary_low:  { type: speed_calc, digits: [5,5] }
+      primary_high: { type: speed_calc, digits: [5,5] }
+      junior:       { type: speed_calc, digits: [4,4], optional: true }
+      senior:       { type: speed_calc, digits: [3,3], optional: true }
+    5:
+      primary_low:  { type: speed_calc, digits: [5,5], advanced: "混合运算+开根号" }
+      primary_high: { type: speed_calc, digits: [5,5], advanced: "混合运算+开根号" }
+      junior:       { type: speed_calc, digits: [4,4], optional: true, advanced: "混合运算+开根号" }
+      senior:       { type: speed_calc, digits: [3,3], optional: true, advanced: "混合运算+开根号" }
+
+  # ──── 极速学习 ────
+  极速学习:
+    1:
+      all: null
+    2:
+      all: null
+    3:
+      all: null
+    4:
+      primary_low:  { type: program, name: "火箭提分营", days: 5, description: "提升3-10倍学习效率或50-100分" }
+      primary_high: { type: program, name: "火箭提分营", days: 5, description: "提升3-10倍学习效率或50-100分" }
+      junior:       { type: program, name: "火箭提分营", days: 5, description: "提升3-10倍学习效率或50-100分" }
+      senior:       { type: program, name: "火箭提分营", days: 5, description: "提升3-10倍学习效率或50-100分" }
+    5:
+      primary_low:  { type: program, name: "跨年级刷试卷" }
+      primary_high: { type: program, name: "跨年级刷试卷" }
+      junior:       { type: program, name: "跨年级刷试卷" }
+      senior:       { type: program, name: "跨年级刷试卷" }
+
+  # ──── 高效作业 ────
+  高效作业:
+    1:
+      # 一阶有晋级标准但当前不作打卡判定（选修、不打卡）
+      primary_low:  null
+      primary_high: null
+      junior:       null
+      senior:       null
+
+# ── 扫描速记"逐字倒背"宽容策略 ──
+scan_memory_tolerance:
+  reverse_recite_check: sample       # 抽查即可
+  strict_mode: false                 # 不严格，避免畏难情绪
+  note: "逐字倒着背抽查即可，不过度严格"

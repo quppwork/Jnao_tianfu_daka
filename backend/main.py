@@ -15,12 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import auth, chat, dev, growth, guide, health, qa, resources, talent, training, user, voice
+from app.api import auth, chat, dev, growth, guide, health, parent, qa, resources, talent, training, user, voice
 from app.core.logger import setup_logging
 from app.core.security import get_cors_origins, is_debug_routes_enabled
 from app.db.models import ContentItem
 from app.db.session import get_session_factory, init_db
-from app.services.catalog_import import import_catalog
+from app.services.catalog_import import import_all_xet_catalogs
 
 logger = setup_logging("jnao")
 
@@ -30,8 +30,14 @@ def _seed_catalog_if_empty() -> None:
     try:
         count = session.scalar(select(func.count()).select_from(ContentItem)) or 0
         if count == 0:
-            inserted = import_catalog(session)
+            inserted = sum(import_all_xet_catalogs(session).values())
             logger.info(f"音频目录自动导入 {inserted} 条")
+        else:
+            from app.services.training_catalog_sync import ensure_supplementary_catalogs
+
+            added = ensure_supplementary_catalogs(session)
+            if added:
+                logger.info(f"补充音频目录导入 {added} 条（多元感知等）")
     except Exception as e:
         logger.warning(f"音频目录导入跳过: {e}")
     finally:
@@ -92,6 +98,7 @@ app.include_router(chat.router)
 app.include_router(guide.router)
 app.include_router(voice.router)
 app.include_router(auth.router)
+app.include_router(parent.router)
 app.include_router(user.router)
 app.include_router(training.router)
 app.include_router(dev.router)

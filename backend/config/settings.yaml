@@ -27,10 +27,8 @@ training:
   # 首日固定课（content_index=0）；未完成则次日仍推同一套
   day_one:
     a_lessons:
-      - { skill: 影像追忆, stage: 1, part: 1 }
-      - { skill: 影像追忆, stage: 1, part: 2 }
-    b_lessons:
-      - { skill: 数学奥秘, stage: 1, part: 1 }
+      - { skill: 超脑阅读, stage: 1, part: 1 }
+    b_lessons: []
   # 次日及以后
   after_day_one:
     strategy: random

@@ -13,6 +13,9 @@ __pycache__/
 .pytest_cache/
 backend/data/
 
+# SQLite databases
+data/*.db
+
 # Node
 node_modules/
 vue_fronted/.cert/
@@ -23,10 +26,13 @@ vue_fronted/.cert/
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # Logs
 logs/
 backups/
+debug-*.log
+.cursor/debug-*.log
 
 # Build output
 dist/
@@ -43,15 +49,10 @@ vue_fronted/tests_fronted/
 # 旧版前端（待废弃）
 h5_fronted/
 
-# 本地工具文档（不上传）
-docs/Agent技能速查表.md
-docs/AI训练方案理解文档.md
-docs/打卡卡片制作进度.md
-
 # 大型媒体文件
 *.mp4
 *.mp3
 *.avi
 *.mov
 *.wav
-*.ogg
+*.oggdata/*.db

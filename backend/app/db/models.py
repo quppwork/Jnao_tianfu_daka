@@ -24,6 +24,10 @@ class ChildUser(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parent_phone: Mapped[str] = mapped_column(String(20), nullable=False)
     nickname: Mapped[str] = mapped_column(String(50), nullable=False)
+    login_name: Mapped[str | None] = mapped_column(String(50), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(128))
+    role: Mapped[str] = mapped_column(String(10), default="student")
+    child_quota: Mapped[int | None] = mapped_column(Integer)
     jnao_uid: Mapped[str | None] = mapped_column(String(50))
     profile_json: Mapped[dict | None] = mapped_column(JSON)
     training_level: Mapped[str | None] = mapped_column(String(20))
@@ -35,6 +39,32 @@ class ChildUser(Base):
 
     assessments: Mapped[list["TalentAssessment"]] = relationship(back_populates="child_user")
     training_plans: Mapped[list["TrainingPlan"]] = relationship(back_populates="child_user")
+    parent_binds: Mapped[list["ParentChildBind"]] = relationship(
+        back_populates="parent",
+        foreign_keys="ParentChildBind.parent_id",
+    )
+    child_binds: Mapped[list["ParentChildBind"]] = relationship(
+        back_populates="child",
+        foreign_keys="ParentChildBind.child_id",
+    )
+
+
+class ParentChildBind(Base):
+    __tablename__ = "parent_child_bind"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
+    child_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    parent: Mapped["ChildUser"] = relationship(
+        back_populates="parent_binds",
+        foreign_keys=[parent_id],
+    )
+    child: Mapped["ChildUser"] = relationship(
+        back_populates="child_binds",
+        foreign_keys=[child_id],
+    )
 
 
 class TalentAssessment(Base):
@@ -96,6 +126,7 @@ class TrainingPlan(Base):
     report_text: Mapped[str | None] = mapped_column(Text)
     planned_minutes: Mapped[int | None] = mapped_column(Integer)
     content_index: Mapped[int] = mapped_column(Integer, default=0)
+    media_exhausted: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     generated_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -120,6 +151,7 @@ class TrainingItem(Base):
     instructions: Mapped[str | None] = mapped_column(Text)
     content_item_id: Mapped[int | None] = mapped_column(Integer)
     checkin_status: Mapped[str] = mapped_column(String(20), default="pending")
+    watch_progress: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     plan: Mapped["TrainingPlan"] = relationship(back_populates="items")
@@ -132,6 +164,7 @@ class TrainingRecord(Base):
     child_user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
     plan_id: Mapped[int | None] = mapped_column(Integer)
     item_id: Mapped[int | None] = mapped_column(Integer)
+    train_date: Mapped[date | None] = mapped_column(Date)
     ability_type: Mapped[str | None] = mapped_column(String(20))
     time_spent: Mapped[str | None] = mapped_column(String(50))
     content: Mapped[str | None] = mapped_column(Text)
@@ -139,6 +172,7 @@ class TrainingRecord(Base):
     note: Mapped[str | None] = mapped_column(Text)
     attitude_pct: Mapped[int | None] = mapped_column(Integer)
     files_json: Mapped[dict | list | None] = mapped_column(JSON)
+    # 预留：家长/运营复核打卡质量（暂无 API，默认 approved）
     review_status: Mapped[str] = mapped_column(String(20), default="approved")
     reviewed_by: Mapped[int | None] = mapped_column(Integer)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -179,6 +213,7 @@ class QaMessage(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("qa_session.id"), nullable=False)
     role: Mapped[str] = mapped_column(String(10), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # 预留：语音提问/回复（当前仅文本+图片答疑）
     voice_url: Mapped[str | None] = mapped_column(String(500))
     image_url: Mapped[str | None] = mapped_column(String(500))
     meta_json: Mapped[dict | None] = mapped_column(JSON)

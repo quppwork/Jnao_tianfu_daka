@@ -1,3 +1,4 @@
+import pytest
 """Health check API tests"""
 
 from fastapi.testclient import TestClient

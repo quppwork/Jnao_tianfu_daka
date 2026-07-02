@@ -1,0 +1,76 @@
+{
+  "source": "xiaoetong_local_download",
+  "series_code": "duoyuanganzhi",
+  "items": [
+    {
+      "file_name": "多元感知-学.mp3",
+      "talent_name": "学者",
+      "talent_code": 1,
+      "talent_tag": "学",
+      "skill": "感知力",
+      "skill_raw": "多元感知",
+      "stage": 1,
+      "part": 1,
+      "lesson_sort": 1,
+      "series": "duoyuanganzhi",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/yinpin/duoyuanganzhi/天赋-多元感知/多元感知-学.mp3",
+      "oss_key": "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-学.mp3"
+    },
+    {
+      "file_name": "多元感知-思.mp3",
+      "talent_name": "思者",
+      "talent_code": 2,
+      "talent_tag": "思",
+      "skill": "感知力",
+      "skill_raw": "多元感知",
+      "stage": 1,
+      "part": 1,
+      "lesson_sort": 1,
+      "series": "duoyuanganzhi",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/yinpin/duoyuanganzhi/天赋-多元感知/多元感知-思.mp3",
+      "oss_key": "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-思.mp3"
+    },
+    {
+      "file_name": "多元感知-行.mp3",
+      "talent_name": "行者",
+      "talent_code": 3,
+      "talent_tag": "行",
+      "skill": "感知力",
+      "skill_raw": "多元感知",
+      "stage": 1,
+      "part": 1,
+      "lesson_sort": 1,
+      "series": "duoyuanganzhi",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/yinpin/duoyuanganzhi/天赋-多元感知/多元感知-行.mp3",
+      "oss_key": "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-行.mp3"
+    },
+    {
+      "file_name": "多元感知-德.mp3",
+      "talent_name": "德者",
+      "talent_code": 4,
+      "talent_tag": "德",
+      "skill": "感知力",
+      "skill_raw": "多元感知",
+      "stage": 1,
+      "part": 1,
+      "lesson_sort": 1,
+      "series": "duoyuanganzhi",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/yinpin/duoyuanganzhi/天赋-多元感知/多元感知-德.mp3",
+      "oss_key": "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-德.mp3"
+    },
+    {
+      "file_name": "多元感知-赢.mp3",
+      "talent_name": "赢者",
+      "talent_code": 5,
+      "talent_tag": "赢",
+      "skill": "感知力",
+      "skill_raw": "多元感知",
+      "stage": 1,
+      "part": 1,
+      "lesson_sort": 1,
+      "series": "duoyuanganzhi",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/yinpin/duoyuanganzhi/天赋-多元感知/多元感知-赢.mp3",
+      "oss_key": "yinpin/duoyuanganzhi/天赋-多元感知/多元感知-赢.mp3"
+    }
+  ]
+}
