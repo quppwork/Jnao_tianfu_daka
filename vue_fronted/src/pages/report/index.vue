@@ -54,12 +54,13 @@
         </view>
 
         <!-- ══ 1. Hero ══ -->
-        <view class="card hero-row">
-          <view class="hero-logo">
+        <view class="card hero-row" style="position:relative;overflow:hidden;">
+          <view class="hero-bg-fig" :style="{ backgroundImage: 'url(' + talentBgImage + ')' }"></view>
+          <view class="hero-logo" style="position:relative;z-index:1;">
             <image v-if="talentLogo" :src="talentLogo" mode="aspectFit" class="hero-logo-img" />
             <text v-else class="hero-logo-text">{{ report.check_talent?.[0] || report.talent?.[0] || '?' }}</text>
           </view>
-          <view class="hero-info">
+          <view class="hero-info" style="position:relative;z-index:1;">
             <text class="hero-label">天赋者</text>
             <text class="hero-name">{{ talentDisplay }}</text>
             <text class="hero-desc">{{ attrShort }}</text>
@@ -73,9 +74,16 @@
           <view class="stat"><text class="stat-val">{{ stateName }}</text><text class="stat-label">能量状态</text></view>
         </view>
 
+        <!-- ══ 天赋轮盘 ══ -->
+        <view class="card" style="text-align:center;padding:24px 20px;">
+          <view v-html="talentWheelSvg" style="display:inline-block;"></view>
+        </view>
+
         <!-- ══ 4. 双重属性 ══ -->
-        <view class="card" v-if="suppDesp">
-          <text class="card-label">{{ talentDisplay }} · 双重属性详解</text>
+        <view class="card" v-if="suppDesp" style="position:relative;overflow:hidden;">
+          <view style="position:absolute;right:70px;top:4px;width:100px;height:120px;opacity:0.22;pointer-events:none;background:url(/static/bg-de.png) center top/cover no-repeat;z-index:0;"></view>
+          <view style="position:absolute;right:-10px;top:-20px;width:130px;height:150px;opacity:0.22;pointer-events:none;background:url(/static/bg-si.png) center top/cover no-repeat;z-index:0;"></view>
+          <text class="card-label" style="position:relative;z-index:1;">{{ talentDisplay }} · 双重属性详解</text>
           <view class="collapse-wrap" :class="{ clamped: !collapseOpen['supp'] && suppDesp.length > 120 }" v-html="suppDesp"></view>
           <text v-if="stripHtml(suppDesp).length > 120" class="collapse-btn" @tap="collapseOpen['supp']=!collapseOpen['supp']">{{ collapseOpen['supp'] ? '收起' : '展示更多' }}</text>
         </view>
@@ -86,6 +94,8 @@
           <text class="card-label">天赋能力解读</text>
           <view v-if="abilityDesc" class="collapse-wrap" :class="{ clamped: !collapseOpen['ab'] && stripHtml(abilityDesc).length > 120 }" v-html="abilityDesc"></view>
           <text v-if="stripHtml(abilityDesc).length > 120" class="collapse-btn" @tap="collapseOpen['ab']=!collapseOpen['ab']">{{ collapseOpen['ab'] ? '收起' : '展示更多' }}</text>
+          <!-- 视频占位 — 在想对你说的话上方 -->
+          <view class="video-banner" @tap="openVideo" :style="{ backgroundImage: 'url(/static/video-cover.jpg)' }"><text>▶ 视频讲解</text></view>
           <view v-if="wordsForYou" class="words-block">
             <text class="card-label">想对你说的话</text>
             <view v-html="cleanWords"></view>
@@ -104,11 +114,16 @@
             <text class="ab-rating" :class="ab.value>70?'':'ab-warn'">{{ ab.value>70?'良好':ab.value>=50?'正常':'待提升' }}</text>
           </view>
           <view v-if="Ability.some(a=>a.desp)" class="ab-desp-block">
-            <text class="card-label">综合能力解读</text>
-            <view v-for="ab in Ability.filter(a=>a.desp)" :key="ab.abilityID" class="ab-desp">
-              <text class="ab-desp-name">-{{ ab.abilityName }}-</text>
-              <view v-html="cleanDesp(ab.desp, ab.abilityName)"></view>
-            </view>
+            <view v-if="!collapseOpen['abilityDesp']" class="collapse-btn" @tap="collapseOpen['abilityDesp']=true"><text>展示更多</text></view>
+            <template v-if="collapseOpen['abilityDesp']">
+              <view class="video-banner" @tap="openVideo"><text>▶ 视频讲解</text></view>
+              <text class="card-label">综合能力解读</text>
+              <view v-for="ab in Ability.filter(a=>a.desp)" :key="ab.abilityID" class="ab-desp">
+                <text class="ab-desp-name">-{{ ab.abilityName }}-</text>
+                <view v-html="cleanDesp(ab.desp, ab.abilityName)"></view>
+              </view>
+              <view class="collapse-btn" @tap="collapseOpen['abilityDesp']=false"><text>收起</text></view>
+            </template>
           </view>
         </view>
 
@@ -132,7 +147,10 @@
           <text class="sec-title">给你的建议</text>
           <view v-if="advice.career" class="advice-item">
             <text class="card-label">事业建议</text>
-            <text class="advice-text">{{ advice.career }}</text>
+            <view class="advice-video-wrap">
+              <view class="video-placeholder video-float" @tap="openVideo"><text>▶ 视频</text></view>
+              <text class="advice-text">{{ advice.career }}</text>
+            </view>
           </view>
           <view v-if="advice.emotion" class="advice-item">
             <text class="card-label">情感建议</text>
@@ -173,6 +191,7 @@ import { ensureChildUser, fetchAssessmentReport, fetchProfile, saveProfile } fro
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
 const TALENT_LOGOS = { "学者":"/static/xue.jpg","思者":"/static/si.jpg","赢者":"/static/ying.jpg","德者":"/static/de.jpg","行者":"/static/xing.jpg" }
+const TALENT_BG_FIGS = { "学者":"/static/学者.png","思者":"/static/思者.png","赢者":"/static/赢者.png","德者":"/static/德者.png","行者":"/static/行者.png" }
 
 const loading = ref(true)
 const report = ref(null)
@@ -297,6 +316,9 @@ const isMizhe = computed(() => {
 })
 const talentColor = computed(() => TALENT_COLORS[report.value?.talent] || '#171717')
 const talentLogo = computed(() => TALENT_LOGOS[report.value?.talent] || '')
+const talentBgFig = computed(() => TALENT_BG_FIGS[report.value?.talent] || '')
+const TALENT_BG_MAP = { "学者":"/static/talent-bg-xue.png","思者":"/static/talent-bg-si.png","赢者":"/static/talent-bg-ying.png","德者":"/static/talent-bg-de.png","行者":"/static/talent-bg-xing.png" }
+const talentBgImage = computed(() => TALENT_BG_MAP[report.value?.talent] || '/static/talent-bg-xue.png')
 const talentDisplay = computed(() => {
   const ct = report.value?.check_talent
   if (!ct) return report.value?.talent || '--'
@@ -475,6 +497,62 @@ onBeforeUnmount(() => {
   }
 })
 
+// 天赋轮盘 SVG — 单色分层，根据主天赋高亮
+const WHEEL_TALENTS = ['思者','赢者','行者','德者','学者']
+const talentWheelSvg = computed(() => {
+  const mainTalent = report.value?.talent || '学者'
+  // 从 traits 获取各天赋 grade (权重) — 兼容两种数据格式
+  const traitMap = {}
+  const NAME_MAP = { '智慧':'学者','思辨':'思者','专注':'赢者','洞察':'德者','求知':'行者' }
+  traits.value.forEach(t => {
+    const talentName = NAME_MAP[t.name] || t.name  // API 可能返回天赋名或特质名
+    traitMap[talentName] = t.grade || 0
+  })
+  const weights = WHEEL_TALENTS.map(t => {
+    return traitMap[t] || (t === mainTalent ? 4 : 1)
+  })
+  const layers = weights.map(w => Math.max(1, Math.min(4, Math.round(w * 0.8))))
+  const color = talentColor.value
+  const cx=130, cy=120
+
+  let svg = `<svg viewBox="0 0 260 260" style="width:280px;height:280px;">`
+  // 同心圆
+  ;[80,60,40,20].forEach(r => {
+    svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e8e8e8" stroke-width="1.5"/>`
+  })
+
+  for (let i=0; i<5; i++) {
+    const a1 = (i*72 - 90) * Math.PI / 180
+    const a2 = ((i+1)*72 - 90) * Math.PI / 180
+    const midA = (a1 + a2)/2
+    const fillLevel = layers[i]
+    const ringRadii = [20, 40, 60, 80]
+    const innerR = 20
+    const outerR = ringRadii[fillLevel - 1]
+
+    const x1i = cx + innerR * Math.cos(a1), y1i = cy + innerR * Math.sin(a1)
+    const x1o = cx + outerR * Math.cos(a1), y1o = cy + outerR * Math.sin(a1)
+    const x2o = cx + outerR * Math.cos(a2), y2o = cy + outerR * Math.sin(a2)
+    const x2i = cx + innerR * Math.cos(a2), y2i = cy + innerR * Math.sin(a2)
+    const opacity = 0.35 + fillLevel * 0.2
+    svg += `<path d="M ${x1i} ${y1i} L ${x1o} ${y1o} A ${outerR} ${outerR} 0 0 1 ${x2o} ${y2o} L ${x2i} ${y2i} A ${innerR} ${innerR} 0 0 0 ${x1i} ${y1i} Z" fill="${color}" opacity="${opacity.toFixed(2)}"/>`
+
+    // 放射线
+    const xl = cx + 80 * Math.cos(a1), yl = cy + 80 * Math.sin(a1)
+    svg += `<line x1="${cx}" y1="${cy}" x2="${xl}" y2="${yl}" stroke="#eee" stroke-width="1"/>`
+
+    // 标签
+    const lr = 80 + 28
+    const lx = cx + lr * Math.cos(midA), ly = cy + lr * Math.sin(midA)
+    const anchor = lx < cx-30 ? 'end' : lx > cx+30 ? 'start' : 'middle'
+    const isMain = WHEEL_TALENTS[i] === mainTalent
+    svg += `<text x="${lx}" y="${ly+5}" font-size="14" font-weight="${isMain?'700':'400'}" fill="${isMain?color:'#bbb'}" text-anchor="${anchor}">${WHEEL_TALENTS[i]}</text>`
+  }
+
+  svg += `</svg>`
+  return svg
+})
+function openVideo() { uni.showToast({ title: '视频功能开发中', icon: 'none' }) }
 function reTest() { goBack() }
 function openOldReport() {
   const id = report.value?.id
@@ -512,6 +590,7 @@ function openOldReport() {
 .hero-label { font-size:11px; color:var(--text-dim); display:block; margin-bottom:2px; }
 .hero-name { font-size:20px; font-weight:700; color:var(--text); display:block; }
 .hero-desc { font-size:12px; color:var(--text-dim); line-height:1.5; display:block; margin-top:4px; }
+.hero-bg-fig { position:absolute; right:-10px; top:6px; width:135px; height:150px; opacity:0.15; pointer-events:none; background-size:cover; background-position:center top; background-repeat:no-repeat; z-index:2; }
 
 /* Stats */
 .stats-row { display:flex; }
@@ -529,8 +608,6 @@ function openOldReport() {
 .trait-grade { font-size:9px; color:var(--text-dim); display:block; margin-top:2px; }
 
 .card-label { font-size:12px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.4px; display:block; margin-bottom:6px; }
-.words-block { margin-top:12px; font-size:13px; color:var(--text-dim); line-height:1.6; }
-
 /* Ability */
 .ab-row { display:flex; align-items:center; gap:8px; padding:4px 0; }
 .ab-name { width:52px; font-size:12px; font-weight:600; color:var(--text); flex-shrink:0; }
@@ -571,6 +648,9 @@ function openOldReport() {
 
 /* Collapsible HTML text styles */
 .collapse-wrap { font-size:12px; color:var(--text-dim); line-height:1.7; }
+.collapse-wrap :deep(*) { font-size:12px !important; color:var(--text-dim) !important; }
+.words-block { margin-top:12px; font-size:13px; color:var(--text-dim); line-height:1.6; }
+.words-block :deep(*) { font-size:13px !important; color:var(--text-dim) !important; }
 .collapse-wrap.clamped { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .collapse-btn { width:100%; text-align:center; font-size:12px; color:var(--text-dim); padding:6px 0; cursor:pointer; display:block; }
 
@@ -591,4 +671,22 @@ function openOldReport() {
 .mizhe-title { color:#e67e00; font-size:18px; font-weight:700; display:block; margin-bottom:6px; }
 .mizhe-desc { color:var(--text-dim); font-size:13px; line-height:1.6; display:block; margin-bottom:14px; }
 .mizhe-btn { background:linear-gradient(135deg,#f59e0b,#e67e00); display:inline-block; width:auto; padding:10px 28px; margin:0 auto; }
+
+/* Wheel */
+
+/* Video placeholder */
+.ability-row { display:flex; gap:12px; align-items:flex-start; }
+.ability-text { flex:1; min-width:0; }
+.video-placeholder { width:100px; height:72px; background:#e5e7eb; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; font-size:12px; color:#9ca3af; }
+.video-placeholder:active { background:#d1d5db; }
+.video-float { float:right; margin:0 0 8px 12px; }
+.advice-video-wrap { overflow:hidden; }
+.video-banner { width:100%; height:120px; background-color:#e5e7eb; background-size:cover; background-position:center; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; margin-bottom:14px; font-size:14px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+.video-banner:active { background:#d1d5db; }
+</style>
+
+<!-- 全局样式，穿透 v-html 内容 -->
+<style>
+.collapse-wrap * { font-size:12px !important; color:var(--text-dim) !important; }
+.words-block * { font-size:13px !important; color:var(--text-dim) !important; }
 </style>
