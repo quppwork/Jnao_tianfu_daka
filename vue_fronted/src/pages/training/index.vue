@@ -9,7 +9,7 @@
       <text class="nav-title cyber-glitch" @click="triggerGlitch">今日训练</text>
         <view class="nav-actions">
         <view class="nav-history" @click.stop="openHistory"><text>历史</text></view>
-        <view class="nav-dev" :class="{ active: devMode }" @click.stop="toggleDevMode">
+        <view v-if="devToolsAvailable" class="nav-dev" :class="{ active: devMode }" @click.stop="toggleDevMode">
           <text>{{ devMode ? 'DEV ✓' : 'DEV' }}</text>
         </view>
       </view>
@@ -814,13 +814,14 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
-import { getDevMode, setDevMode } from '@/utils/devMode.js'
+import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
+const devToolsAvailable = isDevToolsAvailable()
 const devMode = ref(getDevMode())
 const scheduleLoading = ref(false)
 const entryLoading = ref(false)

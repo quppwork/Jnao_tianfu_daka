@@ -34,37 +34,38 @@ from app.services.training_day import (
     TZ,
 )
 
-import time as _time
+# ── Plan 响应短期缓存（Redis，无 REDIS_URL 时直读 DB）──
+from app.core.cache import (
+    cache_delete,
+    cache_get_json,
+    cache_set_json,
+    key_train_today,
+    ttl_env,
+)
 
-# ── Plan 响应短期缓存 ──
-# 消除「首页 ↔ 训练页来回切」时重复的 10+ DB 查询
-# TTL 10 秒，覆盖页面切换场景；打卡/排课时主动清除
-_plan_cache: dict[tuple[int, str], tuple[float, dict]] = {}
-_PLAN_CACHE_TTL = 10.0
-_CACHE_MAX_ENTRIES = 5000
+_PLAN_CACHE_TTL = ttl_env("CACHE_TTL_TRAINING_TODAY", 30)
 
 
 def invalidate_plan_cache(child_user_id: int, plan_date: date):
     """打卡、修改方案后立即清除该用户当日缓存"""
-    _plan_cache.pop((child_user_id, str(plan_date)), None)
+    cache_delete(key_train_today(child_user_id, plan_date))
 
 
 def _cache_get(child_user_id: int, plan_date: date) -> dict | None:
-    key = (child_user_id, str(plan_date))
-    entry = _plan_cache.get(key)
-    if entry is None:
-        return None
-    ts, data = entry
-    if _time.monotonic() - ts < _PLAN_CACHE_TTL:
-        return data
-    _plan_cache.pop(key, None)
-    return None
+    data = cache_get_json(key_train_today(child_user_id, plan_date))
+    return data if isinstance(data, dict) else None
 
 
 def _cache_set(child_user_id: int, plan_date: date, data: dict) -> None:
-    if len(_plan_cache) >= _CACHE_MAX_ENTRIES:
-        _plan_cache.clear()
-    _plan_cache[(child_user_id, str(plan_date))] = (_time.monotonic(), data)
+    cache_set_json(key_train_today(child_user_id, plan_date), data, _PLAN_CACHE_TTL)
+
+
+def _invalidate_after_checkin_change(child_user_id: int, plan_date: date) -> None:
+    from app.core.cache import invalidate_user_growth, invalidate_user_training
+
+    invalidate_plan_cache(child_user_id, plan_date)
+    invalidate_user_growth(child_user_id)
+    invalidate_user_training(child_user_id, plan_date=plan_date)
 
 
 WATCH_COMPLETE_PCT = 90
@@ -916,6 +917,7 @@ def submit_checkin(
     db.refresh(record)
     # 打卡后清除当日方案缓存，下次 GET /today 拉取最新状态
     invalidate_plan_cache(child_user_id, plan.plan_date)
+    _invalidate_after_checkin_change(child_user_id, plan.plan_date)
     out = {"record_id": record.id, "plan_status": plan.status}
     if progress_delta:
         out["training_progress"] = progress_delta
@@ -1194,6 +1196,8 @@ def update_checkin_record(
             )
     db.commit()
     db.refresh(record)
+    if plan:
+        _invalidate_after_checkin_change(child_user_id, plan.plan_date)
     out = {"record": _record_to_dict(record, plan=plan), "plan_status": plan_status}
     if progress_delta:
         out["training_progress"] = progress_delta
@@ -1231,6 +1235,8 @@ def delete_checkin_record(db: Session, child_user_id: int, record_id: int) -> di
                 grade=child_grade(child),
             )
     db.commit()
+    if plan:
+        _invalidate_after_checkin_change(child_user_id, plan.plan_date)
     out = {"deleted": True, "plan_status": plan_status}
     if progress_delta:
         out["training_progress"] = progress_delta

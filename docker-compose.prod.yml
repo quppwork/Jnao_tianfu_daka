@@ -12,6 +12,8 @@ services:
     image: jnao-daka-backend:latest
     container_name: jnao-daka-backend
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - backend_data:/app/data
       - ./docs/data:/catalog_data:ro
@@ -25,6 +27,13 @@ services:
       JNAO_DEBUG_ROUTES: "0"
       TIANFU_RAG_MOCK: ${TIANFU_RAG_MOCK:-1}
       DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-}
+      QA_SESSION_CACHE_TTL: ${QA_SESSION_CACHE_TTL:-3600}
+      CACHE_TTL_PROFILE: ${CACHE_TTL_PROFILE:-300}
+      CACHE_TTL_ASSESSMENT: ${CACHE_TTL_ASSESSMENT:-600}
+      CACHE_TTL_TRAINING_TODAY: ${CACHE_TTL_TRAINING_TODAY:-30}
+      CACHE_TTL_TRAINING_PROGRESS: ${CACHE_TTL_TRAINING_PROGRESS:-60}
+      CACHE_TTL_GROWTH_SUMMARY: ${CACHE_TTL_GROWTH_SUMMARY:-120}
       CORS_ORIGINS: ${SITE_DOMAIN}
       DOUBAO_API_KEY: ${DOUBAO_API_KEY}
       DOUBAO_API_BASE: ${DOUBAO_API_BASE:-https://ark.cn-beijing.volces.com/api/v3}

@@ -4,6 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_user, get_db
+from app.core.cache import (
+    cache_get_json,
+    cache_set_json,
+    invalidate_user_assessment,
+    invalidate_user_growth,
+    invalidate_user_profile,
+    invalidate_user_training,
+    key_assessment_latest,
+    ttl_env,
+)
 from app.db.models import ChildUser
 from app.models.requests import ReportRequest
 from app.schemas.training import AssessmentOut
@@ -11,6 +21,15 @@ from app.services import assessment_service
 from app.services.jnao_client import jnao_get_report, jnao_submit
 
 router = APIRouter(prefix="/api/talent", tags=["talent"])
+
+_ASSESSMENT_TTL = ttl_env("CACHE_TTL_ASSESSMENT", 600)
+
+
+def _invalidate_assessment_caches(user_id: int) -> None:
+    invalidate_user_assessment(user_id)
+    invalidate_user_profile(user_id)
+    invalidate_user_growth(user_id)
+    invalidate_user_training(user_id)
 
 
 @router.post("/jnao/submit")
@@ -63,6 +82,8 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
             assessment_id = row.id
             conflict = getattr(row, "_talent_conflict", False)
             locked = getattr(row, "_talent_locked", False)
+            if req.child_user_id:
+                _invalidate_assessment_caches(req.child_user_id)
             if locked:
                 lock_msg = assessment_service.TALENT_LOCK_MSG
             if conflict and user:
@@ -101,6 +122,7 @@ async def save_assessment_endpoint(
         )
         user = db.get(ChildUser, child_user_id)
         current = (user.profile_json or {}).get("talent_primary", "") if user else ""
+        _invalidate_assessment_caches(child_user_id)
         return {
             "code": 1,
             "data": report,
@@ -131,10 +153,15 @@ def latest_assessment(
     db: Session = Depends(get_db),
 ):
     """最新测评；无 JNAO 记录时若有引导页自选天赋也返回 200"""
+    key = key_assessment_latest(child_user_id)
+    cached = cache_get_json(key)
+    if cached is not None:
+        return AssessmentOut(**cached)
+
     assessment_service.repair_onboarding_talent(db, child_user_id)
     row = assessment_service.get_latest_assessment(db, child_user_id)
     if row:
-        return AssessmentOut(
+        out = AssessmentOut(
             id=row.id,
             child_user_id=row.child_user_id,
             talent_primary=row.talent_primary,
@@ -144,13 +171,15 @@ def latest_assessment(
             jnao_record_id=row.jnao_record_id,
             talent_source="assessment",
         )
+        cache_set_json(key, out.model_dump(), _ASSESSMENT_TTL)
+        return out
     eff = assessment_service.resolve_effective_talent(db, child_user_id)
     if eff and eff.get("talent_code"):
         user = db.get(ChildUser, child_user_id)
         onboarding = {}
         if user and isinstance(user.profile_json, dict):
             onboarding = user.profile_json.get("onboarding") or {}
-        return AssessmentOut(
+        out = AssessmentOut(
             id=0,
             child_user_id=child_user_id,
             talent_primary=eff.get("talent_primary"),
@@ -160,6 +189,8 @@ def latest_assessment(
             jnao_record_id=None,
             talent_source=eff.get("talent_source"),
         )
+        cache_set_json(key, out.model_dump(), _ASSESSMENT_TTL)
+        return out
     raise HTTPException(404, "尚未完成天赋测评")
 
 
@@ -190,6 +221,8 @@ def delete_assessment_endpoint(
 ):
     """删除历史测评（归档后从主表移除，定时全库备份保留副本）"""
     try:
-        return assessment_service.delete_assessment(db, assessment_id, child_user_id)
+        result = assessment_service.delete_assessment(db, assessment_id, child_user_id)
+        _invalidate_assessment_caches(child_user_id)
+        return result
     except assessment_service.AssessmentError as e:
         raise HTTPException(e.status_code, e.message) from e

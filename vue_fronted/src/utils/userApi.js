@@ -212,18 +212,6 @@ function _storeAuth(data) {
   }
 }
 
-/** 登录：验证手机+昵称，不存在则报错（兼容旧流程） */
-/** 学生登录：手机号+昵称 → POST /api/auth/login → 返回 child_user_id */
-export async function loginUser(phone, nickname) {
-  const data = await apiJson('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parent_phone: phone, nickname }),
-  })
-  _storeAuth(data)
-  return data
-}
-
 /** 家长登录：手机号 + 密码 */
 export async function loginParent(phone, password) {
   const data = await apiJson('/api/auth/login', {

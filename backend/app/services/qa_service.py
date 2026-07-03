@@ -12,6 +12,13 @@ from app.db.models import ChildUser, QaMessage, QaSession
 from app.services.assessment_service import get_latest_assessment
 from app.services.doubao_client import chat_completion, vision_chat_completion
 from app.services.qa_cache import get_session_list, invalidate_session_list, set_session_list
+from app.core.cache import invalidate_user_growth
+
+
+def _invalidate_qa_caches(child_user_id: int) -> None:
+    invalidate_session_list(child_user_id)
+    invalidate_user_growth(child_user_id)
+
 from app.services.qa_coach import build_coach_metadata, fetch_recent_coach_context_for_prompt
 from app.services.qa_image_store import image_data_url
 from app.agents.qa.memory import QaMemory
@@ -169,7 +176,7 @@ async def chat(
             },
         )
         db.commit()
-        invalidate_session_list(child_user_id)
+        _invalidate_qa_caches(child_user_id)
         return {
             "session_id": session.id,
             "reply": reply,
@@ -283,7 +290,7 @@ async def chat(
         )
     )
     db.commit()
-    invalidate_session_list(child_user_id)
+    _invalidate_qa_caches(child_user_id)
 
     return _public_chat_payload(
         session_id=session.id,
@@ -350,7 +357,7 @@ async def chat_stream(
             },
         )
         db.commit()
-        invalidate_session_list(child_user_id)
+        _invalidate_qa_caches(child_user_id)
         yield ("token", reply)
         yield (
             "done",
@@ -474,7 +481,7 @@ async def chat_stream(
         )
     )
     db.commit()
-    invalidate_session_list(child_user_id)
+    _invalidate_qa_caches(child_user_id)
 
     yield (
         "done",

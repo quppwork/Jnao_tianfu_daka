@@ -6,6 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_user, get_db
+from app.core.cache import (
+    cache_get_json,
+    cache_set_json,
+    key_train_progress,
+    ttl_env,
+)
 from app.schemas.training import (
     CheckinDeleteResponse,
     CheckinHistoryResponse,
@@ -244,7 +250,13 @@ def training_progress(
     child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    return training_service.get_progress(db, child_user_id)
+    key = key_train_progress(child_user_id)
+    cached = cache_get_json(key)
+    if cached is not None:
+        return cached
+    data = training_service.get_progress(db, child_user_id)
+    cache_set_json(key, data, ttl_env("CACHE_TTL_TRAINING_PROGRESS", 60))
+    return data
 
 
 @router.post("/window", response_model=WindowResponse)

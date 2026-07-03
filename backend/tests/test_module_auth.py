@@ -21,18 +21,32 @@ class TestModuleAuth:
         r2 = client.post("/api/auth/register", json=body)
         assert r1.json()["child_user_id"] == r2.json()["child_user_id"]
 
-    def test_login_existing(self, client: TestClient):
-        body = {"parent_phone": "13955556666", "nickname": "小刚"}
-        client.post("/api/auth/register", json=body)
-        res = client.post("/api/auth/login", json=body)
+    def test_login_student_password(self, client: TestClient):
+        parent = client.post(
+            "/api/auth/register",
+            json={
+                "parent_phone": "13955556666",
+                "nickname": "张家长",
+                "password": "123456",
+                "role": "parent",
+            },
+        ).json()
+        client.post(
+            f"/api/parent/children?user_id={parent['child_user_id']}",
+            json={"login_name": "kid_xiaogang", "nickname": "小刚", "password": "111111"},
+        )
+        res = client.post(
+            "/api/auth/login",
+            json={"login_name": "kid_xiaogang", "password": "111111"},
+        )
         assert res.status_code == 200
 
-    def test_login_not_found(self, client: TestClient):
+    def test_login_invalid_credentials(self, client: TestClient):
         res = client.post(
             "/api/auth/login",
             json={"parent_phone": "13999990000", "nickname": "不存在"},
         )
-        assert res.status_code == 404
+        assert res.status_code == 400
 
     def test_profile_after_register(self, client: TestClient, registered_user):
         uid = registered_user["child_user_id"]

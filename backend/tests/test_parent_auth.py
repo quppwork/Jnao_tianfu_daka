@@ -118,13 +118,19 @@ class TestParentAuth:
         assert data["limit"] == 5
         assert data["can_add"] is True
 
-    def test_legacy_student_register_login(self, client: TestClient):
-        """兼容旧手机+昵称注册"""
-        body = {"parent_phone": "13988887777", "nickname": "_legacy"}
-        r1 = client.post("/api/auth/register", json=body)
-        assert r1.status_code == 200
-        r2 = client.post("/api/auth/login", json=body)
-        assert r2.status_code == 200
+    def test_student_password_login(self, client: TestClient):
+        parent = _register_parent(client, "13900001118", password="123456")
+        pid = parent["child_user_id"]
+        created = client.post(
+            f"/api/parent/children?user_id={pid}",
+            json={"login_name": "legacy_kid", "nickname": "旧流程童", "password": "111111"},
+        ).json()
+        res = client.post(
+            "/api/auth/login",
+            json={"login_name": "legacy_kid", "password": "111111"},
+        )
+        assert res.status_code == 200
+        assert res.json()["child_user_id"] == created["id"]
 
     def test_child_profile_includes_parent_name(self, client: TestClient):
         parent = _register_parent(client, "13900002222", password="123456")
