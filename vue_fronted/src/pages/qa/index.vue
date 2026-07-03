@@ -1508,7 +1508,7 @@ onBeforeUnmount(() => {
 
   height: 100vh; height: 100dvh;
 
-  max-width: 768px;
+  max-width: var(--app-max-width, 480px);
 
   margin: 0 auto;
 
@@ -1532,7 +1532,7 @@ onBeforeUnmount(() => {
 
   align-items: center;
 
-  padding: 12px 16px;
+  padding: 24rpx 32rpx;
 
   background: var(--bg-card);
 
@@ -1623,9 +1623,9 @@ onBeforeUnmount(() => {
 
   display: flex;
 
-  gap: 8px;
+  gap: 16rpx;
 
-  padding: 10px 16px 12px;
+  padding: 20rpx 32rpx 24rpx;
 
   background: var(--bg-card);
 
@@ -1679,7 +1679,7 @@ onBeforeUnmount(() => {
 
   overflow-y: auto;
 
-  padding: 16px;
+  padding: 32rpx;
 
   background: var(--chat-surface);
 
@@ -1711,9 +1711,9 @@ onBeforeUnmount(() => {
 
   display: flex;
 
-  gap: 10px;
+  gap: 20rpx;
 
-  margin-bottom: 20px;
+  margin-bottom: 40rpx;
 
   align-items: flex-end;
 
@@ -1799,10 +1799,10 @@ onBeforeUnmount(() => {
   position: relative;
   background: var(--accent);
   color: #fff;
-  border-radius: 16px;
-  border-bottom-right-radius: 4px;
-  padding: 10px 14px;
-  font-size: 14px;
+  border-radius: 32rpx;
+  border-bottom-right-radius: 8rpx;
+  padding: 20rpx 28rpx;
+  font-size: 28rpx;
   line-height: 1.55;
   word-break: break-word;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
@@ -1827,10 +1827,10 @@ onBeforeUnmount(() => {
 .bubble-ai {
   position: relative;
   background: var(--chat-ai-bg);
-  border-radius: 16px;
-  border-bottom-left-radius: 4px;
-  padding: 10px 14px;
-  font-size: 14px;
+  border-radius: 32rpx;
+  border-bottom-left-radius: 8rpx;
+  padding: 20rpx 28rpx;
+  font-size: 28rpx;
   line-height: 1.55;
   color: var(--text);
   word-break: break-word;
@@ -1850,12 +1850,12 @@ onBeforeUnmount(() => {
 
 .bubble-img {
   width: auto;
-  max-width: min(260px, 72vw);
-  min-width: 80px;
+  max-width: 400rpx;
+  min-width: 160rpx;
   height: auto;
-  max-height: 340px;
-  border-radius: 10px;
-  margin-bottom: 6px;
+  max-height: 480rpx;
+  border-radius: 20rpx;
+  margin-bottom: 12rpx;
   display: block;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.08);
@@ -1870,7 +1870,7 @@ onBeforeUnmount(() => {
 }
 .pending-bubble {
   position: relative;
-  max-width: min(200px, 55vw);
+  max-width: 400rpx;
   background: var(--accent);
   border-radius: 16px;
   border-bottom-right-radius: 4px;
@@ -1888,9 +1888,9 @@ onBeforeUnmount(() => {
 }
 .pending-thumb {
   width: 100%;
-  max-width: 180px;
-  max-height: 140px;
-  border-radius: 10px;
+  max-width: 360rpx;
+  max-height: 280rpx;
+  border-radius: 20rpx;
   display: block;
   object-fit: cover;
 }
@@ -1972,7 +1972,7 @@ onBeforeUnmount(() => {
 
 .composer {
   flex-shrink: 0;
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  padding: 20rpx 28rpx calc(20rpx + env(safe-area-inset-bottom));
   background: var(--bg-card);
   border-top: 1px solid var(--border);
 }
@@ -1980,7 +1980,7 @@ onBeforeUnmount(() => {
 .input-wrap {
   display: flex; align-items: center;
   background: rgba(255,255,255,0.1);
-  border-radius: 24px; padding: 2px 2px 2px 14px;
+  border-radius: 48rpx; padding: 2px 2px 2px 28rpx;
   border: 1px solid rgba(255,255,255,0.15);
 }
 [data-theme="white"] .input-wrap { background: #f3f4f6; border-color: #d1d5db; }
