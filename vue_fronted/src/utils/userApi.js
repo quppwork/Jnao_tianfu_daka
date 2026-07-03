@@ -167,29 +167,43 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
 }
 
 /** 给 URL 拼接 ?user_id= 和 &session_token= 查询参数 */
-function withUser(url, userId) {
+function ensureAuthQuery(url, userId) {
   let result = url
-  const sep = result.includes('?') ? '&' : '?'
-  result = `${result}${sep}user_id=${userId}`
+  if (userId && !/[?&]user_id=/.test(result)) {
+    const sep = result.includes('?') ? '&' : '?'
+    result = `${result}${sep}user_id=${userId}`
+  }
   const token = getSessionToken()
-  if (token) {
+  if (token && !/[?&]session_token=/.test(result)) {
     result = `${result}&session_token=${encodeURIComponent(token)}`
   }
   return result
 }
 
-/** 答疑图片需带 user_id 鉴权；补全绝对路径确保 <image> 在任何部署环境都能加载 */
+function withUser(url, userId) {
+  return ensureAuthQuery(url, userId)
+}
+
+/** 答疑图片需带 user_id + session_token 鉴权；补全绝对路径供 <image> 加载 */
 export function resolveQaImageUrl(url, userId) {
   if (!url || !userId) return url
   if (url.startsWith('blob:') || url.startsWith('data:')) return url
   if (!url.includes('/api/qa/images/')) return url
-  // 确保 user_id 参数存在（后端 /images/{id} 依赖它鉴权）
-  if (!/[?&]user_id=/.test(url)) url = withUser(url, userId)
-  // 相对路径 → 补全 origin，避免 UniApp <image> 组件或代理层解析失败
-  if (url.startsWith('/')) {
-    try { url = window.location.origin + url } catch (_) {}
+
+  let path = url
+  let origin = ''
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    try {
+      const u = new URL(path)
+      origin = u.origin
+      path = u.pathname + u.search
+    } catch (_) { /* keep path */ }
   }
-  return url
+  path = ensureAuthQuery(path, userId)
+  if (!origin && path.startsWith('/')) {
+    try { origin = window.location.origin } catch (_) {}
+  }
+  return origin ? origin + path : path
 }
 
 function getOrCreateGuestPhone() {

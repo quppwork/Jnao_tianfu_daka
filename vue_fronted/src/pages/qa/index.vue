@@ -1146,17 +1146,13 @@ function clearPendingImage({ keepPreview } = {}) {
 
 
 async function resolveImageFile(pending) {
-
   if (pending.file) return pending.file
-
   const resp = await fetch(pending.path)
-
+  if (!resp.ok) throw new Error('读取图片失败，请重新选择')
   const blob = await resp.blob()
-
+  if (!blob.size) throw new Error('图片为空，请重新拍摄')
   const ext = blob.type.includes('png') ? 'png' : 'jpg'
-
   return new File([blob], `photo.${ext}`, { type: blob.type || 'image/jpeg' })
-
 }
 
 
