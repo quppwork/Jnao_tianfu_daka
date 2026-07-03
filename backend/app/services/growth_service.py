@@ -18,6 +18,22 @@ MASTERY_SKILLS = ("影像追忆", "扫描速记", "极速学习", "数学奥秘"
 CHECKIN_MILESTONES = (1, 7, 10, 30, 100)
 QA_MILESTONES = (1, 10, 50, 100)
 
+# 🆕 v2.0 九阶荣誉体系：按 overall_tier 映射头衔
+def get_tier_honor(overall_tier: int) -> str:
+    """将整体 Tier 映射为荣誉头衔。
+
+    Tier 1-4: 传承特使
+    Tier 5-7: 劲脑学神
+    Tier 8-9: 专利精英
+    """
+    if overall_tier >= 8:
+        return "专利精英"
+    if overall_tier >= 5:
+        return "劲脑学神"
+    if overall_tier >= 1:
+        return "传承特使"
+    return "新学员"
+
 
 def _checkin_count(db: Session, child_user_id: int) -> int:
     return db.scalar(
@@ -356,17 +372,30 @@ def get_summary(db: Session, child_user_id: int) -> dict:
     badges = get_badges(db, child_user_id)
     earned = sum(1 for b in badges if b["earned"])
     milestones = get_milestones(db, child_user_id)
-    honor = "新学员"
-    for m in reversed(milestones):
-        if m["achieved"]:
-            honor = m["level"]
-            break
+    # 🆕 v2.0: 荣誉头衔优先按九阶 Tier 判定，回退到打卡里程碑
+    overall_tier = 1
+    try:
+        from app.services.child_training_state import get_training_progress, overall_tier as _overall_tier
+        user = stats["user"]
+        if user:
+            state = get_training_progress(user)
+            overall_tier = _overall_tier(state)
+    except Exception:
+        pass
+    honor = get_tier_honor(overall_tier)
+    # 回退：无训练进度时用打卡里程碑
+    if honor == "新学员":
+        for m in reversed(milestones):
+            if m["achieved"]:
+                honor = m["level"]
+                break
 
     user = stats["user"]
     assessment = stats["assessment"]
     return {
         "nickname": user.nickname if user else "",
         "talent_primary": assessment.talent_primary if assessment else None,
+        "overall_tier": overall_tier,        # 🆕 v2.0
         "honor_level": honor,
         "total_checkins": stats["checkins"],
         "checkin_streak": stats["streak"],
