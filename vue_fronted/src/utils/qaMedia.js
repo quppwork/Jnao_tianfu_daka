@@ -87,6 +87,47 @@ export async function fileToDataUrl(file) {
   })
 }
 
+/** 本地图片缓存：拍照后优先从本机显示，服务器 URL 仅作 AI 与无缓存时的回退 */
+const QA_IMG_CACHE_PREFIX = 'jnao_qa_img_'
+const QA_IMG_CACHE_MAX = 8
+const _qaImgMem = new Map()
+
+export function parseQaImageId(imageUrl) {
+  if (!imageUrl) return null
+  const m = String(imageUrl).match(/\/api\/qa\/images\/([a-f0-9]+)/i)
+  return m ? m[1] : null
+}
+
+export function putQaImageLocal(imageId, dataUrl) {
+  if (!imageId || !dataUrl) return
+  _qaImgMem.set(imageId, dataUrl)
+  try {
+    sessionStorage.setItem(`${QA_IMG_CACHE_PREFIX}${imageId}`, dataUrl)
+    const keys = []
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i)
+      if (k?.startsWith(QA_IMG_CACHE_PREFIX)) keys.push(k)
+    }
+    while (keys.length > QA_IMG_CACHE_MAX) {
+      const old = keys.shift()
+      if (old) sessionStorage.removeItem(old)
+    }
+  } catch (_) { /* 超出配额时仅保留内存缓存 */ }
+}
+
+export function getQaImageLocal(imageId) {
+  if (!imageId) return null
+  if (_qaImgMem.has(imageId)) return _qaImgMem.get(imageId)
+  try {
+    const v = sessionStorage.getItem(`${QA_IMG_CACHE_PREFIX}${imageId}`)
+    if (v) {
+      _qaImgMem.set(imageId, v)
+      return v
+    }
+  } catch (_) { /* ignore */ }
+  return null
+}
+
 /**
  * 原生 file input 拍照/选图（DeepSeek 式 fallback，强制后置摄像头）
  * @param {'environment'|'user'|''} captureMode

@@ -274,6 +274,8 @@ import {
 
   resolveQaImageUrl,
 
+  resolveMessageImageDisplay,
+
   sendQaMessageStream,
 
   uploadQaImage,
@@ -299,6 +301,9 @@ import {
   browserCanUseCamera,
   pickImageViaNativeInput,
   fileToDataUrl,
+  putQaImageLocal,
+  parseQaImageId,
+  getQaImageLocal,
 } from '@/utils/qaMedia.js'
 
 import {
@@ -438,6 +443,13 @@ function previewMessageImage(msgIndex) {
 function onMsgImageError(msgIndex) {
   const m = messages.value[msgIndex]
   if (!m) return
+  if (m.imageId) {
+    const cached = getQaImageLocal(m.imageId)
+    if (cached && m.imageUrl !== cached) {
+      m.imageUrl = cached
+      return
+    }
+  }
   if (m.serverImageUrl && m.imageUrl !== m.serverImageUrl) {
     m.imageUrl = m.serverImageUrl
     return
@@ -715,7 +727,9 @@ function mapSessionMessages(data, uid) {
 
     text: m.content,
 
-    imageUrl: resolveQaImageUrl(m.image_url, uid) || null,
+    imageUrl: resolveMessageImageDisplay(m.image_url, uid) || null,
+
+    imageId: parseQaImageId(m.image_url),
 
   }))
 
@@ -1355,6 +1369,10 @@ async function sendMsg() {
 
       if (up.url && messages.value[userMsgIdx]) {
         messages.value[userMsgIdx].serverImageUrl = resolveQaImageUrl(up.url, uid)
+        messages.value[userMsgIdx].imageId = imageId
+        if (displayImageUrl?.startsWith('data:')) {
+          putQaImageLocal(imageId, displayImageUrl)
+        }
       }
 
     }
