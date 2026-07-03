@@ -32,7 +32,6 @@ class QaMemory:
                 "role": m.role,
                 "content": m.content,
                 "image_url": m.image_url,
-                "meta_json": m.meta_json,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in session.messages

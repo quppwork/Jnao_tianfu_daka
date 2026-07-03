@@ -39,7 +39,7 @@ class TestQaImageUpload:
 
 
 class TestQaChatEnhanced:
-    def test_chat_returns_coach_metadata(self, client: TestClient, child_with_assessment, mock_doubao):
+    def test_chat_hides_internal_metadata(self, client: TestClient, child_with_assessment, mock_doubao):
         uid = child_with_assessment
         client.put(
             f"/api/user/learner-profile?user_id={uid}",
@@ -51,7 +51,10 @@ class TestQaChatEnhanced:
         )
         assert res.status_code == 200
         data = res.json()
-        assert data["coach_hint"]
+        assert "coach_hint" not in data
+        assert "mistake_pattern" not in data
+        assert "rag_used" not in data
+        assert "ocr_preview" not in data
         assert data["school_stage"] == "primary_high"
         assert data["talent_primary"] == "学者"
 
@@ -80,7 +83,7 @@ class TestQaChatEnhanced:
             )
         assert res.status_code == 200
         assert vision_mock.call_count >= 1
-        assert res.json()["ocr_preview"]
+        assert "ocr_preview" not in res.json()
 
     def test_rag_context_injected(self, client: TestClient, child_with_assessment, mock_doubao):
         uid = child_with_assessment
@@ -103,5 +106,8 @@ class TestQaChatEnhanced:
                 },
             )
         assert res.status_code == 200
-        assert res.json()["rag_used"] is True
-        assert "k12_math" in (res.json().get("rag_sources") or [])
+        data = res.json()
+        assert data["session_id"]
+        assert data["reply"]
+        assert "rag_used" not in data
+        assert "rag_sources" not in data

@@ -31,6 +31,8 @@ class TestModuleQa:
 
         msgs = client.get(f"/api/qa/sessions/{first['session_id']}?user_id={uid}")
         assert len(msgs.json()["messages"]) >= 4
+        for message in msgs.json()["messages"]:
+            assert "meta_json" not in message
 
     def test_qa_list_sessions(self, client: TestClient, child_with_assessment, mock_doubao):
         uid = child_with_assessment

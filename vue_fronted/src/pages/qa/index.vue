@@ -130,10 +130,6 @@
 
       </view>
 
-
-
-      <text v-if="coachHint" class="coach-hint">💡 {{ coachHint }}</text>
-
     </view>
 
 
@@ -382,8 +378,6 @@ const inputFocused = ref(false)
 const loading = ref(false)
 
 const qaSessionId = ref(null)
-
-const coachHint = ref('')
 
 const pendingImage = ref(null)
 
@@ -1423,7 +1417,6 @@ async function sendMsg() {
       },
       onDone(data) {
         qaSessionId.value = data.session_id
-        coachHint.value = data.coach_hint || ''
         if (data.reply) messages.value[aiIdx].text = data.reply
       },
     })
@@ -1902,30 +1895,6 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-
-
-
-.coach-hint {
-
-  display: block;
-
-  font-size: 12px;
-
-  color: #6b7280;
-
-  background: #f9fafb;
-
-  border: 1px solid #e5e7eb;
-
-  border-radius: 12px;
-
-  padding: 10px 12px;
-
-  line-height: 1.5;
-
-  margin-top: 4px;
-
-}
 
 
 
