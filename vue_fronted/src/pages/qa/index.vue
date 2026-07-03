@@ -34,7 +34,7 @@
 
       >
 
-        <text>{{ subjectEmoji[s] || '' }} {{ s }}</text>
+        <view style="display:flex;align-items:center;gap:5px;"><view v-html="subjectIcon[s]" style="display:flex;align-items:center;"></view><text>{{ s }}</text></view>
 
       </view>
 
@@ -44,15 +44,6 @@
 
     <view class="chat-scroll" id="chatScroll">
 
-      <view v-if="messages.length <= 1" class="empty-hint">
-
-        <view class="empty-icon">✨</view>
-
-        <text class="empty-title">张宇老师在线</text>
-
-        <text class="empty-desc">拍照发题或打字提问，我会结合你的天赋特点来辅导～</text>
-
-      </view>
 
 
 
@@ -67,14 +58,6 @@
         :class="m.role === 'user' ? 'msg-user' : 'msg-ai'"
 
       >
-
-        <view v-if="m.role !== 'user'" class="msg-avatar ai">
-
-          <image class="avatar-img" src="/static/teacher-avatar.png" mode="aspectFill" />
-
-        </view>
-
-
 
         <view class="msg-body">
 
@@ -104,19 +87,11 @@
 
 
 
-        <view v-if="m.role === 'user'" class="msg-avatar user">
-
-          <text>我</text>
-
-        </view>
-
       </view>
 
 
 
       <view v-if="loading" class="msg-row msg-ai">
-
-        <view class="msg-avatar ai"><image class="avatar-img" src="/static/teacher-avatar.png" mode="aspectFill" /></view>
 
         <view class="msg-body">
 
@@ -140,16 +115,6 @@
 
     <view class="composer">
 
-      <view v-if="QA_VOICE_ENABLED && (micBlockedHint || isMobileH5())" class="mic-hint-bar" :class="{ ok: !micBlockedHint && isMobileH5() }">
-
-        <text class="mic-hint-text">{{ micBlockedHint || (isMobileH5() ? '按住 🎤 说话，松开发送' : '') }}</text>
-
-        <view v-if="micBlockedHint" class="mic-hint-close" @tap="micBlockedHint = ''"><text>✕</text></view>
-
-      </view>
-
-
-
       <view v-if="pendingImage" class="pending-bar">
 
         <image :src="pendingImage.preview" mode="aspectFill" class="pending-thumb" @tap="previewImage(pendingImage.preview)" />
@@ -160,56 +125,37 @@
 
       </view>
 
+      <view class="input-panel">
 
+        <view class="input-wrap">
 
-      <view class="input-box" :class="{ focused: inputFocused }">
+          <input
 
-        <input
+            class="chat-input"
 
-          class="chat-input"
+            v-model="inputText"
 
-          v-model="inputText"
+            placeholder="输入问题，也可拍照发题…"
 
-          placeholder="输入问题，也可拍照发题…"
+            :disabled="loading"
 
-          confirm-type="send"
+            @confirm="sendMsg"
 
-          @confirm="sendMsg"
+          />
 
-          @focus="inputFocused = true"
+          <view class="input-btns">
 
-          @blur="inputFocused = false"
+            <view class="btn-camera" @tap="openImageSheet">
 
-          :disabled="loading"
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="3"/><circle cx="12" cy="13.5" r="3.5"/><circle cx="8" cy="9" r="1" fill="var(--text-dim)" stroke="none"/></svg>
 
-        />
+            </view>
 
-        <view class="input-actions">
+            <view class="btn-send" :class="{ disabled: !canSend }" @tap="sendMsg">
 
-          <view class="act-btn" @tap="openImageSheet" title="添加图片">
+              <text style="color:#fff;font-size:14px;">➤</text>
 
-            <text class="act-icon">📷</text>
-
-          </view>
-
-          <view
-            v-if="QA_VOICE_ENABLED"
-            class="act-btn"
-            :class="{ recording }"
-            @tap="onMicTap"
-            @touchstart.prevent="onMicTouchStart"
-            @touchend.prevent="onMicTouchEnd"
-            @touchcancel.prevent="onMicTouchEnd"
-            title="语音"
-          >
-
-            <text class="act-icon">🎤</text>
-
-          </view>
-
-          <view class="send-btn" :class="{ disabled: !canSend }" @tap="sendMsg">
-
-            <text>发送</text>
+            </view>
 
           </view>
 
@@ -234,21 +180,19 @@
 
           <view class="sheet-card" @tap="onPickSource('camera')">
 
-            <text class="sheet-card-icon">📷</text>
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#374151" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="3"/><circle cx="12" cy="13.5" r="3.5"/></svg>
 
             <text class="sheet-card-label">拍照</text>
 
-            <text class="sheet-card-desc">{{ isDesktop ? '电脑：打开摄像头' : '使用手机相机' }}</text>
 
           </view>
 
           <view class="sheet-card" @tap="onPickSource('album')">
 
-            <text class="sheet-card-icon">🖼️</text>
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#374151" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
 
             <text class="sheet-card-label">从相册选择</text>
 
-            <text class="sheet-card-desc">{{ isDesktop ? '选择本机图片' : '从相册选图' }}</text>
 
           </view>
 
@@ -372,6 +316,12 @@ const QA_VOICE_ENABLED = false
 
 const subjects = ['数学', '语文', '英语', '科学']
 const subjectEmoji = { 数学: '📐', 语文: '📖', 英语: '🔤', 科学: '🔬' }
+const subjectIcon = {
+  数学: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><path d="M6 4l6 14"/><path d="M18 4l-6 14"/></svg>',
+  语文: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
+  英语: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+  科学: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+}
 
 const subject = ref('数学')
 
@@ -431,7 +381,7 @@ let voiceMode = 'browser-media' // browser-media | uni-recorder | browser-asr
 
 const messages = ref([
 
-  { role: 'assistant', text: '你好！我是张宇老师 ✨ 可以拍照发题或打字提问～' },
+  { role: 'assistant', text: '你好！我是张宇老师 ✨ 可以拍照发题或打字提问～我会根据你的天赋特点来辅导～' },
 
 ])
 
@@ -741,7 +691,7 @@ async function ensureLearnerProfile(uid, profileData = null) {
 
 
 
-const DEFAULT_GREETING = { role: 'assistant', text: '你好！我是张宇老师 ✨ 可以拍照发题或打字提问～' }
+const DEFAULT_GREETING = { role: 'assistant', text: '你好！我是张宇老师 ✨ 可以拍照发题或打字提问～我会根据你的天赋特点来辅导～' }
 
 
 
@@ -1665,7 +1615,8 @@ onBeforeUnmount(() => {
 
 }
 
-.subject-chip text { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+.subject-chip { color: var(--text-dim); }
+.subject-chip text { font-size: 13px; font-weight: 500; }
 
 .subject-chip.active {
 
@@ -1677,7 +1628,8 @@ onBeforeUnmount(() => {
 
 }
 
-.subject-chip.active text { color: var(--accent); font-weight: 600; }
+.subject-chip.active { color: var(--accent); }
+.subject-chip.active text { font-weight: 600; }
 
 
 
@@ -1930,214 +1882,39 @@ onBeforeUnmount(() => {
 
 
 .composer {
-
   flex-shrink: 0;
-
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
   background: var(--bg-card);
-
   border-top: 1px solid var(--border);
-
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.04);
-
 }
-
-
-
-.mic-hint-bar {
-
-  display: flex;
-
-  align-items: flex-start;
-
-  gap: 8px;
-
-  margin-bottom: 10px;
-
-  padding: 10px 12px;
-
-  background: #fffbeb;
-
-  border: 1px solid #fde68a;
-
-  border-radius: 12px;
-
+.input-panel { }
+.input-wrap {
+  display: flex; align-items: center;
+  background: rgba(255,255,255,0.1);
+  border-radius: 24px; padding: 2px 2px 2px 14px;
+  border: 1px solid rgba(255,255,255,0.15);
 }
-
-.mic-hint-bar.ok {
-
-  background: #eff6ff;
-
-  border-color: #bfdbfe;
-
+[data-theme="white"] .input-wrap { background: #f3f4f6; border-color: #d1d5db; }
+.input-wrap .chat-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-size: 14px; color: var(--text); height: 36px; line-height: 36px;
 }
-
-.mic-hint-bar.ok .mic-hint-text { color: #1d4ed8; }
-
-
-
-.mic-hint-text { flex: 1; font-size: 12px; color: #92400e; line-height: 1.5; }
-
-.mic-hint-close {
-
-  width: 22px; height: 22px; border-radius: 6px;
-
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-
-}
-
-.mic-hint-close text { font-size: 11px; color: #b45309; }
-
-
-
-.pending-bar {
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 10px;
-
-  margin-bottom: 10px;
-
-  padding: 8px 10px;
-
-  background: #fff;
-
-  border: 1px solid #e5e7eb;
-
-  border-radius: 12px;
-
-}
-
-.pending-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
-
-.pending-label { flex: 1; font-size: 13px; color: #6b7280; }
-
-.pending-clear {
-
-  width: 28px; height: 28px; border-radius: 8px;
-
-  background: #fef2f2; display: flex; align-items: center; justify-content: center; cursor: pointer;
-
-}
-
-.pending-clear text { color: #ef4444; font-size: 12px; }
-
-
-
-.input-box {
-
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 8px;
-
-  background: var(--bg-card);
-
-  border: 1px solid var(--border);
-
-  border-radius: 20px;
-
-  padding: 12px 14px;
-
-  box-shadow: var(--bubble-shadow);
-
-  transition: border-color 0.2s, box-shadow 0.2s;
-
-}
-
-.input-box.focused {
-
-  border-color: var(--accent);
-
-  box-shadow: 0 2px 16px var(--mic-shadow);
-
-}
-
-
-
-.chat-input {
-
-  width: 100%;
-
-  border: none;
-
-  outline: none;
-
-  font-size: 15px;
-
-  line-height: 1.5;
-
-  color: var(--text);
-
-  background: transparent;
-
-  min-height: 24px;
-
-}
-
-.chat-input::placeholder { color: var(--text-hint); }
-
-
-
-.input-actions {
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 6px;
-
-  justify-content: flex-end;
-
-}
-
-.act-btn {
-
-  width: 34px; height: 34px; border-radius: 10px;
-
+.input-wrap .chat-input::placeholder { color: var(--text-hint); }
+.input-btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.btn-camera {
+  width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-
-  cursor: pointer; transition: background 0.15s;
-
+  cursor: pointer; opacity: 0.7;
 }
-
-.act-btn:active { background: #f3f4f6; }
-
-.act-btn.recording { background: #fef2f2; animation: recPulse 1s infinite; }
-
-@keyframes recPulse { 50% { opacity: 0.6; } }
-
-.act-icon { font-size: 18px; line-height: 1; }
-
-
-
-.send-btn {
-
-  padding: 8px 16px;
-
-  border-radius: 12px;
-
-  background: #2563eb;
-
-  cursor: pointer;
-
-  margin-left: 4px;
-
-  transition: opacity 0.15s;
-
+.btn-camera:active { opacity: 1; background: rgba(255,255,255,0.1); }
+.btn-send {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
 }
-
-.send-btn text { color: #fff; font-size: 14px; font-weight: 500; }
-
-.send-btn.disabled { opacity: 0.45; pointer-events: none; }
-
-.send-btn:active:not(.disabled) { background: #1d4ed8; }
-
-
+.btn-send.disabled { opacity: 0.45; pointer-events: none; }
+.btn-send:active:not(.disabled) { opacity: 0.8; }
 
 .sheet-mask {
 
@@ -2179,7 +1956,7 @@ onBeforeUnmount(() => {
 
 .sheet-card:active { border-color: #2563eb; background: rgba(37, 99, 235, 0.06); }
 
-.sheet-card-icon { font-size: 32px; }
+.sheet-card-icon { font-size: 32px; display: flex; align-items: center; justify-content: center; }
 
 .sheet-card-label { font-size: 15px; font-weight: 600; }
 
