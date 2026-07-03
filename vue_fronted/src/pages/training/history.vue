@@ -110,8 +110,8 @@ onShow(() => loadHistory(true))
 
 <style scoped>
 .app {
-  height: 100vh;
-  max-width: 480px;
+  height: 100vh; height: 100dvh;
+  max-width: var(--app-max-width, 480px);
   width: 100%;
   margin: 0 auto;
   background: #0b111e;

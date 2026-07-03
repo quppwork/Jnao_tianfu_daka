@@ -340,7 +340,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.app { min-height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:60px; font-family:-apple-system,"PingFang SC",sans-serif; }
+.app { min-height:100vh;min-height:100dvh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:60px; font-family:-apple-system,"PingFang SC",sans-serif; }
 .card { width:100%; padding-bottom:40px; }
 .fixed-back { position:fixed; top:16px; left:16px; z-index:100; cursor:pointer; }
 .fixed-back text { color: var(--accent); font-size:14px; }

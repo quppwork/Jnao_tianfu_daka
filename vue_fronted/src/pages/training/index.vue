@@ -2713,6 +2713,19 @@ onMounted(async () => {
   }, 5000)
 })
 onShow(async () => {
+  // 方案已存在且计时运行中 → 无需重载（避免 3-4 次 API 调用造成卡顿）
+  if (todayPlan.value?.plan_id && timerPhase.value === 'running') {
+    return
+  }
+  // 方案存在但不在运行中 → 只刷新打卡记录（轻量）
+  if (todayPlan.value?.plan_id) {
+    try {
+      const uid = await ensureChildUser()
+      await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
+    } catch (_) { /* 静默失败 */ }
+    return
+  }
+  // 无方案 → 完整加载
   await loadTodayPlan(true)
 })
 onUnmounted(() => {
@@ -2735,7 +2748,7 @@ function triggerGlitch() {
 <style scoped>
 @import 'augmented-ui/augmented-ui.min.css';
 [data-augmented-ui].card, [data-augmented-ui].plan-card { --aug-border-bg:rgba(0,210,255,0.35); --aug-border-all:2px; }
-.app { height:100vh; max-width:480px; margin:0 auto; background:#0b111e; font-family:PingFang SC,Roboto,sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+.app { height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:#0b111e; font-family:PingFang SC,Roboto,sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; }
 .nav { display:flex; align-items:center; padding:14px 14px 0; position:relative; z-index:1001; }
 .nav-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }

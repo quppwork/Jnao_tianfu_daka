@@ -302,6 +302,9 @@ async def schedule_training_by_duration(
         schedule_mode = "existing"
 
     db.commit()
+    # 方案变更后清除缓存，确保 GET /today 返回最新数据
+    from app.services.training_service import invalidate_plan_cache
+    invalidate_plan_cache(child_user_id, plan_date)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or not _has_plan_content(plan):
         raise TrainingError("今日方案生成失败", 500)

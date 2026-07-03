@@ -33,7 +33,7 @@ function goParentRegister() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; }
+.app { height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:30px; font-family:-apple-system,"PingFang SC",sans-serif; }
 .card { width:100%; }
 .logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:6px; }
 .logo-j { color:#dc2626; font-size:44px; font-weight:800; }

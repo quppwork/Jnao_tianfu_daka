@@ -1459,7 +1459,7 @@ onBeforeUnmount(() => {
 
 .qa-app {
 
-  height: 100vh;
+  height: 100vh; height: 100dvh;
 
   max-width: 768px;
 

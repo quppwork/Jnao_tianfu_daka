@@ -80,5 +80,8 @@ def submit_elective_checkin(
     db.add(record)
     db.commit()
     db.refresh(record)
+    # 选修打卡后清除方案缓存
+    from app.services.training_service import invalidate_plan_cache
+    invalidate_plan_cache(child_user_id, plan.plan_date)
 
     return {"record_id": record.id, "status": "ok"}

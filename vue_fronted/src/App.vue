@@ -52,3 +52,40 @@ onLaunch(() => {
   display: block; margin-top: 12px; letter-spacing: 0.2em;
 }
 </style>
+
+<!-- 全局多设备适配：纯 CSS 变量，不改组件 -->
+<style>
+:root {
+  --app-max-width: 480px;
+  --app-font-scale: 1;
+}
+
+/* 小平板 ≥600px（iPad Mini 等 7-8" 设备） */
+@media (min-width: 600px) {
+  :root {
+    --app-max-width: 620px;
+    --app-font-scale: 1.05;
+  }
+}
+
+/* 大平板 ≥1024px（iPad Pro 等 10-13" 设备） */
+@media (min-width: 1024px) {
+  :root {
+    --app-max-width: 760px;
+    --app-font-scale: 1.1;
+  }
+}
+
+/* 横屏（宽高比翻转，不限宽度） */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --app-max-width: 100%;
+  }
+}
+
+/* 全面屏 / 刘海屏 / 底部 Home Indicator 安全区 */
+body {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+</style>

@@ -9,6 +9,17 @@
     </view>
 
     <scroll-view class="body" scroll-y>
+      <!-- 骨架屏：数据加载前显示，消除空白闪烁 -->
+      <view v-if="loading" class="skeleton">
+        <view class="sk-card"><view class="sk-line w40"></view><view class="sk-line w60"></view><view class="sk-row"><view class="sk-stat"></view><view class="sk-stat"></view><view class="sk-stat"></view></view></view>
+        <view class="sk-title"></view>
+        <view v-for="i in 4" :key="'ms'+i" class="sk-ms"><view class="sk-dot"></view><view class="sk-lines"><view class="sk-line w70"></view><view class="sk-line w40"></view></view></view>
+        <view class="sk-title"></view>
+        <view class="sk-badges"><view v-for="i in 4" :key="'b'+i" class="sk-badge"></view></view>
+        <view class="sk-title"></view>
+        <view v-for="i in 3" :key="'tl'+i" class="sk-tl"><view class="sk-dot sm"></view><view class="sk-lines"><view class="sk-line w50"></view><view class="sk-line w30"></view></view></view>
+      </view>
+
       <!-- Summary -->
       <view v-if="summary" class="summary-card">
         <text class="sum-honor">{{ summary.honor_level }}</text>
@@ -142,7 +153,7 @@ async function copyShare() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; box-sizing:border-box; }
+.app { height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; box-sizing:border-box; }
 .nav { display:flex; align-items:center; padding:14px 14px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
@@ -193,4 +204,31 @@ async function copyShare() {
 .share-btn { background:var(--accent); border-radius:12px; padding:12px; display:inline-block; cursor:pointer; }
 .share-btn text { color:#fff; font-size:14px; font-weight:600; }
 .share-btn:active { opacity:0.85; }
+
+/* 骨架屏：加载期间显示，消除空白闪烁 */
+.skeleton { padding: 0; }
+.sk-card { background:var(--bg-card); border-radius:16px; padding:18px; margin-bottom:20px; text-align:center; }
+.sk-stat { width:60px; height:40px; background:var(--bg); border-radius:8px; }
+.sk-row { display:flex; justify-content:space-around; margin-top:12px; }
+.sk-title { width:80px; height:15px; background:var(--bg-card); border-radius:6px; margin:0 0 12px; }
+.sk-ms { display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:8px; background:var(--bg-card); border-radius:12px; }
+.sk-dot { width:22px; height:22px; border-radius:50%; background:var(--bg); flex-shrink:0; }
+.sk-dot.sm { width:10px; height:10px; }
+.sk-lines { flex:1; display:flex; flex-direction:column; gap:6px; }
+.sk-line { height:12px; background:var(--bg); border-radius:4px; }
+.sk-line.w40 { width:40%; }
+.sk-line.w50 { width:50%; }
+.sk-line.w60 { width:60%; }
+.sk-line.w70 { width:70%; }
+.sk-line.w30 { width:30%; }
+.sk-badges { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
+.sk-badge { width:50px; height:50px; border-radius:50%; background:var(--bg-card); margin:0 auto; }
+.sk-tl { display:flex; align-items:flex-start; gap:10px; padding-left:20px; margin-bottom:14px; }
+.sk-tl .sk-dot { margin-top:2px; }
+.skeleton .sk-card *,
+.skeleton .sk-ms *,
+.skeleton .sk-title,
+.skeleton .sk-badge,
+.skeleton .sk-tl * { animation: skPulse 1.4s ease-in-out infinite; }
+@keyframes skPulse { 0%,100% { opacity:0.3; } 50% { opacity:0.7; } }
 </style>
