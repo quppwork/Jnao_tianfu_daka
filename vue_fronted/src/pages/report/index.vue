@@ -413,10 +413,9 @@ function radarVertices(scale) {
 const radarSvgHtml = computed(() => {
   const light = isLightTheme.value
   const gridStroke = light ? '#e5e7eb' : '#30363d'
-  const dataStroke = light ? '#6b7280' : '#8b949e'
-  const dataFill = light ? 'rgba(100,100,100,0.06)' : 'rgba(128,128,128,0.06)'
-  const dotStrong = light ? '#4b5563' : '#c9d1d9'
-  const dotWeak = light ? '#9ca3af' : '#8b949e'
+  const dataColor = talentColor.value
+  const dataStroke = dataColor
+  const dataFill = dataColor + '18'
   const labelFill = light ? '#1f2937' : '#c9d1d9'
 
   const sorted = RADAR_LABELS.map(name => Ability.value.find(d => d.abilityName === name) || { abilityName: name, value: 0 })
@@ -429,11 +428,11 @@ const radarSvgHtml = computed(() => {
     const r = Math.min(100,Math.max(0,d.value))/100
     const v = RADAR_OUTER[i]
     const x = RADAR_CX+(v.x-RADAR_CX)*r, y = RADAR_CY+(v.y-RADAR_CY)*r
-    return `<circle cx="${x}" cy="${y}" r="3" fill="${r>=0.5 ? dotStrong : dotWeak}"/>`
-  }).join('')
+    return `<circle cx="${x}" cy="${y}" r="3.5" fill="${dataColor}" stroke="#fff" stroke-width="1.5"/>`
+  }).join(' ')
   const labels = RADAR_LABEL_POS.map((l,i) =>
     `<text x="${l.x}" y="${l.y}" font-size="10" fill="${labelFill}" text-anchor="${l.a}" font-weight="600">${RADAR_LABELS[i]}</text>`
-  ).join('')
+  ).join(' ')
   return `<svg viewBox="-10 -5 150 130" style="display:block;width:220px;height:auto;margin:0 auto;overflow:visible;">
     <polygon points="${radarVertices(1)}" fill="none" stroke="${gridStroke}" stroke-width="1"/>
     <polygon points="${radarVertices(0.75)}" fill="none" stroke="${gridStroke}" stroke-width="1"/>

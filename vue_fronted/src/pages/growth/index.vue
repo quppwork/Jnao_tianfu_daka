@@ -12,6 +12,7 @@
       <!-- Summary -->
       <view v-if="summary" class="summary-card">
         <text class="sum-honor">{{ summary.honor_level }}</text>
+        <text v-if="summary.overall_tier" class="sum-tier">Tier {{ summary.overall_tier }}</text>
         <text class="sum-nick">{{ summary.nickname || '学员' }}</text>
         <view class="sum-stats">
           <view class="sum-stat"><text class="sum-num">{{ summary.total_checkins }}</text><text class="sum-lbl">累计打卡</text></view>
