@@ -1416,7 +1416,7 @@ async function devResetMainLine() {
     overallTier.value = 1
     await loadTodayPlan(true)
     await loadDevStatus()
-    uni.showToast({ title: 'Tier 已回到 1（今日方案未删）', icon: 'none' })
+    uni.showToast({ title: '训练进度已重置（今日方案未删）', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '重置失败', icon: 'none' })
   } finally {
@@ -1665,7 +1665,7 @@ const skillTierProgress = ref({})
 const planHeaderMeta = computed(() => {
   const parts = [talentLabel.value]
   const tier = overallTier.value || todayPlan.value?.overall_tier || 1
-  parts.push(`Tier ${tier}`)
+  if (tier > 1) parts.push(`Lv.${tier}`)
   const day = todayPlan.value?.training_day_number ?? todayPlan.value?.lesson_day ?? lessonIndex.value
   if (day) parts.push(`第 ${day} 天`)
   return parts.filter(Boolean).join(' · ')
@@ -2149,7 +2149,7 @@ function applyCheckinProgress(res) {
     for (const [skill, result] of Object.entries(sr)) {
       if (result.tier_advanced) {
         uni.showToast({
-          title: `🎉 ${skill} 晋级 Tier ${result.tier_after}！`,
+          title: `🎉 ${skill} 晋级成功！`,
           icon: 'none',
           duration: 3000,
         })
@@ -2774,7 +2774,7 @@ function triggerGlitch() {
 @import 'augmented-ui/augmented-ui.min.css';
 [data-augmented-ui].card, [data-augmented-ui].plan-card { --aug-border-bg:rgba(0,210,255,0.35); --aug-border-all:2px; }
 .app { height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:#0b111e; font-family:PingFang SC,Roboto,sans-serif; display:flex; flex-direction:column; position:relative; overflow:hidden; }
-.nav { display:flex; align-items:center; padding:14px 14px 0; position:relative; z-index:1001; }
+.nav { display:flex; align-items:center; padding:28rpx 28rpx 0; position:relative; z-index:1001; }
 .nav-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:#fff; font-size:16px; font-weight:600; }
@@ -2785,7 +2785,7 @@ function triggerGlitch() {
 [data-theme="white"] .nav-history text { color:#374151; }
 .history-list { max-height:50vh; max-height:50dvh; overflow-y:auto; margin-bottom:8px; }
 .history-overlay { position:fixed; inset:0; z-index:600; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
-.history-panel { width:100%; max-width:340px; background:#1a2030; border-radius:16px; padding:20px 16px; max-height:60vh; max-height:60dvh; overflow-y:auto; }
+.history-panel { width:100%; max-width:340px; background:#1a2030; border-radius:32rpx; padding:40rpx 32rpx; max-height:60vh; max-height:60dvh; overflow-y:auto; }
 .history-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .history-title { font-size:17px; font-weight:700; color:#e5e7eb; }
 .history-header-close { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; cursor:pointer; }
@@ -2817,12 +2817,12 @@ function triggerGlitch() {
 .nav-dev text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
 .nav-dev.active { background:rgba(251,191,36,0.15); border-color:rgba(251,191,36,0.45); }
 .nav-dev.active text { color:#fbbf24; }
-.body { flex:1; overflow-y:auto; padding:12px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
+.body { flex:1; overflow-y:auto; padding:24rpx 28rpx 0; scrollbar-width:none; -ms-overflow-style:none; }
 .body::-webkit-scrollbar { display:none; }
 
-.card { background:#243046; border-radius:10px; padding:14px 16px; margin-bottom:12px; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+.card { background:#243046; border-radius:20rpx; padding:28rpx 32rpx; margin-bottom:24rpx; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
 .plan-label { color:#00d2ff; font-size:13px; font-weight:700; display:block; }
-.plan-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.plan-header { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-bottom:20rpx; flex-wrap:wrap; }
 .plan-header-meta { color:rgba(255,255,255,0.55); font-size:11px; font-weight:600; white-space:nowrap; }
 .plan-loading { color:rgba(255,255,255,0.45); font-size:12px; display:block; padding:8px 0; }
 
@@ -2918,7 +2918,7 @@ function triggerGlitch() {
 .step-time { color:rgba(255,255,255,0.4); font-size:10px; text-align:center; display:block; margin-top:4px; }
 .step-time.dim-text { color:rgba(255,255,255,0.35); }
 
-.btn-checkin { background:linear-gradient(135deg,rgba(0,210,255,0.25),rgba(0,136,204,0.25)); border-radius:10px; padding:14px; text-align:center; margin-bottom:12px; cursor:pointer; box-shadow:0 0 20px rgba(0,210,255,0.15); }
+.btn-checkin { background:linear-gradient(135deg,rgba(0,210,255,0.25),rgba(0,136,204,0.25)); border-radius:20rpx; padding:28rpx; text-align:center; margin-bottom:24rpx; cursor:pointer; box-shadow:0 0 20px rgba(0,210,255,0.15); }
 .btn-checkin text { color:#00d2ff; font-size:15px; font-weight:600; }
 .btn-checkin:active { opacity:0.85; }
 
@@ -2942,15 +2942,15 @@ function triggerGlitch() {
 .summary-empty:active { background:var(--bg-card, #243046); }
 .summary-empty-text { display:block; color:rgba(255,255,255,0.35); font-size:12px; line-height:1.5; }
 
-.picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
-.picker-card { background:#1a2840; border:1px solid #00d2ff; border-radius:14px; padding:24px 20px; width:100%; max-width:360px; box-shadow:0 0 30px rgba(0,210,255,0.1); position:relative; }
+.picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:40rpx; }
+.picker-card { background:#1a2840; border:1px solid #00d2ff; border-radius:28rpx; padding:48rpx 40rpx; width:100%; max-width:360px; box-shadow:0 0 30px rgba(0,210,255,0.1); position:relative; }
 .picker-card::before, .picker-card::after { content:''; position:absolute; width:10px; height:10px; border-color:#00d2ff; border-style:solid; }
 .picker-card::before { top:0; left:0; border-width:1px 0 0 1px; }
 .picker-card::after { bottom:0; right:0; border-width:0 1px 1px 0; }
 .picker-title { color:#fff; font-size:16px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
 
 /* 打卡弹窗 */
-.checkin-modal { max-height:85vh; max-height:85dvh; overflow-y:auto; padding:20px 16px; max-width:400px; }
+.checkin-modal { max-height:85vh; max-height:85dvh; overflow-y:auto; padding:40rpx 32rpx; max-width:400px; }
 .assessment-modal { max-width:320px; padding:28px 22px 22px; text-align:center; }
 .assessment-modal-icon { font-size:40px; display:block; margin-bottom:12px; }
 .assessment-modal-title { display:block; color:#fff; font-size:17px; font-weight:700; margin-bottom:10px; }
@@ -3133,7 +3133,7 @@ function triggerGlitch() {
   100% { top:0; left:-10px; width:30px; height:2px; opacity:0; }
 }
 
-.form-card { background:#1a2840; border:2px solid rgba(0,210,255,0.5); border-radius:12px; padding:18px; margin-bottom:10px; position:relative; box-shadow:0 0 20px rgba(0,210,255,0.12), inset 0 0 30px rgba(0,210,255,0.02); clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); animation:scanDown 0.4s cubic-bezier(0.25,0.8,0.25,1) both; }
+.form-card { background:#1a2840; border:2px solid rgba(0,210,255,0.5); border-radius:24rpx; padding:36rpx; margin-bottom:20rpx; position:relative; box-shadow:0 0 20px rgba(0,210,255,0.12), inset 0 0 30px rgba(0,210,255,0.02); clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); animation:scanDown 0.4s cubic-bezier(0.25,0.8,0.25,1) both; }
 @keyframes scanDown {
   0% { clip-path:polygon(10px 0,100% 0,100% 4px,calc(100% - 10px) 4px,0 4px,0 4px); opacity:0.3; box-shadow:0 0 60px rgba(0,210,255,0.4); }
   50% { box-shadow:0 0 40px rgba(0,210,255,0.3); }
@@ -3148,9 +3148,9 @@ function triggerGlitch() {
 .form-title { color:#fff; font-size:14px; font-weight:700; }
 .form-del { color:rgba(255,255,255,0.4); font-size:18px; cursor:pointer; padding:2px 6px; }
 .form-del:active { color:#ff6b6b; }
-.form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.form-label { color:rgba(255,255,255,0.5); font-size:13px; width:auto; min-width:56px; flex-shrink:0; }
-.form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; }
+.form-row { display:flex; align-items:center; gap:20rpx; margin-bottom:20rpx; }
+.form-label { color:rgba(255,255,255,0.5); font-size:26rpx; width:auto; min-width:112rpx; flex-shrink:0; }
+.form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:20rpx; padding:20rpx 24rpx; font-size:26rpx; color:#0b111e; }
 .form-textarea { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; height:60px; }
 .form-textarea-sm { height:36px; padding:6px 10px; }
 .form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }

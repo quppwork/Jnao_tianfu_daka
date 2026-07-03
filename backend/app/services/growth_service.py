@@ -222,21 +222,21 @@ def get_milestones(db: Session, child_user_id: int, stats: dict | None = None) -
     return [
         {
             "level": "传承特使",
-            "condition": "Tier 1-4 · 基础训练阶段",
+            "condition": "基础训练阶段",
             "achieved": overall_tier >= 1,
-            "progress": f"当前 Tier {overall_tier}" if overall_tier >= 1 else "未开始训练",
+            "progress": "已达成 ✓" if overall_tier >= 1 else "未开始训练",
         },
         {
             "level": "劲脑学神",
-            "condition": "Tier 5-7 · 进阶训练阶段",
+            "condition": "进阶训练阶段",
             "achieved": overall_tier >= 5,
-            "progress": f"当前 Tier {overall_tier}/5" if overall_tier < 5 else "已达成 ✓",
+            "progress": "已达成 ✓" if overall_tier >= 5 else "继续努力中",
         },
         {
             "level": "专利精英",
-            "condition": "Tier 8-9 · 高阶关门弟子",
+            "condition": "高阶关门弟子",
             "achieved": overall_tier >= 8,
-            "progress": f"当前 Tier {overall_tier}/8" if overall_tier < 8 else "已达成 ✓",
+            "progress": "已达成 ✓" if overall_tier >= 8 else "继续努力中",
         },
     ]
 

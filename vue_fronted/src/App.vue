@@ -72,30 +72,13 @@ onLaunch(() => {
 }
 </style>
 
-<!-- 全局多设备适配：纯 CSS 变量，不改组件 -->
+<!-- 全局容器：手机自然宽度，不做额外断点变动 -->
 <style>
 :root {
-  --app-max-width: 480px;
-  --app-font-scale: 1;
+  --app-max-width: 480px;  /* 仅对平板做上限，手机 360-430 不受影响 */
 }
 
-/* 小平板 ≥600px（iPad Mini 744px 等 7-8" 设备） */
-@media (min-width: 600px) {
-  :root {
-    --app-max-width: 660px;
-    --app-font-scale: 1.05;
-  }
-}
-
-/* 大平板 ≥800px（iPad Pro 11" 834px / 12.9" 1024px / 安卓平板 800-1200px） */
-@media (min-width: 800px) {
-  :root {
-    --app-max-width: 840px;
-    --app-font-scale: 1.1;
-  }
-}
-
-/* 横屏（宽高比翻转，不限宽度） */
+/* 横屏手机：宽高比翻转，不限宽度 */
 @media (orientation: landscape) and (max-height: 500px) {
   :root {
     --app-max-width: 100%;

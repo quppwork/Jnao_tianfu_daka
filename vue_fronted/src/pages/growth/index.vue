@@ -8,7 +8,7 @@
       <view class="nav-spacer"></view>
     </view>
 
-    <scroll-view class="body" scroll-y>
+    <scroll-view class="body" scroll-y :show-scrollbar="false" :enhanced="true">
       <!-- 骨架屏：数据加载前显示，消除空白闪烁 -->
       <view v-if="loading" class="skeleton">
         <view class="sk-card"><view class="sk-line w40"></view><view class="sk-line w60"></view><view class="sk-row"><view class="sk-stat"></view><view class="sk-stat"></view><view class="sk-stat"></view></view></view>
@@ -23,7 +23,6 @@
       <!-- Summary -->
       <view v-if="summary" class="summary-card">
         <text class="sum-honor">{{ summary.honor_level }}</text>
-        <text v-if="summary.overall_tier" class="sum-tier">Tier {{ summary.overall_tier }}</text>
         <text class="sum-nick">{{ summary.nickname || '学员' }}</text>
         <view class="sum-stats">
           <view class="sum-stat"><text class="sum-num">{{ summary.total_checkins }}</text><text class="sum-lbl">累计打卡</text></view>
@@ -158,8 +157,13 @@ async function copyShare() {
 .nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
 .nav-spacer { width:36px; }
-.body { flex:1; overflow-y:auto; overflow-x:hidden; padding:12px 14px 0; box-sizing:border-box; width:100%; }
-.body::-webkit-scrollbar { display:none; }
+.body { flex:1; overflow-y:auto; overflow-x:hidden; padding:12px 14px 0; box-sizing:border-box; width:100%; scrollbar-width:none; -ms-overflow-style:none; }
+:deep(uni-scroll-view) ::-webkit-scrollbar,
+:deep(.uni-scroll-view) ::-webkit-scrollbar,
+.body *::-webkit-scrollbar,
+.body::-webkit-scrollbar { display:none; width:0; height:0; }
+.share-preview { scrollbar-width:none; -ms-overflow-style:none; }
+.share-preview::-webkit-scrollbar { display:none; width:0; height:0; }
 .sec-title { color:var(--text); font-size:15px; font-weight:700; display:block; margin:0 0 12px; }
 
 .summary-card { background:linear-gradient(135deg, rgba(88,166,255,0.12), rgba(124,58,237,0.08)); border:1px solid var(--border); border-radius:16px; padding:18px; margin-bottom:20px; text-align:center; box-sizing:border-box; }
