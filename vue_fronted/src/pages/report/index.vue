@@ -81,8 +81,8 @@
 
         <!-- ══ 4. 双重属性 ══ -->
         <view class="card" v-if="suppDesp" style="position:relative;overflow:hidden;">
-          <view style="position:absolute;right:70px;top:4px;width:100px;height:120px;opacity:0.22;pointer-events:none;background:url(/static/bg-de.png) center top/cover no-repeat;z-index:0;"></view>
-          <view style="position:absolute;right:-10px;top:-20px;width:130px;height:150px;opacity:0.22;pointer-events:none;background:url(/static/bg-si.png) center top/cover no-repeat;z-index:0;"></view>
+          <view :style="{ position:'absolute', right:'70px', top:'4px', width:'100px', height:'120px', opacity:0.22, pointerEvents:'none', background:'url('+talentBgImage+') center top/cover no-repeat', zIndex:0 }"></view>
+          <view :style="{ position:'absolute', right:'-10px', top:'-20px', width:'130px', height:'150px', opacity:0.22, pointerEvents:'none', background:'url('+secondBgImage+') center top/cover no-repeat', zIndex:0 }"></view>
           <text class="card-label" style="position:relative;z-index:1;">{{ talentDisplay }} · 双重属性详解</text>
           <view class="collapse-wrap" :class="{ clamped: !collapseOpen['supp'] && suppDesp.length > 120 }" v-html="suppDesp"></view>
           <text v-if="stripHtml(suppDesp).length > 120" class="collapse-btn" @tap="collapseOpen['supp']=!collapseOpen['supp']">{{ collapseOpen['supp'] ? '收起' : '展示更多' }}</text>
@@ -319,6 +319,25 @@ const talentLogo = computed(() => TALENT_LOGOS[report.value?.talent] || '')
 const talentBgFig = computed(() => TALENT_BG_FIGS[report.value?.talent] || '')
 const TALENT_BG_MAP = { "学者":"/static/talent-bg-xue.png","思者":"/static/talent-bg-si.png","赢者":"/static/talent-bg-ying.png","德者":"/static/talent-bg-de.png","行者":"/static/talent-bg-xing.png" }
 const talentBgImage = computed(() => TALENT_BG_MAP[report.value?.talent] || '/static/talent-bg-xue.png')
+
+// X偏Y 副天赋背景（双重属性水印第二个用副天赋）
+const TALENT_NAME_TO_BG = { "学":"学者","思":"思者","赢":"赢者","德":"德者","行":"行者" }
+const secondBgImage = computed(() => {
+  const ct = report.value?.check_talent
+  if (!ct) return talentBgImage.value
+  // 数组 ["赢者","行者"] → 取第二个
+  if (Array.isArray(ct) && ct.length >= 2) {
+    return TALENT_BG_MAP[ct[1]] || talentBgImage.value
+  }
+  // 字符串 "赢行" 或 "赢偏行" → 取偏后面的
+  if (typeof ct === 'string') {
+    const s = ct.includes('偏') ? ct.split('偏')[1] : ct.slice(1)
+    const key = s?.replace(/者$/, '')
+    const bg = TALENT_BG_MAP[TALENT_NAME_TO_BG[key]]
+    if (bg) return bg
+  }
+  return talentBgImage.value
+})
 const talentDisplay = computed(() => {
   const ct = report.value?.check_talent
   if (!ct) return report.value?.talent || '--'
