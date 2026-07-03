@@ -203,28 +203,21 @@
 
 
 
-    <view v-if="showWebcam" class="sheet-mask" @tap="closeWebcam">
-
-      <view class="webcam-panel" @tap.stop>
-
-        <text class="webcam-title">摄像头拍照</text>
-
-        <view class="webcam-video-wrap">
-
-          <video id="qaWebcamVideo" class="webcam-video" autoplay playsinline muted></video>
-
+    <view v-if="showWebcam" class="camera-fullscreen">
+      <view class="camera-top">
+        <view class="camera-close" @tap="closeWebcam">
+          <text>✕</text>
         </view>
-
-        <view class="webcam-actions">
-
-          <view class="webcam-btn cancel" @tap="closeWebcam"><text>取消</text></view>
-
-          <view class="webcam-btn shoot" @tap="captureWebcam"><text>拍摄</text></view>
-
-        </view>
-
+        <text class="camera-hint">对准题目，点击底部按钮拍摄</text>
       </view>
-
+      <video id="qaWebcamVideo" class="camera-video" autoplay playsinline muted></video>
+      <view class="camera-bottom">
+        <view class="camera-album" @tap="pickAlbumFromCamera"><text>相册</text></view>
+        <view class="camera-shutter" @tap="captureWebcam">
+          <view class="camera-shutter-inner"></view>
+        </view>
+        <view class="camera-album-spacer"></view>
+      </view>
     </view>
 
     <view v-if="showSessionSheet" class="sheet-mask" @tap="closeSessionSheet">
@@ -296,7 +289,15 @@ import {
 
 } from '@/utils/userApi.js'
 
-import { chooseQuestionImage, needsWebcamCapture, isMobileH5, compressImage } from '@/utils/qaMedia.js'
+import {
+  chooseQuestionImage,
+  needsWebcamCapture,
+  isMobileH5,
+  compressImage,
+  buildPendingImageFromPath,
+  browserCanUseCamera,
+  pickImageViaNativeInput,
+} from '@/utils/qaMedia.js'
 
 import {
   BrowserVoiceRecorder,
@@ -922,11 +923,31 @@ async function confirmDeleteSession() {
 
 
 function openImageSheet() {
-
   if (pickingImage.value || loading.value) return
-
+  // 手机 H5：点相机直接进入全屏拍照（DeepSeek 式）
+  if (isWebH5() && isMobileH5()) {
+    openWebcam()
+    return
+  }
   showImageSheet.value = true
+}
 
+async function pickAlbumFromCamera() {
+  closeWebcam()
+  pickingImage.value = true
+  try {
+    uni.showLoading({ title: '打开相册...' })
+    const path = await chooseQuestionImage('album')
+    uni.hideLoading()
+    await setPendingFromPick(path)
+    uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
+  } catch (e) {
+    uni.hideLoading()
+    if (e.message && e.message !== 'cancel') {
+      uni.showToast({ title: e.message, icon: 'none', duration: 2500 })
+    }
+  }
+  pickingImage.value = false
 }
 
 
@@ -939,110 +960,94 @@ function closeImageSheet() {
 
 
 
-async function onPickSource(source) {
-
-  if (pickingImage.value) return
-
-  closeImageSheet()
-
-
-
-  if (needsWebcamCapture(source)) {
-
-    await openWebcam()
-
-    return
-
-  }
-
-
-
-  pickingImage.value = true
-
-  try {
-
-    uni.showLoading({ title: source === 'camera' ? '打开相机...' : '打开相册...' })
-
-    const path = await chooseQuestionImage(source)
-
-    uni.hideLoading()
-
-    pendingImage.value = { path, preview: path }
-
-    uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
-
-  } catch (e) {
-
-    uni.hideLoading()
-
-    if (e.code === 'WEBCAM') {
-
-      await openWebcam()
-
-    } else if (e.message && e.message !== 'cancel') {
-
-      uni.showToast({ title: e.message, icon: 'none', duration: 2500 })
-
-    }
-
-  }
-
-  pickingImage.value = false
-
+function trackPendingPreview(preview) {
+  if (preview?.startsWith('blob:')) messageBlobUrls.add(preview)
 }
 
+async function setPendingFromPick(path) {
+  if (isWebH5()) {
+    try {
+      const pending = await buildPendingImageFromPath(path)
+      trackPendingPreview(pending.preview)
+      pendingImage.value = pending
+      return
+    } catch (_) { /* fallback to raw path */ }
+  }
+  pendingImage.value = { path, preview: path }
+}
 
+async function setPendingFromNativePick(captureMode = 'environment') {
+  const pending = await pickImageViaNativeInput(captureMode)
+  trackPendingPreview(pending.preview)
+  pendingImage.value = pending
+}
+
+async function onPickSource(source) {
+  if (pickingImage.value) return
+  closeImageSheet()
+
+  if (needsWebcamCapture(source)) {
+    await openWebcam()
+    return
+  }
+
+  pickingImage.value = true
+  try {
+    uni.showLoading({ title: source === 'camera' ? '打开相机...' : '打开相册...' })
+    const path = await chooseQuestionImage(source)
+    uni.hideLoading()
+    await setPendingFromPick(path)
+    uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
+  } catch (e) {
+    uni.hideLoading()
+    if (e.code === 'WEBCAM') {
+      await openWebcam()
+    } else if (e.message && e.message !== 'cancel') {
+      uni.showToast({ title: e.message, icon: 'none', duration: 2500 })
+    }
+  }
+  pickingImage.value = false
+}
 
 async function openWebcam() {
-
-  if (!browserCanUseMic()) {
-
-    warnMicBlocked()
-
-    return
-
-  }
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-
-    uni.showToast({ title: '当前浏览器不支持摄像头，请用「从相册选择」', icon: 'none' })
-
-    return
-
-  }
-
-  try {
-
-    webcamStream = await navigator.mediaDevices.getUserMedia({
-
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-
-      audio: false,
-
-    })
-
-    showWebcam.value = true
-
-    await nextTick()
-
-    webcamVideoEl = document.getElementById('qaWebcamVideo')
-
-    if (webcamVideoEl) {
-
-      webcamVideoEl.srcObject = webcamStream
-
-      await webcamVideoEl.play().catch(() => {})
-
+  if (!browserCanUseCamera()) {
+    try {
+      await setPendingFromNativePick('environment')
+      uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
+    } catch (e) {
+      if (e.message !== 'cancel') {
+        uni.showToast({ title: '无法打开相机，请用相册选图', icon: 'none', duration: 3000 })
+      }
     }
-
-  } catch (_) {
-
-    closeWebcam()
-
-    uni.showToast({ title: '摄像头权限被拒，请允许后重试或用相册选图', icon: 'none', duration: 3000 })
-
+    return
   }
-
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
+      audio: false,
+    })
+    showWebcam.value = true
+    await nextTick()
+    webcamVideoEl = document.getElementById('qaWebcamVideo')
+    if (webcamVideoEl) {
+      webcamVideoEl.srcObject = webcamStream
+      await webcamVideoEl.play().catch(() => {})
+    }
+  } catch (_) {
+    closeWebcam()
+    try {
+      await setPendingFromNativePick('environment')
+      uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
+    } catch (e) {
+      if (e.message !== 'cancel') {
+        uni.showToast({ title: '摄像头权限被拒，请允许后重试或用相册选图', icon: 'none', duration: 3000 })
+      }
+    }
+  }
 }
 
 
@@ -1946,6 +1951,88 @@ onBeforeUnmount(() => {
 
   animation: sheetUp 0.25s ease-out;
 
+}
+
+/* DeepSeek 式全屏拍照 */
+.camera-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+.camera-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%);
+}
+.camera-close {
+  position: absolute;
+  left: 16px;
+  top: calc(12px + env(safe-area-inset-top));
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.camera-close text { color: #fff; font-size: 18px; }
+.camera-hint { color: #fff; font-size: 14px; font-weight: 500; }
+.camera-video {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+.camera-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px calc(28px + env(safe-area-inset-bottom));
+  background: linear-gradient(0deg, rgba(0,0,0,0.55) 0%, transparent 100%);
+}
+.camera-album {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.camera-album text { color: #fff; font-size: 13px; }
+.camera-album-spacer { width: 56px; height: 56px; }
+.camera-shutter {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 4px solid rgba(255,255,255,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.camera-shutter:active { opacity: 0.85; transform: scale(0.96); }
+.camera-shutter-inner {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #fff;
 }
 
 .webcam-title { display: block; text-align: center; font-size: 14px; font-weight: 600; margin-bottom: 12px; }

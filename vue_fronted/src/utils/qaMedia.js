@@ -50,7 +50,65 @@ export function isMobileH5() {
 
 /** 电脑浏览器 H5：uni.chooseImage(camera) 只会弹出「选文件」，需改用摄像头预览 */
 export function needsWebcamCapture(source) {
-  return source === 'camera' && systemPlatform() === 'web' && !isMobileH5()
+  return source === 'camera' && systemPlatform() === 'web'
+}
+
+/** H5 是否可用 getUserMedia 拍照（需 HTTPS） */
+export function browserCanUseCamera() {
+  return (
+    typeof window !== 'undefined'
+    && Boolean(window.isSecureContext)
+    && typeof navigator !== 'undefined'
+    && Boolean(navigator.mediaDevices?.getUserMedia)
+  )
+}
+
+/**
+ * 将 uni.chooseImage 临时路径转为可预览的 blob（H5 <image> 无法直接显示部分 temp 路径）
+ * @returns {{ file: File, preview: string, path: string }}
+ */
+export async function buildPendingImageFromPath(path) {
+  const resp = await fetch(path)
+  if (!resp.ok) throw new Error('读取图片失败，请重新选择')
+  const blob = await resp.blob()
+  if (!blob.size) throw new Error('图片为空，请重新拍摄')
+  const preview = URL.createObjectURL(blob)
+  const ext = blob.type.includes('png') ? 'png' : 'jpg'
+  const file = new File([blob], `photo.${ext}`, { type: blob.type || 'image/jpeg' })
+  return { file, preview, path: preview }
+}
+
+/**
+ * 原生 file input 拍照/选图（DeepSeek 式 fallback，强制后置摄像头）
+ * @param {'environment'|'user'|''} captureMode
+ */
+export function pickImageViaNativeInput(captureMode = 'environment') {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    if (captureMode) input.setAttribute('capture', captureMode)
+    input.style.cssText = 'position:fixed;left:-9999px;opacity:0'
+    document.body.appendChild(input)
+    const cleanup = () => {
+      try { document.body.removeChild(input) } catch (_) { /* ignore */ }
+    }
+    input.addEventListener('change', () => {
+      const file = input.files?.[0]
+      cleanup()
+      if (!file || !file.size) {
+        reject(new Error('cancel'))
+        return
+      }
+      const preview = URL.createObjectURL(file)
+      resolve({ file, preview, path: preview })
+    })
+    input.addEventListener('cancel', () => {
+      cleanup()
+      reject(new Error('cancel'))
+    })
+    input.click()
+  })
 }
 
 function openSettingModal(permissionName) {
