@@ -115,9 +115,23 @@ class TestSmoke:
         assert body["nickname"] == "发烟童"
 
     def test_03_login(self, client):
-        body = {"parent_phone": "13900000002", "nickname": "登录童"}
-        client.post("/api/auth/register", json=body)
-        r = client.post("/api/auth/login", json=body)
+        parent = client.post(
+            "/api/auth/register",
+            json={
+                "parent_phone": "13900000002",
+                "nickname": "张家长",
+                "password": "123456",
+                "role": "parent",
+            },
+        ).json()
+        client.post(
+            f"/api/parent/children?user_id={parent['child_user_id']}",
+            json={"login_name": "kid_login", "nickname": "登录童", "password": "111111"},
+        )
+        r = client.post(
+            "/api/auth/login",
+            json={"login_name": "kid_login", "password": "111111"},
+        )
         assert r.status_code == 200
         assert r.json()["nickname"] == "登录童"
 

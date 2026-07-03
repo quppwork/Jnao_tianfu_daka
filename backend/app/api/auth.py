@@ -79,12 +79,4 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         auth_service._refresh_session_token(db, user)
         return _to_response(user)
 
-    # 兼容旧流程：手机号 + 昵称（无密码）
-    if req.parent_phone and req.nickname:
-        user = auth_service.find_child_by_phone(db, req.parent_phone, req.nickname)
-        if not user:
-            raise HTTPException(404, "用户不存在，请先注册")
-        auth_service._refresh_session_token(db, user)
-        return _to_response(user)
-
     raise HTTPException(400, "请提供有效的登录信息")
