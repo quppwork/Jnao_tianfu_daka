@@ -18,6 +18,8 @@
     </script>
     <title></title>
     <!--preload-links-->
+    <link rel="preload" href="/static/teacher.png" as="image" />
+    <link rel="preload" href="/static/teacher-avatar.png" as="image" />
     <!--app-context-->
     <style>
       /* ===== Theme CSS Variables ===== */
@@ -65,13 +67,20 @@
       </style>
     </div>
     <script>
-      // Splash — 冷启动完整动画，热重载快速闪过
+      // Splash — 2分钟内回来走 bfcache 不展示；同一会话只展示一次
       (function(){
         var s = document.getElementById('initial-splash');
-        // 只在首次安装/清缓存时显示，之后页面间跳转不再出现
-        var launched = false;
-        try { launched = localStorage.getItem('jnao_launched'); } catch(e) {}
-        if (launched) { s.remove(); return; }
+        var ACTIVE_KEY = 'jnao_last_active';
+        var SESSION_KEY = 'jnao_splash_session';
+        var TTL = 2 * 60 * 1000; // 2 分钟
+        var now = Date.now();
+        // 同会话已展示 → 跳过
+        try { if (sessionStorage.getItem(SESSION_KEY)) { s.remove(); return; } } catch(e) {}
+        var last = 0;
+        try { last = parseInt(localStorage.getItem(ACTIVE_KEY) || '0', 10); } catch(e) {}
+        try { localStorage.setItem(ACTIVE_KEY, String(now)); } catch(e) {}
+        try { sessionStorage.setItem(SESSION_KEY, '1'); } catch(e) {}
+        if (last && (now - last) < TTL) { s.remove(); return; }
         var delay = 2500;
 
         // 适配主题
@@ -86,7 +95,6 @@
           s.style.opacity = '0';
           setTimeout(function(){ s.remove(); }, 300);
         }, delay);
-        try { localStorage.setItem('jnao_launched', '1'); } catch(e) {}
       })();
     </script>
     <div id="app"><!--app-html--></div>

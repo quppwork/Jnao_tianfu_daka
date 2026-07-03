@@ -18,11 +18,21 @@ import { onLaunch } from '@dcloudio/uni-app'
 const showSplash = ref(false)
 
 onLaunch(() => {
-  // 冷启动才显示，热启动（后台切回）跳过
-  const shown = sessionStorage.getItem('jnao_splash_shown')
-  if (!shown) {
-    sessionStorage.setItem('jnao_splash_shown', '1')
+  // Splash：同浏览器会话只展示一次；2分钟内回来走 bfcache 不展示
+  const SESSION_KEY = 'jnao_splash_session'
+  const ACTIVE_KEY = 'jnao_last_active'
+  const SHORT_TTL = 2 * 60 * 1000  // 2 分钟：覆盖切微信/接电话等短暂离开
+
+  if (sessionStorage.getItem(SESSION_KEY)) return  // 同会话已展示过
+
+  const now = Date.now()
+  let last = 0
+  try { last = parseInt(localStorage.getItem(ACTIVE_KEY) || '0', 10) } catch (_) {}
+  try { localStorage.setItem(ACTIVE_KEY, String(now)) } catch (_) {}
+
+  if (!last || (now - last) > SHORT_TTL) {
     showSplash.value = true
+    sessionStorage.setItem(SESSION_KEY, '1')
     setTimeout(() => { showSplash.value = false }, 2000)
   }
 
@@ -69,18 +79,18 @@ onLaunch(() => {
   --app-font-scale: 1;
 }
 
-/* 小平板 ≥600px（iPad Mini 等 7-8" 设备） */
+/* 小平板 ≥600px（iPad Mini 744px 等 7-8" 设备） */
 @media (min-width: 600px) {
   :root {
-    --app-max-width: 620px;
+    --app-max-width: 660px;
     --app-font-scale: 1.05;
   }
 }
 
-/* 大平板 ≥1024px（iPad Pro 等 10-13" 设备） */
-@media (min-width: 1024px) {
+/* 大平板 ≥800px（iPad Pro 11" 834px / 12.9" 1024px / 安卓平板 800-1200px） */
+@media (min-width: 800px) {
   :root {
-    --app-max-width: 760px;
+    --app-max-width: 840px;
     --app-font-scale: 1.1;
   }
 }

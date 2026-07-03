@@ -166,7 +166,7 @@
 
     <!-- ===== COMPLETED ===== -->
     <view v-if="phase === 'completed'" class="phase" key="completed">
-      <view class="phase-inner" style="padding-top:20vh;">
+      <view class="phase-inner" style="padding-top:20vh; padding-top:20dvh;">
         <!-- Animation -->
         <view class="complete-anim">
           <view class="ca-check">✓</view>
@@ -563,7 +563,7 @@ onBeforeUnmount(() => {
 .nav-right text { color: var(--text-dim); font-size: 14px; }
 
 /* Pre-test */
-.phase { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:18vh 24px 0; }
+.phase { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:18vh 24px 0; padding:18dvh 24px 0; }
 .phase-inner { display:flex; flex-direction:column; align-items:center; width:100%; }
 .msg-title { color:var(--text); font-size:19px; font-weight:600; text-align:center; line-height:1.5; margin-bottom:8px; }
 .msg-sub { color:var(--text-dim); font-size:14px; text-align:center; line-height:1.6; max-width:300px; }
@@ -588,7 +588,7 @@ onBeforeUnmount(() => {
 .history-hint { text-align:center; margin-bottom:8px; cursor:pointer; }
 .history-hint text { color:var(--text-dim); font-size:13px; }
 .history-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
-.history-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px 16px; max-height:60vh; overflow-y:auto; }
+.history-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px 16px; max-height:60vh; max-height:60dvh; overflow-y:auto; }
 .history-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .history-title { font-size:17px; font-weight:700; color:var(--text); }
 .history-header-close { width:28px; height:28px; border-radius:50%; background:var(--bg-input); display:flex; align-items:center; justify-content:center; cursor:pointer; }

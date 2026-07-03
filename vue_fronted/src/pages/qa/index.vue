@@ -69,6 +69,7 @@
               mode="widthFix"
               class="bubble-img"
               @tap.stop="previewMessageImage(i)"
+              @error="onMsgImageError(i)"
             />
 
             <text v-if="m.text && !(m.imageUrl && m.text === '请帮我看这道题')" class="bubble-text">{{ m.text }}</text>
@@ -295,7 +296,7 @@ import {
 
 } from '@/utils/userApi.js'
 
-import { chooseQuestionImage, needsWebcamCapture, isMobileH5 } from '@/utils/qaMedia.js'
+import { chooseQuestionImage, needsWebcamCapture, isMobileH5, compressImage } from '@/utils/qaMedia.js'
 
 import {
   BrowserVoiceRecorder,
@@ -429,6 +430,17 @@ function previewMessageImage(msgIndex) {
 
   previewImage(current, urls)
 
+}
+
+// 图片加载失败时回退显示提示文字，避免空白
+function onMsgImageError(msgIndex) {
+  const m = messages.value[msgIndex]
+  if (!m) return
+  // 如果已有文字则不替换，否则显示占位
+  if (!m.text || m.text === '请帮我看这道题') {
+    m.text = '📷 题目图片（点击查看原图）'
+  }
+  // 保留 imageUrl 供点击预览使用
 }
 
 
@@ -731,28 +743,22 @@ async function loadSession(sessionId = null) {
 
     const uid = await ensureChildUser()
 
-    const profile = await fetchProfile(uid)
-
+    // profile + sessionList 并行（互不依赖）
+    const [profile] = await Promise.all([
+      fetchProfile(uid),
+      loadSessionList(),
+    ])
     await ensureLearnerProfile(uid, profile)
 
-    await loadSessionList()
-
     let sid = sessionId
-
     if (!sid) {
-
       const latest = sessionList.value[0]
-
       if (!latest) return
-
       sid = latest.id
-
     }
 
     qaSessionId.value = sid
-
     const data = await fetchQaSession(uid, sid)
-
     messages.value = mapSessionMessages(data, uid)
 
   } catch (e) { /* 新用户 */ }
@@ -1333,7 +1339,8 @@ async function sendMsg() {
 
     if (pending) {
 
-      const file = await resolveImageFile(pending)
+      const rawFile = await resolveImageFile(pending)
+      const file = await compressImage(rawFile)
 
       const up = await uploadQaImage(uid, file)
 
@@ -1345,7 +1352,10 @@ async function sendMsg() {
 
         messages.value[userMsgIdx].imageUrl = resolveQaImageUrl(up.url, uid)
 
-        if (oldUrl?.startsWith('blob:')) revokeBlobUrl(oldUrl)
+        // 延迟销毁 blob，给浏览器时间切换到服务器 URL
+        if (oldUrl?.startsWith('blob:')) {
+          setTimeout(() => revokeBlobUrl(oldUrl), 3000)
+        }
 
       }
 
@@ -1522,10 +1532,10 @@ onBeforeUnmount(() => {
 .nav-spacer { width: 36px; }
 .nav-history { padding: 6px 12px; border-radius: 999px; background: var(--accent-bg); border: 1px solid rgba(88,166,255,0.2); cursor: pointer; }
 .nav-history text { color: var(--accent); font-size: 13px; font-weight: 600; }
-.session-panel { max-height: 70vh; }
+.session-panel { max-height:70vh; max-height:70dvh; }
 .session-new { text-align: center; padding: 10px; margin-bottom: 8px; border: 1px dashed var(--border); border-radius: 10px; cursor: pointer; }
 .session-new text { color: var(--accent); font-size: 13px; font-weight: 600; }
-.session-list { max-height: 45vh; }
+.session-list { max-height:45vh; max-height:45dvh; }
 .session-row { display: flex; align-items: center; gap: 8px; padding: 10px 8px; border-bottom: 1px solid var(--border); cursor: pointer; }
 .session-row.active { background: var(--accent-bg); border-radius: 8px; }
 .session-info { flex: 1; min-width: 0; }
@@ -1771,21 +1781,14 @@ onBeforeUnmount(() => {
 
 
 .bubble-img {
-
   width: 100%;
-
-  max-width: 220px;
-
+  max-width: 260px;
+  max-height: 340px;
   border-radius: 10px;
-
   margin-bottom: 6px;
-
   display: block;
-
   background: rgba(255, 255, 255, 0.15);
-
   cursor: pointer;
-
 }
 
 
@@ -1816,7 +1819,7 @@ onBeforeUnmount(() => {
 
   max-width: 100%;
 
-  max-height: 80vh;
+  max-height:80vh; max-height:80dvh;
 
   border-radius: 8px;
 

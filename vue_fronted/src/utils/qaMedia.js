@@ -1,4 +1,31 @@
-/** 学科答疑 — 拍照/相册权限与选图（手机端优先） */
+/** 学科答疑 — 拍照/相册权限与选图 + 图片压缩（手机端优先） */
+
+/**
+ * H5 端压缩图片：限制最大宽度，超出则等比缩放
+ * Android/iOS 原生端 uni.chooseImage 已传 sizeType:['compressed']，无需重复压缩
+ * @param {File|Blob} file
+ * @param {number} maxWidth
+ * @returns {Promise<File>}
+ */
+export async function compressImage(file, maxWidth = 1200) {
+  // 非 H5 环境不压缩（原生 chooseImage 已压缩）
+  if (!file || typeof Image === 'undefined') return file
+  try {
+    const bmp = await createImageBitmap(file)
+    if (bmp.width <= maxWidth) { bmp.close(); return file }
+    const ratio = maxWidth / bmp.width
+    const canvas = document.createElement('canvas')
+    canvas.width = maxWidth
+    canvas.height = Math.round(bmp.height * ratio)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    bmp.close()
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    return new File([blob], file.name || 'photo.jpg', { type: 'image/jpeg' })
+  } catch (_) {
+    return file  // 压缩失败不影响发送
+  }
+}
 
 function systemPlatform() {
   try {

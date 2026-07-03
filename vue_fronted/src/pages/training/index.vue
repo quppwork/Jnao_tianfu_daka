@@ -2623,6 +2623,12 @@ async function loadTodayPlan(silent = true) {
   needAssessment.value = false
   try {
     const uid = await ensureChildUser()
+
+    // 提前启动 progress 请求，与主流程并行
+    const progressPromise = !talentLabel.value
+      ? fetchTrainingProgress(uid).catch(() => null)
+      : Promise.resolve(null)
+
     const entryOk = await checkTrainingEntry(uid)
     if (!entryOk) {
       aiPlanText.value = ''
@@ -2671,11 +2677,14 @@ async function loadTodayPlan(silent = true) {
 
     syncPickersAfterTimerRestore(result.data.planned_minutes)
 
-    await loadTodayCheckinRecords(uid, result.data.plan_id)
+    // checkin records + progress 并行等待
+    const [progress] = await Promise.all([
+      progressPromise,
+      loadTodayCheckinRecords(uid, result.data.plan_id),
+    ])
     nextTick(() => syncPhaseExpand())
 
-    if (!talentLabel.value) {
-      const progress = await fetchTrainingProgress(uid)
+    if (progress && !talentLabel.value) {
       applyTalentLabelFromTag(progress?.talent_tag)
     }
 
@@ -2774,9 +2783,9 @@ function triggerGlitch() {
 .nav-history text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
 [data-theme="white"] .nav-history { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .nav-history text { color:#374151; }
-.history-list { max-height:50vh; overflow-y:auto; margin-bottom:8px; }
+.history-list { max-height:50vh; max-height:50dvh; overflow-y:auto; margin-bottom:8px; }
 .history-overlay { position:fixed; inset:0; z-index:600; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
-.history-panel { width:100%; max-width:340px; background:#1a2030; border-radius:16px; padding:20px 16px; max-height:60vh; overflow-y:auto; }
+.history-panel { width:100%; max-width:340px; background:#1a2030; border-radius:16px; padding:20px 16px; max-height:60vh; max-height:60dvh; overflow-y:auto; }
 .history-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .history-title { font-size:17px; font-weight:700; color:#e5e7eb; }
 .history-header-close { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; cursor:pointer; }
@@ -2941,7 +2950,7 @@ function triggerGlitch() {
 .picker-title { color:#fff; font-size:16px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
 
 /* 打卡弹窗 */
-.checkin-modal { max-height:85vh; overflow-y:auto; padding:20px 16px; max-width:400px; }
+.checkin-modal { max-height:85vh; max-height:85dvh; overflow-y:auto; padding:20px 16px; max-width:400px; }
 .assessment-modal { max-width:320px; padding:28px 22px 22px; text-align:center; }
 .assessment-modal-icon { font-size:40px; display:block; margin-bottom:12px; }
 .assessment-modal-title { display:block; color:#fff; font-size:17px; font-weight:700; margin-bottom:10px; }
@@ -3589,7 +3598,7 @@ function triggerGlitch() {
 [data-theme="white"] .detail-label { color:#1a1a2e; }
 [data-theme="white"] .detail-value { color:#6b7280; }
 .detail-actions { display:flex; gap:6px; padding-top:8px; flex-shrink:0; border-top:1px solid rgba(0,210,255,0.08); }
-.detail-edit-body { max-height:52vh; overflow-y:auto; margin-bottom:4px; }
+.detail-edit-body { max-height:52vh; max-height:52dvh; overflow-y:auto; margin-bottom:4px; }
 .detail-form-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
 .detail-form-label { color:rgba(0,210,255,0.55); font-size:10px; width:52px; flex-shrink:0; padding-top:8px; }
 .detail-form-input {

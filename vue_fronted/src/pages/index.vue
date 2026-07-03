@@ -18,7 +18,7 @@
     </view>
 
     <!-- Hero Banner -->
-    <image class="hero-img" src="/static/teacher.png" mode="widthFix"></image>
+    <image class="hero-img" src="/static/teacher.png" mode="widthFix" lazy-load />
 
     <!-- 1x4 Function Grid -->
     <view class="func-grid">
@@ -281,8 +281,8 @@ async function initHome() {
         fetchProfile(uid),
         fetchAssessmentHistory(uid),
         fetchGuideSession(uid),
+        refreshTalentState(uid).catch(() => null),  // 并行，不阻塞
       ])
-      await refreshTalentState(uid).catch(() => {})
       markChildUserSessionValid(uid)
     } catch (e) {
       if (e.status === 404 && getChildUserId()) {
@@ -557,7 +557,7 @@ function onNavTap() {
 
 /* Settings modal */
 .picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
-.picker-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:24px 20px; width:100%; max-width:340px; max-height:85vh; overflow-y:auto; }
+.picker-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:24px 20px; width:100%; max-width:340px; max-height:85vh; max-height:85dvh; overflow-y:auto; }
 .settings-card { animation:settingsIn 0.3s cubic-bezier(0.22,0.61,0.36,1); }
 @keyframes settingsIn { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
 .picker-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
