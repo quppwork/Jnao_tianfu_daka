@@ -11,6 +11,27 @@ from app.services.onboarding_service import (
 )
 
 
+_LEARNER_SYNC_KEYS = ("grade", "age", "school_stage", "region")
+
+
+def normalize_profile_json(pj: dict | None) -> dict:
+    """统一 profile_json：家长写入 learner.*，孩子端/训练读取顶层 grade 等字段。"""
+    base = dict(pj or {})
+    learner = base.get("learner")
+    if not isinstance(learner, dict):
+        learner = {}
+    else:
+        learner = dict(learner)
+    for key in _LEARNER_SYNC_KEYS:
+        if not base.get(key) and learner.get(key):
+            base[key] = learner[key]
+        elif base.get(key) and not learner.get(key):
+            learner[key] = base[key]
+    if learner:
+        base["learner"] = learner
+    return base
+
+
 def merge_profile_json(current: dict | None, patch: dict) -> dict:
     """深度合并 profile_json — onboarding 支持分步保存与老学员 prior_training_data"""
     if patch.get("onboarding"):
@@ -62,9 +83,12 @@ def merge_learner_profile(db: Session, child_user_id: int, patch: dict) -> Child
     user = db.get(ChildUser, child_user_id)
     if not user:
         return None
-    current = dict(user.profile_json or {})
+    current = normalize_profile_json(user.profile_json)
+    learner = dict(current.get("learner") or {})
+    learner.update(patch)
+    current["learner"] = learner
     current.update(patch)
-    user.profile_json = current
+    user.profile_json = normalize_profile_json(current)
     db.commit()
     db.refresh(user)
     return user
@@ -99,7 +123,7 @@ def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
         "parent_phone": user.parent_phone,
         "nickname": user.nickname,
         "jnao_uid": user.jnao_uid,
-        "profile_json": user.profile_json or {},
+        "profile_json": normalize_profile_json(user.profile_json),
         "training_level": user.training_level,
         "is_qingbei": bool(user.is_qingbei),
         "created_at": user.created_at.isoformat() if user.created_at else None,

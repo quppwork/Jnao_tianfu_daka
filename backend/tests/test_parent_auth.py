@@ -145,3 +145,24 @@ class TestParentAuth:
         data = res.json()
         assert data["parent_name"] == "张家长"
         assert data["profile_json"].get("parentName") == "张家长"
+
+    def test_parent_set_grade_visible_on_child_profile(self, client: TestClient):
+        parent = _register_parent(client, "13900003333", password="123456")
+        pid = parent["child_user_id"]
+        created = client.post(
+            f"/api/parent/children?user_id={pid}",
+            json={
+                "login_name": "kid_grade",
+                "nickname": "刘思思",
+                "password": "111111",
+                "grade": "五年级",
+            },
+        ).json()
+        cid = created["id"]
+        assert created["grade"] == "五年级"
+
+        res = client.get(f"/api/user/profile?user_id={cid}")
+        assert res.status_code == 200
+        pj = res.json()["profile_json"]
+        assert pj.get("grade") == "五年级"
+        assert pj.get("learner", {}).get("grade") == "五年级"

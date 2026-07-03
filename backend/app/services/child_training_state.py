@@ -224,9 +224,10 @@ def bump_training_completed_day(state: dict) -> int:
 # ─── 通用 helper ──────────────────────────────────
 
 def child_grade(child) -> str | None:
-    """从 ChildUser 读取年级（profile_json.grade 或 direct grade 字段）"""
+    """从 ChildUser 读取年级（profile_json.grade / learner.grade）"""
     pj = child.profile_json if isinstance(child.profile_json, dict) else {}
-    return pj.get("grade") or getattr(child, "grade", None) or None
+    learner = pj.get("learner") if isinstance(pj.get("learner"), dict) else {}
+    return pj.get("grade") or learner.get("grade") or getattr(child, "grade", None) or None
 
 
 # ─── 序列化 helper（供 API 返回）────────────────────

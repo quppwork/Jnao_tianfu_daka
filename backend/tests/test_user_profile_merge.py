@@ -16,6 +16,15 @@ from app.services.assessment_service import sync_child_user_talent
 from app.services.user_service import merge_profile_json, profile_to_dict, update_profile
 
 
+def test_normalize_profile_json_syncs_learner_grade():
+    from app.services.user_service import normalize_profile_json
+
+    merged = normalize_profile_json({"learner": {"grade": "五年级", "age": 10}})
+    assert merged["grade"] == "五年级"
+    assert merged["age"] == 10
+    assert merged["learner"]["grade"] == "五年级"
+
+
 def test_merge_profile_json_preserves_role_and_onboarding():
     merged = merge_profile_json(
         {"role": "student", "grade": "四年级"},

@@ -669,7 +669,7 @@ async function ensureLearnerProfile(uid, profileData = null) {
 
     const profile = profileData || await fetchProfile(uid)
 
-    const grade = profile.profile_json?.grade
+    const grade = profile.profile_json?.grade || profile.profile_json?.learner?.grade
 
     if (grade) {
 

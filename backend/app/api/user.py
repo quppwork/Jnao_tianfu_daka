@@ -8,12 +8,14 @@ from app.core.deps import get_authenticated_user, get_db
 from app.core.cache import (
     cache_get_json,
     cache_set_json,
+    invalidate_user_assessment,
+    invalidate_user_growth,
     invalidate_user_profile,
+    invalidate_user_training,
     key_profile,
     ttl_env,
 )
 from app.services import assessment_service, user_service
-from app.core.cache import invalidate_user_assessment, invalidate_user_growth, invalidate_user_profile, invalidate_user_training
 from app.services.onboarding_service import OnboardingError
 
 router = APIRouter(prefix="/api/user", tags=["user"])
@@ -46,6 +48,9 @@ def get_profile(
     key = key_profile(child_user_id)
     cached = cache_get_json(key)
     if cached is not None:
+        pj = cached.get("profile_json")
+        if isinstance(pj, dict):
+            cached["profile_json"] = user_service.normalize_profile_json(pj)
         return cached
     user = user_service.get_profile(db, child_user_id)
     if not user:

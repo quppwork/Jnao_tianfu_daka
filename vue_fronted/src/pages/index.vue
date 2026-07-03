@@ -233,7 +233,8 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   if (data.parent_name) profile.value.parentName = data.parent_name
   let hasTalent = false
   if (data.profile_json) {
-    if (data.profile_json.grade) profile.value.grade = data.profile_json.grade
+    const grade = data.profile_json.grade || data.profile_json.learner?.grade
+    if (grade) profile.value.grade = grade
     if (!data.parent_name && data.profile_json.parentName) {
       profile.value.parentName = data.profile_json.parentName
     }

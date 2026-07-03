@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.cache import invalidate_user_profile
 from app.schemas.auth import (
     ChildDetailResponse,
     ChildSummaryOut,
@@ -47,6 +48,7 @@ def create_child(
     )
     from app.services import auth_service
 
+    invalidate_user_profile(child.id)
     return ChildSummaryOut(**auth_service.child_summary(db, child))
 
 
@@ -69,6 +71,7 @@ def update_child(
     )
     from app.services import auth_service
 
+    invalidate_user_profile(child.id)
     return ChildSummaryOut(**auth_service.child_summary(db, child))
 
 

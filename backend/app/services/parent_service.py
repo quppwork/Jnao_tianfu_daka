@@ -70,10 +70,13 @@ def create_child(
     learner = dict(pj.get("learner") or {})
     if grade is not None:
         learner["grade"] = grade
+        pj["grade"] = grade
     if age is not None:
         learner["age"] = age
+        pj["age"] = age
     if region is not None:
         learner["region"] = region
+        pj["region"] = region
     if learner:
         pj["learner"] = learner
     child.profile_json = pj
@@ -110,10 +113,13 @@ def update_child(
     learner = dict(pj.get("learner") or {})
     if grade is not None:
         learner["grade"] = grade
+        pj["grade"] = grade
     if age is not None:
         learner["age"] = age
+        pj["age"] = age
     if region is not None:
         learner["region"] = region
+        pj["region"] = region
     if learner:
         pj["learner"] = learner
     child.profile_json = pj
