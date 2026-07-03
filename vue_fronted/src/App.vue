@@ -25,6 +25,15 @@ onLaunch(() => {
     showSplash.value = true
     setTimeout(() => { showSplash.value = false }, 2000)
   }
+
+  // 动画降级：系统偏好 + 极端低端硬件（其余靠页面级 FPS 实测）
+  try {
+    const reduce =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+      (navigator.hardwareConcurrency || 8) <= 2 ||
+      (navigator.deviceMemory || 8) <= 2
+    if (reduce) document.documentElement.setAttribute('data-reduced-motion', '')
+  } catch (_) {}
 })
 </script>
 
@@ -87,5 +96,41 @@ onLaunch(() => {
 body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* ── 全局动画降级：系统偏好 或 低端设备 ── */
+/* 规则1: 系统设置"减少动态效果" */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  [class*="backdrop"],
+  [style*="backdrop"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+/* 规则2: JS 检测到低端设备 */
+[data-reduced-motion] *,
+[data-reduced-motion] *::before,
+[data-reduced-motion] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+/* 关闭 blur——移动端 GPU 最大消耗源 */
+[data-reduced-motion] .card,
+[data-reduced-motion] [class*="blur"],
+[data-reduced-motion] .bbar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* 关闭无限旋转/脉冲（loading spinner 保留基础显示） */
+[data-reduced-motion] .loading-spinner,
+[data-reduced-motion] [class*="spin"],
+[data-reduced-motion] [class*="pulse"] {
+  animation: none !important;
 }
 </style>

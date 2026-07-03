@@ -178,13 +178,18 @@ function withUser(url, userId) {
   return result
 }
 
-/** 答疑图片需带 user_id 鉴权，否则 <img> 请求会 401 */
+/** 答疑图片需带 user_id 鉴权；补全绝对路径确保 <image> 在任何部署环境都能加载 */
 export function resolveQaImageUrl(url, userId) {
   if (!url || !userId) return url
   if (url.startsWith('blob:') || url.startsWith('data:')) return url
   if (!url.includes('/api/qa/images/')) return url
-  if (/[?&]user_id=/.test(url)) return url
-  return withUser(url, userId)
+  // 确保 user_id 参数存在（后端 /images/{id} 依赖它鉴权）
+  if (!/[?&]user_id=/.test(url)) url = withUser(url, userId)
+  // 相对路径 → 补全 origin，避免 UniApp <image> 组件或代理层解析失败
+  if (url.startsWith('/')) {
+    try { url = window.location.origin + url } catch (_) {}
+  }
+  return url
 }
 
 function getOrCreateGuestPhone() {

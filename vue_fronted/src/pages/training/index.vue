@@ -380,48 +380,37 @@
               </view>
               <view class="form-row">
                 <text class="form-label">训练</text>
-                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
-                  <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
-                    <text class="form-unit" style="width:32px;">分钟</text>
-                  </view>
-                  <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="记住" type="number" />
-                    <text class="form-unit" style="width:32px;">字</text>
-                  </view>
+                <view style="display:flex;align-items:center;gap:6px;flex:1;">
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                  <text class="form-unit">分钟</text>
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="记住" type="number" />
+                  <text class="form-unit">字</text>
                 </view>
               </view>
-              <view class="form-row">
-                <text class="form-label">正背</text>
-                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
-                  <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardTime" placeholder="用时" type="number" />
-                    <text class="form-unit" style="width:32px;">分钟</text>
-                  </view>
-                  <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardAcc" placeholder="正确率" type="number" />
-                    <text class="form-unit" style="width:24px;">%</text>
-                  </view>
-                </view>
-              </view>
-              <view class="form-row">
-                <text class="form-label">倒背</text>
-                <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
-                  <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardTime" placeholder="用时" type="number" />
-                    <text class="form-unit" style="width:32px;">分钟</text>
-                  </view>
-                  <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
-                    <text class="form-unit" style="width:24px;">%</text>
-                  </view>
-                </view>
-              </view>
+              <!-- 倒背验证：先选择模式，再决定显示正背还是倒背 -->
               <view class="form-row">
                 <text class="form-label">倒背验证</text>
                 <view class="form-tags">
                   <text class="ftag" :class="{ on: card.reverseRecite }" @click="card.reverseRecite = true">✓ 可逐字倒背</text>
                   <text class="ftag" :class="{ on: !card.reverseRecite }" @click="card.reverseRecite = false">✗ 暂不能</text>
+                </view>
+              </view>
+              <view class="form-row" v-if="!card.reverseRecite">
+                <text class="form-label">正背</text>
+                <view style="display:flex;align-items:center;gap:6px;flex:1;">
+                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardTime" placeholder="用时" type="number" />
+                  <text class="form-unit">分钟</text>
+                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardAcc" placeholder="正确率" type="number" />
+                  <text class="form-unit">%</text>
+                </view>
+              </view>
+              <view class="form-row" v-if="card.reverseRecite">
+                <text class="form-label">倒背</text>
+                <view style="display:flex;align-items:center;gap:6px;flex:1;">
+                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardTime" placeholder="用时" type="number" />
+                  <text class="form-unit">分钟</text>
+                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
+                  <text class="form-unit">%</text>
                 </view>
               </view>
               <view class="form-row">
@@ -701,7 +690,15 @@
             <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
             <text class="detail-form-unit">字</text>
           </view>
+          <!-- 倒背验证 -->
           <view class="detail-form-row">
+            <text class="detail-form-label">倒背验证</text>
+            <view class="detail-form-tags">
+              <text class="detail-ftag" :class="{ on: detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = true">✓ 可逐字倒背</text>
+              <text class="detail-ftag" :class="{ on: !detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = false">✗ 暂不能</text>
+            </view>
+          </view>
+          <view class="detail-form-row" v-if="!detailEditCard.reverseRecite">
             <text class="detail-form-label">正背</text>
             <view class="detail-form-inline">
               <input class="detail-form-input short" v-model="detailEditCard.forwardTime" placeholder="用时" />
@@ -709,7 +706,7 @@
               <input class="detail-form-input short" v-model="detailEditCard.forwardAcc" placeholder="准确度" />
             </view>
           </view>
-          <view class="detail-form-row">
+          <view class="detail-form-row" v-if="detailEditCard.reverseRecite">
             <text class="detail-form-label">倒背</text>
             <view class="detail-form-inline">
               <input class="detail-form-input short" v-model="detailEditCard.backwardTime" placeholder="用时" />
@@ -2700,6 +2697,25 @@ function goTalent() {
 let idleGuideTimer = null
 
 onMounted(async () => {
+  // App.vue 已做系统偏好+硬件检测；此处补 FPS 实测捕获弱 GPU 边缘机型
+  if (!document.documentElement.hasAttribute('data-reduced-motion')) {
+    try {
+      const fps = await new Promise<number>(resolve => {
+        let frames = 0
+        const start = performance.now()
+        function tick() {
+          frames++
+          if (performance.now() - start < 500) {
+            requestAnimationFrame(tick)
+          } else {
+            resolve(Math.round(frames / ((performance.now() - start) / 1000)))
+          }
+        }
+        requestAnimationFrame(tick)
+      })
+      if (fps < 30) document.documentElement.setAttribute('data-reduced-motion', '')
+    } catch (_) {}
+  }
   await loadTodayPlan()
   startDayUnlockWatch()
   if (devMode.value) loadDevStatus()
@@ -3123,7 +3139,7 @@ function triggerGlitch() {
 .form-del { color:rgba(255,255,255,0.4); font-size:18px; cursor:pointer; padding:2px 6px; }
 .form-del:active { color:#ff6b6b; }
 .form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.form-label { color:rgba(255,255,255,0.5); font-size:13px; width:110px; flex-shrink:0; }
+.form-label { color:rgba(255,255,255,0.5); font-size:13px; width:auto; min-width:56px; flex-shrink:0; }
 .form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; }
 .form-textarea { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; height:60px; }
 .form-textarea-sm { height:36px; padding:6px 10px; }
@@ -3745,5 +3761,47 @@ function triggerGlitch() {
 }
 .player-card {
   animation:modalSlideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+/* ── 动画降级：系统偏好 或 低端设备 ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+[data-reduced-motion] *,
+[data-reduced-motion] *::before,
+[data-reduced-motion] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+/* 保留必要交互反馈 */
+[data-reduced-motion] .btn-checkin:active,
+[data-reduced-motion] .ftag:active,
+[data-reduced-motion] .step:active {
+  opacity: 0.85;
+}
+/* 低端机关闭昂贵光效 */
+[data-reduced-motion] .cyber-scanlines,
+[data-reduced-motion] .cyber-scanlines::before,
+[data-reduced-motion] .cyber-scanlines::after {
+  display: none;
+}
+[data-reduced-motion] .card,
+[data-reduced-motion] .form-card,
+[data-reduced-motion] .picker-card,
+[data-reduced-motion] .picker-item,
+[data-reduced-motion] .step,
+[data-reduced-motion] .score-item {
+  box-shadow: none !important;
+}
+[data-reduced-motion] .plr-arc,
+[data-reduced-motion] .plr-core {
+  display: none;
 }
 </style>
