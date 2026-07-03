@@ -59,6 +59,12 @@
 
       >
 
+        <view v-if="m.role !== 'user'" class="msg-avatar ai">
+
+          <img class="avatar-img" src="/static/teacher-avatar.png" alt="张宇老师" />
+
+        </view>
+
         <view class="msg-body">
 
           <view v-if="m.role === 'user'" class="bubble-user bubble-user-tail">
@@ -86,7 +92,11 @@
 
         </view>
 
+        <view v-if="m.role === 'user'" class="msg-user-label">
 
+          <text>{{ userDisplayName }}</text>
+
+        </view>
 
       </view>
 
@@ -94,9 +104,15 @@
 
       <view v-if="loading" class="msg-row msg-ai">
 
+        <view class="msg-avatar ai">
+
+          <img class="avatar-img" src="/static/teacher-avatar.png" alt="张宇老师" />
+
+        </view>
+
         <view class="msg-body">
 
-          <view class="bubble-ai typing-wrap">
+          <view class="bubble-ai bubble-ai-tail typing-wrap">
 
             <text class="typing-dots">思考中</text>
 
@@ -329,6 +345,8 @@ const subjectIcon = {
 }
 
 const subject = ref('数学')
+
+const userDisplayName = ref('我')
 
 const inputText = ref('')
 
@@ -767,6 +785,9 @@ async function loadSession(sessionId = null) {
       loadSessionList(),
     ])
     await ensureLearnerProfile(uid, profile)
+    if (profile.nickname && profile.nickname !== '学员') {
+      userDisplayName.value = profile.nickname
+    }
 
     let sid = sessionId
     if (!sid) {
@@ -1690,17 +1711,17 @@ onBeforeUnmount(() => {
 
   display: flex;
 
-  gap: 12px;
+  gap: 10px;
 
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 
-  align-items: flex-start;
+  align-items: flex-end;
 
   max-width: 100%;
 
 }
 
-.msg-user { justify-content: flex-end; }
+.msg-user { flex-direction: row-reverse; justify-content: flex-start; }
 
 .msg-ai { justify-content: flex-start; }
 
@@ -1708,11 +1729,11 @@ onBeforeUnmount(() => {
 
 .msg-avatar {
 
-  width: 36px;
+  width: 40px;
 
-  height: 36px;
+  height: 40px;
 
-  border-radius: 50%;
+  border-radius: 10px;
 
   flex-shrink: 0;
 
@@ -1728,25 +1749,35 @@ onBeforeUnmount(() => {
 
 .msg-avatar.ai {
 
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
 
   box-shadow: var(--bubble-shadow);
 
 }
 
-.avatar-img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-.msg-avatar.user {
 
-  background: var(--accent-bg);
 
-  color: var(--accent);
+.msg-user-label {
 
-  font-size: 12px;
+  flex-shrink: 0;
 
-  font-weight: 700;
+  max-width: 56px;
 
-  border: 1px solid var(--border);
+  text-align: center;
+
+}
+
+.msg-user-label text {
+
+  font-size: 11px;
+
+  color: var(--text-dim);
+
+  line-height: 1.2;
+
+  word-break: break-all;
 
 }
 
@@ -1754,63 +1785,64 @@ onBeforeUnmount(() => {
 
 .msg-body {
 
-  max-width: 78%;
+  max-width: calc(100% - 108px);
 
   min-width: 0;
 
 }
 
-.msg-ai .msg-body { flex: 1; max-width: calc(100% - 44px); }
+.msg-ai .msg-body { max-width: calc(100% - 56px); }
 
 
 
 .bubble-user {
   position: relative;
-  background: var(--chat-me-bg);
-  color: var(--text-sub);
-  border-radius: 14px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 16px;
   border-bottom-right-radius: 4px;
-  padding: 9px 13px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   line-height: 1.55;
   word-break: break-word;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 .bubble-user-tail::after {
   content: '';
   position: absolute;
-  right: 10px;
-  bottom: -7px;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 8px solid var(--chat-me-bg);
+  right: -6px;
+  bottom: 10px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid var(--accent);
 }
-.bubble-user .bubble-text { color: var(--text-sub); white-space: pre-wrap; }
+.bubble-user .bubble-text { color: #fff; white-space: pre-wrap; }
 .bubble-sender {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-dim);
   margin-bottom: 4px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .bubble-ai {
   position: relative;
   background: var(--chat-ai-bg);
-  border-radius: 14px;
+  border-radius: 16px;
   border-bottom-left-radius: 4px;
-  padding: 9px 13px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   line-height: 1.55;
   color: var(--text);
   word-break: break-word;
 }
-.bubble-ai-tail::after {
+.bubble-ai-tail::before {
   content: '';
   position: absolute;
-  left: 10px;
-  bottom: -7px;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 8px solid var(--chat-ai-bg);
+  left: -6px;
+  bottom: 10px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 8px solid var(--chat-ai-bg);
 }
 .bubble-ai .bubble-text { white-space: pre-wrap; color: var(--text); }
 
@@ -1839,19 +1871,20 @@ onBeforeUnmount(() => {
 .pending-bubble {
   position: relative;
   max-width: min(200px, 55vw);
-  background: var(--chat-me-bg);
-  border-radius: 14px;
+  background: var(--accent);
+  border-radius: 16px;
   border-bottom-right-radius: 4px;
   padding: 6px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 .pending-bubble::after {
   content: '';
   position: absolute;
-  right: 14px;
-  bottom: -7px;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 8px solid var(--chat-me-bg);
+  right: -6px;
+  bottom: 10px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid var(--accent);
 }
 .pending-thumb {
   width: 100%;
