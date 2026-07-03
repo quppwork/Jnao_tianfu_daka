@@ -29,6 +29,42 @@ def _learner_profile(user: ChildUser | None) -> dict:
     return dict(user.profile_json or {})
 
 
+def _assistant_meta_for_storage(
+    coach_meta: dict,
+    *,
+    rag_used: bool = False,
+    rag_sources: list[str] | None = None,
+) -> dict | None:
+    """仅持久化跨轮复用所需的内部字段，不存 coach_hint 等可重算数据。"""
+    meta: dict = {}
+    pattern = coach_meta.get("mistake_pattern")
+    if pattern:
+        meta["mistake_pattern"] = pattern
+    if rag_used:
+        meta["rag_used"] = True
+        if rag_sources:
+            meta["rag_sources"] = rag_sources
+    return meta or None
+
+
+def _public_chat_payload(
+    *,
+    session_id: int,
+    reply: str,
+    talent: str | None,
+    school_stage: str,
+    **extra: Any,
+) -> dict:
+    """返回给前端的答疑结果，不含教练提示词等内部元数据。"""
+    return {
+        "session_id": session_id,
+        "reply": reply,
+        "talent_primary": talent,
+        "school_stage": school_stage,
+        **extra,
+    }
+
+
 def list_sessions(db: Session, child_user_id: int, limit: int = 20) -> list[dict]:
     cached = get_session_list(child_user_id)
     if cached is not None:
@@ -233,12 +269,11 @@ async def chat(
     if not reply:
         reply = "抱歉，AI 暂时无法响应，请稍后再试。"
 
-    assistant_meta = {
-        **coach_meta,
-        "rag_used": rag_used,
-        "rag_sources": rag_sources,
-        "ocr_preview": ocr_preview,
-    }
+    assistant_meta = _assistant_meta_for_storage(
+        coach_meta,
+        rag_used=rag_used,
+        rag_sources=rag_sources,
+    )
     db.add(
         QaMessage(
             session_id=session.id,
@@ -250,18 +285,12 @@ async def chat(
     db.commit()
     invalidate_session_list(child_user_id)
 
-    return {
-        "session_id": session.id,
-        "reply": reply,
-        "talent_primary": talent,
-        "school_stage": school_stage,
-        "coach_hint": coach_meta.get("coach_hint"),
-        "mistake_pattern": coach_meta.get("mistake_pattern"),
-        "rag_used": rag_used,
-        "rag_sources": rag_sources,
-        "ocr_preview": ocr_preview,
-        "recent_topics": coach_meta.get("recent_topics"),
-    }
+    return _public_chat_payload(
+        session_id=session.id,
+        reply=reply,
+        talent=talent,
+        school_stage=school_stage,
+    )
 
 
 async def chat_stream(
@@ -431,12 +460,11 @@ async def chat_stream(
         yield ("token", token)
 
     reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
-    assistant_meta = {
-        **coach_meta,
-        "rag_used": rag_used,
-        "rag_sources": rag_sources,
-        "ocr_preview": ocr_preview,
-    }
+    assistant_meta = _assistant_meta_for_storage(
+        coach_meta,
+        rag_used=rag_used,
+        rag_sources=rag_sources,
+    )
     db.add(
         QaMessage(
             session_id=session.id,
@@ -450,18 +478,12 @@ async def chat_stream(
 
     yield (
         "done",
-        {
-            "session_id": session.id,
-            "reply": reply,
-            "talent_primary": talent,
-            "school_stage": school_stage,
-            "coach_hint": coach_meta.get("coach_hint"),
-            "mistake_pattern": coach_meta.get("mistake_pattern"),
-            "rag_used": rag_used,
-            "rag_sources": rag_sources,
-            "ocr_preview": ocr_preview,
-            "recent_topics": coach_meta.get("recent_topics"),
-        },
+        _public_chat_payload(
+            session_id=session.id,
+            reply=reply,
+            talent=talent,
+            school_stage=school_stage,
+        ),
     )
 
 

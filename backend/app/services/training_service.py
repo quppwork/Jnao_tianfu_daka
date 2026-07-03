@@ -811,8 +811,6 @@ def submit_checkin(
     if not target_item or target_item.plan_id != plan.id:
         raise TrainingError("训练项不存在", 404)
 
-    target_block = parse_item_instruction(target_item.instructions).get("block")
-
     ability_type, time_spent, content, result, note = _apply_card_fields_to_record(
         cards=cards,
         ability_type=ability_type,
@@ -867,8 +865,6 @@ def submit_checkin(
                 talent_code=talent_code,
                 grade=child_grade(child),
             )
-            if progress_delta and not progress_delta.get("main_line_advanced"):
-                plan.content_index = progress_delta.get("content_index", plan.content_index)
 
     db.commit()
     db.refresh(record)

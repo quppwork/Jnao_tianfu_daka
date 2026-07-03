@@ -33,7 +33,7 @@ def fetch_recent_coach_context_for_prompt(
     session_id: int | None = None,
     limit: int = 8,
 ) -> str | None:
-    """读取近期答疑 assistant 消息的 coach_hint / mistake_pattern，注入下次系统提示"""
+    """读取近期答疑 assistant 消息的 mistake_pattern，注入下次系统提示。"""
     rows = db.scalars(
         select(QaMessage)
         .join(QaSession)
@@ -45,11 +45,13 @@ def fetch_recent_coach_context_for_prompt(
         .limit(limit)
     ).all()
 
-    patterns: list[str] = []
-    hints: list[str] = []
-    seen_pattern: set[str] = set()
-    seen_hint: set[str] = set()
+    if session_id:
+        session_rows = [r for r in rows if r.session_id == session_id]
+        if session_rows:
+            rows = session_rows
 
+    patterns: list[str] = []
+    seen_pattern: set[str] = set()
     for row in rows:
         meta = row.meta_json if isinstance(row.meta_json, dict) else {}
         pattern = meta.get("mistake_pattern")
@@ -57,36 +59,10 @@ def fetch_recent_coach_context_for_prompt(
             seen_pattern.add(pattern)
             label = MISTAKE_PATTERN_HINTS.get(pattern, str(pattern))
             patterns.append(label)
-        hint = meta.get("coach_hint")
-        if hint and hint not in seen_hint:
-            seen_hint.add(hint)
-            hints.append(str(hint).strip())
 
-    if session_id:
-        # 同会话优先：把当前会话的记录排在前面（rows 已按 id 降序）
-        session_rows = [r for r in rows if r.session_id == session_id]
-        if session_rows:
-            patterns = []
-            hints = []
-            seen_pattern = set()
-            seen_hint = set()
-            for row in session_rows:
-                meta = row.meta_json if isinstance(row.meta_json, dict) else {}
-                pattern = meta.get("mistake_pattern")
-                if pattern and pattern not in seen_pattern:
-                    seen_pattern.add(pattern)
-                    patterns.append(MISTAKE_PATTERN_HINTS.get(pattern, str(pattern)))
-                hint = meta.get("coach_hint")
-                if hint and hint not in seen_hint:
-                    seen_hint.add(hint)
-                    hints.append(str(hint).strip())
-
-    lines: list[str] = []
-    if patterns:
-        lines.append("学员近期易错模式（请针对性辅导，勿重复说教）：" + "；".join(patterns))
-    if hints:
-        lines.append("近期教练提示摘要：" + "；".join(hints[:2]))
-    return "\n".join(lines) if lines else None
+    if not patterns:
+        return None
+    return "学员近期易错模式（请针对性辅导，勿重复说教）：" + "；".join(patterns)
 
 
 def detect_mistake_pattern(talent_primary: str | None, message: str) -> str | None:
