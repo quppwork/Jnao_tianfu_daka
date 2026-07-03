@@ -59,16 +59,22 @@
 
       >
 
+        <view v-if="m.role !== 'user'" class="msg-avatar ai">
+
+          <img class="avatar-img" src="/static/teacher-avatar.png" alt="张宇老师" />
+
+        </view>
+
         <view class="msg-body">
 
-          <view v-if="m.role === 'user'" class="bubble-user">
+          <view v-if="m.role === 'user'" class="bubble-user bubble-user-tail">
 
-            <image
+            <img
               v-if="m.imageUrl"
               :src="m.imageUrl"
-              mode="widthFix"
               class="bubble-img"
-              @tap.stop="previewMessageImage(i)"
+              loading="lazy"
+              @click.stop="previewMessageImage(i)"
               @error="onMsgImageError(i)"
             />
 
@@ -76,7 +82,7 @@
 
           </view>
 
-          <view v-else class="bubble-ai">
+          <view v-else class="bubble-ai bubble-ai-tail">
 
             <text class="bubble-sender">张宇老师</text>
 
@@ -86,7 +92,11 @@
 
         </view>
 
+        <view v-if="m.role === 'user'" class="msg-user-label">
 
+          <text>{{ userDisplayName }}</text>
+
+        </view>
 
       </view>
 
@@ -94,9 +104,15 @@
 
       <view v-if="loading" class="msg-row msg-ai">
 
+        <view class="msg-avatar ai">
+
+          <img class="avatar-img" src="/static/teacher-avatar.png" alt="张宇老师" />
+
+        </view>
+
         <view class="msg-body">
 
-          <view class="bubble-ai typing-wrap">
+          <view class="bubble-ai bubble-ai-tail typing-wrap">
 
             <text class="typing-dots">思考中</text>
 
@@ -112,14 +128,15 @@
 
     <view class="composer">
 
-      <view v-if="pendingImage" class="pending-bar">
-
-        <image :src="pendingImage.preview" mode="aspectFill" class="pending-thumb" @tap="previewImage(pendingImage.preview)" />
-
-        <text class="pending-label">题目图片已添加</text>
-
-        <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
-
+      <view v-if="pendingImage" class="pending-bubble-wrap">
+        <view class="pending-bubble">
+          <img
+            :src="pendingImage.preview"
+            class="pending-thumb"
+            @click="previewImage(pendingImage.preview)"
+          />
+          <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
+        </view>
       </view>
 
       <view class="input-panel">
@@ -273,6 +290,8 @@ import {
 
   resolveQaImageUrl,
 
+  resolveMessageImageDisplay,
+
   sendQaMessageStream,
 
   uploadQaImage,
@@ -297,6 +316,10 @@ import {
   buildPendingImageFromPath,
   browserCanUseCamera,
   pickImageViaNativeInput,
+  fileToDataUrl,
+  putQaImageLocal,
+  parseQaImageId,
+  getQaImageLocal,
 } from '@/utils/qaMedia.js'
 
 import {
@@ -322,6 +345,8 @@ const subjectIcon = {
 }
 
 const subject = ref('数学')
+
+const userDisplayName = ref('我')
 
 const inputText = ref('')
 
@@ -433,15 +458,23 @@ function previewMessageImage(msgIndex) {
 
 }
 
-// 图片加载失败时回退显示提示文字，避免空白
 function onMsgImageError(msgIndex) {
   const m = messages.value[msgIndex]
   if (!m) return
-  // 如果已有文字则不替换，否则显示占位
+  if (m.imageId) {
+    const cached = getQaImageLocal(m.imageId)
+    if (cached && m.imageUrl !== cached) {
+      m.imageUrl = cached
+      return
+    }
+  }
+  if (m.serverImageUrl && m.imageUrl !== m.serverImageUrl) {
+    m.imageUrl = m.serverImageUrl
+    return
+  }
   if (!m.text || m.text === '请帮我看这道题') {
     m.text = '📷 题目图片（点击查看原图）'
   }
-  // 保留 imageUrl 供点击预览使用
 }
 
 
@@ -712,7 +745,9 @@ function mapSessionMessages(data, uid) {
 
     text: m.content,
 
-    imageUrl: resolveQaImageUrl(m.image_url, uid) || null,
+    imageUrl: resolveMessageImageDisplay(m.image_url, uid) || null,
+
+    imageId: parseQaImageId(m.image_url),
 
   }))
 
@@ -750,6 +785,9 @@ async function loadSession(sessionId = null) {
       loadSessionList(),
     ])
     await ensureLearnerProfile(uid, profile)
+    if (profile.nickname && profile.nickname !== '学员') {
+      userDisplayName.value = profile.nickname
+    }
 
     let sid = sessionId
     if (!sid) {
@@ -1306,15 +1344,18 @@ async function sendMsg() {
 
   const pending = pendingImage.value
 
-  const displayImageUrl = pending?.preview || null
+  let displayImageUrl = pending?.preview || null
 
-  if (displayImageUrl?.startsWith('blob:')) {
-
-    messageBlobUrls.add(displayImageUrl)
-
+  if (pending) {
+    try {
+      const rawFile = await resolveImageFile(pending)
+      displayImageUrl = await fileToDataUrl(rawFile)
+    } catch (_) { /* keep blob preview */ }
   }
 
-
+  if (displayImageUrl?.startsWith('blob:')) {
+    messageBlobUrls.add(displayImageUrl)
+  }
 
   const userMsgIdx = messages.value.length
 
@@ -1322,7 +1363,7 @@ async function sendMsg() {
 
   inputText.value = ''
 
-  clearPendingImage({ keepPreview: displayImageUrl })
+  clearPendingImage({ keepPreview: displayImageUrl?.startsWith('blob:') ? displayImageUrl : null })
 
   loading.value = true
 
@@ -1348,16 +1389,11 @@ async function sendMsg() {
       imageId = up.image_id
 
       if (up.url && messages.value[userMsgIdx]) {
-
-        const oldUrl = messages.value[userMsgIdx].imageUrl
-
-        messages.value[userMsgIdx].imageUrl = resolveQaImageUrl(up.url, uid)
-
-        // 延迟销毁 blob，给浏览器时间切换到服务器 URL
-        if (oldUrl?.startsWith('blob:')) {
-          setTimeout(() => revokeBlobUrl(oldUrl), 3000)
+        messages.value[userMsgIdx].serverImageUrl = resolveQaImageUrl(up.url, uid)
+        messages.value[userMsgIdx].imageId = imageId
+        if (displayImageUrl?.startsWith('data:')) {
+          putQaImageLocal(imageId, displayImageUrl)
         }
-
       }
 
     }
@@ -1675,17 +1711,17 @@ onBeforeUnmount(() => {
 
   display: flex;
 
-  gap: 12px;
+  gap: 10px;
 
   margin-bottom: 20px;
 
-  align-items: flex-start;
+  align-items: flex-end;
 
   max-width: 100%;
 
 }
 
-.msg-user { justify-content: flex-end; }
+.msg-user { flex-direction: row-reverse; justify-content: flex-start; }
 
 .msg-ai { justify-content: flex-start; }
 
@@ -1693,11 +1729,11 @@ onBeforeUnmount(() => {
 
 .msg-avatar {
 
-  width: 36px;
+  width: 40px;
 
-  height: 36px;
+  height: 40px;
 
-  border-radius: 50%;
+  border-radius: 10px;
 
   flex-shrink: 0;
 
@@ -1713,25 +1749,35 @@ onBeforeUnmount(() => {
 
 .msg-avatar.ai {
 
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
 
   box-shadow: var(--bubble-shadow);
 
 }
 
-.avatar-img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-.msg-avatar.user {
 
-  background: var(--accent-bg);
 
-  color: var(--accent);
+.msg-user-label {
 
-  font-size: 12px;
+  flex-shrink: 0;
 
-  font-weight: 700;
+  max-width: 56px;
 
-  border: 1px solid var(--border);
+  text-align: center;
+
+}
+
+.msg-user-label text {
+
+  font-size: 11px;
+
+  color: var(--text-dim);
+
+  line-height: 1.2;
+
+  word-break: break-all;
 
 }
 
@@ -1739,58 +1785,128 @@ onBeforeUnmount(() => {
 
 .msg-body {
 
-  max-width: 78%;
+  max-width: calc(100% - 108px);
 
   min-width: 0;
 
 }
 
-.msg-ai .msg-body { flex: 1; max-width: calc(100% - 44px); }
+.msg-ai .msg-body { max-width: calc(100% - 56px); }
 
 
 
 .bubble-user {
-  background: var(--chat-me-bg);
-  color: var(--text-sub);
-  border-radius: 14px;
+  position: relative;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 16px;
   border-bottom-right-radius: 4px;
-  padding: 9px 13px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   line-height: 1.55;
   word-break: break-word;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
-.bubble-user .bubble-text { color: var(--text-sub); white-space: pre-wrap; }
+.bubble-user-tail::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  bottom: 10px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid var(--accent);
+}
+.bubble-user .bubble-text { color: #fff; white-space: pre-wrap; }
 .bubble-sender {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-dim);
   margin-bottom: 4px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .bubble-ai {
+  position: relative;
   background: var(--chat-ai-bg);
-  border-radius: 14px;
+  border-radius: 16px;
   border-bottom-left-radius: 4px;
-  padding: 9px 13px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   line-height: 1.55;
   color: var(--text);
   word-break: break-word;
+}
+.bubble-ai-tail::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  bottom: 10px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 8px solid var(--chat-ai-bg);
 }
 .bubble-ai .bubble-text { white-space: pre-wrap; color: var(--text); }
 
 
 
 .bubble-img {
-  width: 100%;
-  max-width: 260px;
+  width: auto;
+  max-width: min(260px, 72vw);
+  min-width: 80px;
+  height: auto;
   max-height: 340px;
   border-radius: 10px;
   margin-bottom: 6px;
   display: block;
-  background: rgba(255, 255, 255, 0.15);
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.08);
   cursor: pointer;
 }
+
+/* 待发送预览：右对齐气泡，尾巴向下指向输入框 */
+.pending-bubble-wrap {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 14px 12px;
+}
+.pending-bubble {
+  position: relative;
+  max-width: min(200px, 55vw);
+  background: var(--accent);
+  border-radius: 16px;
+  border-bottom-right-radius: 4px;
+  padding: 6px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+.pending-bubble::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  bottom: 10px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid var(--accent);
+}
+.pending-thumb {
+  width: 100%;
+  max-width: 180px;
+  max-height: 140px;
+  border-radius: 10px;
+  display: block;
+  object-fit: cover;
+}
+.pending-clear {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pending-clear text { color: #fff; font-size: 12px; line-height: 1; }
 
 
 

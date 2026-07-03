@@ -21,6 +21,8 @@
  *   L491-520 语音 + 开发者工具
  */
 
+import { getQaImageLocal, parseQaImageId } from './qaMedia.js'
+
 // ── localStorage 键名 ──
 const CHILD_KEY = 'jnao_child_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
@@ -204,6 +206,18 @@ export function resolveQaImageUrl(url, userId) {
     try { origin = window.location.origin } catch (_) {}
   }
   return origin ? origin + path : path
+}
+
+/**
+ * 消息图片显示：优先本地 session 缓存（data URL），无缓存再走服务器
+ */
+export function resolveMessageImageDisplay(imageUrl, userId) {
+  const imageId = parseQaImageId(imageUrl)
+  if (imageId) {
+    const cached = getQaImageLocal(imageId)
+    if (cached) return cached
+  }
+  return imageUrl ? resolveQaImageUrl(imageUrl, userId) : null
 }
 
 function getOrCreateGuestPhone() {
