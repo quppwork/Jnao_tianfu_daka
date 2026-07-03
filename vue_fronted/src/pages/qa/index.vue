@@ -61,14 +61,14 @@
 
         <view class="msg-body">
 
-          <view v-if="m.role === 'user'" class="bubble-user">
+          <view v-if="m.role === 'user'" class="bubble-user bubble-user-tail">
 
-            <image
+            <img
               v-if="m.imageUrl"
               :src="m.imageUrl"
-              mode="widthFix"
               class="bubble-img"
-              @tap.stop="previewMessageImage(i)"
+              loading="lazy"
+              @click.stop="previewMessageImage(i)"
               @error="onMsgImageError(i)"
             />
 
@@ -76,7 +76,7 @@
 
           </view>
 
-          <view v-else class="bubble-ai">
+          <view v-else class="bubble-ai bubble-ai-tail">
 
             <text class="bubble-sender">张宇老师</text>
 
@@ -112,14 +112,15 @@
 
     <view class="composer">
 
-      <view v-if="pendingImage" class="pending-bar">
-
-        <image :src="pendingImage.preview" mode="aspectFill" class="pending-thumb" @tap="previewImage(pendingImage.preview)" />
-
-        <text class="pending-label">题目图片已添加</text>
-
-        <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
-
+      <view v-if="pendingImage" class="pending-bubble-wrap">
+        <view class="pending-bubble">
+          <img
+            :src="pendingImage.preview"
+            class="pending-thumb"
+            @click="previewImage(pendingImage.preview)"
+          />
+          <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
+        </view>
       </view>
 
       <view class="input-panel">
@@ -297,6 +298,7 @@ import {
   buildPendingImageFromPath,
   browserCanUseCamera,
   pickImageViaNativeInput,
+  fileToDataUrl,
 } from '@/utils/qaMedia.js'
 
 import {
@@ -433,15 +435,16 @@ function previewMessageImage(msgIndex) {
 
 }
 
-// 图片加载失败时回退显示提示文字，避免空白
 function onMsgImageError(msgIndex) {
   const m = messages.value[msgIndex]
   if (!m) return
-  // 如果已有文字则不替换，否则显示占位
+  if (m.serverImageUrl && m.imageUrl !== m.serverImageUrl) {
+    m.imageUrl = m.serverImageUrl
+    return
+  }
   if (!m.text || m.text === '请帮我看这道题') {
     m.text = '📷 题目图片（点击查看原图）'
   }
-  // 保留 imageUrl 供点击预览使用
 }
 
 
@@ -1306,15 +1309,18 @@ async function sendMsg() {
 
   const pending = pendingImage.value
 
-  const displayImageUrl = pending?.preview || null
+  let displayImageUrl = pending?.preview || null
 
-  if (displayImageUrl?.startsWith('blob:')) {
-
-    messageBlobUrls.add(displayImageUrl)
-
+  if (pending) {
+    try {
+      const rawFile = await resolveImageFile(pending)
+      displayImageUrl = await fileToDataUrl(rawFile)
+    } catch (_) { /* keep blob preview */ }
   }
 
-
+  if (displayImageUrl?.startsWith('blob:')) {
+    messageBlobUrls.add(displayImageUrl)
+  }
 
   const userMsgIdx = messages.value.length
 
@@ -1322,7 +1328,7 @@ async function sendMsg() {
 
   inputText.value = ''
 
-  clearPendingImage({ keepPreview: displayImageUrl })
+  clearPendingImage({ keepPreview: displayImageUrl?.startsWith('blob:') ? displayImageUrl : null })
 
   loading.value = true
 
@@ -1348,16 +1354,7 @@ async function sendMsg() {
       imageId = up.image_id
 
       if (up.url && messages.value[userMsgIdx]) {
-
-        const oldUrl = messages.value[userMsgIdx].imageUrl
-
-        messages.value[userMsgIdx].imageUrl = resolveQaImageUrl(up.url, uid)
-
-        // 延迟销毁 blob，给浏览器时间切换到服务器 URL
-        if (oldUrl?.startsWith('blob:')) {
-          setTimeout(() => revokeBlobUrl(oldUrl), 3000)
-        }
-
+        messages.value[userMsgIdx].serverImageUrl = resolveQaImageUrl(up.url, uid)
       }
 
     }
@@ -1677,7 +1674,7 @@ onBeforeUnmount(() => {
 
   gap: 12px;
 
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 
   align-items: flex-start;
 
@@ -1750,6 +1747,7 @@ onBeforeUnmount(() => {
 
 
 .bubble-user {
+  position: relative;
   background: var(--chat-me-bg);
   color: var(--text-sub);
   border-radius: 14px;
@@ -1758,6 +1756,15 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.55;
   word-break: break-word;
+}
+.bubble-user-tail::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: -7px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 8px solid var(--chat-me-bg);
 }
 .bubble-user .bubble-text { color: var(--text-sub); white-space: pre-wrap; }
 .bubble-sender {
@@ -1768,6 +1775,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 .bubble-ai {
+  position: relative;
   background: var(--chat-ai-bg);
   border-radius: 14px;
   border-bottom-left-radius: 4px;
@@ -1777,20 +1785,77 @@ onBeforeUnmount(() => {
   color: var(--text);
   word-break: break-word;
 }
+.bubble-ai-tail::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  bottom: -7px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 8px solid var(--chat-ai-bg);
+}
 .bubble-ai .bubble-text { white-space: pre-wrap; color: var(--text); }
 
 
 
 .bubble-img {
-  width: 100%;
-  max-width: 260px;
+  width: auto;
+  max-width: min(260px, 72vw);
+  min-width: 80px;
+  height: auto;
   max-height: 340px;
   border-radius: 10px;
   margin-bottom: 6px;
   display: block;
-  background: rgba(255, 255, 255, 0.15);
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.08);
   cursor: pointer;
 }
+
+/* 待发送预览：右对齐气泡，尾巴向下指向输入框 */
+.pending-bubble-wrap {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 14px 12px;
+}
+.pending-bubble {
+  position: relative;
+  max-width: min(200px, 55vw);
+  background: var(--chat-me-bg);
+  border-radius: 14px;
+  border-bottom-right-radius: 4px;
+  padding: 6px;
+}
+.pending-bubble::after {
+  content: '';
+  position: absolute;
+  right: 14px;
+  bottom: -7px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 8px solid var(--chat-me-bg);
+}
+.pending-thumb {
+  width: 100%;
+  max-width: 180px;
+  max-height: 140px;
+  border-radius: 10px;
+  display: block;
+  object-fit: cover;
+}
+.pending-clear {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pending-clear text { color: #fff; font-size: 12px; line-height: 1; }
 
 
 

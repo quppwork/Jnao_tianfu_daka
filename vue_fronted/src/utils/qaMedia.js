@@ -78,6 +78,15 @@ export async function buildPendingImageFromPath(path) {
   return { file, preview, path: preview }
 }
 
+export async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
 /**
  * 原生 file input 拍照/选图（DeepSeek 式 fallback，强制后置摄像头）
  * @param {'environment'|'user'|''} captureMode
