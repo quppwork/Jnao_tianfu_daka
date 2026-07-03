@@ -497,59 +497,79 @@ onBeforeUnmount(() => {
   }
 })
 
-// 天赋轮盘 SVG — 单色分层，根据主天赋高亮
-const WHEEL_TALENTS = ['思者','赢者','行者','德者','学者']
+// 天赋轮盘 SVG — 三环分层实色（参考设计稿第二种样式）
+const WHEEL_TALENTS = ['德者', '思者', '学者', '行者', '赢者']
+const WHEEL_START_DEG = -144
+const WHEEL_GAP_DEG = 2.5
+const WHEEL_RINGS = [
+  { inner: 14, outer: 34 },
+  { inner: 34, outer: 54 },
+  { inner: 54, outer: 74 },
+]
+const WHEEL_GRAY = '#ececec'
+const WHEEL_LABEL_DIM = '#c5c5c5'
+
+function wheelArcSegment(cx, cy, innerR, outerR, deg1, deg2) {
+  const a1 = deg1 * Math.PI / 180
+  const a2 = deg2 * Math.PI / 180
+  const large = a2 - a1 > Math.PI ? 1 : 0
+  const x1o = cx + outerR * Math.cos(a1)
+  const y1o = cy + outerR * Math.sin(a1)
+  const x2o = cx + outerR * Math.cos(a2)
+  const y2o = cy + outerR * Math.sin(a2)
+  const x2i = cx + innerR * Math.cos(a2)
+  const y2i = cy + innerR * Math.sin(a2)
+  const x1i = cx + innerR * Math.cos(a1)
+  const y1i = cy + innerR * Math.sin(a1)
+  return `M ${x1i} ${y1i} L ${x1o} ${y1o} A ${outerR} ${outerR} 0 ${large} 1 ${x2o} ${y2o} L ${x2i} ${y2i} A ${innerR} ${innerR} 0 ${large} 0 ${x1i} ${y1i} Z`
+}
+
 const talentWheelSvg = computed(() => {
   const mainTalent = report.value?.talent || '学者'
-  // 从 traits 获取各天赋 grade (权重) — 兼容两种数据格式
   const traitMap = {}
-  const NAME_MAP = { '智慧':'学者','思辨':'思者','专注':'赢者','洞察':'德者','求知':'行者' }
-  traits.value.forEach(t => {
-    const talentName = NAME_MAP[t.name] || t.name  // API 可能返回天赋名或特质名
+  const NAME_MAP = { 智慧: '学者', 思辨: '思者', 专注: '赢者', 洞察: '德者', 求知: '行者' }
+  traits.value.forEach((t) => {
+    const talentName = NAME_MAP[t.name] || t.name
     traitMap[talentName] = t.grade || 0
   })
-  const weights = WHEEL_TALENTS.map(t => {
-    return traitMap[t] || (t === mainTalent ? 4 : 1)
+  const layers = WHEEL_TALENTS.map((t) => {
+    const w = traitMap[t] ?? (t === mainTalent ? 4 : 1)
+    return Math.max(0, Math.min(3, Math.round(w * 0.6)))
   })
-  const layers = weights.map(w => Math.max(1, Math.min(4, Math.round(w * 0.8))))
   const color = talentColor.value
-  const cx=130, cy=120
+  const cx = 130
+  const cy = 130
 
-  let svg = `<svg viewBox="0 0 260 260" style="width:280px;height:280px;">`
-  // 同心圆
-  ;[80,60,40,20].forEach(r => {
-    svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e8e8e8" stroke-width="1.5"/>`
+  let svg = '<svg viewBox="0 0 260 260" style="width:280px;height:280px;">'
+
+  WHEEL_RINGS.forEach((ring) => {
+    svg += `<circle cx="${cx}" cy="${cy}" r="${ring.outer}" fill="none" stroke="#e5e5e5" stroke-width="1"/>`
   })
 
-  for (let i=0; i<5; i++) {
-    const a1 = (i*72 - 90) * Math.PI / 180
-    const a2 = ((i+1)*72 - 90) * Math.PI / 180
-    const midA = (a1 + a2)/2
+  for (let i = 0; i < 5; i++) {
+    const deg1 = WHEEL_START_DEG + i * 72 + WHEEL_GAP_DEG / 2
+    const deg2 = WHEEL_START_DEG + (i + 1) * 72 - WHEEL_GAP_DEG / 2
     const fillLevel = layers[i]
-    const ringRadii = [20, 40, 60, 80]
-    const innerR = 20
-    const outerR = ringRadii[fillLevel - 1]
+    const midDeg = (deg1 + deg2) / 2
 
-    const x1i = cx + innerR * Math.cos(a1), y1i = cy + innerR * Math.sin(a1)
-    const x1o = cx + outerR * Math.cos(a1), y1o = cy + outerR * Math.sin(a1)
-    const x2o = cx + outerR * Math.cos(a2), y2o = cy + outerR * Math.sin(a2)
-    const x2i = cx + innerR * Math.cos(a2), y2i = cy + innerR * Math.sin(a2)
-    const opacity = 0.35 + fillLevel * 0.2
-    svg += `<path d="M ${x1i} ${y1i} L ${x1o} ${y1o} A ${outerR} ${outerR} 0 0 1 ${x2o} ${y2o} L ${x2i} ${y2i} A ${innerR} ${innerR} 0 0 0 ${x1i} ${y1i} Z" fill="${color}" opacity="${opacity.toFixed(2)}"/>`
+    WHEEL_RINGS.forEach((ring, ringIdx) => {
+      const filled = ringIdx < fillLevel
+      const fill = filled ? color : WHEEL_GRAY
+      svg += `<path d="${wheelArcSegment(cx, cy, ring.inner, ring.outer, deg1, deg2)}" fill="${fill}" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>`
+    })
 
-    // 放射线
-    const xl = cx + 80 * Math.cos(a1), yl = cy + 80 * Math.sin(a1)
-    svg += `<line x1="${cx}" y1="${cy}" x2="${xl}" y2="${yl}" stroke="#eee" stroke-width="1"/>`
-
-    // 标签
-    const lr = 80 + 28
-    const lx = cx + lr * Math.cos(midA), ly = cy + lr * Math.sin(midA)
-    const anchor = lx < cx-30 ? 'end' : lx > cx+30 ? 'start' : 'middle'
+    const lr = 74 + 30
+    const midRad = midDeg * Math.PI / 180
+    const lx = cx + lr * Math.cos(midRad)
+    const ly = cy + lr * Math.sin(midRad)
+    const anchor = lx < cx - 20 ? 'end' : lx > cx + 20 ? 'start' : 'middle'
     const isMain = WHEEL_TALENTS[i] === mainTalent
-    svg += `<text x="${lx}" y="${ly+5}" font-size="14" font-weight="${isMain?'700':'400'}" fill="${isMain?color:'#bbb'}" text-anchor="${anchor}">${WHEEL_TALENTS[i]}</text>`
+    const labelColor = isMain ? color : WHEEL_LABEL_DIM
+    const labelWeight = isMain ? '700' : '400'
+    svg += `<text x="${lx}" y="${ly + 5}" font-size="15" font-weight="${labelWeight}" fill="${labelColor}" text-anchor="${anchor}">${WHEEL_TALENTS[i]}</text>`
   }
 
-  svg += `</svg>`
+  svg += '</svg>'
   return svg
 })
 function openVideo() { uni.showToast({ title: '视频功能开发中', icon: 'none' }) }
