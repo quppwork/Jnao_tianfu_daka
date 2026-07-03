@@ -5,10 +5,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_user, get_db
+from app.core.cache import (
+    cache_get_json,
+    cache_set_json,
+    invalidate_user_profile,
+    key_profile,
+    ttl_env,
+)
 from app.services import assessment_service, user_service
+from app.core.cache import invalidate_user_assessment, invalidate_user_growth, invalidate_user_profile, invalidate_user_training
 from app.services.onboarding_service import OnboardingError
 
 router = APIRouter(prefix="/api/user", tags=["user"])
+
+_PROFILE_TTL = ttl_env("CACHE_TTL_PROFILE", 300)
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -33,10 +43,16 @@ def get_profile(
     child_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
+    key = key_profile(child_user_id)
+    cached = cache_get_json(key)
+    if cached is not None:
+        return cached
     user = user_service.get_profile(db, child_user_id)
     if not user:
         raise HTTPException(404, "用户不存在")
-    return user_service.profile_to_dict(user, db)
+    data = user_service.profile_to_dict(user, db)
+    cache_set_json(key, data, _PROFILE_TTL)
+    return data
 
 
 @router.put("/profile")
@@ -62,6 +78,7 @@ def update_profile(
     from app.services.assessment_service import repair_onboarding_talent, sync_child_user_talent
     repair_onboarding_talent(db, child_user_id)
     sync_child_user_talent(db, child_user_id)
+    invalidate_user_profile(child_user_id)
     return user_service.profile_to_dict(user, db)
 
 
@@ -75,6 +92,7 @@ def update_learner_profile(
     user = user_service.merge_learner_profile(db, child_user_id, patch)
     if not user:
         raise HTTPException(404, "用户不存在")
+    invalidate_user_profile(child_user_id)
     return user_service.profile_to_dict(user, db)
 
 
@@ -90,8 +108,13 @@ def resolve_talent_conflict(
 ):
     """解决天赋冲突：保留旧天赋或采用新测评结果"""
     try:
-        return assessment_service.resolve_talent_conflict(
+        result = assessment_service.resolve_talent_conflict(
             db, child_user_id, action=req.action
         )
+        invalidate_user_assessment(child_user_id)
+        invalidate_user_profile(child_user_id)
+        invalidate_user_growth(child_user_id)
+        invalidate_user_training(child_user_id)
+        return result
     except assessment_service.AssessmentError as e:
         raise HTTPException(e.status_code, e.message) from e

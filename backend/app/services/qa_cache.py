@@ -1,64 +1,26 @@
-"""学科答疑会话列表 — 可选 Redis 缓存（无 REDIS_URL 时透明降级为直读 DB）"""
+"""学科答疑会话列表 — Redis 缓存（无 REDIS_URL 时透明降级）"""
 
 from __future__ import annotations
 
-import json
-import os
-from typing import Any
+from app.core.cache import (
+    cache_delete,
+    cache_get_json,
+    cache_set_json,
+    key_qa_sessions,
+    ttl_env,
+)
 
-_TTL = int(os.getenv("QA_SESSION_CACHE_TTL", "3600"))
-_PREFIX = "qa:sessions:"
-
-_redis: Any = None
-_redis_checked = False
-
-
-def _client():
-    global _redis, _redis_checked
-    if _redis_checked:
-        return _redis
-    _redis_checked = True
-    url = os.getenv("REDIS_URL", "").strip()
-    if not url:
-        return None
-    try:
-        import redis
-
-        _redis = redis.from_url(url, decode_responses=True)
-        _redis.ping()
-    except Exception:
-        _redis = None
-    return _redis
-
-
-def _key(user_id: int) -> str:
-    return f"{_PREFIX}{user_id}"
+_TTL = ttl_env("QA_SESSION_CACHE_TTL", 3600)
 
 
 def get_session_list(user_id: int) -> list[dict] | None:
-    client = _client()
-    if not client:
-        return None
-    raw = client.get(_key(user_id))
-    if not raw:
-        return None
-    try:
-        data = json.loads(raw)
-        return data if isinstance(data, list) else None
-    except json.JSONDecodeError:
-        client.delete(_key(user_id))
-        return None
+    data = cache_get_json(key_qa_sessions(user_id))
+    return data if isinstance(data, list) else None
 
 
 def set_session_list(user_id: int, items: list[dict]) -> None:
-    client = _client()
-    if not client:
-        return
-    client.setex(_key(user_id), _TTL, json.dumps(items, ensure_ascii=False))
+    cache_set_json(key_qa_sessions(user_id), items, _TTL)
 
 
 def invalidate_session_list(user_id: int) -> None:
-    client = _client()
-    if not client:
-        return
-    client.delete(_key(user_id))
+    cache_delete(key_qa_sessions(user_id))
