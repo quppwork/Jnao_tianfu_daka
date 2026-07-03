@@ -553,7 +553,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.app { display:flex; flex-direction:column; height:100vh; max-width:480px; margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
+.app { display:flex; flex-direction:column; height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
 
 /* Nav */
 .nav { display:flex; align-items:center; padding:14px 24px 0; }

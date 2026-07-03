@@ -34,6 +34,39 @@ from app.services.training_day import (
     TZ,
 )
 
+import time as _time
+
+# ── Plan 响应短期缓存 ──
+# 消除「首页 ↔ 训练页来回切」时重复的 10+ DB 查询
+# TTL 10 秒，覆盖页面切换场景；打卡/排课时主动清除
+_plan_cache: dict[tuple[int, str], tuple[float, dict]] = {}
+_PLAN_CACHE_TTL = 10.0
+_CACHE_MAX_ENTRIES = 5000
+
+
+def invalidate_plan_cache(child_user_id: int, plan_date: date):
+    """打卡、修改方案后立即清除该用户当日缓存"""
+    _plan_cache.pop((child_user_id, str(plan_date)), None)
+
+
+def _cache_get(child_user_id: int, plan_date: date) -> dict | None:
+    key = (child_user_id, str(plan_date))
+    entry = _plan_cache.get(key)
+    if entry is None:
+        return None
+    ts, data = entry
+    if _time.monotonic() - ts < _PLAN_CACHE_TTL:
+        return data
+    _plan_cache.pop(key, None)
+    return None
+
+
+def _cache_set(child_user_id: int, plan_date: date, data: dict) -> None:
+    if len(_plan_cache) >= _CACHE_MAX_ENTRIES:
+        _plan_cache.clear()
+    _plan_cache[(child_user_id, str(plan_date))] = (_time.monotonic(), data)
+
+
 WATCH_COMPLETE_PCT = 90
 
 
@@ -597,10 +630,19 @@ def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: Trai
 
 
 def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
-    """获取今日方案；无内容时需先 POST /schedule 选时长生成"""
+    """获取今日方案；无内容时需先 POST /schedule 选时长生成
+
+    含短期缓存（10s TTL）：消除首页↔训练页来回切换时的重复 DB 查询。
+    打卡/排课/选修打卡后自动清除。
+    """
     from app.services.training_schedule_service import ensure_today_plan_shell
 
     plan_date = plan_date or _today_for(db, child_user_id)
+
+    # 短期缓存命中 → 跳过所有 DB 查询
+    cached = _cache_get(child_user_id, plan_date)
+    if cached is not None:
+        return cached
     if not is_new_day_ready(_user_now(db, child_user_id)):
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
 
@@ -630,9 +672,13 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
             db.commit()
         sync_media_exhausted_from_window(db, child_user_id, plan)
         plan = _resolve_today_plan(db, child_user_id, plan_date)
-        return _plan_to_response(plan, db=db)
+        result = _plan_to_response(plan, db=db)
+        _cache_set(child_user_id, plan_date, result)
+        return result
 
-    return empty_today_plan_response(db, child_user_id, plan_date)
+    result = empty_today_plan_response(db, child_user_id, plan_date)
+    _cache_set(child_user_id, plan_date, result)
+    return result
 
 
 def _talent_attr(assessment, key: str, default=None):
@@ -868,6 +914,8 @@ def submit_checkin(
 
     db.commit()
     db.refresh(record)
+    # 打卡后清除当日方案缓存，下次 GET /today 拉取最新状态
+    invalidate_plan_cache(child_user_id, plan.plan_date)
     out = {"record_id": record.id, "plan_status": plan.status}
     if progress_delta:
         out["training_progress"] = progress_delta

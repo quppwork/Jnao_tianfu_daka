@@ -155,7 +155,7 @@ function goParentRegister() {
 </script>
 
 <style scoped>
-.app { height:100vh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:18vh; font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
+.app { height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:18vh; font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
 .glow { position:absolute; width:260px; height:260px; border-radius:50%; pointer-events:none; z-index:0; }
 .glow-top { top:-80px; right:-60px; background:radial-gradient(circle, rgba(88,166,255,0.18) 0%, transparent 70%); }
 .glow-bottom { bottom:-100px; left:-50px; background:radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%); }

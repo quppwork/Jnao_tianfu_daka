@@ -148,7 +148,7 @@ function reTest(){ uni.redirectTo({ url:'/pages/talent/index' }) }
 </script>
 
 <style scoped>
-.app { min-height:100vh; max-width:480px; margin:0 auto; background:#fafafa; font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; position:relative; }
+.app { min-height:100vh;min-height:100dvh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:#fafafa; font-family:-apple-system,"PingFang SC",sans-serif; display:flex; flex-direction:column; position:relative; }
 .nav { display:flex; align-items:center; padding:14px 24px 0; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; border:1px solid #e5e7eb; }
 .nav-title { flex:1; text-align:center; color:#1f2937; font-size:16px; font-weight:600; }
@@ -209,7 +209,7 @@ function reTest(){ uni.redirectTo({ url:'/pages/talent/index' }) }
 .tip-t { font-size:13px; color:#374151; line-height:1.5; flex:1; }
 
 /* Bottom bar */
-.bbar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; padding:12px 20px; padding-bottom:max(12px, env(safe-area-inset-bottom)); background:rgba(255,255,255,0.92); backdrop-filter:blur(12px); border-top:1px solid #e5e7eb; }
+.bbar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:var(--app-max-width, 480px); padding:12px 20px; padding-bottom:max(12px, env(safe-area-inset-bottom)); background:rgba(255,255,255,0.92); backdrop-filter:blur(12px); border-top:1px solid #e5e7eb; }
 .bbar-btn { width:100%; padding:14px; text-align:center; border-radius:14px; border:2px solid #2563eb; background:#fff; cursor:pointer; }
 .bbar-btn text { color:#2563eb; font-size:15px; font-weight:600; }
 .bbar-btn:active { opacity:0.85; transform:scale(0.98); }

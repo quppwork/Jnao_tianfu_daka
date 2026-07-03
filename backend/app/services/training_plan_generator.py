@@ -109,4 +109,7 @@ async def ensure_plan_report(
     db.commit()
     db.refresh(plan)
     plan_data["report_text"] = plan.report_text
+    # 强制再生 AI 文案后清除缓存，让下次 GET /today 返回新文案
+    from app.services.training_service import invalidate_plan_cache
+    invalidate_plan_cache(child_user_id, plan.plan_date)
     return plan_data

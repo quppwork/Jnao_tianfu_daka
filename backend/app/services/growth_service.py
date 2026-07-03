@@ -119,8 +119,9 @@ def _event_date_str(d: date) -> str:
     return d.strftime("%m-%d")
 
 
-def get_badges(db: Session, child_user_id: int) -> list[dict]:
-    stats = _collect_stats(db, child_user_id)
+def get_badges(db: Session, child_user_id: int, stats: dict | None = None) -> list[dict]:
+    if stats is None:
+        stats = _collect_stats(db, child_user_id)
     trained = stats["trained_skills"]
     mastery = stats["mastery"]
     earned_at_map = _build_earned_at_map(db, child_user_id, stats)
@@ -202,60 +203,48 @@ def _record_date_iso(rec: TrainingRecord) -> str:
     return date.today().isoformat()
 
 
-def get_milestones(db: Session, child_user_id: int) -> list[dict]:
-    stats = _collect_stats(db, child_user_id)
-    assessment = stats["assessment"]
-    checkins = stats["checkins"]
-    qa_count = stats["qa_count"]
-    trained = stats["trained_skills"]
-    mastery = stats["mastery"]
+def get_milestones(db: Session, child_user_id: int, stats: dict | None = None) -> list[dict]:
+    """🆕 v2.0 九阶荣誉体系 — 三段头衔，按 overall_tier 判定达成状态"""
+    if stats is None:
+        stats = _collect_stats(db, child_user_id)
+    user = stats["user"]
+
+    # 获取 overall_tier
+    overall_tier = 1
+    try:
+        from app.services.child_training_state import get_training_progress, overall_tier as _calc_tier
+        if user:
+            state = get_training_progress(user)
+            overall_tier = _calc_tier(state)
+    except Exception:
+        pass
 
     return [
         {
-            "level": "入门学员",
-            "condition": "完成天赋测评",
-            "achieved": assessment is not None,
-            "talent": assessment.talent_primary if assessment else None,
-            "progress": "1/1" if assessment else "0/1",
+            "level": "传承特使",
+            "condition": "Tier 1-4 · 基础训练阶段",
+            "achieved": overall_tier >= 1,
+            "progress": f"当前 Tier {overall_tier}" if overall_tier >= 1 else "未开始训练",
         },
         {
-            "level": "坚持训练",
-            "condition": "累计打卡 ≥ 7 次",
-            "achieved": checkins >= 7,
-            "progress": f"{checkins}/7",
+            "level": "劲脑学神",
+            "condition": "Tier 5-7 · 进阶训练阶段",
+            "achieved": overall_tier >= 5,
+            "progress": f"当前 Tier {overall_tier}/5" if overall_tier < 5 else "已达成 ✓",
         },
         {
-            "level": "成长达人",
-            "condition": "累计打卡 ≥ 30 次",
-            "achieved": checkins >= 30,
-            "progress": f"{checkins}/30",
-        },
-        {
-            "level": "百炼学员",
-            "condition": "累计打卡 ≥ 100 次",
-            "achieved": checkins >= 100,
-            "progress": f"{checkins}/100",
-        },
-        {
-            "level": "答疑探索",
-            "condition": "累计学科提问 ≥ 1 次",
-            "achieved": qa_count >= 1,
-            "progress": f"{min(qa_count, 1)}/1",
-        },
-        {
-            "level": "王者之路",
-            "condition": "完成全部核心能力训练",
-            "achieved": mastery,
-            "progress": f"{sum(1 for s in MASTERY_SKILLS if s in trained)}/{len(MASTERY_SKILLS)}",
-            "skills_done": sorted(trained & set(MASTERY_SKILLS)),
-            "skills_target": list(MASTERY_SKILLS),
+            "level": "专利精英",
+            "condition": "Tier 8-9 · 高阶关门弟子",
+            "achieved": overall_tier >= 8,
+            "progress": f"当前 Tier {overall_tier}/8" if overall_tier < 8 else "已达成 ✓",
         },
     ]
 
 
-def get_timeline(db: Session, child_user_id: int, limit: int = 40) -> list[dict]:
+def get_timeline(db: Session, child_user_id: int, limit: int = 40, stats: dict | None = None) -> list[dict]:
+    if stats is None:
+        stats = _collect_stats(db, child_user_id)
     events: list[dict] = []
-    stats = _collect_stats(db, child_user_id)
 
     assessment = db.scalar(
         select(TalentAssessment)
@@ -367,11 +356,12 @@ def get_timeline(db: Session, child_user_id: int, limit: int = 40) -> list[dict]
     return events[:limit]
 
 
-def get_summary(db: Session, child_user_id: int) -> dict:
-    stats = _collect_stats(db, child_user_id)
-    badges = get_badges(db, child_user_id)
+def get_summary(db: Session, child_user_id: int, stats: dict | None = None) -> dict:
+    if stats is None:
+        stats = _collect_stats(db, child_user_id)
+    badges = get_badges(db, child_user_id, stats=stats)
     earned = sum(1 for b in badges if b["earned"])
-    milestones = get_milestones(db, child_user_id)
+    milestones = get_milestones(db, child_user_id, stats=stats)
     # 🆕 v2.0: 荣誉头衔优先按九阶 Tier 判定，回退到打卡里程碑
     overall_tier = 1
     try:
@@ -410,8 +400,9 @@ def get_summary(db: Session, child_user_id: int) -> dict:
 
 
 def get_share(db: Session, child_user_id: int) -> dict:
-    summary = get_summary(db, child_user_id)
-    badges = [b for b in get_badges(db, child_user_id) if b["earned"]]
+    stats = _collect_stats(db, child_user_id)
+    summary = get_summary(db, child_user_id, stats=stats)
+    badges = [b for b in get_badges(db, child_user_id, stats=stats) if b["earned"]]
     badge_line = "、".join(b["name"] for b in badges[:5]) or "继续努力中"
     talent = summary["talent_primary"] or "天赋学员"
     lines = [

@@ -261,7 +261,7 @@ function doLogout() {
 </script>
 
 <style scoped>
-.app { min-height: 100vh; max-width: 480px; margin: 0 auto; background: var(--bg); font-family: -apple-system, "PingFang SC", sans-serif; display: flex; flex-direction: column; padding: 0 0 40px; }
+.app { min-height: 100vh; min-height: 100dvh; height: 100dvh; max-width: var(--app-max-width, 480px); margin: 0 auto; background: var(--bg); font-family: -apple-system, "PingFang SC", sans-serif; display: flex; flex-direction: column; padding: 0 0 40px; }
 .nav-bar { display:flex; align-items:center; padding:14px 14px 10px; }
 .nav-spacer { width:36px; }
 .nav-center { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
