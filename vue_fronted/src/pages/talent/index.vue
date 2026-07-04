@@ -46,7 +46,8 @@
             <view v-for="(h,i) in historyList" :key="h.id || i" class="history-box" @tap="viewHistory(h)">
               <view class="history-box-row">
                 <view class="history-box-icon">
-                  <text>{{ talentEmoji[h.talent_primary] || '🧬' }}</text>
+                  <image v-if="talentAvatar[h.talent_primary]" :src="talentAvatar[h.talent_primary]" mode="aspectFill" style="width:100%;height:100%;border-radius:50%;" />
+                  <text v-else>{{ talentEmoji[h.talent_primary] || '🧬' }}</text>
                 </view>
                 <text class="history-box-talent">{{ h.talent_primary || h.talent || '--' }}</text>
                 <text class="history-box-time">{{ formatHistoryDate(h.create_time || h.assessed_at) }}</text>
@@ -515,6 +516,7 @@ function dismissNotice() {
 }
 
 const talentEmoji = { 学者:'📚', 思者:'💡', 行者:'🏃', 德者:'⚖️', 赢者:'🏆' }
+const talentAvatar = { 学者:'/static/学者.png', 思者:'/static/思者.png', 行者:'/static/行者.png', 德者:'/static/德者.png', 赢者:'/static/赢者.png' }
 
 function formatHistoryDate(iso) {
   if (!iso) return ''

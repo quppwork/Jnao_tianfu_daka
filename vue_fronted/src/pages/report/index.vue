@@ -21,12 +21,14 @@
       <view class="content">
 
         <!-- ══ 迷者警告 ══ -->
-        <view v-if="isMizhe" class="card mizhe-warn">
-          <view class="mizhe-icon">⚠️</view>
-          <text class="mizhe-title">测评结果不明确</text>
-          <text class="mizhe-desc">本次天赋测评未得出明确的五者天赋归属，建议重新测试以获得准确的训练方案。</text>
-          <view class="btn-solid mizhe-btn" @tap="reTestFromMizhe">
-            <text>🔄 重新测试</text>
+        <view v-if="isMizhe" class="card mizhe-warn mizhe-row">
+          <text class="mizhe-left-icon">⚠️</text>
+          <view class="mizhe-right">
+            <text class="mizhe-title">测评结果不明确</text>
+            <text class="mizhe-desc">本次天赋测评未得出明确的五者天赋归属，建议重新测试以获得准确结果。</text>
+            <view class="btn-solid mizhe-btn" @tap="reTestFromMizhe">
+              <text>🔄 重新测试</text>
+            </view>
           </view>
         </view>
 
@@ -55,9 +57,9 @@
 
         <!-- ══ 1. Hero ══ -->
         <view class="card hero-row" style="position:relative;overflow:hidden;">
-          <view class="hero-bg-fig" :style="{ backgroundImage: 'url(' + talentBgImage + ')' }"></view>
+          <view v-if="!isMizhe" class="hero-bg-fig" :style="{ backgroundImage: 'url(' + talentBgImage + ')' }"></view>
           <view class="hero-logo" style="position:relative;z-index:1;">
-            <image v-if="talentLogo" :src="talentLogo" mode="aspectFit" class="hero-logo-img" />
+            <image v-if="talentLogo" :src="talentLogo" mode="aspectFill" class="hero-logo-img" />
             <text v-else class="hero-logo-text">{{ report.check_talent?.[0] || report.talent?.[0] || '?' }}</text>
           </view>
           <view class="hero-info" style="position:relative;z-index:1;">
@@ -81,8 +83,8 @@
 
         <!-- ══ 4. 双重属性 ══ -->
         <view class="card" v-if="suppDesp" style="position:relative;overflow:hidden;">
-          <view :style="{ position:'absolute', right:'70px', top:'4px', width:'100px', height:'120px', opacity:0.22, pointerEvents:'none', background:'url('+talentBgImage+') center top/cover no-repeat', zIndex:0 }"></view>
-          <view :style="{ position:'absolute', right:'-10px', top:'-20px', width:'130px', height:'150px', opacity:0.22, pointerEvents:'none', background:'url('+secondBgImage+') center top/cover no-repeat', zIndex:0 }"></view>
+          <view :style="{ position:'absolute', right:'70px', top:'4px', width:'100px', height:'120px', opacity:0, pointerEvents:'none', background:'url('+talentBgImage+') center top/cover no-repeat', zIndex:0 }"></view>
+          <view :style="{ position:'absolute', right:'-10px', top:'-20px', width:'130px', height:'150px', opacity:0, pointerEvents:'none', background:'url('+secondBgImage+') center top/cover no-repeat', zIndex:0 }"></view>
           <text class="card-label" style="position:relative;z-index:1;">{{ talentDisplay }} · 双重属性详解</text>
           <view class="collapse-wrap" :class="{ clamped: !collapseOpen['supp'] && suppDesp.length > 120 }" v-html="suppDesp"></view>
           <text v-if="stripHtml(suppDesp).length > 120" class="collapse-btn" @tap="collapseOpen['supp']=!collapseOpen['supp']">{{ collapseOpen['supp'] ? '收起' : '展示更多' }}</text>
@@ -521,9 +523,9 @@ const WHEEL_TALENTS = ['德者', '思者', '学者', '行者', '赢者']
 const WHEEL_START_DEG = -144
 const WHEEL_GAP_DEG = 2.5
 const WHEEL_RINGS = [
-  { inner: 14, outer: 34 },
-  { inner: 34, outer: 54 },
-  { inner: 54, outer: 74 },
+  { inner: 10, outer: 38 },
+  { inner: 38, outer: 60 },
+  { inner: 60, outer: 82 },
 ]
 const WHEEL_GRAY = '#ececec'
 const WHEEL_LABEL_DIM = '#c5c5c5'
@@ -572,7 +574,7 @@ const talentWheelSvg = computed(() => {
     const midDeg = (deg1 + deg2) / 2
 
     WHEEL_RINGS.forEach((ring, ringIdx) => {
-      const filled = ringIdx < fillLevel
+      const filled = fillLevel >= 1 && ringIdx === fillLevel - 1
       const fill = filled ? color : WHEEL_GRAY
       svg += `<path d="${wheelArcSegment(cx, cy, ring.inner, ring.outer, deg1, deg2)}" fill="${fill}" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>`
     })
@@ -705,10 +707,14 @@ function openOldReport() {
 .conflict-hint { color:var(--text-dim); font-size:12px; margin-top:10px; display:block; }
 
 /* ── Mizhe (迷者) warning ── */
-.mizhe-warn { background:linear-gradient(135deg,rgba(255,193,7,0.08),rgba(255,152,0,0.05)); border:1.5px solid rgba(255,152,0,0.35); text-align:center; padding:20px 16px; }
+.mizhe-warn { background:linear-gradient(135deg,rgba(255,193,7,0.08),rgba(255,152,0,0.05)); border:1.5px solid rgba(255,152,0,0.35); padding:20px 16px; }
+.mizhe-row { display:flex; align-items:flex-start; gap:14px; text-align:left; }
+.mizhe-left-icon { font-size:36px; flex-shrink:0; line-height:1.2; }
+.mizhe-right { flex:1; min-width:0; }
 .mizhe-icon { font-size:36px; display:block; margin-bottom:8px; }
-.mizhe-title { color:#e67e00; font-size:18px; font-weight:700; display:block; margin-bottom:6px; }
-.mizhe-desc { color:var(--text-dim); font-size:13px; line-height:1.6; display:block; margin-bottom:14px; }
+.mizhe-title { color:#e67e00; font-size:17px; font-weight:700; display:block; margin-bottom:6px; }
+.mizhe-desc { color:var(--text-dim); font-size:13px; line-height:1.6; display:block; margin-bottom:12px; }
+.mizhe-btn { margin-top:4px; }
 .mizhe-btn { background:linear-gradient(135deg,#f59e0b,#e67e00); display:inline-block; width:auto; padding:10px 28px; margin:0 auto; }
 
 /* Wheel */

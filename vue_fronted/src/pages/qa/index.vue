@@ -59,12 +59,6 @@
 
       >
 
-        <view v-if="m.role !== 'user'" class="msg-avatar ai">
-
-          <img class="avatar-img" src="/static/teacher-avatar.png" alt="张宇老师" />
-
-        </view>
-
         <view class="msg-body">
 
           <view v-if="m.role === 'user'" class="bubble-user bubble-user-tail">
@@ -104,11 +98,6 @@
 
       <view v-if="loading" class="msg-row msg-ai">
 
-        <view class="msg-avatar ai">
-
-          <img class="avatar-img" src="/static/teacher-avatar.png" alt="张宇老师" />
-
-        </view>
 
         <view class="msg-body">
 
