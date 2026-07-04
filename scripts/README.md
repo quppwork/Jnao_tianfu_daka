@@ -16,7 +16,7 @@
 
 | 脚本 | 说明 |
 |------|------|
-| `start_backend.bat` / `.sh` | 仅后端 → http://127.0.0.1:8011 |
+| `start_backend.bat` / `.sh` | 仅后端 → http://127.0.0.1:8012 |
 | `start_frontend.bat` / `.sh` | 仅前端 → http://127.0.0.1:5185 |
 
 启动前会自动清理端口占用。

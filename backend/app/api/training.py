@@ -20,7 +20,6 @@ from app.schemas.training import (
     CheckinResponse,
     CheckinUpdateRequest,
     ScheduleRequest,
-    OptionalChoiceRequest,
     TalentVideoResponse,
     TrainingEntryResponse,
     TrainingProgressResponse,
@@ -53,26 +52,6 @@ async def schedule_training(
     try:
         return await schedule_training_by_duration(
             db, child_user_id, req.planned_minutes, plan_date=plan_date
-        )
-    except TrainingError as e:
-        raise HTTPException(e.status_code, e.message) from e
-
-
-@router.post("/schedule/optional", response_model=TrainingTodayResponse)
-def schedule_optional_training(
-    req: OptionalChoiceRequest,
-    child_user_id: int = Depends(get_authenticated_user),
-    db: Session = Depends(get_db),
-    plan_date: date | None = Query(None),
-):
-    """孩子确认是否练习可选训练项（如高效作业），按天赋权重推荐"""
-    try:
-        if req.accept:
-            return accept_optional_training(
-                db, child_user_id, req.skill, plan_date=plan_date
-            )
-        return decline_optional_training(
-            db, child_user_id, req.skill, plan_date=plan_date
         )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e

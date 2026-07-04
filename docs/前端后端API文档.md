@@ -27,9 +27,11 @@
 |---|---|
 | 后端地址 | `http://127.0.0.1:8012` |
 | 用户标识 | Query `?user_id=` 或 Header `X-Child-User-Id` |
+| 认证 | Query `?session_token=` 或 Header `X-Session-Token`（单设备登录） |
 | 数据库 | SQLite（开发）/ MySQL（生产） |
+| 缓存 | Redis（可选，`REDIS_URL` 环境变量配置；无则直读 DB） |
 | AI 模型 | 火山引擎豆包 `doubao-seed-1-6-250615` |
-| 内容目录 | `docs/data/xet_*.json` → 启动时自动灌入 `content_item` 表（511 条） |
+| 内容目录 | `docs/data/xet_*.json` → 启动时自动灌入 `content_item` 表（700+ 条） |
 
 ---
 

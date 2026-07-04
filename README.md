@@ -22,6 +22,8 @@
 | AI 对话 | 火山引擎豆包 (Doubao) | — |
 | 测评 | 外部 JNAO API（m.jnao.com） | — |
 | 语音 | 火山引擎 TTS / ASR | — |
+| 缓存 | Redis（可选，无则直读 DB） | — |
+| 认证 | `user_id` + `session_token`（Query/Header） | — |
 
 ## 项目结构
 
@@ -29,12 +31,12 @@
 tianfu_daka/
 ├── backend/            # Python FastAPI 后端（端口 8012）
 │   ├── app/api/        # API 路由（14 个模块）
-│   ├── app/services/   # 业务逻辑层（45+ 个服务，v2.0 公式引擎+状态机+Tier晋级）
+│   ├── app/services/   # 业务逻辑层（50+ 个服务，公式引擎+状态机+Tier晋级）
 │   ├── app/agents/     # AI Agent 层（人设+路由+记忆）
 │   ├── app/schemas/    # Pydantic 请求/响应模型
 │   ├── app/db/         # 数据库模型 + 迁移
-│   ├── config/         # YAML 配置（课程 / 进阶规则）
-│   └── tests/          # 后端测试（pytest，32 文件）
+│   ├── config/         # YAML 配置（课程 / Tier 阈值 / 选修规则）
+│   └── tests/          # 后端测试（pytest，52+ 文件 290+ 用例）
 ├── vue_fronted/        # UniApp Vue 前端
 │   ├── src/pages/      # 页面（training / talent / qa / growth / report / login / parent）
 │   └── tests/          # 前端测试（vitest，3 文件 89 用例）

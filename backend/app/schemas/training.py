@@ -47,11 +47,6 @@ class OptionalOfferOut(BaseModel):
     status: str = "pending"  # pending | accepted | declined
 
 
-class OptionalChoiceRequest(BaseModel):
-    skill: str = Field(..., min_length=1, max_length=50)
-    accept: bool = Field(..., description="true=加入今日训练，false=今天不练")
-
-
 class TrainingTodayResponse(BaseModel):
     plan_id: int
     plan_date: date
@@ -136,9 +131,7 @@ class CheckinTrainingProgress(BaseModel):
     main_line: str | None = None
     main_line_from: str | None = None
     main_line_to: str | None = None
-    main_line_advanced: bool = False
     advance_pending: bool = False
-    pending_main_line_to: str | None = None
     advance_met: bool = False
     advance_rule_key: str | None = None
     advance_detail: CheckinAdvanceDetail | None = None

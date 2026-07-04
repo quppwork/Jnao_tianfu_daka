@@ -647,150 +647,125 @@
       <view v-else class="detail-edit-body">
         <template v-if="detailEditCard?.name === '极速运算'">
           <view class="detail-form-row">
-            <text class="detail-form-label">时间</text>
-            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" type="number" />
+            <text class="detail-form-hint">时长</text>
+            <input class="detail-form-input short" v-model="detailEditCard.time" placeholder="0" type="number"  />
+            <text class="detail-form-hint">分</text>
+            <text class="detail-form-hint">题数</text>
+            <input class="detail-form-input short" v-model="detailEditCard.count" placeholder="0" type="number"  />
+            <text class="detail-form-hint">题</text>
+            <text class="detail-form-hint">正确率</text>
+            <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="0" type="number"  />
+            <text class="detail-form-hint">%</text>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">内容</text>
+            <text class="detail-form-hint">题型</text>
             <view class="detail-form-tags">
               <text v-for="t in ['加减法','乘除法','混合运算','口算']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tag === t }" @click="detailEditCard.tag = t">{{ t }}</text>
             </view>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">结果</text>
-            <view class="detail-form-inline">
-              <input class="detail-form-input short" v-model="detailEditCard.count" placeholder="题数" type="number" />
-              <text class="detail-form-unit">题</text>
-              <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="正确率" type="number" />
-              <text class="detail-form-unit">%</text>
-            </view>
-          </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
+            <text class="detail-form-hint">备注</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '扫描速记'">
           <view class="detail-form-row">
-            <text class="detail-form-label">材料类型</text>
+            <text class="detail-form-hint">时长</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number"  />
+            <text class="detail-form-hint">分</text>
+            <text class="detail-form-hint">字数</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number"  />
+            <text class="detail-form-hint">字</text>
+          </view>
+          <view class="detail-form-row">
+            <text class="detail-form-hint">材料</text>
             <view class="detail-form-tags">
               <text v-for="t in ['书','文章','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.materialType === t }" @click="detailEditCard.materialType = t">{{ t }}</text>
             </view>
+            <input class="detail-form-input" v-model="detailEditCard.materialName" placeholder="材料名称" style="flex:1;min-width:80px;" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">材料名称</text>
-            <input class="detail-form-input" v-model="detailEditCard.materialName" placeholder="材料名称" />
-          </view>
-          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
-            <text class="detail-form-label">训练</text>
-            <text class="detail-form-unit">用时</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
-            <text class="detail-form-unit">分钟</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
-            <text class="detail-form-unit">字</text>
-          </view>
-          <!-- 倒背验证 -->
-          <view class="detail-form-row">
-            <text class="detail-form-label">倒背验证</text>
+            <text class="detail-form-hint">倒背</text>
             <view class="detail-form-tags">
-              <text class="detail-ftag" :class="{ on: detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = true">✓ 可逐字倒背</text>
+              <text class="detail-ftag" :class="{ on: detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = true">✓ 可</text>
               <text class="detail-ftag" :class="{ on: !detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = false">✗ 暂不能</text>
             </view>
-          </view>
-          <view class="detail-form-row" v-if="!detailEditCard.reverseRecite">
-            <text class="detail-form-label">正背</text>
-            <view class="detail-form-inline">
-              <input class="detail-form-input short" v-model="detailEditCard.forwardTime" placeholder="用时" />
-              <text class="detail-form-unit">/</text>
-              <input class="detail-form-input short" v-model="detailEditCard.forwardAcc" placeholder="准确度" />
-            </view>
-          </view>
-          <view class="detail-form-row" v-if="detailEditCard.reverseRecite">
-            <text class="detail-form-label">倒背</text>
-            <view class="detail-form-inline">
-              <input class="detail-form-input short" v-model="detailEditCard.backwardTime" placeholder="用时" />
-              <text class="detail-form-unit">/</text>
-              <input class="detail-form-input short" v-model="detailEditCard.backwardAcc" placeholder="准确度" />
-            </view>
+            <template v-if="!detailEditCard.reverseRecite">
+              <input class="detail-form-input short" v-model="detailEditCard.forwardTime" placeholder="用时" style="width:50px;" />
+              <text class="detail-form-hint">/</text>
+              <input class="detail-form-input short" v-model="detailEditCard.forwardAcc" placeholder="准确度" style="width:50px;" />
+            </template>
+            <template v-else>
+              <input class="detail-form-input short" v-model="detailEditCard.backwardTime" placeholder="用时" style="width:50px;" />
+              <text class="detail-form-hint">/</text>
+              <input class="detail-form-input short" v-model="detailEditCard.backwardAcc" placeholder="准确度" style="width:50px;" />
+            </template>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
+            <text class="detail-form-hint">备注</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '影像追忆'">
           <view class="detail-form-row">
-            <text class="detail-form-label">使用工具</text>
+            <text class="detail-form-hint">时长</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number"  />
+            <text class="detail-form-hint">分</text>
+            <text class="detail-form-hint">字数</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number"  />
+            <text class="detail-form-hint">字</text>
+            <text class="detail-form-hint">追忆率</text>
+            <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="0" type="number"  />
+            <text class="detail-form-hint">%</text>
+          </view>
+          <view class="detail-form-row">
+            <text class="detail-form-hint">工具</text>
             <view class="detail-form-tags">
               <text v-for="t in ['书本','视频','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tool === t }" @click="detailEditCard.tool = t">{{ t }}</text>
             </view>
-          </view>
-          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
-            <text class="detail-form-label">训练</text>
-            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
-              <text class="detail-form-unit">用时</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
-              <text class="detail-form-unit">分钟，看完</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
-              <text class="detail-form-unit">字</text>
-            </view>
+            <input class="detail-form-input" v-model="detailEditCard.content" placeholder="材料名称" style="flex:1;" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">材料</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练材料" style="height:36px;padding:6px 10px;" />
-          </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">追忆率</text>
-            <view class="detail-form-inline">
-              <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="%" type="number" />
-              <text class="detail-form-unit">%</text>
-            </view>
-          </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">备注</text>
+            <text class="detail-form-hint">备注</text>
             <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '超脑阅读'">
-          <view style="display:flex;align-items:center;gap:4px;margin-bottom:10px;">
-            <text class="detail-form-label" style="width:auto;">训练</text>
-            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
-              <text class="detail-form-unit">用时</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" />
-              <text class="detail-form-unit">分钟，完成</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" />
-              <text class="detail-form-unit">字</text>
-            </view>
+          <view class="detail-form-row">
+            <text class="detail-form-hint">时长</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number"  />
+            <text class="detail-form-hint">分</text>
+            <text class="detail-form-hint">字数</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number"  />
+            <text class="detail-form-hint">字</text>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">结果</text>
+            <text class="detail-form-hint">效果</text>
             <textarea class="detail-form-textarea" v-model="detailEditCard.result" placeholder="训练效果" style="height:36px;padding:6px 10px;" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">备注</text>
+            <text class="detail-form-hint">备注</text>
             <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
           </view>
         </template>
 
         <template v-else>
           <view class="detail-form-row">
-            <text class="detail-form-label">时间</text>
-            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" />
+            <text class="detail-form-hint">时长</text>
+            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" style="flex:0.4;" />
+            <text class="detail-form-hint">效果</text>
+            <input class="detail-form-input" v-model="detailEditCard.result" placeholder="训练效果" style="flex:0.6;" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">内容</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练内容" />
+            <text class="detail-form-hint">内容</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练内容" style="height:36px;padding:6px 10px;" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-label">结果</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.result" placeholder="训练效果" />
-          </view>
-          <view class="detail-form-row">
-            <text class="detail-form-label">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
+            <text class="detail-form-hint">备注</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
           </view>
         </template>
       </view>
@@ -3559,11 +3534,11 @@ function triggerGlitch() {
   display:flex; justify-content:center; padding:24px 0 40px;
 }
 .detail-test-card {
-  width:90%; max-width:340px; margin:auto;
+  width:85%; max-width:300px; margin:auto;
   background:#1a2840; border-radius:12px;
   border:1.5px solid rgba(0,210,255,0.35);
   box-shadow:0 0 24px rgba(0,210,255,0.12);
-  padding:16px;
+  padding:14px;
 }
 .detail-swiper-wrap { width:90%; max-width:360px; }
 .detail-swiper { height:420px; }
@@ -3577,26 +3552,22 @@ function triggerGlitch() {
 .detail-slide-body { flex:1; overflow-y:auto; min-height:0; padding-right:2px; }
 .detail-row { display:flex; align-items:flex-start; gap:6px; padding:6px 0; border-bottom:1px solid rgba(0,210,255,0.06); position:relative; }
 .detail-row::before { content:'›'; position:absolute; left:-6px; top:6px; color:rgba(0,210,255,0.25); font-size:9px; font-family:monospace; }
-.detail-label { color:#fff; font-size:12px; width:56px; flex-shrink:0; font-weight:500; }
-.detail-value { color:rgba(0,210,255,0.55); font-size:11px; flex:1; line-height:1.4; word-break:break-all; }
+.detail-label { color:#fff; font-size:13px; width:56px; flex-shrink:0; font-weight:600; }
+.detail-value { color:rgba(0,210,255,0.55); font-size:12px; flex:1; line-height:1.4; word-break:break-all; }
 
 [data-theme="white"] .detail-label { color:#1a1a2e; }
 [data-theme="white"] .detail-value { color:#6b7280; }
 .detail-actions { display:flex; gap:6px; padding-top:8px; flex-shrink:0; border-top:1px solid rgba(0,210,255,0.08); }
 .detail-edit-body { max-height:52vh; max-height:52dvh; overflow-y:auto; margin-bottom:4px; }
-.detail-form-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
-.detail-form-label { color:rgba(0,210,255,0.55); font-size:10px; width:52px; flex-shrink:0; padding-top:8px; }
-.detail-form-input {
-  flex:1; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
-  border-radius:8px; padding:8px 10px; font-size:12px; color:#fff;
-}
-.detail-form-input.short { width:72px; flex:none; }
+.detail-form-row { display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+.detail-form-hint { color:rgba(255,255,255,0.55); font-size:12px; width:auto; flex-shrink:0; }
+.detail-form-input { flex:none; width:auto; min-width:0; }
+.detail-form-input.short { width:56px; flex:none; }
 .detail-form-textarea {
-  flex:1; min-height:52px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
-  border-radius:8px; padding:8px 10px; font-size:12px; color:#fff;
+  flex:1; min-height:36px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
+  border-radius:8px; padding:6px 10px; font-size:12px; color:#fff; width:auto; max-width:100%; box-sizing:border-box;
 }
 .detail-form-inline { display:flex; align-items:center; gap:6px; flex:1; flex-wrap:wrap; }
-.detail-form-unit { color:rgba(0,210,255,0.45); font-size:11px; }
 .detail-form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
 .detail-ftag {
   padding:4px 8px; border-radius:6px; font-size:11px;
@@ -3606,6 +3577,7 @@ function triggerGlitch() {
 .detail-save-btn { border-color:rgba(34,197,94,0.45); color:#4ade80; background:rgba(34,197,94,0.08); }
 [data-theme="white"] .detail-test-card { background:#fff; border-color:rgba(37,99,235,0.25); }
 [data-theme="white"] .detail-slide-name { color:#1a1a2e; }
+[data-theme="white"] .detail-form-hint { color:#6b7280; }
 [data-theme="white"] .detail-form-input,
 [data-theme="white"] .detail-form-textarea { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
 [data-theme="white"] .detail-ftag { border-color:#e5e7eb; color:#6b7280; }

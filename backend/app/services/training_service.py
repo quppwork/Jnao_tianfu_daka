@@ -526,7 +526,6 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
     main_line_name = ""
     progress_main_line = "A"
     progress_main_line_name = ""
-    pending_main_line_to = None
     if db is not None:
         ids = [i.content_item_id for i in plan.items if i.content_item_id]
         if ids:
@@ -541,13 +540,10 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         main_line_name = f"整体 Tier {overall_tier(tp)}"
         progress_main_line = main_line_key
         progress_main_line_name = main_line_name
-        pending_main_line_to = None  # v2.0: Tier晋级实时判定，无pending
     training_day = _training_day_for_child(db, plan.child_user_id) if db is not None else 1
     optional_offers: list[dict] = []
     if db is not None and plan.items:
-        from app.services.training_optional_service import get_optional_offers_for_child
-
-        optional_offers = get_optional_offers_for_child(db, plan.child_user_id, plan)
+        optional_offers = []  # v2.0: 选修由 formula_engine + elective_service 管理
     timer_fields = _build_timer_fields(db, plan.child_user_id, plan, now) if db is not None else {
         "timer_phase": "setup",
         "timer_end_at": None,
@@ -564,7 +560,6 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "main_line_name": main_line_name,
         "progress_main_line": progress_main_line,
         "progress_main_line_name": progress_main_line_name,
-        "pending_main_line_to": pending_main_line_to,
         "lesson_day": training_day,
         "training_day_number": training_day,
         "planned_minutes": plan.planned_minutes,
