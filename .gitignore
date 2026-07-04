@@ -56,3 +56,4 @@ h5_fronted/
 *.mov
 *.wav
 *.oggdata/*.db
+.trash/
