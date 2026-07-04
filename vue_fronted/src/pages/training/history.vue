@@ -22,36 +22,23 @@
 
       <template v-else-if="historyDays.length">
         <view v-for="(day, di) in historyDays" :key="day.date || di" class="day-section">
-          <text class="day-label">{{ formatDayLabel(day.date) }}</text>
-          <view
-            v-for="(rec, ri) in day.records"
-            :key="rec.id || `${di}-${ri}`"
-            class="card summary-card"
-          >
-            <view class="summary-header">
-              <text class="summary-label">📝 打卡 {{ cardsFromRecord(rec).length }} 项</text>
-              <text v-if="rec.checkin_time" class="summary-time">{{ rec.checkin_time }}</text>
-            </view>
-            <view class="summary-mini-cards">
+          <view class="card day-card">
+            <text class="day-card-title">{{ formatDayLabel(day.date) }}</text>
+            <view v-for="(rec, ri) in day.records" :key="rec.id || `${di}-${ri}`" class="day-card-body">
               <view
                 v-for="(c, ci) in cardsFromRecord(rec)"
                 :key="`${ri}-${ci}`"
-                class="mini-card mini-card-v1"
+                class="day-item"
+                @click="openRecordDetail(rec)"
               >
-                <view class="mini-card-accent"></view>
-                <view class="mini-card-left">
-                  <text class="mini-card-name">{{ c.name }}{{ c.phaseBlock ? ` · 训练${c.phaseBlock}` : '' }}</text>
-                  <text class="mini-card-summary">{{ miniCardSummary(c) }}</text>
-                  <text v-if="c.result" class="mini-card-extra">结果：{{ c.result }}</text>
-                  <text v-if="c.note" class="mini-card-extra">备注：{{ c.note }}</text>
+                <view class="day-item-head">
+                  <text class="day-item-name">{{ c.name }}{{ c.phaseBlock ? ` · 训练${c.phaseBlock}` : '' }}</text>
+                  <view v-if="rec.attitude_pct != null" class="day-item-att">
+                    <text class="day-att-emoji">{{ attitudeEmoji(rec.attitude_pct) }}</text>
+                    <text>{{ rec.attitude_pct }}%</text>
+                  </view>
                 </view>
-              </view>
-            </view>
-            <view v-if="rec.attitude_pct != null" class="summary-attitude">
-              <text class="sa-label">配合度</text>
-              <view class="sa-badge">
-                <text class="sa-pct">{{ rec.attitude_pct }}%</text>
-                <text class="sa-emoji">{{ attitudeEmoji(rec.attitude_pct) }}</text>
+                <text class="day-item-detail">{{ miniCardSummary(c) }}</text>
               </view>
             </view>
           </view>
@@ -63,6 +50,34 @@
         <text class="empty-hint">今日打卡请在训练页查看；完成训练并进入新训练日后，记录会出现在这里</text>
       </view>
     </view>
+
+    <!-- 打卡详情弹窗 -->
+    <view v-if="showDetail" class="picker-overlay" @click="closeDetail">
+      <view class="picker-card detail-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">打卡详情</text>
+          <view class="modal-close" @click="closeDetail">✕</view>
+        </view>
+        <view class="detail-body">
+          <view v-for="(c, ci) in detailCards" :key="ci" class="detail-card-item">
+            <text class="detail-card-name">{{ c.name }}{{ c.phaseBlock ? ` · 训练${c.phaseBlock}` : '' }}</text>
+            <view class="detail-fields">
+              <view v-if="c.time" class="detail-field"><text class="dfl">用时</text><text class="dfv">{{ c.time }}分钟</text></view>
+              <view v-if="c.wordCount" class="detail-field"><text class="dfl">完成</text><text class="dfv">{{ c.wordCount }}字</text></view>
+              <view v-if="c.count" class="detail-field"><text class="dfl">题数</text><text class="dfv">{{ c.count }}题</text></view>
+              <view v-if="c.accuracy" class="detail-field"><text class="dfl">正确率</text><text class="dfv">{{ c.accuracy }}%</text></view>
+              <view v-if="c.tool" class="detail-field"><text class="dfl">工具</text><text class="dfv">{{ c.tool }}</text></view>
+              <view v-if="c.completed" class="detail-field"><text class="dfl">状态</text><text class="dfv">{{ c.completed }}</text></view>
+              <view v-if="c.materialType" class="detail-field"><text class="dfl">材料</text><text class="dfv">{{ c.materialType }}</text></view>
+              <view v-if="c.materialName" class="detail-field"><text class="dfl">名称</text><text class="dfv">《{{ c.materialName }}》</text></view>
+              <view v-if="c.result" class="detail-field"><text class="dfl">效果</text><text class="dfv">{{ c.result }}</text></view>
+              <view v-if="c.note" class="detail-field"><text class="dfl">备注</text><text class="dfv">{{ c.note }}</text></view>
+            </view>
+          </view>
+        </view>
+        <view class="btn-close-detail" @click="closeDetail"><text>关闭</text></view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -71,6 +86,17 @@ import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ensureChildUser, fetchTrainingHistory } from '@/utils/userApi.js'
 import { miniCardSummary, cardsFromRecord, attitudeEmoji } from '@/utils/trainingCardDisplay.js'
+
+function miniCardDetail(c) {
+  const parts = []
+  if (c.time) parts.push(`用时${c.time}min`)
+  if (c.wordCount) parts.push(`完成${c.wordCount}字`)
+  if (c.count) parts.push(`${c.count}题`)
+  if (c.accuracy) parts.push(`正确率${c.accuracy}%`)
+  if (c.tool) parts.push(`工具：${c.tool}`)
+  if (c.completed) parts.push(c.completed)
+  return parts.length ? parts.join('  ') : '已记录'
+}
 
 const loading = ref(false)
 const errorText = ref('')
@@ -102,6 +128,17 @@ async function loadHistory(force = false) {
 
 function goBack() {
   uni.navigateBack({ delta: 1 })
+}
+const showDetail = ref(false)
+const detailCards = ref([])
+
+function openRecordDetail(rec) {
+  detailCards.value = cardsFromRecord(rec)
+  showDetail.value = true
+}
+function closeDetail() {
+  showDetail.value = false
+  detailCards.value = []
 }
 
 onMounted(() => loadHistory(true))
@@ -186,15 +223,51 @@ onShow(() => loadHistory(true))
   margin: 8px 0 8px;
   padding-left: 2px;
 }
-.summary-card {
-  width: 100%;
-  box-sizing: border-box;
-  background: rgba(0, 210, 255, 0.04);
-  border: 2px solid rgba(0, 210, 255, 0.15);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 10px;
+.day-card {
+  width: 100%; box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px; padding: 16px; margin-bottom: 12px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
 }
+.day-card::after {
+  content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.6) 45%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.6) 55%, transparent 60%);
+  animation: cardShine 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes cardShine {
+  0% { transform: translateX(-100%) translateY(-100%); }
+  100% { transform: translateX(100%) translateY(100%); }
+}
+.day-card-title { color:#1f2937; font-size:14px; font-weight:600; display:block; margin-bottom:12px; position:relative; z-index:1; }
+.day-card-body { display:flex; flex-direction:column; gap:8px; position:relative; z-index:1; }
+.day-item { display:flex; flex-direction:column; gap:3px; padding:8px 0; border-bottom:1px solid #f3f4f6; }
+.day-item:last-child { border-bottom:none; }
+.day-item-head { display:flex; justify-content:space-between; align-items:center; }
+.day-item-name { color:#374151; font-size:13px; font-weight:500; }
+.day-item-att { display:flex; align-items:center; gap:3px; color:#2563eb; font-size:12px; font-weight:600; }
+.day-att-emoji { font-size:14px; }
+.day-item { cursor:pointer; }
+.day-item:active { background:#f9fafb; border-radius:8px; }
+
+/* Detail popup */
+.picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; padding:20px; }
+.detail-modal { background:#fff; border-radius:16px; padding:20px; width:100%; max-width:360px; max-height:70vh; overflow-y:auto; }
+.modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.modal-title { color:#1f2937; font-size:16px; font-weight:700; }
+.modal-close { width:28px; height:28px; border-radius:50%; background:#f3f4f6; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; color:#9ca3af; }
+.detail-body { display:flex; flex-direction:column; gap:12px; }
+.detail-card-item { border:1px solid #f3f4f6; border-radius:10px; padding:12px; }
+.detail-card-name { color:#1f2937; font-size:14px; font-weight:600; display:block; margin-bottom:8px; }
+.detail-fields { display:flex; flex-direction:column; gap:6px; }
+.detail-field { display:flex; align-items:center; gap:8px; }
+.dfl { color:#9ca3af; font-size:12px; width:48px; flex-shrink:0; }
+.dfv { color:#374151; font-size:13px; }
+.btn-close-detail { margin-top:16px; padding:12px; text-align:center; background:#f3f4f6; border-radius:10px; cursor:pointer; }
+.btn-close-detail text { color:#6b7280; font-size:14px; font-weight:500; }
+.day-item-detail { color:#9ca3af; font-size:11px; }
 .summary-header {
   display: flex;
   align-items: center;
@@ -231,19 +304,13 @@ onShow(() => loadHistory(true))
   padding: 10px 10px 10px 0;
   overflow: hidden;
 }
-.mini-card-v1 {
-  padding-left: 8px;
+.mini-card-v2 {
+  padding:12px 14px;
+  flex-direction:column; align-items:stretch; gap:6px;
 }
-.mini-card-v1 .mini-card-accent {
-  width: 3px;
-  height: 60%;
-  min-height: 28px;
-  border-radius: 0 2px 2px 0;
-  background: linear-gradient(180deg, #00d2ff, #0088cc);
-  box-shadow: 0 0 8px rgba(0, 210, 255, 0.4);
-  flex-shrink: 0;
-  align-self: center;
-}
+.mini-card-v2-head { display:flex; justify-content:space-between; align-items:center; }
+.mini-card-v2-name { color:#fff; font-size:13px; font-weight:600; }
+.mini-card-v2-detail { color:rgba(255,255,255,0.5); font-size:11px; line-height:1.5; }
 .mini-card-left {
   flex: 1;
   min-width: 0;

@@ -3074,15 +3074,11 @@ function triggerGlitch() {
 [data-theme="white"] .time-running-hint { color:#9ca3af; }
 [data-theme="white"] .time-expired-sub { color:#9ca3af; }
 [data-theme="white"] .media-lock-text, [data-theme="white"] .checkin-lock-text { background:#fff; border-color:#e5e7eb; color:#2563eb; }
-[data-theme="white"] .form-label { color:#6b7280; }
 [data-theme="white"] .form-input { background:#f9fafb; border-color:#d1d5db; color:#1f2937; }
 [data-theme="white"] .form-input.short { background:#f9fafb; color:#1f2937; }
 [data-theme="white"] .form-input.mini { background:#f9fafb; color:#1f2937; }
 [data-theme="white"] .form-textarea { background:#f9fafb; border-color:#d1d5db; color:#1f2937; }
-[data-theme="white"] .form-unit { color:#9ca3af; }
-[data-theme="white"] .form-inline .form-unit { color:#9ca3af; }
-[data-theme="white"] .ftag { background:#f3f4f6; color:#6b7280; border-color:#d1d5db; }
-[data-theme="white"] .ftag.on { background:#2563eb; border-color:#2563eb; color:#fff; }
+[data-theme="white"] .ftag { background:#f3f4f6; color:#374151; border-color:#d1d5db; }
 
 .divider { height:1px; background:linear-gradient(90deg,transparent,rgba(0,210,255,0.3),transparent); margin:12px 0; }
 .b-section { }
@@ -3215,7 +3211,6 @@ function triggerGlitch() {
 [data-theme="white"] .step-label { color:#1a1a2e; }
 [data-theme="white"] .step-box { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
 [data-theme="white"] .step-time { color:#9ca3af; }
-[data-theme="white"] .btn-checkin { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 [data-theme="white"] .btn-checkin text { color:#fff; }
 [data-theme="white"] .summary-card { border-color:#e5e7eb; }
 [data-theme="white"] .summary-label { color:#6b7280; }
@@ -3237,14 +3232,6 @@ function triggerGlitch() {
 [data-theme="white"] .pi-text { color:#374151; }
 [data-theme="white"] .picker-item.active { background:#2563eb; border-color:#2563eb; }
 [data-theme="white"] .picker-item.active .pi-text { color:#fff; text-shadow:none; }
-[data-theme="white"] .form-card { background:#fff; border-color:#2563eb; box-shadow:0 4px 20px rgba(0,0,0,0.06); }
-[data-theme="white"] .form-title { color:#1a1a2e; }
-[data-theme="white"] .form-label { color:#6b7280; }
-[data-theme="white"] .form-input { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
-[data-theme="white"] .form-textarea { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
-[data-theme="white"] .form-input.short { background:#fff; }
-[data-theme="white"] .ftag { background:#f3f4f6; color:#6b7280; border-color:#e5e7eb; }
-[data-theme="white"] .ftag.on { background:#2563eb; border-color:#2563eb; color:#fff; }
 [data-theme="white"] .score-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 20px rgba(0,0,0,0.04); }
 [data-theme="white"] .score-item { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .score-item.active { background:rgba(37,99,235,0.08); border-color:#2563eb; }
@@ -3275,8 +3262,6 @@ function triggerGlitch() {
 [data-theme="white"] .si-edit { color:#2563eb; }
 [data-theme="white"] .si-del { color:#9ca3af; }
 [data-theme="white"] .si-del:active { color:#ef4444; }
-[data-theme="white"] .form-del { color:#9ca3af; }
-[data-theme="white"] .form-del:active { color:#ef4444; }
 [data-theme="white"] .submitted-item { border-bottom-color:#e5e7eb; }
 [data-theme="white"] .step-content .step-time { color:#9ca3af; }
 [data-theme="white"] .step-box.dim-box { opacity:0.6; }
@@ -3814,4 +3799,20 @@ function triggerGlitch() {
 [data-reduced-motion] .plr-core {
   display: none;
 }
+</style>
+
+<style>
+[data-theme="white"] .form-card { background:#fff; border-color:#2563eb; box-shadow:0 4px 20px rgba(0,0,0,0.06); }
+[data-theme="white"] .form-title { color:#1a1a2e; }
+[data-theme="white"] .form-label { color:#1f2937; font-size:13px; }
+[data-theme="white"] .form-input { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
+[data-theme="white"] .form-textarea { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
+[data-theme="white"] .form-input.short { background:#fff; }
+[data-theme="white"] .ftag { background:#f3f4f6; color:#374151; border-color:#e5e7eb; }
+[data-theme="white"] .ftag.on { background:#2563eb; border-color:#2563eb; color:#fff; }
+[data-theme="white"] .form-unit { color:#1f2937; }
+[data-theme="white"] .form-inline .form-unit { color:#1f2937; }
+[data-theme="white"] .form-del { color:#9ca3af; }
+[data-theme="white"] .form-del:active { color:#ef4444; }
+[data-theme="white"] .btn-checkin { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 </style>
