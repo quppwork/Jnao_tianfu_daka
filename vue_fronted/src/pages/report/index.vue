@@ -193,7 +193,7 @@ import { ensureChildUser, fetchAssessmentReport, fetchProfile, saveProfile } fro
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
 const TALENT_LOGOS = { "学者":"/static/xue.jpg","思者":"/static/si.jpg","赢者":"/static/ying.jpg","德者":"/static/de.jpg","行者":"/static/xing.jpg" }
-const TALENT_BG_FIGS = { "学者":"/static/学者.png","思者":"/static/思者.png","赢者":"/static/赢者.png","德者":"/static/德者.png","行者":"/static/行者.png" }
+const TALENT_BG_FIGS = { "学者":"/static/talent-xuezhe.png","思者":"/static/talent-sizhe.png","赢者":"/static/talent-yingzhe.png","德者":"/static/talent-dezhe.png","行者":"/static/talent-xingzhe.png" }
 
 const loading = ref(true)
 const report = ref(null)

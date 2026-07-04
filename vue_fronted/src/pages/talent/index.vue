@@ -516,7 +516,7 @@ function dismissNotice() {
 }
 
 const talentEmoji = { 学者:'📚', 思者:'💡', 行者:'🏃', 德者:'⚖️', 赢者:'🏆' }
-const talentAvatar = { 学者:'/static/学者.png', 思者:'/static/思者.png', 行者:'/static/行者.png', 德者:'/static/德者.png', 赢者:'/static/赢者.png' }
+const talentAvatar = { 学者:'/static/talent-xuezhe.png', 思者:'/static/talent-sizhe.png', 行者:'/static/talent-xingzhe.png', 德者:'/static/talent-dezhe.png', 赢者:'/static/talent-yingzhe.png' }
 
 function formatHistoryDate(iso) {
   if (!iso) return ''
