@@ -4,8 +4,10 @@
 
 {
     "skills": {
-        "超脑阅读": { "tier": 1, "oss_stage": 0, "oss_part": 0, "consecutive_pass": 0 },
-        "影像追忆": { "tier": 1, "oss_stage": 1, "oss_part": 1, "consecutive_pass": 0 },
+        "超脑阅读": { "tier": 1, "oss_stage": 0, "oss_part": 0, "consecutive_pass": 0,
+                     "part_listen_count": 0, "part_first_listen_at": null },
+        "影像追忆": { "tier": 1, "oss_stage": 1, "oss_part": 1, "consecutive_pass": 0,
+                     "part_listen_count": 0, "part_first_listen_at": null },
         "扫描速记": { "tier": 1, "oss_stage": 1, "oss_part": 1, "consecutive_pass": 0 },
         "极速运算": { "tier": 1, "oss_stage": 2, "oss_part": 1, "consecutive_pass": 0 },
         "极速学习": { "tier": 1, "oss_stage": 2, "oss_part": 1, "consecutive_pass": 0 }
@@ -60,6 +62,8 @@ def _default_state(talent_code: int | None = None) -> dict:
             "oss_stage": stage,
             "oss_part": part,
             "consecutive_pass": 0,
+            "part_listen_count": 0,
+            "part_first_listen_at": None,
         }
     return {
         "skills": skills,
@@ -87,6 +91,8 @@ def get_training_progress(child: ChildUser) -> dict:
             "oss_stage": int(sd.get("oss_stage") if sd.get("oss_stage") is not None else DEFAULT_OSS_START.get(sk, (0, 0))[0]),
             "oss_part": int(sd.get("oss_part") if sd.get("oss_part") is not None else DEFAULT_OSS_START.get(sk, (0, 0))[1]),
             "consecutive_pass": int(sd.get("consecutive_pass") or 0),
+            "part_listen_count": int(sd.get("part_listen_count") or 0),
+            "part_first_listen_at": sd.get("part_first_listen_at"),
         }
     return {
         "skills": skills,
@@ -121,6 +127,8 @@ def _clean_skills_for_save(skills: dict) -> dict:
                 "oss_stage": int(sd.get("oss_stage") or 0),
                 "oss_part": int(sd.get("oss_part") or 0),
                 "consecutive_pass": int(sd.get("consecutive_pass") or 0),
+                "part_listen_count": int(sd.get("part_listen_count") or 0),
+                "part_first_listen_at": sd.get("part_first_listen_at"),
             }
     return out
 
@@ -201,7 +209,8 @@ def get_skill_state(state: dict, skill: str) -> dict:
     if skill in skills:
         return dict(skills[skill])
     default = DEFAULT_OSS_START.get(skill, (0, 0))
-    return {"tier": 1, "oss_stage": default[0], "oss_part": default[1], "consecutive_pass": 0}
+    return {"tier": 1, "oss_stage": default[0], "oss_part": default[1], "consecutive_pass": 0,
+            "part_listen_count": 0, "part_first_listen_at": None}
 
 
 def get_skill_tier(state: dict, skill: str) -> int:
@@ -380,3 +389,119 @@ def _grade_band_from_grade(grade: str | None) -> str | None:
         if g in grades:
             return band
     return None
+
+
+# ─── Part 轮换 ──────────────────────────────────────
+
+
+PART_ROTATION_NEW_USER = 5          # 新学员 5 次打卡换 part
+PART_ROTATION_RETURNING_7D = 20     # 老学员 7 天内 20 次换 part
+PART_ROTATION_RETURNING_7D_PLUS = 14  # 老学员超 7 天 14 次换 part
+
+
+def rotate_part_after_checkin(
+    state: dict,
+    skill: str,
+    *,
+    student_type: str = "new",
+    db: Session | None = None,
+    talent_code: int | None = None,
+) -> bool:
+    """打卡后判定当前技能的 part 是否需要轮换。返回 True 表示轮换了。"""
+    sd = state["skills"].get(skill)
+    if not sd:
+        return False
+
+    count = int(sd.get("part_listen_count", 0)) + 1
+    sd["part_listen_count"] = count
+
+    threshold = _part_rotation_threshold(student_type, sd)
+    if count < threshold:
+        return False
+
+    # 执行轮换
+    return _do_rotate_part(state, skill, db=db, talent_code=talent_code)
+
+
+def _part_rotation_threshold(student_type: str, sd: dict) -> int:
+    """判定当前 part 的轮换阈值"""
+    if student_type == "new":
+        return PART_ROTATION_NEW_USER
+    first_at = sd.get("part_first_listen_at")
+    if first_at:
+        from datetime import datetime, timezone, timedelta
+
+        try:
+            first = first_at if isinstance(first_at, datetime) else datetime.fromisoformat(str(first_at))
+            now = datetime.now(timezone(timedelta(hours=8)))
+            days = (now - first).days
+            if days <= 7:
+                return PART_ROTATION_RETURNING_7D
+        except (ValueError, TypeError):
+            pass
+    return PART_ROTATION_RETURNING_7D_PLUS
+
+
+def _do_rotate_part(
+    state: dict,
+    skill: str,
+    *,
+    db: Session | None = None,
+    talent_code: int | None = None,
+) -> bool:
+    """执行 part 轮换：当前 stage 内 part+1，用完则按 tier 决定回 stage=1 或升 stage"""
+    from datetime import datetime, timezone, timedelta
+
+    sd = state["skills"].get(skill)
+    if not sd:
+        return False
+
+    stage = int(sd.get("oss_stage", 1))
+    part = int(sd.get("oss_part", 1))
+    tier = int(sd.get("tier", 1))
+
+    # 尝试当前 stage 的下一个 part
+    if db and talent_code:
+        from app.services.talent_content_pool import get_talent_content_pool
+        from app.services.training_curriculum import _find_lesson
+        from app.services.content_meta import parse_item_meta
+
+        pool = get_talent_content_pool(db, talent_code)
+        nxt = _find_lesson(pool, skill, stage, part + 1)
+        if nxt:
+            sd["oss_part"] = part + 1
+            _reset_part_counters(sd)
+            return True
+
+        # 当前 stage part 用完
+        if tier <= 3:
+            # 回 stage=1 循环
+            first = _find_lesson(pool, skill, 1, 1)
+            if first:
+                sd["oss_stage"] = 1
+                sd["oss_part"] = 1
+                _reset_part_counters(sd)
+                return True
+        else:
+            # 跳到下一 stage
+            nxt = _find_lesson(pool, skill, stage + 1, 1)
+            if nxt:
+                sd["oss_stage"] = stage + 1
+                sd["oss_part"] = 1
+                _reset_part_counters(sd)
+                return True
+    else:
+        # 无 db 时简单推进
+        sd["oss_part"] = part + 1
+        _reset_part_counters(sd)
+        return True
+
+    return False
+
+
+def _reset_part_counters(sd: dict) -> None:
+    """轮换后重置计数"""
+    from datetime import datetime, timezone, timedelta
+
+    sd["part_listen_count"] = 0
+    sd["part_first_listen_at"] = datetime.now(timezone(timedelta(hours=8))).isoformat()

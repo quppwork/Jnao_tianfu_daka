@@ -908,6 +908,9 @@ def submit_checkin(
                 grade=child_grade(child),
             )
 
+            # Part 轮换判定
+            _try_rotate_part_after_checkin(db, child, talent_code)
+
     db.commit()
     db.refresh(record)
 
@@ -1051,6 +1054,31 @@ def group_checkin_history_by_day(items: list[dict]) -> list[dict]:
         )
         out.append({"date": d, "records": recs})
     return out
+
+
+def _try_rotate_part_after_checkin(db: Session, child: ChildUser, talent_code: int) -> None:
+    """打卡后触发各技能的 part 轮换判定"""
+    from app.services.child_training_state import (
+        get_training_progress,
+        save_training_progress,
+        rotate_part_after_checkin,
+        REQUIRED_SKILLS,
+    )
+    from sqlalchemy.orm.attributes import flag_modified
+
+    pj = child.profile_json if isinstance(child.profile_json, dict) else {}
+    onboarding = pj.get("onboarding") or {}
+    student_type = str(onboarding.get("student_type", "new"))
+    state = get_training_progress(child)
+    rotated = False
+
+    for skill in REQUIRED_SKILLS:
+        if rotate_part_after_checkin(state, skill, student_type=student_type, db=db, talent_code=talent_code):
+            rotated = True
+
+    if rotated:
+        save_training_progress(db, child, state)
+        flag_modified(child, "profile_json")
 
 
 def _auto_promote_to_returning(db: Session, child_user_id: int) -> None:
