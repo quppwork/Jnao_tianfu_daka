@@ -225,6 +225,23 @@ def elective_checkin(
         raise HTTPException(500, str(e)) from e
 
 
+@router.post("/plan/add-elective", response_model=TrainingTodayResponse)
+def plan_add_elective(
+    req: dict,
+    child_user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """往今日方案末尾追加一个选修项（多元感知等），带 OSS 音频"""
+    try:
+        return training_service.append_elective_item(
+            db, child_user_id,
+            plan_id=req.get("plan_id", 0),
+            skill=req.get("skill", ""),
+        )
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
+
+
 @router.get("/progress", response_model=TrainingProgressResponse)
 def training_progress(
     child_user_id: int = Depends(get_authenticated_user),

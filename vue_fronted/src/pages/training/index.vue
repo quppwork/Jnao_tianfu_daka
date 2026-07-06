@@ -818,7 +818,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan, addPlanElective } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -1629,13 +1629,18 @@ function openElectiveModal() {
 function closeElectiveModal() { showElectiveModal.value = false }
 async function onElectiveCheckin(skill) {
   const uid = await ensureChildUser()
-  await submitElectiveCheckin(uid, {
-    plan_id: todayPlan.value?.plan_id,
-    skill,
-    cards: [{ name: skill }],
-  })
-  uni.showToast({ title: `${skill} 已记录`, icon: 'none' })
-  closeElectiveModal()
+  const planId = todayPlan.value?.plan_id
+  if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
+  try {
+    const data = await addPlanElective(uid, planId, skill)
+    await applyScheduledPlan(uid, data)
+    uni.showToast({ title: `${skill} 已添加到方案`, icon: 'none' })
+    closeElectiveModal()
+  } catch (e) {
+    const detail = e.data?.detail || e.message || '添加失败'
+    const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
+    uni.showToast({ title: msg, icon: 'none', duration: 3000 })
+  }
 }
 // ── 方案编辑 ──
 const showPlanEditor = ref(false)

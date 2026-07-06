@@ -643,6 +643,15 @@ export async function customizePlan(userId, planId, skills) {
   })
 }
 
+/** 往今日方案末尾追加一个选修项（多元感知等），返回完整的今日方案 */
+export async function addPlanElective(userId, planId, skill) {
+  return apiJson(withUser('/api/training/plan/add-elective', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan_id: planId, skill }),
+  })
+}
+
 // ── 首页引导对话 ──
 
 export async function fetchGuideSession(userId) {

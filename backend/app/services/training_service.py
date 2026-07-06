@@ -1090,6 +1090,75 @@ def _try_rotate_part_after_checkin(db: Session, child: ChildUser, talent_code: i
         flag_modified(child, "profile_json")
 
 
+def append_elective_item(
+    db: Session,
+    child_user_id: int,
+    plan_id: int,
+    skill: str,
+) -> dict:
+    """在现有方案末尾追加一个选修训练项（如多元感知），有 OSS 音频则带音频"""
+    from app.services.content_meta import (
+        content_display_title, estimate_duration_min, parse_item_meta,
+    )
+    from app.services.talent_content_pool import get_talent_content_pool
+    from app.services.assessment_service import resolve_effective_talent
+    from app.services.training_catalog_sync import repair_plan_media_items
+    from app.services.training_child_guide import build_coach_text_for_plan
+
+    plan = db.get(TrainingPlan, plan_id)
+    if not plan or plan.child_user_id != child_user_id:
+        raise TrainingError("训练计划不存在", 404)
+    if is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止", 403)
+
+    items = sorted(plan.items, key=lambda x: x.sort_order)
+    next_sort = (items[-1].sort_order + 1) if items else 1
+
+    talent = resolve_effective_talent(db, child_user_id)
+    talent_code = talent.get("talent_code") if talent else None
+    pool = get_talent_content_pool(db, talent_code) if talent_code else []
+
+    content = None
+    for item in pool:
+        meta = parse_item_meta(item)
+        if meta.get("skill") == skill:
+            content = item
+            break
+
+    if content:
+        inst_data = {"skill": skill, "item_type": "elective", "blocks_next": False}
+        inst = __import__("json").dumps(inst_data, ensure_ascii=False)
+        db.add(TrainingItem(
+            plan_id=plan.id, sort_order=next_sort, ability_type="elective",
+            title=content_display_title(content),
+            duration_min=estimate_duration_min(content),
+            audio_url=content.play_url, video_url=content.video_url,
+            content_item_id=content.id, instructions=inst,
+            checkin_status="pending",
+        ))
+    else:
+        db.add(TrainingItem(
+            plan_id=plan.id, sort_order=next_sort, ability_type="elective",
+            title=f"{skill}（待同步）", duration_min=0,
+            instructions=__import__("json").dumps(
+                {"skill": skill, "item_type": "elective", "blocks_next": False},
+                ensure_ascii=False,
+            ),
+            checkin_status="pending",
+        ))
+
+    if talent_code:
+        repair_plan_media_items(db, plan, talent_code)
+    plan.report_text = build_coach_text_for_plan(plan)
+    db.commit()
+    invalidate_plan_cache(child_user_id, plan.plan_date)
+    from app.core.cache import invalidate_user_training
+    invalidate_user_training(child_user_id, plan_date=plan.plan_date)
+
+    plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
+    return _plan_to_response(plan, db=db)
+
+
 def _auto_promote_to_returning(db: Session, child_user_id: int) -> None:
     """累计打卡 >= 30 次的新学员 -> 自动转为老学员"""
     from app.db.models import TrainingRecord
