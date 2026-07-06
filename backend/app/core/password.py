@@ -1,20 +1,13 @@
-"""密码哈希 — hashlib"""
+"""密码哈希 — bcrypt"""
 
-import hashlib
-import os
+import bcrypt
 
 
 def hash_password(plain: str) -> str:
-    salt = os.urandom(16).hex()
-    h = hashlib.sha256((salt + plain).encode("utf-8")).hexdigest()
-    return f"{salt}${h}"
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str | None) -> bool:
     if not hashed:
         return False
-    parts = hashed.split("$", 1)
-    if len(parts) != 2:
-        return False
-    salt, h = parts
-    return hashlib.sha256((salt + plain).encode("utf-8")).hexdigest() == h
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))

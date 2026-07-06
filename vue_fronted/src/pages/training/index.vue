@@ -1600,15 +1600,40 @@ const activePickerBlock = ref(null)
 const submittedCards = ref([])
 const summaryAttitude = ref(60)
 
-// 🆕 v2.0 选修弹窗
-const showElectiveModal = ref(false)
-const electiveOffers = ref([])
-async function loadElectiveOffers() {
-  if (!todayPlan.value?.planned_minutes) return
+// ── 选修开关（替代弹窗）──
+const electiveSkills = computed(() => {
+  const items = todayPlan.value?.items || []
+  const list = []
+
+  function skillInPlan(skill) {
+    return items.some(item => {
+      const inst = parseItemInstructions(item.instructions)
+      // OSS 内部名为「感知力」，展示名为「多元感知」，两者都匹配
+      return inst.skill === skill || inst.skill === '感知力' || inst.skill === '多元感知'
+        || (item.title || '').includes(skill) || (item.title || '').includes('多元感知')
+    })
+  }
+
+  // 多元感知（OSS 内部名：感知力）：始终可选
+  list.push({ skill: '感知力', label: '多元感知', inPlan: skillInPlan('感知力') })
+
+  return list
+})
+
+async function toggleElective(skill) {
+  const uid = await ensureChildUser()
+  const planId = todayPlan.value?.plan_id
+  if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
+  const inPlan = electiveSkills.value.find(e => e.skill === skill)?.inPlan
+  const action = inPlan ? 'remove' : 'add'
   try {
-    const { offers } = await fetchElectiveList(todayPlan.value.planned_minutes, overallTier.value)
-    electiveOffers.value = offers || []
-  } catch (_) { electiveOffers.value = [] }
+    const data = await toggleElectiveItem(uid, planId, skill, action)
+    await applyScheduledPlan(uid, data)
+    uni.showToast({ title: inPlan ? `已移除 ${skill}` : `已添加 ${skill}`, icon: 'none' })
+  } catch (e) {
+    const msg = e.data?.detail || e.message || '操作失败'
+    uni.showToast({ title: Array.isArray(msg) ? msg.map(d => d.msg || JSON.stringify(d)).join('; ') : msg, icon: 'none', duration: 3000 })
+  }
 }
 
 // ── 方案编辑 ──
@@ -1672,15 +1697,29 @@ function openPlanEditor() {
 function closePlanEditor() { showPlanEditor.value = false }
 
 async function confirmCustomize() {
-nst uid = await ensureChildUser()
-  await submitElectiveCheckin(uid, {
-    plan_id: todayPlan.value?.plan_id,
-    skill,
-    cards: [{ name: skill }],
+  const uid = await ensureChildUser()
+  const planId = todayPlan.value?.plan_id
+  if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
+  const skills = editorSkills.value.map(s => s.split(':')[1])
+  uni.showModal({
+    title: '确认修改方案',
+    content: '每个训练日仅可修改一次，打卡后不可再改。修改后将按所选技能重新匹配训练内容，请谨慎操作，后果自负。确定继续吗？',
+    success: async (r) => {
+      if (!r.confirm) return
+      try {
+        await customizePlan(uid, planId, skills)
+        uni.showToast({ title: '方案已更新', icon: 'none' })
+        closePlanEditor()
+        await loadTodayPlan(true)
+      } catch (e) {
+        const detail = e.data?.detail || e.message || '修改失败'
+        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
+        uni.showToast({ title: msg, icon: 'none', duration: 3000 })
+      }
+    },
   })
-  uni.showToast({ title: `${skill} 已记录`, icon: 'none' })
-  closeElectiveModal()
 }
+
 // ── 方案编辑 ──
 const showPlanEditor = ref(false)
 const editorSkills = ref([])
