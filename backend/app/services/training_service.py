@@ -910,6 +910,10 @@ def submit_checkin(
 
     db.commit()
     db.refresh(record)
+
+    # 累计打卡 >= 30 次的新学员 -> 自动转为老学员
+    _auto_promote_to_returning(db, child_user_id)
+
     # 打卡后清除当日方案缓存，下次 GET /today 拉取最新状态
     invalidate_plan_cache(child_user_id, plan.plan_date)
     _invalidate_after_checkin_change(child_user_id, plan.plan_date)
@@ -1047,6 +1051,39 @@ def group_checkin_history_by_day(items: list[dict]) -> list[dict]:
         )
         out.append({"date": d, "records": recs})
     return out
+
+
+def _auto_promote_to_returning(db: Session, child_user_id: int) -> None:
+    """累计打卡 >= 30 次的新学员 -> 自动转为老学员"""
+    from app.db.models import TrainingRecord
+    from sqlalchemy import func, select
+
+    user = db.get(ChildUser, child_user_id)
+    if not user or not isinstance(user.profile_json, dict):
+        return
+    onboarding = user.profile_json.get("onboarding") or {}
+    if not isinstance(onboarding, dict):
+        return
+    if onboarding.get("student_type") != "new":
+        return
+    if onboarding.get("completed_at"):
+        return  # 已完成引导的新学员，不重复处理
+
+    count = db.scalar(
+        select(func.count()).select_from(TrainingRecord).where(
+            TrainingRecord.child_user_id == child_user_id,
+        )
+    ) or 0
+    if count >= 30:
+        from sqlalchemy.orm.attributes import flag_modified
+
+        ob = dict(onboarding)
+        ob["student_type"] = "returning"
+        pj = dict(user.profile_json)
+        pj["onboarding"] = ob
+        user.profile_json = pj
+        flag_modified(user, "profile_json")
+        db.commit()
 
 
 def _is_elective_item(item: TrainingItem) -> bool:
