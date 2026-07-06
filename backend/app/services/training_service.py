@@ -496,6 +496,9 @@ def _build_timer_fields(
         now = now.replace(tzinfo=TZ)
     start_dt = datetime.combine(train_date, row.start_time, tzinfo=TZ)
     end_dt = datetime.combine(train_date, row.end_time, tzinfo=TZ)
+    # 跨日窗口（如 22:00→06:00）：end 在 start 之前 → end 推后一天
+    if row.end_time <= row.start_time and end_dt <= start_dt:
+        end_dt += timedelta(days=1)
     planned_sec = max(0, int((end_dt - start_dt).total_seconds()))
     remaining = max(0, int((end_dt - now).total_seconds()))
 
@@ -620,7 +623,13 @@ def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: Trai
     if not row:
         return False
     current = now.time()
-    if row.start_time <= current <= row.end_time:
+    # 处理跨日训练窗口（如 22:00→06:00）
+    if row.start_time <= row.end_time:
+        within = row.start_time <= current <= row.end_time
+    else:
+        # 跨日：当前时间 >= start 或 <= end 都算在窗口内
+        within = current >= row.start_time or current <= row.end_time
+    if within:
         return False
     return mark_plan_media_exhausted(db, plan)
 

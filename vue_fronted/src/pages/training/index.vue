@@ -1174,6 +1174,7 @@ async function applyScheduledPlan(uid, data) {
   todayPlan.value = data
   applyServerTimeMeta(data)
   syncPlanMetaFromApi(data)
+  loadElectiveOffers()
   aiPlanText.value = data.report_text || ''
   applyPlanMedia(data)
   hydrateWatchProgressFromPlan(data)
@@ -1621,7 +1622,10 @@ async function loadElectiveOffers() {
     electiveOffers.value = offers || []
   } catch (_) { electiveOffers.value = [] }
 }
-function openElectiveModal() { showElectiveModal.value = true }
+function openElectiveModal() {
+  loadElectiveOffers()
+  showElectiveModal.value = true
+}
 function closeElectiveModal() { showElectiveModal.value = false }
 async function onElectiveCheckin(skill) {
   const uid = await ensureChildUser()
