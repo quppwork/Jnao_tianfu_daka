@@ -22,6 +22,7 @@ from app.services.child_training_state import (
     training_day_number,
 )
 from app.services.content_meta import parse_item_instruction, resolve_training_item_title
+from app.services.datetime_fmt import format_cst
 from app.services.oss_client import resolve_play_url
 from app.services.training_day import (
     get_training_day,
@@ -1017,7 +1018,7 @@ def _record_to_dict(record: TrainingRecord, *, plan: TrainingPlan | None = None)
         train_date = plan.plan_date.isoformat()
     elif created:
         train_date = created.date().isoformat()
-    checkin_at = created.isoformat() if created else None
+    checkin_at = format_cst(created) if created else None
     cards = record.files_json if isinstance(record.files_json, list) else []
     phase_blocks = sorted({c.get("phaseBlock") for c in cards if c.get("phaseBlock")})
     return {

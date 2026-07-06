@@ -9,6 +9,7 @@
       <view class="tab" :class="{ on: tab === 'parents' }" @click="tab = 'parents'"><text>家长</text></view>
       <view class="tab" :class="{ on: tab === 'children' }" @click="tab = 'children'"><text>孩子</text></view>
       <view class="tab" :class="{ on: tab === 'settings' }" @click="openSettings"><text>设置</text></view>
+      <view class="tab" :class="{ on: tab === 'blacklist' }" @click="openBlacklist"><text>黑名单</text></view>
     </view>
 
     <view v-if="loading" class="empty"><text>加载中...</text></view>
@@ -36,7 +37,7 @@
       </view>
     </view>
 
-    <view v-else class="list settings">
+    <view v-else-if="tab === 'settings'" class="list settings">
       <text class="settings-hint">登录设备上限（后续接入更多登录方式时仍生效）</text>
       <view class="field">
         <text class="field-label">管理员最多设备数</text>
@@ -51,6 +52,37 @@
         <input v-model.number="settingsForm.student_max_devices" type="number" class="inp" />
       </view>
       <view class="btn-primary" @click="saveSettings"><text>保存设置</text></view>
+    </view>
+
+    <view v-else-if="tab === 'blacklist'" class="list">
+      <text class="settings-hint">登录异常自动拉黑，可在此解封避免误伤</text>
+      <text class="bl-section">IP 地址</text>
+      <view v-for="r in blacklist.ips" :key="'ip-' + r.value" class="bl-row">
+        <view class="main">
+          <text class="name">{{ r.value }}</text>
+          <text class="sub">{{ r.reason }} · {{ r.created_at || '' }}</text>
+        </view>
+        <text class="act" @click="unban('ip', r.value)">解封</text>
+      </view>
+      <text class="bl-section">手机号</text>
+      <view v-for="r in blacklist.phones" :key="'ph-' + r.value" class="bl-row">
+        <view class="main">
+          <text class="name">{{ r.value }}</text>
+          <text class="sub">{{ r.reason }} · {{ r.created_at || '' }}</text>
+        </view>
+        <text class="act" @click="unban('phone', r.value)">解封</text>
+      </view>
+      <text class="bl-section">设备 ID</text>
+      <view v-for="r in blacklist.devices" :key="'dv-' + r.value" class="bl-row">
+        <view class="main">
+          <text class="name">{{ r.value }}</text>
+          <text class="sub">{{ r.reason }} · {{ r.created_at || '' }}</text>
+        </view>
+        <text class="act" @click="unban('device', r.value)">解封</text>
+      </view>
+      <view v-if="!blacklist.ips?.length && !blacklist.phones?.length && !blacklist.devices?.length" class="empty">
+        <text>暂无黑名单记录</text>
+      </view>
     </view>
 
     <!-- 孩子新建 -->
@@ -82,6 +114,8 @@ import {
   createAdminChild,
   fetchAdminSettings,
   updateAdminSettings,
+  fetchAdminBlacklist,
+  removeAdminBlacklist,
 } from '@/utils/userApi.js'
 
 const adminId = ref(null)
@@ -94,6 +128,8 @@ const childForm = ref({})
 const createParentId = ref(null)
 const settingsForm = ref({ admin_max_devices: 3, parent_max_devices: 1, student_max_devices: 1 })
 const settingsLoaded = ref(false)
+const blacklist = ref({ ips: [], phones: [], devices: [] })
+const blacklistLoaded = ref(false)
 
 const parentOptions = computed(() =>
   parents.value.map(p => ({ id: p.id, label: `${p.nickname} (${p.parent_phone})` }))
@@ -135,6 +171,34 @@ async function openSettings() {
   } catch (_) {
     uni.showToast({ title: '加载设置失败', icon: 'none' })
   }
+}
+
+async function openBlacklist() {
+  tab.value = 'blacklist'
+  if (blacklistLoaded.value) return
+  try {
+    blacklist.value = await fetchAdminBlacklist(adminId.value)
+    blacklistLoaded.value = true
+  } catch (_) {
+    uni.showToast({ title: '加载黑名单失败', icon: 'none' })
+  }
+}
+
+async function unban(kind, value) {
+  uni.showModal({
+    title: '解封确认',
+    content: `确定解封 ${value} ？`,
+    success: async (r) => {
+      if (!r.confirm) return
+      try {
+        await removeAdminBlacklist(adminId.value, kind, value)
+        blacklist.value = await fetchAdminBlacklist(adminId.value)
+        uni.showToast({ title: '已解封', icon: 'none' })
+      } catch (_) {
+        uni.showToast({ title: '操作失败', icon: 'none' })
+      }
+    },
+  })
 }
 
 async function saveSettings() {
@@ -225,4 +289,6 @@ function logout() {
 .btn-primary text { color:#fff; font-weight:600; }
 .btn-sm { display:inline-block; padding:8px 12px; border-radius:8px; background:rgba(245,158,11,0.15); }
 .btn-sm text { color:#d97706; font-size:12px; }
+.bl-section { display:block; color:var(--text); font-size:14px; font-weight:600; margin:16px 0 8px; }
+.bl-row { display:flex; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; }
 </style>

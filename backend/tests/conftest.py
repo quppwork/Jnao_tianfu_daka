@@ -4,6 +4,9 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("TIANFU_RAG_MOCK", "1")
+os.environ.setdefault("AUTH_CHALLENGE_MOCK", "1")
+os.environ.setdefault("SMS_PROVIDER", "mock")
+os.environ.setdefault("SMS_MOCK_CODE", "88888")
 
 import pytest
 from unittest.mock import AsyncMock, patch

@@ -129,3 +129,17 @@ class AdminChildDetailResponse(BaseModel):
     training_history_days: list[AdminTrainingDayOut] = []
     recent_plans: list[dict] = []
     active_sessions: list[AdminSessionOut] = []
+
+
+class BlacklistEntryOut(BaseModel):
+    value: str
+    reason: str | None = None
+    created_at: str | None = None
+    expires_at: str | None = None
+    created_by: str | None = None
+
+
+class AdminBlacklistResponse(BaseModel):
+    ips: list[BlacklistEntryOut] = []
+    phones: list[BlacklistEntryOut] = []
+    devices: list[BlacklistEntryOut] = []
