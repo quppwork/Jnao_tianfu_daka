@@ -22,6 +22,7 @@
  */
 
 import { getQaImageLocal, parseQaImageId } from './qaMedia.js'
+import { authHeaders, getDeviceId } from './loginGuard.js'
 
 // ── localStorage 键名 ──
 const CHILD_KEY = 'jnao_child_user_id'
@@ -244,18 +245,81 @@ function _storeAuth(data) {
 export async function loginParent(phone, password) {
   const data = await apiJson('/api/auth/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ parent_phone: phone, password, role: 'parent' }),
   })
   _storeAuth(data)
   return data
 }
 
+/** 获取图形验证码 */
+export async function fetchCaptcha() {
+  return apiJson('/api/auth/captcha')
+}
+
+/** 发送短信验证码 scene: login | register */
+export async function sendParentSmsCode(phone, scene, { captchaId, captchaCode } = {}) {
+  const body = { phone, scene, device_id: getDeviceId() }
+  if (captchaId) body.captcha_id = captchaId
+  if (captchaCode) body.captcha_code = captchaCode
+  return apiJson('/api/auth/sms/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  })
+}
+
+/** 家长验证码登录（仅已注册手机号） */
+export async function loginParentSms({ phone, smsCode }) {
+  const data = await apiJson('/api/auth/sms/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ phone, sms_code: smsCode, device_id: getDeviceId() }),
+  })
+  _storeAuth(data)
+  return data
+}
+
+/** 家长验证码注册 */
+export async function registerParentSms({ phone, smsCode, realName, nickname, password }) {
+  const body = {
+    phone,
+    sms_code: smsCode,
+    real_name: realName,
+    nickname,
+    device_id: getDeviceId(),
+  }
+  if (password) body.password = password
+  const data = await apiJson('/api/auth/sms/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  })
+  _storeAuth(data)
+  return data
+}
+
+export function parentNeedsProfileComplete(data) {
+  return data?.role === 'parent' && data?.profile_complete === false
+}
+
+export async function fetchParentProfile(parentId) {
+  return apiJson(withUser('/api/parent/profile', parentId))
+}
+
+export async function updateParentProfile(parentId, body) {
+  return apiJson(withUser('/api/parent/profile', parentId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 /** 孩子登录：账号 + 密码 */
 export async function loginStudent(loginName, password) {
   const data = await apiJson('/api/auth/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ login_name: loginName, password }),
   })
   _storeAuth(data)
@@ -934,6 +998,15 @@ export async function bindAdminChild(adminId, childId, parentId) {
 
 export async function unbindAdminChild(adminId, childId) {
   return apiJson(withAdmin(`/api/admin/children/${childId}/bind`, adminId), { method: 'DELETE' })
+}
+
+export async function fetchAdminBlacklist(adminId) {
+  return apiJson(withAdmin('/api/admin/blacklist', adminId))
+}
+
+export async function removeAdminBlacklist(adminId, kind, value) {
+  const enc = encodeURIComponent(value)
+  return apiJson(withAdmin(`/api/admin/blacklist/${kind}/${enc}`, adminId), { method: 'DELETE' })
 }
 
 export async function fetchAdminSettings(adminId) {

@@ -8,43 +8,63 @@
       </view>
       <text class="subtitle">天赋成长平台</text>
 
+      <view v-if="loginBlocked" class="blocked-hint">
+        <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
+      </view>
+
       <view class="form">
-        <view class="input-wrap" v-if="form.role === 'student'">
-          <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-          <input class="login-input" v-model="form.loginName" placeholder="孩子账号" />
-        </view>
-        <view class="input-wrap" v-if="form.role === 'parent'">
-          <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
-          <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" />
-        </view>
-        <view class="input-wrap">
-          <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input class="login-input" v-model="form.password" placeholder="密码" type="password" />
-        </view>
+        <template v-if="form.role === 'student'">
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.loginName" placeholder="孩子账号" />
+          </view>
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.password" placeholder="密码" type="password" />
+          </view>
+        </template>
+
+        <template v-else-if="parentMode === 'sms'">
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" maxlength="11" />
+          </view>
+          <view class="input-wrap sms-row">
+            <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="number" maxlength="6" />
+            <view class="sms-btn" :class="{ off: smsCooldown > 0 || loginBlocked }" @click="requestLoginSms">
+              <text>{{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}</text>
+            </view>
+          </view>
+        </template>
+
+        <template v-else>
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" maxlength="11" />
+          </view>
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.password" placeholder="密码" type="password" />
+          </view>
+        </template>
 
         <view class="role-row">
           <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'">
-            <svg class="ri-icon-svg" :class="{ on: form.role === 'student' }" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v4M2 10v4"/><path d="M12 2L2 10l10 8 10-8-2-1.5"/><circle cx="12" cy="10" r="3"/><path d="M7 21h10"/></svg>
             <text class="ri-label">学生</text>
           </view>
           <view class="role-item" :class="{ active: form.role === 'parent' }" @click="form.role = 'parent'">
-            <svg class="ri-icon-svg" :class="{ on: form.role === 'parent' }" viewBox="0 0 26 24" width="22" height="22" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="7" r="2.3"/><path d="M4 21v-5.5a4 4 0 0 1 8 0V21"/><circle cx="18.5" cy="8" r="1.6"/><path d="M16 21v-4.5a2.8 2.8 0 0 1 5.5 0V21"/></svg>
             <text class="ri-label">家长</text>
           </view>
         </view>
 
-        <view class="btn-login" @click="doLogin">
-          <text>{{ submitting ? '登录中...' : '进入平台' }}</text>
+        <view class="btn-login" :class="{ off: loginBlocked }" @click="doLogin">
+          <text>{{ submitting ? '登录中...' : '登录' }}</text>
         </view>
 
-        <view v-if="form.role === 'student'" class="hint-register">
-          <text>孩子账号由家长在家长中心分配</text>
-          <view class="hint-admin" @click="goAdminLogin">
-            <text>管理员入口</text>
-          </view>
+        <view v-if="form.role === 'student'" class="sub-actions">
+          <text class="hint-text">孩子账号由家长在家长中心分配</text>
+          <view class="hint-admin" @click="goAdminLogin"><text>管理员入口</text></view>
         </view>
-        <view v-else class="btn-register" style="border-color:rgba(139,92,246,0.3); background:rgba(139,92,246,0.04)" @click="goParentRegister">
-          <text style="color:#a78bfa">注册家长账户</text>
+        <view v-else class="sub-actions">
+          <view class="link-row" @click="toggleParentMode">
+            <text>{{ parentMode === 'sms' ? '使用密码登录' : '使用验证码登录' }}</text>
+          </view>
+          <view class="link-row" @click="goRegister"><text>注册家长账户</text></view>
         </view>
       </view>
     </view>
@@ -54,11 +74,40 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { loginParent, loginStudent, studentNeedsOnboarding } from '@/utils/userApi.js'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import {
+  loginParent,
+  loginStudent,
+  loginParentSms,
+  sendParentSmsCode,
+  parentNeedsProfileComplete,
+  studentNeedsOnboarding,
+} from '@/utils/userApi.js'
+import {
+  isLoginBlocked,
+  recordLoginFail,
+  clearLoginGuard,
+} from '@/utils/loginGuard.js'
 
-const form = ref({ phone: '', loginName: '', password: '', role: 'student' })
+const form = ref({ phone: '', loginName: '', password: '', smsCode: '', role: 'student' })
+const parentMode = ref('sms')
 const submitting = ref(false)
+const smsCooldown = ref(0)
+const blockRemain = ref(0)
+let cooldownTimer = null
+let blockTimer = null
+
+const loginBlocked = computed(() => blockRemain.value > 0)
+
+function refreshBlockState() {
+  const s = isLoginBlocked()
+  blockRemain.value = s.blocked ? s.remainSec : 0
+}
+
+onMounted(() => {
+  refreshBlockState()
+  blockTimer = setInterval(refreshBlockState, 1000)
+})
 
 function saveSession(data) {
   localStorage.setItem('jnao_user', JSON.stringify({
@@ -72,35 +121,123 @@ function saveSession(data) {
   localStorage.setItem('jnao_logged_in', '1')
 }
 
+function toggleParentMode() {
+  parentMode.value = parentMode.value === 'sms' ? 'password' : 'sms'
+}
+
+function startCooldown(sec = 60) {
+  smsCooldown.value = sec
+  if (cooldownTimer) clearInterval(cooldownTimer)
+  cooldownTimer = setInterval(() => {
+    smsCooldown.value -= 1
+    if (smsCooldown.value <= 0) {
+      clearInterval(cooldownTimer)
+      cooldownTimer = null
+    }
+  }, 1000)
+}
+
+async function requestLoginSms() {
+  if (loginBlocked.value || smsCooldown.value > 0) return
+  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
+    uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
+  }
+  try {
+    await sendParentSmsCode(form.value.phone.trim(), 'login')
+    startCooldown(60)
+    uni.showToast({ title: '验证码已发送', icon: 'none' })
+  } catch (e) {
+    if (e.status === 404) {
+      uni.showModal({
+        title: '尚未注册',
+        content: '该手机号未注册，是否前往注册？',
+        success: (r) => { if (r.confirm) goRegister() },
+      })
+    } else {
+      uni.showToast({ title: e.message || '发送失败', icon: 'none' })
+    }
+    if (e.status === 403 || e.status === 429) recordLoginFail()
+    refreshBlockState()
+  }
+}
+
+async function routeParentHome(data) {
+  clearLoginGuard()
+  saveSession(data)
+  uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
+  const target = parentNeedsProfileComplete(data)
+    ? '/pages/login/complete-parent'
+    : '/pages/parent/index'
+  setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
+}
+
 async function routeStudentHome(data) {
+  clearLoginGuard()
   saveSession(data)
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = '/pages/index'
   try {
-    if (await studentNeedsOnboarding(data.child_user_id)) {
-      target = '/pages/login/onboarding/index'
-    }
+    if (await studentNeedsOnboarding(data.child_user_id)) target = '/pages/login/onboarding/index'
   } catch (_) {
     target = '/pages/login/onboarding/index'
   }
   setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
 }
 
+function handleLoginError(e) {
+  submitting.value = false
+  if (e.status === 403) {
+    uni.showToast({ title: e.message || '访问受限', icon: 'none', duration: 3000 })
+  } else if (e.status === 404) {
+    uni.showModal({
+      title: '尚未注册',
+      content: '该手机号未注册，是否前往注册？',
+      success: (r) => { if (r.confirm) goRegister() },
+    })
+  } else if (e.status === 401) {
+    uni.showToast({ title: '账号或密码错误', icon: 'none' })
+  } else if (e.status === 429) {
+    uni.showToast({ title: e.message || '操作太频繁', icon: 'none' })
+  } else {
+    uni.showToast({ title: e.message || '登录失败', icon: 'none' })
+  }
+  if ([400, 401, 403, 404, 429].includes(e.status)) {
+    recordLoginFail()
+    refreshBlockState()
+  }
+}
+
 async function doLogin() {
+  if (loginBlocked.value) {
+    uni.showToast({ title: `请 ${blockRemain.value} 秒后再试`, icon: 'none' }); return
+  }
   submitting.value = true
   try {
-    if (!form.value.password.trim() || form.value.password.trim().length < 6) {
-      uni.showToast({ title: '密码至少6位', icon: 'none' }); submitting.value = false; return
-    }
     if (form.value.role === 'parent') {
+      if (parentMode.value === 'sms') {
+        if (!form.value.smsCode.trim()) {
+          uni.showToast({ title: '请输入短信验证码', icon: 'none' }); submitting.value = false; return
+        }
+        const data = await loginParentSms({
+          phone: form.value.phone.trim(),
+          smsCode: form.value.smsCode.trim(),
+        })
+        await routeParentHome(data)
+        return
+      }
       if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
         uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); submitting.value = false; return
       }
+      if (!form.value.password.trim() || form.value.password.trim().length < 6) {
+        uni.showToast({ title: '密码至少6位', icon: 'none' }); submitting.value = false; return
+      }
       const data = await loginParent(form.value.phone.trim(), form.value.password.trim())
-      saveSession(data)
-      uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
-      setTimeout(() => { uni.redirectTo({ url: '/pages/parent/index' }) }, 500)
+      await routeParentHome(data)
       return
+    }
+
+    if (!form.value.password.trim() || form.value.password.trim().length < 6) {
+      uni.showToast({ title: '密码至少6位', icon: 'none' }); submitting.value = false; return
     }
     if (!form.value.loginName.trim()) {
       uni.showToast({ title: '请输入孩子账号', icon: 'none' }); submitting.value = false; return
@@ -108,57 +245,55 @@ async function doLogin() {
     const data = await loginStudent(form.value.loginName.trim(), form.value.password.trim())
     await routeStudentHome(data)
   } catch (e) {
-    submitting.value = false
-    if (e.status === 404) uni.showToast({ title: '用户不存在，请联系家长创建账号', icon: 'none', duration: 2000 })
-    else if (e.status === 403) uni.showToast({ title: '账号未绑定家长，请联系管理员', icon: 'none', duration: 2500 })
-    else if (e.status === 401) uni.showToast({ title: '账号或密码错误', icon: 'none' })
-    else uni.showToast({ title: '登录失败，请稍后重试', icon: 'none' })
+    handleLoginError(e)
   }
 }
 
-function goParentRegister() {
+function goRegister() {
   uni.navigateTo({ url: '/pages/login/register-parent' })
 }
 
 function goAdminLogin() {
   uni.navigateTo({ url: '/pages/admin/login' })
 }
+
+onUnmounted(() => {
+  if (cooldownTimer) clearInterval(cooldownTimer)
+  if (blockTimer) clearInterval(blockTimer)
+})
 </script>
 
 <style scoped>
-.app { height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:18vh; padding-top:18dvh; font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
+.app { height:100vh;height:100dvh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:12vh; position:relative; overflow:hidden; }
 .glow { position:absolute; width:260px; height:260px; border-radius:50%; pointer-events:none; z-index:0; }
 .glow-top { top:-80px; right:-60px; background:radial-gradient(circle, rgba(88,166,255,0.18) 0%, transparent 70%); }
 .glow-bottom { bottom:-100px; left:-50px; background:radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%); }
-.card { width:100%; position:relative; z-index:1; background:rgba(255,255,255,0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:36px 22px 28px; }
+.card { width:100%; position:relative; z-index:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:36px 22px 28px; }
 .logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:4px; }
-.logo-j { color:#dc2626; font-size:48px; font-weight:800; text-shadow:0 0 24px rgba(220,38,38,0.3); }
-.logo-nao { color:var(--text); font-size:36px; font-weight:700; }
-.logo-ai { color:var(--text); font-size:36px; font-weight:300; }
-.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; margin-bottom:28px; letter-spacing:0.12em; opacity:0.7; }
-.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); transition:border-color 0.2s; }
-.input-wrap:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,0.1); }
-.input-icon { flex-shrink:0; margin-right:10px; opacity:0.5; }
+.logo-j { color:#dc2626; font-size:48px; font-weight:800; }
+.logo-nao, .logo-ai { color:var(--text); font-size:36px; font-weight:700; }
+.logo-ai { font-weight:300; }
+.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; margin-bottom:20px; }
+.blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:10px; margin-bottom:12px; text-align:center; }
+.blocked-hint text { color:#f87171; font-size:12px; }
+.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); }
+.sms-row { padding-right:4px; }
+.sms-btn { flex-shrink:0; padding:8px 10px; border-radius:8px; background:rgba(88,166,255,0.15); }
+.sms-btn.off { opacity:0.5; }
+.sms-btn text { color:var(--accent); font-size:12px; }
 .login-input { flex:1; padding:14px 0; font-size:15px; color:var(--text); }
 .role-row { display:flex; gap:10px; margin-bottom:22px; }
-.role-item { flex:1; background:rgba(255,255,255,0.03); border-radius:12px; padding:14px; text-align:center; border:1.5px solid rgba(255,255,255,0.06); cursor:pointer; transition:all 0.2s; }
-.role-item.active { border-color:var(--accent); background:var(--accent-bg); box-shadow:0 0 16px rgba(88,166,255,0.1); }
-.ri-icon-svg { display:block; margin:0 auto 4px; stroke:var(--text-dim); transition:stroke 0.2s; overflow:visible; }
-.ri-icon-svg.on { stroke:var(--accent); }
-.ri-label { color:var(--text-dim); font-size:13px; font-weight:500; }
-.role-item.active .ri-label { color:var(--accent); }
-.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:15px; text-align:center; cursor:pointer; box-shadow:0 4px 20px rgba(88,166,255,0.25); transition:all 0.2s; }
-.btn-login text { color:#fff; font-size:16px; font-weight:700; letter-spacing:0.04em; }
-.btn-login:active { opacity:0.85; transform:scale(0.98); }
-.hint-register { text-align:center; margin-top:12px; }
-.hint-register text { color:var(--text-dim); font-size:12px; opacity:0.7; }
-.hint-admin { margin-top:8px; cursor:pointer; }
-.hint-admin text { color:var(--text-dim); font-size:11px; opacity:0.45; text-decoration:underline; }
-.btn-register { border:1.5px solid rgba(255,255,255,0.1); border-radius:14px; padding:13px; text-align:center; cursor:pointer; margin-top:10px; backdrop-filter:blur(4px); transition:all 0.2s; }
-.btn-register text { color:var(--text-dim); font-size:14px; font-weight:500; }
-.btn-register:active { background:rgba(255,255,255,0.05); border-color:var(--accent); }
-[data-theme="white"] .card { background:rgba(255,255,255,0.6); border-color:rgba(0,0,0,0.06); }
-[data-theme="white"] .input-wrap { background:#fff; border-color:#e5e7eb; }
-[data-theme="white"] .role-item { background:#fff; border-color:#e5e7eb; }
-[data-theme="white"] .btn-login { background:linear-gradient(135deg, #2563eb, #7c3aed); }
+.role-item { flex:1; padding:14px; text-align:center; border-radius:12px; border:1.5px solid var(--border); }
+.role-item.active { border-color:var(--accent); background:var(--accent-bg); }
+.ri-label { color:var(--text-dim); font-size:13px; }
+.role-item.active .ri-label { color:var(--accent); font-weight:600; }
+.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:15px; text-align:center; }
+.btn-login.off { opacity:0.5; }
+.btn-login text { color:#fff; font-size:16px; font-weight:700; }
+.sub-actions { text-align:center; margin-top:12px; }
+.hint-text { color:var(--text-dim); font-size:12px; }
+.link-row { margin-top:8px; }
+.link-row text { color:#a78bfa; font-size:13px; }
+.hint-admin { margin-top:8px; }
+.hint-admin text { color:var(--text-dim); font-size:11px; text-decoration:underline; }
 </style>

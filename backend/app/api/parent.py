@@ -1,21 +1,54 @@
 """家长端 API — 孩子账号分配与管理"""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.core.cache import invalidate_user_profile
 from app.schemas.auth import (
     ChildDetailResponse,
     ChildSummaryOut,
     CreateChildRequest,
     ParentChildrenResponse,
+    ParentProfileResponse,
+    ParentProfileUpdateRequest,
     ParentQuotaResponse,
     UpdateChildRequest,
 )
 from app.services import parent_service
+from app.services.parent_profile_service import parent_profile_to_dict, update_parent_profile
 
 router = APIRouter(prefix="/api/parent", tags=["parent"])
+
+
+@router.get("/profile", response_model=ParentProfileResponse)
+def get_profile(
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    from app.services import auth_service
+
+    user = auth_service.get_child_user(db, user_id)
+    if not user or user.role != auth_service.ROLE_PARENT:
+        raise HTTPException(403, "需要家长账号")
+    return ParentProfileResponse(**parent_profile_to_dict(user))
+
+
+@router.put("/profile", response_model=ParentProfileResponse)
+def put_profile(
+    req: ParentProfileUpdateRequest,
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    user = update_parent_profile(
+        db,
+        user_id,
+        nickname=req.nickname,
+        real_name=req.real_name,
+        password=req.password,
+    )
+    invalidate_user_profile(user_id)
+    return ParentProfileResponse(**parent_profile_to_dict(user))
 
 
 @router.get("/quota", response_model=ParentQuotaResponse)

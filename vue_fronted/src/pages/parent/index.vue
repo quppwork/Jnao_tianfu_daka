@@ -88,10 +88,39 @@
     <view v-if="showSettings" class="overlay" @tap="showSettings = false">
       <view class="settings-panel" @tap.stop>
         <text class="settings-title">设置</text>
+        <view class="settings-item settings-item-normal" @tap="openProfileForm">
+          <text class="settings-label-normal">我的资料</text>
+        </view>
         <view class="settings-item" @tap="doLogout">
           <text class="settings-label">退出登录</text>
         </view>
         <view class="settings-close" @tap="showSettings = false"><text>关闭</text></view>
+      </view>
+    </view>
+
+    <view v-if="showProfileForm" class="overlay" @tap="closeProfileForm">
+      <view class="settings-panel form-panel" @tap.stop>
+        <text class="settings-title">我的资料</text>
+        <view class="input-wrap readonly">
+          <text class="form-label">手机号</text>
+          <text class="form-readonly">{{ profileForm.phone || '—' }}</text>
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.realName" placeholder="真实姓名" />
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.nickname" placeholder="昵称" />
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.password" placeholder="新密码（留空不改）" type="password" />
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.confirm" placeholder="确认新密码" type="password" />
+        </view>
+        <view class="btn-save" @click="saveProfile">
+          <text>{{ savingProfile ? '保存中...' : '保存' }}</text>
+        </view>
+        <view class="settings-close" @tap="closeProfileForm"><text>取消</text></view>
       </view>
     </view>
   </view>
@@ -101,13 +130,17 @@
 import { ref, computed, onMounted } from 'vue'
 import {
   getChildUserId,
+  clearChildUserId,
   fetchParentChildren,
   fetchParentQuota,
+  fetchParentProfile,
+  updateParentProfile,
   createParentChild,
   updateParentChild,
 } from '@/utils/userApi.js'
 
 const showSettings = ref(false)
+const showProfileForm = ref(false)
 const showChildForm = ref(false)
 const parentName = ref('家长')
 const parentId = ref(null)
@@ -115,9 +148,11 @@ const children = ref([])
 const quota = ref({ limit: 5, used: 0, can_add: true })
 const loading = ref(true)
 const saving = ref(false)
+const savingProfile = ref(false)
 const isLight = ref(false)
 const editingChild = ref(null)
 const childForm = ref({ loginName: '', nickname: '', password: '', age: null, grade: '' })
+const profileForm = ref({ phone: '', realName: '', nickname: '', password: '', confirm: '' })
 
 const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120
 const ageIndex = computed(() => {
@@ -191,6 +226,62 @@ function closeChildForm() {
   editingChild.value = null
 }
 
+async function openProfileForm() {
+  showSettings.value = false
+  if (!parentId.value) return
+  try {
+    const p = await fetchParentProfile(parentId.value)
+    profileForm.value = {
+      phone: p.parent_phone || '',
+      realName: p.real_name || '',
+      nickname: p.nickname || '',
+      password: '',
+      confirm: '',
+    }
+    showProfileForm.value = true
+  } catch (_) {
+    uni.showToast({ title: '加载资料失败', icon: 'none' })
+  }
+}
+
+function closeProfileForm() {
+  showProfileForm.value = false
+}
+
+async function saveProfile() {
+  const realName = profileForm.value.realName.trim()
+  const nickname = profileForm.value.nickname.trim()
+  const pwd = profileForm.value.password.trim()
+  const confirm = profileForm.value.confirm.trim()
+  if (!realName) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
+  if (!nickname) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
+  if (pwd || confirm) {
+    if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
+    if (pwd !== confirm) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
+  }
+  savingProfile.value = true
+  try {
+    const body = { real_name: realName, nickname }
+    if (pwd) body.password = pwd
+    const p = await updateParentProfile(parentId.value, body)
+    parentName.value = p.nickname || parentName.value
+    try {
+      const raw = localStorage.getItem('jnao_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        u.name = p.nickname
+        localStorage.setItem('jnao_user', JSON.stringify(u))
+      }
+    } catch (_) {}
+    closeProfileForm()
+    uni.showToast({ title: '资料已更新', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '保存失败', icon: 'none' })
+  } finally {
+    savingProfile.value = false
+  }
+}
+
 async function saveChild() {
   const nick = childForm.value.nickname.trim()
   const pwd = childForm.value.password.trim()
@@ -236,7 +327,7 @@ function toggleTheme() {
 function doLogout() {
   showSettings.value = false
   try {
-    localStorage.removeItem('jnao_child_user_id')
+    clearChildUserId()
     localStorage.removeItem('jnao_user')
     localStorage.removeItem('jnao_logged_in')
   } catch (_) {}
@@ -285,7 +376,12 @@ function doLogout() {
 .form-hint { margin-top:12px; text-align:center; }
 .form-hint text { color:var(--text-dim); font-size:12px; }
 .settings-item { padding:14px; border-radius:12px; background:rgba(220,38,38,0.08); text-align:center; cursor:pointer; margin-bottom:12px; }
+.settings-item-normal { background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.25); }
 .settings-label { color:#dc2626; font-size:15px; font-weight:500; }
+.settings-label-normal { color:var(--accent); font-size:15px; font-weight:500; }
+.input-wrap.readonly { display:flex; align-items:center; justify-content:space-between; padding:12px; }
+.form-label { color:var(--text-dim); font-size:13px; }
+.form-readonly { color:var(--text); font-size:14px; }
 .settings-close { text-align:center; padding:10px; cursor:pointer; }
 .settings-close text { color:var(--text-dim); font-size:13px; }
 </style>

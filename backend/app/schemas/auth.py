@@ -27,6 +27,61 @@ class AuthResponse(BaseModel):
     role: str = "student"
     login_name: str | None = None
     session_token: str | None = None
+    profile_complete: bool = True
+    missing_fields: list[str] = Field(default_factory=list)
+
+
+class CaptchaResponse(BaseModel):
+    captcha_id: str
+    image_base64: str
+    expires_in: int = 120
+
+
+class SmsSendRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    scene: str = Field("login", pattern="^(login|register)$")
+    captcha_id: str | None = Field(None, max_length=64)
+    captcha_code: str | None = Field(None, max_length=8)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class SmsSendResponse(BaseModel):
+    ok: bool = True
+    expires_in: int = 300
+    resend_after: int = 60
+    debug_code: str | None = None
+
+
+class SmsLoginRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    sms_code: str = Field(..., min_length=4, max_length=8)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class SmsRegisterRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    sms_code: str = Field(..., min_length=4, max_length=8)
+    real_name: str = Field(..., min_length=1, max_length=50)
+    nickname: str = Field(..., min_length=1, max_length=50)
+    password: str | None = Field(None, min_length=6, max_length=128)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class ParentProfileResponse(BaseModel):
+    id: int
+    parent_phone: str
+    nickname: str
+    real_name: str | None = None
+    has_password: bool = False
+    phone_verified: bool = False
+    profile_complete: bool = True
+    missing_fields: list[str] = Field(default_factory=list)
+
+
+class ParentProfileUpdateRequest(BaseModel):
+    nickname: str | None = Field(None, min_length=1, max_length=50)
+    real_name: str | None = Field(None, min_length=1, max_length=50)
+    password: str | None = Field(None, min_length=6, max_length=128)
 
 
 # 兼容旧引用

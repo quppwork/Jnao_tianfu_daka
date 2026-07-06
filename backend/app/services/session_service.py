@@ -10,18 +10,12 @@ from sqlalchemy.orm import Session
 from app.db.models import ChildUser, UserSession
 from app.services import auth_service
 from app.services.platform_config import max_devices_for_role
+from app.services.datetime_fmt import format_cst
 from app.services.training_day import TZ
 
 
 def _now() -> datetime:
     return datetime.now(TZ).replace(tzinfo=None)
-
-
-def _format_dt(dt: datetime | None) -> str | None:
-    if not dt:
-        return None
-    local = dt.replace(tzinfo=TZ) if dt.tzinfo is None else dt.astimezone(TZ)
-    return local.strftime("%Y-%m-%d %H:%M")
 
 
 def _generate_token() -> str:
@@ -38,8 +32,8 @@ def list_user_sessions(db: Session, user_id: int) -> list[dict]:
         {
             "id": r.id,
             "device_label": r.device_label,
-            "created_at": _format_dt(r.created_at),
-            "last_active_at": _format_dt(r.last_active_at),
+            "created_at": format_cst(r.created_at),
+            "last_active_at": format_cst(r.last_active_at),
         }
         for r in rows
     ]

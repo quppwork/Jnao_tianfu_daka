@@ -18,6 +18,8 @@ from app.schemas.admin import (
     AdminUpdatePlatformConfigRequest,
     AdminParentDetailResponse,
     AdminChildDetailResponse,
+    AdminBlacklistResponse,
+    BlacklistEntryOut,
 )
 from app.schemas.auth import AuthResponse
 from app.services import admin_service, auth_service
@@ -195,3 +197,33 @@ def child_detail(
     db: Session = Depends(get_db),
 ):
     return AdminChildDetailResponse(**admin_service.get_child_detail(db, admin_id, child_id))
+
+
+@router.get("/blacklist", response_model=AdminBlacklistResponse)
+def get_blacklist(admin_id: int = Depends(get_admin_user), db: Session = Depends(get_db)):
+    from app.services.blacklist_service import list_blacklist
+
+    data = list_blacklist(db)
+    return AdminBlacklistResponse(
+        ips=[BlacklistEntryOut(**r) for r in data.get("ips", [])],
+        phones=[BlacklistEntryOut(**r) for r in data.get("phones", [])],
+        devices=[BlacklistEntryOut(**r) for r in data.get("devices", [])],
+    )
+
+
+@router.delete("/blacklist/{kind}/{value}")
+def remove_blacklist(
+    kind: str,
+    value: str,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    from app.services.blacklist_service import remove_blacklist_entry
+    from urllib.parse import unquote
+
+    if kind not in ("ip", "phone", "device"):
+        raise HTTPException(400, "无效类型")
+    ok = remove_blacklist_entry(db, kind, unquote(value))
+    if not ok:
+        raise HTTPException(404, "未找到该黑名单记录")
+    return {"ok": True}

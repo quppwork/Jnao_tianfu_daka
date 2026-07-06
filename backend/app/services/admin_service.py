@@ -24,6 +24,7 @@ from app.db.models import (
     TrainingWindow,
 )
 from app.services import auth_service
+from app.services.datetime_fmt import format_cst
 
 TZ = timezone(timedelta(hours=8))
 
@@ -145,7 +146,7 @@ def list_parents(db: Session, admin_id: int) -> list[dict]:
             "nickname": p.nickname,
             "child_quota": auth_service.get_parent_quota_limit(p),
             "children_count": used,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "created_at": format_cst(p.created_at),
         })
     return out
 
@@ -365,7 +366,7 @@ def get_parent_detail(db: Session, admin_id: int, parent_id: int) -> dict:
         "nickname": parent.nickname,
         "child_quota": auth_service.get_parent_quota_limit(parent),
         "children_count": len(children),
-        "created_at": parent.created_at.isoformat() if parent.created_at else None,
+        "created_at": format_cst(parent.created_at),
         "children": children,
         "active_sessions": list_user_sessions(db, parent.id),
     }
@@ -423,7 +424,7 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
         "parent_id": parent.id if parent else None,
         "parent_phone": parent.parent_phone if parent else None,
         "parent_nickname": parent.nickname if parent else None,
-        "created_at": child.created_at.isoformat() if child.created_at else None,
+        "created_at": format_cst(child.created_at),
         "training_progress": summary,
         "training_history_days": history_days[:30],
         "recent_plans": recent_plans,

@@ -18,22 +18,28 @@ def _auth_admin(data: dict) -> dict:
     return {"params": {"user_id": uid, "session_token": token}}
 
 
+def _seed_parent(db_session, phone: str, nickname: str) -> int:
+    from app.core.password import hash_password
+    from app.services.auth_service import ROLE_PARENT, register_child
+
+    user = register_child(
+        db_session,
+        parent_phone=phone,
+        nickname=nickname,
+        password=hash_password("123456"),
+        role=ROLE_PARENT,
+        child_quota=5,
+    )
+    return user.id
+
+
 class TestAdminApi:
     def test_admin_login(self, client: TestClient):
         data = _admin_login(client)
         assert data["role"] == "admin"
 
-    def test_parent_delete_forbidden(self, client: TestClient):
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009901",
-                "nickname": "测家长",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+    def test_parent_delete_forbidden(self, client: TestClient, db_session):
+        pid = _seed_parent(db_session, "13900009901", "测家长")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
             json={"login_name": "kid_del", "nickname": "小孩", "password": "111111"},
@@ -42,19 +48,10 @@ class TestAdminApi:
         res = client.delete(f"/api/parent/children/{cid}?user_id={pid}")
         assert res.status_code == 403
 
-    def test_unbound_child_cannot_login(self, client: TestClient):
+    def test_unbound_child_cannot_login(self, client: TestClient, db_session):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009902",
-                "nickname": "家长乙",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009902", "家长乙")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
             json={"login_name": "kid_unbind", "nickname": "解绑童", "password": "111111"},
@@ -70,16 +67,7 @@ class TestAdminApi:
     def test_admin_delete_child_archived_and_reuse_login_name(self, client: TestClient, db_session):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009903",
-                "nickname": "家长丙",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009903", "家长丙")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
             json={"login_name": "kid_hard", "nickname": "硬删童", "password": "111111"},
@@ -106,19 +94,10 @@ class TestAdminApi:
         assert recreated.status_code == 200
         assert recreated.json()["login_name"] == "kid_hard"
 
-    def test_admin_update_quota(self, client: TestClient):
+    def test_admin_update_quota(self, client: TestClient, db_session):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009904",
-                "nickname": "家长丁",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009904", "家长丁")
         res = client.put(
             f"/api/admin/parents/{pid}",
             json={"child_quota": 2},
@@ -148,19 +127,10 @@ class TestAdminApi:
         assert res.status_code == 200
         assert res.json()["login_policy"]["parent_max_devices"] == 2
 
-    def test_parent_detail_and_child_detail(self, client: TestClient):
+    def test_parent_detail_and_child_detail(self, client: TestClient, db_session):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009905",
-                "nickname": "家长戊",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009905", "家长戊")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
             json={"login_name": "kid_detail", "nickname": "详情童", "password": "111111"},
@@ -183,16 +153,7 @@ class TestAdminApi:
         from app.db.models import UserSession
         from sqlalchemy import select
 
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009906",
-                "nickname": "家长己",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009906", "家长己")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
             json={"login_name": "kid_single", "nickname": "单端童", "password": "111111"},
