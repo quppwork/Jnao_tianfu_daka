@@ -227,6 +227,10 @@ async def populate_plan_items(
             )
         sort_order += 1
 
+    # 训练时长 >= 8 小时 → 末尾追加精力恢复
+    if planned_minutes >= 480:
+        slots = list(slots) + ["精力恢复"]
+
     # 遍历公式槽位，为每个技能取对应 OSS 音频
     elective_rules = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum().get("elective_rules") or {}
     for skill_name in slots:
