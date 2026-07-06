@@ -1,0 +1,197 @@
+"""管理员 API — 最高权限账号管理"""
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_admin_user, get_db
+from app.schemas.admin import (
+    AdminBindChildRequest,
+    AdminChildListResponse,
+    AdminChildOut,
+    AdminCreateChildRequest,
+    AdminLoginRequest,
+    AdminParentListResponse,
+    AdminParentOut,
+    AdminUpdateChildRequest,
+    AdminUpdateParentRequest,
+    AdminPlatformConfigResponse,
+    AdminUpdatePlatformConfigRequest,
+    AdminParentDetailResponse,
+    AdminChildDetailResponse,
+)
+from app.schemas.auth import AuthResponse
+from app.services import admin_service, auth_service
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@router.post("/login", response_model=AuthResponse)
+def admin_login(req: AdminLoginRequest, db: Session = Depends(get_db)):
+    user = auth_service.login_admin_by_password(db, req.login_name, req.password)
+    if not user:
+        raise HTTPException(401, "账号或密码错误")
+    from app.services.session_service import issue_session
+
+    issue_session(db, user)
+    return AuthResponse(
+        child_user_id=user.id,
+        parent_phone=user.parent_phone,
+        nickname=user.nickname,
+        role=auth_service.ROLE_ADMIN,
+        login_name=user.login_name,
+        session_token=user.session_token,
+    )
+
+
+@router.get("/parents", response_model=AdminParentListResponse)
+def list_parents(admin_id: int = Depends(get_admin_user), db: Session = Depends(get_db)):
+    items = admin_service.list_parents(db, admin_id)
+    return AdminParentListResponse(parents=[AdminParentOut(**p) for p in items])
+
+
+@router.put("/parents/{parent_id}", response_model=AdminParentOut)
+def update_parent(
+    parent_id: int,
+    req: AdminUpdateParentRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.update_parent(
+        db,
+        admin_id,
+        parent_id,
+        nickname=req.nickname,
+        parent_phone=req.parent_phone,
+        password=req.password,
+        child_quota=req.child_quota,
+    )
+    return AdminParentOut(**data)
+
+
+@router.delete("/parents/{parent_id}")
+def delete_parent(
+    parent_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    admin_service.delete_parent(db, admin_id, parent_id)
+    return {"ok": True}
+
+
+@router.get("/children", response_model=AdminChildListResponse)
+def list_children(
+    parent_id: int | None = Query(None, ge=1),
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    items = admin_service.list_children(db, admin_id, parent_id=parent_id)
+    return AdminChildListResponse(children=[AdminChildOut(**c) for c in items])
+
+
+@router.post("/children", response_model=AdminChildOut)
+def create_child(
+    req: AdminCreateChildRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.create_child_for_parent(
+        db,
+        admin_id,
+        req.parent_id,
+        login_name=req.login_name,
+        nickname=req.nickname,
+        password=req.password,
+        grade=req.grade,
+        age=req.age,
+    )
+    return AdminChildOut(**data)
+
+
+@router.put("/children/{child_id}", response_model=AdminChildOut)
+def update_child(
+    child_id: int,
+    req: AdminUpdateChildRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.update_child(
+        db,
+        admin_id,
+        child_id,
+        nickname=req.nickname,
+        password=req.password,
+        grade=req.grade,
+        age=req.age,
+        login_name=req.login_name,
+    )
+    return AdminChildOut(**data)
+
+
+@router.delete("/children/{child_id}")
+def delete_child(
+    child_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    admin_service.delete_child(db, admin_id, child_id)
+    return {"ok": True}
+
+
+@router.post("/children/{child_id}/bind", response_model=AdminChildOut)
+def bind_child(
+    child_id: int,
+    req: AdminBindChildRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.bind_child(db, admin_id, child_id, req.parent_id)
+    return AdminChildOut(**data)
+
+
+@router.delete("/children/{child_id}/bind")
+def unbind_child(
+    child_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    admin_service.unbind_child(db, admin_id, child_id)
+    return {"ok": True}
+
+
+@router.get("/settings", response_model=AdminPlatformConfigResponse)
+def get_settings(admin_id: int = Depends(get_admin_user), db: Session = Depends(get_db)):
+    from app.services.platform_config import get_platform_config
+
+    return AdminPlatformConfigResponse(**get_platform_config(db))
+
+
+@router.put("/settings", response_model=AdminPlatformConfigResponse)
+def update_settings(
+    req: AdminUpdatePlatformConfigRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    from app.services.platform_config import update_platform_config
+
+    data = update_platform_config(
+        db, admin_id, login_policy=req.login_policy.model_dump(exclude_none=True)
+    )
+    return AdminPlatformConfigResponse(**data)
+
+
+@router.get("/parents/{parent_id}/detail", response_model=AdminParentDetailResponse)
+def parent_detail(
+    parent_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    return AdminParentDetailResponse(**admin_service.get_parent_detail(db, admin_id, parent_id))
+
+
+@router.get("/children/{child_id}/detail", response_model=AdminChildDetailResponse)
+def child_detail(
+    child_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    return AdminChildDetailResponse(**admin_service.get_child_detail(db, admin_id, child_id))

@@ -27,6 +27,21 @@ def apply_schema_patches(engine: Engine) -> None:
             "ALTER TABLE training_plan ADD COLUMN media_exhausted INTEGER DEFAULT 0",
         ),
         (
+            "training_plan",
+            "plan_customized",
+            "ALTER TABLE training_plan ADD COLUMN plan_customized INTEGER DEFAULT 0",
+        ),
+        (
+            "child_user",
+            "account_status",
+            "ALTER TABLE child_user ADD COLUMN account_status VARCHAR(20) DEFAULT 'active'",
+        ),
+        (
+            "child_user",
+            "deleted_at",
+            "ALTER TABLE child_user ADD COLUMN deleted_at DATETIME",
+        ),
+        (
             "training_record",
             "train_date",
             "ALTER TABLE training_record ADD COLUMN train_date DATE",
@@ -91,6 +106,88 @@ def apply_schema_patches(engine: Engine) -> None:
                 )
 
     _apply_parent_auth_patches(engine)
+    _apply_user_session_table(engine)
+    _migrate_user_session_utc_to_cst(engine)
+
+
+def _migrate_user_session_utc_to_cst(engine: Engine) -> None:
+    """历史会话时间曾为 UTC naive，统一转为北京时间 naive（仅执行一次）"""
+    insp = inspect(engine)
+    if "user_session" not in insp.get_table_names():
+        return
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS schema_data_patch (
+                    name VARCHAR(64) PRIMARY KEY
+                )
+                """
+            )
+        )
+        done = conn.execute(
+            text("SELECT 1 FROM schema_data_patch WHERE name = 'user_session_utc_to_cst'")
+        ).fetchone()
+        if done:
+            return
+        if dialect == "mysql":
+            conn.execute(
+                text(
+                    """
+                    UPDATE user_session
+                    SET last_active_at = DATE_ADD(last_active_at, INTERVAL 8 HOUR),
+                        created_at = DATE_ADD(created_at, INTERVAL 8 HOUR)
+                    """
+                )
+            )
+        else:
+            conn.execute(
+                text(
+                    """
+                    UPDATE user_session
+                    SET last_active_at = datetime(last_active_at, '+8 hours'),
+                        created_at = datetime(created_at, '+8 hours')
+                    """
+                )
+            )
+        conn.execute(
+            text("INSERT INTO schema_data_patch (name) VALUES ('user_session_utc_to_cst')")
+        )
+
+
+def _apply_user_session_table(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "user_session" in insp.get_table_names():
+        return
+    dialect = engine.dialect.name
+    if dialect == "mysql":
+        ddl = """
+            CREATE TABLE user_session (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                user_id INT NOT NULL,
+                session_token VARCHAR(64) NOT NULL UNIQUE,
+                device_label VARCHAR(100) NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES child_user(id)
+            )
+        """
+    else:
+        ddl = """
+            CREATE TABLE user_session (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                session_token VARCHAR(64) NOT NULL UNIQUE,
+                device_label VARCHAR(100),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES child_user(id)
+            )
+        """
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_user_session_user ON user_session(user_id)"))
 
 
 def _apply_parent_auth_patches(engine: Engine) -> None:

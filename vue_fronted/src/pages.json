@@ -15,6 +15,34 @@
       }
     },
     {
+      "path": "pages/admin/login",
+      "style": {
+        "navigationBarTitleText": "管理员登录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/admin/index",
+      "style": {
+        "navigationBarTitleText": "管理后台",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/admin/parent-detail",
+      "style": {
+        "navigationBarTitleText": "家长详情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/admin/child-detail",
+      "style": {
+        "navigationBarTitleText": "孩子详情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/login/register",
       "style": {
         "navigationBarTitleText": "注册孩子账户",

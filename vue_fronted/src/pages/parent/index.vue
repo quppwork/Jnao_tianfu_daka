@@ -78,8 +78,8 @@
         <view class="btn-save" @click="saveChild">
           <text>{{ saving ? '保存中...' : '保存' }}</text>
         </view>
-        <view v-if="editingChild" class="btn-delete" @click="removeChild">
-          <text>解除绑定</text>
+        <view v-if="editingChild" class="form-hint">
+          <text>如需注销或转移账号，请联系管理员</text>
         </view>
         <view class="settings-close" @tap="closeChildForm"><text>取消</text></view>
       </view>
@@ -105,7 +105,6 @@ import {
   fetchParentQuota,
   createParentChild,
   updateParentChild,
-  deleteParentChild,
 } from '@/utils/userApi.js'
 
 const showSettings = ref(false)
@@ -226,21 +225,6 @@ async function saveChild() {
   }
 }
 
-async function removeChild() {
-  if (!editingChild.value) return
-  saving.value = true
-  try {
-    await deleteParentChild(parentId.value, editingChild.value.id)
-    closeChildForm()
-    await loadData()
-    uni.showToast({ title: '已解除绑定', icon: 'none' })
-  } catch (_) {
-    uni.showToast({ title: '操作失败', icon: 'none' })
-  } finally {
-    saving.value = false
-  }
-}
-
 function toggleTheme() {
   isLight.value = !isLight.value
   try { localStorage.setItem('jnao_theme', isLight.value ? 'white' : 'dark') } catch (_) {}
@@ -298,8 +282,8 @@ function doLogout() {
 .form-picker-display.placeholder { color:var(--text-dim); }
 .btn-save { background:linear-gradient(135deg,#8b5cf6,#7c3aed); border-radius:12px; padding:13px; text-align:center; margin-top:8px; cursor:pointer; }
 .btn-save text { color:#fff; font-weight:600; }
-.btn-delete { margin-top:10px; padding:12px; text-align:center; border-radius:12px; background:rgba(220,38,38,0.08); cursor:pointer; }
-.btn-delete text { color:#dc2626; font-size:14px; }
+.form-hint { margin-top:12px; text-align:center; }
+.form-hint text { color:var(--text-dim); font-size:12px; }
 .settings-item { padding:14px; border-radius:12px; background:rgba(220,38,38,0.08); text-align:center; cursor:pointer; margin-bottom:12px; }
 .settings-label { color:#dc2626; font-size:15px; font-weight:500; }
 .settings-close { text-align:center; padding:10px; cursor:pointer; }

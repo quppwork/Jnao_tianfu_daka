@@ -39,6 +39,9 @@
 
         <view v-if="form.role === 'student'" class="hint-register">
           <text>孩子账号由家长在家长中心分配</text>
+          <view class="hint-admin" @click="goAdminLogin">
+            <text>管理员入口</text>
+          </view>
         </view>
         <view v-else class="btn-register" style="border-color:rgba(139,92,246,0.3); background:rgba(139,92,246,0.04)" @click="goParentRegister">
           <text style="color:#a78bfa">注册家长账户</text>
@@ -107,6 +110,7 @@ async function doLogin() {
   } catch (e) {
     submitting.value = false
     if (e.status === 404) uni.showToast({ title: '用户不存在，请联系家长创建账号', icon: 'none', duration: 2000 })
+    else if (e.status === 403) uni.showToast({ title: '账号未绑定家长，请联系管理员', icon: 'none', duration: 2500 })
     else if (e.status === 401) uni.showToast({ title: '账号或密码错误', icon: 'none' })
     else uni.showToast({ title: '登录失败，请稍后重试', icon: 'none' })
   }
@@ -114,6 +118,10 @@ async function doLogin() {
 
 function goParentRegister() {
   uni.navigateTo({ url: '/pages/login/register-parent' })
+}
+
+function goAdminLogin() {
+  uni.navigateTo({ url: '/pages/admin/login' })
 }
 </script>
 
@@ -144,6 +152,8 @@ function goParentRegister() {
 .btn-login:active { opacity:0.85; transform:scale(0.98); }
 .hint-register { text-align:center; margin-top:12px; }
 .hint-register text { color:var(--text-dim); font-size:12px; opacity:0.7; }
+.hint-admin { margin-top:8px; cursor:pointer; }
+.hint-admin text { color:var(--text-dim); font-size:11px; opacity:0.45; text-decoration:underline; }
 .btn-register { border:1.5px solid rgba(255,255,255,0.1); border-radius:14px; padding:13px; text-align:center; cursor:pointer; margin-top:10px; backdrop-filter:blur(4px); transition:all 0.2s; }
 .btn-register text { color:var(--text-dim); font-size:14px; font-weight:500; }
 .btn-register:active { background:rgba(255,255,255,0.05); border-color:var(--accent); }

@@ -593,7 +593,6 @@
           <text class="modal-title">📝 编辑今日方案</text>
           <view class="modal-close" @click="closePlanEditor">✕</view>
         </view>
-        <text class="editor-hint">替换训练项目，不改等级进度和 OSS 位置</text>
         <view class="editor-list">
           <view v-for="(item, idx) in editableItems" :key="item.id" class="editor-row">
             <text class="editor-label">项目 {{ idx + 1 }}</text>
@@ -1642,7 +1641,7 @@ const editableItems = computed(() => {
   })
 })
 
-const canCustomizePlan = computed(() => editableItems.value.length > 0)
+const canCustomizePlan = computed(() => !!todayPlan.value?.can_customize_plan)
 
 function editorSkillName(item) {
   const idx = editorSkills.value.findIndex(s => s.startsWith(item.id + ':'))
@@ -1667,6 +1666,15 @@ function onEditorSkillChange(itemIdx, e) {
 }
 
 function openPlanEditor() {
+  if (!canCustomizePlan.value) {
+    const reason = todayPlan.value?.plan_customized
+      ? '今日方案已编辑过，不可再次修改'
+      : todayPlan.value?.has_checkin
+        ? '已有打卡记录，无法编辑方案'
+        : '当前不可编辑方案'
+    uni.showToast({ title: reason, icon: 'none' })
+    return
+  }
   editorSkills.value = editableItems.value.map(item => {
     const inst = parseItemInstructions(item.instructions)
     const sk = inst.skill || resolvePlanItemSkill(item) || '训练'
@@ -1683,8 +1691,8 @@ async function confirmCustomize() {
   if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
   const skills = editorSkills.value.map(s => s.split(':')[1])
   uni.showModal({
-    title: '确认修改',
-    content: '替换训练项目不会影响各技能的等级进度，确定要修改吗？',
+    title: '确认修改方案',
+    content: '每个训练日仅可修改一次，打卡后不可再改。修改后将按所选技能重新匹配训练内容，请谨慎操作，后果自负。确定继续吗？',
     success: async (r) => {
       if (!r.confirm) return
       try {

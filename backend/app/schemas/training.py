@@ -59,6 +59,9 @@ class TrainingTodayResponse(BaseModel):
     progress_main_line_name: str | None = None
     planned_minutes: int | None = None
     media_exhausted: bool = False
+    plan_customized: bool = False
+    can_customize_plan: bool = False
+    has_checkin: bool = False
     items: list[TrainingItemOut]
     overall_tier: int | None = None          # 🆕 v2.0
     optional_offers: list[dict] | None = None

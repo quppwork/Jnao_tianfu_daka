@@ -68,15 +68,23 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         user = auth_service.login_parent_by_password(db, req.parent_phone, req.password)
         if not user:
             raise HTTPException(401, "手机号或密码错误")
-        auth_service._refresh_session_token(db, user)
+        from app.services.session_service import issue_session
+
+        issue_session(db, user)
         return _to_response(user)
 
     # 学生：账号 + 密码
     if req.login_name and req.password:
-        user = auth_service.login_student_by_password(db, req.login_name, req.password)
-        if not user:
+        from app.core.password import verify_password
+
+        user = auth_service.find_user_by_login_name(db, req.login_name)
+        if not user or not verify_password(req.password, user.password_hash):
             raise HTTPException(401, "账号或密码错误")
-        auth_service._refresh_session_token(db, user)
+        if not auth_service.has_active_parent_bind(db, user.id):
+            raise HTTPException(403, "账号未绑定家长，请联系管理员")
+        from app.services.session_service import issue_session
+
+        issue_session(db, user)
         return _to_response(user)
 
     raise HTTPException(400, "请提供有效的登录信息")
