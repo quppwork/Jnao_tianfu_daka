@@ -807,10 +807,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
-import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
+import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -958,6 +958,8 @@ function applyServerTimeMeta(data) {
   if (data.training_day) trainingDayKey.value = data.training_day
 }
 
+let _transitionReloading = false
+
 function checkGlobalSchedule() {
   checkDayUnlock()
   if (isGlobalCutoff.value && timerPhase.value === 'running') {
@@ -965,8 +967,10 @@ function checkGlobalSchedule() {
   }
   const inTransition = dayTransition.value || todayPlan.value?.status === 'transition'
   if (inTransition && newDayAtMs.value && nowSynced() >= newDayAtMs.value) {
+    if (_transitionReloading) return
+    _transitionReloading = true
     resetAllLocalState()
-    loadTodayPlan(true)
+    loadTodayPlan(true).finally(() => { _transitionReloading = false })
   }
 }
 
@@ -1166,6 +1170,10 @@ async function applyScheduledPlan(uid, data) {
   aiPlanText.value = data.report_text || ''
   applyPlanMedia(data)
   hydrateWatchProgressFromPlan(data)
+  // 方案变更后清除 position-based 状态，避免 block ID 碰撞
+  phaseRecordIds.value = {}
+  phaseClicked.value = {}
+  planExpanded.value = {}
   // 时长选择器仅在用户本次已选；不在此回填 planned_minutes
   await loadTodayCheckinRecords(uid, data.plan_id)
   nextTick(() => syncPhaseExpand())
@@ -1304,7 +1312,7 @@ async function startTrainingTimer() {
 
     uni.showToast({ title: '训练已开始', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '开始训练失败', icon: 'none', duration: 2500 })
   } finally {
     scheduleLoading.value = false
   }
@@ -1413,7 +1421,7 @@ async function devResetMainLine() {
     await loadDevStatus()
     uni.showToast({ title: '训练进度已重置（今日方案未删）', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '重置训练进度失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1435,7 +1443,7 @@ async function devResetToday() {
     await loadDevStatus()
     uni.showToast({ title: '今日方案已清空（历史保留）', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '重置今日方案失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1461,7 +1469,7 @@ async function devSimulate4amCutoffAction() {
     await loadDevStatus()
     uni.showToast({ title: res.message || '已模拟凌晨4点全局截止', icon: 'none', duration: 2500 })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '模拟截止失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1492,7 +1500,7 @@ async function devGoNextDay() {
     const idx = res.today?.content_index ?? res.status?.content_index ?? '?'
     uni.showToast({ title: res.message || `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '模拟下一天失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1513,7 +1521,7 @@ async function devClearAllHistory() {
     await loadDevStatus()
     uni.showToast({ title: '训练历史已清空', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '清空历史失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1535,7 +1543,7 @@ async function devResetTalentAction() {
     await loadDevStatus()
     uni.showToast({ title: '天赋测评已重置', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '重置天赋失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1586,7 +1594,7 @@ async function devRefreshAiPlan() {
     nextTick(() => syncPhaseExpand())
   } catch (e) {
     scheduleLoading.value = false
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '刷新AI方案失败', icon: 'none', duration: 2500 })
     return
   }
   scheduleLoading.value = false
@@ -1620,12 +1628,16 @@ const electiveSkills = computed(() => {
   return list
 })
 
+const electiveToggling = ref(false)
+
 async function toggleElective(skill) {
+  if (electiveToggling.value) return
   const uid = await ensureChildUser()
   const planId = todayPlan.value?.plan_id
   if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
   const inPlan = electiveSkills.value.find(e => e.skill === skill)?.inPlan
   const action = inPlan ? 'remove' : 'add'
+  electiveToggling.value = true
   try {
     const data = await toggleElectiveItem(uid, planId, skill, action)
     await applyScheduledPlan(uid, data)
@@ -1633,6 +1645,8 @@ async function toggleElective(skill) {
   } catch (e) {
     const msg = e.data?.detail || e.message || '操作失败'
     uni.showToast({ title: Array.isArray(msg) ? msg.map(d => d.msg || JSON.stringify(d)).join('; ') : msg, icon: 'none', duration: 3000 })
+  } finally {
+    electiveToggling.value = false
   }
 }
 
@@ -2220,7 +2234,7 @@ function cardsForBlock(block) {
   return submittedCards.value.filter(c => c.phaseBlock === block)
 }
 
-async function loadTodayCheckinRecords(uid, planId) {
+async function loadTodayCheckinRecords(uid, _planId) {
   try {
     const records = await fetchTodayCheckins(uid)
     const sorted = [...records].sort((a, b) => (a.id || 0) - (b.id || 0))
@@ -2443,6 +2457,7 @@ async function confirmSubmit() {
   if (checkinSubmitting.value) return
   const block = pendingSubmitBlock.value
   if (!block) return
+  if (!guardCheckin(block)) return
   showSubmitConfirm.value = false
   checkinSubmitting.value = true
   try {
@@ -2545,7 +2560,7 @@ async function saveDetailEdit() {
     detailEditCard.value = null
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '保存失败', icon: 'none', duration: 2500 })
   } finally {
         checkinSubmitting.value = false
   }
@@ -2588,7 +2603,7 @@ async function deleteCard(idx) {
     nextTick(() => syncPhaseExpand())
     uni.showToast({ title: '已删除', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '删除失败', icon: 'none', duration: 2500 })
   } finally {
         checkinSubmitting.value = false
   }
@@ -2600,9 +2615,9 @@ function applyPlanMedia(plan) {
   if (videoItem?.video_url) {
     videoSrc.value = videoItem.video_url
   }
-  const firstBlock = items[0]?.block || 'A'
-  const firstAudio = items.find(i => (i.block || 'A') === firstBlock && i.audio_url)
-    || items.find(i => i.audio_url && !i.video_url)
+  // v2.0: items 无 block 属性，按 sort_order 取第一个有音频的项
+  const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  const firstAudio = sorted.find(i => i.audio_url)
   if (firstAudio) {
     audioSrc.value = firstAudio.audio_url
     audioTitle.value = `🎧 ${firstAudio.title || '今日训练音频'}`
@@ -2761,9 +2776,11 @@ function dismissAssessmentModal() {
   showAssessmentModal.value = false
 }
 
-async function loadTodayPlan(silent = true) {
-  if (scheduleLoading.value) return
+const todayPlanLoading = ref(false)
 
+async function loadTodayPlan(silent = true) {
+  if (todayPlanLoading.value) return
+  todayPlanLoading.value = true
   entryLoading.value = !silent
   needAssessment.value = false
   try {
@@ -2839,9 +2856,10 @@ async function loadTodayPlan(silent = true) {
       refreshAiPlanInBackground(uid)
     }
   } catch (e) {
-        uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
+    uni.showToast({ title: e.message || '加载今日方案失败', icon: 'none', duration: 2500 })
   } finally {
     entryLoading.value = false
+    todayPlanLoading.value = false
   }
 }
 
