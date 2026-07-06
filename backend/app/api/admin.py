@@ -156,8 +156,7 @@ def unbind_child(
     admin_id: int = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
-    admin_service.unbind_child(db, admin_id, child_id)
-    return {"ok": True}
+    return admin_service.unbind_child(db, admin_id, child_id)
 
 
 @router.get("/settings", response_model=AdminPlatformConfigResponse)

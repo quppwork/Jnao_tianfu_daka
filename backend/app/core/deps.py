@@ -10,6 +10,12 @@ from app.db.session import get_db as _get_db
 logger = logging.getLogger("jnao")
 
 
+def _is_missing_column_error(exc: Exception) -> bool:
+    """迁移未完成时 session_token 等列可能不存在，仅此场景允许降级。"""
+    msg = str(exc).lower()
+    return "no such column" in msg or "unknown column" in msg
+
+
 def get_db():
     yield from _get_db()
 
@@ -45,10 +51,11 @@ def get_authenticated_user(
 
     try:
         user = db.get(ChildUser, uid)
-    except Exception:
-        # session_token 列可能还不存在（迁移未执行），降级处理
-        logger.warning("get_authenticated_user: DB 查询失败（session_token 列可能未创建），降级为无 token 验证")
-        return uid
+    except Exception as e:
+        if _is_missing_column_error(e):
+            logger.warning("get_authenticated_user: session_token 列未创建，降级为无 token 验证")
+            return uid
+        raise
 
     if not user:
         raise HTTPException(401, "用户不存在")
@@ -62,10 +69,12 @@ def get_authenticated_user(
     token = x_session_token or session_token
 
     try:
-        db_token = user.session_token
-    except Exception:
-        logger.warning("get_authenticated_user: 读取 session_token 失败，降级处理")
-        return uid
+        user.session_token  # 触发 ORM 加载，列缺失时在此抛出
+    except Exception as e:
+        if _is_missing_column_error(e):
+            logger.warning("get_authenticated_user: 读取 session_token 列失败，降级处理")
+            return uid
+        raise
 
     if not token:
         raise HTTPException(401, "需要有效的 session_token（请重新登录）")

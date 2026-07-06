@@ -1,21 +1,53 @@
-import pytest
-"""家长/孩子账号体系"""
+"""家长/孩子账号体系 — 短信验证码注册 + 密码登录"""
 
+import pytest
 from fastapi.testclient import TestClient
 
 
-def _register_parent(client: TestClient, phone: str = "13900001111", password: str = "123456") -> dict:
+def _send_register_sms(client: TestClient, phone: str) -> None:
+    cap = client.get("/api/auth/captcha")
+    cid = cap.json()["captcha_id"]
     res = client.post(
-        "/api/auth/register",
+        "/api/auth/sms/send",
         json={
-            "parent_phone": phone,
-            "nickname": "张家长",
+            "phone": phone,
+            "scene": "register",
+            "captcha_id": cid,
+            "captcha_code": "0000",
+        },
+    )
+    assert res.status_code == 200, res.text
+
+
+def _register_parent(
+    client: TestClient,
+    phone: str = "13900001111",
+    password: str = "123456",
+    *,
+    nickname: str = "张家长",
+) -> dict:
+    _send_register_sms(client, phone)
+    res = client.post(
+        "/api/auth/sms/register",
+        json={
+            "phone": phone,
+            "sms_code": "88888",
+            "real_name": "张三",
+            "nickname": nickname,
             "password": password,
-            "role": "parent",
         },
     )
     assert res.status_code == 200, res.text
     return res.json()
+
+
+def _parent_auth(parent: dict) -> dict:
+    return {
+        "params": {
+            "user_id": parent["child_user_id"],
+            "session_token": parent.get("session_token", ""),
+        }
+    }
 
 
 class TestParentAuth:
@@ -26,13 +58,14 @@ class TestParentAuth:
 
     def test_register_parent_duplicate_phone(self, client: TestClient):
         _register_parent(client, "13900001113")
+        cap = client.get("/api/auth/captcha").json()
         res = client.post(
-            "/api/auth/register",
+            "/api/auth/sms/send",
             json={
-                "parent_phone": "13900001113",
-                "nickname": "李家长",
-                "password": "123456",
-                "role": "parent",
+                "phone": "13900001113",
+                "scene": "register",
+                "captcha_id": cap["captcha_id"],
+                "captcha_code": "0000",
             },
         )
         assert res.status_code == 409
@@ -56,10 +89,11 @@ class TestParentAuth:
 
     def test_create_and_login_child(self, client: TestClient):
         parent = _register_parent(client, "13900001116")
-        pid = parent["child_user_id"]
+        auth = _parent_auth(parent)
         res = client.post(
-            f"/api/parent/children?user_id={pid}",
+            "/api/parent/children",
             json={"login_name": "xiaoming", "nickname": "小明", "password": "654321"},
+            **auth,
         )
         assert res.status_code == 200
         child_id = res.json()["id"]
@@ -74,27 +108,30 @@ class TestParentAuth:
 
     def test_list_children(self, client: TestClient):
         parent = _register_parent(client, "13900001117")
-        pid = parent["child_user_id"]
+        auth = _parent_auth(parent)
         client.post(
-            f"/api/parent/children?user_id={pid}",
+            "/api/parent/children",
             json={"login_name": "child1", "nickname": "孩子一", "password": "111111"},
+            **auth,
         )
-        res = client.get(f"/api/parent/children?user_id={pid}")
+        res = client.get("/api/parent/children", **auth)
         assert res.status_code == 200
         assert len(res.json()["children"]) == 1
         assert res.json()["children"][0]["nickname"] == "孩子一"
 
     def test_update_child(self, client: TestClient):
         parent = _register_parent(client, "13900001118")
-        pid = parent["child_user_id"]
+        auth = _parent_auth(parent)
         created = client.post(
-            f"/api/parent/children?user_id={pid}",
+            "/api/parent/children",
             json={"login_name": "child2", "nickname": "旧名", "password": "111111"},
+            **auth,
         ).json()
         cid = created["id"]
         res = client.put(
-            f"/api/parent/children/{cid}?user_id={pid}",
+            f"/api/parent/children/{cid}",
             json={"nickname": "新名", "password": "222222"},
+            **auth,
         )
         assert res.status_code == 200
         assert res.json()["nickname"] == "新名"
@@ -111,19 +148,20 @@ class TestParentAuth:
 
     def test_parent_quota(self, client: TestClient):
         parent = _register_parent(client, "13900001119")
-        pid = parent["child_user_id"]
-        res = client.get(f"/api/parent/quota?user_id={pid}")
+        auth = _parent_auth(parent)
+        res = client.get("/api/parent/quota", **auth)
         assert res.status_code == 200
         data = res.json()
         assert data["limit"] == 5
         assert data["can_add"] is True
 
     def test_student_password_login(self, client: TestClient):
-        parent = _register_parent(client, "13900001118", password="123456")
-        pid = parent["child_user_id"]
+        parent = _register_parent(client, "13900001120", password="123456")
+        auth = _parent_auth(parent)
         created = client.post(
-            f"/api/parent/children?user_id={pid}",
+            "/api/parent/children",
             json={"login_name": "legacy_kid", "nickname": "旧流程童", "password": "111111"},
+            **auth,
         ).json()
         res = client.post(
             "/api/auth/login",
@@ -134,10 +172,11 @@ class TestParentAuth:
 
     def test_child_profile_includes_parent_name(self, client: TestClient):
         parent = _register_parent(client, "13900002222", password="123456")
-        pid = parent["child_user_id"]
+        auth = _parent_auth(parent)
         created = client.post(
-            f"/api/parent/children?user_id={pid}",
+            "/api/parent/children",
             json={"login_name": "kid01", "nickname": "孩子甲", "password": "111111"},
+            **auth,
         ).json()
         cid = created["id"]
         res = client.get(f"/api/user/profile?user_id={cid}")
@@ -148,15 +187,16 @@ class TestParentAuth:
 
     def test_parent_set_grade_visible_on_child_profile(self, client: TestClient):
         parent = _register_parent(client, "13900003333", password="123456")
-        pid = parent["child_user_id"]
+        auth = _parent_auth(parent)
         created = client.post(
-            f"/api/parent/children?user_id={pid}",
+            "/api/parent/children",
             json={
                 "login_name": "kid_grade",
                 "nickname": "刘思思",
                 "password": "111111",
                 "grade": "五年级",
             },
+            **auth,
         ).json()
         cid = created["id"]
         assert created["grade"] == "五年级"

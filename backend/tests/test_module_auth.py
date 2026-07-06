@@ -22,18 +22,14 @@ class TestModuleAuth:
         assert r1.json()["child_user_id"] == r2.json()["child_user_id"]
 
     def test_login_student_password(self, client: TestClient):
-        parent = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13955556666",
-                "nickname": "张家长",
-                "password": "123456",
-                "role": "parent",
-            },
-        ).json()
+        from tests.test_parent_auth import _parent_auth, _register_parent
+
+        parent = _register_parent(client, "13955556666", password="123456")
+        auth = _parent_auth(parent)
         client.post(
-            f"/api/parent/children?user_id={parent['child_user_id']}",
+            "/api/parent/children",
             json={"login_name": "kid_xiaogang", "nickname": "小刚", "password": "111111"},
+            **auth,
         )
         res = client.post(
             "/api/auth/login",

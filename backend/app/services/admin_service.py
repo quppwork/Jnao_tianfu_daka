@@ -79,7 +79,9 @@ def _archive_student_account(db: Session, child: ChildUser) -> None:
     if child.login_name and not str(child.login_name).startswith("__deleted_"):
         pj["archived_login_name"] = child.login_name
         child.login_name = f"__deleted_{child.id}"
-    pj["archived_parent_phone"] = child.parent_phone
+    if child.parent_phone and not str(child.parent_phone).startswith("__deleted_"):
+        pj["archived_parent_phone"] = child.parent_phone
+        child.parent_phone = f"__deleted_student_{child.id}"
     pj["archived_nickname"] = child.nickname
     child.profile_json = pj
     child.password_hash = None
@@ -228,6 +230,8 @@ def delete_parent(db: Session, admin_id: int, parent_id: int) -> None:
     parent = db.get(ChildUser, parent_id)
     if not parent or parent.role != auth_service.ROLE_PARENT:
         raise HTTPException(404, "家长不存在")
+    if not auth_service.is_account_active(parent):
+        raise HTTPException(410, "账号已归档")
     _archive_parent_account(db, parent)
     db.commit()
 
@@ -307,6 +311,8 @@ def delete_child(db: Session, admin_id: int, child_id: int) -> None:
     child = db.get(ChildUser, child_id)
     if not child or child.role != auth_service.ROLE_STUDENT:
         raise HTTPException(404, "孩子不存在")
+    if not auth_service.is_account_active(child):
+        raise HTTPException(410, "账号已归档")
     _archive_student_account(db, child)
     db.commit()
 
@@ -340,7 +346,7 @@ def bind_child(db: Session, admin_id: int, child_id: int, parent_id: int) -> dic
     return summary
 
 
-def unbind_child(db: Session, admin_id: int, child_id: int) -> None:
+def unbind_child(db: Session, admin_id: int, child_id: int) -> dict:
     _require_admin(db, admin_id)
     child = db.get(ChildUser, child_id)
     if not child or not auth_service.is_account_active(child):
@@ -350,6 +356,10 @@ def unbind_child(db: Session, admin_id: int, child_id: int) -> None:
 
     revoke_all_sessions(db, child_id)
     db.commit()
+    return {
+        "ok": True,
+        "warning": "孩子已解绑，将无法登录，需重新绑定家长后方可恢复",
+    }
 
 
 def get_parent_detail(db: Session, admin_id: int, parent_id: int) -> dict:

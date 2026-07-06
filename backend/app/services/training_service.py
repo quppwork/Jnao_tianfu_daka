@@ -118,16 +118,21 @@ def _training_day_for_child(db: Session, child_user_id: int) -> int:
 def _resolve_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> TrainingPlan | None:
     """按训练日查找方案；兼容旧数据用日历日期入库的情况。"""
     plan_date = plan_date or _today_for(db, child_user_id)
+    now = _user_now(db, child_user_id)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
-    if plan and is_plan_stale(plan, now=_user_now(db, child_user_id)):
+    if plan and is_plan_stale(plan, now=now):
+        _delete_training_plan(db, plan)
+        db.flush()
         return None
     if plan:
         return plan
-    now = _user_now(db, child_user_id)
     cal = now.date()
     if plan_date != cal:
         legacy = _get_plan_by_date(db, child_user_id, cal)
-        if legacy and not is_plan_stale(legacy, now=now) and is_plan_day_locked(legacy, now=now):
+        if legacy and is_plan_stale(legacy, now=now):
+            _delete_training_plan(db, legacy)
+            db.flush()
+        elif legacy and is_plan_day_locked(legacy, now=now):
             return legacy
     return None
 
@@ -186,6 +191,7 @@ def _get_plan_by_date(db: Session, child_user_id: int, plan_date: date) -> Train
             TrainingPlan.child_user_id == child_user_id,
             TrainingPlan.plan_date == plan_date,
         )
+        .order_by(TrainingPlan.id.desc())
     )
 
 
@@ -662,16 +668,16 @@ def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: Trai
     )
     if not row:
         return False
-    current = now.time()
-    # 处理跨日训练窗口（如 22:00→06:00）
-    if row.start_time <= row.end_time:
-        within = row.start_time <= current <= row.end_time
-    else:
-        # 跨日：当前时间 >= start 或 <= end 都算在窗口内
-        within = current >= row.start_time or current <= row.end_time
-    if within:
+    if _time_in_training_window(row.start_time, row.end_time, now.time()):
         return False
     return mark_plan_media_exhausted(db, plan)
+
+
+def _time_in_training_window(start: time, end: time, current: time) -> bool:
+    """训练窗口内判断，支持跨日（如 22:00→06:00）。"""
+    if start <= end:
+        return start <= current <= end
+    return current >= start or current <= end
 
 
 def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
@@ -1611,7 +1617,7 @@ def get_window_status(db: Session, child_user_id: int, now: datetime | None = No
             "end_time": None,
         }
     current = now.time()
-    in_window = row.start_time <= current <= row.end_time
+    in_window = _time_in_training_window(row.start_time, row.end_time, current)
     result = {
         "in_window": in_window,
         "train_date": train_date,

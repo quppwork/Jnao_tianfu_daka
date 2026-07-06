@@ -1,6 +1,6 @@
 """家长端 API — 孩子账号分配与管理"""
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_user, get_db
@@ -21,23 +21,33 @@ from app.services.parent_profile_service import parent_profile_to_dict, update_p
 router = APIRouter(prefix="/api/parent", tags=["parent"])
 
 
-@router.get("/profile", response_model=ParentProfileResponse)
-def get_profile(
+def _require_parent_id(
     user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
-):
+) -> int:
     from app.services import auth_service
 
     user = auth_service.get_child_user(db, user_id)
     if not user or user.role != auth_service.ROLE_PARENT:
         raise HTTPException(403, "需要家长账号")
+    return user_id
+
+
+@router.get("/profile", response_model=ParentProfileResponse)
+def get_profile(
+    user_id: int = Depends(_require_parent_id),
+    db: Session = Depends(get_db),
+):
+    from app.services import auth_service
+
+    user = auth_service.get_child_user(db, user_id)
     return ParentProfileResponse(**parent_profile_to_dict(user))
 
 
 @router.put("/profile", response_model=ParentProfileResponse)
 def put_profile(
     req: ParentProfileUpdateRequest,
-    user_id: int = Depends(get_authenticated_user),
+    user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
     user = update_parent_profile(
@@ -52,13 +62,13 @@ def put_profile(
 
 
 @router.get("/quota", response_model=ParentQuotaResponse)
-def get_quota(user_id: int = Query(...), db: Session = Depends(get_db)):
+def get_quota(user_id: int = Depends(_require_parent_id), db: Session = Depends(get_db)):
     """预留：查询家长可分配的孩子名额"""
     return parent_service.get_quota(db, user_id)
 
 
 @router.get("/children", response_model=ParentChildrenResponse)
-def list_children(user_id: int = Query(...), db: Session = Depends(get_db)):
+def list_children(user_id: int = Depends(_require_parent_id), db: Session = Depends(get_db)):
     items = parent_service.list_children(db, user_id)
     return ParentChildrenResponse(children=[ChildSummaryOut(**c) for c in items])
 
@@ -66,7 +76,7 @@ def list_children(user_id: int = Query(...), db: Session = Depends(get_db)):
 @router.post("/children", response_model=ChildSummaryOut)
 def create_child(
     req: CreateChildRequest,
-    user_id: int = Query(...),
+    user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
     child = parent_service.create_child(
@@ -89,7 +99,7 @@ def create_child(
 def update_child(
     child_id: int,
     req: UpdateChildRequest,
-    user_id: int = Query(...),
+    user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
     child = parent_service.update_child(
@@ -111,7 +121,7 @@ def update_child(
 @router.delete("/children/{child_id}")
 def delete_child(
     child_id: int,
-    user_id: int = Query(...),
+    user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
     parent_service.delete_child(db, user_id, child_id)
@@ -121,7 +131,7 @@ def delete_child(
 @router.get("/children/{child_id}/summary", response_model=ChildDetailResponse)
 def child_summary(
     child_id: int,
-    user_id: int = Query(...),
+    user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
     """预留：家长查看单个孩子信息摘要"""
