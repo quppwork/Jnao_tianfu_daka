@@ -270,11 +270,16 @@ def reset_consecutive_pass(state: dict, skill: str) -> None:
 
 
 def advance_skill_tier(state: dict, skill: str) -> int:
-    """技能 Tier += 1，consecutive_pass 重置为 0；返回新 Tier"""
+    """技能 Tier += 1，consecutive_pass 重置为 0，part 轮换计数器归零；返回新 Tier"""
     current = get_skill_tier(state, skill)
     new_tier = current + 1
     set_skill_tier(state, skill, new_tier)
     reset_consecutive_pass(state, skill)
+    # 晋级后 part 轮换计数器归零
+    sd = state.get("skills", {}).get(skill)
+    if sd:
+        sd["part_listen_count"] = 0
+        sd["part_first_listen_at"] = None
     return new_tier
 
 
@@ -449,14 +454,9 @@ def _do_rotate_part(
     db: Session | None = None,
     talent_code: int | None = None,
 ) -> bool:
-    """执行 part 轮换。当前 stage 内有下一个 part → part+1，所有 part 用完则：
+    """执行 part 轮换：只在本 stage 内循环 part，不改 stage。
 
-    - 该技能 tier ≤ 3 → 回到 stage=1, part=1 重新循环
-    - 该技能 tier > 3  → 跳到下一 stage 的 part=1（没有则不动）
-
-    part 轮换与晋级体系的关系：
-      晋级体系控制 tier 提升（达标→consecutive_pass→tier+1→bump_oss→stage推进）
-      part 轮换在舞台内循环音频，不替代晋级体系
+    stage 推进由晋级体系统一管理（bump_oss_after_pass），不在此处处理。
     """
     sd = state["skills"].get(skill)
     if not sd:
@@ -464,7 +464,6 @@ def _do_rotate_part(
 
     stage = int(sd.get("oss_stage", 0))
     part = int(sd.get("oss_part", 0))
-    tier = int(sd.get("tier", 1))
 
     if db and talent_code:
         from app.services.talent_content_pool import get_talent_content_pool
@@ -472,30 +471,19 @@ def _do_rotate_part(
 
         pool = get_talent_content_pool(db, talent_code)
 
-        # 1️⃣ 试当前 stage 的下一个 part
+        # 当前 stage 的下一个 part
         nxt = _find_lesson(pool, skill, stage, part + 1)
         if nxt:
             sd["oss_part"] = part + 1
             _reset_part_counters(sd)
             return True
 
-        # 2️⃣ 当前 stage part 全部用完
-        if tier <= 3:
-            # 回 stage=1 循环
-            first = _find_lesson(pool, skill, 1, 1)
-            if first:
-                sd["oss_stage"] = 1
-                sd["oss_part"] = 1
-                _reset_part_counters(sd)
-                return True
-        else:
-            # 跳到下一 stage
-            nxt = _find_lesson(pool, skill, stage + 1, 1)
-            if nxt:
-                sd["oss_stage"] = stage + 1
-                sd["oss_part"] = 1
-                _reset_part_counters(sd)
-                return True
+        # 当前 stage 无更多 part → 回到 part=1 重新循环
+        first = _find_lesson(pool, skill, stage, 1)
+        if first:
+            sd["oss_part"] = 1
+            _reset_part_counters(sd)
+            return True
     else:
         sd["oss_part"] = part + 1
         _reset_part_counters(sd)
