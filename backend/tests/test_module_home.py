@@ -44,9 +44,10 @@ class TestModuleHome:
         assert data["provider"] == "doubao"
         assert data["key_ok"] is True
 
-    def test_generic_chat_also_doubao(self, client: TestClient, mock_doubao):
+    def test_generic_chat_also_doubao(self, client: TestClient, registered_user, mock_doubao):
         """首页也可走 /api/chat"""
-        res = client.post("/api/chat", json={"message": "你好"})
+        uid = registered_user["child_user_id"]
+        res = client.post(f"/api/chat?user_id={uid}", json={"message": "你好"})
         assert res.json()["data"]["answer_mode"] == "doubao"
 
     def test_guide_chat_stream(self, client: TestClient, registered_user, mock_doubao):

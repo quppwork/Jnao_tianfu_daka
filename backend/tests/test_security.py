@@ -12,9 +12,10 @@ class TestSecurityGates:
         res = client.get("/api/guide/debug")
         assert res.status_code == 200
 
-    def test_report_rejects_invalid_answer(self, client: TestClient):
+    def test_report_rejects_invalid_answer(self, client: TestClient, registered_user):
+        uid = registered_user["child_user_id"]
         res = client.post(
-            "/api/talent/report",
+            f"/api/talent/report?user_id={uid}",
             json={"answer": "x" * 35, "uid": 1, "type": 0},
         )
         assert res.status_code == 422

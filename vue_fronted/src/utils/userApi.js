@@ -89,7 +89,9 @@ export function markChildUserSessionValid(uid) {
 
 /** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
 async function apiJson(url, options = {}) {
-  const res = await fetch(url, options)
+  const userId = extractUserIdFromUrl(url)
+  const headers = mergeAuthHeaders(options, userId)
+  const res = await fetch(url, { ...options, headers })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     // 单设备登录：token 失效 → 清除登录态，触发重新登录
@@ -109,12 +111,19 @@ async function apiJson(url, options = {}) {
 
 /** POST + SSE 流式读取（首页引导 / 学科答疑） */
 async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
+  const userId = extractUserIdFromUrl(url)
+  const headers = mergeAuthHeaders(
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+    },
+    userId,
+  )
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
+    headers,
     body: JSON.stringify(body),
   })
   if (!res.ok) {
@@ -169,18 +178,27 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
   return finalPayload
 }
 
-/** 给 URL 拼接 ?user_id= 和 &session_token= 查询参数 */
+/** 给 URL 拼接 ?user_id=（session_token 改走 Header） */
 function ensureAuthQuery(url, userId) {
-  let result = url
-  if (userId && !/[?&]user_id=/.test(result)) {
-    const sep = result.includes('?') ? '&' : '?'
-    result = `${result}${sep}user_id=${userId}`
+  if (userId && !/[?&]user_id=/.test(url)) {
+    const sep = url.includes('?') ? '&' : '?'
+    return `${url}${sep}user_id=${userId}`
   }
+  return url
+}
+
+function extractUserIdFromUrl(url) {
+  const m = String(url || '').match(/[?&]user_id=(\d+)/)
+  return m ? parseInt(m[1], 10) : null
+}
+
+function mergeAuthHeaders(options = {}, userId = null) {
+  const headers = { ...(options.headers || {}), ...authHeaders() }
   const token = getSessionToken()
-  if (token && !/[?&]session_token=/.test(result)) {
-    result = `${result}&session_token=${encodeURIComponent(token)}`
-  }
-  return result
+  if (token) headers['X-Session-Token'] = token
+  const uid = userId || extractUserIdFromUrl(options._url || '') || getChildUserId()
+  if (uid) headers['X-Child-User-Id'] = String(uid)
+  return headers
 }
 
 function withUser(url, userId) {
@@ -233,12 +251,51 @@ function getOrCreateGuestPhone() {
   }
 }
 
-/** 登录后存储 user_id + session_token */
+/** 登录后存储 session；家长/学生分槽，避免 role 混用 */
 function _storeAuth(data) {
-  setChildUserId(data.child_user_id)
   if (data.session_token) {
     setSessionToken(data.session_token)
   }
+  const role = data.role || 'student'
+  try {
+    localStorage.setItem('jnao_user', JSON.stringify({
+      id: data.child_user_id,
+      name: data.nickname,
+      phone: data.parent_phone,
+      role,
+    }))
+    localStorage.setItem('jnao_logged_in', '1')
+  } catch (e) { /* ignore */ }
+  if (role === 'student') {
+    setChildUserId(data.child_user_id)
+    markChildUserSessionValid(data.child_user_id)
+  } else {
+    try { localStorage.removeItem(CHILD_KEY) } catch (e) { /* ignore */ }
+    invalidateChildUserSession()
+  }
+}
+
+export class NeedLoginError extends Error {
+  constructor(message = '请先登录') {
+    super(message)
+    this.name = 'NeedLoginError'
+  }
+}
+
+function _readStoredRole() {
+  try {
+    const raw = localStorage.getItem('jnao_user')
+    if (!raw) return null
+    return JSON.parse(raw).role || null
+  } catch (e) {
+    return null
+  }
+}
+
+function _redirectToLogin() {
+  try {
+    uni.reLaunch({ url: '/pages/login/index' })
+  } catch (e) { /* ignore */ }
 }
 
 /** 家长登录：手机号 + 密码 */
@@ -437,43 +494,53 @@ async function registerChildUser(parentPhone, nickname) {
 }
 
 /**
- * 全局用户入口 — 所有页面 onMounted 第一个调用的函数
- * 流程: localStorage 有 ID → 调 /api/user/profile 验证 → 200=复用, 404=重新注册
- * 返回有效的 child_user_id，保证后续 API 调用不会 401
+ * 全局用户入口 — 学生页 onMounted 调用
+ * 无有效学生 session 时跳转登录，不再自动 guest 注册
  */
 export async function ensureChildUser(nickname = '学员') {
+  const role = _readStoredRole()
+  if (role === 'parent') {
+    try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (e) { /* ignore */ }
+    throw new NeedLoginError('请使用学生账号登录')
+  }
+
   const existing = getChildUserId()
+  if (!existing) {
+    _redirectToLogin()
+    throw new NeedLoginError()
+  }
+  if (!getSessionToken()) {
+    clearChildUserId()
+    _redirectToLogin()
+    throw new NeedLoginError()
+  }
+
   if (existing && _sessionValidatedUid === existing) {
     return existing
   }
-  if (existing) {
-    if (!_validateInFlight) {
-      _validateInFlight = (async () => {
-        try {
-          await apiJson(withUser('/api/user/profile', existing))
+  if (!_validateInFlight) {
+    _validateInFlight = (async () => {
+      try {
+        await apiJson(withUser('/api/user/profile', existing))
+        _sessionValidatedUid = existing
+      } catch (e) {
+        if (e.status === 404 || e.status === 401 || e.status === 403) {
+          clearChildUserId()
+        } else {
           _sessionValidatedUid = existing
-        } catch (e) {
-          if (e.status === 404 || e.status === 401) {
-            clearChildUserId()
-          } else {
-            _sessionValidatedUid = existing
-          }
-        } finally {
-          _validateInFlight = null
         }
-      })()
-    }
-    await _validateInFlight
-    const uid = getChildUserId()
-    if (uid) return uid
+      } finally {
+        _validateInFlight = null
+      }
+    })()
   }
-
-  const loginProfile = readLoginProfile()
-  const nick = loginProfile?.nickname || getOrCreateGuestNickname(nickname)
-  const phone = loginProfile?.phone || getOrCreateGuestPhone()
-  const id = await registerChildUser(phone, nick)
-  _sessionValidatedUid = id
-  return id
+  await _validateInFlight
+  const uid = getChildUserId()
+  if (!uid) {
+    _redirectToLogin()
+    throw new NeedLoginError()
+  }
+  return uid
 }
 
 /** JNAO 外部 API 用的 uid（存于 child_user.jnao_uid） */
@@ -542,14 +609,13 @@ export async function resolveTalentConflict(userId, action) {
 }
 
 export async function submitTalentReport(userId, { answer, jnaoUid, type }) {
-  return apiJson('/api/talent/report', {
+  return apiJson(withUser('/api/talent/report', userId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       answer,
       uid: jnaoUid,
       type,
-      child_user_id: userId,
     }),
   })
 }
@@ -802,8 +868,10 @@ export function sendQaMessageStream(userId, message, sessionId = null, options =
 export async function uploadQaImage(userId, file) {
   const form = new FormData()
   form.append('file', file)
+  const headers = mergeAuthHeaders({}, userId)
   const res = await fetch(withUser('/api/qa/upload-image', userId), {
     method: 'POST',
+    headers,
     body: form,
   })
   const data = await res.json().catch(() => ({}))
@@ -812,9 +880,12 @@ export async function uploadQaImage(userId, file) {
 }
 
 export async function transcribeVoice(audioBlob, filename = 'speech.webm') {
+  const userId = getChildUserId()
+  if (!userId || !getSessionToken()) throw new NeedLoginError()
   const form = new FormData()
   form.append('audio', audioBlob, filename)
-  const res = await fetch('/api/voice/asr', { method: 'POST', body: form })
+  const headers = mergeAuthHeaders({}, userId)
+  const res = await fetch(withUser('/api/voice/asr', userId), { method: 'POST', headers, body: form })
   const data = await res.json().catch(() => ({}))
   if (!res.ok || data.error) throw new Error(data.error || data.detail || '语音识别失败')
   return data.text || ''

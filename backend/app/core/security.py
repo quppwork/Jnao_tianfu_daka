@@ -24,6 +24,24 @@ def is_debug_routes_enabled() -> bool:
     return os.getenv("JNAO_DEBUG_ROUTES", "1") == "1"
 
 
+def is_legacy_register_enabled() -> bool:
+    """MVP 遗留 /api/auth/register — 生产默认关闭。"""
+    default = "0" if is_production() else "1"
+    return os.getenv("JNAO_LEGACY_REGISTER", default) == "1"
+
+
+def assert_production_auth_config() -> None:
+    """生产环境禁止 mock 认证组件。"""
+    if not is_production():
+        return
+    if os.getenv("AUTH_CHALLENGE_MOCK", "0") == "1":
+        raise RuntimeError("生产环境不可启用 AUTH_CHALLENGE_MOCK")
+    if os.getenv("SMS_PROVIDER", "").strip().lower() == "mock":
+        raise RuntimeError("生产环境不可使用 SMS_PROVIDER=mock")
+    if os.getenv("SMS_MOCK_EXPOSE", "0") == "1":
+        raise RuntimeError("生产环境不可启用 SMS_MOCK_EXPOSE")
+
+
 def get_cors_origins() -> list[str]:
     raw = os.getenv("CORS_ORIGINS", "").strip()
     if raw:

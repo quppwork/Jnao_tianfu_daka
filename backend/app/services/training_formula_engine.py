@@ -147,3 +147,23 @@ def expand_formula(
             else matched["minutes"][0]
         ),
     }
+
+
+_GRADE_BANDS = ("primary_low", "primary_high", "junior", "senior")
+
+
+def max_formula_item_count(planned_minutes: int) -> int:
+    """时长对应的最大训练项数（跨 tier/学段取保守上界，供结构校验）。"""
+    n = 1
+    for tier in (1, 3):
+        for band in _GRADE_BANDS:
+            slots = expand_formula(planned_minutes, overall_tier=tier, grade_band=band).get("slots") or []
+            n = max(n, len(slots))
+    if planned_minutes >= 480:
+        n += 1  # populate_plan_items 末尾追加「精力恢复」
+    return n
+
+
+def duration_slot(planned_minutes: int) -> dict:
+    """时长档位元数据（兼容旧 _plan_structure_invalid 调用）。"""
+    return {"items": max_formula_item_count(planned_minutes), "minutes": planned_minutes}

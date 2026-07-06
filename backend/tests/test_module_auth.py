@@ -18,8 +18,9 @@ class TestModuleAuth:
     def test_register_idempotent(self, client: TestClient):
         body = {"parent_phone": "13933334444", "nickname": "小红"}
         r1 = client.post("/api/auth/register", json=body)
+        assert r1.status_code == 200
         r2 = client.post("/api/auth/register", json=body)
-        assert r1.json()["child_user_id"] == r2.json()["child_user_id"]
+        assert r2.status_code == 409
 
     def test_login_student_password(self, client: TestClient):
         from tests.test_parent_auth import _parent_auth, _register_parent

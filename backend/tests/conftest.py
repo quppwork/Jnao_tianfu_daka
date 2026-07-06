@@ -7,6 +7,7 @@ os.environ.setdefault("TIANFU_RAG_MOCK", "1")
 os.environ.setdefault("AUTH_CHALLENGE_MOCK", "1")
 os.environ.setdefault("SMS_PROVIDER", "mock")
 os.environ.setdefault("SMS_MOCK_CODE", "88888")
+os.environ.setdefault("JNAO_LEGACY_REGISTER", "1")
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -15,7 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_user, get_child_user_id, get_db
+from app.core.deps import get_authenticated_student, get_authenticated_user, get_child_user_id, get_db
 from app.db.base import Base
 from app.db.session import get_session_factory, init_db
 from app.services.assessment_service import save_assessment
@@ -121,6 +122,7 @@ def client(db_session, mock_jnao, mock_doubao):
     app.dependency_overrides[get_db] = override_get_db
     # 测试环境：绕过 session_token 校验，使用旧版 user_id 认证
     app.dependency_overrides[get_authenticated_user] = get_child_user_id
+    app.dependency_overrides[get_authenticated_student] = get_child_user_id
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -158,12 +160,11 @@ def user_ready_for_training(client, mock_jnao) -> int:
     )
     uid = reg.json()["child_user_id"]
     client.post(
-        "/api/talent/report",
+        f"/api/talent/report?user_id={uid}",
         json={
             "answer": "1" * 35,
             "uid": 888001,
             "type": 1,
-            "child_user_id": uid,
         },
     )
     return uid

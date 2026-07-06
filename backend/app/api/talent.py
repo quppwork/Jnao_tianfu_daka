@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_user, get_db
+from app.core.deps import get_authenticated_student, get_db
 from app.core.cache import (
     cache_get_json,
     cache_set_json,
@@ -37,6 +37,7 @@ async def jnao_submit_answer(
     answer: str = Query(..., description="35位01编码答案字符串"),
     uid: int = Query(..., description="用户ID"),
     type: int = Query(..., description="测试类型 0=成人 1=孩子"),
+    child_user_id: int = Depends(get_authenticated_student),
 ):
     """代理提交答案到 JNAO，返回 record_id"""
     try:
@@ -47,7 +48,10 @@ async def jnao_submit_answer(
 
 
 @router.get("/jnao/report/{record_id}")
-async def jnao_report(record_id: str):
+async def jnao_report(
+    record_id: str,
+    child_user_id: int = Depends(get_authenticated_student),
+):
     """代理获取 JNAO 报告 JSON"""
     try:
         report = await jnao_get_report(record_id)
@@ -57,8 +61,12 @@ async def jnao_report(record_id: str):
 
 
 @router.post("/report")
-async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
-    """提交答案 + 获取报告（一步完成），可选落库"""
+async def talent_report(
+    req: ReportRequest,
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """提交答案 + 获取报告（一步完成），落库到当前登录学生"""
     try:
         record_id = await jnao_submit(req.answer, req.uid, req.type)
         report = await jnao_get_report(record_id)
@@ -67,28 +75,26 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
         locked = False
         lock_msg = None
         current_talent = None
-        if req.child_user_id:
-            user = db.get(ChildUser, req.child_user_id)
-            if user and user.profile_json:
-                current_talent = (user.profile_json or {}).get("talent_primary")
-            row = assessment_service.save_assessment(
-                db,
-                child_user_id=req.child_user_id,
-                jnao_record_id=str(record_id),
-                answer_bitstring=req.answer,
-                test_type=req.type,
-                report=report,
-            )
-            assessment_id = row.id
-            conflict = getattr(row, "_talent_conflict", False)
-            locked = getattr(row, "_talent_locked", False)
-            if req.child_user_id:
-                _invalidate_assessment_caches(req.child_user_id)
-            if locked:
-                lock_msg = assessment_service.TALENT_LOCK_MSG
-            if conflict and user:
-                db.refresh(user)
-                current_talent = (user.profile_json or {}).get("talent_primary") or current_talent
+        user = db.get(ChildUser, child_user_id)
+        if user and user.profile_json:
+            current_talent = (user.profile_json or {}).get("talent_primary")
+        row = assessment_service.save_assessment(
+            db,
+            child_user_id=child_user_id,
+            jnao_record_id=str(record_id),
+            answer_bitstring=req.answer,
+            test_type=req.type,
+            report=report,
+        )
+        assessment_id = row.id
+        conflict = getattr(row, "_talent_conflict", False)
+        locked = getattr(row, "_talent_locked", False)
+        _invalidate_assessment_caches(child_user_id)
+        if locked:
+            lock_msg = assessment_service.TALENT_LOCK_MSG
+        if conflict and user:
+            db.refresh(user)
+            current_talent = (user.profile_json or {}).get("talent_primary") or current_talent
         return {
             "code": 1,
             "data": report,
@@ -105,7 +111,7 @@ async def talent_report(req: ReportRequest, db: Session = Depends(get_db)):
 @router.post("/assessment")
 async def save_assessment_endpoint(
     req: ReportRequest,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     """测评完成并落库（需 user_id / X-Child-User-Id）"""
@@ -140,7 +146,7 @@ async def save_assessment_endpoint(
 
 @router.get("/assessment/history")
 def assessment_history(
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
     limit: int = 30,
 ):
@@ -149,7 +155,7 @@ def assessment_history(
 
 @router.get("/assessment/latest", response_model=AssessmentOut)
 def latest_assessment(
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     """最新测评；无 JNAO 记录时若有引导页自选天赋也返回 200"""
@@ -197,7 +203,7 @@ def latest_assessment(
 @router.get("/assessment/{assessment_id}")
 def get_assessment(
     assessment_id: int,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     row = assessment_service.get_assessment_by_id(db, assessment_id, child_user_id)
@@ -216,7 +222,7 @@ def get_assessment(
 @router.delete("/assessment/{assessment_id}")
 def delete_assessment_endpoint(
     assessment_id: int,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     """删除历史测评（归档后从主表移除，定时全库备份保留副本）"""

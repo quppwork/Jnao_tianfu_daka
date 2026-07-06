@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from sqlalchemy import select
@@ -20,7 +21,7 @@ from app.services.content_meta import estimate_duration_min, item_instruction, p
 from app.services.talent_content_pool import get_talent_content_pool
 from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
 from app.services.training_child_guide import build_coach_text_for_plan
-from app.services.training_formula_engine import expand_formula
+from app.services.training_formula_engine import duration_slot, expand_formula
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
@@ -34,7 +35,11 @@ def _resolve_plan_date(db: Session, child_user_id: int, plan_date: date | None =
     from app.services.dev_clock import resolve_training_now
 
     now = resolve_training_now(db, child_user_id)
-    return plan_date or get_training_day(now)
+    expected = get_training_day(now)
+    resolved = plan_date or expected
+    if resolved != expected:
+        raise TrainingError("只能操作当日训练方案", 400)
+    return resolved
 
 DEFAULT_DAILY_PLAN_MINUTES = 45
 
@@ -95,18 +100,19 @@ def _has_plan_content(plan: TrainingPlan) -> bool:
 
 
 def _plan_structure_invalid(plan: TrainingPlan, planned_minutes: int) -> bool:
-    """同一训练块多项、或超出时长表块数 → 旧排课结构，需重生成"""
+    """项数超出公式上界，或旧版 v1 同 block 重复 → 需重生成"""
     from app.services.content_meta import parse_item_instruction
 
-    slot_cfg = duration_slot(planned_minutes)
-    max_blocks = int(slot_cfg.get("items") or 1)
-    if len(plan.items) > max_blocks:
+    max_items = int(duration_slot(planned_minutes).get("items") or 1)
+    if len(plan.items) > max_items:
         return True
     block_counts: dict[str, int] = {}
     for item in plan.items:
         meta = parse_item_instruction(
             item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
         )
+        if meta.get("skill"):
+            continue  # v2 公式排课项均带 skill，不按 block 字母判重复
         block = meta.get("block") or "A"
         block_counts[block] = block_counts.get(block, 0) + 1
         if block_counts[block] > 1:
@@ -190,11 +196,11 @@ async def populate_plan_items(
             meta = parse_item_meta(content)
             inst = item_instruction("A", meta.get("content_type") or "audio")
             try:
-                payload = __import__("json").loads(inst)
+                payload = json.loads(inst)
                 payload["skill"] = meta.get("skill") or skill_name
                 payload["item_type"] = "elective" if is_elective else "required"
                 payload["blocks_next"] = blocks_next
-                inst = __import__("json").dumps(payload, ensure_ascii=False)
+                inst = json.dumps(payload, ensure_ascii=False)
             except Exception:
                 pass
             title = content_display_title(content)

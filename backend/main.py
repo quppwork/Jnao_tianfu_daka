@@ -49,6 +49,9 @@ def _seed_catalog_if_empty() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.core.security import assert_production_auth_config
+
+    assert_production_auth_config()
     init_db()
     _seed_catalog_if_empty()
     yield
@@ -92,7 +95,7 @@ app.add_middleware(
     allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Child-User-Id"],
+    allow_headers=["Content-Type", "X-Child-User-Id", "X-Session-Token", "X-Device-Id"],
 )
 
 app.include_router(health.router)

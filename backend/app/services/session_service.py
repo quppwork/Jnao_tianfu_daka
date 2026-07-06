@@ -83,6 +83,7 @@ def _migrate_legacy_token(db: Session, user: ChildUser, token: str) -> UserSessi
     existing = db.scalar(select(UserSession).where(UserSession.session_token == token))
     if existing:
         return existing
+    _trim_sessions(db, user)
     row = UserSession(
         user_id=user.id,
         session_token=token,
@@ -90,7 +91,7 @@ def _migrate_legacy_token(db: Session, user: ChildUser, token: str) -> UserSessi
         last_active_at=_now(),
     )
     db.add(row)
-    db.commit()
+    db.flush()
     db.refresh(row)
     return row
 

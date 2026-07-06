@@ -89,6 +89,9 @@ def update_parent_profile(
             from app.core.password import hash_password
 
             user.password_hash = hash_password(pwd)
+            from app.services.session_service import revoke_all_sessions
+
+            revoke_all_sessions(db, user.id)
 
     user.profile_json = pj
     flag_modified(user, "profile_json")

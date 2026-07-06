@@ -10,12 +10,6 @@ from app.db.session import get_db as _get_db
 logger = logging.getLogger("jnao")
 
 
-def _is_missing_column_error(exc: Exception) -> bool:
-    """迁移未完成时 session_token 等列可能不存在，仅此场景允许降级。"""
-    msg = str(exc).lower()
-    return "no such column" in msg or "unknown column" in msg
-
-
 def get_db():
     yield from _get_db()
 
@@ -37,12 +31,7 @@ def get_authenticated_user(
     session_token: str | None = Query(None, description="会话令牌"),
     db: Session = Depends(get_db),
 ) -> int:
-    """验证 user_id + session_token，新登录会使旧设备 token 失效。
-
-    单设备登录：每次登录刷新 session_token，旧 token 立即失效。
-    向下兼容：用户无 token 时自动补发（首次迁移场景）。
-    防御处理：session_token 列不存在时自动降级为无 token 验证。
-    """
+    """验证 user_id + session_token。"""
     uid = user_id or x_child_user_id
     if not uid or uid < 1:
         raise HTTPException(401, "需要有效的 user_id 参数或 X-Child-User-Id 请求头")
@@ -52,10 +41,8 @@ def get_authenticated_user(
     try:
         user = db.get(ChildUser, uid)
     except Exception as e:
-        if _is_missing_column_error(e):
-            logger.warning("get_authenticated_user: session_token 列未创建，降级为无 token 验证")
-            return uid
-        raise
+        logger.error("get_authenticated_user: 读取用户失败 uid=%s: %s", uid, e)
+        raise HTTPException(503, "认证服务暂不可用，请稍后重试") from e
 
     if not user:
         raise HTTPException(401, "用户不存在")
@@ -67,15 +54,6 @@ def get_authenticated_user(
         raise HTTPException(401, "账号已停用")
 
     token = x_session_token or session_token
-
-    try:
-        user.session_token  # 触发 ORM 加载，列缺失时在此抛出
-    except Exception as e:
-        if _is_missing_column_error(e):
-            logger.warning("get_authenticated_user: 读取 session_token 列失败，降级处理")
-            return uid
-        raise
-
     if not token:
         raise HTTPException(401, "需要有效的 session_token（请重新登录）")
 
@@ -83,6 +61,20 @@ def get_authenticated_user(
         raise HTTPException(401, "已在其他设备登录或会话已失效，请重新登录")
 
     return uid
+
+
+def get_authenticated_student(
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+) -> int:
+    """学生端 API：在 session 有效基础上要求 role=student。"""
+    from app.db.models import ChildUser
+    from app.services import auth_service
+
+    user = db.get(ChildUser, user_id)
+    if not user or (user.role or auth_service.ROLE_STUDENT) != auth_service.ROLE_STUDENT:
+        raise HTTPException(403, "需要学生账号")
+    return user_id
 
 
 def get_admin_user(
