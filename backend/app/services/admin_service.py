@@ -69,7 +69,10 @@ def _purge_student_operational_data(db: Session, child_id: int) -> None:
 
 
 def _archive_student_account(db: Session, child: ChildUser) -> None:
-    """软删除孩子：归档账户信息，释放 login_name，不参与生产逻辑"""
+    """软删除孩子：归档账户信息，释放 login_name，不参与生产逻辑。
+
+    不在此函数内 commit — 调用方须在事务末尾统一 db.commit()。
+    """
     if child.role != auth_service.ROLE_STUDENT or not auth_service.is_account_active(child):
         return
     _purge_student_operational_data(db, child.id)
@@ -95,7 +98,10 @@ def _archive_student_account(db: Session, child: ChildUser) -> None:
 
 
 def _archive_parent_account(db: Session, parent: ChildUser) -> None:
-    """软删除家长：先归档名下孩子，再归档家长并释放手机号"""
+    """软删除家长：先归档名下孩子，再归档家长并释放手机号。
+
+    不在此函数内 commit — 调用方须在事务末尾统一 db.commit()。
+    """
     if parent.role != auth_service.ROLE_PARENT or not auth_service.is_account_active(parent):
         return
     child_ids = list(
@@ -209,6 +215,9 @@ def update_parent(
         parent.nickname = nickname.strip()
     if password is not None:
         parent.password_hash = hash_password(password)
+        from app.services.session_service import revoke_all_sessions
+
+        revoke_all_sessions(db, parent.id)
     if child_quota is not None:
         if child_quota < 0:
             raise HTTPException(400, "名额不能为负数")
@@ -290,6 +299,9 @@ def update_child(
         child.nickname = nickname.strip()
     if password is not None:
         child.password_hash = hash_password(password)
+        from app.services.session_service import revoke_all_sessions
+
+        revoke_all_sessions(db, child.id)
     pj = dict(child.profile_json or {})
     learner = dict(pj.get("learner") or {})
     if grade is not None:
@@ -349,9 +361,20 @@ def bind_child(db: Session, admin_id: int, child_id: int, parent_id: int) -> dic
 def unbind_child(db: Session, admin_id: int, child_id: int) -> dict:
     _require_admin(db, admin_id)
     child = db.get(ChildUser, child_id)
-    if not child or not auth_service.is_account_active(child):
+    if (
+        not child
+        or child.role != auth_service.ROLE_STUDENT
+        or not auth_service.is_account_active(child)
+    ):
         raise HTTPException(404, "孩子不存在")
     db.execute(delete(ParentChildBind).where(ParentChildBind.child_id == child_id))
+    child.parent_phone = ""
+    pj = dict(child.profile_json or {})
+    pj.pop("parentName", None)
+    child.profile_json = pj
+    from sqlalchemy.orm.attributes import flag_modified
+
+    flag_modified(child, "profile_json")
     from app.services.session_service import revoke_all_sessions
 
     revoke_all_sessions(db, child_id)

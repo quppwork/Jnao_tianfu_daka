@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_user, get_db
+from app.core.deps import get_authenticated_student, get_db
 from app.core.logger import get_logger
 from app.core.security import is_debug_routes_enabled
 from app.core.sse import SSE_HEADERS, emit_event_stream, sse_done, sse_json
@@ -39,7 +39,7 @@ async def guide_debug():
 
 @router.get("/session")
 def guide_session(
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     return guide_service.load_session_payload(db, child_user_id)
@@ -47,7 +47,7 @@ def guide_session(
 
 @router.post("/clear")
 def guide_clear(
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     cleared = guide_service.clear_sessions(db, child_user_id)
@@ -57,7 +57,7 @@ def guide_clear(
 @router.post("/chat")
 async def guide_chat(
     req: GuideChatRequest,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     if not is_configured():
@@ -73,7 +73,7 @@ async def guide_chat(
 @router.post("/chat/stream")
 async def guide_chat_stream(
     req: GuideChatRequest,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     """SSE 流式引导对话"""

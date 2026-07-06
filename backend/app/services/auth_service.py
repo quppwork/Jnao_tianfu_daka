@@ -158,7 +158,6 @@ def ensure_admin_account(db: Session) -> ChildUser | None:
         return None
     existing = find_admin_by_login_name(db, login_name)
     if existing:
-        existing.password_hash = hash_password(password)
         existing.nickname = existing.nickname or "管理员"
         db.commit()
         db.refresh(existing)

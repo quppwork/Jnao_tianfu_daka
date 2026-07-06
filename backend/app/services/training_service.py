@@ -1,5 +1,6 @@
 """今日训练业务逻辑 — 推送、打卡、时段"""
 
+import json
 from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import delete, func, select
@@ -307,7 +308,7 @@ def sync_pending_plan_content(
         changed = True
 
     # 仅同步「简单推送」单条音频计划；已排课的 A/B 方案保留结构
-    is_simple = len(plan.items) <= 1 and not plan.planned_minutes
+    is_simple = len(plan.items) <= 1 and plan.planned_minutes is None
     if not is_simple:
         if changed:
             db.commit()
@@ -408,7 +409,7 @@ def _compute_content_index(
         return 0
     yesterday = plan_date - timedelta(days=1)
     y_plan = _get_plan_by_date(db, child_user_id, yesterday)
-    if y_plan is None:
+    if y_plan is None or is_plan_stale(y_plan):
         return 0
     if talent_primary and y_plan.level and y_plan.level != talent_primary:
         return 0
@@ -638,17 +639,16 @@ def toggle_elective_item(
             raise TrainingError("训练计划不存在", 404)
         target = None
         for item in plan.items:
-            if item.instructions and str(item.instructions).strip().startswith("{"):
-                try:
-                    payload = __import__("json").loads(item.instructions)
-                    if payload.get("skill") == skill:
-                        target = item
-                        break
-                except Exception:
-                    pass
-            if not target:
-                if skill in (item.title or ""):
-                    target = item
+            inst = parse_item_instruction(
+                item.instructions if item.instructions and str(item.instructions).strip().startswith("{") else None
+            )
+            if inst.get("skill") == skill:
+                target = item
+                break
+            title = (item.title or "").strip()
+            if title == skill or title == f"{skill}（待同步）":
+                target = item
+                break
         if not target:
             raise TrainingError(f"方案中未找到选修项「{skill}」", 404)
         return remove_plan_item(db, child_user_id, target.id)
@@ -1157,13 +1157,23 @@ def append_elective_item(
     if is_plan_globally_cutoff(plan):
         raise TrainingError("训练日已于凌晨4点截止", 403)
 
-    # 去重：同一技能已在方案中则跳过
+    # 去重：同一技能已在方案中则跳过（含无 content_item_id 的占位项）
+    search_skill = "感知力" if skill == "多元感知" else skill
     for existing in plan.items:
+        inst = parse_item_instruction(
+            existing.instructions
+            if existing.instructions and str(existing.instructions).strip().startswith("{")
+            else None
+        )
+        if inst.get("skill") == skill:
+            db.commit()
+            plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
+            return _plan_to_response(plan, db=db)
         if existing.content_item_id:
             ci = db.get(ContentItem, existing.content_item_id)
             if ci:
                 from app.services.content_meta import parse_item_meta as _pim
-                if _pim(ci).get("skill") == skill:
+                if _pim(ci).get("skill") == search_skill:
                     db.commit()
                     plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
                     return _plan_to_response(plan, db=db)
@@ -1175,8 +1185,6 @@ def append_elective_item(
     talent_code = talent.get("talent_code") if talent else None
     pool = get_talent_content_pool(db, talent_code) if talent_code else []
 
-    # 「多元感知」展示名 → OSS 内部名「感知力」
-    search_skill = "感知力" if skill == "多元感知" else skill
     content = None
     for item in pool:
         meta = parse_item_meta(item)
@@ -1186,7 +1194,7 @@ def append_elective_item(
 
     if content:
         inst_data = {"skill": skill, "item_type": "elective", "blocks_next": False}
-        inst = __import__("json").dumps(inst_data, ensure_ascii=False)
+        inst = json.dumps(inst_data, ensure_ascii=False)
         db.add(TrainingItem(
             plan_id=plan.id, sort_order=next_sort, ability_type="elective",
             title=content_display_title(content),
@@ -1199,7 +1207,7 @@ def append_elective_item(
         db.add(TrainingItem(
             plan_id=plan.id, sort_order=next_sort, ability_type="elective",
             title=f"{skill}（待同步）", duration_min=0,
-            instructions=__import__("json").dumps(
+            instructions=json.dumps(
                 {"skill": skill, "item_type": "elective", "blocks_next": False},
                 ensure_ascii=False,
             ),
@@ -1238,6 +1246,9 @@ def remove_plan_item(
     if not item_skips_checkin(item):
         raise TrainingError("只能移除选修训练项", 403)
 
+    from sqlalchemy import update
+
+    db.execute(update(TrainingRecord).where(TrainingRecord.item_id == item_id).values(item_id=None))
     db.delete(item)
     db.flush()  # 确保被删项从 plan.items 中移除
     # 重排剩余项的 sort_order
@@ -1829,11 +1840,14 @@ def customize_plan_items(
         raise TrainingError("训练日已于凌晨4点截止", 403)
     if getattr(plan, "plan_customized", 0):
         raise TrainingError("今日方案已编辑过，每个训练日仅可修改一次", 403)
+
+    mutable = _mutable_required_items(plan)
+    if not mutable:
+        raise TrainingError("当前没有可编辑的必修项", 400)
     if _plan_has_any_checkin(db, plan):
         raise TrainingError("已有打卡记录，无法编辑方案", 403)
 
     items = sorted(plan.items, key=lambda x: x.sort_order)
-    mutable = _mutable_required_items(plan)
     if len(skills) != len(mutable):
         raise TrainingError(
             f"需要 {len(mutable)} 个技能（当前待打卡项数），实际提交 {len(skills)} 个",
@@ -1886,12 +1900,12 @@ def customize_plan_items(
             meta = parse_item_meta(content)
             inst = item_instruction("A", meta.get("content_type") or "audio")
             try:
-                payload = __import__("json").loads(inst)
+                payload = json.loads(inst)
                 payload["skill"] = meta.get("skill") or skill_name
                 payload["item_type"] = "elective" if is_elective else "required"
                 payload["oss_stage"] = stage
                 payload["oss_part"] = part
-                inst = __import__("json").dumps(payload, ensure_ascii=False)
+                inst = json.dumps(payload, ensure_ascii=False)
             except Exception:
                 pass
             target_item.title = content_display_title(content)

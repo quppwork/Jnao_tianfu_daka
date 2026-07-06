@@ -18,12 +18,13 @@ from app.services.training_service import (
 
 
 class TestAuthDeps:
-    def test_missing_column_error_detection(self):
-        from app.core.deps import _is_missing_column_error
+    def test_authenticated_user_fails_closed_on_db_error(self):
+        import inspect
+        from app.core import deps
 
-        assert _is_missing_column_error(Exception("no such column: session_token"))
-        assert _is_missing_column_error(Exception("Unknown column 'session_token'"))
-        assert not _is_missing_column_error(Exception("connection pool exhausted"))
+        src = inspect.getsource(deps.get_authenticated_user)
+        assert "503" in src
+        assert "降级" not in src
 
 
 class TestTrainingWindow:

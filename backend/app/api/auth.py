@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.security import is_legacy_register_enabled
 from app.schemas.auth import (
     AuthResponse,
     CaptchaResponse,
@@ -138,9 +139,16 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     if role == auth_service.ROLE_PARENT:
         raise HTTPException(400, "家长请使用验证码注册")
 
+    if not is_legacy_register_enabled():
+        raise HTTPException(
+            403,
+            "请由家长创建孩子账号或使用账号密码登录",
+        )
+
     existing = auth_service.find_child_by_phone(db, req.parent_phone, req.nickname)
     if existing:
-        return _to_response(existing)
+        raise HTTPException(409, "该账号已注册，请使用账号密码登录")
+
     user = auth_service.register_child(
         db,
         parent_phone=req.parent_phone,
@@ -150,7 +158,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         login_name=req.login_name,
         role=auth_service.ROLE_STUDENT,
     )
-    return _to_response(user)
+    return _issue_and_respond(db, user)
 
 
 @router.post("/login", response_model=AuthResponse)

@@ -1,6 +1,6 @@
 """管理员 API — 最高权限账号管理"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_admin_user, get_db
@@ -23,15 +23,26 @@ from app.schemas.admin import (
 )
 from app.schemas.auth import AuthResponse
 from app.services import admin_service, auth_service
+from app.services.blacklist_service import (
+    check_auth_allowed,
+    clear_auth_failures,
+    record_auth_failure,
+)
+from app.services.sms_service import client_ip_from_request, device_id_from_request
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.post("/login", response_model=AuthResponse)
-def admin_login(req: AdminLoginRequest, db: Session = Depends(get_db)):
+def admin_login(req: AdminLoginRequest, request: Request, db: Session = Depends(get_db)):
+    ip = client_ip_from_request(request)
+    did = device_id_from_request(request) or ""
+    check_auth_allowed(db, client_ip=ip, device_id=did)
     user = auth_service.login_admin_by_password(db, req.login_name, req.password)
     if not user:
+        record_auth_failure(db, client_ip=ip, device_id=did)
         raise HTTPException(401, "账号或密码错误")
+    clear_auth_failures(client_ip=ip, device_id=did)
     from app.services.session_service import issue_session
 
     issue_session(db, user)
