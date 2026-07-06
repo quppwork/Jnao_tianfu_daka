@@ -796,7 +796,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -1152,7 +1152,6 @@ async function applyScheduledPlan(uid, data) {
   todayPlan.value = data
   applyServerTimeMeta(data)
   syncPlanMetaFromApi(data)
-  loadElectiveOffers()
   aiPlanText.value = data.report_text || ''
   applyPlanMedia(data)
   hydrateWatchProgressFromPlan(data)
