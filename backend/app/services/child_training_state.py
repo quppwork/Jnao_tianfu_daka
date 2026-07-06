@@ -449,31 +449,37 @@ def _do_rotate_part(
     db: Session | None = None,
     talent_code: int | None = None,
 ) -> bool:
-    """执行 part 轮换：当前 stage 内 part+1，用完则按 tier 决定回 stage=1 或升 stage"""
-    from datetime import datetime, timezone, timedelta
+    """执行 part 轮换。当前 stage 内有下一个 part → part+1，所有 part 用完则：
 
+    - 该技能 tier ≤ 3 → 回到 stage=1, part=1 重新循环
+    - 该技能 tier > 3  → 跳到下一 stage 的 part=1（没有则不动）
+
+    part 轮换与晋级体系的关系：
+      晋级体系控制 tier 提升（达标→consecutive_pass→tier+1→bump_oss→stage推进）
+      part 轮换在舞台内循环音频，不替代晋级体系
+    """
     sd = state["skills"].get(skill)
     if not sd:
         return False
 
-    stage = int(sd.get("oss_stage", 1))
-    part = int(sd.get("oss_part", 1))
+    stage = int(sd.get("oss_stage", 0))
+    part = int(sd.get("oss_part", 0))
     tier = int(sd.get("tier", 1))
 
-    # 尝试当前 stage 的下一个 part
     if db and talent_code:
         from app.services.talent_content_pool import get_talent_content_pool
         from app.services.training_curriculum import _find_lesson
-        from app.services.content_meta import parse_item_meta
 
         pool = get_talent_content_pool(db, talent_code)
+
+        # 1️⃣ 试当前 stage 的下一个 part
         nxt = _find_lesson(pool, skill, stage, part + 1)
         if nxt:
             sd["oss_part"] = part + 1
             _reset_part_counters(sd)
             return True
 
-        # 当前 stage part 用完
+        # 2️⃣ 当前 stage part 全部用完
         if tier <= 3:
             # 回 stage=1 循环
             first = _find_lesson(pool, skill, 1, 1)
@@ -491,7 +497,6 @@ def _do_rotate_part(
                 _reset_part_counters(sd)
                 return True
     else:
-        # 无 db 时简单推进
         sd["oss_part"] = part + 1
         _reset_part_counters(sd)
         return True
