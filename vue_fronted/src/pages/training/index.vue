@@ -1601,12 +1601,12 @@ const electiveSkills = computed(() => {
   function skillInPlan(skill) {
     return items.some(item => {
       const inst = parseItemInstructions(item.instructions)
-      return inst.skill === skill || (item.title || '').includes(skill)
+      return inst.skill === skill || inst.skill === '感知力' || inst.skill === '多元感知' || (item.title || '').includes(skill) || (item.title || '').includes('多元感知')
     })
   }
 
   // 多元感知：始终可用
-  list.push({ skill: '多元感知', label: '多元感知', inPlan: skillInPlan('多元感知') })
+  list.push({ skill: '感知力', label: '多元感知', inPlan: skillInPlan('感知力') })
 
   return list
 })

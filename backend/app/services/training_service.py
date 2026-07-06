@@ -1168,10 +1168,12 @@ def append_elective_item(
     talent_code = talent.get("talent_code") if talent else None
     pool = get_talent_content_pool(db, talent_code) if talent_code else []
 
+    # 「多元感知」展示名 → OSS 内部名「感知力」
+    search_skill = "感知力" if skill == "多元感知" else skill
     content = None
     for item in pool:
         meta = parse_item_meta(item)
-        if meta.get("skill") == skill:
+        if meta.get("skill") == search_skill:
             content = item
             break
 
