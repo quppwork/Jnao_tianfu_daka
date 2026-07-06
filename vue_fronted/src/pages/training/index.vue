@@ -3073,16 +3073,16 @@ function triggerGlitch() {
 .editor-list { max-height:300px; overflow-y:auto; }
 .editor-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(0,210,255,0.08); }
 .editor-row:last-child { border-bottom:none; }
-.editor-label { color:#fff; font-size:13px; font-weight:600; white-space:nowrap; min-width:56px; }
+.editor-label { color:var(--text); font-size:13px; font-weight:600; white-space:nowrap; min-width:56px; }
 .editor-picker { flex:1; }
-.editor-picker-display { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.15); border-radius:8px; padding:10px 12px; font-size:13px; color:#fff; }
+.editor-picker-display { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text); }
 .editor-actions { display:flex; gap:10px; margin-top:18px; }
 .editor-btn { flex:1; padding:12px; border-radius:10px; text-align:center; cursor:pointer; }
 .editor-btn text { font-size:14px; font-weight:600; }
 .editor-btn.primary { background:linear-gradient(135deg,#00d2ff,#3b8bff); }
 .editor-btn.primary text { color:#fff; }
-.editor-btn.secondary { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); }
-.editor-btn.secondary text { color:rgba(255,255,255,0.7); }
+.editor-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
+.editor-btn.secondary text { color:var(--text-dim); }
 .picker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .picker-close text { color:rgba(255,255,255,0.5); font-size:14px; }
 .submitted-item { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid rgba(0,210,255,0.1); }
