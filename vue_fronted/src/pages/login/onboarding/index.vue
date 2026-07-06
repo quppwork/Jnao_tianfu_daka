@@ -115,10 +115,12 @@
           <!-- 最近一次打卡 -->
           <view class="form-item">
             <text class="form-label">最近一次打卡数据</text>
-            <view style="display:flex;align-items:center;gap:8px;">
-              <input v-model="fLastTime" placeholder="时长" style="width:80px;height:44px;padding:0 8px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;text-align:center;" />
+            <view style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <input v-model="fTime" placeholder="时长" style="width:80px;height:44px;padding:0 8px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;text-align:center;" />
               <text class="form-unit">分钟</text>
-              <input v-model="fLastResult" placeholder="正确率" style="width:80px;height:44px;padding:0 8px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;text-align:center;" />
+              <input v-model="fWordCount" placeholder="完成字数" style="width:80px;height:44px;padding:0 8px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;text-align:center;" />
+              <text class="form-unit">字</text>
+              <input v-model="fAccuracyPct" placeholder="正确率" style="width:80px;height:44px;padding:0 8px;border:2px solid rgba(0,210,255,0.2);border-radius:10px;font-size:14px;color:#0b111e;background:#fff;box-sizing:border-box;text-align:center;" />
               <text class="form-unit">%</text>
             </view>
           </view>
@@ -165,8 +167,9 @@ const selectedAbilities = ref([])
 const formData = ref({})
 const fFirstDate = ref('')
 const fTotalCount = ref('')
-const fLastTime = ref('')
-const fLastResult = ref('')
+const fTime = ref('')
+const fWordCount = ref('')
+const fAccuracyPct = ref('')
 const fNote = ref('')
 
 // 全局训练数据（Step 4）
@@ -216,8 +219,9 @@ function loadCurrentForm() {
   const saved = formData.value[key]
   fFirstDate.value = saved?.firstDate || ''
   fTotalCount.value = saved?.totalCount || ''
-  fLastTime.value = saved?.lastTime || ''
-  fLastResult.value = saved?.lastResult || ''
+  fTime.value = saved?.time || ''
+  fWordCount.value = saved?.wordCount || ''
+  fAccuracyPct.value = saved?.accuracy_pct || ''
   fNote.value = saved?.note || ''
 }
 
@@ -289,7 +293,7 @@ function confirmAbilities() {
 function nextDataStep() {
   formData.value[currentAbility.value] = {
     firstDate: fFirstDate.value, totalCount: fTotalCount.value,
-    lastTime: fLastTime.value, lastResult: fLastResult.value,
+    time: fTime.value, wordCount: fWordCount.value, accuracy_pct: fAccuracyPct.value,
     note: fNote.value,
   }
   if (isLastDataStep.value) { step.value = 100 }

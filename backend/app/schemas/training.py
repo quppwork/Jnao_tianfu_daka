@@ -266,3 +266,9 @@ class AssessmentOut(BaseModel):
     assessed_at: str | None
     jnao_record_id: str | None = None
     talent_source: str | None = None
+
+
+class PlanCustomizeRequest(BaseModel):
+    """整体替换训练方案中的项目"""
+    plan_id: int = Field(..., ge=1)
+    skills: list[str] = Field(..., min_length=1, max_length=10, description="按 sort_order 顺序的技能名列表，长度需与方案 items 一致")

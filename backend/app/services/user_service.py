@@ -72,6 +72,8 @@ def update_profile(
         from app.services.assessment_service import sync_child_user_talent
 
         sync_child_user_talent(db, child_user_id)
+        # 🆕 老学员 onboarding 完成 → 初始化 training_progress
+        _try_init_returning_progress(db, child_user_id)
     if training_level is not None:
         user.training_level = training_level
     db.commit()
@@ -141,3 +143,45 @@ def profile_to_dict(user: ChildUser, db: Session | None = None) -> dict:
                     pj["parentName"] = parent_name
                     data["profile_json"] = pj
     return data
+
+
+# ─── 老学员 onboarding 初始化 ──────────────────────
+
+
+def _try_init_returning_progress(db: Session, child_user_id: int) -> None:
+    """老学员 onboarding 完成时，将 prior_abilities 解析为初始 training_progress"""
+    user = db.get(ChildUser, child_user_id)
+    if not user or not isinstance(user.profile_json, dict):
+        return
+    pj = user.profile_json
+    onboarding = pj.get("onboarding") or {}
+    if not isinstance(onboarding, dict):
+        return
+    if onboarding.get("student_type") != "returning" or not onboarding.get("completed_at"):
+        return
+
+    talent_code = pj.get("talent_code")
+    if not talent_code:
+        return
+
+    prior_abilities = onboarding.get("prior_abilities") or []
+    prior_training_data = onboarding.get("prior_training_data") or {}
+    if not prior_abilities:
+        return
+
+    from app.services.child_training_state import (
+        get_training_progress,
+        build_state_from_onboarding,
+    )
+
+    # 已有进度则不重复初始化
+    state = get_training_progress(user)
+    existing = any(
+        sd.get("tier", 1) > 1 for sd in state.get("skills", {}).values()
+    )
+    if existing:
+        return
+
+    build_state_from_onboarding(
+        db, user, talent_code, prior_abilities, prior_training_data
+    )

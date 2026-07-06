@@ -128,10 +128,69 @@ def _clean_skills_for_save(skills: dict) -> dict:
 # ─── 整体 Tier ──────────────────────────────────────
 
 def overall_tier(state: dict) -> int:
-    """最低原则：取所有活跃技能中最低的 Tier"""
+    """取所有技能 tier 的平均值后向下取整。
+
+    例: [1, 2, 3] → avg=2.0 → 2
+         [1, 1, 2, 2, 2] → avg=1.6 → 1
+         [5, 5, 3, 1, 1] → avg=3.0 → 3
+    """
     skills = state.get("skills") or {}
     tiers = [sd.get("tier", 1) for sd in skills.values() if isinstance(sd, dict)]
-    return min(tiers) if tiers else 1
+    if not tiers:
+        return 1
+    import math
+    return math.floor(sum(tiers) / len(tiers))
+
+
+# ─── 按打卡记录过滤活跃技能 ───────────────────────────
+
+def get_skills_with_records(db: Session, child_user_id: int) -> set[str]:
+    """查询该用户在 TrainingRecord 中有打卡记录的技能名"""
+    import json as _json
+    from sqlalchemy import select
+    from app.db.models import TrainingRecord, TrainingItem, ContentItem
+    from app.services.content_meta import parse_item_meta
+
+    rows = db.execute(
+        select(TrainingItem.instructions, TrainingItem.content_item_id)
+        .join(TrainingRecord, TrainingRecord.item_id == TrainingItem.id)
+        .where(TrainingRecord.child_user_id == child_user_id)
+        .distinct()
+    ).all()
+
+    skills: set[str] = set()
+    for instructions, content_item_id in rows:
+        if instructions and str(instructions).strip().startswith("{"):
+            try:
+                payload = _json.loads(instructions)
+                sk = (payload.get("skill") or "").strip()
+                if sk and sk in REQUIRED_SKILLS:
+                    skills.add(sk)
+                    continue
+            except _json.JSONDecodeError:
+                pass
+        # fallback: 从 content_item 元数据取 skill
+        if content_item_id:
+            ci = db.get(ContentItem, content_item_id)
+            if ci:
+                meta = parse_item_meta(ci)
+                sk = meta.get("skill")
+                if sk and sk in REQUIRED_SKILLS:
+                    skills.add(sk)
+    return skills
+
+
+def filter_active_skills(state: dict, skills_with_records: set[str]) -> dict:
+    """只保留有打卡记录的技能，用于 overall_tier 计算"""
+    if not skills_with_records:
+        return state  # 无记录 → 保留全部（新用户场景）
+    all_skills = state.get("skills") or {}
+    filtered = {sk: all_skills[sk] for sk in REQUIRED_SKILLS if sk in skills_with_records and sk in all_skills}
+    if not filtered:
+        return state  # 意外兜底
+    new_state = dict(state)
+    new_state["skills"] = filtered
+    return new_state
 
 
 # ─── 单个技能状态 ───────────────────────────────────
@@ -248,3 +307,76 @@ def state_summary(state: dict) -> dict:
         "skills": skills_summary,
         "training_days": state.get("training_days", 0),
     }
+
+
+# ─── 老学员 onboarding 初始化 ──────────────────────
+
+SKIP_INIT_SKILLS = frozenset({"极速学习"})  # 待完工
+
+
+def build_state_from_onboarding(
+    db: Session,
+    child: ChildUser,
+    talent_code: int,
+    prior_abilities: list[str],
+    prior_training_data: dict,
+) -> dict:
+    """老学员 onboarding 完成后，根据历史数据初始化 training_progress。
+
+    对每个已填写的技能，用 evaluate_card 判定其最近一次数据是否达到 Tier 1 标准：
+    - 达标 + totalCount ≥ 3 → Tier 2, consecutive_pass=3, OSS 推进（直接视为完成3连达标）
+    - 达标 + totalCount < 3 → Tier 2, consecutive_pass=1, OSS 推进
+    - 不达标或未填 → 保持 Tier 1（默认）
+    """
+    from app.services.training_mastery import evaluate_card, bump_oss_after_pass
+
+    state = _default_state(talent_code)
+    grade = child_grade(child)
+    grade_band = _grade_band_from_grade(grade)
+
+    for skill in prior_abilities:
+        if skill not in REQUIRED_SKILLS or skill in SKIP_INIT_SKILLS:
+            continue
+        data = prior_training_data.get(skill) or {}
+        # ── sanitize ──
+        try:
+            word_count = abs(int(data.get("wordCount") or 0))
+            minutes = abs(int(data.get("time") or 0))
+            acc = data.get("accuracy_pct")
+            acc = max(0, min(int(acc), 100)) if acc else None
+            total_cnt = abs(int(data.get("totalCount") or 0))
+        except (ValueError, TypeError):
+            continue
+
+        if not word_count and skill in ("超脑阅读", "影像追忆", "扫描速记"):
+            continue  # 缺字数，判不了
+        if minutes == 0:
+            minutes = 1  # 防除零
+
+        card = {"name": skill, "wordCount": word_count, "time": minutes}
+        if acc is not None:
+            card["accuracy"] = acc
+
+        result = evaluate_card(skill, tier=1, grade_band=grade_band, card=card)
+        if result.get("passed"):
+            state["skills"][skill]["tier"] = 2
+            bump_oss_after_pass(db, talent_code, state, skill)
+            state["skills"][skill]["consecutive_pass"] = 3 if total_cnt >= 3 else 1
+
+    save_training_progress(db, child, state)
+    return state
+
+
+def _grade_band_from_grade(grade: str | None) -> str | None:
+    """从年级字符串解析学段（内联实现，避免循环依赖）"""
+    from config.loader import load_training_tier_thresholds
+
+    th = load_training_tier_thresholds()
+    bands = th.get("grade_bands") or {}
+    g = (grade or "").strip()
+    if not g:
+        return None
+    for band, grades in bands.items():
+        if g in grades:
+            return band
+    return None

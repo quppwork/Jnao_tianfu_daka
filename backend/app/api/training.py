@@ -19,6 +19,7 @@ from app.schemas.training import (
     CheckinRequest,
     CheckinResponse,
     CheckinUpdateRequest,
+    PlanCustomizeRequest,
     ScheduleRequest,
     TalentVideoResponse,
     TrainingEntryResponse,
@@ -278,6 +279,21 @@ def window_status(
     db: Session = Depends(get_db),
 ):
     return training_service.get_window_status(db, child_user_id)
+
+
+@router.post("/plan/customize", response_model=TrainingTodayResponse)
+def customize_plan(
+    req: PlanCustomizeRequest,
+    child_user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """整体替换今日训练方案的项目（不改技能等级进度）"""
+    try:
+        return training_service.customize_plan_items(
+            db, child_user_id, req.plan_id, req.skills
+        )
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.post("/plan/media-exhausted", response_model=TrainingTodayResponse)

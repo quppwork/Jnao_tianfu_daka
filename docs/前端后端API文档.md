@@ -316,6 +316,7 @@ GET /api/talent/assessment/{assessment_id}?user_id={uid}
 | DELETE | `/api/training/checkin/{id}` | 删除打卡（回退晋级） | 🟢 |
 | GET | `/api/training/elective/list` | 🆕 可选修技能列表 | 🆕 |
 | POST | `/api/training/elective` | 🆕 提交选修打卡 | 🆕 |
+| POST | `/api/training/plan/customize` | 🆕 整体替换方案中的训练项目（不改等级进度） | 🆕 |
 | GET | `/api/training/progress` | Tier 晋级进度 + OSS 状态 | 🔄 |
 | GET | `/api/training/history` | 历史训练方案 | 🟢 |
 | POST | `/api/training/window` | 设置训练时段 | 🟢 |
@@ -357,6 +358,30 @@ GET /api/talent/assessment/{assessment_id}?user_id={uid}
   "report_text": "今天专注阅读速度..."
 }
 ```
+
+
+
+### POST /api/training/plan/customize（🆕 个性化替换）
+
+整体替换今日训练方案中的训练项目，替换后技能等级/OSS 进度不变。
+
+```json
+// Request
+{
+  "plan_id": 1,
+  "skills": ["扫描速记", "影像追忆", "极速学习"]
+}
+
+// Response → 同 GET /api/training/today 格式
+```
+
+**约束：**
+- 每个技能取用户当前 OSS 位置的音频
+- 找不到音频 → 占位"待同步"
+- 已打卡的项和选修项不受影响
+- 不支持替换已完成的方案
+
+---
 
 ---
 ### POST /api/training/checkin（🆕 v2.0 返回体）

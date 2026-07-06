@@ -9,7 +9,13 @@ from sqlalchemy.orm import selectinload, Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.assessment_service import resolve_effective_talent
-from app.services.child_training_state import get_training_progress, overall_tier, get_skill_oss_position
+from app.services.child_training_state import (
+    filter_active_skills,
+    get_skill_oss_position,
+    get_skills_with_records,
+    get_training_progress,
+    overall_tier,
+)
 from app.services.content_meta import estimate_duration_min, item_instruction, parse_item_meta, content_display_title
 from app.services.talent_content_pool import get_talent_content_pool
 from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
@@ -127,8 +133,10 @@ async def populate_plan_items(
     child = db.get(ChildUser, child_user_id)
     state = get_training_progress(child) if child else {}
 
-    # v2.0: overall_tier 替代 content_index
-    o_tier = overall_tier(state)
+    # v2.0: overall_tier 替代 content_index — 只算有打卡记录的技能
+    skills_with_records = get_skills_with_records(db, child_user_id)
+    active_state = filter_active_skills(state, skills_with_records)
+    o_tier = overall_tier(active_state)
     plan.content_index = o_tier
 
     # 获取年级 → 学段

@@ -70,18 +70,18 @@ class TestDefaultState:
 
 
 class TestOverallTier:
-    """整体 Tier = 最低原则"""
+    """整体 Tier = 平均值向下取整"""
 
     def test_all_one_returns_one(self):
         state = _default_state()
         assert overall_tier(state) == 1
 
-    def test_one_advanced_others_one(self):
+    def test_mixed_avg_floor(self):
         state = _default_state()
         state["skills"]["超脑阅读"]["tier"] = 5
         state["skills"]["影像追忆"]["tier"] = 2
-        # 扫描速记/极速运算/极速学习 still tier 1
-        assert overall_tier(state) == 1  # min = 1
+        # avg = (5+2+1+1+1)/5 = 2.0 → floor = 2
+        assert overall_tier(state) == 2
 
     def test_all_three_returns_three(self):
         state = _default_state()
@@ -91,6 +91,22 @@ class TestOverallTier:
 
     def test_empty_skills_defaults_one(self):
         assert overall_tier({"skills": {}}) == 1
+
+    def test_two_point_six_floors_to_two(self):
+        """2.6 → floor → 2（不四舍五入）"""
+        state = _default_state()
+        state["skills"]["影像追忆"]["tier"] = 5
+        state["skills"]["极速运算"]["tier"] = 5
+        # avg = (1+5+1+5+1)/5 = 2.6 → floor = 2
+        assert overall_tier(state) == 2
+
+    def test_three_point_six_floors_to_three(self):
+        state = _default_state()
+        state["skills"]["影像追忆"]["tier"] = 5
+        state["skills"]["极速运算"]["tier"] = 5
+        state["skills"]["扫描速记"]["tier"] = 5
+        # avg = (1+5+5+5+1)/5 = 3.4 → floor = 3
+        assert overall_tier(state) == 3
 
 
 class TestConsecutivePass:
@@ -234,12 +250,13 @@ class TestStateSummary:
         summary = state_summary(state)
         assert summary["training_days"] == 1
 
-    def test_overall_tier_reflects_min(self):
+    def test_overall_tier_reflects_avg(self):
         state = _default_state()
         state["skills"]["超脑阅读"]["tier"] = 5
         state["skills"]["影像追忆"]["tier"] = 3
         summary = state_summary(state)
-        assert summary["overall_tier"] == 1  # 扫描速记 still tier 1
+        # avg = (5+3+1+1+1)/5 = 2.2 → floor = 2
+        assert summary["overall_tier"] == 2
 
 
 class TestConsecutivePassFlow:

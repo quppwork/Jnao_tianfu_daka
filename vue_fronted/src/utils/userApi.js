@@ -634,6 +634,15 @@ export async function submitElectiveCheckin(userId, payload) {
   })
 }
 
+/** 整体替换今日方案中的训练项目（不改等级进度） */
+export async function customizePlan(userId, planId, skills) {
+  return apiJson(withUser('/api/training/plan/customize', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan_id: planId, skills }),
+  })
+}
+
 // ── 首页引导对话 ──
 
 export async function fetchGuideSession(userId) {

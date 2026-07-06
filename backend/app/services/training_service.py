@@ -1049,6 +1049,13 @@ def group_checkin_history_by_day(items: list[dict]) -> list[dict]:
     return out
 
 
+def _is_elective_item(item: TrainingItem) -> bool:
+    """判断是否为选修/不阻塞项"""
+    from app.services.training_carryover import item_skips_checkin
+
+    return item_skips_checkin(item)
+
+
 def _item_block(item: TrainingItem) -> str | None:
     return parse_item_instruction(item.instructions).get("block")
 
@@ -1504,3 +1511,140 @@ def record_watch_progress(
         "watch_progress": item.watch_progress,
         "video_complete": is_item_video_complete(item),
     }
+
+
+# ─── 个性化替换 ────────────────────────────────────
+
+
+def customize_plan_items(
+    db: Session,
+    child_user_id: int,
+    plan_id: int,
+    skills: list[str],
+) -> dict:
+    """整体替换今日训练方案中的项目（不改技能等级进度）
+
+    约束：
+    - skills 列表长度必须等于原方案 items 数量
+    - 每个技能取用户当前的 oss_stage/oss_part → 从 OSS 池找对应音频
+    - 找不到音频 → 占位符
+    - 选修项不受影响
+    """
+    from app.services.content_meta import (
+        content_display_title,
+        estimate_duration_min,
+        item_instruction,
+        parse_item_meta,
+    )
+    from app.services.talent_content_pool import get_talent_content_pool
+    from app.services.child_training_state import (
+        REQUIRED_SKILLS,
+        get_skill_oss_position,
+        get_training_progress,
+    )
+    from app.services.assessment_service import resolve_effective_talent
+    from app.services.training_catalog_sync import repair_plan_media_items
+    from app.services.training_child_guide import build_coach_text_for_plan
+
+    plan = db.get(TrainingPlan, plan_id)
+    if not plan or plan.child_user_id != child_user_id:
+        raise TrainingError("训练计划不存在", 404)
+    if plan.status == "completed":
+        raise TrainingError("今日训练已完成，无法修改", 403)
+    if is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止", 403)
+
+    items = sorted(plan.items, key=lambda x: x.sort_order)
+    now = _user_now(db, child_user_id)
+    # 只替换必修项（过滤掉已打卡的 + 选修不阻塞项）
+    mutable = [
+        it for it in items
+        if it.checkin_status != "done"
+        and not _is_elective_item(it)
+    ]
+    if len(skills) != len(mutable):
+        raise TrainingError(
+            f"需要 {len(mutable)} 个技能（当前待打卡项数），实际提交 {len(skills)} 个",
+            400,
+        )
+
+    # 校验技能名合法
+    cur = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum()
+    elective_rules = cur.get("elective_rules") or {}
+    elective_skills = set(elective_rules.keys())
+    allowed_skills = set(REQUIRED_SKILLS) | elective_skills
+    for sk in skills:
+        if sk not in allowed_skills:
+            raise TrainingError(f"未知技能：{sk}", 400)
+
+    # 获取用户天赋 + OSS 池
+    talent = resolve_effective_talent(db, child_user_id)
+    if not talent or not talent.get("talent_code"):
+        raise TrainingError("请先完成天赋测评", 403)
+    talent_code = talent["talent_code"]
+
+    child = db.get(ChildUser, child_user_id)
+    state = get_training_progress(child) if child else {}
+    pool = get_talent_content_pool(db, talent_code)
+
+    def _find_content(skill_name: str) -> tuple:
+        """从 OSS 池找该技能当前 OSS 位置对应的音频"""
+        stage, part = get_skill_oss_position(state, skill_name)
+        for item in pool:
+            meta = parse_item_meta(item)
+            if meta.get("skill") == skill_name:
+                s = meta.get("stage", 0)
+                p = meta.get("part", 0)
+                if s == stage and p == part:
+                    return item, stage, part
+        # fallback: 任意第一个
+        for item in pool:
+            meta = parse_item_meta(item)
+            if meta.get("skill") == skill_name:
+                return item, meta.get("stage", 0), meta.get("part", 0)
+        return None, stage, part
+
+    # 逐个替换 mutable 项
+    for i, target_item in enumerate(mutable):
+        skill_name = skills[i]
+        is_elective = skill_name in elective_rules
+
+        content, stage, part = _find_content(skill_name)
+        if content:
+            meta = parse_item_meta(content)
+            inst = item_instruction("A", meta.get("content_type") or "audio")
+            try:
+                payload = __import__("json").loads(inst)
+                payload["skill"] = meta.get("skill") or skill_name
+                payload["item_type"] = "elective" if is_elective else "required"
+                payload["oss_stage"] = stage
+                payload["oss_part"] = part
+                inst = __import__("json").dumps(payload, ensure_ascii=False)
+            except Exception:
+                pass
+            target_item.title = content_display_title(content)
+            target_item.audio_url = content.play_url
+            target_item.video_url = content.video_url
+            target_item.duration_min = estimate_duration_min(content)
+            target_item.content_item_id = content.id
+            target_item.instructions = inst
+            target_item.ability_type = "audio"
+        else:
+            target_item.title = f"{skill_name}（待同步）"
+            target_item.audio_url = None
+            target_item.video_url = None
+            target_item.duration_min = 0
+            target_item.content_item_id = None
+            target_item.instructions = item_instruction("A", "placeholder")
+            target_item.ability_type = "placeholder"
+
+    repair_plan_media_items(db, plan, talent_code)
+    plan.report_text = build_coach_text_for_plan(plan)
+    db.commit()
+
+    invalidate_plan_cache(child_user_id, plan.plan_date)
+    from app.core.cache import invalidate_user_training
+    invalidate_user_training(child_user_id, plan_date=plan.plan_date)
+
+    plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
+    return _plan_to_response(plan, db=db)

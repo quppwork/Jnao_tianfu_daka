@@ -217,9 +217,14 @@
           </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
 
-          <!-- 🆕 v2.0 选修入口 -->
-          <view v-if="timerPhase !== 'setup' && todayPlan?.plan_id" class="elective-entry" @click="openElectiveModal">
-            <text>🧩 选修技能</text>
+          <!-- 🆕 v2.0 选修入口 + 方案编辑 -->
+          <view style="display:flex;gap:8px;margin-top:8px;">
+            <view v-if="timerPhase !== 'setup' && todayPlan?.plan_id" class="elective-entry" style="flex:1;" @click="openElectiveModal">
+              <text>🧩 选修技能</text>
+            </view>
+            <view v-if="canCustomizePlan" class="elective-entry" style="flex:1;" @click="openPlanEditor">
+              <text>📝 编辑方案</text>
+            </view>
           </view>
         </template>
       </view>
@@ -602,6 +607,32 @@
       </view>
     </view>
 
+    <!-- 🆕 方案编辑弹窗 -->
+    <view v-if="showPlanEditor" class="picker-overlay" @click="closePlanEditor">
+      <view class="picker-card plan-editor-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">📝 编辑今日方案</text>
+          <view class="modal-close" @click="closePlanEditor">✕</view>
+        </view>
+        <text class="editor-hint">替换训练项目，不改等级进度和 OSS 位置</text>
+        <view class="editor-list">
+          <view v-for="(item, idx) in editableItems" :key="item.id" class="editor-row">
+            <text class="editor-label">项目 {{ idx + 1 }}</text>
+            <picker class="editor-picker" :range="allReplacableSkills" :value="editorSkillIndex(item)" @change="(e) => onEditorSkillChange(idx, e)">
+              <view class="editor-picker-display">{{ editorSkillName(item) || '选择技能' }}</view>
+            </picker>
+          </view>
+        </view>
+        <view v-if="!editableItems.length" style="padding:16px;text-align:center;color:#8b949e;">
+          无可编辑的训练项目
+        </view>
+        <view v-if="editableItems.length" class="editor-actions">
+          <view class="editor-btn secondary" @click="closePlanEditor"><text>取消</text></view>
+          <view class="editor-btn primary" @click="confirmCustomize"><text>确认修改</text></view>
+        </view>
+      </view>
+    </view>
+
     <!-- Media Player Overlay -->
     <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
       <view class="player-card" @click.stop>
@@ -787,7 +818,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -1602,6 +1633,79 @@ async function onElectiveCheckin(skill) {
   uni.showToast({ title: `${skill} 已记录`, icon: 'none' })
   closeElectiveModal()
 }
+// ── 方案编辑 ──
+const showPlanEditor = ref(false)
+const editorSkills = ref([])
+
+const allReplacableSkills = ['超脑阅读', '影像追忆', '扫描速记', '极速运算', '极速学习']
+
+const editableItems = computed(() => {
+  const items = todayPlan.value?.items || []
+  return items.filter(i => i.checkin_status !== 'done').filter(i => {
+    const inst = parseItemInstructions(i.instructions)
+    return inst.item_type !== 'elective' && inst.blocks_next !== false
+  })
+})
+
+const canCustomizePlan = computed(() => editableItems.value.length > 0)
+
+function editorSkillName(item) {
+  const idx = editorSkills.value.findIndex(s => s.startsWith(item.id + ':'))
+  if (idx >= 0) return editorSkills.value[idx].split(':')[1]
+  const inst = parseItemInstructions(item.instructions)
+  return inst.skill || resolvePlanItemSkill(item) || '训练'
+}
+
+function editorSkillIndex(item) {
+  const name = editorSkillName(item)
+  const idx = allReplacableSkills.indexOf(name)
+  return idx >= 0 ? idx : 0
+}
+
+function onEditorSkillChange(itemIdx, e) {
+  const val = e.detail.value
+  const skill = allReplacableSkills[val]
+  const item = editableItems.value[itemIdx]
+  if (item && skill) {
+    editorSkills.value[itemIdx] = item.id + ':' + skill
+  }
+}
+
+function openPlanEditor() {
+  editorSkills.value = editableItems.value.map(item => {
+    const inst = parseItemInstructions(item.instructions)
+    const sk = inst.skill || resolvePlanItemSkill(item) || '训练'
+    return item.id + ':' + sk
+  })
+  showPlanEditor.value = true
+}
+
+function closePlanEditor() { showPlanEditor.value = false }
+
+async function confirmCustomize() {
+  const uid = await ensureChildUser()
+  const planId = todayPlan.value?.plan_id
+  if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
+  const skills = editorSkills.value.map(s => s.split(':')[1])
+  uni.showModal({
+    title: '确认修改',
+    content: '替换训练项目不会影响各技能的等级进度，确定要修改吗？',
+    success: async (r) => {
+      if (!r.confirm) return
+      try {
+        await customizePlan(uid, planId, skills)
+        uni.showToast({ title: '方案已更新', icon: 'none' })
+        closePlanEditor()
+        await loadTodayPlan(true)
+      } catch (e) {
+        const detail = e.data?.detail || e.message || '修改失败'
+        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
+        uni.showToast({ title: msg, icon: 'none', duration: 3000 })
+      }
+    },
+  })
+}
+
 const attitudeTouched = ref(false)
 const scores = [
   { pct:100, emoji:'🔴', desc:'身体已透支，精神还要求进步' },
@@ -2964,6 +3068,21 @@ function triggerGlitch() {
 .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
 .modal-title { color:#fff; font-size:16px; font-weight:700; }
 .modal-close { color:rgba(255,255,255,0.5); font-size:20px; cursor:pointer; padding:4px 8px; }
+.plan-editor-modal { max-width:340px; }
+.editor-hint { color:var(--text-dim); font-size:12px; text-align:center; margin-bottom:16px; display:block; }
+.editor-list { max-height:300px; overflow-y:auto; }
+.editor-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(0,210,255,0.08); }
+.editor-row:last-child { border-bottom:none; }
+.editor-label { color:#fff; font-size:13px; font-weight:600; white-space:nowrap; min-width:56px; }
+.editor-picker { flex:1; }
+.editor-picker-display { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.15); border-radius:8px; padding:10px 12px; font-size:13px; color:#fff; }
+.editor-actions { display:flex; gap:10px; margin-top:18px; }
+.editor-btn { flex:1; padding:12px; border-radius:10px; text-align:center; cursor:pointer; }
+.editor-btn text { font-size:14px; font-weight:600; }
+.editor-btn.primary { background:linear-gradient(135deg,#00d2ff,#3b8bff); }
+.editor-btn.primary text { color:#fff; }
+.editor-btn.secondary { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); }
+.editor-btn.secondary text { color:rgba(255,255,255,0.7); }
 .picker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .picker-close text { color:rgba(255,255,255,0.5); font-size:14px; }
 .submitted-item { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid rgba(0,210,255,0.1); }

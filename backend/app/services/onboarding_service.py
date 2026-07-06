@@ -22,8 +22,9 @@ ALLOWED_ABILITIES: tuple[str, ...] = (
 PRIOR_DATA_FIELDS: tuple[str, ...] = (
     "firstDate",
     "totalCount",
-    "lastTime",
-    "lastResult",
+    "time",
+    "wordCount",
+    "accuracy_pct",
     "note",
 )
 
