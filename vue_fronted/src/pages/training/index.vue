@@ -283,6 +283,9 @@
             <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
               <text>{{ phase.allDone ? '✏️ 修改 ' + phase.block + ' 打卡' : '✅ 训练 ' + phase.block + ' 打卡' }}</text>
             </view>
+            <view v-if="phase.isElective && phase.firstItemId" class="btn-remove-elective" @click="removeElectiveItem(phase.firstItemId)">
+              <text>✕ 移除</text>
+            </view>
           </view>
         </view>
       </template>
@@ -818,7 +821,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan, addPlanElective } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan, addPlanElective, removePlanItem } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -1627,6 +1630,18 @@ function openElectiveModal() {
   showElectiveModal.value = true
 }
 function closeElectiveModal() { showElectiveModal.value = false }
+
+async function removeElectiveItem(itemId) {
+  const uid = await ensureChildUser()
+  try {
+    const data = await removePlanItem(uid, itemId)
+    await applyScheduledPlan(uid, data)
+    uni.showToast({ title: '已移除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '移除失败', icon: 'none', duration: 2500 })
+  }
+}
+
 async function onElectiveCheckin(skill) {
   const uid = await ensureChildUser()
   const planId = todayPlan.value?.plan_id
@@ -1865,6 +1880,7 @@ const planPhases = computed(() => {
     return {
       block: String(idx + 1),
       itemId: item.id,
+      firstItemId: item.id,
       label,
       subtitle: item.title || '',
       items: [item],
@@ -3254,6 +3270,9 @@ function triggerGlitch() {
 .form-textarea-sm { height:36px; padding:6px 10px; }
 .form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
 .ftag { padding:6px 14px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:12px; border:1px solid rgba(0,210,255,0.2); cursor:pointer; transition:all 0.15s; }
+.btn-remove-elective { display:inline-flex; align-items:center; background:rgba(255,77,79,0.12); border:1px solid rgba(255,77,79,0.25); border-radius:8px; padding:6px 10px; cursor:pointer; margin-top:6px; }
+.btn-remove-elective text { color:rgba(255,77,79,0.8); font-size:12px; font-weight:600; }
+.btn-remove-elective:active { background:rgba(255,77,79,0.25); }
 .ftag.on { background:#0088cc; border-color:#00d2ff; color:#fff; box-shadow:0 0 10px rgba(0,210,255,0.2); }
 .form-inline { display:flex; align-items:center; gap:6px; flex:1; }
 .form-file-wrap { flex:1; }

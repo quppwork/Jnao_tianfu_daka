@@ -242,6 +242,19 @@ def plan_add_elective(
         raise HTTPException(e.status_code, e.message) from e
 
 
+@router.delete("/plan/items/{item_id}", response_model=TrainingTodayResponse)
+def plan_remove_item(
+    item_id: int,
+    child_user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """移除方案中的一个选修项（如多元感知），仅限选修项"""
+    try:
+        return training_service.remove_plan_item(db, child_user_id, item_id)
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
+
+
 @router.get("/progress", response_model=TrainingProgressResponse)
 def training_progress(
     child_user_id: int = Depends(get_authenticated_user),

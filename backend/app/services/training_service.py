@@ -1156,6 +1156,42 @@ def append_elective_item(
     invalidate_user_training(child_user_id, plan_date=plan.plan_date)
 
     plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
+    
+
+def remove_plan_item(
+    db: Session,
+    child_user_id: int,
+    item_id: int,
+) -> dict:
+    """从方案中移除一个训练项（仅限选修项）"""
+    item = db.get(TrainingItem, item_id)
+    if not item:
+        raise TrainingError("训练项不存在", 404)
+    plan = db.get(TrainingPlan, item.plan_id)
+    if not plan or plan.child_user_id != child_user_id:
+        raise TrainingError("训练项不存在", 404)
+    if is_plan_globally_cutoff(plan):
+        raise TrainingError("训练日已于凌晨4点截止", 403)
+
+    # 仅允许移除选修项
+    from app.services.training_carryover import item_skips_checkin
+    if not item_skips_checkin(item):
+        raise TrainingError("只能移除选修训练项", 403)
+
+    db.delete(item)
+    # 重排剩余项的 sort_order
+    remaining = sorted(plan.items, key=lambda x: x.sort_order)
+    for i, it in enumerate(remaining, start=1):
+        it.sort_order = i
+
+    from app.services.training_child_guide import build_coach_text_for_plan
+    plan.report_text = build_coach_text_for_plan(plan)
+    db.commit()
+    invalidate_plan_cache(child_user_id, plan.plan_date)
+    from app.core.cache import invalidate_user_training
+    invalidate_user_training(child_user_id, plan_date=plan.plan_date)
+
+    plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
     return _plan_to_response(plan, db=db)
 
 

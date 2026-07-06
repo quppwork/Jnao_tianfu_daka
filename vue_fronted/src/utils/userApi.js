@@ -652,6 +652,13 @@ export async function addPlanElective(userId, planId, skill) {
   })
 }
 
+/** 移除方案中的一个选修项 */
+export async function removePlanItem(userId, itemId) {
+  return apiJson(withUser(`/api/training/plan/items/${itemId}`, userId), {
+    method: 'DELETE',
+  })
+}
+
 // ── 首页引导对话 ──
 
 export async function fetchGuideSession(userId) {
