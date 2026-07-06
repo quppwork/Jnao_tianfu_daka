@@ -817,3 +817,132 @@ export async function devSimulate4amCutoff(userId) {
 export async function devResetTalent(userId) {
   return apiJson(withUser('/api/dev/training/reset-talent', userId), { method: 'POST' })
 }
+
+// ── 管理员 ──
+
+const ADMIN_USER_KEY = 'jnao_admin_user'
+const ADMIN_TOKEN_KEY = 'jnao_admin_token'
+
+export function getAdminUserId() {
+  try {
+    const raw = localStorage.getItem(ADMIN_USER_KEY)
+    if (raw) return JSON.parse(raw).id
+  } catch (_) {}
+  return null
+}
+
+export function getAdminSessionToken() {
+  try { return localStorage.getItem(ADMIN_TOKEN_KEY) || '' } catch (_) { return '' }
+}
+
+function withAdmin(url, adminId) {
+  let result = url
+  const id = adminId || getAdminUserId()
+  if (id && !/[?&]user_id=/.test(result)) {
+    const sep = result.includes('?') ? '&' : '?'
+    result = `${result}${sep}user_id=${id}`
+  }
+  const token = getAdminSessionToken()
+  if (token && !/[?&]session_token=/.test(result)) {
+    result = `${result}&session_token=${encodeURIComponent(token)}`
+  }
+  return result
+}
+
+export function clearAdminSession() {
+  try {
+    localStorage.removeItem(ADMIN_USER_KEY)
+    localStorage.removeItem(ADMIN_TOKEN_KEY)
+  } catch (_) {}
+}
+
+export async function loginAdmin(loginName, password) {
+  const data = await apiJson('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login_name: loginName, password }),
+  })
+  localStorage.setItem(ADMIN_USER_KEY, JSON.stringify({
+    id: data.child_user_id,
+    name: data.nickname,
+    role: 'admin',
+    loginName: data.login_name,
+  }))
+  if (data.session_token) localStorage.setItem(ADMIN_TOKEN_KEY, data.session_token)
+  return data
+}
+
+export async function fetchAdminParents(adminId) {
+  const data = await apiJson(withAdmin('/api/admin/parents', adminId))
+  return data.parents || []
+}
+
+export async function updateAdminParent(adminId, parentId, body) {
+  return apiJson(withAdmin(`/api/admin/parents/${parentId}`, adminId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteAdminParent(adminId, parentId) {
+  return apiJson(withAdmin(`/api/admin/parents/${parentId}`, adminId), { method: 'DELETE' })
+}
+
+export async function fetchAdminChildren(adminId, parentId) {
+  const q = parentId ? `?parent_id=${parentId}` : ''
+  const data = await apiJson(withAdmin(`/api/admin/children${q}`, adminId))
+  return data.children || []
+}
+
+export async function createAdminChild(adminId, body) {
+  return apiJson(withAdmin('/api/admin/children', adminId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateAdminChild(adminId, childId, body) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}`, adminId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteAdminChild(adminId, childId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}`, adminId), { method: 'DELETE' })
+}
+
+export async function bindAdminChild(adminId, childId, parentId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/bind`, adminId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parent_id: parentId }),
+  })
+}
+
+export async function unbindAdminChild(adminId, childId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/bind`, adminId), { method: 'DELETE' })
+}
+
+export async function fetchAdminSettings(adminId) {
+  return apiJson(withAdmin('/api/admin/settings', adminId))
+}
+
+export async function updateAdminSettings(adminId, body) {
+  return apiJson(withAdmin('/api/admin/settings', adminId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function fetchAdminParentDetail(adminId, parentId) {
+  return apiJson(withAdmin(`/api/admin/parents/${parentId}/detail`, adminId))
+}
+
+export async function fetchAdminChildDetail(adminId, childId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/detail`, adminId))
+}

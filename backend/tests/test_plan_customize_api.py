@@ -39,7 +39,7 @@ def _mutable_skills(plan: dict) -> list[str]:
 
 
 class TestPlanCustomizeApi:
-    """整体替换今日必修项（不改等级进度）"""
+    """整体替换今日必修项（每训练日一次，打卡前）"""
 
     def test_customize_swaps_skills(self, client, user_ready_for_training):
         uid = user_ready_for_training
@@ -50,6 +50,7 @@ class TestPlanCustomizeApi:
         )
         assert sched.status_code == 200
         plan = sched.json()
+        assert plan.get("can_customize_plan") is True
         original = _mutable_skills(plan)
         assert len(original) >= 2
 
@@ -60,8 +61,64 @@ class TestPlanCustomizeApi:
             **_auth(uid),
         )
         assert res.status_code == 200, res.text
-        updated = _mutable_skills(res.json())
-        assert updated == swapped
+        updated = res.json()
+        assert updated.get("plan_customized") is True
+        assert updated.get("can_customize_plan") is False
+        assert _mutable_skills(updated) == swapped
+
+    def test_customize_rejects_second_attempt(self, client, user_ready_for_training):
+        uid = user_ready_for_training
+        sched = client.post(
+            "/api/training/schedule",
+            json={"planned_minutes": 40},
+            **_auth(uid),
+        )
+        plan = sched.json()
+        skills = _mutable_skills(plan)
+        first = client.post(
+            "/api/training/plan/customize",
+            json={"plan_id": plan["plan_id"], "skills": list(reversed(skills))},
+            **_auth(uid),
+        )
+        assert first.status_code == 200
+        second = client.post(
+            "/api/training/plan/customize",
+            json={"plan_id": plan["plan_id"], "skills": skills},
+            **_auth(uid),
+        )
+        assert second.status_code == 403
+        assert "仅可修改一次" in second.json().get("detail", "")
+
+    def test_customize_rejects_after_checkin(self, client, user_ready_for_training):
+        uid = user_ready_for_training
+        sched = client.post(
+            "/api/training/schedule",
+            json={"planned_minutes": 40},
+            **_auth(uid),
+        )
+        plan = sched.json()
+        first = plan["items"][0]
+        client.post(
+            "/api/training/checkin",
+            json={
+                "plan_id": plan["plan_id"],
+                "item_id": first["id"],
+                "cards": [{"name": _item_skill(first) or "超脑阅读", "time": "2.5", "wordCount": "900"}],
+            },
+            **_auth(uid),
+        )
+        today = client.get("/api/training/today", **_auth(uid)).json()
+        assert today.get("has_checkin") is True
+        assert today.get("can_customize_plan") is False
+
+        skills = _mutable_skills(today)
+        res = client.post(
+            "/api/training/plan/customize",
+            json={"plan_id": plan["plan_id"], "skills": skills},
+            **_auth(uid),
+        )
+        assert res.status_code == 403
+        assert "打卡" in res.json().get("detail", "")
 
     def test_customize_rejects_wrong_count(self, client, user_ready_for_training):
         uid = user_ready_for_training
@@ -97,38 +154,6 @@ class TestPlanCustomizeApi:
         )
         assert res.status_code == 400
         assert "未知技能" in res.json().get("detail", "")
-
-    def test_customize_after_partial_checkin_only_pending(self, client, user_ready_for_training):
-        uid = user_ready_for_training
-        sched = client.post(
-            "/api/training/schedule",
-            json={"planned_minutes": 40},
-            **_auth(uid),
-        )
-        plan = sched.json()
-        items = plan["items"]
-        first = items[0]
-        client.post(
-            "/api/training/checkin",
-            json={
-                "plan_id": plan["plan_id"],
-                "item_id": first["id"],
-                "cards": [{"name": _item_skill(first) or "超脑阅读", "time": "2.5", "wordCount": "900"}],
-            },
-            **_auth(uid),
-        )
-        today = client.get("/api/training/today", **_auth(uid)).json()
-        pending = _mutable_skills(today)
-        assert len(pending) == 1
-
-        replacement = ["影像追忆"] if pending[0] != "影像追忆" else ["超脑阅读"]
-        res = client.post(
-            "/api/training/plan/customize",
-            json={"plan_id": plan["plan_id"], "skills": replacement},
-            **_auth(uid),
-        )
-        assert res.status_code == 200
-        assert _mutable_skills(res.json()) == replacement
 
     def test_customize_preserves_overall_tier(self, client, user_ready_for_training):
         uid = user_ready_for_training

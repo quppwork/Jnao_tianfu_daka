@@ -23,6 +23,24 @@ function buildCustomizePayload(editableItems, editorSkills) {
   return { skills }
 }
 
+describe('方案编辑 — 可见性', () => {
+  function canShowCustomize(plan) {
+    return !!plan?.can_customize_plan
+  }
+
+  it('未打卡且未编辑时可显示', () => {
+    expect(canShowCustomize({ can_customize_plan: true })).toBe(true)
+  })
+
+  it('已编辑后不可显示', () => {
+    expect(canShowCustomize({ can_customize_plan: false, plan_customized: true })).toBe(false)
+  })
+
+  it('已有打卡后不可显示', () => {
+    expect(canShowCustomize({ can_customize_plan: false, has_checkin: true })).toBe(false)
+  })
+})
+
 describe('方案编辑 — editableItems 过滤', () => {
   const items = [
     { id: 1, checkin_status: 'done', instructions: JSON.stringify({ skill: '超脑阅读', item_type: 'required' }) },

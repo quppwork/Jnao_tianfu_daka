@@ -53,31 +53,57 @@ def get_authenticated_user(
     if not user:
         raise HTTPException(401, "用户不存在")
 
+    from app.services.auth_service import is_account_active
+    from app.services.session_service import validate_session
+
+    if not is_account_active(user):
+        raise HTTPException(401, "账号已停用")
+
     token = x_session_token or session_token
 
-    # 读取 session_token 字段——如果列不存在，hasattr 保护
-    db_token = None
     try:
         db_token = user.session_token
     except Exception:
         logger.warning("get_authenticated_user: 读取 session_token 失败，降级处理")
         return uid
 
-    # 用户尚无 token（迁移前遗留）→ 自动生成一个，向下兼容
-    if not db_token:
-        try:
-            from app.services.auth_service import _refresh_session_token
-            _refresh_session_token(db, user)
-        except Exception:
-            logger.warning("get_authenticated_user: 自动生成 token 失败，继续降级处理")
-        return uid
-
-    # 客户端未传 token → 拒绝（新设备必须走登录流程获取 token）
     if not token:
         raise HTTPException(401, "需要有效的 session_token（请重新登录）")
 
-    # token 不匹配 → 其他设备已登录
-    if db_token != token:
-        raise HTTPException(401, "已在其他设备登录，请重新登录")
+    if not validate_session(db, uid, token):
+        raise HTTPException(401, "已在其他设备登录或会话已失效，请重新登录")
 
+    return uid
+
+
+def get_admin_user(
+    user_id: int | None = Query(None, ge=1, description="管理员用户 ID"),
+    x_child_user_id: int | None = Header(None, ge=1, alias="X-Child-User-Id"),
+    x_session_token: str | None = Header(None, alias="X-Session-Token"),
+    session_token: str | None = Query(None, description="会话令牌"),
+    db: Session = Depends(get_db),
+) -> int:
+    """验证管理员 session_token + role=admin"""
+    uid = user_id or x_child_user_id
+    if not uid or uid < 1:
+        raise HTTPException(401, "需要有效的管理员 user_id")
+
+    from app.db.models import ChildUser
+    from app.services import auth_service
+
+    user = db.get(ChildUser, uid)
+    if not user or user.role != auth_service.ROLE_ADMIN:
+        raise HTTPException(403, "需要管理员权限")
+
+    from app.services.auth_service import is_account_active
+    from app.services.session_service import validate_session
+
+    if not is_account_active(user):
+        raise HTTPException(401, "管理员账号已停用")
+
+    token = x_session_token or session_token
+    if not token:
+        raise HTTPException(401, "管理员会话无效，请重新登录")
+    if not validate_session(db, uid, token):
+        raise HTTPException(401, "管理员会话无效或已在其他设备登录，请重新登录")
     return uid

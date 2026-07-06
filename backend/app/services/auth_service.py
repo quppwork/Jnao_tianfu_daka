@@ -12,7 +12,16 @@ from app.db.models import ChildUser, ParentChildBind, TalentAssessment, Training
 
 ROLE_PARENT = "parent"
 ROLE_STUDENT = "student"
+ROLE_ADMIN = "admin"
 DEFAULT_CHILD_QUOTA = 5
+ACCOUNT_ACTIVE = "active"
+ACCOUNT_DELETED = "deleted"
+
+
+def is_account_active(user: ChildUser | None) -> bool:
+    if not user:
+        return False
+    return (getattr(user, "account_status", None) or ACCOUNT_ACTIVE) == ACCOUNT_ACTIVE
 
 
 def _generate_session_token() -> str:
@@ -57,7 +66,10 @@ def register_child(
 
 
 def get_child_user(db: Session, child_user_id: int) -> ChildUser | None:
-    return db.get(ChildUser, child_user_id)
+    user = db.get(ChildUser, child_user_id)
+    if user and not is_account_active(user):
+        return None
+    return user
 
 
 def find_child_by_phone(db: Session, parent_phone: str, nickname: str) -> ChildUser | None:
@@ -66,6 +78,7 @@ def find_child_by_phone(db: Session, parent_phone: str, nickname: str) -> ChildU
             ChildUser.parent_phone == parent_phone,
             ChildUser.nickname == nickname,
             ChildUser.role == ROLE_STUDENT,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
         )
     )
 
@@ -75,6 +88,7 @@ def find_parent_by_phone(db: Session, parent_phone: str) -> ChildUser | None:
         select(ChildUser).where(
             ChildUser.parent_phone == parent_phone,
             ChildUser.role == ROLE_PARENT,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
         )
     )
 
@@ -84,8 +98,32 @@ def find_user_by_login_name(db: Session, login_name: str) -> ChildUser | None:
         select(ChildUser).where(
             ChildUser.login_name == login_name,
             ChildUser.role == ROLE_STUDENT,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
         )
     )
+
+
+def find_admin_by_login_name(db: Session, login_name: str) -> ChildUser | None:
+    return db.scalar(
+        select(ChildUser).where(
+            ChildUser.login_name == login_name,
+            ChildUser.role == ROLE_ADMIN,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
+        )
+    )
+
+
+def has_active_parent_bind(db: Session, child_id: int) -> bool:
+    cnt = db.scalar(
+        select(func.count())
+        .select_from(ParentChildBind)
+        .join(ChildUser, ChildUser.id == ParentChildBind.child_id)
+        .where(
+            ParentChildBind.child_id == child_id,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
+        )
+    )
+    return (cnt or 0) > 0
 
 
 def login_parent_by_password(db: Session, parent_phone: str, password: str) -> ChildUser | None:
@@ -94,11 +132,45 @@ def login_parent_by_password(db: Session, parent_phone: str, password: str) -> C
         return None
     return user
 
-
 def login_student_by_password(db: Session, login_name: str, password: str) -> ChildUser | None:
     user = find_user_by_login_name(db, login_name)
     if not user or not verify_password(password, user.password_hash):
         return None
+    if not has_active_parent_bind(db, user.id):
+        return None
+    return user
+
+
+def login_admin_by_password(db: Session, login_name: str, password: str) -> ChildUser | None:
+    user = find_admin_by_login_name(db, login_name.strip())
+    if not user or not verify_password(password, user.password_hash):
+        return None
+    return user
+
+
+def ensure_admin_account(db: Session) -> ChildUser | None:
+    """启动时确保管理员账号存在（凭据来自环境变量）"""
+    import os
+
+    login_name = (os.getenv("ADMIN_LOGIN_NAME") or "pyx").strip()
+    password = os.getenv("ADMIN_PASSWORD") or "123456"
+    if not login_name or not password:
+        return None
+    existing = find_admin_by_login_name(db, login_name)
+    if existing:
+        existing.password_hash = hash_password(password)
+        existing.nickname = existing.nickname or "管理员"
+        db.commit()
+        db.refresh(existing)
+        return existing
+    user = register_child(
+        db,
+        parent_phone="admin",
+        nickname="管理员",
+        login_name=login_name,
+        password=password,
+        role=ROLE_ADMIN,
+    )
     return user
 
 
@@ -122,7 +194,11 @@ def count_parent_children(db: Session, parent_id: int) -> int:
     return db.scalar(
         select(func.count())
         .select_from(ParentChildBind)
-        .where(ParentChildBind.parent_id == parent_id)
+        .join(ChildUser, ChildUser.id == ParentChildBind.child_id)
+        .where(
+            ParentChildBind.parent_id == parent_id,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
+        )
     ) or 0
 
 
@@ -143,7 +219,10 @@ def list_parent_children(db: Session, parent_id: int) -> list[ChildUser]:
         db.scalars(
             select(ChildUser)
             .join(ParentChildBind, ParentChildBind.child_id == ChildUser.id)
-            .where(ParentChildBind.parent_id == parent_id)
+            .where(
+                ParentChildBind.parent_id == parent_id,
+                ChildUser.account_status == ACCOUNT_ACTIVE,
+            )
             .order_by(ChildUser.id)
         ).all()
     )

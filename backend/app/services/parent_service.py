@@ -129,12 +129,8 @@ def update_child(
 
 
 def delete_child(db: Session, parent_id: int, child_id: int) -> None:
-    _require_parent(db, parent_id)
-    bind = auth_service.get_parent_child_bind(db, parent_id, child_id)
-    if not bind:
-        raise HTTPException(404, "孩子不存在或未绑定")
-    db.delete(bind)
-    db.commit()
+    """家长端禁止解绑/删除 — 仅管理员可操作"""
+    raise HTTPException(403, "请联系管理员处理账号解绑或删除")
 
 
 def get_child_detail(db: Session, parent_id: int, child_id: int) -> dict:

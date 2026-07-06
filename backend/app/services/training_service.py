@@ -550,6 +550,9 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "timer_planned_seconds": None,
         "timer_remaining_seconds": None,
     }
+    has_checkin = _plan_has_any_checkin(db, plan) if db is not None else False
+    plan_customized = bool(getattr(plan, "plan_customized", 0))
+    can_customize = _can_customize_plan(db, plan, now=now) if db is not None else False
     return {
         "plan_id": plan.id,
         "plan_date": plan.plan_date,
@@ -564,6 +567,9 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "training_day_number": training_day,
         "planned_minutes": plan.planned_minutes,
         "media_exhausted": hide_media,
+        "plan_customized": plan_customized,
+        "can_customize_plan": can_customize,
+        "has_checkin": has_checkin,
         "items": [
             _item_to_dict(item, hide_media=hide_media, content=content_map.get(item.content_item_id))
             for item in sorted(plan.items, key=lambda i: i.sort_order)
@@ -1054,6 +1060,39 @@ def _is_elective_item(item: TrainingItem) -> bool:
     from app.services.training_carryover import item_skips_checkin
 
     return item_skips_checkin(item)
+
+
+def _mutable_required_items(plan: TrainingPlan) -> list[TrainingItem]:
+    """可替换的必修项（未打卡、非选修）"""
+    items = sorted(plan.items, key=lambda x: x.sort_order)
+    return [
+        it for it in items
+        if it.checkin_status != "done" and not _is_elective_item(it)
+    ]
+
+
+def _plan_has_any_checkin(db: Session, plan: TrainingPlan) -> bool:
+    """方案下是否已有任意打卡（含选修）"""
+    if any(it.checkin_status == "done" for it in plan.items):
+        return True
+    cnt = db.scalar(
+        select(func.count())
+        .select_from(TrainingRecord)
+        .where(TrainingRecord.plan_id == plan.id)
+    )
+    return (cnt or 0) > 0
+
+
+def _can_customize_plan(db: Session, plan: TrainingPlan, *, now: datetime) -> bool:
+    if plan.status == "completed":
+        return False
+    if is_plan_globally_cutoff(plan, now=now):
+        return False
+    if getattr(plan, "plan_customized", 0):
+        return False
+    if _plan_has_any_checkin(db, plan):
+        return False
+    return len(_mutable_required_items(plan)) > 0
 
 
 def _item_block(item: TrainingItem) -> str | None:
@@ -1551,17 +1590,16 @@ def customize_plan_items(
         raise TrainingError("训练计划不存在", 404)
     if plan.status == "completed":
         raise TrainingError("今日训练已完成，无法修改", 403)
-    if is_plan_globally_cutoff(plan):
+    now = _user_now(db, child_user_id)
+    if is_plan_globally_cutoff(plan, now=now):
         raise TrainingError("训练日已于凌晨4点截止", 403)
+    if getattr(plan, "plan_customized", 0):
+        raise TrainingError("今日方案已编辑过，每个训练日仅可修改一次", 403)
+    if _plan_has_any_checkin(db, plan):
+        raise TrainingError("已有打卡记录，无法编辑方案", 403)
 
     items = sorted(plan.items, key=lambda x: x.sort_order)
-    now = _user_now(db, child_user_id)
-    # 只替换必修项（过滤掉已打卡的 + 选修不阻塞项）
-    mutable = [
-        it for it in items
-        if it.checkin_status != "done"
-        and not _is_elective_item(it)
-    ]
+    mutable = _mutable_required_items(plan)
     if len(skills) != len(mutable):
         raise TrainingError(
             f"需要 {len(mutable)} 个技能（当前待打卡项数），实际提交 {len(skills)} 个",
@@ -1640,6 +1678,7 @@ def customize_plan_items(
 
     repair_plan_media_items(db, plan, talent_code)
     plan.report_text = build_coach_text_for_plan(plan)
+    plan.plan_customized = 1
     db.commit()
 
     invalidate_plan_cache(child_user_id, plan.plan_date)

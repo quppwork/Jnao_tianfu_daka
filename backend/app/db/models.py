@@ -33,6 +33,8 @@ class ChildUser(Base):
     training_level: Mapped[str | None] = mapped_column(String(20))
     is_qingbei: Mapped[int] = mapped_column(Integer, default=0)
     session_token: Mapped[str | None] = mapped_column(String(64))
+    account_status: Mapped[str] = mapped_column(String(20), default="active")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -128,6 +130,7 @@ class TrainingPlan(Base):
     planned_minutes: Mapped[int | None] = mapped_column(Integer)
     content_index: Mapped[int] = mapped_column(Integer, default=0)
     media_exhausted: Mapped[int] = mapped_column(Integer, default=0)
+    plan_customized: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     generated_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -249,3 +252,16 @@ class GuideMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     session: Mapped["GuideSession"] = relationship(back_populates="messages")
+
+
+class UserSession(Base):
+    """登录会话 — 支持按角色限制多端数量"""
+
+    __tablename__ = "user_session"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
+    session_token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    device_label: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_active_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
