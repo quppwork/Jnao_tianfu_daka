@@ -217,13 +217,18 @@
           </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
 
-          <!-- 🆕 v2.0 选修入口 + 方案编辑 -->
+          <!-- 🆕 选修开关 + 方案编辑 -->
           <view style="display:flex;gap:8px;margin-top:8px;">
-            <view v-if="timerPhase !== 'setup' && todayPlan?.plan_id" class="elective-entry" style="flex:1;" @click="openElectiveModal">
-              <text>🧩 选修技能</text>
-            </view>
             <view v-if="canCustomizePlan" class="elective-entry" style="flex:1;" @click="openPlanEditor">
               <text>📝 编辑方案</text>
+            </view>
+          </view>
+          <view v-if="timerPhase !== 'setup' && todayPlan?.plan_id" class="elective-toggles">
+            <view class="elective-toggle-item" v-for="es in electiveSkills" :key="es.skill">
+              <text class="et-label">{{ es.label }}</text>
+              <view class="et-switch" :class="{ on: es.inPlan }" @click="toggleElective(es.skill)">
+                <view class="et-knob"></view>
+              </view>
             </view>
           </view>
         </template>
@@ -282,9 +287,6 @@
             </view>
             <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
               <text>{{ phase.allDone ? '✏️ 修改 ' + phase.block + ' 打卡' : '✅ 训练 ' + phase.block + ' 打卡' }}</text>
-            </view>
-            <view v-if="phase.isElective && phase.firstItemId" class="btn-remove-elective" @click="removeElectiveItem(phase.firstItemId)">
-              <text>✕ 移除</text>
             </view>
           </view>
         </view>
@@ -569,33 +571,7 @@
 
       </view>
 
-    <!-- 🆕 v2.0 选修弹窗 -->
-    <view v-if="showElectiveModal" class="picker-overlay" @click="closeElectiveModal">
-      <view class="picker-card elective-modal" @click.stop>
-        <view class="modal-header">
-          <text class="modal-title">🧩 选修技能</text>
-          <view class="modal-close" @click="closeElectiveModal">✕</view>
-        </view>
-        <view v-if="!electiveOffers.length" style="padding:16px;text-align:center;color:#8b949e;">
-          暂无可用选修技能
-        </view>
-        <view v-for="offer in electiveOffers" :key="offer.skill" class="elective-item">
-          <view class="elective-info">
-            <text class="elective-name">{{ offer.skill }}</text>
-            <text class="elective-hint" v-if="!offer.available">{{ offer.reason }}</text>
-            <text class="elective-hint" v-else-if="offer.has_checkin">可打卡记录</text>
-            <text class="elective-hint" v-else>纯播放，无需打卡</text>
-          </view>
-          <view
-            class="elective-btn"
-            :class="{ disabled: !offer.available }"
-            @click="offer.available && onElectiveCheckin(offer.skill)"
-          >
-            <text>{{ offer.available ? (offer.has_checkin ? '打卡' : '开始') : '不可用' }}</text>
-          </view>
-        </view>
-      </view>
-    </view>
+    <!-- (选修弹窗已移除，改用开关控制) -->
 
     <!-- 天赋测评引导 -->
     <view v-if="showAssessmentModal" class="picker-overlay" @click="dismissAssessmentModal">
@@ -821,7 +797,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan, addPlanElective, removePlanItem } from '@/utils/userApi.js'
+import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -1616,45 +1592,40 @@ const submittedCards = ref([])
 const summaryAttitude = ref(60)
 
 // 🆕 v2.0 选修弹窗
-const showElectiveModal = ref(false)
-const electiveOffers = ref([])
-async function loadElectiveOffers() {
-  if (!todayPlan.value?.planned_minutes) return
-  try {
-    const { offers } = await fetchElectiveList(todayPlan.value.planned_minutes, overallTier.value)
-    electiveOffers.value = offers || []
-  } catch (_) { electiveOffers.value = [] }
-}
-function openElectiveModal() {
-  loadElectiveOffers()
-  showElectiveModal.value = true
-}
-function closeElectiveModal() { showElectiveModal.value = false }
+// 选修弹窗已移除，改用开关控制
 
-async function removeElectiveItem(itemId) {
-  const uid = await ensureChildUser()
-  try {
-    const data = await removePlanItem(uid, itemId)
-    await applyScheduledPlan(uid, data)
-    uni.showToast({ title: '已移除', icon: 'none' })
-  } catch (e) {
-    uni.showToast({ title: e.message || '移除失败', icon: 'none', duration: 2500 })
+// ── 选修开关 ──
+const electiveSkills = computed(() => {
+  const items = todayPlan.value?.items || []
+  const plan = todayPlan.value
+  const list = []
+
+  function skillInPlan(skill) {
+    return items.some(item => {
+      const inst = parseItemInstructions(item.instructions)
+      return inst.skill === skill || (item.title || '').includes(skill)
+    })
   }
-}
 
-async function onElectiveCheckin(skill) {
+  // 多元感知：始终可用
+  list.push({ skill: '多元感知', label: '多元感知', inPlan: skillInPlan('多元感知') })
+
+  return list
+})
+
+async function toggleElective(skill) {
   const uid = await ensureChildUser()
   const planId = todayPlan.value?.plan_id
   if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
+  const inPlan = electiveSkills.value.find(e => e.skill === skill)?.inPlan
+  const action = inPlan ? 'remove' : 'add'
   try {
-    const data = await addPlanElective(uid, planId, skill)
+    const data = await toggleElectiveItem(uid, planId, skill, action)
     await applyScheduledPlan(uid, data)
-    uni.showToast({ title: `${skill} 已添加到方案`, icon: 'none' })
-    closeElectiveModal()
+    uni.showToast({ title: inPlan ? `已移除 ${skill}` : `已添加 ${skill}`, icon: 'none' })
   } catch (e) {
-    const detail = e.data?.detail || e.message || '添加失败'
-    const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
-    uni.showToast({ title: msg, icon: 'none', duration: 3000 })
+    const msg = e.data?.detail || e.message || '操作失败'
+    uni.showToast({ title: Array.isArray(msg) ? msg.map(d => d.msg || JSON.stringify(d)).join('; ') : msg, icon: 'none', duration: 3000 })
   }
 }
 // ── 方案编辑 ──
@@ -3108,6 +3079,13 @@ function triggerGlitch() {
 .editor-btn.primary text { color:#fff; }
 .editor-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
 .editor-btn.secondary text { color:var(--text-dim); }
+.elective-toggles { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.elective-toggle-item { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:6px 12px; }
+.et-label { color:var(--text); font-size:12px; font-weight:500; }
+.et-switch { width:36px; height:20px; border-radius:10px; background:var(--border); cursor:pointer; position:relative; transition:background 0.2s; }
+.et-switch.on { background:#00d2ff; }
+.et-knob { width:16px; height:16px; border-radius:50%; background:var(--text); position:absolute; top:2px; left:2px; transition:left 0.2s; }
+.et-switch.on .et-knob { background:#fff; left:18px; }
 .picker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .picker-close text { color:rgba(255,255,255,0.5); font-size:14px; }
 .submitted-item { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid rgba(0,210,255,0.1); }
@@ -3270,9 +3248,6 @@ function triggerGlitch() {
 .form-textarea-sm { height:36px; padding:6px 10px; }
 .form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
 .ftag { padding:6px 14px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:12px; border:1px solid rgba(0,210,255,0.2); cursor:pointer; transition:all 0.15s; }
-.btn-remove-elective { display:inline-flex; align-items:center; background:rgba(255,77,79,0.12); border:1px solid rgba(255,77,79,0.25); border-radius:8px; padding:6px 10px; cursor:pointer; margin-top:6px; }
-.btn-remove-elective text { color:rgba(255,77,79,0.8); font-size:12px; font-weight:600; }
-.btn-remove-elective:active { background:rgba(255,77,79,0.25); }
 .ftag.on { background:#0088cc; border-color:#00d2ff; color:#fff; box-shadow:0 0 10px rgba(0,210,255,0.2); }
 .form-inline { display:flex; align-items:center; gap:6px; flex:1; }
 .form-file-wrap { flex:1; }

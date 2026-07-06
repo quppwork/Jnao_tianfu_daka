@@ -608,6 +608,39 @@ def mark_today_media_exhausted(
     return _plan_to_response(plan, db=db)
 
 
+def toggle_elective_item(
+    db: Session,
+    child_user_id: int,
+    plan_id: int,
+    skill: str,
+    action: str,
+) -> dict:
+    """统一开关选修项：action="add" 追加，action="remove" 按技能名移除"""
+    if action == "add":
+        return append_elective_item(db, child_user_id, plan_id, skill)
+    elif action == "remove":
+        # 按技能名查找 plan 中的选修项
+        plan = db.get(TrainingPlan, plan_id)
+        if not plan or plan.child_user_id != child_user_id:
+            raise TrainingError("训练计划不存在", 404)
+        target = None
+        for item in plan.items:
+            if item.instructions and str(item.instructions).strip().startswith("{"):
+                try:
+                    payload = __import__("json").loads(item.instructions)
+                    if payload.get("skill") == skill:
+                        target = item
+                        break
+                except Exception:
+                    pass
+            if not target:
+                if skill in (item.title or ""):
+                    target = item
+        if not target:
+            raise TrainingError(f"方案中未找到选修项「{skill}」", 404)
+        return remove_plan_item(db, child_user_id, target.id)
+    raise TrainingError("action 必须为 add 或 remove", 400)
+
 def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: TrainingPlan | None) -> bool:
     """计时窗口结束后自动标记媒体用尽"""
     if not plan or plan.media_exhausted:
@@ -1111,6 +1144,17 @@ def append_elective_item(
     if is_plan_globally_cutoff(plan):
         raise TrainingError("训练日已于凌晨4点截止", 403)
 
+    # 去重：同一技能已在方案中则跳过
+    for existing in plan.items:
+        if existing.content_item_id:
+            ci = db.get(ContentItem, existing.content_item_id)
+            if ci:
+                from app.services.content_meta import parse_item_meta as _pim
+                if _pim(ci).get("skill") == skill:
+                    db.commit()
+                    plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
+                    return _plan_to_response(plan, db=db)
+
     items = sorted(plan.items, key=lambda x: x.sort_order)
     next_sort = (items[-1].sort_order + 1) if items else 1
 
@@ -1156,7 +1200,8 @@ def append_elective_item(
     invalidate_user_training(child_user_id, plan_date=plan.plan_date)
 
     plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
-    
+    return _plan_to_response(plan, db=db)
+
 
 def remove_plan_item(
     db: Session,
@@ -1179,8 +1224,9 @@ def remove_plan_item(
         raise TrainingError("只能移除选修训练项", 403)
 
     db.delete(item)
+    db.flush()  # 确保被删项从 plan.items 中移除
     # 重排剩余项的 sort_order
-    remaining = sorted(plan.items, key=lambda x: x.sort_order)
+    remaining = sorted(plan.items, key=lambda x: x.sort_order or 0)
     for i, it in enumerate(remaining, start=1):
         it.sort_order = i
 
@@ -1733,97 +1779,14 @@ def customize_plan_items(
     if is_plan_globally_cutoff(plan):
         raise TrainingError("训练日已于凌晨4点截止", 403)
 
-    items = sorted(plan.items, key=lambda x: x.sort_order)
-    now = _user_now(db, child_user_id)
-    # 只替换必修项（过滤掉已打卡的 + 选修不阻塞项）
-    mutable = [
-        it for it in items
-        if it.checkin_status != "done"
-        and not _is_elective_item(it)
-    ]
-    if len(skills) != len(mutable):
-        raise TrainingError(
-            f"需要 {len(mutable)} 个技能（当前待打卡项数），实际提交 {len(skills)} 个",
-            400,
-        )
+    # 去重：同一技能已在方案中则跳过
+    for existing in plan.items:
+        if existing.content_item_id:
+            ci = db.get(ContentItem, existing.content_item_id)
+            if ci:
+                from app.services.content_meta import parse_item_meta as _pim
+                if _pim(ci).get("skill") == skill:
+                    db.commit()
+                    plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
+                    return _plan_to_response(plan, db=db)
 
-    # 校验技能名合法
-    cur = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum()
-    elective_rules = cur.get("elective_rules") or {}
-    elective_skills = set(elective_rules.keys())
-    allowed_skills = set(REQUIRED_SKILLS) | elective_skills
-    for sk in skills:
-        if sk not in allowed_skills:
-            raise TrainingError(f"未知技能：{sk}", 400)
-
-    # 获取用户天赋 + OSS 池
-    talent = resolve_effective_talent(db, child_user_id)
-    if not talent or not talent.get("talent_code"):
-        raise TrainingError("请先完成天赋测评", 403)
-    talent_code = talent["talent_code"]
-
-    child = db.get(ChildUser, child_user_id)
-    state = get_training_progress(child) if child else {}
-    pool = get_talent_content_pool(db, talent_code)
-
-    def _find_content(skill_name: str) -> tuple:
-        """从 OSS 池找该技能当前 OSS 位置对应的音频"""
-        stage, part = get_skill_oss_position(state, skill_name)
-        for item in pool:
-            meta = parse_item_meta(item)
-            if meta.get("skill") == skill_name:
-                s = meta.get("stage", 0)
-                p = meta.get("part", 0)
-                if s == stage and p == part:
-                    return item, stage, part
-        # fallback: 任意第一个
-        for item in pool:
-            meta = parse_item_meta(item)
-            if meta.get("skill") == skill_name:
-                return item, meta.get("stage", 0), meta.get("part", 0)
-        return None, stage, part
-
-    # 逐个替换 mutable 项
-    for i, target_item in enumerate(mutable):
-        skill_name = skills[i]
-        is_elective = skill_name in elective_rules
-
-        content, stage, part = _find_content(skill_name)
-        if content:
-            meta = parse_item_meta(content)
-            inst = item_instruction("A", meta.get("content_type") or "audio")
-            try:
-                payload = __import__("json").loads(inst)
-                payload["skill"] = meta.get("skill") or skill_name
-                payload["item_type"] = "elective" if is_elective else "required"
-                payload["oss_stage"] = stage
-                payload["oss_part"] = part
-                inst = __import__("json").dumps(payload, ensure_ascii=False)
-            except Exception:
-                pass
-            target_item.title = content_display_title(content)
-            target_item.audio_url = content.play_url
-            target_item.video_url = content.video_url
-            target_item.duration_min = estimate_duration_min(content)
-            target_item.content_item_id = content.id
-            target_item.instructions = inst
-            target_item.ability_type = "audio"
-        else:
-            target_item.title = f"{skill_name}（待同步）"
-            target_item.audio_url = None
-            target_item.video_url = None
-            target_item.duration_min = 0
-            target_item.content_item_id = None
-            target_item.instructions = item_instruction("A", "placeholder")
-            target_item.ability_type = "placeholder"
-
-    repair_plan_media_items(db, plan, talent_code)
-    plan.report_text = build_coach_text_for_plan(plan)
-    db.commit()
-
-    invalidate_plan_cache(child_user_id, plan.plan_date)
-    from app.core.cache import invalidate_user_training
-    invalidate_user_training(child_user_id, plan_date=plan.plan_date)
-
-    plan = _get_plan_by_date(db, child_user_id, plan.plan_date)
-    return _plan_to_response(plan, db=db)

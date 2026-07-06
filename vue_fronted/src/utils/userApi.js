@@ -643,19 +643,12 @@ export async function customizePlan(userId, planId, skills) {
   })
 }
 
-/** 往今日方案末尾追加一个选修项（多元感知等），返回完整的今日方案 */
-export async function addPlanElective(userId, planId, skill) {
-  return apiJson(withUser('/api/training/plan/add-elective', userId), {
+/** 开关选修项：action="add" 追加到末尾，action="remove" 从方案移除 */
+export async function toggleElectiveItem(userId, planId, skill, action) {
+  return apiJson(withUser('/api/training/plan/elective-toggle', userId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plan_id: planId, skill }),
-  })
-}
-
-/** 移除方案中的一个选修项 */
-export async function removePlanItem(userId, itemId) {
-  return apiJson(withUser(`/api/training/plan/items/${itemId}`, userId), {
-    method: 'DELETE',
+    body: JSON.stringify({ plan_id: planId, skill, action }),
   })
 }
 
