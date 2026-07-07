@@ -962,6 +962,10 @@ export async function devResetTalent(userId) {
   return apiJson(withUser('/api/dev/training/reset-talent', userId), { method: 'POST' })
 }
 
+export async function devResetClock(userId) {
+  return apiJson(withUser('/api/dev/training/reset-clock', userId), { method: 'POST' })
+}
+
 // ── 管理员 ──
 
 const ADMIN_USER_KEY = 'jnao_admin_user'
