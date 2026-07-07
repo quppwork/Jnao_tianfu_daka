@@ -8,6 +8,7 @@ from app.core.security import is_dev_api_enabled
 from app.services.dev_training_service import (
     get_dev_training_status,
     reset_all_training,
+    reset_dev_clock,
     reset_talent_assessment,
     reset_today_training,
     reset_training_progress,
@@ -94,5 +95,18 @@ def dev_next_day(
 ):
     try:
         return simulate_next_training_day(db, child_user_id)
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
+
+
+@router.post("/training/reset-clock")
+def dev_reset_clock(
+    _: None = Depends(_require_dev_mode),
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """清除虚拟时钟，回归实际日期"""
+    try:
+        return reset_dev_clock(db, child_user_id)
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e

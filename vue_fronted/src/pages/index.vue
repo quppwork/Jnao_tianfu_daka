@@ -55,6 +55,10 @@
         <view class="chat-av ai" v-else><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl" :class="{ me: m.role==='user', ai: m.role!=='user' }">{{ m.text }}</view>
       </view>
+      <view v-if="showQuickActions" class="quick-actions">
+        <view class="qa-chip" @tap="openPage('talent')">🧬 开始天赋测评</view>
+        <view class="qa-chip" @tap="openPage('train')">📋 查看今日训练</view>
+      </view>
       <view v-if="loading" class="chat-row">
         <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl ai"><text class="loading-dots">...</text></view>
@@ -175,6 +179,7 @@ const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: ''
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
 const historyList = ref([])
+const showQuickActions = ref(false)
 
 try {
   const saved = localStorage.getItem('jnao_theme')
@@ -199,6 +204,7 @@ async function sendMsg() {
   stopRecord()
   const text = inputText.value.trim()
   if (!text || loading.value) return
+  showQuickActions.value = false
   messages.value.push({ role: 'user', text })
   inputText.value = ''
   const aiIdx = messages.value.length
@@ -307,7 +313,8 @@ async function initHome() {
       text: m.content,
     }))
     if (!messages.value.length) {
-      messages.value = [{ role: 'ai', text: '你好！我是张宇老师 👋 想了解平台怎么用都可以问我～比如：天赋测试怎么做？知识答题在哪里？' }]
+      messages.value = [{ role: 'ai', text: '你好，我是张宇老师 👋\n建议先从天赋测评开始，了解自己的潜能方向～' }]
+      showQuickActions.value = true
     }
     await applyProfileData(profileData, uid)
   } catch (_) {}
@@ -362,7 +369,8 @@ async function clearGuideChat() {
     const uid = await ensureChildUser()
     await clearGuideSession(uid)
     guideSessionId.value = null
-    messages.value = [{ role: 'ai', text: '你好！我是张宇老师 👋 想了解平台怎么用都可以问我～比如：天赋测试怎么做？知识答题在哪里？' }]
+    messages.value = [{ role: 'ai', text: '你好，我是张宇老师 👋\n建议先从天赋测评开始，了解自己的潜能方向～' }]
+    showQuickActions.value = true
     uni.showToast({ title: '对话已清空', icon: 'none' })
   } catch (_) {
     uni.showToast({ title: '清空失败', icon: 'none' })
@@ -531,6 +539,14 @@ function onNavTap() {
 .func-label { color:var(--text-sub); font-size:11px; font-weight:500; }
 
 .chat-section { flex:1; overflow-y:auto; padding:8px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
+.quick-actions { display:flex; gap:8px; padding:0 0 12px 40px; }
+.qa-chip {
+  padding:8px 14px; border-radius:20px; font-size:13px;
+  background:var(--accent-bg); border:1px solid var(--accent);
+  color:var(--accent); cursor:pointer; white-space:nowrap;
+  transition:all 0.15s;
+}
+.qa-chip:active { background:var(--accent); color:#fff; transform:scale(0.96); }
 .chat-section::-webkit-scrollbar { display:none; }
 .chat-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-end; }
 .chat-row.user { flex-direction:row-reverse; }
