@@ -137,6 +137,7 @@ import {
   updateParentProfile,
   createParentChild,
   updateParentChild,
+  ensureParentAccountReady,
 } from '@/utils/userApi.js'
 
 const showSettings = ref(false)
@@ -189,6 +190,8 @@ async function loadData() {
       uni.redirectTo({ url: '/pages/login/index' })
       return
     }
+    const ready = await ensureParentAccountReady(parentId.value)
+    if (!ready) return
     const [list, q] = await Promise.all([
       fetchParentChildren(parentId.value),
       fetchParentQuota(parentId.value),
@@ -205,7 +208,10 @@ async function loadData() {
   } catch (_) {}
 }
 
-function openAddChild() {
+async function openAddChild() {
+  if (!parentId.value) return
+  const ready = await ensureParentAccountReady(parentId.value)
+  if (!ready) return
   if (!quota.value.can_add) {
     uni.showToast({ title: '孩子名额已满', icon: 'none' })
     return

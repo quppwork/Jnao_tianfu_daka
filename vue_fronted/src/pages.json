@@ -57,6 +57,13 @@
       }
     },
     {
+      "path": "pages/login/bind-phone",
+      "style": {
+        "navigationBarTitleText": "绑定手机号",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/login/complete-parent",
       "style": {
         "navigationBarTitleText": "完善资料",

@@ -81,6 +81,11 @@ import {
   loginParentSms,
   sendParentSmsCode,
   parentNeedsProfileComplete,
+  parentNeedsAccountReady,
+  setSessionToken,
+  storeWechatCallbackAuth,
+  fetchParentProfile,
+  fetchWechatOAuthUrl,
   studentNeedsOnboarding,
 } from '@/utils/userApi.js'
 import {
@@ -88,6 +93,12 @@ import {
   recordLoginFail,
   clearLoginGuard,
 } from '@/utils/loginGuard.js'
+import {
+  shouldAutoWechatOAuth,
+  readWechatCallbackParams,
+  clearWechatQueryFromUrl,
+  redirectParentNextStep,
+} from '@/utils/wechatAuth.js'
 
 const form = ref({ phone: '', loginName: '', password: '', smsCode: '', role: 'student' })
 const parentMode = ref('sms')
@@ -104,9 +115,47 @@ function refreshBlockState() {
   blockRemain.value = s.blocked ? s.remainSec : 0
 }
 
-onMounted(() => {
+onMounted(async () => {
   refreshBlockState()
   blockTimer = setInterval(refreshBlockState, 1000)
+
+  const wxCb = readWechatCallbackParams()
+  if (wxCb?.sessionToken) {
+    setSessionToken(wxCb.sessionToken)
+    storeWechatCallbackAuth(wxCb)
+    clearWechatQueryFromUrl()
+    try {
+      const profile = await fetchParentProfile(Number(wxCb.userId))
+      try {
+        localStorage.setItem('jnao_user', JSON.stringify({
+          id: profile.id,
+          name: profile.nickname,
+          phone: profile.parent_phone,
+          role: 'parent',
+          loginChannel: 'wechat',
+        }))
+      } catch (_) {}
+      redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket)
+    } catch (_) {
+      redirectParentNextStep(wxCb.nextStep, wxCb.bindTicket)
+    }
+    return
+  }
+  if (wxCb?.bindTicket && wxCb.nextStep === 'bind-phone') {
+    clearWechatQueryFromUrl()
+    redirectParentNextStep('bind-phone', wxCb.bindTicket)
+    return
+  }
+
+  if (shouldAutoWechatOAuth()) {
+    try {
+      const redirect = window.location.href.split('?')[0] + '?from=mp'
+      const data = await fetchWechatOAuthUrl(redirect)
+      if (data?.url) {
+        window.location.href = data.url
+      }
+    } catch (_) { /* 未配置微信时展示普通登录页 */ }
+  }
 })
 
 function saveSession(data) {
@@ -165,9 +214,14 @@ async function routeParentHome(data) {
   clearLoginGuard()
   saveSession(data)
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
-  const target = parentNeedsProfileComplete(data)
-    ? '/pages/login/complete-parent'
-    : '/pages/parent/index'
+  let target = '/pages/parent/index'
+  if (parentNeedsAccountReady(data)) {
+    target = data.next_step === 'bind-phone'
+      ? `/pages/login/bind-phone${data.bind_ticket ? '?bind_ticket=' + encodeURIComponent(data.bind_ticket) : ''}`
+      : '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
+  } else if (parentNeedsProfileComplete(data)) {
+    target = '/pages/login/complete-parent'
+  }
   setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
 }
 

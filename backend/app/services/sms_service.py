@@ -35,6 +35,7 @@ SMS_MAX_VERIFY_FAIL = 5
 SMS_VERIFY_LOCK_TTL = 900
 SCENE_LOGIN = "login"
 SCENE_REGISTER = "register"
+SCENE_BIND = "bind"
 
 
 def _is_mock() -> bool:
@@ -95,15 +96,47 @@ def _generate_code() -> str:
     return f"{random.randint(0, 999999):06d}"
 
 
-def _dispatch_sms(phone: str, code: str) -> None:
+def _dispatch_company_sms(phone: str, code: str, scene: str) -> None:
+    import httpx
+
+    base = (os.getenv("COMPANY_SMS_BASE_URL") or "").strip().rstrip("/")
+    if not base:
+        raise HTTPException(503, "公司短信服务未配置 COMPANY_SMS_BASE_URL")
+    path = (os.getenv("COMPANY_SMS_SEND_PATH") or "/send").strip()
+    if not path.startswith("/"):
+        path = f"/{path}"
+    headers = {}
+    api_key = (os.getenv("COMPANY_SMS_API_KEY") or "").strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+        headers["X-Api-Key"] = api_key
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(
+                f"{base}{path}",
+                json={"phone": phone, "code": code, "scene": scene},
+                headers=headers,
+            )
+        if resp.status_code >= 400:
+            logger.warning("Company SMS failed %s: %s", resp.status_code, resp.text[:200])
+            raise HTTPException(502, "短信发送失败，请稍后再试")
+    except httpx.HTTPError as e:
+        logger.exception("Company SMS request error")
+        raise HTTPException(502, "短信服务暂不可用") from e
+
+
+def _dispatch_sms(phone: str, code: str, scene: str = SCENE_LOGIN) -> None:
     if _is_mock():
-        logger.info("SMS mock → %s code=%s", phone, code)
+        logger.info("SMS mock → %s code=%s scene=%s", phone, code, scene)
         return
     provider = (os.getenv("SMS_PROVIDER") or "").strip().lower()
+    if provider == "company":
+        _dispatch_company_sms(phone, code, scene)
+        return
     if provider == "aliyun":
-        raise HTTPException(503, "阿里云短信尚未接入，请设置 SMS_PROVIDER=mock")
+        raise HTTPException(503, "阿里云短信尚未接入，请设置 SMS_PROVIDER=mock 或 company")
     if provider == "tencent":
-        raise HTTPException(503, "腾讯云短信尚未接入，请设置 SMS_PROVIDER=mock")
+        raise HTTPException(503, "腾讯云短信尚未接入，请设置 SMS_PROVIDER=mock 或 company")
     raise HTTPException(503, "短信服务未配置")
 
 
@@ -119,7 +152,7 @@ def send_sms_code(
 ) -> dict:
     phone = normalize_phone(phone)
     scene = (scene or SCENE_LOGIN).strip().lower()
-    if scene not in (SCENE_LOGIN, SCENE_REGISTER):
+    if scene not in (SCENE_LOGIN, SCENE_REGISTER, SCENE_BIND):
         raise HTTPException(400, "无效的发送场景")
 
     check_auth_allowed(db, client_ip=client_ip, phone=phone, device_id=device_id)
@@ -129,8 +162,9 @@ def send_sms_code(
         raise HTTPException(404, "该手机号尚未注册，请先注册")
     if scene == SCENE_REGISTER and exists:
         raise HTTPException(409, "该手机号已注册，请直接登录")
-
-    if scene == SCENE_REGISTER:
+    if scene == SCENE_BIND:
+        pass
+    elif scene == SCENE_REGISTER:
         if not captcha_id or not captcha_code:
             raise HTTPException(400, "请先完成图形验证")
         verify_captcha(captcha_id, captcha_code, consume=True)
@@ -144,7 +178,7 @@ def send_sms_code(
         SMS_TTL,
     )
     _record_send(phone, client_ip)
-    _dispatch_sms(phone, code)
+    _dispatch_sms(phone, code, scene)
 
     out: dict = {"ok": True, "expires_in": SMS_TTL, "resend_after": SMS_SEND_INTERVAL}
     if _is_mock() and os.getenv("SMS_MOCK_EXPOSE", "").strip() in ("1", "true", "yes"):
@@ -155,6 +189,8 @@ def send_sms_code(
 def verify_sms_code(phone: str, sms_code: str, scene: str) -> None:
     phone = normalize_phone(phone)
     scene = (scene or SCENE_LOGIN).strip().lower()
+    if scene not in (SCENE_LOGIN, SCENE_REGISTER, SCENE_BIND):
+        raise HTTPException(400, "无效的发送场景")
     if not sms_code or len(sms_code.strip()) < 4:
         raise HTTPException(400, "请输入短信验证码")
 

@@ -16,7 +16,7 @@ from app.schemas.auth import (
     UpdateChildRequest,
 )
 from app.services import parent_service
-from app.services.parent_profile_service import parent_profile_to_dict, update_parent_profile
+from app.services.parent_profile_service import parent_profile_to_dict, update_parent_profile, assert_parent_account_ready
 
 router = APIRouter(prefix="/api/parent", tags=["parent"])
 
@@ -56,6 +56,7 @@ def put_profile(
         nickname=req.nickname,
         real_name=req.real_name,
         password=req.password,
+        require_password=req.require_password,
     )
     invalidate_user_profile(user_id)
     return ParentProfileResponse(**parent_profile_to_dict(user))
@@ -79,6 +80,10 @@ def create_child(
     user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
+    from app.services import auth_service
+
+    parent = auth_service.get_child_user(db, user_id)
+    assert_parent_account_ready(parent)
     child = parent_service.create_child(
         db,
         user_id,

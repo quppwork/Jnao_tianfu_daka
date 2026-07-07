@@ -1,6 +1,7 @@
 """用户注册 / 登录"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -14,6 +15,10 @@ from app.schemas.auth import (
     SmsRegisterRequest,
     SmsSendRequest,
     SmsSendResponse,
+    WechatBindPhoneRequest,
+    WechatConfigResponse,
+    WechatOAuthUrlResponse,
+    WechatSendBindSmsRequest,
 )
 from app.services import auth_service
 from app.services.blacklist_service import (
@@ -23,17 +28,33 @@ from app.services.blacklist_service import (
 )
 from app.services.captcha_service import create_captcha
 from app.services.parent_profile_service import (
+    get_login_channel,
     login_parent_by_sms,
+    parent_account_ready,
+    parent_next_step,
     parent_profile_status,
+    parent_wechat_missing_fields,
     register_parent_by_sms,
 )
 from app.services.sms_service import (
+    SCENE_BIND,
     SCENE_LOGIN,
     SCENE_REGISTER,
     client_ip_from_request,
     device_id_from_request,
     send_sms_code,
     verify_sms_code,
+)
+from app.services.wechat_auth_service import (
+    build_oauth_url,
+    complete_bind_phone,
+    consume_oauth_state,
+    frontend_login_url,
+    resolve_wechat_login,
+    wechat_app_id,
+    wechat_configured,
+    exchange_code_for_openid,
+    get_bind_ticket,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -45,10 +66,22 @@ def _auth_ctx(request: Request, device_id: str | None = None) -> tuple[str, str]
     return ip, did
 
 
-def _to_response(user) -> AuthResponse:
+def _to_response(user, *, bind_ticket: str | None = None) -> AuthResponse:
     complete, missing = (True, [])
+    channel = "standard"
+    ready = True
+    step = "home"
     if (user.role or auth_service.ROLE_STUDENT) == auth_service.ROLE_PARENT:
-        complete, missing = parent_profile_status(user)
+        channel = get_login_channel(user)
+        if channel == "wechat":
+            missing = parent_wechat_missing_fields(user)
+            complete = len(missing) == 0
+            ready = parent_account_ready(user)
+            step = parent_next_step(user)
+        else:
+            complete, missing = parent_profile_status(user)
+            ready = complete
+            step = "home" if complete else "complete-profile"
     return AuthResponse(
         child_user_id=user.id,
         parent_phone=user.parent_phone,
@@ -58,6 +91,10 @@ def _to_response(user) -> AuthResponse:
         session_token=user.session_token,
         profile_complete=complete,
         missing_fields=missing,
+        login_channel=channel,
+        account_ready=ready,
+        next_step=step,
+        bind_ticket=bind_ticket,
     )
 
 
@@ -191,3 +228,74 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         return _issue_and_respond(db, user)
 
     raise HTTPException(400, "请提供有效的登录信息")
+
+
+@router.get("/wechat/config", response_model=WechatConfigResponse)
+def wechat_config():
+    return WechatConfigResponse(
+        configured=wechat_configured(),
+        app_id=wechat_app_id() or None,
+    )
+
+
+@router.get("/wechat/oauth-url", response_model=WechatOAuthUrlResponse)
+def wechat_oauth_url(redirect: str = Query("", max_length=500)):
+    url = build_oauth_url(front_redirect=redirect)
+    return WechatOAuthUrlResponse(url=url, configured=True)
+
+
+@router.get("/wechat/callback")
+def wechat_callback(
+    code: str = Query(""),
+    state: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    if not code:
+        raise HTTPException(400, "缺少微信授权 code")
+    consume_oauth_state(state)
+    openid, unionid = exchange_code_for_openid(code)
+    user, bind_ticket, next_step = resolve_wechat_login(db, openid=openid, unionid=unionid)
+
+    params = {"wx": "1", "next_step": next_step}
+    if user:
+        from app.services.session_service import issue_session
+
+        token = issue_session(db, user)
+        db.refresh(user)
+        params["session_token"] = token
+        params["user_id"] = str(user.id)
+        params["role"] = user.role or auth_service.ROLE_PARENT
+    if bind_ticket:
+        params["bind_ticket"] = bind_ticket
+
+    return RedirectResponse(url=frontend_login_url(**params), status_code=302)
+
+
+@router.post("/wechat/send-bind-sms", response_model=SmsSendResponse)
+def wechat_send_bind_sms(req: WechatSendBindSmsRequest, request: Request, db: Session = Depends(get_db)):
+    get_bind_ticket(req.bind_ticket)
+    ip, did = _auth_ctx(request, req.device_id)
+    data = send_sms_code(
+        db,
+        phone=req.phone,
+        scene=SCENE_BIND,
+        client_ip=ip,
+        device_id=did,
+    )
+    return SmsSendResponse(**data)
+
+
+@router.post("/wechat/bind-phone", response_model=AuthResponse)
+def wechat_bind_phone(req: WechatBindPhoneRequest, request: Request, db: Session = Depends(get_db)):
+    ip, did = _auth_ctx(request, req.device_id)
+    phone = req.phone.strip()
+    check_auth_allowed(db, client_ip=ip, phone=phone, device_id=did)
+    try:
+        verify_sms_code(phone, req.sms_code, SCENE_BIND)
+        user = complete_bind_phone(db, bind_ticket=req.bind_ticket, phone=phone)
+        clear_auth_failures(client_ip=ip, phone=phone, device_id=did)
+        return _issue_and_respond(db, user)
+    except HTTPException as e:
+        if e.status_code in (400, 429):
+            record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
+        raise

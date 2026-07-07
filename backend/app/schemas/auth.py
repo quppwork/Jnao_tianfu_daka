@@ -29,6 +29,33 @@ class AuthResponse(BaseModel):
     session_token: str | None = None
     profile_complete: bool = True
     missing_fields: list[str] = Field(default_factory=list)
+    login_channel: str = "standard"
+    account_ready: bool = True
+    next_step: str = "home"
+    bind_ticket: str | None = None
+
+
+class WechatOAuthUrlResponse(BaseModel):
+    url: str
+    configured: bool = True
+
+
+class WechatConfigResponse(BaseModel):
+    configured: bool
+    app_id: str | None = None
+
+
+class WechatBindPhoneRequest(BaseModel):
+    bind_ticket: str = Field(..., min_length=8, max_length=128)
+    phone: str = Field(..., min_length=11, max_length=20)
+    sms_code: str = Field(..., min_length=4, max_length=8)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class WechatSendBindSmsRequest(BaseModel):
+    bind_ticket: str = Field(..., min_length=8, max_length=128)
+    phone: str = Field(..., min_length=11, max_length=20)
+    device_id: str | None = Field(None, max_length=64)
 
 
 class CaptchaResponse(BaseModel):
@@ -39,7 +66,7 @@ class CaptchaResponse(BaseModel):
 
 class SmsSendRequest(BaseModel):
     phone: str = Field(..., min_length=11, max_length=20)
-    scene: str = Field("login", pattern="^(login|register)$")
+    scene: str = Field("login", pattern="^(login|register|bind)$")
     captcha_id: str | None = Field(None, max_length=64)
     captcha_code: str | None = Field(None, max_length=8)
     device_id: str | None = Field(None, max_length=64)
@@ -76,12 +103,16 @@ class ParentProfileResponse(BaseModel):
     phone_verified: bool = False
     profile_complete: bool = True
     missing_fields: list[str] = Field(default_factory=list)
+    login_channel: str = "standard"
+    account_ready: bool = True
+    next_step: str = "home"
 
 
 class ParentProfileUpdateRequest(BaseModel):
     nickname: str | None = Field(None, min_length=1, max_length=50)
     real_name: str | None = Field(None, min_length=1, max_length=50)
     password: str | None = Field(None, min_length=6, max_length=128)
+    require_password: bool = False
 
 
 # 兼容旧引用

@@ -263,8 +263,12 @@ function _storeAuth(data) {
       name: data.nickname,
       phone: data.parent_phone,
       role,
+      loginChannel: data.login_channel || 'standard',
     }))
     localStorage.setItem('jnao_logged_in', '1')
+    if (data.login_channel === 'wechat') {
+      localStorage.setItem('jnao_login_channel', 'wechat')
+    }
   } catch (e) { /* ignore */ }
   if (role === 'student') {
     setChildUserId(data.child_user_id)
@@ -272,6 +276,7 @@ function _storeAuth(data) {
   } else {
     try { localStorage.removeItem(CHILD_KEY) } catch (e) { /* ignore */ }
     invalidateChildUserSession()
+    setChildUserId(data.child_user_id)
   }
 }
 
@@ -360,6 +365,62 @@ export function parentNeedsProfileComplete(data) {
   return data?.role === 'parent' && data?.profile_complete === false
 }
 
+export function parentNeedsAccountReady(data) {
+  if (data?.role !== 'parent') return false
+  if (data?.login_channel === 'wechat') return data?.account_ready === false
+  return data?.profile_complete === false
+}
+
+export async function fetchWechatConfig() {
+  return apiJson('/api/auth/wechat/config')
+}
+
+export async function fetchWechatOAuthUrl(redirect = '') {
+  const q = redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''
+  return apiJson(`/api/auth/wechat/oauth-url${q}`)
+}
+
+export async function sendWechatBindSms({ bindTicket, phone }) {
+  return apiJson('/api/auth/wechat/send-bind-sms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({
+      bind_ticket: bindTicket,
+      phone,
+      device_id: getDeviceId(),
+    }),
+  })
+}
+
+export async function wechatBindPhone({ bindTicket, phone, smsCode }) {
+  const data = await apiJson('/api/auth/wechat/bind-phone', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({
+      bind_ticket: bindTicket,
+      phone,
+      sms_code: smsCode,
+      device_id: getDeviceId(),
+    }),
+  })
+  _storeAuth(data)
+  return data
+}
+
+export function storeWechatCallbackAuth(payload) {
+  _storeAuth({
+    child_user_id: Number(payload.userId),
+    parent_phone: '',
+    nickname: '家长',
+    role: payload.role || 'parent',
+    session_token: payload.sessionToken,
+    login_channel: 'wechat',
+    account_ready: payload.nextStep === 'home',
+    next_step: payload.nextStep,
+    profile_complete: payload.nextStep === 'home',
+  })
+}
+
 export async function fetchParentProfile(parentId) {
   return apiJson(withUser('/api/parent/profile', parentId))
 }
@@ -370,6 +431,23 @@ export async function updateParentProfile(parentId, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+export async function ensureParentAccountReady(parentId) {
+  const p = await fetchParentProfile(parentId)
+  if (p.login_channel === 'wechat' && !p.account_ready) {
+    if (p.next_step === 'bind-phone') {
+      uni.redirectTo({ url: '/pages/login/bind-phone' })
+    } else {
+      uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })
+    }
+    return false
+  }
+  if (!p.profile_complete) {
+    uni.redirectTo({ url: '/pages/login/complete-parent' })
+    return false
+  }
+  return true
 }
 
 /** 孩子登录：账号 + 密码 */

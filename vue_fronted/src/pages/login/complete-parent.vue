@@ -1,8 +1,8 @@
 <template>
   <view class="app">
     <view class="card">
-      <text class="title">完善家长资料</text>
-      <text class="hint">还差一步即可进入家长中心</text>
+      <text class="title">{{ isWechat ? '设置登录密码' : '完善家长资料' }}</text>
+      <text class="hint">{{ isWechat ? '设置密码后可在任意设备使用手机号+密码登录' : '还差一步即可进入家长中心' }}</text>
 
       <view v-if="missing.includes('real_name')" class="field">
         <text class="label">真实姓名</text>
@@ -13,15 +13,18 @@
         <input v-model="form.nickname" class="inp" placeholder="请输入昵称" />
       </view>
 
-      <view class="field optional">
-        <text class="label">登录密码（可选）</text>
-        <input v-model="form.password" class="inp" placeholder="至少6位，可稍后在设置中修改" type="password" />
+      <view v-if="missing.includes('password') || isWechat" class="field">
+        <text class="label">{{ isWechat ? '登录密码（必填）' : '登录密码（可选）' }}</text>
+        <input v-model="form.password" class="inp" placeholder="至少6位" type="password" />
+      </view>
+      <view v-if="(missing.includes('password') || isWechat) && isWechat" class="field">
+        <input v-model="form.confirm" class="inp" placeholder="确认密码" type="password" />
       </view>
 
       <view class="btn-primary" @click="submit">
         <text>{{ submitting ? '保存中...' : '进入家长中心' }}</text>
       </view>
-      <view class="skip" @click="skipPassword">
+      <view v-if="!isWechat" class="skip" @click="skipPassword">
         <text>暂不设置密码</text>
       </view>
     </view>
@@ -34,10 +37,16 @@ import { getChildUserId, fetchParentProfile, updateParentProfile } from '@/utils
 
 const parentId = ref(null)
 const missing = ref([])
-const form = ref({ realName: '', nickname: '', password: '' })
+const isWechat = ref(false)
+const form = ref({ realName: '', nickname: '', password: '', confirm: '' })
 const submitting = ref(false)
 
 onMounted(async () => {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    isWechat.value = params.get('from') === 'wechat'
+  } catch (_) {}
+
   parentId.value = getChildUserId()
   if (!parentId.value) {
     uni.redirectTo({ url: '/pages/login/index' })
@@ -45,10 +54,11 @@ onMounted(async () => {
   }
   try {
     const p = await fetchParentProfile(parentId.value)
+    if (p.login_channel === 'wechat') isWechat.value = true
     missing.value = p.missing_fields || []
     form.value.realName = p.real_name || ''
     form.value.nickname = p.nickname || ''
-    if (p.profile_complete) {
+    if (p.account_ready || (p.profile_complete && !isWechat.value)) {
       uni.redirectTo({ url: '/pages/parent/index' })
     }
   } catch (_) {
@@ -57,29 +67,38 @@ onMounted(async () => {
 })
 
 async function submit() {
-  const body = {}
-  if (missing.value.includes('real_name')) {
+  const body = { require_password: isWechat.value }
+  if (missing.value.includes('real_name') || form.value.realName.trim()) {
     if (!form.value.realName.trim()) {
       uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return
     }
     body.real_name = form.value.realName.trim()
   }
-  if (missing.value.includes('nickname')) {
+  if (missing.value.includes('nickname') || form.value.nickname.trim()) {
     if (!form.value.nickname.trim()) {
       uni.showToast({ title: '请填写昵称', icon: 'none' }); return
     }
     body.nickname = form.value.nickname.trim()
   }
-  if (form.value.password.trim()) {
-    if (form.value.password.trim().length < 6) {
+  if (isWechat.value || form.value.password.trim()) {
+    const pwd = form.value.password.trim()
+    if (isWechat.value && pwd.length < 6) {
       uni.showToast({ title: '密码至少6位', icon: 'none' }); return
     }
-    body.password = form.value.password.trim()
+    if (isWechat.value && pwd !== form.value.confirm.trim()) {
+      uni.showToast({ title: '两次密码不一致', icon: 'none' }); return
+    }
+    if (pwd) body.password = pwd
   }
   submitting.value = true
   try {
     const p = await updateParentProfile(parentId.value, body)
-    if (!p.profile_complete && (p.missing_fields || []).length) {
+    if (isWechat.value && !p.account_ready) {
+      missing.value = p.missing_fields || []
+      uni.showToast({ title: '请补全必填项', icon: 'none' })
+      return
+    }
+    if (!p.profile_complete && !isWechat.value) {
       missing.value = p.missing_fields
       uni.showToast({ title: '请补全必填项', icon: 'none' })
       return
@@ -93,6 +112,7 @@ async function submit() {
 }
 
 function skipPassword() {
+  if (isWechat.value) return
   form.value.password = ''
   submit()
 }
@@ -104,7 +124,6 @@ function skipPassword() {
 .title { display:block; font-size:20px; font-weight:700; color:var(--text); text-align:center; }
 .hint { display:block; text-align:center; color:var(--text-dim); font-size:13px; margin:8px 0 24px; }
 .field { margin-bottom:14px; }
-.field.optional { margin-top:8px; }
 .label { display:block; color:var(--text-dim); font-size:12px; margin-bottom:6px; }
 .inp { width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; font-size:15px; color:var(--text); background:var(--bg); box-sizing:border-box; }
 .btn-primary { margin-top:20px; background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:12px; padding:14px; text-align:center; }

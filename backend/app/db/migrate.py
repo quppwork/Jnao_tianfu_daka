@@ -107,6 +107,7 @@ def apply_schema_patches(engine: Engine) -> None:
 
     _apply_parent_auth_patches(engine)
     _apply_user_session_table(engine)
+    _apply_wechat_auth_tables(engine)
     _migrate_user_session_utc_to_cst(engine)
 
 
@@ -154,6 +155,80 @@ def _migrate_user_session_utc_to_cst(engine: Engine) -> None:
         conn.execute(
             text("INSERT INTO schema_data_patch (name) VALUES ('user_session_utc_to_cst')")
         )
+
+
+def _apply_wechat_auth_tables(engine: Engine) -> None:
+    insp = inspect(engine)
+    dialect = engine.dialect.name
+    if "wx_member_snapshot" not in insp.get_table_names():
+        if dialect == "mysql":
+            ddl = """
+                CREATE TABLE wx_member_snapshot (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    wx_member_id INT NULL,
+                    openid VARCHAR(64) NOT NULL,
+                    unionid VARCHAR(64) NULL,
+                    mobile VARCHAR(20) NULL,
+                    nickname VARCHAR(255) NULL,
+                    truename VARCHAR(64) NULL,
+                    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_wx_snapshot_openid (openid),
+                    KEY idx_wx_snapshot_mobile (mobile),
+                    KEY idx_wx_snapshot_unionid (unionid)
+                )
+            """
+        else:
+            ddl = """
+                CREATE TABLE wx_member_snapshot (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    wx_member_id INTEGER,
+                    openid VARCHAR(64) NOT NULL UNIQUE,
+                    unionid VARCHAR(64),
+                    mobile VARCHAR(20),
+                    nickname VARCHAR(255),
+                    truename VARCHAR(64),
+                    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+
+    if "parent_wechat_bind" not in insp.get_table_names():
+        if dialect == "mysql":
+            ddl = """
+                CREATE TABLE parent_wechat_bind (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    parent_id INT NOT NULL,
+                    openid VARCHAR(64) NOT NULL,
+                    unionid VARCHAR(64) NULL,
+                    wx_member_id INT NULL,
+                    app_id VARCHAR(32) NOT NULL,
+                    bound_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_login_at DATETIME NULL,
+                    UNIQUE KEY uk_wechat_openid_app (openid, app_id),
+                    UNIQUE KEY uk_wechat_parent_app (parent_id, app_id),
+                    KEY idx_wechat_unionid (unionid),
+                    FOREIGN KEY (parent_id) REFERENCES child_user(id)
+                )
+            """
+        else:
+            ddl = """
+                CREATE TABLE parent_wechat_bind (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    parent_id INTEGER NOT NULL,
+                    openid VARCHAR(64) NOT NULL,
+                    unionid VARCHAR(64),
+                    wx_member_id INTEGER,
+                    app_id VARCHAR(32) NOT NULL,
+                    bound_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_login_at DATETIME,
+                    UNIQUE (openid, app_id),
+                    UNIQUE (parent_id, app_id),
+                    FOREIGN KEY (parent_id) REFERENCES child_user(id)
+                )
+            """
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
 
 
 def _apply_user_session_table(engine: Engine) -> None:
