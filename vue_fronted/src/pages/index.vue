@@ -50,14 +50,23 @@
 
     <!-- Chat Area -->
     <view class="chat-section" id="chatScroll">
+      <!-- 首次欢迎 -->
+      <view v-if="showQuickActions" class="chat-welcome">
+        <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
+        <view class="welcome-card">
+          <text class="welcome-text">你好，我是张宇老师 👋</text>
+          <text class="welcome-sub">建议先从天赋测评开始，了解自己的潜能方向～</text>
+          <view class="welcome-chips">
+            <view class="qa-chip" @tap="openPage('talent')">🧬 开始天赋测评</view>
+            <view class="qa-chip" @tap="openPage('train')">📋 查看今日训练</view>
+          </view>
+        </view>
+      </view>
+      <!-- 聊天记录 -->
       <view v-for="(m,i) in messages" :key="i" class="chat-row" :class="{ user: m.role === 'user' }">
         <view class="chat-av me" v-if="m.role==='user'"><text>我</text></view>
         <view class="chat-av ai" v-else><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl" :class="{ me: m.role==='user', ai: m.role!=='user' }">{{ m.text }}</view>
-      </view>
-      <view v-if="showQuickActions" class="quick-actions">
-        <view class="qa-chip" @tap="openPage('talent')">🧬 开始天赋测评</view>
-        <view class="qa-chip" @tap="openPage('train')">📋 查看今日训练</view>
       </view>
       <view v-if="loading" class="chat-row">
         <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
@@ -148,7 +157,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import {
   clearChildUserId,
   ensureChildUser,
@@ -179,7 +188,7 @@ const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: ''
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
 const historyList = ref([])
-const showQuickActions = ref(false)
+const showQuickActions = computed(() => !messages.value.some(m => m.role === 'user'))
 
 try {
   const saved = localStorage.getItem('jnao_theme')
@@ -204,7 +213,6 @@ async function sendMsg() {
   stopRecord()
   const text = inputText.value.trim()
   if (!text || loading.value) return
-  showQuickActions.value = false
   messages.value.push({ role: 'user', text })
   inputText.value = ''
   const aiIdx = messages.value.length
@@ -312,10 +320,6 @@ async function initHome() {
       role: m.role === 'assistant' ? 'ai' : 'user',
       text: m.content,
     }))
-    if (!messages.value.length) {
-      messages.value = [{ role: 'ai', text: '你好，我是张宇老师 👋\n建议先从天赋测评开始，了解自己的潜能方向～' }]
-      showQuickActions.value = true
-    }
     await applyProfileData(profileData, uid)
   } catch (_) {}
 }
@@ -369,8 +373,7 @@ async function clearGuideChat() {
     const uid = await ensureChildUser()
     await clearGuideSession(uid)
     guideSessionId.value = null
-    messages.value = [{ role: 'ai', text: '你好，我是张宇老师 👋\n建议先从天赋测评开始，了解自己的潜能方向～' }]
-    showQuickActions.value = true
+    messages.value = []
     uni.showToast({ title: '对话已清空', icon: 'none' })
   } catch (_) {
     uni.showToast({ title: '清空失败', icon: 'none' })
@@ -539,12 +542,19 @@ function onNavTap() {
 .func-label { color:var(--text-sub); font-size:11px; font-weight:500; }
 
 .chat-section { flex:1; overflow-y:auto; padding:8px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
-.quick-actions { display:flex; gap:8px; padding:0 0 12px 40px; }
+.chat-welcome { display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; }
+.welcome-card {
+  flex:1; background:var(--chat-ai-bg); border-radius:14px;
+  border-bottom-left-radius:4px; padding:14px 16px;
+}
+.welcome-text { display:block; color:var(--text); font-size:14px; font-weight:600; margin-bottom:4px; }
+.welcome-sub { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; margin-bottom:10px; }
+.welcome-chips { display:flex; gap:8px; flex-wrap:wrap; }
 .qa-chip {
-  padding:8px 14px; border-radius:20px; font-size:13px;
+  padding:7px 14px; border-radius:20px; font-size:12px;
   background:var(--accent-bg); border:1px solid var(--accent);
   color:var(--accent); cursor:pointer; white-space:nowrap;
-  transition:all 0.15s;
+  transition:all 0.15s; display:inline-flex;
 }
 .qa-chip:active { background:var(--accent); color:#fff; transform:scale(0.96); }
 .chat-section::-webkit-scrollbar { display:none; }
