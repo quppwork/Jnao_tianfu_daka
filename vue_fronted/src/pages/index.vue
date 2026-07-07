@@ -56,10 +56,6 @@
         <view class="welcome-card">
           <text class="welcome-text">你好，我是张宇老师 👋</text>
           <text class="welcome-sub">建议先从天赋测评开始，了解自己的潜能方向～</text>
-          <view class="welcome-chips">
-            <view class="qa-chip" @tap="openPage('talent')">🧬 开始天赋测评</view>
-            <view class="qa-chip" @tap="openPage('train')">📋 查看今日训练</view>
-          </view>
         </view>
       </view>
       <!-- 聊天记录 -->
@@ -548,15 +544,7 @@ function onNavTap() {
   border-bottom-left-radius:4px; padding:14px 16px;
 }
 .welcome-text { display:block; color:var(--text); font-size:14px; font-weight:600; margin-bottom:4px; }
-.welcome-sub { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; margin-bottom:10px; }
-.welcome-chips { display:flex; gap:8px; flex-wrap:wrap; }
-.qa-chip {
-  padding:7px 14px; border-radius:20px; font-size:12px;
-  background:var(--accent-bg); border:1px solid var(--accent);
-  color:var(--accent); cursor:pointer; white-space:nowrap;
-  transition:all 0.15s; display:inline-flex;
-}
-.qa-chip:active { background:var(--accent); color:#fff; transform:scale(0.96); }
+.welcome-sub { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; }
 .chat-section::-webkit-scrollbar { display:none; }
 .chat-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-end; }
 .chat-row.user { flex-direction:row-reverse; }
