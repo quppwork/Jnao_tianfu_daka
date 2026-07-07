@@ -41,19 +41,17 @@ export function readWechatError() {
   }
 }
 
-export function shouldAutoWechatOAuth() {
-  if (!isWeChatBrowser()) return false
+/** 用户点击「微信一键登录」时可清除失败冷却 */
+export function clearWechatOAuthCooldown() {
   try {
-    if (sessionStorage.getItem(SKIP_WECHAT_AUTO_KEY) === '1') return false
-    if (wechatOAuthInCooldown()) return false
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('wx') === '1') return false
-    if (params.get('manual') === '1') return false
-    if (params.get('wx_error')) return false
-    return true
-  } catch (_) {
-    return false
-  }
+    sessionStorage.removeItem(WECHAT_OAUTH_FAIL_KEY)
+    sessionStorage.removeItem(SKIP_WECHAT_AUTO_KEY)
+  } catch (_) { /* ignore */ }
+}
+
+export function shouldAutoWechatOAuth() {
+  // 已改为仅手动点击，不再自动跳转 OAuth
+  return false
 }
 
 export function wechatLoginRedirectUrl() {
@@ -89,7 +87,7 @@ export function readWechatCallbackParams() {
 export function clearWechatQueryFromUrl() {
   try {
     const url = new URL(window.location.href)
-    ;['wx', 'session_token', 'user_id', 'next_step', 'bind_ticket', 'role', 'wx_error', 'manual'].forEach((k) => url.searchParams.delete(k))
+    ;['wx', 'session_token', 'user_id', 'next_step', 'bind_ticket', 'role', 'wx_error', 'manual', 'from'].forEach((k) => url.searchParams.delete(k))
     window.history.replaceState({}, '', url.pathname + (url.search || ''))
   } catch (_) { /* ignore */ }
 }
@@ -97,16 +95,16 @@ export function clearWechatQueryFromUrl() {
 export function redirectParentNextStep(nextStep, bindTicket = '', bindMobileUrl = '') {
   if (nextStep === 'bind-phone') {
     if (bindMobileUrl) {
-      window.location.href = bindMobileUrl
+      window.location.replace(bindMobileUrl)
       return
     }
     const q = bindTicket ? `?bind_ticket=${encodeURIComponent(bindTicket)}` : ''
-    uni.redirectTo({ url: `/pages/login/bind-phone${q}` })
+    uni.reLaunch({ url: `/pages/login/bind-phone${q}` })
     return
   }
   if (nextStep === 'complete-profile') {
-    uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })
+    uni.reLaunch({ url: '/pages/login/complete-parent?from=wechat' })
     return
   }
-  uni.redirectTo({ url: '/pages/parent/index' })
+  uni.reLaunch({ url: '/pages/parent/index' })
 }
