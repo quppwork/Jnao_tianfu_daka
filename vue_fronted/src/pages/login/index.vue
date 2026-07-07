@@ -6,7 +6,9 @@
       <view class="logo-row">
         <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
       </view>
-      <text class="subtitle">天赋成长平台</text>
+      <text class="subtitle">欢迎来到天赋成长平台</text>
+      <text class="sub-desc">我们立志于让中国少1亿个学习痛苦的孩子 让中国多1亿个天赋绽放的孩子</text>
+      <view class="hint-admin-top" @click="goAdminLogin"><text>管理员入口</text></view>
 
       <!-- 微信内：仅家长一键登录，不展示短信/密码表单 -->
       <view v-if="wechatParentOnly" class="wechat-only">
@@ -33,6 +35,15 @@
       <view v-else class="form">
         <view v-if="loginBlocked" class="blocked-hint">
           <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
+        </view>
+
+        <view class="role-row">
+          <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'">
+            <text class="ri-label">学生</text>
+          </view>
+          <view class="role-item" :class="{ active: form.role === 'parent' }" @click="form.role = 'parent'">
+            <text class="ri-label">家长</text>
+          </view>
         </view>
 
         <template v-if="form.role === 'student'">
@@ -65,30 +76,26 @@
           </view>
         </template>
 
-        <view class="role-row">
-          <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'">
-            <text class="ri-label">学生</text>
-          </view>
-          <view class="role-item" :class="{ active: form.role === 'parent' }" @click="form.role = 'parent'">
-            <text class="ri-label">家长</text>
-          </view>
-        </view>
-
         <view class="btn-login" :class="{ off: loginBlocked }" @click="doLogin">
           <text>{{ submitting ? '登录中...' : '登录' }}</text>
         </view>
 
         <view v-if="form.role === 'student'" class="sub-actions">
-          <text class="hint-text">孩子账号由家长在家长中心分配</text>
-          <view class="hint-admin" @click="goAdminLogin"><text>管理员入口</text></view>
+          <text class="hint-text hint-highlight">👆 首次使用？请点「家长」标签注册</text>
+          <text class="hint-text">家长注册后可在家长中心创建孩子账号，</text>
+          <text class="hint-text">将账号和密码交给孩子即可登录</text>
         </view>
         <view v-else class="sub-actions">
-          <view class="link-row" @click="toggleParentMode">
-            <text>{{ parentMode === 'sms' ? '使用密码登录' : '使用验证码登录' }}</text>
-          </view>
-          <view class="link-row" @click="goRegister"><text>注册家长账户</text></view>
-          <view v-if="inWechat" class="link-row" @click="backToWechatLogin">
-            <text>返回微信一键登录</text>
+          <text class="hint-text">注册后可在家长中心创建孩子账号，</text>
+          <text class="hint-text">将账号密码交给孩子即可登录训练</text>
+          <view class="link-row-wrap">
+            <view class="link-row" @click="toggleParentMode">
+              <text>{{ parentMode === 'sms' ? '使用密码登录' : '使用验证码登录' }}</text>
+            </view>
+            <view class="link-row" @click="goRegister"><text>注册家长账户</text></view>
+            <view v-if="inWechat" class="link-row" @click="backToWechatLogin">
+              <text>返回微信一键登录</text>
+            </view>
           </view>
         </view>
       </view>
@@ -448,11 +455,12 @@ onUnmounted(() => {
 .glow-top { top:-80px; right:-60px; background:radial-gradient(circle, rgba(88,166,255,0.18) 0%, transparent 70%); }
 .glow-bottom { bottom:-100px; left:-50px; background:radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%); }
 .card { width:100%; position:relative; z-index:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:36px 22px 28px; }
-.logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:4px; }
-.logo-j { color:#dc2626; font-size:48px; font-weight:800; }
-.logo-nao, .logo-ai { color:var(--text); font-size:36px; font-weight:700; }
+.logo-row { display:flex; align-items:baseline; justify-content:center; gap:8px; margin-bottom:6px; }
+.logo-j { color:#dc2626; font-size:60px; font-weight:800; }
+.logo-nao, .logo-ai { color:var(--text); font-size:44px; font-weight:700; }
 .logo-ai { font-weight:300; }
-.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; margin-bottom:20px; }
+.subtitle { color:var(--text-dim); font-size:10px; text-align:center; display:block; line-height:1.5; margin-top:-15px; margin-bottom:2px; }
+.sub-desc { color:var(--text-dim); font-size:10px; text-align:center; display:block; line-height:1.5; margin-bottom:16px; }
 .blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:10px; margin-bottom:12px; text-align:center; }
 .blocked-hint text { color:#f87171; font-size:12px; }
 .wechat-only { padding-top:8px; }
@@ -468,18 +476,29 @@ onUnmounted(() => {
 .sms-btn.off { opacity:0.5; }
 .sms-btn text { color:var(--accent); font-size:12px; }
 .login-input { flex:1; width:100%; min-height:48px; padding:14px 0; font-size:16px; line-height:1.4; color:var(--text); background:transparent; border:none; box-sizing:border-box; -webkit-user-select:text; user-select:text; }
-.role-row { display:flex; gap:10px; margin-bottom:22px; }
-.role-item { flex:1; padding:14px; text-align:center; border-radius:12px; border:1.5px solid var(--border); }
-.role-item.active { border-color:var(--accent); background:var(--accent-bg); }
-.ri-label { color:var(--text-dim); font-size:13px; }
-.role-item.active .ri-label { color:var(--accent); font-weight:600; }
+.role-row { display:flex; gap:0; margin-top:100px; margin-bottom:22px; border-radius:14px; overflow:hidden; border:1.5px solid var(--border); background:var(--accent-bg); }
+.role-item { flex:1; padding:16px; text-align:center; cursor:pointer; transition:all 0.25s; position:relative; }
+.role-item:first-child { border-right:1.5px solid var(--border); }
+.role-item.active { background:var(--bg-card); }
+.role-item.active::after {
+  content:''; position:absolute; bottom:0; left:20%; width:60%; height:2px;
+  background:linear-gradient(90deg,#a78bfa,#60a5fa); border-radius:2px;
+}
+.ri-label { font-size:14px; font-weight:500; transition:all 0.25s; }
+.role-item.active .ri-label { color:var(--accent); font-weight:700; }
+.role-item:not(.active) .ri-label { color:var(--text-dim); }
 .btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:15px; text-align:center; }
 .btn-login.off { opacity:0.5; }
 .btn-login text { color:#fff; font-size:16px; font-weight:700; }
 .sub-actions { text-align:center; margin-top:12px; }
 .hint-text { color:var(--text-dim); font-size:12px; }
+.hint-highlight { color:#f5a623; font-weight:600; }
 .link-row { margin-top:12px; text-align:center; }
 .link-row text { color:#a78bfa; font-size:13px; }
+.link-row-wrap { display:flex; gap:16px; justify-content:center; margin-top:8px; }
+.hint-admin-top { position:absolute; top:12px; right:16px; z-index:10; }
+.hint-admin-top text { color:var(--text-dim); font-size:10px; text-decoration:underline; cursor:pointer; }
+.hint-admin-top:active text { opacity:0.6; }
 .hint-admin { margin-top:8px; }
 .hint-admin text { color:var(--text-dim); font-size:11px; text-decoration:underline; }
 </style>
