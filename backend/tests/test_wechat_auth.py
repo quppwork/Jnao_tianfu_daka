@@ -90,7 +90,8 @@ def test_resolve_wechat_login_with_mobile_snapshot(db_session: Session, monkeypa
     assert user.parent_phone == "13900003333"
 
 
-def test_resolve_wechat_login_without_mobile(db_session: Session):
+def test_resolve_wechat_login_without_mobile(db_session: Session, monkeypatch):
+    monkeypatch.setenv("WECHAT_BIND_MOBILE_URL", "")
     upsert_snapshot(
         db_session,
         {
@@ -106,3 +107,12 @@ def test_resolve_wechat_login_without_mobile(db_session: Session):
     assert user is None
     assert ticket
     assert step == "bind-phone"
+
+
+def test_external_bind_mobile_url_default(monkeypatch):
+    monkeypatch.delenv("WECHAT_BIND_MOBILE_URL", raising=False)
+    from app.services.wechat_auth_service import build_external_bind_mobile_url
+
+    url = build_external_bind_mobile_url()
+    assert "m.jnao.com" in url
+    assert "bindmobile" in url

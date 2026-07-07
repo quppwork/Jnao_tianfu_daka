@@ -65,6 +65,37 @@ def frontend_login_url(**params: str) -> str:
     return f"{base}/pages/login/index?{qs}" if qs else f"{base}/pages/login/index"
 
 
+def external_bind_mobile_url() -> str:
+    """公司现有绑手机 H5（微信内跳转）。设 WECHAT_BIND_MOBILE_URL= 可关闭并回退 Jnao 内置绑手机。"""
+    if "WECHAT_BIND_MOBILE_URL" in os.environ:
+        return os.environ["WECHAT_BIND_MOBILE_URL"].strip()
+    return "https://m.jnao.com/home/member/bindmobile.html"
+
+
+def bind_mobile_return_url() -> str:
+    custom = (os.getenv("WECHAT_BIND_MOBILE_RETURN_URL") or "").strip()
+    if custom:
+        return custom
+    return f"{site_domain()}/pages/login/index?from=mp"
+
+
+def build_external_bind_mobile_url() -> str:
+    """绑手机页 URL，可选附带返回 Jnao 登录的参数"""
+    base = external_bind_mobile_url()
+    if not base:
+        return ""
+    param = (os.getenv("WECHAT_BIND_MOBILE_RETURN_PARAM") or "redirect").strip()
+    ret = bind_mobile_return_url()
+    if not param or not ret:
+        return base
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}{param}={urllib.parse.quote(ret, safe='')}"
+
+
+def use_external_bind_mobile() -> bool:
+    return bool(external_bind_mobile_url())
+
+
 def _state_key(state: str) -> str:
     return f"auth:wx:state:{state}"
 
@@ -200,8 +231,16 @@ def fetch_legacy_member(openid: str) -> dict | None:
         return None
 
 
-def lookup_member(db: Session, openid: str) -> WxMemberSnapshot | None:
+def lookup_member(db: Session, openid: str, *, refresh_legacy: bool = False) -> WxMemberSnapshot | None:
     snap = db.scalar(select(WxMemberSnapshot).where(WxMemberSnapshot.openid == openid))
+    need_legacy = refresh_legacy or snap is None or not snap.mobile
+    if need_legacy:
+        legacy = fetch_legacy_member(openid)
+        if legacy:
+            snap = upsert_snapshot(db, legacy)
+            db.commit()
+            db.refresh(snap)
+            return snap
     if snap:
         return snap
     legacy = fetch_legacy_member(openid)
@@ -373,7 +412,7 @@ def resolve_wechat_login(
             db.refresh(user)
             return user, None, parent_next_step(user)
 
-    snap = lookup_member(db, openid)
+    snap = lookup_member(db, openid, refresh_legacy=True)
     mobile = snap.mobile if snap else None
     if mobile:
         user = ensure_parent_for_phone(db, phone=mobile, snap=snap)
@@ -387,6 +426,9 @@ def resolve_wechat_login(
         db.commit()
         db.refresh(user)
         return user, None, parent_next_step(user)
+
+    if use_external_bind_mobile():
+        return None, None, "bind-phone"
 
     ticket = create_bind_ticket(
         openid=openid,

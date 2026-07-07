@@ -47,10 +47,13 @@ from app.services.sms_service import (
 )
 from app.services.wechat_auth_service import (
     build_oauth_url,
+    build_external_bind_mobile_url,
+    bind_mobile_return_url,
     complete_bind_phone,
     consume_oauth_state,
     frontend_login_url,
     resolve_wechat_login,
+    use_external_bind_mobile,
     wechat_app_id,
     wechat_configured,
     exchange_code_for_openid,
@@ -232,9 +235,13 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 @router.get("/wechat/config", response_model=WechatConfigResponse)
 def wechat_config():
+    ext = use_external_bind_mobile()
     return WechatConfigResponse(
         configured=wechat_configured(),
         app_id=wechat_app_id() or None,
+        bind_mobile_url=build_external_bind_mobile_url() if ext else None,
+        bind_mobile_return_url=bind_mobile_return_url() if ext else None,
+        use_external_bind_mobile=ext,
     )
 
 
@@ -255,6 +262,9 @@ def wechat_callback(
     consume_oauth_state(state)
     openid, unionid = exchange_code_for_openid(code)
     user, bind_ticket, next_step = resolve_wechat_login(db, openid=openid, unionid=unionid)
+
+    if next_step == "bind-phone" and use_external_bind_mobile():
+        return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
 
     params = {"wx": "1", "next_step": next_step}
     if user:

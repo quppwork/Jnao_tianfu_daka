@@ -1,4 +1,8 @@
-"""短信验证码 — 注册需图形码；登录仅已注册手机号"""
+"""短信验证码 — 浏览器家长登录/注册（login/register）
+
+微信内缺手机号走 m.jnao.com 绑手机页，不经本模块。
+后期浏览器验证码单独接阿里云（SMS_PROVIDER=aliyun），与微信绑手机分离。
+"""
 
 from __future__ import annotations
 

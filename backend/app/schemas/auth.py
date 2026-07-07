@@ -43,6 +43,9 @@ class WechatOAuthUrlResponse(BaseModel):
 class WechatConfigResponse(BaseModel):
     configured: bool
     app_id: str | None = None
+    bind_mobile_url: str | None = None
+    bind_mobile_return_url: str | None = None
+    use_external_bind_mobile: bool = False
 
 
 class WechatBindPhoneRequest(BaseModel):

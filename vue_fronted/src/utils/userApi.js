@@ -437,6 +437,13 @@ export async function ensureParentAccountReady(parentId) {
   const p = await fetchParentProfile(parentId)
   if (p.login_channel === 'wechat' && !p.account_ready) {
     if (p.next_step === 'bind-phone') {
+      try {
+        const cfg = await fetchWechatConfig()
+        if (cfg.use_external_bind_mobile && cfg.bind_mobile_url) {
+          window.location.href = cfg.bind_mobile_url
+          return false
+        }
+      } catch (_) { /* fallback */ }
       uni.redirectTo({ url: '/pages/login/bind-phone' })
     } else {
       uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })

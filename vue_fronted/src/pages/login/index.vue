@@ -86,6 +86,7 @@ import {
   storeWechatCallbackAuth,
   fetchParentProfile,
   fetchWechatOAuthUrl,
+  fetchWechatConfig,
   studentNeedsOnboarding,
 } from '@/utils/userApi.js'
 import {
@@ -125,7 +126,10 @@ onMounted(async () => {
     storeWechatCallbackAuth(wxCb)
     clearWechatQueryFromUrl()
     try {
-      const profile = await fetchParentProfile(Number(wxCb.userId))
+      const [profile, cfg] = await Promise.all([
+        fetchParentProfile(Number(wxCb.userId)),
+        fetchWechatConfig().catch(() => ({})),
+      ])
       try {
         localStorage.setItem('jnao_user', JSON.stringify({
           id: profile.id,
@@ -135,15 +139,20 @@ onMounted(async () => {
           loginChannel: 'wechat',
         }))
       } catch (_) {}
-      redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket)
+      redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket, cfg?.bind_mobile_url)
     } catch (_) {
       redirectParentNextStep(wxCb.nextStep, wxCb.bindTicket)
     }
     return
   }
-  if (wxCb?.bindTicket && wxCb.nextStep === 'bind-phone') {
+  if (wxCb?.nextStep === 'bind-phone') {
     clearWechatQueryFromUrl()
-    redirectParentNextStep('bind-phone', wxCb.bindTicket)
+    try {
+      const cfg = await fetchWechatConfig()
+      redirectParentNextStep('bind-phone', wxCb.bindTicket, cfg?.bind_mobile_url)
+    } catch (_) {
+      redirectParentNextStep('bind-phone', wxCb.bindTicket)
+    }
     return
   }
 
@@ -216,9 +225,18 @@ async function routeParentHome(data) {
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = '/pages/parent/index'
   if (parentNeedsAccountReady(data)) {
-    target = data.next_step === 'bind-phone'
-      ? `/pages/login/bind-phone${data.bind_ticket ? '?bind_ticket=' + encodeURIComponent(data.bind_ticket) : ''}`
-      : '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
+    if (data.next_step === 'bind-phone') {
+      try {
+        const cfg = await fetchWechatConfig()
+        if (cfg.use_external_bind_mobile && cfg.bind_mobile_url) {
+          window.location.href = cfg.bind_mobile_url
+          return
+        }
+      } catch (_) { /* fallback */ }
+      target = `/pages/login/bind-phone${data.bind_ticket ? '?bind_ticket=' + encodeURIComponent(data.bind_ticket) : ''}`
+    } else {
+      target = '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
+    }
   } else if (parentNeedsProfileComplete(data)) {
     target = '/pages/login/complete-parent'
   }
