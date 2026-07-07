@@ -287,6 +287,14 @@ def wechat_callback(
         openid, unionid = exchange_code_for_openid(code)
         user, bind_ticket, next_step = resolve_wechat_login(db, openid=openid, unionid=unionid)
 
+        if next_step == "register":
+            return RedirectResponse(
+                url=frontend_wechat_error_url(
+                    "您的微信尚未登记会员，请点击「使用手机号/密码登录」注册家长账户"
+                ),
+                status_code=302,
+            )
+
         if next_step == "bind-phone" and use_external_bind_mobile():
             return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
 

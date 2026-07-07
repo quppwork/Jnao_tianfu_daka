@@ -109,6 +109,65 @@ def test_resolve_wechat_login_without_mobile(db_session: Session, monkeypatch):
     assert step == "bind-phone"
 
 
+def test_resolve_wechat_login_unknown_openid(db_session: Session, monkeypatch):
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    user, ticket, step = resolve_wechat_login(db_session, openid="oUNKNOWN_not_in_snapshot", unionid=None)
+    assert user is None
+    assert ticket is None
+    assert step == "register"
+
+
+def test_sync_wx_members_from_legacy(db_session: Session, monkeypatch):
+    class FakeResult:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {
+                    "id": 100,
+                    "openid": "oSYNC_001",
+                    "unionid": "u100",
+                    "mobile": "13900006666",
+                    "nickname": "同步测试",
+                    "truename": "张三",
+                },
+                {
+                    "id": 101,
+                    "openid": "oSYNC_002",
+                    "unionid": None,
+                    "mobile": "",
+                    "nickname": "无手机",
+                    "truename": None,
+                },
+            ]
+
+    class FakeConn:
+        def execute(self, *_args, **_kwargs):
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    monkeypatch.setattr(
+        "app.services.wechat_auth_service.get_legacy_engine",
+        lambda: FakeEngine(),
+    )
+    from app.services.wechat_auth_service import sync_wx_members_from_legacy
+
+    stats = sync_wx_members_from_legacy(db_session)
+    assert stats["total"] == 2
+    assert stats["with_mobile"] == 1
+    assert stats["without_mobile"] == 1
+
+
 def test_external_bind_mobile_url_default(monkeypatch):
     monkeypatch.delenv("WECHAT_BIND_MOBILE_URL", raising=False)
     from app.services.wechat_auth_service import build_external_bind_mobile_url

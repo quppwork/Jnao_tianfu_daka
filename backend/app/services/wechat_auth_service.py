@@ -254,7 +254,13 @@ def fetch_legacy_member(openid: str) -> dict | None:
         return None
 
 
+def lookup_member_local(db: Session, openid: str) -> WxMemberSnapshot | None:
+    """仅查本地 wx_member_snapshot，登录路径用；不访问老库。"""
+    return db.scalar(select(WxMemberSnapshot).where(WxMemberSnapshot.openid == openid))
+
+
 def lookup_member(db: Session, openid: str, *, refresh_legacy: bool = False) -> WxMemberSnapshot | None:
+    """兼容旧调用；refresh_legacy 仅建议离线同步脚本使用。"""
     if refresh_legacy:
         legacy = fetch_legacy_member(openid)
         if legacy:
@@ -262,16 +268,42 @@ def lookup_member(db: Session, openid: str, *, refresh_legacy: bool = False) -> 
             db.commit()
             db.refresh(snap)
             return snap
-    snap = db.scalar(select(WxMemberSnapshot).where(WxMemberSnapshot.openid == openid))
-    if snap:
-        return snap
-    legacy = fetch_legacy_member(openid)
-    if not legacy:
-        return None
-    snap = upsert_snapshot(db, legacy)
+    return lookup_member_local(db, openid)
+
+
+def fetch_all_legacy_members() -> list[dict]:
+    engine = get_legacy_engine()
+    if not engine:
+        return []
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT id, openid, unionid, mobile, nickname, truename
+                FROM ys_wx_member
+                WHERE openid IS NOT NULL AND openid != ''
+                """
+            )
+        ).mappings().all()
+    return [_row_to_snapshot(dict(row)) for row in rows]
+
+
+def sync_wx_members_from_legacy(db: Session) -> dict[str, int]:
+    """从 db_fz_jingnao.ys_wx_member 全量拉取到 wx_member_snapshot（定时任务专用）。"""
+    rows = fetch_all_legacy_members()
+    if not rows and not get_legacy_engine():
+        raise RuntimeError("LEGACY_DATABASE_URL 未配置，无法同步")
+
+    stats = {"total": 0, "with_mobile": 0, "without_mobile": 0}
+    for data in rows:
+        snap = upsert_snapshot(db, data)
+        stats["total"] += 1
+        if snap.mobile:
+            stats["with_mobile"] += 1
+        else:
+            stats["without_mobile"] += 1
     db.commit()
-    db.refresh(snap)
-    return snap
+    return stats
 
 
 def get_bind_by_openid(db: Session, openid: str) -> ParentWechatBind | None:
@@ -473,8 +505,11 @@ def resolve_wechat_login(
         db.delete(bind)
         db.commit()
 
-    snap = lookup_member(db, openid, refresh_legacy=True)
-    mobile = snap.mobile if snap else None
+    snap = lookup_member_local(db, openid)
+    if not snap:
+        return None, None, "register"
+
+    mobile = snap.mobile
     if mobile:
         user = ensure_parent_for_phone(db, phone=mobile, snap=snap)
         upsert_wechat_bind(
@@ -516,7 +551,7 @@ def complete_bind_phone(
     by_openid = get_bind_by_openid(db, openid)
     if by_openid and existing and by_openid.parent_id != existing.id:
         raise HTTPException(409, "该微信已绑定其他家长账号")
-    snap = lookup_member(db, openid, refresh_legacy=True)
+    snap = lookup_member_local(db, openid)
     user = ensure_parent_for_phone(db, phone=phone, snap=snap)
     upsert_wechat_bind(
         db,
