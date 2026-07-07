@@ -31,7 +31,7 @@ def is_legacy_register_enabled() -> bool:
 
 
 def assert_production_auth_config() -> None:
-    """生产环境禁止 mock 认证组件。"""
+    """生产环境禁止 mock 认证组件，并要求 Redis。"""
     if not is_production():
         return
     if os.getenv("AUTH_CHALLENGE_MOCK", "0") == "1":
@@ -40,6 +40,8 @@ def assert_production_auth_config() -> None:
         raise RuntimeError("生产环境不可使用 SMS_PROVIDER=mock")
     if os.getenv("SMS_MOCK_EXPOSE", "0") == "1":
         raise RuntimeError("生产环境不可启用 SMS_MOCK_EXPOSE")
+    if not (os.getenv("REDIS_URL") or "").strip():
+        raise RuntimeError("生产环境必须配置 REDIS_URL（OAuth/SMS 状态存储）")
 
 
 def get_cors_origins() -> list[str]:

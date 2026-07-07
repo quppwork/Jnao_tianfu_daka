@@ -107,13 +107,14 @@ import {
   sendParentSmsCode,
   parentNeedsProfileComplete,
   parentNeedsAccountReady,
-  setSessionToken,
-  storeWechatCallbackAuth,
+  saveAuthSession,
+  exchangeWechatLogin,
   fetchParentProfile,
   fetchWechatOAuthUrl,
   fetchWechatConfig,
   studentNeedsOnboarding,
-  setChildUserId,
+  getLoggedInUserId,
+  getSessionToken,
 } from '@/utils/userApi.js'
 import {
   isLoginBlocked,
@@ -176,6 +177,25 @@ function backToWechatLogin() {
   form.value.role = 'parent'
 }
 
+function tryRedirectIfLoggedIn() {
+  try {
+    if (localStorage.getItem('jnao_logged_in') !== '1') return false
+    const uid = getLoggedInUserId()
+    if (!uid || !getSessionToken()) return false
+    const raw = localStorage.getItem('jnao_user')
+    const role = raw ? JSON.parse(raw).role : null
+    if (role === 'parent') {
+      uni.reLaunch({ url: '/pages/parent/index' })
+      return true
+    }
+    if (role === 'student') {
+      uni.reLaunch({ url: '/pages/index' })
+      return true
+    }
+  } catch (_) { /* ignore */ }
+  return false
+}
+
 onMounted(async () => {
   refreshBlockState()
   blockTimer = setInterval(refreshBlockState, 1000)
@@ -202,29 +222,22 @@ onMounted(async () => {
   }
 
   const wxCb = readWechatCallbackParams()
-  if (wxCb?.sessionToken) {
-    setSessionToken(wxCb.sessionToken)
-    storeWechatCallbackAuth(wxCb)
+  if (wxCb?.loginTicket) {
     clearWechatQueryFromUrl()
     try {
+      await exchangeWechatLogin(wxCb.loginTicket)
       const [profile, cfg] = await Promise.all([
-        fetchParentProfile(Number(wxCb.userId)),
+        fetchParentProfile(getLoggedInUserId()),
         fetchWechatConfig().catch(() => ({})),
       ])
-      setChildUserId(profile.id)
-      try {
-        localStorage.setItem('jnao_user', JSON.stringify({
-          id: profile.id,
-          name: profile.nickname,
-          phone: profile.parent_phone,
-          role: 'parent',
-          loginChannel: 'wechat',
-        }))
-        localStorage.setItem('jnao_logged_in', '1')
-      } catch (_) {}
       redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket, cfg?.bind_mobile_url)
-    } catch (_) {
-      redirectParentNextStep(wxCb.nextStep, wxCb.bindTicket)
+    } catch (e) {
+      markWechatOAuthFailed()
+      uni.showModal({
+        title: '微信登录失败',
+        content: e.message || '登录凭证已过期，请重新进入',
+        showCancel: false,
+      })
     }
     return
   }
@@ -238,6 +251,8 @@ onMounted(async () => {
     }
     return
   }
+
+  if (tryRedirectIfLoggedIn()) return
 })
 
 async function doWechatLogin() {
@@ -263,16 +278,7 @@ async function doWechatLogin() {
 }
 
 function saveSession(data) {
-  if (data?.child_user_id) setChildUserId(data.child_user_id)
-  localStorage.setItem('jnao_user', JSON.stringify({
-    id: data.child_user_id,
-    name: data.nickname,
-    phone: data.parent_phone,
-    loginName: data.login_name || form.value.loginName.trim(),
-    role: data.role || form.value.role,
-    loginTime: new Date().toISOString(),
-  }))
-  localStorage.setItem('jnao_logged_in', '1')
+  saveAuthSession(data)
 }
 
 function toggleParentMode() {
@@ -329,7 +335,11 @@ async function routeParentHome(data) {
           return
         }
       } catch (_) { /* fallback */ }
-      target = `/pages/login/bind-phone${data.bind_ticket ? '?bind_ticket=' + encodeURIComponent(data.bind_ticket) : ''}`
+      if (data.bind_ticket) {
+        target = `/pages/login/bind-phone?bind_ticket=${encodeURIComponent(data.bind_ticket)}`
+      } else {
+        target = '/pages/login/index'
+      }
     } else {
       target = '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
     }

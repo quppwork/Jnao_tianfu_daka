@@ -32,6 +32,7 @@ logger = logging.getLogger("jnao")
 
 WX_STATE_TTL = 300
 WX_BIND_TTL = 1800
+WX_LOGIN_EXCHANGE_TTL = 120
 WECHAT_TOKEN_URL = "https://api.weixin.qq.com/sns/oauth2/access_token"
 
 
@@ -107,6 +108,10 @@ def _state_key(state: str) -> str:
 
 def _bind_key(ticket: str) -> str:
     return f"auth:wx:pending:{ticket}"
+
+
+def _login_exchange_key(ticket: str) -> str:
+    return f"auth:wx:login:{ticket}"
 
 
 def create_oauth_state(*, front_redirect: str = "") -> str:
@@ -250,15 +255,14 @@ def fetch_legacy_member(openid: str) -> dict | None:
 
 
 def lookup_member(db: Session, openid: str, *, refresh_legacy: bool = False) -> WxMemberSnapshot | None:
-    snap = db.scalar(select(WxMemberSnapshot).where(WxMemberSnapshot.openid == openid))
-    need_legacy = refresh_legacy or snap is None or not snap.mobile
-    if need_legacy:
+    if refresh_legacy:
         legacy = fetch_legacy_member(openid)
         if legacy:
             snap = upsert_snapshot(db, legacy)
             db.commit()
             db.refresh(snap)
             return snap
+    snap = db.scalar(select(WxMemberSnapshot).where(WxMemberSnapshot.openid == openid))
     if snap:
         return snap
     legacy = fetch_legacy_member(openid)
@@ -282,6 +286,18 @@ def get_bind_by_openid(db: Session, openid: str) -> ParentWechatBind | None:
     )
 
 
+def get_bind_by_parent(db: Session, parent_id: int) -> ParentWechatBind | None:
+    app_id = wechat_app_id()
+    if not app_id:
+        return None
+    return db.scalar(
+        select(ParentWechatBind).where(
+            ParentWechatBind.parent_id == parent_id,
+            ParentWechatBind.app_id == app_id,
+        )
+    )
+
+
 def upsert_wechat_bind(
     db: Session,
     *,
@@ -291,10 +307,17 @@ def upsert_wechat_bind(
     wx_member_id: int | None,
 ) -> ParentWechatBind:
     app_id = wechat_app_id()
-    row = get_bind_by_openid(db, openid)
+    by_openid = get_bind_by_openid(db, openid)
+    by_parent = get_bind_by_parent(db, parent_id)
+    if by_openid and by_openid.parent_id != parent_id:
+        raise HTTPException(409, "该微信已绑定其他家长账号")
+    if by_parent and by_parent.openid != openid:
+        raise HTTPException(409, "该家长账号已绑定其他微信")
     now = datetime.now(TZ).replace(tzinfo=None)
+    row = by_openid or by_parent
     if row:
         row.parent_id = parent_id
+        row.openid = openid
         row.unionid = unionid
         row.wx_member_id = wx_member_id
         row.last_login_at = now
@@ -407,6 +430,24 @@ def delete_bind_ticket(ticket: str) -> None:
     challenge_delete(_bind_key(ticket))
 
 
+def create_login_exchange_ticket(*, user_id: int, next_step: str, role: str) -> str:
+    ticket = secrets.token_urlsafe(18)
+    challenge_set(
+        _login_exchange_key(ticket),
+        {"user_id": user_id, "next_step": next_step, "role": role},
+        WX_LOGIN_EXCHANGE_TTL,
+    )
+    return ticket
+
+
+def consume_login_exchange_ticket(ticket: str) -> dict:
+    row = challenge_get(_login_exchange_key(ticket))
+    if not row:
+        raise HTTPException(400, "登录凭证已过期，请重新从微信进入")
+    challenge_delete(_login_exchange_key(ticket))
+    return row
+
+
 def resolve_wechat_login(
     db: Session,
     *,
@@ -429,6 +470,8 @@ def resolve_wechat_login(
             db.commit()
             db.refresh(user)
             return user, None, parent_next_step(user)
+        db.delete(bind)
+        db.commit()
 
     snap = lookup_member(db, openid, refresh_legacy=True)
     mobile = snap.mobile if snap else None
@@ -465,7 +508,15 @@ def complete_bind_phone(
     pending = consume_bind_ticket(bind_ticket)
     openid = pending["openid"]
     phone = normalize_phone(phone)
-    snap = lookup_member(db, openid)
+    existing = auth_service.find_parent_by_phone(db, phone)
+    if existing:
+        other = get_bind_by_parent(db, existing.id)
+        if other and other.openid != openid:
+            raise HTTPException(409, "该手机号已绑定其他微信账号")
+    by_openid = get_bind_by_openid(db, openid)
+    if by_openid and existing and by_openid.parent_id != existing.id:
+        raise HTTPException(409, "该微信已绑定其他家长账号")
+    snap = lookup_member(db, openid, refresh_legacy=True)
     user = ensure_parent_for_phone(db, phone=phone, snap=snap)
     upsert_wechat_bind(
         db,

@@ -129,8 +129,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  getChildUserId,
-  clearChildUserId,
+  getLoggedInUserId,
+  getSessionToken,
+  logoutAndGoLogin,
   fetchParentChildren,
   fetchParentQuota,
   fetchParentProfile,
@@ -178,16 +179,26 @@ onMounted(() => loadData())
 async function loadData() {
   loading.value = true
   try {
+    if (!getSessionToken()) {
+      logoutAndGoLogin()
+      return
+    }
     const raw = localStorage.getItem('jnao_user')
+    let role = null
     if (raw) {
       const u = JSON.parse(raw)
+      role = u.role
+      if (role !== 'parent') {
+        logoutAndGoLogin()
+        return
+      }
       parentName.value = u.name || '家长'
-      parentId.value = u.id || getChildUserId()
+      parentId.value = u.id || getLoggedInUserId()
     } else {
-      parentId.value = getChildUserId()
+      parentId.value = getLoggedInUserId()
     }
     if (!parentId.value) {
-      uni.redirectTo({ url: '/pages/login/index' })
+      logoutAndGoLogin()
       return
     }
     const ready = await ensureParentAccountReady(parentId.value)
@@ -332,12 +343,7 @@ function toggleTheme() {
 
 function doLogout() {
   showSettings.value = false
-  try {
-    clearChildUserId()
-    localStorage.removeItem('jnao_user')
-    localStorage.removeItem('jnao_logged_in')
-  } catch (_) {}
-  uni.redirectTo({ url: '/pages/login/index' })
+  logoutAndGoLogin()
 }
 </script>
 

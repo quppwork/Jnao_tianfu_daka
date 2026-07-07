@@ -53,6 +53,8 @@ from app.services.wechat_auth_service import (
     bind_mobile_return_url,
     complete_bind_phone,
     consume_oauth_state,
+    consume_login_exchange_ticket,
+    create_login_exchange_ticket,
     frontend_login_url,
     frontend_wechat_error_url,
     resolve_wechat_login,
@@ -251,8 +253,20 @@ def wechat_config():
 
 @router.get("/wechat/oauth-url", response_model=WechatOAuthUrlResponse)
 def wechat_oauth_url(redirect: str = Query("", max_length=500)):
+    if not wechat_configured():
+        raise HTTPException(503, "微信公众号未配置")
     url = build_oauth_url(front_redirect=redirect)
     return WechatOAuthUrlResponse(url=url, configured=True)
+
+
+@router.get("/wechat/exchange", response_model=AuthResponse)
+def wechat_login_exchange(login_ticket: str = Query(..., min_length=8, max_length=128), db: Session = Depends(get_db)):
+    """OAuth 回调后一次性换取 session，避免 token 出现在 URL"""
+    row = consume_login_exchange_ticket(login_ticket)
+    user = auth_service.get_child_user(db, int(row["user_id"]))
+    if not user:
+        raise HTTPException(404, "用户不存在")
+    return _to_response(user)
 
 
 @router.get("/wechat/callback")
@@ -280,11 +294,13 @@ def wechat_callback(
         if user:
             from app.services.session_service import issue_session
 
-            token = issue_session(db, user)
+            issue_session(db, user)
             db.refresh(user)
-            params["session_token"] = token
-            params["user_id"] = str(user.id)
-            params["role"] = user.role or auth_service.ROLE_PARENT
+            params["login_ticket"] = create_login_exchange_ticket(
+                user_id=user.id,
+                next_step=next_step,
+                role=user.role or auth_service.ROLE_PARENT,
+            )
         if bind_ticket:
             params["bind_ticket"] = bind_ticket
 

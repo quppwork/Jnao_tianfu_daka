@@ -73,8 +73,7 @@ export function readWechatCallbackParams() {
     const params = new URLSearchParams(window.location.search)
     if (params.get('wx') !== '1') return null
     return {
-      sessionToken: params.get('session_token') || '',
-      userId: params.get('user_id') || '',
+      loginTicket: params.get('login_ticket') || '',
       nextStep: params.get('next_step') || 'home',
       bindTicket: params.get('bind_ticket') || '',
       role: params.get('role') || 'parent',
@@ -87,7 +86,7 @@ export function readWechatCallbackParams() {
 export function clearWechatQueryFromUrl() {
   try {
     const url = new URL(window.location.href)
-    ;['wx', 'session_token', 'user_id', 'next_step', 'bind_ticket', 'role', 'wx_error', 'manual', 'from'].forEach((k) => url.searchParams.delete(k))
+    ;['wx', 'login_ticket', 'session_token', 'user_id', 'next_step', 'bind_ticket', 'role', 'wx_error', 'manual', 'from'].forEach((k) => url.searchParams.delete(k))
     window.history.replaceState({}, '', url.pathname + (url.search || ''))
   } catch (_) { /* ignore */ }
 }
@@ -98,8 +97,11 @@ export function redirectParentNextStep(nextStep, bindTicket = '', bindMobileUrl 
       window.location.replace(bindMobileUrl)
       return
     }
-    const q = bindTicket ? `?bind_ticket=${encodeURIComponent(bindTicket)}` : ''
-    uni.reLaunch({ url: `/pages/login/bind-phone${q}` })
+    if (bindTicket) {
+      uni.reLaunch({ url: `/pages/login/bind-phone?bind_ticket=${encodeURIComponent(bindTicket)}` })
+      return
+    }
+    uni.reLaunch({ url: '/pages/login/index' })
     return
   }
   if (nextStep === 'complete-profile') {

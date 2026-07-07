@@ -133,12 +133,15 @@ async function apiJson(url, options = {}) {
   const res = await fetch(url, { ...options, headers })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    // 单设备登录：token 失效 → 清除登录态，触发重新登录
+    // 401：会话失效 → 清除登录态并回到登录页
     if (res.status === 401) {
-      const msg = formatApiError(data, res.status)
-      if (msg.includes('已在其他设备登录') || msg.includes('重新登录')) {
-        clearChildUserId()
-      }
+      clearChildUserId()
+      try {
+        localStorage.removeItem('jnao_user')
+        localStorage.removeItem('jnao_logged_in')
+        localStorage.removeItem('jnao_login_channel')
+      } catch (e) { /* ignore */ }
+      logoutAndGoLogin()
     }
     const err = new Error(formatApiError(data, res.status))
     err.status = res.status
@@ -168,10 +171,13 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     if (res.status === 401) {
-      const msg = data.detail || ''
-      if (msg.includes('已在其他设备登录') || msg.includes('重新登录')) {
-        clearChildUserId()
-      }
+      clearChildUserId()
+      try {
+        localStorage.removeItem('jnao_user')
+        localStorage.removeItem('jnao_logged_in')
+        localStorage.removeItem('jnao_login_channel')
+      } catch (e) { /* ignore */ }
+      logoutAndGoLogin()
     }
     const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
     err.status = res.status
@@ -291,6 +297,10 @@ function getOrCreateGuestPhone() {
 }
 
 /** 登录后存储 session；家长/学生分槽，避免 role 混用 */
+export function saveAuthSession(data) {
+  _storeAuth(data)
+}
+
 function _storeAuth(data) {
   if (data.session_token) {
     setSessionToken(data.session_token)
@@ -419,6 +429,15 @@ export async function fetchWechatOAuthUrl(redirect = '') {
   return apiJson(`/api/auth/wechat/oauth-url${q}`)
 }
 
+/** OAuth 回调 login_ticket 一次性换取 session */
+export async function exchangeWechatLogin(loginTicket) {
+  const data = await apiJson(
+    `/api/auth/wechat/exchange?login_ticket=${encodeURIComponent(loginTicket)}`,
+  )
+  _storeAuth({ ...data, login_channel: 'wechat' })
+  return data
+}
+
 export async function sendWechatBindSms({ bindTicket, phone }) {
   return apiJson('/api/auth/wechat/send-bind-sms', {
     method: 'POST',
@@ -446,18 +465,8 @@ export async function wechatBindPhone({ bindTicket, phone, smsCode }) {
   return data
 }
 
-export function storeWechatCallbackAuth(payload) {
-  _storeAuth({
-    child_user_id: Number(payload.userId),
-    parent_phone: '',
-    nickname: '家长',
-    role: payload.role || 'parent',
-    session_token: payload.sessionToken,
-    login_channel: 'wechat',
-    account_ready: payload.nextStep === 'home',
-    next_step: payload.nextStep,
-    profile_complete: payload.nextStep === 'home',
-  })
+export function storeWechatCallbackAuth(data) {
+  _storeAuth({ ...data, login_channel: 'wechat' })
 }
 
 export async function fetchParentProfile(parentId) {
@@ -483,7 +492,7 @@ export async function ensureParentAccountReady(parentId) {
           return false
         }
       } catch (_) { /* fallback */ }
-      uni.redirectTo({ url: '/pages/login/bind-phone' })
+      uni.redirectTo({ url: '/pages/login/index' })
     } else {
       uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })
     }

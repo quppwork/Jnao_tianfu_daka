@@ -13,7 +13,7 @@ from app.services.parent_profile_service import (
     parent_wechat_missing_fields,
     set_login_channel,
 )
-from app.services.wechat_auth_service import upsert_snapshot, resolve_wechat_login
+from app.services.wechat_auth_service import upsert_snapshot, resolve_wechat_login, upsert_wechat_bind
 
 
 def test_wechat_parent_missing_password(db_session: Session):
@@ -116,3 +116,64 @@ def test_external_bind_mobile_url_default(monkeypatch):
     url = build_external_bind_mobile_url()
     assert "m.jnao.com" in url
     assert "bindmobile" in url
+
+
+def test_upsert_wechat_bind_rejects_openid_conflict(db_session: Session, monkeypatch):
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    from fastapi import HTTPException
+
+    u1 = auth_service.register_child(
+        db_session,
+        parent_phone="13900004444",
+        nickname="家长A",
+        role=auth_service.ROLE_PARENT,
+    )
+    u2 = auth_service.register_child(
+        db_session,
+        parent_phone="13900005555",
+        nickname="家长B",
+        role=auth_service.ROLE_PARENT,
+    )
+    db_session.commit()
+
+    upsert_wechat_bind(
+        db_session,
+        parent_id=u1.id,
+        openid="oCONFLICT_001",
+        unionid=None,
+        wx_member_id=1,
+    )
+    db_session.commit()
+
+    try:
+        upsert_wechat_bind(
+            db_session,
+            parent_id=u2.id,
+            openid="oCONFLICT_001",
+            unionid=None,
+            wx_member_id=1,
+        )
+        assert False, "expected 409"
+    except HTTPException as e:
+        assert e.status_code == 409
+
+
+def test_login_exchange_ticket_one_time(monkeypatch):
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    from app.services.wechat_auth_service import (
+        create_login_exchange_ticket,
+        consume_login_exchange_ticket,
+    )
+
+    ticket = create_login_exchange_ticket(user_id=99, next_step="home", role="parent")
+    row = consume_login_exchange_ticket(ticket)
+    assert row["user_id"] == 99
+    assert row["next_step"] == "home"
+
+    from fastapi import HTTPException
+
+    try:
+        consume_login_exchange_ticket(ticket)
+        assert False, "expected expired"
+    except HTTPException as e:
+        assert e.status_code == 400
