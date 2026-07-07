@@ -107,7 +107,7 @@ def evaluate_card(
     """判定单张打卡卡片是否达标。
 
     Returns:
-        { passed: bool, threshold: dict|null, detail: str, skill, tier, rule_type }
+        { passed, threshold, detail, skill, tier, rule_type }
     """
     threshold = get_skill_threshold(skill, tier, grade_band)
     base: dict[str, Any] = {
@@ -320,22 +320,21 @@ def process_checkin_progress(
         tier_before = get_skill_tier(state, skill)
         eval_result = evaluate_skill_any_card(skill, tier_before, grade_band, all_cards)
 
+        # 本次是第几次尝试（处理前的连续次数 + 1）
+        consecutive_before = get_consecutive_pass(state, skill)
+        attempt_number = consecutive_before + 1
         passed = bool(eval_result.get("passed"))
         tier_advanced = False
         oss_advanced = False
         tier_after = tier_before
 
         if passed:
-            # 达标 → 连续计数 +1
             bump_consecutive_pass(state, skill)
-            # 尝试推进 OSS
             oss_advanced = bump_oss_after_pass(db, talent_code, state, skill)
-            # 检查是否达到晋级条件
             if get_consecutive_pass(state, skill) >= 3:
                 tier_after = advance_skill_tier(state, skill)
                 tier_advanced = True
         else:
-            # 不达标 → 计数重置
             reset_consecutive_pass(state, skill)
 
         skill_results[skill] = {
@@ -345,6 +344,8 @@ def process_checkin_progress(
             "consecutive_pass": get_consecutive_pass(state, skill),
             "tier_advanced": tier_advanced,
             "oss_advanced": oss_advanced,
+            "attempt_number": attempt_number,
+            "was_deciding": attempt_number >= 3,
             "threshold_detail": eval_result,
         }
 

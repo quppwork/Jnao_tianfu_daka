@@ -130,7 +130,15 @@ function formatApiError(data, status) {
 async function apiJson(url, options = {}) {
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders(options, userId)
-  const res = await fetch(url, { ...options, headers })
+  let res
+  try {
+    res = await fetch(url, { ...options, headers })
+  } catch (e) {
+    console.error(`[api] NETWORK ${options.method || 'GET'} ${url} — ${e.message || 'fetch failed'}`)
+    const err = new Error('网络连接失败，请检查网络')
+    err.status = 0
+    throw err
+  }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     // 401：会话失效 → 清除登录态并回到登录页
@@ -143,7 +151,9 @@ async function apiJson(url, options = {}) {
       } catch (e) { /* ignore */ }
       logoutAndGoLogin()
     }
-    const err = new Error(formatApiError(data, res.status))
+    const msg = formatApiError(data, res.status)
+    console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
+    const err = new Error(msg)
     err.status = res.status
     err.data = data
     throw err

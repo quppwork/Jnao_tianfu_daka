@@ -33,13 +33,18 @@ def get_engine():
         if url.startswith("sqlite"):
             _engine = create_engine(
                 url,
-                connect_args={"check_same_thread": False},
+                connect_args={
+                    "check_same_thread": False,
+                    "timeout": 10,
+                },
                 poolclass=StaticPool,
             )
 
             @event.listens_for(_engine, "connect")
             def _set_sqlite_pragma(dbapi_conn, _):
                 cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=5000")
                 cursor.execute("PRAGMA foreign_keys=ON")
                 cursor.close()
         else:

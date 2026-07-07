@@ -356,7 +356,8 @@ async function routeStudentHome(data) {
   let target = '/pages/index'
   try {
     if (await studentNeedsOnboarding(data.child_user_id)) target = '/pages/login/onboarding/index'
-  } catch (_) {
+  } catch (e) {
+    console.error('[login] studentNeedsOnboarding 检查失败，默认走引导:', e?.message || e)
     target = '/pages/login/onboarding/index'
   }
   setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
