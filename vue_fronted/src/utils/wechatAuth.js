@@ -5,21 +5,35 @@ export function isWeChatBrowser() {
   return /MicroMessenger/i.test(navigator.userAgent || '')
 }
 
+const SKIP_WECHAT_AUTO_KEY = 'jnao_skip_wechat_oauth'
+
+/** 用户主动选择手机号/密码登录时调用，本会话内不再自动跳 OAuth */
+export function skipWechatAutoLogin() {
+  try {
+    sessionStorage.setItem(SKIP_WECHAT_AUTO_KEY, '1')
+  } catch (_) { /* ignore */ }
+}
+
 export function shouldAutoWechatOAuth() {
   if (!isWeChatBrowser()) return false
   try {
+    if (sessionStorage.getItem(SKIP_WECHAT_AUTO_KEY) === '1') return false
     const params = new URLSearchParams(window.location.search)
     if (params.get('wx') === '1') return false
-    if (params.get('from') === 'mp') return true
-    return params.get('wechat') === '1'
+    if (params.get('manual') === '1') return false
+    return true
   } catch (_) {
     return false
   }
 }
 
-export async function startWechatOAuth(apiJson) {
-  const redirect = encodeURIComponent(window.location.href.split('?')[0] + '?from=mp')
-  const data = await apiJson(`/api/auth/wechat/oauth-url?redirect=${redirect}`)
+export function wechatLoginRedirectUrl() {
+  return `${window.location.origin}${window.location.pathname}?from=mp`
+}
+
+export async function startWechatOAuth(fetchOAuthUrl) {
+  const redirect = wechatLoginRedirectUrl()
+  const data = await fetchOAuthUrl(redirect)
   if (data?.url) {
     window.location.href = data.url
     return true

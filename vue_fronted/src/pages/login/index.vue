@@ -12,6 +12,10 @@
         <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
       </view>
 
+      <view v-if="wechatLoading" class="wechat-loading">
+        <text>正在跳转微信登录…</text>
+      </view>
+
       <view class="form">
         <template v-if="form.role === 'student'">
           <view class="input-wrap">
@@ -24,10 +28,10 @@
 
         <template v-else-if="parentMode === 'sms'">
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" maxlength="11" />
+            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" />
           </view>
           <view class="input-wrap sms-row">
-            <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="number" maxlength="6" />
+            <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="text" maxlength="6" confirm-type="done" />
             <view class="sms-btn" :class="{ off: smsCooldown > 0 || loginBlocked }" @click="requestLoginSms">
               <text>{{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}</text>
             </view>
@@ -36,15 +40,15 @@
 
         <template v-else>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" maxlength="11" />
+            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" />
           </view>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.password" placeholder="密码" type="password" />
+            <input class="login-input" v-model="form.password" placeholder="密码" type="password" maxlength="64" confirm-type="done" />
           </view>
         </template>
 
         <view class="role-row">
-          <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'">
+          <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'; useManualLogin()">
             <text class="ri-label">学生</text>
           </view>
           <view class="role-item" :class="{ active: form.role === 'parent' }" @click="form.role = 'parent'">
@@ -61,6 +65,9 @@
           <view class="hint-admin" @click="goAdminLogin"><text>管理员入口</text></view>
         </view>
         <view v-else class="sub-actions">
+          <view v-if="inWechat" class="link-row" @click="doWechatLogin">
+            <text class="wechat-link">微信家长一键登录</text>
+          </view>
           <view class="link-row" @click="toggleParentMode">
             <text>{{ parentMode === 'sms' ? '使用密码登录' : '使用验证码登录' }}</text>
           </view>
@@ -100,11 +107,16 @@ import {
   readWechatCallbackParams,
   clearWechatQueryFromUrl,
   redirectParentNextStep,
+  isWeChatBrowser,
+  skipWechatAutoLogin,
+  startWechatOAuth,
 } from '@/utils/wechatAuth.js'
 
 const form = ref({ phone: '', loginName: '', password: '', smsCode: '', role: 'student' })
 const parentMode = ref('sms')
 const submitting = ref(false)
+const wechatLoading = ref(false)
+const inWechat = ref(false)
 const smsCooldown = ref(0)
 const blockRemain = ref(0)
 let cooldownTimer = null
@@ -120,6 +132,10 @@ function refreshBlockState() {
 onMounted(async () => {
   refreshBlockState()
   blockTimer = setInterval(refreshBlockState, 1000)
+  inWechat.value = isWeChatBrowser()
+  if (inWechat.value) {
+    form.value.role = 'parent'
+  }
 
   const wxCb = readWechatCallbackParams()
   if (wxCb?.sessionToken) {
@@ -158,15 +174,39 @@ onMounted(async () => {
   }
 
   if (shouldAutoWechatOAuth()) {
+    wechatLoading.value = true
     try {
-      const redirect = window.location.href.split('?')[0] + '?from=mp'
-      const data = await fetchWechatOAuthUrl(redirect)
-      if (data?.url) {
-        window.location.href = data.url
+      const ok = await startWechatOAuth(fetchWechatOAuthUrl)
+      if (!ok) {
+        wechatLoading.value = false
+        uni.showToast({ title: '微信登录暂不可用，请用手机号登录', icon: 'none' })
       }
-    } catch (_) { /* 未配置微信时展示普通登录页 */ }
+    } catch (e) {
+      wechatLoading.value = false
+      uni.showToast({ title: e.message || '微信登录失败，请用手机号登录', icon: 'none' })
+    }
   }
 })
+
+async function doWechatLogin() {
+  if (wechatLoading.value || submitting.value) return
+  wechatLoading.value = true
+  try {
+    const ok = await startWechatOAuth(fetchWechatOAuthUrl)
+    if (!ok) {
+      uni.showToast({ title: '微信登录暂不可用', icon: 'none' })
+    }
+  } catch (e) {
+    uni.showToast({ title: e.message || '微信登录失败', icon: 'none' })
+  } finally {
+    wechatLoading.value = false
+  }
+}
+
+function useManualLogin() {
+  skipWechatAutoLogin()
+  wechatLoading.value = false
+}
 
 function saveSession(data) {
   if (data?.child_user_id) setChildUserId(data.child_user_id)
@@ -182,6 +222,7 @@ function saveSession(data) {
 }
 
 function toggleParentMode() {
+  useManualLogin()
   parentMode.value = parentMode.value === 'sms' ? 'password' : 'sms'
 }
 
@@ -324,6 +365,7 @@ async function doLogin() {
 }
 
 function goRegister() {
+  useManualLogin()
   uni.navigateTo({ url: '/pages/login/register-parent' })
 }
 
@@ -350,12 +392,15 @@ onUnmounted(() => {
 .subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; margin-bottom:20px; }
 .blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:10px; margin-bottom:12px; text-align:center; }
 .blocked-hint text { color:#f87171; font-size:12px; }
-.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); }
+.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); position:relative; z-index:2; }
 .sms-row { padding-right:4px; }
 .sms-btn { flex-shrink:0; padding:8px 10px; border-radius:8px; background:rgba(88,166,255,0.15); }
 .sms-btn.off { opacity:0.5; }
 .sms-btn text { color:var(--accent); font-size:12px; }
-.login-input { flex:1; padding:14px 0; font-size:15px; color:var(--text); }
+.login-input { flex:1; width:100%; min-height:48px; padding:14px 0; font-size:16px; line-height:1.4; color:var(--text); background:transparent; border:none; box-sizing:border-box; -webkit-user-select:text; user-select:text; }
+.wechat-loading { text-align:center; padding:10px 0 16px; }
+.wechat-loading text { color:var(--accent); font-size:13px; }
+.wechat-link { color:#07c160 !important; font-weight:600; }
 .role-row { display:flex; gap:10px; margin-bottom:22px; }
 .role-item { flex:1; padding:14px; text-align:center; border-radius:12px; border:1.5px solid var(--border); }
 .role-item.active { border-color:var(--accent); background:var(--accent-bg); }
