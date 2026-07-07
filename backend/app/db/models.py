@@ -53,7 +53,7 @@ class ChildUser(Base):
 
 
 class WxMemberSnapshot(Base):
-    """从 db_fz_jingnao.ys_wx_member 同步的微信会员镜像"""
+    """从 db_fz_jingnao.ys_wx_member 同步的微信会员镜像（只读对照，不写入老库）"""
 
     __tablename__ = "wx_member_snapshot"
 
@@ -65,6 +65,27 @@ class WxMemberSnapshot(Base):
     nickname: Mapped[str | None] = mapped_column(String(255))
     truename: Mapped[str | None] = mapped_column(String(64))
     synced_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class DakaMember(Base):
+    """本平台注册家长会员 — 短信/密码/微信登录写入，登录优先查此表"""
+
+    __tablename__ = "daka_member"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False, unique=True)
+    mobile: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    openid: Mapped[str | None] = mapped_column(String(64), unique=True)
+    unionid: Mapped[str | None] = mapped_column(String(64))
+    register_channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    legacy_matched: Mapped[int] = mapped_column(Integer, default=0)
+    legacy_wx_member_id: Mapped[int | None] = mapped_column(Integer)
+    real_name: Mapped[str | None] = mapped_column(String(64))
+    nickname: Mapped[str | None] = mapped_column(String(50))
+    registered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class ParentWechatBind(Base):

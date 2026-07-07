@@ -108,6 +108,7 @@ def apply_schema_patches(engine: Engine) -> None:
     _apply_parent_auth_patches(engine)
     _apply_user_session_table(engine)
     _apply_wechat_auth_tables(engine)
+    _apply_daka_member_table(engine)
     _migrate_user_session_utc_to_cst(engine)
 
 
@@ -229,6 +230,55 @@ def _apply_wechat_auth_tables(engine: Engine) -> None:
             """
         with engine.begin() as conn:
             conn.execute(text(ddl))
+
+
+def _apply_daka_member_table(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "daka_member" in insp.get_table_names():
+        return
+    dialect = engine.dialect.name
+    if dialect == "mysql":
+        ddl = """
+            CREATE TABLE daka_member (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                parent_id INT NOT NULL,
+                mobile VARCHAR(20) NOT NULL,
+                openid VARCHAR(64) NULL,
+                unionid VARCHAR(64) NULL,
+                register_channel VARCHAR(20) NOT NULL,
+                legacy_matched TINYINT NOT NULL DEFAULT 0,
+                legacy_wx_member_id INT NULL,
+                real_name VARCHAR(64) NULL,
+                nickname VARCHAR(50) NULL,
+                registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_daka_member_parent (parent_id),
+                UNIQUE KEY uk_daka_member_mobile (mobile),
+                UNIQUE KEY uk_daka_member_openid (openid),
+                KEY idx_daka_member_legacy_wx (legacy_wx_member_id),
+                FOREIGN KEY (parent_id) REFERENCES child_user(id)
+            )
+        """
+    else:
+        ddl = """
+            CREATE TABLE daka_member (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_id INTEGER NOT NULL UNIQUE,
+                mobile VARCHAR(20) NOT NULL UNIQUE,
+                openid VARCHAR(64) UNIQUE,
+                unionid VARCHAR(64),
+                register_channel VARCHAR(20) NOT NULL,
+                legacy_matched INTEGER NOT NULL DEFAULT 0,
+                legacy_wx_member_id INTEGER,
+                real_name VARCHAR(64),
+                nickname VARCHAR(50),
+                registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (parent_id) REFERENCES child_user(id)
+            )
+        """
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
 
 
 def _apply_user_session_table(engine: Engine) -> None:

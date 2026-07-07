@@ -380,7 +380,15 @@ def ensure_parent_for_phone(
     *,
     phone: str,
     snap: WxMemberSnapshot | None,
+    openid: str | None = None,
+    unionid: str | None = None,
 ) -> ChildUser:
+    from app.services.member_registry_service import (
+        CHANNEL_WECHAT,
+        CHANNEL_WECHAT_LEGACY,
+        register_daka_member_from_user,
+    )
+
     existing = auth_service.find_parent_by_phone(db, phone)
     if existing:
         set_login_channel(existing, LOGIN_CHANNEL_WECHAT)
@@ -390,6 +398,15 @@ def ensure_parent_for_phone(
             parent["real_name"] = snap.truename.strip()
             existing.profile_json = pj
             flag_modified(existing, "profile_json")
+        register_daka_member_from_user(
+            db,
+            existing,
+            register_channel=CHANNEL_WECHAT_LEGACY if snap else CHANNEL_WECHAT,
+            openid=openid,
+            unionid=unionid,
+            legacy_matched=bool(snap),
+            legacy_wx_member_id=snap.wx_member_id if snap else None,
+        )
         db.commit()
         db.refresh(existing)
         return existing
@@ -413,6 +430,15 @@ def ensure_parent_for_phone(
     )
     user.profile_json = pj
     flag_modified(user, "profile_json")
+    register_daka_member_from_user(
+        db,
+        user,
+        register_channel=CHANNEL_WECHAT_LEGACY if snap else CHANNEL_WECHAT,
+        openid=openid,
+        unionid=unionid,
+        legacy_matched=bool(snap),
+        legacy_wx_member_id=snap.wx_member_id if snap else None,
+    )
     db.commit()
     db.refresh(user)
     return user
@@ -486,7 +512,9 @@ def resolve_wechat_login(
     openid: str,
     unionid: str | None,
 ) -> tuple[ChildUser | None, str | None, str]:
-    """返回 (user, bind_ticket, next_step)。user 为空表示需要先绑手机。"""
+    """返回 (user, bind_ticket, next_step)。仅查本地 daka_member / wx_member_snapshot，不访问老库。"""
+    from app.services.member_registry_service import find_daka_member_by_openid
+
     bind = get_bind_by_openid(db, openid)
     if bind:
         user = auth_service.get_child_user(db, bind.parent_id)
@@ -505,19 +533,41 @@ def resolve_wechat_login(
         db.delete(bind)
         db.commit()
 
+    member = find_daka_member_by_openid(db, openid)
+    if member:
+        user = auth_service.get_child_user(db, member.parent_id)
+        if user:
+            set_login_channel(user, LOGIN_CHANNEL_WECHAT)
+            upsert_wechat_bind(
+                db,
+                parent_id=user.id,
+                openid=openid,
+                unionid=unionid,
+                wx_member_id=member.legacy_wx_member_id,
+            )
+            db.commit()
+            db.refresh(user)
+            return user, None, parent_next_step(user)
+
     snap = lookup_member_local(db, openid)
     if not snap:
         return None, None, "register"
 
     mobile = snap.mobile
     if mobile:
-        user = ensure_parent_for_phone(db, phone=mobile, snap=snap)
+        user = ensure_parent_for_phone(
+            db,
+            phone=mobile,
+            snap=snap,
+            openid=openid,
+            unionid=unionid,
+        )
         upsert_wechat_bind(
             db,
             parent_id=user.id,
             openid=openid,
-            unionid=unionid or (snap.unionid if snap else None),
-            wx_member_id=snap.wx_member_id if snap else None,
+            unionid=unionid or snap.unionid,
+            wx_member_id=snap.wx_member_id,
         )
         db.commit()
         db.refresh(user)
@@ -552,7 +602,13 @@ def complete_bind_phone(
     if by_openid and existing and by_openid.parent_id != existing.id:
         raise HTTPException(409, "该微信已绑定其他家长账号")
     snap = lookup_member_local(db, openid)
-    user = ensure_parent_for_phone(db, phone=phone, snap=snap)
+    user = ensure_parent_for_phone(
+        db,
+        phone=phone,
+        snap=snap,
+        openid=openid,
+        unionid=pending.get("unionid"),
+    )
     upsert_wechat_bind(
         db,
         parent_id=user.id,

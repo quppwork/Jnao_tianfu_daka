@@ -238,4 +238,9 @@ def register_parent_by_sms(
     flag_modified(user, "profile_json")
     db.commit()
     db.refresh(user)
+
+    from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
+
+    register_daka_member_from_user(db, user, register_channel=CHANNEL_SMS)
+    db.commit()
     return user
