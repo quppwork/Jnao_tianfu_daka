@@ -1,5 +1,7 @@
 """用户注册 / 登录"""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -52,6 +54,7 @@ from app.services.wechat_auth_service import (
     complete_bind_phone,
     consume_oauth_state,
     frontend_login_url,
+    frontend_wechat_error_url,
     resolve_wechat_login,
     use_external_bind_mobile,
     wechat_app_id,
@@ -61,6 +64,7 @@ from app.services.wechat_auth_service import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger("jnao")
 
 
 def _auth_ctx(request: Request, device_id: str | None = None) -> tuple[str, str]:
@@ -257,28 +261,43 @@ def wechat_callback(
     state: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    if not code:
-        raise HTTPException(400, "缺少微信授权 code")
-    consume_oauth_state(state)
-    openid, unionid = exchange_code_for_openid(code)
-    user, bind_ticket, next_step = resolve_wechat_login(db, openid=openid, unionid=unionid)
+    try:
+        if not code:
+            return RedirectResponse(
+                url=frontend_wechat_error_url(
+                    "微信未返回授权码：请从微信内打开链接，并确认公众平台已配置网页授权域名 jnaosoft.cn"
+                ),
+                status_code=302,
+            )
+        consume_oauth_state(state)
+        openid, unionid = exchange_code_for_openid(code)
+        user, bind_ticket, next_step = resolve_wechat_login(db, openid=openid, unionid=unionid)
 
-    if next_step == "bind-phone" and use_external_bind_mobile():
-        return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
+        if next_step == "bind-phone" and use_external_bind_mobile():
+            return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
 
-    params = {"wx": "1", "next_step": next_step}
-    if user:
-        from app.services.session_service import issue_session
+        params = {"wx": "1", "next_step": next_step}
+        if user:
+            from app.services.session_service import issue_session
 
-        token = issue_session(db, user)
-        db.refresh(user)
-        params["session_token"] = token
-        params["user_id"] = str(user.id)
-        params["role"] = user.role or auth_service.ROLE_PARENT
-    if bind_ticket:
-        params["bind_ticket"] = bind_ticket
+            token = issue_session(db, user)
+            db.refresh(user)
+            params["session_token"] = token
+            params["user_id"] = str(user.id)
+            params["role"] = user.role or auth_service.ROLE_PARENT
+        if bind_ticket:
+            params["bind_ticket"] = bind_ticket
 
-    return RedirectResponse(url=frontend_login_url(**params), status_code=302)
+        return RedirectResponse(url=frontend_login_url(**params), status_code=302)
+    except HTTPException as e:
+        detail = e.detail if isinstance(e.detail, str) else "微信登录失败，请重新进入"
+        return RedirectResponse(url=frontend_wechat_error_url(detail), status_code=302)
+    except Exception:
+        logger.exception("WeChat callback failed")
+        return RedirectResponse(
+            url=frontend_wechat_error_url("微信登录异常，请稍后重试或使用手机登录"),
+            status_code=302,
+        )
 
 
 @router.post("/wechat/send-bind-sms", response_model=SmsSendResponse)

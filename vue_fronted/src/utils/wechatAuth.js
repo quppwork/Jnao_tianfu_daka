@@ -6,6 +6,7 @@ export function isWeChatBrowser() {
 }
 
 const SKIP_WECHAT_AUTO_KEY = 'jnao_skip_wechat_oauth'
+const WECHAT_OAUTH_FAIL_KEY = 'jnao_wechat_oauth_fail_until'
 
 /** 用户主动选择手机号/密码登录时调用，本会话内不再自动跳 OAuth */
 export function skipWechatAutoLogin() {
@@ -14,13 +15,41 @@ export function skipWechatAutoLogin() {
   } catch (_) { /* ignore */ }
 }
 
+/** OAuth 刚失败时调用，避免反复自动跳转 */
+export function markWechatOAuthFailed(cooldownMs = 120000) {
+  skipWechatAutoLogin()
+  try {
+    sessionStorage.setItem(WECHAT_OAUTH_FAIL_KEY, String(Date.now() + cooldownMs))
+  } catch (_) { /* ignore */ }
+}
+
+function wechatOAuthInCooldown() {
+  try {
+    const until = parseInt(sessionStorage.getItem(WECHAT_OAUTH_FAIL_KEY) || '0', 10)
+    return until > Date.now()
+  } catch (_) {
+    return false
+  }
+}
+
+export function readWechatError() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('wx_error') || ''
+  } catch (_) {
+    return ''
+  }
+}
+
 export function shouldAutoWechatOAuth() {
   if (!isWeChatBrowser()) return false
   try {
     if (sessionStorage.getItem(SKIP_WECHAT_AUTO_KEY) === '1') return false
+    if (wechatOAuthInCooldown()) return false
     const params = new URLSearchParams(window.location.search)
     if (params.get('wx') === '1') return false
     if (params.get('manual') === '1') return false
+    if (params.get('wx_error')) return false
     return true
   } catch (_) {
     return false
@@ -60,7 +89,7 @@ export function readWechatCallbackParams() {
 export function clearWechatQueryFromUrl() {
   try {
     const url = new URL(window.location.href)
-    ;['wx', 'session_token', 'user_id', 'next_step', 'bind_ticket', 'role'].forEach((k) => url.searchParams.delete(k))
+    ;['wx', 'session_token', 'user_id', 'next_step', 'bind_ticket', 'role', 'wx_error', 'manual'].forEach((k) => url.searchParams.delete(k))
     window.history.replaceState({}, '', url.pathname + (url.search || ''))
   } catch (_) { /* ignore */ }
 }

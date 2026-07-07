@@ -117,6 +117,16 @@ export function markChildUserSessionValid(uid) {
 }
 
 /** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
+function formatApiError(data, status) {
+  const d = data?.detail ?? data?.message
+  if (typeof d === 'string' && d.trim()) return d
+  if (Array.isArray(d)) {
+    const parts = d.map((x) => x?.msg || x?.message).filter(Boolean)
+    if (parts.length) return parts.join('；')
+  }
+  return `HTTP ${status}`
+}
+
 async function apiJson(url, options = {}) {
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders(options, userId)
@@ -125,12 +135,12 @@ async function apiJson(url, options = {}) {
   if (!res.ok) {
     // 单设备登录：token 失效 → 清除登录态，触发重新登录
     if (res.status === 401) {
-      const msg = data.detail || ''
+      const msg = formatApiError(data, res.status)
       if (msg.includes('已在其他设备登录') || msg.includes('重新登录')) {
         clearChildUserId()
       }
     }
-    const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
+    const err = new Error(formatApiError(data, res.status))
     err.status = res.status
     err.data = data
     throw err

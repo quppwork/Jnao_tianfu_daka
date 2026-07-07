@@ -65,6 +65,11 @@ def frontend_login_url(**params: str) -> str:
     return f"{base}/pages/login/index?{qs}" if qs else f"{base}/pages/login/index"
 
 
+def frontend_wechat_error_url(message: str) -> str:
+    qs = urllib.parse.urlencode({"wx_error": message[:240], "manual": "1"})
+    return f"{site_domain()}/pages/login/index?{qs}"
+
+
 def external_bind_mobile_url() -> str:
     """公司现有绑手机 H5（微信内跳转）。设 WECHAT_BIND_MOBILE_URL= 可关闭并回退 Jnao 内置绑手机。"""
     if "WECHAT_BIND_MOBILE_URL" in os.environ:
@@ -158,8 +163,21 @@ def exchange_code_for_openid(code: str) -> tuple[str, str | None]:
         raise HTTPException(502, "微信授权服务暂不可用") from e
 
     if data.get("errcode"):
-        logger.warning("WeChat oauth error: %s", data)
-        raise HTTPException(400, "微信授权失败，请重新进入")
+        errcode = int(data.get("errcode") or 0)
+        errmsg = data.get("errmsg") or ""
+        logger.warning("WeChat oauth error: %s %s", errcode, errmsg)
+        if errcode == 40013:
+            raise HTTPException(400, "微信 AppSecret 配置错误，请联系管理员")
+        if errcode in (40029, 40163):
+            raise HTTPException(400, "微信授权码已失效，请重新进入")
+        if errcode == 10003:
+            raise HTTPException(
+                400,
+                "微信回调域名未配置：请在公众平台设置网页授权域名为 jnaosoft.cn",
+            )
+        if errcode == 10005:
+            raise HTTPException(400, "公众号无网页授权权限，请确认是已认证服务号")
+        raise HTTPException(400, f"微信授权失败({errcode})，请重新进入")
     openid = (data.get("openid") or "").strip()
     if not openid:
         raise HTTPException(400, "未获取到微信 openid")

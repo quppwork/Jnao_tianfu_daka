@@ -110,6 +110,8 @@ import {
   isWeChatBrowser,
   skipWechatAutoLogin,
   startWechatOAuth,
+  readWechatError,
+  markWechatOAuthFailed,
 } from '@/utils/wechatAuth.js'
 
 const form = ref({ phone: '', loginName: '', password: '', smsCode: '', role: 'student' })
@@ -135,6 +137,18 @@ onMounted(async () => {
   inWechat.value = isWeChatBrowser()
   if (inWechat.value) {
     form.value.role = 'parent'
+  }
+
+  const wxErr = readWechatError()
+  if (wxErr) {
+    wechatLoading.value = false
+    markWechatOAuthFailed()
+    clearWechatQueryFromUrl()
+    uni.showModal({
+      title: '微信登录失败',
+      content: wxErr,
+      showCancel: false,
+    })
   }
 
   const wxCb = readWechatCallbackParams()
@@ -183,7 +197,12 @@ onMounted(async () => {
       }
     } catch (e) {
       wechatLoading.value = false
-      uni.showToast({ title: e.message || '微信登录失败，请用手机号登录', icon: 'none' })
+      markWechatOAuthFailed()
+      uni.showModal({
+        title: '微信登录失败',
+        content: e.message || '请用手机号或密码登录',
+        showCancel: false,
+      })
     }
   }
 })
@@ -194,10 +213,16 @@ async function doWechatLogin() {
   try {
     const ok = await startWechatOAuth(fetchWechatOAuthUrl)
     if (!ok) {
+      markWechatOAuthFailed()
       uni.showToast({ title: '微信登录暂不可用', icon: 'none' })
     }
   } catch (e) {
-    uni.showToast({ title: e.message || '微信登录失败', icon: 'none' })
+    markWechatOAuthFailed()
+    uni.showModal({
+      title: '微信登录失败',
+      content: e.message || '请稍后重试',
+      showCancel: false,
+    })
   } finally {
     wechatLoading.value = false
   }
