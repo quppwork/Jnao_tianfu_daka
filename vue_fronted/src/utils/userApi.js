@@ -39,6 +39,35 @@ export function getChildUserId() {
   return null
 }
 
+/** 当前登录用户 id（家长/学生），优先 CHILD_KEY，否则 jnao_user */
+export function getLoggedInUserId() {
+  const cid = getChildUserId()
+  if (cid) return cid
+  try {
+    const raw = localStorage.getItem('jnao_user')
+    if (raw) {
+      const u = JSON.parse(raw)
+      if (u?.id) return parseInt(u.id, 10)
+    }
+  } catch (e) { /* ignore */ }
+  return null
+}
+
+/** 退出登录并回到登录页 */
+export function logoutAndGoLogin() {
+  try {
+    localStorage.removeItem('jnao_user')
+    localStorage.removeItem('jnao_logged_in')
+    localStorage.removeItem('jnao_login_channel')
+    clearChildUserId()
+  } catch (e) { /* ignore */ }
+  try {
+    uni.reLaunch({ url: '/pages/login/index' })
+  } catch (e) {
+    window.location.href = '/pages/login/index'
+  }
+}
+
 export function setChildUserId(id) {
   try {
     localStorage.setItem(CHILD_KEY, String(id))

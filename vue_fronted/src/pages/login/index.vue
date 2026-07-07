@@ -88,6 +88,7 @@ import {
   fetchWechatOAuthUrl,
   fetchWechatConfig,
   studentNeedsOnboarding,
+  setChildUserId,
 } from '@/utils/userApi.js'
 import {
   isLoginBlocked,
@@ -168,6 +169,7 @@ onMounted(async () => {
 })
 
 function saveSession(data) {
+  if (data?.child_user_id) setChildUserId(data.child_user_id)
   localStorage.setItem('jnao_user', JSON.stringify({
     id: data.child_user_id,
     name: data.nickname,
