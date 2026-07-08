@@ -43,7 +43,8 @@
       </view>
 
       <!-- 浏览器 / 已切换为表单登录 -->
-      <view v-else class="form">
+      <view v-else class="login-main login-main--offset">
+        <view class="form">
         <view v-if="loginBlocked" class="blocked-hint">
           <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
         </view>
@@ -106,9 +107,16 @@
             </view>
           </view>
         </view>
+        </view>
+
+        <view class="page-footer">
+          <text class="footer-link" @click="goAdminLogin">管理员后台</text>
+          <text class="footer-dot">·</text>
+          <text class="footer-link" @click="showLoginHelp">登录帮助</text>
+        </view>
       </view>
 
-      <view class="page-footer">
+      <view v-if="wechatParentOnly" class="page-footer">
         <text class="footer-link" @click="goAdminLogin">管理员后台</text>
         <text class="footer-dot">·</text>
         <text class="footer-link" @click="showLoginHelp">登录帮助</text>
@@ -666,6 +674,7 @@ onUnmounted(() => {
 .logo-ai { font-weight:300; }
 .subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; line-height:1.5; margin-top:-8px; margin-bottom:4px; }
 .sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.5; margin-bottom:20px; opacity:0.85; }
+.login-main--offset { margin-top:100px; }
 .login-flow { padding-top:4px; }
 .flow-title { display:block; text-align:center; color:var(--text); font-size:17px; font-weight:700; margin-bottom:6px; }
 .flow-desc { display:block; text-align:center; color:var(--text-dim); font-size:12px; line-height:1.5; margin-bottom:16px; padding:0 4px; }
