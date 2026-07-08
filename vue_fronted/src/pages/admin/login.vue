@@ -1,18 +1,23 @@
 <template>
   <view class="app">
     <view class="card">
-      <text class="title">管理员登录</text>
+      <text class="badge">仅限工作人员</text>
+      <text class="title">管理后台登录</text>
+      <text class="desc">与家长 / 孩子账号分开，请勿在此使用手机号或昵称</text>
       <view class="input-wrap">
         <input class="input" v-model="form.loginName" placeholder="管理员账号" />
       </view>
       <view class="input-wrap">
-        <input class="input" v-model="form.password" placeholder="密码" type="password" />
+        <input class="input" v-model="form.password" placeholder="管理员密码" type="password" />
       </view>
       <view class="btn" @click="doLogin">
         <text>{{ submitting ? '登录中...' : '进入管理后台' }}</text>
       </view>
-      <view class="back" @click="goBack"><text>返回登录页</text></view>
-      <view class="back" @click="confirmClearCache"><text>登录异常？清除本机登录缓存</text></view>
+      <view class="footer">
+        <text class="footer-link" @click="goBack">← 返回用户登录</text>
+        <text class="footer-dot">·</text>
+        <text class="footer-link" @click="confirmClearCache">清除登录状态</text>
+      </view>
     </view>
   </view>
 </template>
@@ -50,8 +55,8 @@ function goBack() {
 
 function confirmClearCache() {
   uni.showModal({
-    title: '清除登录缓存',
-    content: '仅清除本网站的登录信息，清除后需重新登录。确定？',
+    title: '清除登录状态',
+    content: '清除本网站全部登录信息，确定？',
     success: (r) => {
       if (!r.confirm) return
       resetLocalAuthCache()
@@ -64,11 +69,14 @@ function confirmClearCache() {
 <style scoped>
 .app { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--bg); }
 .card { width:100%; max-width:360px; background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:24px; }
-.title { display:block; text-align:center; color:var(--text); font-size:18px; font-weight:700; margin-bottom:20px; }
+.badge { display:block; text-align:center; color:#f59e0b; font-size:11px; font-weight:600; margin-bottom:8px; letter-spacing:0.05em; }
+.title { display:block; text-align:center; color:var(--text); font-size:18px; font-weight:700; margin-bottom:8px; }
+.desc { display:block; text-align:center; color:var(--text-dim); font-size:12px; line-height:1.5; margin-bottom:20px; }
 .input-wrap { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:0 12px; margin-bottom:12px; }
 .input { padding:12px 0; font-size:15px; color:var(--text); width:100%; }
 .btn { background:linear-gradient(135deg,#f59e0b,#d97706); border-radius:12px; padding:14px; text-align:center; margin-top:8px; }
 .btn text { color:#fff; font-weight:600; }
-.back { margin-top:16px; text-align:center; }
-.back text { color:var(--text-dim); font-size:13px; }
+.footer { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:20px; padding-top:14px; border-top:1px solid var(--border); }
+.footer-link { color:var(--text-dim); font-size:12px; }
+.footer-dot { color:var(--text-dim); font-size:12px; opacity:0.5; }
 </style>
