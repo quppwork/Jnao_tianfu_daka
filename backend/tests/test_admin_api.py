@@ -52,6 +52,31 @@ def _seed_parent(db_session, phone: str, nickname: str) -> int:
 
 
 class TestAdminApi:
+    def test_ensure_admin_retires_legacy_admins_and_sessions(self, db_session, monkeypatch):
+        from app.services import auth_service
+        from app.services.session_service import issue_session, validate_session
+
+        monkeypatch.setenv("ADMIN_LOGIN_NAME", "new_admin")
+        monkeypatch.setenv("ADMIN_PASSWORD", "1234567890123456")
+        legacy = auth_service.register_child(
+            db_session,
+            parent_phone="admin_legacy",
+            nickname="旧管理员",
+            login_name="pyx_legacy",
+            password="123456",
+            role=auth_service.ROLE_ADMIN,
+        )
+        legacy_token = issue_session(db_session, legacy)
+        assert validate_session(db_session, legacy.id, legacy_token)
+
+        kept = auth_service.ensure_admin_account(db_session)
+        assert kept.login_name == "new_admin"
+        assert auth_service.find_admin_by_login_name(db_session, "pyx_legacy") is None
+        legacy_row = db_session.get(type(legacy), legacy.id)
+        assert legacy_row.account_status == auth_service.ACCOUNT_DELETED
+        assert not validate_session(db_session, legacy.id, legacy_token)
+        assert auth_service.login_admin_by_password(db_session, "pyx_legacy", "123456") is None
+
     def test_admin_login(self, client: TestClient):
         data = _admin_login(client)
         assert data["role"] == "admin"

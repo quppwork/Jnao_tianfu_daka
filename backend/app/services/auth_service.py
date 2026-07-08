@@ -147,9 +147,35 @@ def login_student_by_password(db: Session, login_name: str, password: str) -> Ch
 
 def login_admin_by_password(db: Session, login_name: str, password: str) -> ChildUser | None:
     user = find_admin_by_login_name(db, login_name.strip())
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not is_account_active(user):
+        return None
+    if not verify_password(password, user.password_hash):
         return None
     return user
+
+
+def retire_other_admin_accounts(db: Session, *, keep_id: int) -> int:
+    """废除 env 指定以外的所有活跃管理员，并吊销其全部 session。"""
+    import logging
+
+    from app.services.session_service import revoke_all_sessions
+
+    logger = logging.getLogger("jnao")
+    others = db.scalars(
+        select(ChildUser).where(
+            ChildUser.role == ROLE_ADMIN,
+            ChildUser.id != keep_id,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
+        )
+    ).all()
+    if not others:
+        return 0
+    for admin in others:
+        admin.account_status = ACCOUNT_DELETED
+        revoke_all_sessions(db, admin.id)
+        logger.info("已废除旧管理员 login_name=%s id=%s", admin.login_name, admin.id)
+    db.commit()
+    return len(others)
 
 
 def ensure_admin_account(db: Session) -> ChildUser | None:
@@ -169,11 +195,19 @@ def ensure_admin_account(db: Session) -> ChildUser | None:
     existing = find_admin_by_login_name(db, login_name)
     if existing:
         existing.nickname = existing.nickname or "管理员"
+        pwd_changed = False
         if not verify_password(password, existing.password_hash):
             existing.password_hash = hash_password(password)
+            pwd_changed = True
             logger.info("管理员密码已按环境变量更新")
         db.commit()
         db.refresh(existing)
+        if pwd_changed:
+            from app.services.session_service import revoke_all_sessions
+
+            revoke_all_sessions(db, existing.id)
+            db.commit()
+        retire_other_admin_accounts(db, keep_id=existing.id)
         return existing
     user = register_child(
         db,
@@ -184,6 +218,7 @@ def ensure_admin_account(db: Session) -> ChildUser | None:
         role=ROLE_ADMIN,
     )
     logger.info("已创建管理员账号 login_name=%s", login_name)
+    retire_other_admin_accounts(db, keep_id=user.id)
     return user
 
 
