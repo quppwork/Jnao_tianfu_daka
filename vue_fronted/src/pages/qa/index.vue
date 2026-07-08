@@ -270,6 +270,8 @@ import {
 
   ensureChildUser,
 
+  requirePageAuth,
+
   fetchQaSessions,
 
   createQaSession,
@@ -1478,6 +1480,9 @@ function scrollChat() {
 
 
 onMounted(async () => {
+
+  const auth = await requirePageAuth('student')
+  if (!auth) return
 
   try { localStorage.removeItem('jnao_learner_profile_set') } catch (_) {}
 

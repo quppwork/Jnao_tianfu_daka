@@ -143,6 +143,7 @@ def update_parent_profile(
     nickname: str | None = None,
     real_name: str | None = None,
     password: str | None = None,
+    old_password: str | None = None,
     require_password: bool = False,
 ) -> tuple[ChildUser, str | None]:
     user = db.get(ChildUser, user_id)
@@ -173,9 +174,15 @@ def update_parent_profile(
         if pwd and len(pwd) < 6:
             raise HTTPException(400, "密码至少6位")
         if pwd:
-            from app.core.password import hash_password
+            from app.core.password import hash_password, verify_password
             from app.services.session_service import issue_session, revoke_all_sessions
 
+            if user.password_hash:
+                old = (old_password or "").strip()
+                if not old:
+                    raise HTTPException(400, "修改密码需提供原密码")
+                if not verify_password(old, user.password_hash):
+                    raise HTTPException(401, "原密码错误")
             user.password_hash = hash_password(pwd)
             revoke_all_sessions(db, user.id)
             new_session_token = issue_session(db, user)

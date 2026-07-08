@@ -103,7 +103,7 @@ export function redirectToLoginForKind(kind) {
 
 const _authValidatedAt = { admin: 0, parent: 0, student: 0 }
 const _authValidatedUid = { admin: null, parent: null, student: null }
-const AUTH_VALIDATE_TTL = 5 * 60 * 1000
+const AUTH_VALIDATE_TTL = 60 * 1000
 
 export function invalidatePageAuthCache(kind = null) {
   const kinds = kind ? [kind] : ['admin', 'parent', 'student']
@@ -512,14 +512,15 @@ function _storeAuth(data) {
   } catch (e) { /* ignore */ }
   if (role === 'student') {
     setChildUserId(data.child_user_id)
+    try { localStorage.setItem('jnao_student_user_id', String(data.child_user_id)) } catch (_) {}
     markChildUserSessionValid(data.child_user_id)
     invalidatePageAuthCache('student')
     _authValidatedUid.student = data.child_user_id
     _authValidatedAt.student = Date.now()
-  } else {
-    try { localStorage.removeItem(CHILD_KEY) } catch (e) { /* ignore */ }
-    invalidateChildUserSession()
+  } else if (role === 'parent') {
+    try { localStorage.setItem('jnao_parent_user_id', String(data.child_user_id)) } catch (_) {}
     setChildUserId(data.child_user_id)
+    invalidateChildUserSession()
     invalidatePageAuthCache('parent')
     _authValidatedUid.parent = data.child_user_id
     _authValidatedAt.parent = Date.now()
@@ -566,9 +567,17 @@ export async function fetchCaptcha() {
   return apiJson('/api/auth/captcha')
 }
 
-/** 家长手机号注册状态（child_user / daka_member / wx_snapshot） */
-export async function checkParentPhone(phone) {
-  return apiJson(`/api/auth/parent/phone-check?phone=${encodeURIComponent(phone)}`)
+/** 家长手机号注册状态 — 需图形验证码（B10） */
+export async function checkParentPhone(phone, { captchaId, captchaCode } = {}) {
+  return apiJson('/api/auth/parent/phone-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({
+      phone,
+      captcha_id: captchaId,
+      captcha_code: captchaCode,
+    }),
+  })
 }
 
 /** 发送短信验证码 scene: login | register */

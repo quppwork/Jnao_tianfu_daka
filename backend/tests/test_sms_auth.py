@@ -27,9 +27,16 @@ def _send_register_sms(client: TestClient, phone: str) -> None:
 
 
 def _send_login_sms(client: TestClient, phone: str) -> None:
+    cap = client.get("/api/auth/captcha")
+    cid = cap.json()["captcha_id"]
     res = client.post(
         "/api/auth/sms/send",
-        json={"phone": phone, "scene": "login"},
+        json={
+            "phone": phone,
+            "scene": "login",
+            "captcha_id": cid,
+            "captcha_code": "0000",
+        },
     )
     assert res.status_code == 200, res.text
 
@@ -153,6 +160,23 @@ class TestSmsAuth:
             json={"phone": "13900008899", "sms_code": "88888"},
         )
         assert res.status_code == 400
+
+    def test_login_sms_requires_captcha(self, client: TestClient, db_session):
+        from app.services.auth_service import register_child, ROLE_PARENT
+
+        register_child(
+            db_session,
+            parent_phone="13900008818",
+            nickname="需验证码",
+            role=ROLE_PARENT,
+            child_quota=5,
+        )
+        res = client.post(
+            "/api/auth/sms/send",
+            json={"phone": "13900008818", "scene": "login"},
+        )
+        assert res.status_code == 400
+        assert "图形验证" in res.json()["detail"]
 
     def test_admin_blacklist_unban(self, client: TestClient, db_session):
         from app.services.blacklist_service import add_blacklist_entry

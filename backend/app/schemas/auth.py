@@ -121,7 +121,14 @@ class ParentProfileUpdateRequest(BaseModel):
     nickname: str | None = Field(None, min_length=1, max_length=50)
     real_name: str | None = Field(None, min_length=1, max_length=50)
     password: str | None = Field(None, min_length=6, max_length=128)
+    old_password: str | None = Field(None, min_length=6, max_length=128)
     require_password: bool = False
+
+
+class PhoneCheckRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    captcha_id: str = Field(..., min_length=1, max_length=64)
+    captcha_code: str = Field(..., min_length=4, max_length=8)
 
 
 # 兼容旧引用

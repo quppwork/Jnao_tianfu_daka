@@ -87,10 +87,7 @@ const phoneBlocked = ref(false)
 let cooldownTimer = null
 
 onLoad((opts) => {
-  if (opts?.phone) {
-    form.value.phone = String(opts.phone)
-    onPhoneBlur()
-  }
+  if (opts?.phone) form.value.phone = String(opts.phone)
 })
 
 async function loadCaptcha() {
@@ -112,16 +109,42 @@ function startCooldown(sec = 60) {
   }, 1000)
 }
 
-async function onPhoneBlur() {
+function onPhoneBlur() {
   phoneHint.value = ''
   phoneBlocked.value = false
-  const phone = form.value.phone.trim()
-  if (phone.length < 11) return
+}
+
+function goLogin(phone = '') {
+  const q = phone ? `?phone=${encodeURIComponent(phone)}` : ''
+  uni.redirectTo({ url: `/pages/login/index${q}` })
+}
+
+async function openCaptchaModal() {
+  if (smsCooldown.value > 0 || loginBusy.value || phoneBlocked.value) return
+  if (!form.value.realName.trim()) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
+  if (!form.value.nickname.trim()) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
+  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
+    uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
+  }
+  await loadCaptcha()
+  showCaptcha.value = true
+}
+
+async function confirmSendSms() {
+  if (!captchaCode.value.trim()) {
+    uni.showToast({ title: '请输入图形验证码', icon: 'none' }); return
+  }
+  sendingSms.value = true
   try {
-    const st = await checkParentPhone(phone)
+    const phone = form.value.phone.trim()
+    const st = await checkParentPhone(phone, {
+      captchaId: captchaId.value,
+      captchaCode: captchaCode.value.trim(),
+    })
     if (st.registered) {
       phoneBlocked.value = true
       phoneHint.value = st.message || '该手机号已注册'
+      showCaptcha.value = false
       if (st.action === 'wechat_login') {
         uni.showModal({
           title: '请使用微信登录',
@@ -137,35 +160,9 @@ async function onPhoneBlur() {
           success: (r) => { if (r.confirm) goLogin(phone) },
         })
       }
+      return
     }
-  } catch (_) { /* ignore */ }
-}
-
-function goLogin(phone = '') {
-  const q = phone ? `?phone=${encodeURIComponent(phone)}` : ''
-  uni.redirectTo({ url: `/pages/login/index${q}` })
-}
-
-async function openCaptchaModal() {
-  if (smsCooldown.value > 0 || loginBusy.value || phoneBlocked.value) return
-  if (!form.value.realName.trim()) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
-  if (!form.value.nickname.trim()) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
-  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
-    uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
-  }
-  await onPhoneBlur()
-  if (phoneBlocked.value) return
-  await loadCaptcha()
-  showCaptcha.value = true
-}
-
-async function confirmSendSms() {
-  if (!captchaCode.value.trim()) {
-    uni.showToast({ title: '请输入图形验证码', icon: 'none' }); return
-  }
-  sendingSms.value = true
-  try {
-    await sendParentSmsCode(form.value.phone.trim(), 'register', {
+    await sendParentSmsCode(phone, 'register', {
       captchaId: captchaId.value,
       captchaCode: captchaCode.value.trim(),
     })

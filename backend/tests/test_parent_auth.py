@@ -228,10 +228,26 @@ class TestParentAuth:
         auth = _parent_auth(parent)
         res = client.put(
             "/api/parent/profile",
-            json={"real_name": "张三", "nickname": "张家长", "password": "654321"},
+            json={
+                "real_name": "张三",
+                "nickname": "张家长",
+                "password": "654321",
+                "old_password": "123456",
+            },
             **auth,
         )
         assert res.status_code == 200, res.text
         data = res.json()
         assert data.get("session_token")
         assert data["session_token"] != parent["session_token"]
+
+    def test_parent_profile_password_requires_old_password(self, client: TestClient):
+        parent = _register_parent(client, "13900003336", password="123456")
+        auth = _parent_auth(parent)
+        res = client.put(
+            "/api/parent/profile",
+            json={"password": "654321"},
+            **auth,
+        )
+        assert res.status_code == 400
+        assert "原密码" in res.json()["detail"]

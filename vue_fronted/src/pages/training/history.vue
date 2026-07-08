@@ -84,7 +84,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, fetchTrainingHistory } from '@/utils/userApi.js'
+import { requirePageAuth, ensureChildUser, fetchTrainingHistory } from '@/utils/userApi.js'
 import { miniCardSummary, cardsFromRecord, attitudeEmoji } from '@/utils/trainingCardDisplay.js'
 
 function miniCardDetail(c) {
@@ -141,7 +141,11 @@ function closeDetail() {
   detailCards.value = []
 }
 
-onMounted(() => loadHistory(true))
+onMounted(async () => {
+  const auth = await requirePageAuth('student')
+  if (!auth) return
+  loadHistory(true)
+})
 onShow(() => loadHistory(true))
 </script>
 

@@ -109,27 +109,25 @@ def get_admin_user(
     session_token: str | None = Query(None, description="会话令牌（已弃用，请用 Header）"),
     db: Session = Depends(get_db),
 ) -> int:
-    """验证管理员 session_token + role=admin"""
+    """验证管理员 session；先校验 token 再查 role，避免枚举 admin user_id（B12）。"""
     uid = user_id or x_child_user_id
     if not uid or uid < 1:
-        raise HTTPException(401, "需要有效的管理员 user_id")
-
-    from app.db.models import ChildUser
-    from app.services import auth_service
-
-    user = db.get(ChildUser, uid)
-    if not user or user.role != auth_service.ROLE_ADMIN:
-        raise HTTPException(403, "需要管理员权限")
-
-    from app.services.auth_service import is_account_active
-    from app.services.session_service import validate_session
-
-    if not is_account_active(user):
-        raise HTTPException(401, "管理员账号已停用")
+        raise HTTPException(401, "管理员会话无效，请重新登录")
 
     token = _resolve_session_token(request, x_session_token, session_token)
     if not token:
         raise HTTPException(401, "管理员会话无效，请重新登录")
+
+    from app.db.models import ChildUser
+    from app.services import auth_service
+    from app.services.auth_service import is_account_active
+    from app.services.session_service import validate_session
+
+    user = db.get(ChildUser, uid)
+    if not user or not is_account_active(user):
+        raise HTTPException(401, "管理员会话无效，请重新登录")
     if not validate_session(db, uid, token):
         raise HTTPException(401, "管理员会话无效或已在其他设备登录，请重新登录")
+    if user.role != auth_service.ROLE_ADMIN:
+        raise HTTPException(401, "管理员会话无效，请重新登录")
     return uid

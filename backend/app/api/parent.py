@@ -56,6 +56,7 @@ def put_profile(
         nickname=req.nickname,
         real_name=req.real_name,
         password=req.password,
+        old_password=req.old_password,
         require_password=req.require_password,
     )
     invalidate_user_profile(user_id)

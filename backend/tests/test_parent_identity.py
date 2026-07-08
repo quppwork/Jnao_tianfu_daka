@@ -57,11 +57,26 @@ class TestParentIdentityApi:
             WxMemberSnapshot(openid="o_api_snap", mobile="13900009904", nickname="镜像")
         )
         db_session.commit()
-        res = client.get("/api/auth/parent/phone-check", params={"phone": "13900009904"})
+        cap = client.get("/api/auth/captcha")
+        res = client.post(
+            "/api/auth/parent/phone-check",
+            json={
+                "phone": "13900009904",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
+        )
         assert res.status_code == 200
         data = res.json()
         assert data["registered"] is True
         assert data["action"] == ACTION_WECHAT_LOGIN
+
+    def test_phone_check_requires_captcha(self, client: TestClient):
+        res = client.post(
+            "/api/auth/parent/phone-check",
+            json={"phone": "13900009999"},
+        )
+        assert res.status_code in (400, 422)
 
     def test_register_sms_blocked_by_snapshot(self, client: TestClient, db_session):
         db_session.add(

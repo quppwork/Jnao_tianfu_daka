@@ -53,6 +53,8 @@ async def lifespan(_app: FastAPI):
     from app.core.security import assert_production_auth_config
 
     assert_production_auth_config()
+    if not os.getenv("REDIS_URL", "").strip() and os.getenv("JNAO_SKIP_ADMIN_SEED") != "1":
+        logger.warning("未配置 REDIS_URL：多 worker 下限流/OAuth 状态不共享（B16）")
     init_db()
     _seed_catalog_if_empty()
     yield

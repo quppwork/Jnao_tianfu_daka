@@ -625,6 +625,31 @@ def get_parent_real_name_safe(user: ChildUser) -> str | None:
     return name.strip() or None
 
 
+BIND_SMS_MAX_PER_TICKET = 3
+
+
+def _refresh_bind_ticket(ticket: str, row: dict) -> None:
+    challenge_set(_bind_key(ticket), row, WX_BIND_TTL)
+
+
+def assert_bind_ticket_sms_allowed(bind_ticket: str, phone: str) -> dict:
+    """绑手机 SMS 限次 + 锁定手机号（B19）。"""
+    from app.services.sms_service import normalize_phone
+
+    row = get_bind_ticket(bind_ticket)
+    sms_count = int(row.get("sms_count") or 0)
+    if sms_count >= BIND_SMS_MAX_PER_TICKET:
+        raise HTTPException(429, "该绑定会话验证码次数已达上限，请重新从微信进入")
+    p = normalize_phone(phone)
+    locked = (row.get("phone") or "").strip()
+    if locked and locked != p:
+        raise HTTPException(400, "请使用首次发送验证码的手机号")
+    row["sms_count"] = sms_count + 1
+    row["phone"] = p
+    _refresh_bind_ticket(bind_ticket, row)
+    return row
+
+
 def create_bind_ticket(*, openid: str, unionid: str | None, wx_member_id: int | None) -> str:
     ticket = secrets.token_urlsafe(18)
     challenge_set(
@@ -633,6 +658,8 @@ def create_bind_ticket(*, openid: str, unionid: str | None, wx_member_id: int | 
             "openid": openid,
             "unionid": unionid,
             "wx_member_id": wx_member_id,
+            "sms_count": 0,
+            "phone": "",
         },
         WX_BIND_TTL,
     )

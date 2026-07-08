@@ -111,6 +111,9 @@
         <view class="input-wrap">
           <input class="form-input" v-model="profileForm.nickname" placeholder="昵称" />
         </view>
+        <view v-if="profileHasPassword" class="input-wrap">
+          <input class="form-input" v-model="profileForm.oldPassword" placeholder="原密码（改密必填）" type="password" />
+        </view>
         <view class="input-wrap">
           <input class="form-input" v-model="profileForm.password" placeholder="新密码（留空不改）" type="password" />
         </view>
@@ -153,7 +156,8 @@ const savingProfile = ref(false)
 const isLight = ref(false)
 const editingChild = ref(null)
 const childForm = ref({ loginName: '', nickname: '', password: '', age: null, grade: '' })
-const profileForm = ref({ phone: '', realName: '', nickname: '', password: '', confirm: '' })
+const profileForm = ref({ phone: '', realName: '', nickname: '', oldPassword: '', password: '', confirm: '' })
+const profileHasPassword = ref(false)
 
 const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120，与后端校验一致
 const ageIndex = computed(() => {
@@ -248,9 +252,11 @@ async function openProfileForm() {
       phone: p.parent_phone || '',
       realName: p.real_name || '',
       nickname: p.nickname || '',
+      oldPassword: '',
       password: '',
       confirm: '',
     }
+    profileHasPassword.value = !!p.has_password
     showProfileForm.value = true
   } catch (_) {
     uni.showToast({ title: '加载资料失败', icon: 'none' })
@@ -269,13 +275,19 @@ async function saveProfile() {
   if (!realName) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
   if (!nickname) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
   if (pwd || confirm) {
+    if (profileHasPassword.value && !profileForm.value.oldPassword.trim()) {
+      uni.showToast({ title: '请输入原密码', icon: 'none' }); return
+    }
     if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
     if (pwd !== confirm) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
   }
   savingProfile.value = true
   try {
     const body = { real_name: realName, nickname }
-    if (pwd) body.password = pwd
+    if (pwd) {
+      body.password = pwd
+      if (profileHasPassword.value) body.old_password = profileForm.value.oldPassword.trim()
+    }
     const p = await updateParentProfile(parentId.value, body)
     parentName.value = p.nickname || parentName.value
     try {

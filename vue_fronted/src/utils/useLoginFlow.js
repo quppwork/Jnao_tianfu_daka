@@ -19,7 +19,7 @@ export function inferHomeFromSession() {
     if (role === 'parent') return '/pages/parent/index'
     if (role === 'student') return '/pages/index'
   } catch (_) { /* ignore */ }
-  return '/pages/parent/index'
+  return '/pages/login/index'
 }
 
 export function useLoginFlow() {

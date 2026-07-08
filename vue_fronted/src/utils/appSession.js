@@ -37,7 +37,20 @@ export function sessionKeysForKind(kind) {
   if (kind === 'admin') {
     return ['jnao_admin_user', 'jnao_admin_token']
   }
+  if (kind === 'parent') {
+    return [
+      'jnao_parent_user_id',
+      'jnao_child_user_id',
+      'jnao_session_token',
+      'jnao_user',
+      'jnao_logged_in',
+      'jnao_login_channel',
+      'jnao_guest_phone',
+      'jnao_guest_nickname',
+    ]
+  }
   return [
+    'jnao_student_user_id',
     'jnao_child_user_id',
     'jnao_session_token',
     'jnao_user',
@@ -81,9 +94,16 @@ export function readAuthSnapshot(getItem) {
 
   let parent = null
   let student = null
-  if (userId && token) {
-    if (role === 'parent') parent = { userId, token }
-    else student = { userId, token }
+  const parentSlotId = parseInt(get('jnao_parent_user_id') || '', 10) || null
+  const studentSlotId = parseInt(get('jnao_student_user_id') || '', 10) || null
+  if (token) {
+    if (role === 'parent') {
+      const pid = parentSlotId || userId
+      if (pid) parent = { userId: pid, token }
+    } else if (role === 'student') {
+      const sid = studentSlotId || userId
+      if (sid) student = { userId: sid, token }
+    }
   }
 
   return {
@@ -164,4 +184,14 @@ export function rememberCurrentRoute() {
 export function routeToUrl(route, query = '') {
   const q = String(query || '').replace(/^\?/, '')
   return q ? `${route}?${q}` : route
+}
+
+/** 登录成功后恢复刷新前页面（F11） */
+export function consumePostLoginRoute(fallbackUrl) {
+  const snap = readRouteSnapshot()
+  if (!snap?.route || isPublicPath(snap.route)) return fallbackUrl
+  try {
+    sessionStorage.removeItem(LAST_ROUTE_KEY)
+  } catch (_) { /* ignore */ }
+  return routeToUrl(snap.route, snap.query)
 }

@@ -107,6 +107,18 @@
       <view class="login-spinner"></view>
       <text class="login-overlay-text">{{ overlayText || '请稍候…' }}</text>
     </view>
+
+    <view v-if="showCaptcha" class="overlay" @click="showCaptcha = false">
+      <view class="captcha-panel" @click.stop>
+        <text class="captcha-title">安全验证</text>
+        <image v-if="captchaImage" class="captcha-img" :src="captchaImage" mode="aspectFit" @click="loadCaptcha" />
+        <view class="input-wrap"><input v-model="captchaCode" class="login-input" placeholder="图形验证码" maxlength="6" /></view>
+        <view class="captcha-actions">
+          <view class="sms-btn" @click="loadCaptcha"><text>换一张</text></view>
+          <view class="btn-login captcha-confirm" @click="confirmLoginSms"><text>{{ sendingSms ? '发送中…' : '发送验证码' }}</text></view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -117,6 +129,7 @@ import {
   loginStudent,
   loginParentSms,
   sendParentSmsCode,
+  fetchCaptcha,
   parentNeedsProfileComplete,
   parentNeedsAccountReady,
   saveAuthSession,
@@ -152,6 +165,7 @@ import {
   inferHomeFromSession,
   minDelay,
 } from '@/utils/useLoginFlow.js'
+import { consumePostLoginRoute } from '@/utils/appSession.js'
 
 const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
@@ -162,6 +176,11 @@ const inWechat = ref(false)
 const browserLogin = ref(false)
 const smsCooldown = ref(0)
 const blockRemain = ref(0)
+const showCaptcha = ref(false)
+const captchaId = ref('')
+const captchaCode = ref('')
+const captchaImage = ref('')
+const sendingSms = ref(false)
 let cooldownTimer = null
 let blockTimer = null
 
@@ -348,18 +367,43 @@ function startCooldown(sec = 60) {
   }, 1000)
 }
 
+async function loadCaptcha() {
+  const data = await fetchCaptcha()
+  captchaId.value = data.captcha_id
+  captchaImage.value = `data:image/svg+xml;base64,${data.image_base64}`
+  captchaCode.value = ''
+}
+
 async function requestLoginSms() {
   if (loginBlocked.value || smsCooldown.value > 0 || loginBusy.value) return
   if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
     uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
   }
   try {
-    await sendParentSmsCode(form.value.phone.trim(), 'login')
+    await loadCaptcha()
+    showCaptcha.value = true
+  } catch (e) {
+    uni.showToast({ title: e.message || '验证码加载失败', icon: 'none' })
+  }
+}
+
+async function confirmLoginSms() {
+  if (!captchaCode.value.trim()) {
+    uni.showToast({ title: '请输入图形验证码', icon: 'none' }); return
+  }
+  sendingSms.value = true
+  try {
+    await sendParentSmsCode(form.value.phone.trim(), 'login', {
+      captchaId: captchaId.value,
+      captchaCode: captchaCode.value.trim(),
+    })
+    showCaptcha.value = false
     startCooldown(60)
     uni.showToast({ title: '验证码已发送', icon: 'none' })
   } catch (e) {
     if (e.status === 404) {
       const msg = e.message || ''
+      showCaptcha.value = false
       if (msg.includes('老系统') || msg.includes('微信')) {
         uni.showModal({
           title: '请使用微信登录',
@@ -375,9 +419,12 @@ async function requestLoginSms() {
       }
     } else {
       uni.showToast({ title: e.message || '发送失败', icon: 'none' })
+      await loadCaptcha()
     }
     if (e.status === 403 || e.status === 429) recordLoginFail()
     refreshBlockState()
+  } finally {
+    sendingSms.value = false
   }
 }
 
@@ -413,6 +460,7 @@ async function routeParentHome(data) {
       }
     } catch (_) { /* fallback local bind page */ }
   }
+  if (target === '/pages/parent/index') target = consumePostLoginRoute(target)
   uni.redirectTo({ url: target })
 }
 
@@ -427,6 +475,7 @@ async function routeStudentHome(data) {
     console.error('[login] studentNeedsOnboarding 检查失败，默认走引导:', e?.message || e)
     target = '/pages/login/onboarding/index'
   }
+  if (target === '/pages/index') target = consumePostLoginRoute(target)
   uni.redirectTo({ url: target })
 }
 
@@ -599,4 +648,10 @@ onUnmounted(() => {
 }
 .login-overlay-text { color: #fff; font-size: 14px; }
 @keyframes loginSpin { to { transform: rotate(360deg); } }
+.overlay { position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; padding:20px; }
+.captcha-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px; border:1px solid var(--border); }
+.captcha-title { display:block; text-align:center; font-weight:700; color:var(--text); margin-bottom:12px; }
+.captcha-img { width:100%; height:48px; margin-bottom:10px; border-radius:8px; background:#f3f4f6; }
+.captcha-actions { display:flex; gap:10px; margin-top:12px; align-items:center; }
+.captcha-confirm { flex:1; padding:12px; }
 </style>
