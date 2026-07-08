@@ -66,6 +66,124 @@ def reactivate_student_for_login(db: Session, student: ChildUser) -> None:
     db.flush()
 
 
+def effective_parent_phone(user: ChildUser) -> str:
+    phone = (user.parent_phone or "").strip()
+    if phone.startswith("__deleted_parent_"):
+        archived = (user.profile_json or {}).get("archived_parent_phone") or ""
+        return archived.strip() or phone
+    return phone
+
+
+def effective_student_login_name(user: ChildUser) -> str | None:
+    ln = (user.login_name or "").strip()
+    if ln.startswith("__deleted_"):
+        archived = (user.profile_json or {}).get("archived_login_name") or ""
+        return archived.strip() or ln
+    return ln or None
+
+
+def restore_student_account(db: Session, student: ChildUser) -> None:
+    """管理员恢复：还原硬删时改写的 login_name / parent_phone。"""
+    if student.role != ROLE_STUDENT:
+        return
+    pj = dict(student.profile_json or {})
+    ln = effective_student_login_name(student)
+    if ln and ln != student.login_name and not ln.startswith("__deleted_"):
+        student.login_name = ln
+    archived_phone = (pj.get("archived_parent_phone") or "").strip()
+    if student.parent_phone.startswith("__deleted_student_") and archived_phone:
+        student.parent_phone = archived_phone
+    student.account_status = ACCOUNT_ACTIVE
+    student.deleted_at = None
+    db.flush()
+
+
+def restore_parent_account(db: Session, parent: ChildUser) -> ChildUser:
+    """管理员恢复家长；同步恢复名下孩子并尽量补回绑定。"""
+    from fastapi import HTTPException
+    from app.services.sms_service import normalize_phone
+
+    if parent.role != ROLE_PARENT:
+        raise ValueError("not a parent")
+    if is_account_active(parent):
+        return parent
+
+    pj = dict(parent.profile_json or {})
+    archived_phone = (pj.get("archived_parent_phone") or "").strip()
+    if parent.parent_phone.startswith("__deleted_parent_") and archived_phone:
+        parent.parent_phone = archived_phone
+    archived_nick = (pj.get("archived_nickname") or "").strip()
+    if archived_nick and parent.nickname != archived_nick:
+        parent.nickname = archived_nick
+
+    parent.account_status = ACCOUNT_ACTIVE
+    parent.deleted_at = None
+    db.flush()
+
+    phone = effective_parent_phone(parent)
+    norm_phone = normalize_phone(phone)
+    bound_ids = set(
+        db.scalars(
+            select(ParentChildBind.child_id).where(ParentChildBind.parent_id == parent.id)
+        ).all()
+    )
+    for cid in bound_ids:
+        child = db.get(ChildUser, cid)
+        if child and child.role == ROLE_STUDENT and not is_account_active(child):
+            restore_student_account(db, child)
+
+    orphans = db.scalars(
+        select(ChildUser).where(
+            ChildUser.role == ROLE_STUDENT,
+            ChildUser.account_status.in_((ACCOUNT_REMOVED, ACCOUNT_DELETED)),
+        )
+    ).all()
+    for child in orphans:
+        pj_c = child.profile_json or {}
+        phones = {
+            normalize_phone(child.parent_phone or ""),
+            normalize_phone(pj_c.get("archived_parent_phone") or ""),
+        }
+        if norm_phone not in phones:
+            continue
+        restore_student_account(db, child)
+        child.parent_phone = phone
+        if child.id not in bound_ids:
+            try:
+                bind_parent_child(db, parent.id, child.id, commit=False)
+            except HTTPException:
+                pass
+    db.flush()
+    return parent
+
+
+def find_parent_for_admin_restore(
+    db: Session,
+    *,
+    phone: str | None = None,
+    nickname: str | None = None,
+) -> ChildUser | None:
+    from app.services.sms_service import normalize_phone
+
+    target_phone = normalize_phone(phone) if phone else ""
+    target_nick = (nickname or "").strip()
+    rows = db.scalars(
+        select(ChildUser).where(
+            ChildUser.role == ROLE_PARENT,
+            ChildUser.account_status.in_((ACCOUNT_REMOVED, ACCOUNT_DELETED)),
+        )
+    ).all()
+    for row in rows:
+        if target_phone and normalize_phone(effective_parent_phone(row)) == target_phone:
+            return row
+        if target_nick and (row.nickname or "").strip() == target_nick:
+            return row
+        archived = ((row.profile_json or {}).get("archived_nickname") or "").strip()
+        if target_nick and archived == target_nick:
+            return row
+    return None
+
+
 def _generate_session_token() -> str:
     """生成 64 字符随机 session token，新登录时旧 token 失效"""
     return secrets.token_hex(32)

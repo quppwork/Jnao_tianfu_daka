@@ -11,6 +11,9 @@
     <view v-else-if="detail" class="content">
       <view class="card">
         <text class="card-title">{{ detail.nickname }}</text>
+        <view v-if="detail.account_status && detail.account_status !== 'active'" class="status-banner">
+          <text>已从生产环境移出 · {{ formatTime(detail.removed_at) }}</text>
+        </view>
         <view class="row-line"><text class="label">登录账号</text><text class="val">{{ detail.login_name || '—' }}</text></view>
         <view class="row-line"><text class="label">年级</text><text class="val">{{ detail.grade || '—' }}</text></view>
         <view class="row-line"><text class="label">天赋类型</text><text class="val">{{ detail.talent_display || detail.talent || '—' }}</text></view>
@@ -64,6 +67,10 @@
       </view>
     </view>
 
+    <view v-if="detail?.account_status && detail.account_status !== 'active'" class="content">
+      <view class="btn-restore" @click="doRestore"><text>恢复孩子账号</text></view>
+    </view>
+
     <view v-if="showEdit" class="overlay" @click="showEdit = false">
       <view class="panel" @click.stop>
         <text class="panel-title">管理孩子</text>
@@ -72,7 +79,7 @@
         <view class="field"><input v-model="form.grade" placeholder="年级" class="inp" /></view>
         <view class="btn-primary" @click="save"><text>保存</text></view>
         <view v-if="detail?.parent_id" class="btn-warn" @click="doUnbind"><text>解绑家长</text></view>
-        <view class="btn-danger" @click="confirmDelete"><text>删除孩子（归档账号）</text></view>
+        <view class="btn-danger" @click="confirmDelete"><text>移出生产环境</text></view>
       </view>
     </view>
   </view>
@@ -87,6 +94,7 @@ import {
   updateAdminChild,
   deleteAdminChild,
   unbindAdminChild,
+  restoreAdminChild,
 } from '@/utils/userApi.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 
@@ -165,10 +173,20 @@ async function doUnbind() {
   })
 }
 
+async function doRestore() {
+  try {
+    await restoreAdminChild(adminId.value, childId.value)
+    uni.showToast({ title: '已恢复', icon: 'none' })
+    await load()
+  } catch (e) {
+    uni.showToast({ title: e.message || '恢复失败', icon: 'none' })
+  }
+}
+
 function confirmDelete() {
   uni.showModal({
-    title: '危险操作',
-    content: '将归档该孩子账号，训练等业务数据会清除。确定？',
+    title: '移出确认',
+    content: '将从生产环境移出该孩子（数据保留，可再次登录）。确定？',
     success: async (r) => {
       if (!r.confirm) return
       try {
@@ -225,4 +243,8 @@ function confirmDelete() {
 .btn-warn text { color:#d97706; font-size:13px; }
 .btn-danger { margin-top:8px; padding:12px; text-align:center; border-radius:10px; background:rgba(220,38,38,0.1); }
 .btn-danger text { color:#dc2626; font-size:13px; }
+.status-banner { background:rgba(220,38,38,0.08); border-radius:8px; padding:8px 10px; margin-bottom:10px; }
+.status-banner text { color:#dc2626; font-size:12px; }
+.btn-restore { background:#f59e0b; border-radius:10px; padding:12px; text-align:center; margin:0 16px 20px; }
+.btn-restore text { color:#fff; font-weight:600; font-size:14px; }
 </style>

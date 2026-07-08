@@ -1350,9 +1350,44 @@ export async function loginAdmin(loginName, password) {
   return data
 }
 
-export async function fetchAdminParents(adminId) {
-  const data = await apiJson(withAdmin('/api/admin/parents', adminId))
+export async function fetchAdminParents(adminId, q = '') {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : ''
+  const data = await apiJson(withAdmin(`/api/admin/parents${qs}`, adminId))
   return data.parents || []
+}
+
+export async function fetchAdminRemovedParents(adminId, q = '') {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : ''
+  const data = await apiJson(withAdmin(`/api/admin/parents/removed${qs}`, adminId))
+  return data.parents || []
+}
+
+export async function createAdminParent(adminId, body) {
+  return apiJson(withAdmin('/api/admin/parents', adminId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function restoreAdminParent(adminId, parentId) {
+  return apiJson(withAdmin(`/api/admin/parents/${parentId}/restore`, adminId), {
+    method: 'POST',
+  })
+}
+
+export async function restoreAdminParentByPhone(adminId, { phone, nickname } = {}) {
+  return apiJson(withAdmin('/api/admin/parents/restore-by-phone', adminId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, nickname }),
+  })
+}
+
+export async function restoreAdminChild(adminId, childId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/restore`, adminId), {
+    method: 'POST',
+  })
 }
 
 export async function updateAdminParent(adminId, parentId, body) {
@@ -1367,9 +1402,12 @@ export async function deleteAdminParent(adminId, parentId) {
   return apiJson(withAdmin(`/api/admin/parents/${parentId}`, adminId), { method: 'DELETE' })
 }
 
-export async function fetchAdminChildren(adminId, parentId) {
-  const q = parentId ? `?parent_id=${parentId}` : ''
-  const data = await apiJson(withAdmin(`/api/admin/children${q}`, adminId))
+export async function fetchAdminChildren(adminId, { parentId = null, q = '' } = {}) {
+  const params = []
+  if (parentId) params.push(`parent_id=${parentId}`)
+  if (q) params.push(`q=${encodeURIComponent(q)}`)
+  const qs = params.length ? `?${params.join('&')}` : ''
+  const data = await apiJson(withAdmin(`/api/admin/children${qs}`, adminId))
   return data.children || []
 }
 

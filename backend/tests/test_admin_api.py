@@ -77,6 +77,84 @@ class TestAdminApi:
         assert not validate_session(db_session, legacy.id, legacy_token)
         assert auth_service.login_admin_by_password(db_session, "pyx_legacy", "123456") is None
 
+    def test_admin_restore_removed_parent_by_phone(self, client: TestClient, db_session):
+        from app.db.models import ChildUser
+        from app.services import auth_service
+
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        pid = _seed_parent(db_session, "19805031756", "qupp")
+        res = client.delete(f"/api/admin/parents/{pid}", **auth)
+        assert res.status_code == 200
+
+        row = db_session.get(ChildUser, pid)
+        assert row.account_status == "removed"
+
+        listed = client.get("/api/admin/parents", **auth)
+        assert not any(p["id"] == pid for p in listed.json()["parents"])
+
+        removed = client.get("/api/admin/parents/removed?q=qupp", **auth)
+        assert removed.status_code == 200
+        assert any(p["id"] == pid for p in removed.json()["parents"])
+
+        restore = client.post(
+            "/api/admin/parents/restore-by-phone",
+            json={"phone": "19805031756", "nickname": "qupp"},
+            **auth,
+        )
+        assert restore.status_code == 200, restore.text
+        data = restore.json()
+        assert data["parent_phone"] == "19805031756"
+        assert data["nickname"] == "qupp"
+
+        db_session.refresh(row)
+        assert row.account_status == "active"
+        assert row.parent_phone == "19805031756"
+
+    def test_admin_restore_hard_deleted_parent(self, client: TestClient, db_session):
+        from app.db.models import ChildUser
+        from app.services import auth_service
+
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        pid = _seed_parent(db_session, "19805031757", "hard_parent")
+        row = db_session.get(ChildUser, pid)
+        row.profile_json = {
+            **(row.profile_json or {}),
+            "archived_parent_phone": "19805031757",
+            "archived_nickname": "hard_parent",
+        }
+        row.parent_phone = f"__deleted_parent_{pid}"
+        row.account_status = auth_service.ACCOUNT_DELETED
+        row.deleted_at = row.created_at
+        db_session.commit()
+
+        restore = client.post(
+            "/api/admin/parents/restore-by-phone",
+            json={"phone": "19805031757"},
+            **auth,
+        )
+        assert restore.status_code == 200, restore.text
+        db_session.refresh(row)
+        assert row.account_status == "active"
+        assert row.parent_phone == "19805031757"
+
+    def test_admin_create_parent(self, client: TestClient, db_session):
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        res = client.post(
+            "/api/admin/parents",
+            json={
+                "parent_phone": "13900008888",
+                "nickname": "新家长",
+                "password": "123456",
+                "child_quota": 3,
+            },
+            **auth,
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["nickname"] == "新家长"
+
     def test_admin_login(self, client: TestClient):
         data = _admin_login(client)
         assert data["role"] == "admin"

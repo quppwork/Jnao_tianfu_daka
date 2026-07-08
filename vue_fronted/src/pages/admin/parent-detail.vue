@@ -11,6 +11,9 @@
     <view v-else-if="detail" class="content">
       <view class="card">
         <text class="card-title">{{ detail.nickname }}</text>
+        <view v-if="detail.account_status && detail.account_status !== 'active'" class="status-banner">
+          <text>{{ detail.account_status === 'removed' ? '已从生产环境移出' : '账号已归档' }} · {{ formatTime(detail.removed_at) }}</text>
+        </view>
         <view class="row-line"><text class="label">手机号</text><text class="val">{{ detail.parent_phone }}</text></view>
         <view class="row-line"><text class="label">孩子名额</text><text class="val">{{ detail.children_count }} / {{ detail.child_quota }}</text></view>
         <view class="row-line"><text class="label">注册时间</text><text class="val">{{ formatTime(detail.created_at) }}</text></view>
@@ -67,6 +70,10 @@
           <text class="act">查看</text>
         </view>
       </view>
+
+      <view v-if="detail.account_status && detail.account_status !== 'active'" class="btn-restore-wrap">
+        <view class="btn-reconcile" @click="doRestore"><text>恢复家长账号</text></view>
+      </view>
     </view>
 
     <view v-if="showEdit" class="overlay" @click="showEdit = false">
@@ -77,7 +84,7 @@
         <view class="field"><input v-model="form.password" placeholder="新密码（留空不改）" type="password" class="inp" /></view>
         <view class="field"><input v-model.number="form.child_quota" placeholder="孩子名额" type="number" class="inp" /></view>
         <view class="btn-primary" @click="save"><text>保存</text></view>
-        <view class="btn-danger" @click="confirmDelete"><text>删除家长（归档账号）</text></view>
+        <view class="btn-danger" @click="confirmDelete"><text>移出生产环境</text></view>
       </view>
     </view>
   </view>
@@ -92,6 +99,7 @@ import {
   reconcileAdminParent,
   updateAdminParent,
   deleteAdminParent,
+  restoreAdminParent,
 } from '@/utils/userApi.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 
@@ -173,10 +181,20 @@ async function save() {
   }
 }
 
+async function doRestore() {
+  try {
+    await restoreAdminParent(adminId.value, parentId.value)
+    uni.showToast({ title: '已恢复', icon: 'none' })
+    await load()
+  } catch (e) {
+    uni.showToast({ title: e.message || '恢复失败', icon: 'none' })
+  }
+}
+
 function confirmDelete() {
   uni.showModal({
-    title: '危险操作',
-    content: '将归档该家长及名下孩子账号，业务数据会清除。确定？',
+    title: '移出确认',
+    content: '将从生产环境移出该家长（数据保留，微信/手机号可再次登录）。确定？',
     success: async (r) => {
       if (!r.confirm) return
       try {
@@ -232,4 +250,7 @@ function confirmDelete() {
 .btn-reconcile { margin-top:10px; background:#f59e0b; border-radius:10px; padding:10px; text-align:center; }
 .btn-reconcile text { color:#fff; font-size:13px; font-weight:600; }
 .info-text { color:#22c55e; font-size:12px; }
+.status-banner { background:rgba(220,38,38,0.08); border-radius:8px; padding:8px 10px; margin-bottom:10px; }
+.status-banner text { color:#dc2626; font-size:12px; }
+.btn-restore-wrap { margin-bottom:16px; }
 </style>

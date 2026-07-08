@@ -15,6 +15,20 @@ class AdminParentOut(BaseModel):
     child_quota: int
     children_count: int = 0
     created_at: str | None = None
+    account_status: str | None = None
+    display_phone: str | None = None
+
+
+class AdminCreateParentRequest(BaseModel):
+    parent_phone: str = Field(..., min_length=11, max_length=20)
+    nickname: str = Field(..., min_length=1, max_length=50)
+    password: str | None = Field(None, min_length=6, max_length=128)
+    child_quota: int = Field(5, ge=0, le=999)
+
+
+class AdminRestoreByPhoneRequest(BaseModel):
+    phone: str | None = Field(None, min_length=11, max_length=20)
+    nickname: str | None = Field(None, min_length=1, max_length=50)
 
 
 class AdminParentListResponse(BaseModel):
@@ -109,6 +123,8 @@ class AdminParentDetailResponse(BaseModel):
     duplicate_parents: list[dict] = []
     canonical_parent_id: int | None = None
     is_duplicate_account: bool = False
+    account_status: str | None = "active"
+    removed_at: str | None = None
 
 
 class AdminReconcileResponse(BaseModel):
@@ -141,6 +157,8 @@ class AdminChildDetailResponse(BaseModel):
     training_history_days: list[AdminTrainingDayOut] = []
     recent_plans: list[dict] = []
     active_sessions: list[AdminSessionOut] = []
+    account_status: str | None = "active"
+    removed_at: str | None = None
 
 
 class BlacklistEntryOut(BaseModel):
