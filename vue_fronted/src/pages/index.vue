@@ -65,10 +65,6 @@
         <view class="chat-av ai" v-else><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl" :class="{ me: m.role==='user', ai: m.role!=='user' }">{{ m.text }}</view>
       </view>
-      <view v-if="loading" class="chat-row">
-        <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
-        <view class="chat-bbl ai"><text class="loading-dots">...</text></view>
-      </view>
     </view>
 
     <!-- Bottom Input -->
@@ -76,11 +72,12 @@
       <view class="input-wrap">
         <textarea class="chat-input" v-model="inputText" placeholder="输入问题..." :disabled="loading" @keydown="onKeyDown" :rows="1" />
         <view class="input-btns">
-          <view class="btn-mic" :class="{ 'mic-recording': recording }" @click="voicePlaceholder">
+          <view class="btn-mic" :class="{ 'mic-recording': recording, 'btn-disabled': loading }" @click="voicePlaceholder">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </view>
-          <view class="btn-send" @click="sendMsg">
-            <text style="color:#fff;font-size:14px;">➤</text>
+          <view class="btn-send" :class="{ 'btn-stop': loading }" @click="loading ? stopStream() : sendMsg()">
+            <text v-if="loading" style="color:#fff;font-size:12px;font-weight:700;">■</text>
+            <text v-else style="color:#fff;font-size:14px;">➤</text>
           </view>
         </view>
       </view>
@@ -173,10 +170,13 @@ import {
   gradeToSchoolStage,
 } from '@/utils/userApi.js'
 import { refreshTalentState } from '@/utils/talentState.js'
+import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 const isLight = ref(true)
 const inputText = ref('')
 const loading = ref(false)
+let streamAbort = null
+let abortRequested = false
 const guideSessionId = ref(null)
 const messages = ref([])
 const showSettings = ref(false)
@@ -214,12 +214,17 @@ async function sendMsg() {
   inputText.value = ''
   const aiIdx = messages.value.length
   messages.value.push({ role: 'ai', text: '' })
-  loading.value = false
+  loading.value = true
+  abortRequested = false
   await nextTick()
   scrollChat()
   try {
     const uid = await ensureChildUser()
-    await sendGuideMessageStream(uid, text, guideSessionId.value, {
+    if (abortRequested) {
+      applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
+    const { promise, abort } = sendGuideMessageStream(uid, text, guideSessionId.value, {
       onToken(chunk) {
         messages.value[aiIdx].text += chunk
         scrollChat()
@@ -229,13 +234,26 @@ async function sendMsg() {
         if (data.reply) messages.value[aiIdx].text = data.reply
       },
     })
+    streamAbort = abort
+    await promise
   } catch (e) {
-    if (!messages.value[aiIdx].text) {
+    if (isStreamAborted(e)) {
+      applyStreamStoppedHint(messages, aiIdx)
+    } else if (!messages.value[aiIdx].text) {
       messages.value[aiIdx].text = e?.message || '网络错误，请稍后再试'
     }
+  } finally {
+    streamAbort = null
+    abortRequested = false
+    loading.value = false
   }
   await nextTick()
   scrollChat()
+}
+
+function stopStream() {
+  abortRequested = true
+  streamAbort?.()
 }
 
 function applyProfileData(data, uid, { fetchLatest = true } = {}) {
@@ -571,7 +589,9 @@ function onNavTap() {
 .loading-dots { animation:dotPulse 1.4s infinite; }
 @keyframes dotPulse { 0%,80%,100% { opacity:0.2 } 40% { opacity:1 } }
 .btn-send { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex !important; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.btn-send.btn-stop { background:#ef4444; }
 .btn-send:active { opacity:0.8; }
+.btn-disabled { opacity:0.45; pointer-events:none; }
 .btn-mic { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--accent),#3b8bff); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px var(--mic-shadow); transition:all 0.2s; }
 .btn-mic.mic-recording { background:#ff4444 !important; box-shadow:0 0 0 6px rgba(255,68,68,0.3); animation:micPulse 1s infinite; }
 @keyframes micPulse { 0%,100% { box-shadow:0 0 0 6px rgba(255,68,68,0.3) } 50% { box-shadow:0 0 0 14px rgba(255,68,68,0) } }

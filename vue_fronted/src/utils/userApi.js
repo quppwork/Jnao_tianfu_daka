@@ -182,7 +182,7 @@ async function apiJson(url, options = {}) {
 }
 
 /** POST + SSE 流式读取（首页引导 / 学科答疑） */
-async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
+async function streamPostSse(url, body, { onToken, onDone, onError, signal } = {}) {
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders(
     {
@@ -197,6 +197,7 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    signal,
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
@@ -215,6 +216,10 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
   let finalPayload = null
 
   while (true) {
+    if (signal?.aborted) {
+      await reader.cancel().catch(() => {})
+      throw new DOMException('Aborted', 'AbortError')
+    }
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
@@ -958,11 +963,13 @@ export async function sendGuideMessage(userId, message, sessionId = null) {
 }
 
 export function sendGuideMessageStream(userId, message, sessionId = null, handlers = {}) {
-  return streamPostSse(
+  const controller = new AbortController()
+  const promise = streamPostSse(
     withUser('/api/guide/chat/stream', userId),
     { message, session_id: sessionId },
-    handlers,
+    { ...handlers, signal: controller.signal },
   )
+  return { promise, abort: () => controller.abort() }
 }
 
 // ── 学科答疑 ──
@@ -1009,7 +1016,8 @@ export function sendQaMessageStream(userId, message, sessionId = null, options =
   const subject = typeof options === 'string' ? options : options.subject
   const imageId = options.image_id || options.imageId || null
   const useRag = options.use_rag ?? options.useRag ?? null
-  return streamPostSse(
+  const controller = new AbortController()
+  const promise = streamPostSse(
     withUser('/api/qa/chat/stream', userId),
     {
       message,
@@ -1018,8 +1026,9 @@ export function sendQaMessageStream(userId, message, sessionId = null, options =
       image_id: imageId,
       use_rag: useRag,
     },
-    handlers,
+    { ...handlers, signal: controller.signal },
   )
+  return { promise, abort: () => controller.abort() }
 }
 
 export async function uploadQaImage(userId, file) {
