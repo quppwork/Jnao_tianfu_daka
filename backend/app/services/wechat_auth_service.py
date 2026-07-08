@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
 import urllib.parse
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -34,6 +36,16 @@ WX_STATE_TTL = 300
 WX_BIND_TTL = 1800
 WX_LOGIN_EXCHANGE_TTL = 120
 WECHAT_TOKEN_URL = "https://api.weixin.qq.com/sns/oauth2/access_token"
+
+_LEGACY_TIME_COLUMNS = (
+    "update_time",
+    "updatetime",
+    "updated_at",
+    "modify_time",
+    "u_time",
+    "lastupdate",
+    "last_time",
+)
 
 
 def wechat_configured() -> bool:
@@ -255,20 +267,177 @@ def fetch_legacy_member(openid: str) -> dict | None:
 
 
 def lookup_member_local(db: Session, openid: str) -> WxMemberSnapshot | None:
-    """仅查本地 wx_member_snapshot，登录路径用；不访问老库。"""
+    """仅查本地 wx_member_snapshot。"""
     return db.scalar(select(WxMemberSnapshot).where(WxMemberSnapshot.openid == openid))
 
 
+def lookup_member_for_oauth(db: Session, openid: str) -> WxMemberSnapshot | None:
+    """C：优先本地 snapshot；缺失或缺手机号时 OAuth 按 openid 懒查老库 1 条并回写。"""
+    oid = (openid or "").strip()
+    if not oid:
+        return None
+    snap = lookup_member_local(db, oid)
+    if snap and snap.mobile:
+        return snap
+    if not get_legacy_engine():
+        return snap
+    legacy = fetch_legacy_member(oid)
+    if not legacy:
+        return snap
+    snap = upsert_snapshot(db, legacy)
+    db.commit()
+    db.refresh(snap)
+    logger.info(
+        "OAuth lazy-sync wx snapshot openid=%s… mobile=%s",
+        oid[:10],
+        snap.mobile or "-",
+    )
+    return snap
+
+
 def lookup_member(db: Session, openid: str, *, refresh_legacy: bool = False) -> WxMemberSnapshot | None:
-    """兼容旧调用；refresh_legacy 仅建议离线同步脚本使用。"""
+    """兼容旧调用；refresh_legacy 时同 lookup_member_for_oauth。"""
     if refresh_legacy:
-        legacy = fetch_legacy_member(openid)
-        if legacy:
-            snap = upsert_snapshot(db, legacy)
-            db.commit()
-            db.refresh(snap)
-            return snap
+        return lookup_member_for_oauth(db, openid)
     return lookup_member_local(db, openid)
+
+
+def _sync_state_path() -> Path:
+    custom = (os.getenv("WX_SYNC_STATE_FILE") or "").strip()
+    if custom:
+        return Path(custom)
+    return Path("/app/data/wx_sync_state.json")
+
+
+def _load_sync_state() -> dict:
+    path = _sync_state_path()
+    try:
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("Load wx sync state failed: %s", e)
+    return {}
+
+
+def _save_sync_state(state: dict) -> None:
+    path = _sync_state_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        logger.warning("Save wx sync state failed: %s", e)
+
+
+def _legacy_table_columns(engine) -> set[str]:
+    from sqlalchemy import inspect
+
+    insp = inspect(engine)
+    try:
+        return {c["name"] for c in insp.get_columns("ys_wx_member")}
+    except Exception:
+        return set()
+
+
+def _pick_legacy_time_column(engine) -> str | None:
+    cols = _legacy_table_columns(engine)
+    for name in _LEGACY_TIME_COLUMNS:
+        if name in cols:
+            return name
+    return None
+
+
+def _stats_from_rows(db: Session, rows: list[dict]) -> dict[str, int]:
+    stats = {"total": 0, "with_mobile": 0, "without_mobile": 0}
+    for data in rows:
+        snap = upsert_snapshot(db, data)
+        stats["total"] += 1
+        if snap.mobile:
+            stats["with_mobile"] += 1
+        else:
+            stats["without_mobile"] += 1
+    return stats
+
+
+def fetch_legacy_members_incremental(
+    *,
+    last_id: int = 0,
+    since_time: str | None = None,
+) -> tuple[list[dict], str, int | None, str | None]:
+    """增量拉取老库会员。返回 (rows, mode, new_last_id, new_since_time)。"""
+    engine = get_legacy_engine()
+    if not engine:
+        return [], "none", last_id, since_time
+
+    time_col = _pick_legacy_time_column(engine)
+    select_cols = "id, openid, unionid, mobile, nickname, truename"
+    rows_raw: list[dict] = []
+    mode = "id"
+
+    with engine.connect() as conn:
+        if time_col and since_time:
+            mode = "time"
+            sql = f"""
+                SELECT {select_cols}, {time_col} AS _sync_time
+                FROM ys_wx_member
+                WHERE openid IS NOT NULL AND openid != ''
+                  AND {time_col} > :since
+                ORDER BY {time_col}
+            """
+            rows_raw = [dict(r) for r in conn.execute(text(sql), {"since": since_time}).mappings().all()]
+        else:
+            sql = f"""
+                SELECT {select_cols}
+                FROM ys_wx_member
+                WHERE openid IS NOT NULL AND openid != '' AND id > :last_id
+                ORDER BY id
+            """
+            rows_raw = [dict(r) for r in conn.execute(text(sql), {"last_id": last_id}).mappings().all()]
+
+    rows = [_row_to_snapshot(r) for r in rows_raw]
+    new_last_id = last_id
+    new_since = since_time
+    for raw, data in zip(rows_raw, rows):
+        wid = data.get("wx_member_id")
+        if isinstance(wid, int) and wid > new_last_id:
+            new_last_id = wid
+        if mode == "time":
+            ts = raw.get("_sync_time")
+            if ts is not None:
+                new_since = str(ts)
+
+    if mode == "time" and rows and new_since == since_time:
+        ts = rows_raw[-1].get("_sync_time")
+        if ts is not None:
+            new_since = str(ts)
+
+    return rows, mode, new_last_id, new_since
+
+
+def sync_wx_members_incremental(db: Session) -> dict[str, int | str]:
+    """B：增量同步（新 id 或 update_time 变更）。"""
+    if not get_legacy_engine():
+        raise RuntimeError("LEGACY_DATABASE_URL 未配置，无法同步")
+
+    state = _load_sync_state()
+    last_id = int(state.get("last_id") or 0)
+    if last_id <= 0:
+        last_id = int(db.scalar(select(func.max(WxMemberSnapshot.wx_member_id))) or 0)
+    since_time = state.get("last_time")
+
+    rows, mode, new_last_id, new_since = fetch_legacy_members_incremental(
+        last_id=last_id,
+        since_time=since_time if isinstance(since_time, str) else None,
+    )
+    stats = _stats_from_rows(db, rows)
+    stats["mode"] = mode
+    db.commit()
+
+    if rows:
+        _save_sync_state({"last_id": new_last_id, "last_time": new_since})
+    elif not state:
+        _save_sync_state({"last_id": last_id, "last_time": since_time})
+
+    return stats
 
 
 def fetch_all_legacy_members() -> list[dict]:
@@ -288,21 +457,18 @@ def fetch_all_legacy_members() -> list[dict]:
     return [_row_to_snapshot(dict(row)) for row in rows]
 
 
-def sync_wx_members_from_legacy(db: Session) -> dict[str, int]:
+def sync_wx_members_from_legacy(db: Session) -> dict[str, int | str]:
     """从 db_fz_jingnao.ys_wx_member 全量拉取到 wx_member_snapshot（定时任务专用）。"""
     rows = fetch_all_legacy_members()
     if not rows and not get_legacy_engine():
         raise RuntimeError("LEGACY_DATABASE_URL 未配置，无法同步")
 
-    stats = {"total": 0, "with_mobile": 0, "without_mobile": 0}
-    for data in rows:
-        snap = upsert_snapshot(db, data)
-        stats["total"] += 1
-        if snap.mobile:
-            stats["with_mobile"] += 1
-        else:
-            stats["without_mobile"] += 1
+    stats = _stats_from_rows(db, rows)
+    stats["mode"] = "full"
     db.commit()
+
+    max_id = max((r.get("wx_member_id") or 0 for r in rows), default=0)
+    _save_sync_state({"last_id": max_id, "last_time": _load_sync_state().get("last_time")})
     return stats
 
 
@@ -512,7 +678,7 @@ def resolve_wechat_login(
     openid: str,
     unionid: str | None,
 ) -> tuple[ChildUser | None, str | None, str]:
-    """返回 (user, bind_ticket, next_step)。仅查本地 daka_member / wx_member_snapshot，不访问老库。"""
+    """返回 (user, bind_ticket, next_step)。B+C：本地优先，OAuth 可懒查老库 1 条。"""
     from app.services.member_registry_service import find_daka_member_by_openid
 
     bind = get_bind_by_openid(db, openid)
@@ -549,7 +715,7 @@ def resolve_wechat_login(
             db.refresh(user)
             return user, None, parent_next_step(user)
 
-    snap = lookup_member_local(db, openid)
+    snap = lookup_member_for_oauth(db, openid)
     if not snap:
         return None, None, "register"
 
@@ -601,7 +767,7 @@ def complete_bind_phone(
     by_openid = get_bind_by_openid(db, openid)
     if by_openid and existing and by_openid.parent_id != existing.id:
         raise HTTPException(409, "该微信已绑定其他家长账号")
-    snap = lookup_member_local(db, openid)
+    snap = lookup_member_for_oauth(db, openid)
     user = ensure_parent_for_phone(
         db,
         phone=phone,
