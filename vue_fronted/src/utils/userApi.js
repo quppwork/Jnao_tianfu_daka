@@ -105,15 +105,21 @@ export function setSessionToken(token) {
 
 /** 会话内已验证 uid，避免重复 ping /api/user/profile */
 let _sessionValidatedUid = null
+let _sessionValidatedAt = 0
 let _validateInFlight = null
+const SESSION_VALID_TTL = 5 * 60 * 1000  // 5 分钟，防止缓存过期 session
 
 export function invalidateChildUserSession() {
   _sessionValidatedUid = null
+  _sessionValidatedAt = 0
   _validateInFlight = null
 }
 
 export function markChildUserSessionValid(uid) {
-  if (uid) _sessionValidatedUid = uid
+  if (uid) {
+    _sessionValidatedUid = uid
+    _sessionValidatedAt = Date.now()
+  }
 }
 
 /** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
@@ -141,15 +147,22 @@ async function apiJson(url, options = {}) {
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    // 401：会话失效 → 清除登录态并回到登录页
+    // 401：会话失效 → 仅清除本地状态，统一由 ensureChildUser / 页面守卫负责跳转
     if (res.status === 401) {
+      // 管理员 API → 清除管理员状态
+      if (String(url).includes('/api/admin/')) {
+        try {
+          localStorage.removeItem('jnao_admin_user')
+          localStorage.removeItem('jnao_admin_token')
+        } catch (e) { /* ignore */ }
+      }
       clearChildUserId()
+      invalidateChildUserSession()
       try {
         localStorage.removeItem('jnao_user')
         localStorage.removeItem('jnao_logged_in')
         localStorage.removeItem('jnao_login_channel')
       } catch (e) { /* ignore */ }
-      logoutAndGoLogin()
     }
     const msg = formatApiError(data, res.status)
     console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
@@ -182,12 +195,12 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
     const data = await res.json().catch(() => ({}))
     if (res.status === 401) {
       clearChildUserId()
+      invalidateChildUserSession()
       try {
         localStorage.removeItem('jnao_user')
         localStorage.removeItem('jnao_logged_in')
         localStorage.removeItem('jnao_login_channel')
       } catch (e) { /* ignore */ }
-      logoutAndGoLogin()
     }
     const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
     err.status = res.status
@@ -658,19 +671,23 @@ export async function ensureChildUser(nickname = '学员') {
     throw new NeedLoginError()
   }
 
-  if (existing && _sessionValidatedUid === existing) {
+  // 缓存命中 + 未超过 TTL → 跳过 API 校验
+  if (existing && _sessionValidatedUid === existing && (Date.now() - _sessionValidatedAt) < SESSION_VALID_TTL) {
     return existing
   }
   if (!_validateInFlight) {
     _validateInFlight = (async () => {
       try {
         await apiJson(withUser('/api/user/profile', existing))
-        _sessionValidatedUid = existing
+        markChildUserSessionValid(existing)
       } catch (e) {
         if (e.status === 404 || e.status === 401 || e.status === 403) {
           clearChildUserId()
+          // 会话已失效 → 统一在此跳转登录页
+          _redirectToLogin()
         } else {
-          _sessionValidatedUid = existing
+          // 网络错误等非鉴权错误 → 允许继续使用，下次再校验
+          markChildUserSessionValid(existing)
         }
       } finally {
         _validateInFlight = null
