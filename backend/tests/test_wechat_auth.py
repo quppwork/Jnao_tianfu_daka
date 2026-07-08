@@ -111,10 +111,72 @@ def test_resolve_wechat_login_without_mobile(db_session: Session, monkeypatch):
 
 def test_resolve_wechat_login_unknown_openid(db_session: Session, monkeypatch):
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: None)
     user, ticket, step = resolve_wechat_login(db_session, openid="oUNKNOWN_not_in_snapshot", unionid=None)
     assert user is None
     assert ticket is None
     assert step == "register"
+
+
+def test_oauth_lazy_load_legacy_when_missing_local(db_session: Session, monkeypatch):
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+
+    def fake_fetch(openid: str):
+        if openid == "oLAZY_001":
+            return {
+                "wx_member_id": 9001,
+                "openid": openid,
+                "unionid": None,
+                "mobile": "13900001234",
+                "nickname": "懒加载",
+                "truename": "测试",
+            }
+        return None
+
+    monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: object())
+    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fake_fetch)
+
+    user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_001", unionid=None)
+    assert user is not None
+    assert user.parent_phone == "13900001234"
+    assert ticket is None
+
+    from app.services.wechat_auth_service import lookup_member_local
+
+    snap = lookup_member_local(db_session, "oLAZY_001")
+    assert snap is not None
+    assert snap.mobile == "13900001234"
+
+
+def test_oauth_lazy_refresh_mobile_when_local_empty(db_session: Session, monkeypatch):
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    upsert_snapshot(
+        db_session,
+        {
+            "wx_member_id": 9002,
+            "openid": "oLAZY_002",
+            "mobile": None,
+            "nickname": "无手机",
+        },
+    )
+    db_session.commit()
+
+    def fake_fetch(openid: str):
+        if openid == "oLAZY_002":
+            return {
+                "wx_member_id": 9002,
+                "openid": openid,
+                "mobile": "13900005678",
+                "nickname": "已绑手机",
+            }
+        return None
+
+    monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: object())
+    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fake_fetch)
+
+    user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_002", unionid=None)
+    assert user is not None
+    assert user.parent_phone == "13900005678"
 
 
 def test_sync_wx_members_from_legacy(db_session: Session, monkeypatch):
@@ -166,6 +228,82 @@ def test_sync_wx_members_from_legacy(db_session: Session, monkeypatch):
     assert stats["total"] == 2
     assert stats["with_mobile"] == 1
     assert stats["without_mobile"] == 1
+    assert stats["mode"] == "full"
+
+
+def test_sync_wx_members_incremental_by_id(db_session: Session, monkeypatch):
+    upsert_snapshot(
+        db_session,
+        {
+            "wx_member_id": 100,
+            "openid": "oINC_100",
+            "mobile": "13900001000",
+        },
+    )
+    db_session.commit()
+
+    class FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return self._rows
+
+    class FakeConn:
+        def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "id >" in sql:
+                assert params["last_id"] == 100
+                return FakeResult([
+                    {
+                        "id": 101,
+                        "openid": "oINC_101",
+                        "unionid": None,
+                        "mobile": "13900001001",
+                        "nickname": "新会员",
+                        "truename": None,
+                    }
+                ])
+            return FakeResult([])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    monkeypatch.setattr(
+        "app.services.wechat_auth_service.get_legacy_engine",
+        lambda: FakeEngine(),
+    )
+    monkeypatch.setattr(
+        "app.services.wechat_auth_service._pick_legacy_time_column",
+        lambda _engine: None,
+    )
+    monkeypatch.setattr(
+        "app.services.wechat_auth_service._load_sync_state",
+        lambda: {"last_id": 100},
+    )
+    saved = {}
+
+    def fake_save(state):
+        saved.update(state)
+
+    monkeypatch.setattr("app.services.wechat_auth_service._save_sync_state", fake_save)
+
+    from app.services.wechat_auth_service import sync_wx_members_incremental
+
+    stats = sync_wx_members_incremental(db_session)
+    assert stats["total"] == 1
+    assert stats["mode"] == "id"
+    assert saved.get("last_id") == 101
 
 
 def test_external_bind_mobile_url_default(monkeypatch):

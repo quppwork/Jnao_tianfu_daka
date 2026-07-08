@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# 每天凌晨 4:00 从老库拉取 ys_wx_member → jnao_daka.wx_member_snapshot
+# 每 15 分钟增量同步 wx_member_snapshot（B）
 #
-# 宝塔「计划任务」示例:
+# 宝塔计划任务示例:
 #   任务类型: Shell
-#   执行周期: 每天 04:00
-#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_wx_snapshot_daily.sh
+#   执行周期: 每 15 分钟
+#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_wx_snapshot_incremental.sh
 
 set -euo pipefail
 
@@ -14,7 +14,7 @@ cd "$ROOT"
 COMPOSE_FILE="docker-compose.prod.yml"
 ENV_FILE=".env.production"
 LOG_DIR="$ROOT/logs"
-LOG_FILE="$LOG_DIR/sync_wx_snapshot.log"
+LOG_FILE="$LOG_DIR/sync_wx_snapshot_incremental.log"
 
 mkdir -p "$LOG_DIR"
 
@@ -24,8 +24,8 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 {
-  echo "[$(date '+%F %T')] 开始全量同步 wx_member_snapshot ..."
+  echo "[$(date '+%F %T')] 开始增量同步 wx_member_snapshot ..."
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T backend \
-    python tools/sync_wx_member_snapshot.py
-  echo "[$(date '+%F %T')] 全量同步完成"
+    python tools/sync_wx_member_snapshot.py --incremental
+  echo "[$(date '+%F %T')] 增量同步完成"
 } >> "$LOG_FILE" 2>&1
