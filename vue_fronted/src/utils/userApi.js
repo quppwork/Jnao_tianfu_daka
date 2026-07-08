@@ -423,6 +423,11 @@ export async function fetchCaptcha() {
   return apiJson('/api/auth/captcha')
 }
 
+/** 家长手机号注册状态（child_user / daka_member / wx_snapshot） */
+export async function checkParentPhone(phone) {
+  return apiJson(`/api/auth/parent/phone-check?phone=${encodeURIComponent(phone)}`)
+}
+
 /** 发送短信验证码 scene: login | register */
 export async function sendParentSmsCode(phone, scene, { captchaId, captchaCode } = {}) {
   const body = { phone, scene, device_id: getDeviceId() }

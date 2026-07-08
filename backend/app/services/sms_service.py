@@ -161,17 +161,20 @@ def send_sms_code(
 
     check_auth_allowed(db, client_ip=client_ip, phone=phone, device_id=device_id)
 
-    exists = auth_service.find_parent_by_phone(db, phone) is not None
-    if scene == SCENE_LOGIN and not exists:
-        raise HTTPException(404, "该手机号尚未注册，请先注册")
-    if scene == SCENE_REGISTER and exists:
-        raise HTTPException(409, "该手机号已注册，请直接登录")
-    if scene == SCENE_BIND:
-        pass
+    from app.services.parent_identity_service import (
+        assert_can_send_login_sms,
+        assert_parent_can_register,
+    )
+
+    if scene == SCENE_LOGIN:
+        assert_can_send_login_sms(db, phone)
     elif scene == SCENE_REGISTER:
+        assert_parent_can_register(db, phone)
         if not captcha_id or not captcha_code:
             raise HTTPException(400, "请先完成图形验证")
         verify_captcha(captcha_id, captcha_code, consume=True)
+    elif scene == SCENE_BIND:
+        pass
     # 登录发短信：仅靠限流 + 黑名单（无需图形码）
 
     _check_send_rate(phone, client_ip)

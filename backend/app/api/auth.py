@@ -122,9 +122,16 @@ def get_captcha():
 
 @router.get("/parent/phone-check")
 def parent_phone_check(phone: str = Query(..., min_length=11), db: Session = Depends(get_db)):
-    p = phone.strip()
-    exists = auth_service.find_parent_by_phone(db, p) is not None
-    return {"registered": exists}
+    from app.services.parent_identity_service import resolve_parent_registration_state
+
+    state = resolve_parent_registration_state(db, phone.strip())
+    return {
+        "registered": state["registered"],
+        "source": state["source"],
+        "action": state["action"],
+        "message": state["message"],
+        "suggested_action": state["action"],
+    }
 
 
 @router.post("/sms/send", response_model=SmsSendResponse)

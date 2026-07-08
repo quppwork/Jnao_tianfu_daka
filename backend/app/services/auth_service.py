@@ -48,7 +48,12 @@ def register_child(
     role: str = ROLE_STUDENT,
     login_name: str | None = None,
     child_quota: int | None = None,
+    commit: bool = True,
 ) -> ChildUser:
+    if role == ROLE_PARENT and find_parent_by_phone(db, parent_phone):
+        from fastapi import HTTPException
+
+        raise HTTPException(409, "该手机号已注册，请直接登录")
     user = ChildUser(
         parent_phone=parent_phone,
         nickname=nickname,
@@ -60,8 +65,11 @@ def register_child(
         session_token=_generate_session_token(),
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    if commit:
+        db.commit()
+        db.refresh(user)
+    else:
+        db.flush()
     return user
 
 

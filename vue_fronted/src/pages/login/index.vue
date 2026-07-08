@@ -20,7 +20,7 @@
         </view>
         <view
           class="btn-wechat"
-          :class="{ off: loginBlocked || wechatLoading }"
+          :class="{ off: loginBlocked || loginBusy }"
           @click="doWechatLogin"
         >
           <text>{{ wechatLoading ? '跳转中…' : '微信家长一键登录' }}</text>
@@ -48,20 +48,20 @@
 
         <template v-if="form.role === 'student'">
           <view class="input-wrap">
-            <input class="login-input" v-model="form.loginName" placeholder="孩子账号" />
+            <input class="login-input" v-model="form.loginName" placeholder="孩子账号" :disabled="loginBusy" />
           </view>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.password" placeholder="密码" type="password" />
+            <input class="login-input" v-model="form.password" placeholder="密码" type="password" :disabled="loginBusy" />
           </view>
         </template>
 
         <template v-else-if="parentMode === 'sms'">
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" />
+            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
           <view class="input-wrap sms-row">
-            <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="text" maxlength="6" confirm-type="done" />
-            <view class="sms-btn" :class="{ off: smsCooldown > 0 || loginBlocked }" @click="requestLoginSms">
+            <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="text" maxlength="6" confirm-type="done" :disabled="loginBusy" />
+            <view class="sms-btn" :class="{ off: smsCooldown > 0 || loginBlocked || loginBusy }" @click="requestLoginSms">
               <text>{{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}</text>
             </view>
           </view>
@@ -69,15 +69,15 @@
 
         <template v-else>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" />
+            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.password" placeholder="密码" type="password" maxlength="64" confirm-type="done" />
+            <input class="login-input" v-model="form.password" placeholder="密码" type="password" maxlength="64" confirm-type="done" :disabled="loginBusy" />
           </view>
         </template>
 
-        <view class="btn-login" :class="{ off: loginBlocked }" @click="doLogin">
-          <text>{{ submitting ? '登录中...' : '登录' }}</text>
+        <view class="btn-login" :class="{ off: loginBlocked || loginBusy }" @click="doLogin">
+          <text>{{ loginBusy ? '登录中...' : '登录' }}</text>
         </view>
 
         <view v-if="form.role === 'student'" class="sub-actions">
@@ -92,7 +92,7 @@
             <view class="link-row" @click="toggleParentMode">
               <text>{{ parentMode === 'sms' ? '使用密码登录' : '使用验证码登录' }}</text>
             </view>
-            <view class="link-row" @click="goRegister"><text>注册家长账户</text></view>
+            <view class="link-row" @click="goRegister()"><text>注册家长账户</text></view>
             <view v-if="inWechat" class="link-row" @click="backToWechatLogin">
               <text>返回微信一键登录</text>
             </view>
@@ -102,6 +102,11 @@
     </view>
 
     <view class="glow glow-bottom"></view>
+
+    <view v-if="loginBusy" class="login-overlay">
+      <view class="login-spinner"></view>
+      <text class="login-overlay-text">{{ overlayText || '请稍候…' }}</text>
+    </view>
   </view>
 </template>
 
@@ -139,13 +144,19 @@ import {
   markWechatOAuthFailed,
   clearWechatOAuthCooldown,
 } from '@/utils/wechatAuth.js'
+import {
+  useLoginFlow,
+  hasValidSession,
+  inferHomeFromSession,
+  minDelay,
+} from '@/utils/useLoginFlow.js'
+
+const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
 const form = ref({ phone: '', loginName: '', password: '', smsCode: '', role: 'student' })
 const parentMode = ref('sms')
-const submitting = ref(false)
 const wechatLoading = ref(false)
 const inWechat = ref(false)
-/** 微信内是否展示浏览器短信/密码表单（默认 false，仅一键登录） */
 const browserLogin = ref(false)
 const smsCooldown = ref(0)
 const blockRemain = ref(0)
@@ -203,6 +214,36 @@ function tryRedirectIfLoggedIn() {
   return false
 }
 
+async function handleWechatCallback(wxCb) {
+  clearWechatQueryFromUrl()
+  setPhase('authenticating', '正在登录…')
+  try {
+    await exchangeWechatLogin(wxCb.loginTicket)
+  } catch (e) {
+    markWechatOAuthFailed()
+    resetPhase()
+    uni.showModal({
+      title: '微信登录失败',
+      content: e.message || '登录凭证已过期，请重新进入',
+      showCancel: false,
+    })
+    return
+  }
+  setPhase('settling', '正在进入…')
+  try {
+    const [profile, cfg] = await Promise.all([
+      fetchParentProfile(getLoggedInUserId()),
+      fetchWechatConfig().catch(() => ({})),
+    ])
+    await minDelay(400)
+    redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket, cfg?.bind_mobile_url)
+  } catch (e) {
+    console.warn('[login] wechat post-auth fallback', e?.message || e)
+    await minDelay(400)
+    redirectParentNextStep(wxCb.nextStep || 'home', wxCb.bindTicket)
+  }
+}
+
 onMounted(async () => {
   refreshBlockState()
   blockTimer = setInterval(refreshBlockState, 1000)
@@ -230,22 +271,7 @@ onMounted(async () => {
 
   const wxCb = readWechatCallbackParams()
   if (wxCb?.loginTicket) {
-    clearWechatQueryFromUrl()
-    try {
-      await exchangeWechatLogin(wxCb.loginTicket)
-      const [profile, cfg] = await Promise.all([
-        fetchParentProfile(getLoggedInUserId()),
-        fetchWechatConfig().catch(() => ({})),
-      ])
-      redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket, cfg?.bind_mobile_url)
-    } catch (e) {
-      markWechatOAuthFailed()
-      uni.showModal({
-        title: '微信登录失败',
-        content: e.message || '登录凭证已过期，请重新进入',
-        showCancel: false,
-      })
-    }
+    await handleWechatCallback(wxCb)
     return
   }
   if (wxCb?.nextStep === 'bind-phone') {
@@ -263,7 +289,7 @@ onMounted(async () => {
 })
 
 async function doWechatLogin() {
-  if (wechatLoading.value || submitting.value || loginBlocked.value) return
+  if (wechatLoading.value || loginBusy.value || loginBlocked.value) return
   clearWechatOAuthCooldown()
   wechatLoading.value = true
   try {
@@ -284,10 +310,6 @@ async function doWechatLogin() {
   }
 }
 
-function saveSession(data) {
-  saveAuthSession(data)
-}
-
 function toggleParentMode() {
   parentMode.value = parentMode.value === 'sms' ? 'password' : 'sms'
 }
@@ -305,7 +327,7 @@ function startCooldown(sec = 60) {
 }
 
 async function requestLoginSms() {
-  if (loginBlocked.value || smsCooldown.value > 0) return
+  if (loginBlocked.value || smsCooldown.value > 0 || loginBusy.value) return
   if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
     uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
   }
@@ -315,11 +337,20 @@ async function requestLoginSms() {
     uni.showToast({ title: '验证码已发送', icon: 'none' })
   } catch (e) {
     if (e.status === 404) {
-      uni.showModal({
-        title: '尚未注册',
-        content: '该手机号未注册，是否前往注册？',
-        success: (r) => { if (r.confirm) goRegister() },
-      })
+      const msg = e.message || ''
+      if (msg.includes('老系统') || msg.includes('微信')) {
+        uni.showModal({
+          title: '请使用微信登录',
+          content: msg,
+          showCancel: false,
+        })
+      } else {
+        uni.showModal({
+          title: '尚未注册',
+          content: '该手机号未注册，是否前往注册？',
+          success: (r) => { if (r.confirm) goRegister(form.value.phone.trim()) },
+        })
+      }
     } else {
       uni.showToast({ title: e.message || '发送失败', icon: 'none' })
     }
@@ -328,20 +359,10 @@ async function requestLoginSms() {
   }
 }
 
-async function routeParentHome(data) {
-  clearLoginGuard()
-  saveSession(data)
-  uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
+function resolveParentTarget(data) {
   let target = '/pages/parent/index'
   if (parentNeedsAccountReady(data)) {
     if (data.next_step === 'bind-phone') {
-      try {
-        const cfg = await fetchWechatConfig()
-        if (cfg.use_external_bind_mobile && cfg.bind_mobile_url) {
-          window.location.href = cfg.bind_mobile_url
-          return
-        }
-      } catch (_) { /* fallback */ }
       if (data.bind_ticket) {
         target = `/pages/login/bind-phone?bind_ticket=${encodeURIComponent(data.bind_ticket)}`
       } else {
@@ -353,12 +374,29 @@ async function routeParentHome(data) {
   } else if (parentNeedsProfileComplete(data)) {
     target = '/pages/login/complete-parent'
   }
-  setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
+  return target
+}
+
+async function routeParentHome(data) {
+  clearLoginGuard()
+  saveAuthSession(data)
+  uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
+  let target = resolveParentTarget(data)
+  if (parentNeedsAccountReady(data) && data.next_step === 'bind-phone') {
+    try {
+      const cfg = await fetchWechatConfig()
+      if (cfg.use_external_bind_mobile && cfg.bind_mobile_url) {
+        window.location.href = cfg.bind_mobile_url
+        return
+      }
+    } catch (_) { /* fallback local bind page */ }
+  }
+  uni.redirectTo({ url: target })
 }
 
 async function routeStudentHome(data) {
   clearLoginGuard()
-  saveSession(data)
+  saveAuthSession(data)
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = '/pages/index'
   try {
@@ -367,19 +405,28 @@ async function routeStudentHome(data) {
     console.error('[login] studentNeedsOnboarding 检查失败，默认走引导:', e?.message || e)
     target = '/pages/login/onboarding/index'
   }
-  setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
+  uni.redirectTo({ url: target })
 }
 
 function handleLoginError(e) {
-  submitting.value = false
+  resetPhase()
+  if (hasValidSession()) {
+    uni.reLaunch({ url: inferHomeFromSession() })
+    return
+  }
   if (e.status === 403) {
     uni.showToast({ title: e.message || '访问受限', icon: 'none', duration: 3000 })
   } else if (e.status === 404) {
-    uni.showModal({
-      title: '尚未注册',
-      content: '该手机号未注册，是否前往注册？',
-      success: (r) => { if (r.confirm) goRegister() },
-    })
+    const msg = e.message || ''
+    if (msg.includes('老系统') || msg.includes('微信')) {
+      uni.showModal({ title: '请使用微信登录', content: msg, showCancel: false })
+    } else {
+      uni.showModal({
+        title: '尚未注册',
+        content: '该手机号未注册，是否前往注册？',
+        success: (r) => { if (r.confirm) goRegister(form.value.phone.trim()) },
+      })
+    }
   } else if (e.status === 401) {
     uni.showToast({ title: '账号或密码错误', icon: 'none' })
   } else if (e.status === 429) {
@@ -394,49 +441,66 @@ function handleLoginError(e) {
 }
 
 async function doLogin() {
-  if (loginBlocked.value) {
-    uni.showToast({ title: `请 ${blockRemain.value} 秒后再试`, icon: 'none' }); return
+  if (loginBlocked.value || loginBusy.value) {
+    if (loginBlocked.value) uni.showToast({ title: `请 ${blockRemain.value} 秒后再试`, icon: 'none' })
+    return
   }
-  submitting.value = true
   try {
-    if (form.value.role === 'parent') {
-      if (parentMode.value === 'sms') {
-        if (!form.value.smsCode.trim()) {
-          uni.showToast({ title: '请输入短信验证码', icon: 'none' }); submitting.value = false; return
+    const result = await runAuthenticating(async () => {
+      if (form.value.role === 'parent') {
+        if (parentMode.value === 'sms') {
+          if (!form.value.smsCode.trim()) {
+            uni.showToast({ title: '请输入短信验证码', icon: 'none' })
+            resetPhase()
+            return null
+          }
+          const data = await loginParentSms({
+            phone: form.value.phone.trim(),
+            smsCode: form.value.smsCode.trim(),
+          })
+          await completeAfterAuth(() => routeParentHome(data))
+          return data
         }
-        const data = await loginParentSms({
-          phone: form.value.phone.trim(),
-          smsCode: form.value.smsCode.trim(),
-        })
-        await routeParentHome(data)
-        return
+        if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
+          uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
+          resetPhase()
+          return null
+        }
+        if (!form.value.password.trim() || form.value.password.trim().length < 6) {
+          uni.showToast({ title: '密码至少6位', icon: 'none' })
+          resetPhase()
+          return null
+        }
+        const data = await loginParent(form.value.phone.trim(), form.value.password.trim())
+        await completeAfterAuth(() => routeParentHome(data))
+        return data
       }
-      if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
-        uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); submitting.value = false; return
-      }
-      if (!form.value.password.trim() || form.value.password.trim().length < 6) {
-        uni.showToast({ title: '密码至少6位', icon: 'none' }); submitting.value = false; return
-      }
-      const data = await loginParent(form.value.phone.trim(), form.value.password.trim())
-      await routeParentHome(data)
-      return
-    }
 
-    if (!form.value.password.trim() || form.value.password.trim().length < 6) {
-      uni.showToast({ title: '密码至少6位', icon: 'none' }); submitting.value = false; return
+      if (!form.value.password.trim() || form.value.password.trim().length < 6) {
+        uni.showToast({ title: '密码至少6位', icon: 'none' })
+        resetPhase()
+        return null
+      }
+      if (!form.value.loginName.trim()) {
+        uni.showToast({ title: '请输入孩子账号', icon: 'none' })
+        resetPhase()
+        return null
+      }
+      const data = await loginStudent(form.value.loginName.trim(), form.value.password.trim())
+      await completeAfterAuth(() => routeStudentHome(data))
+      return data
+    })
+    if (result?._sessionFallback) {
+      await completeAfterAuth(() => uni.reLaunch({ url: inferHomeFromSession() }))
     }
-    if (!form.value.loginName.trim()) {
-      uni.showToast({ title: '请输入孩子账号', icon: 'none' }); submitting.value = false; return
-    }
-    const data = await loginStudent(form.value.loginName.trim(), form.value.password.trim())
-    await routeStudentHome(data)
   } catch (e) {
     handleLoginError(e)
   }
 }
 
-function goRegister() {
-  uni.navigateTo({ url: '/pages/login/register-parent' })
+function goRegister(phone = '') {
+  const q = phone ? `?phone=${encodeURIComponent(phone)}` : ''
+  uni.navigateTo({ url: `/pages/login/register-parent${q}` })
 }
 
 function goAdminLogin() {
@@ -499,6 +563,18 @@ onUnmounted(() => {
 .hint-admin-top { position:absolute; top:12px; right:16px; z-index:10; }
 .hint-admin-top text { color:var(--text-dim); font-size:10px; text-decoration:underline; cursor:pointer; }
 .hint-admin-top:active text { opacity:0.6; }
-.hint-admin { margin-top:8px; }
-.hint-admin text { color:var(--text-dim); font-size:11px; text-decoration:underline; }
+.login-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.45);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px;
+}
+.login-spinner {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.25);
+  border-top-color: #58a6ff;
+  animation: loginSpin 0.8s linear infinite;
+}
+.login-overlay-text { color: #fff; font-size: 14px; }
+@keyframes loginSpin { to { transform: rotate(360deg); } }
 </style>

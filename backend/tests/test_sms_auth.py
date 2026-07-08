@@ -128,6 +128,25 @@ class TestSmsAuth:
         )
         assert res.status_code == 409
 
+    def test_register_rejected_after_snapshot(self, client: TestClient, db_session):
+        from app.db.models import WxMemberSnapshot
+
+        db_session.add(
+            WxMemberSnapshot(openid="o_dup_test", mobile="13900008817", nickname="老")
+        )
+        db_session.commit()
+        cap = client.get("/api/auth/captcha")
+        send = client.post(
+            "/api/auth/sms/send",
+            json={
+                "phone": "13900008817",
+                "scene": "register",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
+        )
+        assert send.status_code == 409
+
     def test_sms_login_rejects_unregistered(self, client: TestClient):
         res = client.post(
             "/api/auth/sms/login",
