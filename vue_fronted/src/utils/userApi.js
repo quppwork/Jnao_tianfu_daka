@@ -176,6 +176,7 @@ async function apiJson(url, options = {}) {
   if (!res.ok) {
     // 401：会话失效 → 仅清除本地状态，统一由 ensureChildUser / 页面守卫负责跳转
     if (res.status === 401) {
+      const hadSession = !!getSessionToken()
       // 管理员 API → 清除管理员状态
       if (String(url).includes('/api/admin/')) {
         try {
@@ -190,6 +191,9 @@ async function apiJson(url, options = {}) {
         localStorage.removeItem('jnao_logged_in')
         localStorage.removeItem('jnao_login_channel')
       } catch (e) { /* ignore */ }
+      if (!isAuthAttemptRequest(url) && hadSession) {
+        logoutAndGoLogin()
+      }
     }
     const msg = formatApiError(data, res.status)
     console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
@@ -534,11 +538,15 @@ export async function fetchParentProfile(parentId) {
 }
 
 export async function updateParentProfile(parentId, body) {
-  return apiJson(withUser('/api/parent/profile', parentId), {
+  const data = await apiJson(withUser('/api/parent/profile', parentId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (data.session_token) {
+    setSessionToken(data.session_token)
+  }
+  return data
 }
 
 export async function ensureParentAccountReady(parentId) {

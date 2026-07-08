@@ -156,7 +156,7 @@ const editingChild = ref(null)
 const childForm = ref({ loginName: '', nickname: '', password: '', age: null, grade: '' })
 const profileForm = ref({ phone: '', realName: '', nickname: '', password: '', confirm: '' })
 
-const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120
+const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120，与后端校验一致
 const ageIndex = computed(() => {
   const idx = ageOptions.indexOf(childForm.value.age)
   return idx >= 0 ? idx : 0
@@ -293,6 +293,7 @@ async function saveProfile() {
     closeProfileForm()
     uni.showToast({ title: '资料已更新', icon: 'none' })
   } catch (e) {
+    if (e.status === 401) return
     uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {
     savingProfile.value = false
@@ -306,7 +307,9 @@ async function saveChild() {
   saving.value = true
   try {
     if (editingChild.value) {
-      const body = { nickname: nick, grade: childForm.value.grade || null, age: childForm.value.age || null }
+      const body = { nickname: nick }
+      if (childForm.value.grade) body.grade = childForm.value.grade
+      if (childForm.value.age != null && childForm.value.age !== '') body.age = childForm.value.age
       if (pwd) {
         if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
         body.password = pwd
@@ -326,8 +329,9 @@ async function saveChild() {
     await loadData()
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch (e) {
+    if (e.status === 401) return
     if (e.status === 409) uni.showToast({ title: '账号已被使用', icon: 'none' })
-    else uni.showToast({ title: '保存失败', icon: 'none' })
+    else uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {
     saving.value = false
   }

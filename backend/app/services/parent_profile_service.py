@@ -104,13 +104,13 @@ def parent_next_step(user: ChildUser) -> str:
     return "home" if complete else "complete-profile"
 
 
-def parent_profile_to_dict(user: ChildUser) -> dict:
+def parent_profile_to_dict(user: ChildUser, *, session_token: str | None = None) -> dict:
     complete, missing = parent_profile_status(user)
     channel = get_login_channel(user)
     if channel == LOGIN_CHANNEL_WECHAT:
         missing = parent_wechat_missing_fields(user)
         complete = len(missing) == 0
-    return {
+    out = {
         "id": user.id,
         "parent_phone": user.parent_phone,
         "nickname": user.nickname,
@@ -123,6 +123,9 @@ def parent_profile_to_dict(user: ChildUser) -> dict:
         "account_ready": parent_account_ready(user),
         "next_step": parent_next_step(user),
     }
+    if session_token:
+        out["session_token"] = session_token
+    return out
 
 
 def assert_parent_account_ready(user: ChildUser) -> None:
@@ -141,12 +144,14 @@ def update_parent_profile(
     real_name: str | None = None,
     password: str | None = None,
     require_password: bool = False,
-) -> ChildUser:
+) -> tuple[ChildUser, str | None]:
     user = db.get(ChildUser, user_id)
     if not user or user.role != auth_service.ROLE_PARENT:
         raise HTTPException(404, "家长不存在")
     if not auth_service.is_account_active(user):
         raise HTTPException(401, "账号已停用")
+
+    new_session_token: str | None = None
 
     if nickname is not None:
         nick = nickname.strip()
@@ -169,19 +174,17 @@ def update_parent_profile(
             raise HTTPException(400, "密码至少6位")
         if pwd:
             from app.core.password import hash_password
+            from app.services.session_service import issue_session, revoke_all_sessions
 
-            had_password = bool(user.password_hash)
             user.password_hash = hash_password(pwd)
-            if had_password:
-                from app.services.session_service import revoke_all_sessions
-
-                revoke_all_sessions(db, user.id)
+            revoke_all_sessions(db, user.id)
+            new_session_token = issue_session(db, user)
 
     user.profile_json = pj
     flag_modified(user, "profile_json")
     db.commit()
     db.refresh(user)
-    return user
+    return user, new_session_token
 
 
 def login_parent_by_sms(db: Session, *, phone: str) -> ChildUser:

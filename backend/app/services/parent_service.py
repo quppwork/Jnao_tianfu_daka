@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.password import hash_password
 from app.db.models import ChildUser
@@ -80,6 +81,7 @@ def create_child(
     if learner:
         pj["learner"] = learner
     child.profile_json = pj
+    flag_modified(child, "profile_json")
     db.commit()
     db.refresh(child)
     return child
@@ -123,6 +125,7 @@ def update_child(
     if learner:
         pj["learner"] = learner
     child.profile_json = pj
+    flag_modified(child, "profile_json")
     db.commit()
     db.refresh(child)
     return child

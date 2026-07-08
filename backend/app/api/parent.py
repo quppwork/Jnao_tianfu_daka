@@ -50,7 +50,7 @@ def put_profile(
     user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
-    user = update_parent_profile(
+    user, new_token = update_parent_profile(
         db,
         user_id,
         nickname=req.nickname,
@@ -59,7 +59,7 @@ def put_profile(
         require_password=req.require_password,
     )
     invalidate_user_profile(user_id)
-    return ParentProfileResponse(**parent_profile_to_dict(user))
+    return ParentProfileResponse(**parent_profile_to_dict(user, session_token=new_token))
 
 
 @router.get("/quota", response_model=ParentQuotaResponse)
