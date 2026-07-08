@@ -107,8 +107,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  getAdminUserId,
   clearAdminSession,
+  logoutAdminAndGoLogin,
+  requirePageAuth,
   fetchAdminParents,
   fetchAdminChildren,
   createAdminChild,
@@ -140,11 +141,9 @@ const selectedParentLabel = computed(() => {
 })
 
 onMounted(async () => {
-  adminId.value = getAdminUserId()
-  if (!adminId.value) {
-    uni.redirectTo({ url: '/pages/admin/login' })
-    return
-  }
+  const auth = await requirePageAuth('admin')
+  if (!auth.ok) return
+  adminId.value = auth.userId
   await loadAll()
 })
 
@@ -153,9 +152,12 @@ async function loadAll() {
   try {
     parents.value = await fetchAdminParents(adminId.value)
     children.value = await fetchAdminChildren(adminId.value)
-  } catch (_) {
-    uni.showToast({ title: '加载失败，请重新登录', icon: 'none' })
-    logout()
+  } catch (e) {
+    if (e?.status === 401) {
+      logout()
+      return
+    }
+    uni.showToast({ title: '加载失败，请稍后重试', icon: 'none' })
   } finally {
     loading.value = false
   }
@@ -253,8 +255,7 @@ async function saveChild() {
 }
 
 function logout() {
-  clearAdminSession()
-  uni.redirectTo({ url: '/pages/login/index' })
+  logoutAdminAndGoLogin()
 }
 </script>
 

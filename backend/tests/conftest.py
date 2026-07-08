@@ -113,6 +113,21 @@ def mock_doubao():
 
 
 @pytest.fixture
+def client_strict_auth(db_session, mock_jnao, mock_doubao):
+    """真实 session_token 校验（模拟生产刷新场景）"""
+
+    def override_get_db():
+        yield db_session
+
+    from main import app
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
 def client(db_session, mock_jnao, mock_doubao):
     def override_get_db():
         yield db_session

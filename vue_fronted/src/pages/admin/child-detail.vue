@@ -82,7 +82,7 @@
 import { ref, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
-  getAdminUserId,
+  requirePageAuth,
   fetchAdminChildDetail,
   updateAdminChild,
   deleteAdminChild,
@@ -102,11 +102,13 @@ onLoad((q) => {
 })
 
 onMounted(async () => {
-  adminId.value = getAdminUserId()
-  if (!adminId.value || !childId.value) {
-    uni.redirectTo({ url: '/pages/admin/login' })
+  if (!childId.value) {
+    goBack()
     return
   }
+  const auth = await requirePageAuth('admin')
+  if (!auth.ok) return
+  adminId.value = auth.userId
   await load()
 })
 

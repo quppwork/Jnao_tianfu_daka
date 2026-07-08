@@ -129,8 +129,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  getLoggedInUserId,
-  getSessionToken,
+  requirePageAuth,
   logoutAndGoLogin,
   fetchParentChildren,
   fetchParentQuota,
@@ -179,23 +178,20 @@ onMounted(() => loadData())
 async function loadData() {
   loading.value = true
   try {
-    if (!getSessionToken()) {
-      logoutAndGoLogin()
-      return
-    }
+    const auth = await requirePageAuth('parent')
+    if (!auth.ok) return
+
     const raw = localStorage.getItem('jnao_user')
-    let role = null
     if (raw) {
       const u = JSON.parse(raw)
-      role = u.role
-      if (role !== 'parent') {
+      if (u.role !== 'parent') {
         logoutAndGoLogin()
         return
       }
       parentName.value = u.name || '家长'
-      parentId.value = u.id || getLoggedInUserId()
+      parentId.value = u.id || auth.userId
     } else {
-      parentId.value = getLoggedInUserId()
+      parentId.value = auth.userId
     }
     if (!parentId.value) {
       logoutAndGoLogin()

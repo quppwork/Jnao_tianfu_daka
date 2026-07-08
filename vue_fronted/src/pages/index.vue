@@ -155,6 +155,7 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import {
   clearChildUserId,
   ensureChildUser,
+  requirePageAuth,
   getChildUserId,
   markChildUserSessionValid,
   invalidateChildUserSession,
@@ -427,13 +428,9 @@ function doLogout() {
   uni.redirectTo({ url: '/pages/login/index' })
 }
 
-onMounted(() => {
-  try {
-    if (localStorage.getItem('jnao_logged_in') !== '1') {
-      uni.redirectTo({ url: '/pages/login/index' })
-      return
-    }
-  } catch (_) {}
+onMounted(async () => {
+  const auth = await requirePageAuth('student')
+  if (!auth.ok) return
   initHome()
 })
 

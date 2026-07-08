@@ -23,6 +23,15 @@
 
 import { getQaImageLocal, parseQaImageId } from './qaMedia.js'
 import { authHeaders, getDeviceId } from './loginGuard.js'
+import {
+  inferAuthKindFromPath,
+  readAuthSnapshot,
+  isTransientError,
+  isAuthExpiredError,
+  sessionKeysForKind,
+  rememberCurrentRoute,
+  getCurrentAppPath,
+} from './appSession.js'
 
 // ── localStorage 键名 ──
 const CHILD_KEY = 'jnao_child_user_id'
@@ -55,17 +64,111 @@ export function getLoggedInUserId() {
 
 /** 退出登录并回到登录页 */
 export function logoutAndGoLogin() {
-  try {
-    localStorage.removeItem('jnao_user')
-    localStorage.removeItem('jnao_logged_in')
-    localStorage.removeItem('jnao_login_channel')
-    clearChildUserId()
-  } catch (e) { /* ignore */ }
+  clearSessionForKind('parent')
+  clearSessionForKind('student')
   try {
     uni.reLaunch({ url: '/pages/login/index' })
   } catch (e) {
     window.location.href = '/pages/login/index'
   }
+}
+
+export function logoutAdminAndGoLogin() {
+  clearSessionForKind('admin')
+  try {
+    uni.redirectTo({ url: '/pages/admin/login' })
+  } catch (e) {
+    window.location.href = '/pages/admin/login'
+  }
+}
+
+export function clearSessionForKind(kind) {
+  for (const key of sessionKeysForKind(kind)) {
+    try {
+      localStorage.removeItem(key)
+    } catch (e) { /* ignore */ }
+  }
+  if (kind === 'student' || kind === 'parent') {
+    invalidateChildUserSession()
+  }
+}
+
+export function redirectToLoginForKind(kind) {
+  if (kind === 'admin') {
+    logoutAdminAndGoLogin()
+    return
+  }
+  logoutAndGoLogin()
+}
+
+const _authValidatedAt = { admin: 0, parent: 0, student: 0 }
+const _authValidatedUid = { admin: null, parent: null, student: null }
+const AUTH_VALIDATE_TTL = 5 * 60 * 1000
+
+export function invalidatePageAuthCache(kind = null) {
+  const kinds = kind ? [kind] : ['admin', 'parent', 'student']
+  for (const k of kinds) {
+    _authValidatedAt[k] = 0
+    _authValidatedUid[k] = null
+  }
+}
+
+/** 页面进入前校验 session；网络异常允许离线继续，仅 401 才登出 */
+export async function requirePageAuth(kind) {
+  const snap = readAuthSnapshot()
+  const session = kind === 'admin' ? snap.admin : kind === 'parent' ? snap.parent : snap.student
+
+  if (!session?.userId || !session?.token) {
+    redirectToLoginForKind(kind)
+    return { ok: false, reason: 'missing_local' }
+  }
+
+  if (
+    _authValidatedUid[kind] === session.userId
+    && (Date.now() - _authValidatedAt[kind]) < AUTH_VALIDATE_TTL
+  ) {
+    if (kind === 'student') markChildUserSessionValid(session.userId)
+    return { ok: true, userId: session.userId }
+  }
+
+  try {
+    if (kind === 'admin') {
+      await apiJson(withAdmin('/api/admin/settings', session.userId))
+    } else if (kind === 'parent') {
+      await apiJson(withUser('/api/parent/profile', session.userId))
+    } else {
+      await apiJson(withUser('/api/user/profile', session.userId))
+    }
+    _authValidatedUid[kind] = session.userId
+    _authValidatedAt[kind] = Date.now()
+    if (kind === 'student') markChildUserSessionValid(session.userId)
+    return { ok: true, userId: session.userId }
+  } catch (e) {
+    if (isTransientError(e.status)) {
+      _authValidatedUid[kind] = session.userId
+      _authValidatedAt[kind] = Date.now()
+      if (kind === 'student') markChildUserSessionValid(session.userId)
+      return { ok: true, userId: session.userId, offline: true }
+    }
+    if (isAuthExpiredError(e.status) || e.status === 403) {
+      clearSessionForKind(kind)
+      redirectToLoginForKind(kind)
+      return { ok: false, reason: 'expired' }
+    }
+    _authValidatedUid[kind] = session.userId
+    _authValidatedAt[kind] = Date.now()
+    if (kind === 'student') markChildUserSessionValid(session.userId)
+    return { ok: true, userId: session.userId, offline: true }
+  }
+}
+
+/** App 启动：记录路由 + 静默校验当前页 session */
+export async function bootstrapAppSession() {
+  rememberCurrentRoute()
+  const { route } = getCurrentAppPath()
+  const kind = inferAuthKindFromPath(route)
+  if (!kind) return { ok: true, skipped: true }
+  return requirePageAuth(kind)
 }
 
 export function setChildUserId(id) {
@@ -82,6 +185,8 @@ export function clearChildUserId() {
     localStorage.removeItem(SESSION_TOKEN_KEY)
   } catch (e) { /* ignore */ }
   invalidateChildUserSession()
+  invalidatePageAuthCache('student')
+  invalidatePageAuthCache('parent')
 }
 
 /** 读取 session_token */
@@ -122,33 +227,6 @@ export function markChildUserSessionValid(uid) {
   }
 }
 
-/** 登录/注册类接口的 401 表示凭据错误，不应 reLaunch 登录页 */
-const AUTH_ATTEMPT_PREFIXES = [
-  '/api/auth/login',
-  '/api/auth/sms/',
-  '/api/auth/register',
-  '/api/auth/wechat/exchange',
-  '/api/admin/login',
-]
-
-function isAuthAttemptRequest(url) {
-  const path = String(url || '').split('?')[0]
-  return AUTH_ATTEMPT_PREFIXES.some((p) => path === p || path.startsWith(p))
-}
-
-/** 已登录会话失效时才清态并回登录页；登录失败 401 由页面自行提示 */
-function handleUnauthorizedResponse(url) {
-  if (isAuthAttemptRequest(url)) return
-  if (!getSessionToken() && !getLoggedInUserId()) return
-  clearChildUserId()
-  try {
-    localStorage.removeItem('jnao_user')
-    localStorage.removeItem('jnao_logged_in')
-    localStorage.removeItem('jnao_login_channel')
-  } catch (e) { /* ignore */ }
-  logoutAndGoLogin()
-}
-
 /** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
 function formatApiError(data, status) {
   const d = data?.detail ?? data?.message
@@ -174,27 +252,6 @@ async function apiJson(url, options = {}) {
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    // 401：会话失效 → 仅清除本地状态，统一由 ensureChildUser / 页面守卫负责跳转
-    if (res.status === 401) {
-      const hadSession = !!getSessionToken()
-      // 管理员 API → 清除管理员状态
-      if (String(url).includes('/api/admin/')) {
-        try {
-          localStorage.removeItem('jnao_admin_user')
-          localStorage.removeItem('jnao_admin_token')
-        } catch (e) { /* ignore */ }
-      }
-      clearChildUserId()
-      invalidateChildUserSession()
-      try {
-        localStorage.removeItem('jnao_user')
-        localStorage.removeItem('jnao_logged_in')
-        localStorage.removeItem('jnao_login_channel')
-      } catch (e) { /* ignore */ }
-      if (!isAuthAttemptRequest(url) && hadSession) {
-        logoutAndGoLogin()
-      }
-    }
     const msg = formatApiError(data, res.status)
     console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
     const err = new Error(msg)
@@ -225,15 +282,6 @@ async function streamPostSse(url, body, { onToken, onDone, onError, signal } = {
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    if (res.status === 401) {
-      clearChildUserId()
-      invalidateChildUserSession()
-      try {
-        localStorage.removeItem('jnao_user')
-        localStorage.removeItem('jnao_logged_in')
-        localStorage.removeItem('jnao_login_channel')
-      } catch (e) { /* ignore */ }
-    }
     const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
     err.status = res.status
     throw err
@@ -381,10 +429,16 @@ function _storeAuth(data) {
   if (role === 'student') {
     setChildUserId(data.child_user_id)
     markChildUserSessionValid(data.child_user_id)
+    invalidatePageAuthCache('student')
+    _authValidatedUid.student = data.child_user_id
+    _authValidatedAt.student = Date.now()
   } else {
     try { localStorage.removeItem(CHILD_KEY) } catch (e) { /* ignore */ }
     invalidateChildUserSession()
     setChildUserId(data.child_user_id)
+    invalidatePageAuthCache('parent')
+    _authValidatedUid.parent = data.child_user_id
+    _authValidatedAt.parent = Date.now()
   }
 }
 
@@ -705,47 +759,9 @@ export async function ensureChildUser(nickname = '学员') {
     throw new NeedLoginError('请使用学生账号登录')
   }
 
-  const existing = getChildUserId()
-  if (!existing) {
-    _redirectToLogin()
-    throw new NeedLoginError()
-  }
-  if (!getSessionToken()) {
-    clearChildUserId()
-    _redirectToLogin()
-    throw new NeedLoginError()
-  }
-
-  // 缓存命中 + 未超过 TTL → 跳过 API 校验
-  if (existing && _sessionValidatedUid === existing && (Date.now() - _sessionValidatedAt) < SESSION_VALID_TTL) {
-    return existing
-  }
-  if (!_validateInFlight) {
-    _validateInFlight = (async () => {
-      try {
-        await apiJson(withUser('/api/user/profile', existing))
-        markChildUserSessionValid(existing)
-      } catch (e) {
-        if (e.status === 404 || e.status === 401 || e.status === 403) {
-          clearChildUserId()
-          // 会话已失效 → 统一在此跳转登录页
-          _redirectToLogin()
-        } else {
-          // 网络错误等非鉴权错误 → 允许继续使用，下次再校验
-          markChildUserSessionValid(existing)
-        }
-      } finally {
-        _validateInFlight = null
-      }
-    })()
-  }
-  await _validateInFlight
-  const uid = getChildUserId()
-  if (!uid) {
-    _redirectToLogin()
-    throw new NeedLoginError()
-  }
-  return uid
+  const auth = await requirePageAuth('student')
+  if (!auth.ok) throw new NeedLoginError()
+  return auth.userId
 }
 
 /** JNAO 外部 API 用的 uid（存于 child_user.jnao_uid） */
@@ -1207,10 +1223,7 @@ function withAdmin(url, adminId) {
 }
 
 export function clearAdminSession() {
-  try {
-    localStorage.removeItem(ADMIN_USER_KEY)
-    localStorage.removeItem(ADMIN_TOKEN_KEY)
-  } catch (_) {}
+  clearSessionForKind('admin')
 }
 
 export async function loginAdmin(loginName, password) {
@@ -1226,6 +1239,9 @@ export async function loginAdmin(loginName, password) {
     loginName: data.login_name,
   }))
   if (data.session_token) localStorage.setItem(ADMIN_TOKEN_KEY, data.session_token)
+  invalidatePageAuthCache('admin')
+  _authValidatedUid.admin = data.child_user_id
+  _authValidatedAt.admin = Date.now()
   return data
 }
 
