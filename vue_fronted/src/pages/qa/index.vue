@@ -945,11 +945,8 @@ async function confirmDeleteSession() {
 
 function openImageSheet() {
   if (pickingImage.value || loading.value) return
-  // 手机 H5：点相机直接进入全屏拍照（DeepSeek 式）
-  if (isWebH5() && isMobileH5()) {
-    openWebcam()
-    return
-  }
+  // 始终弹出 ActionSheet 让用户选择拍照或相册
+  // 手机 H5（HTTP）下 browserCanUseCamera 为 false，直接 openWebcam 会降级到纯拍照，丢失相册入口
   showImageSheet.value = true
 }
 

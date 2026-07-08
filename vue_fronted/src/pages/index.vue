@@ -76,9 +76,6 @@
       <view class="input-wrap">
         <textarea class="chat-input" v-model="inputText" placeholder="输入问题..." :disabled="loading" @keydown="onKeyDown" :rows="1" />
         <view class="input-btns">
-          <view class="btn-mic" :class="{ 'mic-recording': recording }" @click="voicePlaceholder">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-          </view>
           <view class="btn-send" @click="sendMsg">
             <text style="color:#fff;font-size:14px;">➤</text>
           </view>
@@ -207,7 +204,6 @@ function onKeyDown(e) {
 }
 
 async function sendMsg() {
-  stopRecord()
   const text = inputText.value.trim()
   if (!text || loading.value) return
   messages.value.push({ role: 'user', text })
@@ -424,71 +420,7 @@ function scrollChat() {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-function speakLast() {
-  const aiMsgs = messages.value.filter(m => m.role === 'ai')
-  if (!aiMsgs.length) return
-  const text = aiMsgs[aiMsgs.length - 1].text
-  if (window.speechSynthesis) {
-    const u = new SpeechSynthesisUtterance(text)
-    u.lang = 'zh-CN'
-    u.rate = 1.1
-    speechSynthesis.cancel()
-    speechSynthesis.speak(u)
-  } else {
-    uni.showToast({ title: '当前浏览器不支持语音播报', icon: 'none' })
-  }
-}
-const recording = ref(false)
-let recognition = null
 
-function initRecognition() {
-  if (recognition) return true
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-  if (!SpeechRecognition) { console.log('SpeechRecognition not available'); return false }
-  recognition = new SpeechRecognition()
-  recognition.lang = 'zh-CN'
-  recognition.interimResults = true
-  recognition.continuous = true
-  recognition.onresult = (e) => {
-    let text = ''
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      text += e.results[i][0].transcript
-    }
-    inputText.value = text
-    console.log('recognized:', text)
-  }
-  recognition.onerror = (e) => {
-    console.log('recognition error:', e.error)
-    recording.value = false
-  }
-  recognition.onend = () => {
-    console.log('recognition ended')
-    recording.value = false
-    if (inputText.value.trim()) sendMsg()
-  }
-  console.log('SpeechRecognition ready')
-  return true
-}
-
-function voicePlaceholder() {
-  if (recording.value) { stopRecord(); return }
-  if (!initRecognition()) {
-    uni.showToast({ title: '当前浏览器不支持语音识别', icon: 'none' })
-    return
-  }
-  recording.value = true
-  try { recognition.start() } catch(e) {
-    recording.value = false
-    uni.showToast({ title: '麦克风权限被拒', icon: 'none', duration: 3000 })
-  }
-}
-
-function stopRecord() {
-  if (recognition) {
-    try { recognition.stop() } catch(e) {}
-    recording.value = false
-  }
-}
 
 function openPage(name) {
   const routes = {
@@ -572,9 +504,7 @@ function onNavTap() {
 @keyframes dotPulse { 0%,80%,100% { opacity:0.2 } 40% { opacity:1 } }
 .btn-send { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex !important; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .btn-send:active { opacity:0.8; }
-.btn-mic { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--accent),#3b8bff); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px var(--mic-shadow); transition:all 0.2s; }
-.btn-mic.mic-recording { background:#ff4444 !important; box-shadow:0 0 0 6px rgba(255,68,68,0.3); animation:micPulse 1s infinite; }
-@keyframes micPulse { 0%,100% { box-shadow:0 0 0 6px rgba(255,68,68,0.3) } 50% { box-shadow:0 0 0 14px rgba(255,68,68,0) } }
+
 
 /* Settings modal */
 .picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
