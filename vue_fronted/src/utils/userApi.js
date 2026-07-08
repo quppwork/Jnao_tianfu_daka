@@ -116,6 +116,33 @@ export function markChildUserSessionValid(uid) {
   if (uid) _sessionValidatedUid = uid
 }
 
+/** 登录/注册类接口的 401 表示凭据错误，不应 reLaunch 登录页 */
+const AUTH_ATTEMPT_PREFIXES = [
+  '/api/auth/login',
+  '/api/auth/sms/',
+  '/api/auth/register',
+  '/api/auth/wechat/exchange',
+  '/api/admin/login',
+]
+
+function isAuthAttemptRequest(url) {
+  const path = String(url || '').split('?')[0]
+  return AUTH_ATTEMPT_PREFIXES.some((p) => path === p || path.startsWith(p))
+}
+
+/** 已登录会话失效时才清态并回登录页；登录失败 401 由页面自行提示 */
+function handleUnauthorizedResponse(url) {
+  if (isAuthAttemptRequest(url)) return
+  if (!getSessionToken() && !getLoggedInUserId()) return
+  clearChildUserId()
+  try {
+    localStorage.removeItem('jnao_user')
+    localStorage.removeItem('jnao_logged_in')
+    localStorage.removeItem('jnao_login_channel')
+  } catch (e) { /* ignore */ }
+  logoutAndGoLogin()
+}
+
 /** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
 function formatApiError(data, status) {
   const d = data?.detail ?? data?.message
@@ -141,15 +168,8 @@ async function apiJson(url, options = {}) {
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    // 401：会话失效 → 清除登录态并回到登录页
     if (res.status === 401) {
-      clearChildUserId()
-      try {
-        localStorage.removeItem('jnao_user')
-        localStorage.removeItem('jnao_logged_in')
-        localStorage.removeItem('jnao_login_channel')
-      } catch (e) { /* ignore */ }
-      logoutAndGoLogin()
+      handleUnauthorizedResponse(url)
     }
     const msg = formatApiError(data, res.status)
     console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
@@ -181,13 +201,7 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     if (res.status === 401) {
-      clearChildUserId()
-      try {
-        localStorage.removeItem('jnao_user')
-        localStorage.removeItem('jnao_logged_in')
-        localStorage.removeItem('jnao_login_channel')
-      } catch (e) { /* ignore */ }
-      logoutAndGoLogin()
+      handleUnauthorizedResponse(url)
     }
     const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
     err.status = res.status
