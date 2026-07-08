@@ -103,6 +103,11 @@ class AdminParentDetailResponse(BaseModel):
     created_at: str | None = None
     children: list[AdminChildOut] = []
     active_sessions: list[AdminSessionOut] = []
+    reconciled_count: int = 0
+    unbound_children: list[AdminChildOut] = []
+    duplicate_parents: list[dict] = []
+    canonical_parent_id: int | None = None
+    is_duplicate_account: bool = False
 
 
 class AdminTrainingDayOut(BaseModel):

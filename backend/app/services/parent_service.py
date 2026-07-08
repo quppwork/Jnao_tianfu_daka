@@ -32,7 +32,10 @@ def get_quota(db: Session, parent_id: int) -> dict:
 
 
 def list_children(db: Session, parent_id: int) -> list[dict]:
+    from app.services.parent_reconcile_service import reconcile_parent_children
+
     _require_parent(db, parent_id)
+    reconcile_parent_children(db, parent_id)
     children = auth_service.list_parent_children(db, parent_id)
     return [auth_service.child_summary(db, c) for c in children]
 

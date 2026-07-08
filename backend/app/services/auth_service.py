@@ -92,13 +92,9 @@ def find_child_by_phone(db: Session, parent_phone: str, nickname: str) -> ChildU
 
 
 def find_parent_by_phone(db: Session, parent_phone: str) -> ChildUser | None:
-    return db.scalar(
-        select(ChildUser).where(
-            ChildUser.parent_phone == parent_phone,
-            ChildUser.role == ROLE_PARENT,
-            ChildUser.account_status == ACCOUNT_ACTIVE,
-        )
-    )
+    from app.services.parent_reconcile_service import resolve_canonical_parent
+
+    return resolve_canonical_parent(db, parent_phone)
 
 
 def find_user_by_login_name(db: Session, login_name: str) -> ChildUser | None:

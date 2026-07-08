@@ -16,6 +16,23 @@
         <view class="row-line"><text class="label">注册时间</text><text class="val">{{ formatTime(detail.created_at) }}</text></view>
       </view>
 
+      <view v-if="detail.is_duplicate_account" class="warn-box">
+        <text class="warn-title">重复家长账号</text>
+        <text class="warn-text">该手机号存在多个家长账号，孩子列表已合并显示自主账号（ID {{ detail.canonical_parent_id }}）。</text>
+      </view>
+
+      <view v-if="detail.reconciled_count > 0" class="info-box">
+        <text class="info-text">已自动修复 {{ detail.reconciled_count }} 个未绑定孩子。</text>
+      </view>
+
+      <view v-if="detail.duplicate_parents?.length" class="warn-box">
+        <text class="warn-title">同手机号其他账号（{{ detail.duplicate_parents.length }}）</text>
+        <view v-for="d in detail.duplicate_parents" :key="d.id" class="warn-row">
+          <text class="warn-text">{{ d.nickname }} · ID {{ d.id }} · {{ d.children_count }} 个孩子</text>
+          <text class="act" @click="goParent(d.id)">查看</text>
+        </view>
+      </view>
+
       <view class="section">
         <text class="section-title">在线设备（{{ detail.active_sessions?.length || 0 }}）</text>
         <view v-if="!detail.active_sessions?.length" class="hint"><text>暂无活跃会话</text></view>
@@ -113,6 +130,11 @@ function goChild(id) {
   uni.navigateTo({ url: `/pages/admin/child-detail?id=${id}` })
 }
 
+function goParent(id) {
+  if (id === parentId.value) return
+  uni.redirectTo({ url: `/pages/admin/parent-detail?id=${id}` })
+}
+
 async function save() {
   const p = form.value
   const body = { nickname: p.nickname, parent_phone: p.parent_phone, child_quota: p.child_quota }
@@ -178,4 +200,10 @@ function confirmDelete() {
 .btn-primary text { color:#fff; font-weight:600; }
 .btn-danger { margin-top:8px; padding:12px; text-align:center; border-radius:10px; background:rgba(220,38,38,0.1); }
 .btn-danger text { color:#dc2626; font-size:13px; }
+.warn-box { background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); border-radius:12px; padding:12px; margin-bottom:12px; }
+.warn-title { display:block; color:#f59e0b; font-size:13px; font-weight:600; margin-bottom:6px; }
+.warn-text { display:block; color:var(--text-dim); font-size:12px; line-height:1.5; }
+.warn-row { display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
+.info-box { background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:12px; padding:10px 12px; margin-bottom:12px; }
+.info-text { color:#22c55e; font-size:12px; }
 </style>
