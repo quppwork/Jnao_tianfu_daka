@@ -217,7 +217,8 @@ def get_milestones(db: Session, child_user_id: int, stats: dict | None = None) -
             state = get_training_progress(user)
             overall_tier = _calc_tier(state)
     except Exception:
-        pass
+        import logging
+        logging.getLogger("jnao").warning("growth: 计算 overall_tier 失败，退回默认", exc_info=True)
 
     return [
         {
@@ -371,7 +372,8 @@ def get_summary(db: Session, child_user_id: int, stats: dict | None = None) -> d
             state = get_training_progress(user)
             overall_tier = _overall_tier(state)
     except Exception:
-        pass
+        import logging
+        logging.getLogger("jnao").warning("growth: _overall_tier 失败，退回默认", exc_info=True)
     honor = get_tier_honor(overall_tier)
     # 回退：无训练进度时用打卡里程碑
     if honor == "新学员":

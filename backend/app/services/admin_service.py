@@ -59,7 +59,9 @@ def _purge_student_operational_data(db: Session, child_id: int) -> None:
     )
     if plan_ids:
         db.execute(delete(TrainingRecord).where(TrainingRecord.plan_id.in_(plan_ids)))
-        db.execute(delete(TrainingItem).where(TrainingItem.plan_id.in_(plan_ids)))
+        db.execute(
+            delete(TrainingItem).where(TrainingItem.plan_id.in_(plan_ids))
+        )
         db.execute(delete(TrainingPlan).where(TrainingPlan.id.in_(plan_ids)))
 
     db.execute(delete(TrainingRecord).where(TrainingRecord.child_user_id == child_id))

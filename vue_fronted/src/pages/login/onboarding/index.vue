@@ -263,14 +263,18 @@ async function persistOnboarding({ finalize = false } = {}) {
   try {
     const p = await fetchProfile(userId)
     existing = p.profile_json?.onboarding || {}
-  } catch (_) {}
+  } catch (e) {
+    console.error('[onboarding] 读取已有数据失败:', e?.message || e)
+  }
   const onboarding = { ...existing, ...buildOnboardingPayload({ finalize }) }
   await saveProfile(userId, { profile_json: { onboarding } })
   await refreshTalentState(userId)
 }
 
 async function startTalentTest() {
-  try { await persistOnboarding() } catch (_) {}
+  try { await persistOnboarding() } catch (e) {
+    console.error('[onboarding] persistOnboarding 失败:', e?.message || e)
+  }
   const st = studentType.value || 'new'
   uni.navigateTo({ url: `/pages/talent/index?from=onboarding&student_type=${st}` })
 }

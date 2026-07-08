@@ -127,7 +127,8 @@ async def save_assessment_endpoint(
             report=report,
         )
         user = db.get(ChildUser, child_user_id)
-        current = (user.profile_json or {}).get("talent_primary", "") if user else ""
+        pj = (user.profile_json or {}) if user else {}
+        current = pj.get("talent_primary", "")
         _invalidate_assessment_caches(child_user_id)
         return {
             "code": 1,

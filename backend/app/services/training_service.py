@@ -908,6 +908,9 @@ def submit_checkin(
     if not target_item or target_item.plan_id != plan.id:
         raise TrainingError("训练项不存在", 404)
 
+    if cards:
+        cards = [_sanitize_card(c) for c in cards]
+
     ability_type, time_spent, content, result, note = _apply_card_fields_to_record(
         cards=cards,
         ability_type=ability_type,
@@ -931,7 +934,16 @@ def submit_checkin(
         files_json=cards,
     )
     db.add(record)
-    target_item.checkin_status = "done"
+    # 原子抢占：仅在未打卡时标记 done，防止并发重复提交
+    from sqlalchemy import update as sql_update
+    claimed = db.execute(
+        sql_update(TrainingItem)
+        .where(TrainingItem.id == target_item.id, TrainingItem.checkin_status != "done")
+        .values(checkin_status="done")
+    )
+    if claimed.rowcount == 0:
+        db.rollback()
+        raise TrainingError("该项已完成打卡，请勿重复提交", 409)
 
     # v2.0: 各技能独立打卡，不再按 block 批量标记完成。
     # pre-v2.0 的 block 批量逻辑已移除。
@@ -1034,6 +1046,34 @@ def _summarize_results(cards: list[dict]) -> str | None:
 def _summarize_notes(cards: list[dict]) -> str | None:
     parts = [str(c.get("note")).strip() for c in cards or [] if c.get("note")]
     return "；".join(parts) if parts else None
+
+
+def _sanitize_card(card: dict) -> dict:
+    """清洗单张打卡卡片，防止脏数据入库"""
+    c = dict(card)
+    # 数值字段：转 float 并 clamp 到合理范围
+    for field, lo, hi in [
+        ("time", 0.5, 480), ("wordCount", 1, 1000000),
+        ("accuracy", 0, 100), ("count", 1, 100000),
+    ]:
+        raw = c.get(field)
+        if raw is not None and raw != "":
+            try:
+                v = float(str(raw))
+                c[field] = max(lo, min(hi, v))
+            except (ValueError, TypeError):
+                c.pop(field, None)
+    # 文本字段：截断
+    for field, limit in [
+        ("note", 2000), ("content", 2000), ("result", 2000),
+        ("materialName", 200), ("tag", 50), ("tool", 50),
+        ("materialType", 50), ("forwardAcc", 50), ("backwardAcc", 50),
+        ("forwardTime", 20), ("backwardTime", 20),
+    ]:
+        val = c.get(field)
+        if isinstance(val, str) and len(val) > limit:
+            c[field] = val[:limit]
+    return c
 
 
 def _apply_card_fields_to_record(

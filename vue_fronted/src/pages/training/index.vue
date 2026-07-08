@@ -84,6 +84,11 @@
             <view class="dev-action" @click="devRefreshAiPlan"><text>🤖 刷新 AI</text></view>
             <view class="dev-action" @click="devUnlockNextPhase"><text>🔓 解锁下阶段</text></view>
           </view>
+          <text class="dev-section-label">提醒预览</text>
+          <view class="dev-actions">
+            <view class="dev-action" @click="devPreviewCongrats"><text>🎉 晋级成功</text></view>
+            <view class="dev-action" @click="devPreviewRegret"><text>😔 遗憾失败</text></view>
+          </view>
           <text class="dev-section-label">危险操作</text>
           <view class="dev-actions">
             <view class="dev-action dev-action-danger" @click="devClearAllHistory"><text>🗑 清空历史</text></view>
@@ -1551,6 +1556,13 @@ async function devResetClockAction() {
   }
 }
 
+function devPreviewCongrats() {
+  uni.showToast({ title: '🎉 超脑阅读 晋级成功！', icon: 'none', duration: 3000 })
+}
+function devPreviewRegret() {
+  uni.showToast({ title: '😔 超脑阅读 差一点就晋级了，明天继续加油！', icon: 'none', duration: 3000 })
+}
+
 async function devClearAllHistory() {
   if (!devMode.value) return
   try {
@@ -2327,23 +2339,19 @@ function applyCheckinProgress(res) {
   if (sr) {
     skillTierProgress.value = sr
     for (const [skill, result] of Object.entries(sr)) {
+      // 仅在第 3 次尝试（小晋级考核）时触发通知
+      if (!result.was_deciding) continue
       if (result.tier_advanced) {
         uni.showToast({
           title: `🎉 ${skill} 晋级成功！`,
           icon: 'none',
           duration: 3000,
         })
-      } else if (result.passed && result.consecutive_pass >= 2) {
-        uni.showToast({
-          title: `${skill} 连续 ${result.consecutive_pass} 次达标`,
-          icon: 'none',
-          duration: 2000,
-        })
       } else if (!result.passed) {
         uni.showToast({
-          title: `${skill} 未达标，计数重置`,
+          title: `😔 ${skill} 差一点就晋级了，明天继续加油！`,
           icon: 'none',
-          duration: 2000,
+          duration: 3000,
         })
       }
     }

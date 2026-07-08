@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.talent_mapping import (
@@ -178,6 +178,7 @@ def has_training_records(db: Session, child_user_id: int) -> bool:
     return db.query(
         select(TrainingRecord).where(TrainingRecord.child_user_id == child_user_id).exists()
     ).scalar()
+
 
 class AssessmentError(Exception):
     def __init__(self, message: str, status_code: int = 400):

@@ -317,7 +317,9 @@ async function initHome() {
       text: m.content,
     }))
     await applyProfileData(profileData, uid)
-  } catch (_) {}
+  } catch (e) {
+    console.error('[home] initHome 失败:', e?.message || e, e?.status)
+  }
 }
 
 async function loadProfile() {
@@ -325,7 +327,9 @@ async function loadProfile() {
     const uid = await ensureChildUser()
     const data = await fetchProfile(uid)
     await applyProfileData(data, uid)
-  } catch (_) {}
+  } catch (e) {
+    console.error('[home] loadProfile 失败:', e?.message || e, e?.status)
+  }
 }
 
 function onGradeChange(e) {
