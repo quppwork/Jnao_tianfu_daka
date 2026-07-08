@@ -1782,10 +1782,10 @@ onBeforeUnmount(() => {
   position: relative;
   background: var(--accent);
   color: #fff;
-  border-radius: 32rpx;
-  border-bottom-right-radius: 8rpx;
-  padding: 20rpx 28rpx;
-  font-size: 28rpx;
+  border-radius: 14px;
+  border-bottom-right-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
   line-height: 1.55;
   word-break: break-word;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
@@ -1810,10 +1810,10 @@ onBeforeUnmount(() => {
 .bubble-ai {
   position: relative;
   background: var(--chat-ai-bg);
-  border-radius: 32rpx;
-  border-bottom-left-radius: 8rpx;
-  padding: 20rpx 28rpx;
-  font-size: 28rpx;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--text);
   word-break: break-word;

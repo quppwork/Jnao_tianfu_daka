@@ -56,6 +56,7 @@
         <view class="welcome-card">
           <text class="welcome-text">你好，我是张宇老师 👋</text>
           <text class="welcome-sub">建议先从天赋测评开始，了解自己的潜能方向～</text>
+          <text class="welcome-desc">完成天赋测评后，点击下方「今日训练」即可开始打卡训练 💪</text>
         </view>
       </view>
       <!-- 聊天记录 -->
@@ -549,6 +550,7 @@ function onNavTap() {
 }
 .welcome-text { display:block; color:var(--text); font-size:14px; font-weight:600; margin-bottom:4px; }
 .welcome-sub { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; }
+.welcome-desc { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; margin-top:6px; }
 .chat-section::-webkit-scrollbar { display:none; }
 .chat-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-end; }
 .chat-row.user { flex-direction:row-reverse; }
