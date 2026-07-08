@@ -101,10 +101,11 @@ class TestAdminArchiveFixes:
             json={"login_name": "pyx", "password": "123456"},
         ).json()
         return {
-            "params": {
-                "user_id": data["child_user_id"],
-                "session_token": data["session_token"],
-            }
+            "params": {"user_id": data["child_user_id"]},
+            "headers": {
+                "X-Child-User-Id": str(data["child_user_id"]),
+                "X-Session-Token": data["session_token"],
+            },
         }
 
     def test_delete_child_idempotent(self, client: TestClient, db_session: Session):

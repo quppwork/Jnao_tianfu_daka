@@ -121,6 +121,7 @@ import {
   parentNeedsAccountReady,
   saveAuthSession,
   exchangeWechatLogin,
+  completeWechatExternalBind,
   fetchParentProfile,
   fetchWechatOAuthUrl,
   fetchWechatConfig,
@@ -135,6 +136,7 @@ import {
 } from '@/utils/loginGuard.js'
 import {
   readWechatCallbackParams,
+  readExternalBindReturn,
   clearWechatQueryFromUrl,
   redirectParentNextStep,
   isWeChatBrowser,
@@ -176,7 +178,8 @@ function cleanLandingQuery() {
     const url = new URL(window.location.href)
     const hasWxCb = url.searchParams.get('wx') === '1'
     const hasWxErr = url.searchParams.get('wx_error')
-    if (!hasWxCb && !hasWxErr && url.searchParams.get('from') === 'mp') {
+    const hasExtBind = url.searchParams.get('from') === 'mp' && url.searchParams.get('bind_ticket')
+    if (!hasWxCb && !hasWxErr && url.searchParams.get('from') === 'mp' && !hasExtBind) {
       url.searchParams.delete('from')
       window.history.replaceState({}, '', url.pathname + (url.search || ''))
     }
@@ -281,6 +284,25 @@ onMounted(async () => {
       redirectParentNextStep('bind-phone', wxCb.bindTicket, cfg?.bind_mobile_url)
     } catch (_) {
       redirectParentNextStep('bind-phone', wxCb.bindTicket)
+    }
+    return
+  }
+
+  const extBind = readExternalBindReturn()
+  if (extBind?.bindTicket) {
+    setPhase('authenticating', '正在完成绑手机…')
+    try {
+      const data = await completeWechatExternalBind(extBind.bindTicket)
+      clearWechatQueryFromUrl()
+      await routeParentHome(data)
+    } catch (e) {
+      resetPhase()
+      clearWechatQueryFromUrl()
+      uni.showModal({
+        title: '绑手机未完成',
+        content: e.message || '请先在绑手机页完成操作后再返回',
+        showCancel: false,
+      })
     }
     return
   }

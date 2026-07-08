@@ -42,6 +42,12 @@ def assert_production_auth_config() -> None:
         raise RuntimeError("生产环境不可启用 SMS_MOCK_EXPOSE")
     if not (os.getenv("REDIS_URL") or "").strip():
         raise RuntimeError("生产环境必须配置 REDIS_URL（OAuth/SMS 状态存储）")
+    admin_login = (os.getenv("ADMIN_LOGIN_NAME") or "").strip()
+    admin_pwd = (os.getenv("ADMIN_PASSWORD") or "").strip()
+    if not admin_login or not admin_pwd:
+        raise RuntimeError("生产环境必须配置 ADMIN_LOGIN_NAME 与 ADMIN_PASSWORD")
+    if len(admin_pwd) < 16:
+        raise RuntimeError("生产环境 ADMIN_PASSWORD 长度至少 16 位")
 
 
 def get_cors_origins() -> list[str]:

@@ -6,11 +6,14 @@ from app.services import auth_service
 
 
 def _auth_params(data: dict) -> dict:
+    uid = data["child_user_id"]
+    token = data["session_token"]
     return {
-        "params": {
-            "user_id": data["child_user_id"],
-            "session_token": data["session_token"],
-        }
+        "params": {"user_id": uid},
+        "headers": {
+            "X-Child-User-Id": str(uid),
+            "X-Session-Token": token,
+        },
     }
 
 
@@ -92,7 +95,8 @@ class TestSessionRefresh:
         auth_service.bind_parent_child(db_session, parent.id, uid)
         res = client_strict_auth.get(
             "/api/user/profile",
-            params={"user_id": uid, "session_token": "invalid-token-xyz"},
+            params={"user_id": uid},
+            headers={"X-Child-User-Id": str(uid), "X-Session-Token": "invalid-token-xyz"},
         )
         assert res.status_code == 401
 
@@ -122,7 +126,8 @@ class TestSessionRefresh:
 
         client_strict_auth.get(
             "/api/admin/settings",
-            params={"user_id": 999, "session_token": "bad-admin"},
+            params={"user_id": 999},
+            headers={"X-Child-User-Id": "999", "X-Session-Token": "bad-admin"},
         )
 
         ok = client_strict_auth.get("/api/user/profile", **stu_auth)

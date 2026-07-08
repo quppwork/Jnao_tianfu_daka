@@ -19,6 +19,7 @@ from app.schemas.auth import (
     SmsSendResponse,
     WechatBindPhoneRequest,
     WechatConfigResponse,
+    WechatExternalBindRequest,
     WechatOAuthUrlResponse,
     WechatSendBindSmsRequest,
 )
@@ -52,11 +53,14 @@ from app.services.wechat_auth_service import (
     build_external_bind_mobile_url,
     bind_mobile_return_url,
     complete_bind_phone,
+    complete_external_bind_phone,
     consume_oauth_state,
     consume_login_exchange_ticket,
+    create_bind_ticket,
     create_login_exchange_ticket,
     frontend_login_url,
     frontend_wechat_error_url,
+    lookup_member_for_oauth,
     resolve_wechat_login,
     use_external_bind_mobile,
     wechat_app_id,
@@ -303,6 +307,19 @@ def wechat_callback(
             )
 
         if next_step == "bind-phone" and use_external_bind_mobile():
+            ticket = bind_ticket
+            if not ticket and user is None:
+                snap = lookup_member_for_oauth(db, openid)
+                ticket = create_bind_ticket(
+                    openid=openid,
+                    unionid=unionid,
+                    wx_member_id=snap.wx_member_id if snap else None,
+                )
+            if ticket:
+                return RedirectResponse(
+                    url=build_external_bind_mobile_url(bind_ticket=ticket),
+                    status_code=302,
+                )
             return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
 
         params = {"wx": "1", "next_step": next_step}
@@ -358,4 +375,23 @@ def wechat_bind_phone(req: WechatBindPhoneRequest, request: Request, db: Session
     except HTTPException as e:
         if e.status_code in (400, 429):
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
+        raise
+
+
+@router.post("/wechat/complete-external-bind", response_model=AuthResponse)
+def wechat_complete_external_bind(
+    req: WechatExternalBindRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """外链 m.jnao.com 绑手机完成后，凭 bind_ticket 换取登录 session。"""
+    ip, did = _auth_ctx(request, req.device_id)
+    check_auth_allowed(db, client_ip=ip, device_id=did)
+    try:
+        user = complete_external_bind_phone(db, bind_ticket=req.bind_ticket)
+        clear_auth_failures(client_ip=ip, device_id=did)
+        return _issue_and_respond(db, user)
+    except HTTPException as e:
+        if e.status_code in (400, 429):
+            record_auth_failure(db, client_ip=ip, device_id=did)
         raise

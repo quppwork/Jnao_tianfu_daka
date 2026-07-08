@@ -153,16 +153,25 @@ def login_admin_by_password(db: Session, login_name: str, password: str) -> Chil
 
 
 def ensure_admin_account(db: Session) -> ChildUser | None:
-    """启动时确保管理员账号存在（凭据来自环境变量）"""
+    """启动时确保管理员账号存在；凭据仅来自环境变量，并按 env 同步密码哈希。"""
+    import logging
     import os
 
-    login_name = (os.getenv("ADMIN_LOGIN_NAME") or "pyx").strip()
-    password = os.getenv("ADMIN_PASSWORD") or "123456"
+    from app.core.security import is_production
+
+    logger = logging.getLogger("jnao")
+    login_name = (os.getenv("ADMIN_LOGIN_NAME") or "").strip()
+    password = (os.getenv("ADMIN_PASSWORD") or "").strip()
     if not login_name or not password:
+        if is_production():
+            raise RuntimeError("生产环境必须配置 ADMIN_LOGIN_NAME 与 ADMIN_PASSWORD")
         return None
     existing = find_admin_by_login_name(db, login_name)
     if existing:
         existing.nickname = existing.nickname or "管理员"
+        if not verify_password(password, existing.password_hash):
+            existing.password_hash = hash_password(password)
+            logger.info("管理员密码已按环境变量更新")
         db.commit()
         db.refresh(existing)
         return existing
@@ -174,6 +183,7 @@ def ensure_admin_account(db: Session) -> ChildUser | None:
         password=password,
         role=ROLE_ADMIN,
     )
+    logger.info("已创建管理员账号 login_name=%s", login_name)
     return user
 
 

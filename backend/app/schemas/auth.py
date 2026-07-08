@@ -55,6 +55,11 @@ class WechatBindPhoneRequest(BaseModel):
     device_id: str | None = Field(None, max_length=64)
 
 
+class WechatExternalBindRequest(BaseModel):
+    bind_ticket: str = Field(..., min_length=8, max_length=128)
+    device_id: str | None = Field(None, max_length=64)
+
+
 class WechatSendBindSmsRequest(BaseModel):
     bind_ticket: str = Field(..., min_length=8, max_length=128)
     phone: str = Field(..., min_length=11, max_length=20)

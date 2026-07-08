@@ -2,12 +2,15 @@
 
 import os
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ.setdefault("TIANFU_RAG_MOCK", "1")
 os.environ.setdefault("AUTH_CHALLENGE_MOCK", "1")
 os.environ.setdefault("SMS_PROVIDER", "mock")
 os.environ.setdefault("SMS_MOCK_CODE", "88888")
 os.environ.setdefault("JNAO_LEGACY_REGISTER", "1")
+os.environ["ADMIN_LOGIN_NAME"] = "pyx"
+os.environ["ADMIN_PASSWORD"] = "123456"
+os.environ["JNAO_SKIP_ADMIN_SEED"] = "1"
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -31,6 +34,9 @@ def db_session() -> Session:
     init_db()
     session = get_session_factory()()
     import_all_xet_catalogs(session, replace=True)
+    from app.services.auth_service import ensure_admin_account
+
+    ensure_admin_account(session)
     yield session
     session.rollback()
     for table in reversed(Base.metadata.sorted_tables):

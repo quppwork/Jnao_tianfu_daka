@@ -18,6 +18,7 @@ from app.schemas.admin import (
     AdminUpdatePlatformConfigRequest,
     AdminParentDetailResponse,
     AdminChildDetailResponse,
+    AdminReconcileResponse,
     AdminBlacklistResponse,
     BlacklistEntryOut,
 )
@@ -198,6 +199,20 @@ def parent_detail(
     db: Session = Depends(get_db),
 ):
     return AdminParentDetailResponse(**admin_service.get_parent_detail(db, admin_id, parent_id))
+
+
+@router.post("/parents/{parent_id}/reconcile", response_model=AdminReconcileResponse)
+def reconcile_parent(
+    parent_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.apply_parent_reconcile(db, admin_id, parent_id)
+    return AdminReconcileResponse(
+        reconciled_count=data["reconciled_count"],
+        children_count=data["children_count"],
+        children=[AdminChildOut(**c) for c in data["children"]],
+    )
 
 
 @router.get("/children/{child_id}/detail", response_model=AdminChildDetailResponse)

@@ -8,7 +8,7 @@ import httpx
 from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import Response
 
-from app.core.deps import get_authenticated_user
+from app.core.deps import get_authenticated_student
 from app.core.rate_limit import check_rate_limit
 from app.core.logger import get_logger
 
@@ -25,7 +25,7 @@ TTS_URL = "https://openspeech.bytedance.com/api/v1/tts"
 @router.post("/tts")
 async def text_to_speech(
     data: dict,
-    auth_user_id: int = Depends(get_authenticated_user),
+    auth_user_id: int = Depends(get_authenticated_student),
 ):
     check_rate_limit(f"tts:{auth_user_id}", max_calls=60, window_sec=60)
     text = data.get("text", "")
@@ -65,7 +65,7 @@ def _get_model():
 @router.post("/asr")
 async def speech_to_text(
     audio: UploadFile = File(...),
-    auth_user_id: int = Depends(get_authenticated_user),
+    auth_user_id: int = Depends(get_authenticated_student),
 ):
     check_rate_limit(f"asr:{auth_user_id}", max_calls=30, window_sec=60)
     try:

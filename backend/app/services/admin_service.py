@@ -172,13 +172,9 @@ def list_children(db: Session, admin_id: int, *, parent_id: int | None = None) -
         )
     )
     if parent_id is not None:
-        from app.services.parent_reconcile_service import (
-            reconcile_parent_children,
-            resolve_canonical_parent,
-        )
+        from app.services.parent_reconcile_service import resolve_canonical_parent
 
         parent_row = db.get(ChildUser, parent_id)
-        reconcile_parent_children(db, parent_id)
         effective_id = parent_id
         if parent_row and parent_row.role == auth_service.ROLE_PARENT:
             canonical = resolve_canonical_parent(db, parent_row.parent_phone)
@@ -410,13 +406,11 @@ def get_parent_detail(db: Session, admin_id: int, parent_id: int) -> dict:
     from app.services.parent_reconcile_service import (
         duplicate_parent_summaries,
         find_unbound_students_by_phone,
-        reconcile_parent_children,
         resolve_canonical_parent,
     )
     from app.services.session_service import list_user_sessions
 
     canonical = resolve_canonical_parent(db, parent.parent_phone) or parent
-    reconciled = reconcile_parent_children(db, parent.id)
     children = list_children(db, admin_id, parent_id=parent.id)
     unbound = find_unbound_students_by_phone(db, parent.parent_phone)
     dupes = duplicate_parent_summaries(db, parent.parent_phone, exclude_id=parent.id)
@@ -430,12 +424,27 @@ def get_parent_detail(db: Session, admin_id: int, parent_id: int) -> dict:
         "created_at": format_cst(parent.created_at),
         "children": children,
         "active_sessions": list_user_sessions(db, parent.id),
-        "reconciled_count": reconciled,
+        "reconciled_count": 0,
+        "pending_unbound_count": len(unbound),
         "unbound_children": [auth_service.child_summary(db, c) for c in unbound],
         "duplicate_parents": dupes,
         "canonical_parent_id": canonical.id,
         "is_duplicate_account": canonical.id != parent.id,
     }
+
+
+def apply_parent_reconcile(db: Session, admin_id: int, parent_id: int) -> dict:
+    """管理员确认后，将同手机号未绑定孩子挂到主家长名下。"""
+    _require_admin(db, admin_id)
+    parent = db.get(ChildUser, parent_id)
+    if not parent or parent.role != auth_service.ROLE_PARENT or not auth_service.is_account_active(parent):
+        raise HTTPException(404, "家长不存在")
+
+    from app.services.parent_reconcile_service import reconcile_parent_children
+
+    bound = reconcile_parent_children(db, parent_id)
+    children = list_children(db, admin_id, parent_id=parent_id)
+    return {"reconciled_count": bound, "children_count": len(children), "children": children}
 
 
 def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:

@@ -15,7 +15,12 @@ def _admin_login(client: TestClient) -> dict:
 def _auth_admin(data: dict) -> dict:
     uid = data["child_user_id"]
     token = data["session_token"]
-    return {"params": {"user_id": uid, "session_token": token}}
+    return {
+        "headers": {
+            "X-Child-User-Id": str(uid),
+            "X-Session-Token": token,
+        },
+    }
 
 
 def _seed_parent(db_session, phone: str, nickname: str) -> int:

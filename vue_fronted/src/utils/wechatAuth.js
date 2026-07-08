@@ -68,6 +68,18 @@ export async function startWechatOAuth(fetchOAuthUrl) {
   return false
 }
 
+export function readExternalBindReturn() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('from') !== 'mp') return null
+    const bindTicket = params.get('bind_ticket') || ''
+    if (!bindTicket) return null
+    return { bindTicket }
+  } catch (_) {
+    return null
+  }
+}
+
 export function readWechatCallbackParams() {
   try {
     const params = new URLSearchParams(window.location.search)

@@ -306,13 +306,14 @@ def test_sync_wx_members_incremental_by_id(db_session: Session, monkeypatch):
     assert saved.get("last_id") == 101
 
 
-def test_external_bind_mobile_url_default(monkeypatch):
+def test_external_bind_mobile_url_with_ticket(monkeypatch):
     monkeypatch.delenv("WECHAT_BIND_MOBILE_URL", raising=False)
     from app.services.wechat_auth_service import build_external_bind_mobile_url
 
-    url = build_external_bind_mobile_url()
+    url = build_external_bind_mobile_url(bind_ticket="test-ticket-abc")
     assert "m.jnao.com" in url
-    assert "bindmobile" in url
+    assert "bind_ticket" in url
+    assert "test-ticket-abc" in url
 
 
 def test_upsert_wechat_bind_rejects_openid_conflict(db_session: Session, monkeypatch):

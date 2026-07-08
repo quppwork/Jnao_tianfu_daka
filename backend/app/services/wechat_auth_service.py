@@ -90,20 +90,22 @@ def external_bind_mobile_url() -> str:
     return "https://m.jnao.com/home/member/bindmobile.html"
 
 
-def bind_mobile_return_url() -> str:
+def bind_mobile_return_url(bind_ticket: str | None = None) -> str:
     custom = (os.getenv("WECHAT_BIND_MOBILE_RETURN_URL") or "").strip()
-    if custom:
-        return custom
-    return f"{site_domain()}/pages/login/index?from=mp"
+    base = custom if custom else f"{site_domain()}/pages/login/index?from=mp"
+    if bind_ticket:
+        sep = "&" if "?" in base else "?"
+        return f"{base}{sep}bind_ticket={urllib.parse.quote(bind_ticket, safe='')}"
+    return base
 
 
-def build_external_bind_mobile_url() -> str:
+def build_external_bind_mobile_url(*, bind_ticket: str | None = None) -> str:
     """绑手机页 URL，可选附带返回 Jnao 登录的参数"""
     base = external_bind_mobile_url()
     if not base:
         return ""
     param = (os.getenv("WECHAT_BIND_MOBILE_RETURN_PARAM") or "redirect").strip()
-    ret = bind_mobile_return_url()
+    ret = bind_mobile_return_url(bind_ticket)
     if not param or not ret:
         return base
     sep = "&" if "?" in base else "?"
@@ -743,7 +745,12 @@ def resolve_wechat_login(
         return None, ticket, "bind-phone"
 
     if use_external_bind_mobile():
-        return None, None, "bind-phone"
+        ticket = create_bind_ticket(
+            openid=openid,
+            unionid=unionid,
+            wx_member_id=snap.wx_member_id if snap else None,
+        )
+        return None, ticket, "bind-phone"
 
     ticket = create_bind_ticket(
         openid=openid,
@@ -788,3 +795,13 @@ def complete_bind_phone(
     db.commit()
     db.refresh(user)
     return user
+
+
+def complete_external_bind_phone(db: Session, *, bind_ticket: str) -> ChildUser:
+    """外链绑手机页返回后：刷新 snapshot 手机号并完成登录。"""
+    pending = get_bind_ticket(bind_ticket)
+    openid = pending["openid"]
+    snap = lookup_member_for_oauth(db, openid)
+    if not snap or not snap.mobile:
+        raise HTTPException(400, "尚未完成手机号绑定，请先在绑手机页完成操作后再返回")
+    return complete_bind_phone(db, bind_ticket=bind_ticket, phone=snap.mobile)

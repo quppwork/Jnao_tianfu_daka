@@ -668,6 +668,20 @@ export async function wechatBindPhone({ bindTicket, phone, smsCode }) {
   return data
 }
 
+/** 外链 m.jnao.com 绑手机完成后换取 session */
+export async function completeWechatExternalBind(bindTicket) {
+  const data = await apiJson('/api/auth/wechat/complete-external-bind', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({
+      bind_ticket: bindTicket,
+      device_id: getDeviceId(),
+    }),
+  })
+  _storeAuth({ ...data, login_channel: 'wechat' })
+  return data
+}
+
 export function storeWechatCallbackAuth(data) {
   _storeAuth({ ...data, login_channel: 'wechat' })
 }
@@ -1300,10 +1314,6 @@ function withAdmin(url, adminId) {
     const sep = result.includes('?') ? '&' : '?'
     result = `${result}${sep}user_id=${id}`
   }
-  const token = getAdminSessionToken()
-  if (token && !/[?&]session_token=/.test(result)) {
-    result = `${result}&session_token=${encodeURIComponent(token)}`
-  }
   return result
 }
 
@@ -1409,6 +1419,12 @@ export async function updateAdminSettings(adminId, body) {
 
 export async function fetchAdminParentDetail(adminId, parentId) {
   return apiJson(withAdmin(`/api/admin/parents/${parentId}/detail`, adminId))
+}
+
+export async function reconcileAdminParent(adminId, parentId) {
+  return apiJson(withAdmin(`/api/admin/parents/${parentId}/reconcile`, adminId), {
+    method: 'POST',
+  })
 }
 
 export async function fetchAdminChildDetail(adminId, childId) {

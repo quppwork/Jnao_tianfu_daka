@@ -162,10 +162,11 @@ class TestSmsAuth:
             json={"login_name": "pyx", "password": "123456"},
         ).json()
         auth = {
-            "params": {
-                "user_id": admin["child_user_id"],
-                "session_token": admin["session_token"],
-            }
+            "params": {"user_id": admin["child_user_id"]},
+            "headers": {
+                "X-Child-User-Id": str(admin["child_user_id"]),
+                "X-Session-Token": admin["session_token"],
+            },
         }
         add_blacklist_entry(db_session, "ip", "203.0.113.99", reason="test")
         lst = client.get("/api/admin/blacklist", **auth)

@@ -17,11 +17,13 @@ def _student_auth(client: TestClient, phone: str = "13900006601") -> dict:
     )
     assert reg.status_code == 200, reg.text
     data = reg.json()
+    uid = data["child_user_id"]
     return {
-        "params": {
-            "user_id": data["child_user_id"],
-            "session_token": data["session_token"],
-        }
+        "params": {"user_id": uid},
+        "headers": {
+            "X-Child-User-Id": str(uid),
+            "X-Session-Token": data["session_token"],
+        },
     }
 
 
@@ -52,7 +54,13 @@ class TestUnboundStudentBlocked:
             child_quota=5,
         )
         auth_service.bind_parent_child(db_session, parent.id, cid)
-        auth = {"params": {"user_id": cid, "session_token": data["session_token"]}}
+        auth = {
+            "params": {"user_id": cid},
+            "headers": {
+                "X-Child-User-Id": str(cid),
+                "X-Session-Token": data["session_token"],
+            },
+        }
         res = client_strict_auth.get("/api/user/profile", **auth)
         assert res.status_code == 200
 

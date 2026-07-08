@@ -21,8 +21,17 @@
         <text class="warn-text">该手机号存在多个家长账号，孩子列表已合并显示自主账号（ID {{ detail.canonical_parent_id }}）。</text>
       </view>
 
-      <view v-if="detail.reconciled_count > 0" class="info-box">
-        <text class="info-text">已自动修复 {{ detail.reconciled_count }} 个未绑定孩子。</text>
+      <view v-if="detail.pending_unbound_count > 0" class="warn-box">
+        <text class="warn-title">待绑定孩子（{{ detail.pending_unbound_count }}）</text>
+        <text class="warn-text">同手机号下有孩子账号尚未绑定到该家长，需管理员确认后才会出现在列表中。</text>
+        <view v-for="c in detail.unbound_children" :key="c.id" class="warn-row">
+          <text class="warn-text">{{ c.nickname }} · {{ c.login_name }}</text>
+        </view>
+        <view class="btn-reconcile" @click="doReconcile"><text>确认绑定</text></view>
+      </view>
+
+      <view v-if="reconcileMsg" class="info-box">
+        <text class="info-text">{{ reconcileMsg }}</text>
       </view>
 
       <view v-if="detail.duplicate_parents?.length" class="warn-box">
@@ -80,6 +89,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import {
   requirePageAuth,
   fetchAdminParentDetail,
+  reconcileAdminParent,
   updateAdminParent,
   deleteAdminParent,
 } from '@/utils/userApi.js'
@@ -91,6 +101,7 @@ const loading = ref(true)
 const detail = ref(null)
 const showEdit = ref(false)
 const form = ref({})
+const reconcileMsg = ref('')
 
 onLoad((q) => {
   parentId.value = Number(q.id)
@@ -135,6 +146,17 @@ function goChild(id) {
 function goParent(id) {
   if (id === parentId.value) return
   uni.redirectTo({ url: `/pages/admin/parent-detail?id=${id}` })
+}
+
+async function doReconcile() {
+  try {
+    const res = await reconcileAdminParent(adminId.value, parentId.value)
+    reconcileMsg.value = `已绑定 ${res.reconciled_count} 个孩子`
+    await load()
+    uni.showToast({ title: '绑定完成', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '绑定失败', icon: 'none' })
+  }
 }
 
 async function save() {
@@ -207,5 +229,7 @@ function confirmDelete() {
 .warn-text { display:block; color:var(--text-dim); font-size:12px; line-height:1.5; }
 .warn-row { display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
 .info-box { background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:12px; padding:10px 12px; margin-bottom:12px; }
+.btn-reconcile { margin-top:10px; background:#f59e0b; border-radius:10px; padding:10px; text-align:center; }
+.btn-reconcile text { color:#fff; font-size:13px; font-weight:600; }
 .info-text { color:#22c55e; font-size:12px; }
 </style>

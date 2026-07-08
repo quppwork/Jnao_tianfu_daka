@@ -49,7 +49,7 @@ class TestParentReconcile:
         assert auth_service.count_parent_children(db_session, pid) == 1
         assert find_unbound_students_by_phone(db_session, phone) == []
 
-    def test_parent_list_triggers_reconcile(self, client: TestClient, db_session):
+    def test_parent_list_does_not_auto_reconcile(self, client: TestClient, db_session):
         phone = "13900008802"
         pid = _seed_parent(db_session, phone, "家长B")
         _seed_orphan_student(db_session, phone, "orphan2", "孤儿童2")
@@ -57,10 +57,9 @@ class TestParentReconcile:
         res = client.get(f"/api/parent/children?user_id={pid}")
         assert res.status_code == 200
         kids = res.json()["children"]
-        assert len(kids) == 1
-        assert kids[0]["login_name"] == "orphan2"
+        assert len(kids) == 0
 
-    def test_admin_detail_shows_reconciled_child(self, client: TestClient, db_session):
+    def test_admin_reconcile_binds_orphan(self, client: TestClient, db_session):
         from tests.test_admin_api import _admin_login, _auth_admin
 
         phone = "13900008803"
@@ -69,12 +68,34 @@ class TestParentReconcile:
 
         admin = _admin_login(client)
         auth = _auth_admin(admin)
+        detail = client.get(f"/api/admin/parents/{pid}/detail", **auth)
+        assert detail.status_code == 200
+        data = detail.json()
+        assert data["pending_unbound_count"] == 1
+        assert len(data["unbound_children"]) == 1
+        assert len(data["children"]) == 0
+
+        rec = client.post(f"/api/admin/parents/{pid}/reconcile", **auth)
+        assert rec.status_code == 200
+        assert rec.json()["reconciled_count"] == 1
+        assert len(rec.json()["children"]) == 1
+
+    def test_admin_detail_shows_unbound_before_reconcile(self, client: TestClient, db_session):
+        from tests.test_admin_api import _admin_login, _auth_admin
+
+        phone = "13900008831"
+        pid = _seed_parent(db_session, phone, "家长C2")
+        _seed_orphan_student(db_session, phone, "orphan31", "孤儿童31")
+
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
         res = client.get(f"/api/admin/parents/{pid}/detail", **auth)
         assert res.status_code == 200
         data = res.json()
-        assert data["reconciled_count"] == 1
-        assert len(data["children"]) == 1
-        assert data["children"][0]["login_name"] == "orphan3"
+        assert data["reconciled_count"] == 0
+        assert data["pending_unbound_count"] == 1
+        assert len(data["unbound_children"]) == 1
+        assert data["unbound_children"][0]["login_name"] == "orphan31"
 
     def test_duplicate_parent_shows_canonical_children(self, db_session, client: TestClient):
         from app.db.models import ChildUser
