@@ -90,20 +90,22 @@ def external_bind_mobile_url() -> str:
     return "https://m.jnao.com/home/member/bindmobile.html"
 
 
-def bind_mobile_return_url() -> str:
+def bind_mobile_return_url(bind_ticket: str | None = None) -> str:
     custom = (os.getenv("WECHAT_BIND_MOBILE_RETURN_URL") or "").strip()
-    if custom:
-        return custom
-    return f"{site_domain()}/pages/login/index?from=mp"
+    base = custom if custom else f"{site_domain()}/pages/login/index?from=mp"
+    if bind_ticket:
+        sep = "&" if "?" in base else "?"
+        return f"{base}{sep}bind_ticket={urllib.parse.quote(bind_ticket, safe='')}"
+    return base
 
 
-def build_external_bind_mobile_url() -> str:
+def build_external_bind_mobile_url(*, bind_ticket: str | None = None) -> str:
     """绑手机页 URL，可选附带返回 Jnao 登录的参数"""
     base = external_bind_mobile_url()
     if not base:
         return ""
     param = (os.getenv("WECHAT_BIND_MOBILE_RETURN_PARAM") or "redirect").strip()
-    ret = bind_mobile_return_url()
+    ret = bind_mobile_return_url(bind_ticket)
     if not param or not ret:
         return base
     sep = "&" if "?" in base else "?"
@@ -555,7 +557,7 @@ def ensure_parent_for_phone(
         register_daka_member_from_user,
     )
 
-    existing = auth_service.find_parent_by_phone(db, phone)
+    existing = auth_service.find_parent_by_phone_for_login(db, phone)
     if existing:
         set_login_channel(existing, LOGIN_CHANNEL_WECHAT)
         mark_phone_verified(existing)
@@ -623,6 +625,31 @@ def get_parent_real_name_safe(user: ChildUser) -> str | None:
     return name.strip() or None
 
 
+BIND_SMS_MAX_PER_TICKET = 3
+
+
+def _refresh_bind_ticket(ticket: str, row: dict) -> None:
+    challenge_set(_bind_key(ticket), row, WX_BIND_TTL)
+
+
+def assert_bind_ticket_sms_allowed(bind_ticket: str, phone: str) -> dict:
+    """绑手机 SMS 限次 + 锁定手机号（B19）。"""
+    from app.services.sms_service import normalize_phone
+
+    row = get_bind_ticket(bind_ticket)
+    sms_count = int(row.get("sms_count") or 0)
+    if sms_count >= BIND_SMS_MAX_PER_TICKET:
+        raise HTTPException(429, "该绑定会话验证码次数已达上限，请重新从微信进入")
+    p = normalize_phone(phone)
+    locked = (row.get("phone") or "").strip()
+    if locked and locked != p:
+        raise HTTPException(400, "请使用首次发送验证码的手机号")
+    row["sms_count"] = sms_count + 1
+    row["phone"] = p
+    _refresh_bind_ticket(bind_ticket, row)
+    return row
+
+
 def create_bind_ticket(*, openid: str, unionid: str | None, wx_member_id: int | None) -> str:
     ticket = secrets.token_urlsafe(18)
     challenge_set(
@@ -631,6 +658,8 @@ def create_bind_ticket(*, openid: str, unionid: str | None, wx_member_id: int | 
             "openid": openid,
             "unionid": unionid,
             "wx_member_id": wx_member_id,
+            "sms_count": 0,
+            "phone": "",
         },
         WX_BIND_TTL,
     )
@@ -683,7 +712,7 @@ def resolve_wechat_login(
 
     bind = get_bind_by_openid(db, openid)
     if bind:
-        user = auth_service.get_child_user(db, bind.parent_id)
+        user = auth_service.get_parent_for_login(db, bind.parent_id)
         if user:
             set_login_channel(user, LOGIN_CHANNEL_WECHAT)
             upsert_wechat_bind(
@@ -701,7 +730,7 @@ def resolve_wechat_login(
 
     member = find_daka_member_by_openid(db, openid)
     if member:
-        user = auth_service.get_child_user(db, member.parent_id)
+        user = auth_service.get_parent_for_login(db, member.parent_id)
         if user:
             set_login_channel(user, LOGIN_CHANNEL_WECHAT)
             upsert_wechat_bind(
@@ -721,26 +750,34 @@ def resolve_wechat_login(
 
     mobile = snap.mobile
     if mobile:
-        user = ensure_parent_for_phone(
-            db,
-            phone=mobile,
-            snap=snap,
+        existing = auth_service.find_parent_by_phone_for_login(db, mobile)
+        if existing:
+            set_login_channel(existing, LOGIN_CHANNEL_WECHAT)
+            mark_phone_verified(existing)
+            upsert_wechat_bind(
+                db,
+                parent_id=existing.id,
+                openid=openid,
+                unionid=unionid or snap.unionid,
+                wx_member_id=snap.wx_member_id,
+            )
+            db.commit()
+            db.refresh(existing)
+            return existing, None, parent_next_step(existing)
+        ticket = create_bind_ticket(
             openid=openid,
             unionid=unionid,
+            wx_member_id=snap.wx_member_id if snap else None,
         )
-        upsert_wechat_bind(
-            db,
-            parent_id=user.id,
-            openid=openid,
-            unionid=unionid or snap.unionid,
-            wx_member_id=snap.wx_member_id,
-        )
-        db.commit()
-        db.refresh(user)
-        return user, None, parent_next_step(user)
+        return None, ticket, "bind-phone"
 
     if use_external_bind_mobile():
-        return None, None, "bind-phone"
+        ticket = create_bind_ticket(
+            openid=openid,
+            unionid=unionid,
+            wx_member_id=snap.wx_member_id if snap else None,
+        )
+        return None, ticket, "bind-phone"
 
     ticket = create_bind_ticket(
         openid=openid,
@@ -759,7 +796,7 @@ def complete_bind_phone(
     pending = consume_bind_ticket(bind_ticket)
     openid = pending["openid"]
     phone = normalize_phone(phone)
-    existing = auth_service.find_parent_by_phone(db, phone)
+    existing = auth_service.find_parent_by_phone_for_login(db, phone)
     if existing:
         other = get_bind_by_parent(db, existing.id)
         if other and other.openid != openid:
@@ -785,3 +822,13 @@ def complete_bind_phone(
     db.commit()
     db.refresh(user)
     return user
+
+
+def complete_external_bind_phone(db: Session, *, bind_ticket: str) -> ChildUser:
+    """外链绑手机页返回后：刷新 snapshot 手机号并完成登录。"""
+    pending = get_bind_ticket(bind_ticket)
+    openid = pending["openid"]
+    snap = lookup_member_for_oauth(db, openid)
+    if not snap or not snap.mobile:
+        raise HTTPException(400, "尚未完成手机号绑定，请先在绑手机页完成操作后再返回")
+    return complete_bind_phone(db, bind_ticket=bind_ticket, phone=snap.mobile)

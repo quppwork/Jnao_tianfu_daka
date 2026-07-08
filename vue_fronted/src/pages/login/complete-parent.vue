@@ -75,11 +75,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import {
+  requirePageAuth,
   getLoggedInUserId,
   fetchParentProfile,
   updateParentProfile,
   logoutAndGoLogin,
-  getSessionToken,
 } from '@/utils/userApi.js'
 
 const parentId = ref(null)
@@ -93,15 +93,13 @@ function goBack() {
 }
 
 onMounted(async () => {
+  const auth = await requirePageAuth('parent')
+  if (!auth) return
+
   try {
     const params = new URLSearchParams(window.location.search)
     isWechat.value = params.get('from') === 'wechat'
   } catch (_) {}
-
-  if (!getSessionToken()) {
-    goBack()
-    return
-  }
 
   parentId.value = getLoggedInUserId()
   if (!parentId.value) {

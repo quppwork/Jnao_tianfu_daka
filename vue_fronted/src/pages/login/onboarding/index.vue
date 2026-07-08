@@ -158,7 +158,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getChildUserId, saveProfile, fetchProfile } from '@/utils/userApi.js'
+import { requirePageAuth, getChildUserId, saveProfile, fetchProfile } from '@/utils/userApi.js'
 import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 
 const step = ref(1)
@@ -310,6 +310,9 @@ async function goHome() {
 }
 
 onMounted(async () => {
+  const auth = await requirePageAuth('student')
+  if (!auth) return
+
   const pages = getCurrentPages()
   const opts = pages[pages.length - 1]?.options || {}
   if (opts.resume === '4') {

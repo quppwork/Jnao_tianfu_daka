@@ -70,40 +70,20 @@ def _purge_student_operational_data(db: Session, child_id: int) -> None:
     db.execute(delete(TalentAssessment).where(TalentAssessment.child_user_id == child_id))
 
 
-def _archive_student_account(db: Session, child: ChildUser) -> None:
-    """软删除孩子：归档账户信息，释放 login_name，不参与生产逻辑。
-
-    不在此函数内 commit — 调用方须在事务末尾统一 db.commit()。
-    """
+def _suspend_student_account(db: Session, child: ChildUser) -> None:
+    """移出生产环境：保留账号/训练数据/绑定，仅吊销 session。"""
     if child.role != auth_service.ROLE_STUDENT or not auth_service.is_account_active(child):
         return
-    _purge_student_operational_data(db, child.id)
-    db.execute(delete(ParentChildBind).where(ParentChildBind.child_id == child.id))
-
-    pj = dict(child.profile_json or {})
-    if child.login_name and not str(child.login_name).startswith("__deleted_"):
-        pj["archived_login_name"] = child.login_name
-        child.login_name = f"__deleted_{child.id}"
-    if child.parent_phone and not str(child.parent_phone).startswith("__deleted_"):
-        pj["archived_parent_phone"] = child.parent_phone
-        child.parent_phone = f"__deleted_student_{child.id}"
-    pj["archived_nickname"] = child.nickname
-    child.profile_json = pj
-    child.password_hash = None
     from app.services.session_service import revoke_all_sessions
 
     revoke_all_sessions(db, child.id)
     child.session_token = None
-    child.training_level = None
-    child.account_status = auth_service.ACCOUNT_DELETED
+    child.account_status = auth_service.ACCOUNT_REMOVED
     child.deleted_at = datetime.now(TZ)
 
 
-def _archive_parent_account(db: Session, parent: ChildUser) -> None:
-    """软删除家长：先归档名下孩子，再归档家长并释放手机号。
-
-    不在此函数内 commit — 调用方须在事务末尾统一 db.commit()。
-    """
+def _suspend_parent_account(db: Session, parent: ChildUser) -> None:
+    """移出生产环境：保留手机号/openid/孩子绑定与业务数据，仅吊销 session。"""
     if parent.role != auth_service.ROLE_PARENT or not auth_service.is_account_active(parent):
         return
     child_ids = list(
@@ -119,25 +99,31 @@ def _archive_parent_account(db: Session, parent: ChildUser) -> None:
     for cid in child_ids:
         child = db.get(ChildUser, cid)
         if child:
-            _archive_student_account(db, child)
+            _suspend_student_account(db, child)
 
-    db.execute(delete(ParentChildBind).where(ParentChildBind.parent_id == parent.id))
-
-    pj = dict(parent.profile_json or {})
-    pj["archived_parent_phone"] = parent.parent_phone
-    pj["archived_nickname"] = parent.nickname
-    parent.profile_json = pj
-    parent.parent_phone = f"__deleted_parent_{parent.id}"
-    parent.password_hash = None
     from app.services.session_service import revoke_all_sessions
 
     revoke_all_sessions(db, parent.id)
     parent.session_token = None
-    parent.account_status = auth_service.ACCOUNT_DELETED
+    parent.account_status = auth_service.ACCOUNT_REMOVED
     parent.deleted_at = datetime.now(TZ)
 
 
-def list_parents(db: Session, admin_id: int) -> list[dict]:
+def _parent_out(db: Session, parent: ChildUser) -> dict:
+    used = auth_service.count_parent_children(db, parent.id)
+    return {
+        "id": parent.id,
+        "parent_phone": parent.parent_phone,
+        "nickname": parent.nickname,
+        "child_quota": auth_service.get_parent_quota_limit(parent),
+        "children_count": used,
+        "created_at": format_cst(parent.created_at),
+        "account_status": parent.account_status or auth_service.ACCOUNT_ACTIVE,
+        "display_phone": auth_service.effective_parent_phone(parent),
+    }
+
+
+def list_parents(db: Session, admin_id: int, *, q: str | None = None) -> list[dict]:
     _require_admin(db, admin_id)
     parents = db.scalars(
         select(ChildUser)
@@ -147,23 +133,122 @@ def list_parents(db: Session, admin_id: int) -> list[dict]:
         )
         .order_by(ChildUser.id.desc())
     ).all()
-    out = []
-    for p in parents:
-        used = auth_service.count_parent_children(db, p.id)
-        out.append({
-            "id": p.id,
-            "parent_phone": p.parent_phone,
-            "nickname": p.nickname,
-            "child_quota": auth_service.get_parent_quota_limit(p),
-            "children_count": used,
-            "created_at": format_cst(p.created_at),
-        })
+    out = [_parent_out(db, p) for p in parents]
+    if q:
+        key = q.strip().lower()
+        out = [
+            p
+            for p in out
+            if key in (p["nickname"] or "").lower()
+            or key in (p["display_phone"] or p["parent_phone"] or "")
+        ]
     return out
 
 
-def list_children(db: Session, admin_id: int, *, parent_id: int | None = None) -> list[dict]:
+def list_removed_parents(db: Session, admin_id: int, *, q: str | None = None) -> list[dict]:
     _require_admin(db, admin_id)
-    q = (
+    rows = db.scalars(
+        select(ChildUser)
+        .where(
+            ChildUser.role == auth_service.ROLE_PARENT,
+            ChildUser.account_status.in_(
+                (auth_service.ACCOUNT_REMOVED, auth_service.ACCOUNT_DELETED)
+            ),
+        )
+        .order_by(ChildUser.deleted_at.desc(), ChildUser.id.desc())
+    ).all()
+    out = []
+    for p in rows:
+        item = _parent_out(db, p)
+        item["removed_at"] = format_cst(p.deleted_at) if p.deleted_at else None
+        out.append(item)
+    if q:
+        key = q.strip().lower()
+        out = [
+            p
+            for p in out
+            if key in (p["nickname"] or "").lower()
+            or key in (p["display_phone"] or p["parent_phone"] or "")
+        ]
+    return out
+
+
+def create_parent(
+    db: Session,
+    admin_id: int,
+    *,
+    parent_phone: str,
+    nickname: str,
+    password: str | None = None,
+    child_quota: int = 5,
+) -> dict:
+    _require_admin(db, admin_id)
+    from app.services.parent_reconcile_service import resolve_canonical_parent_for_login
+    from app.services.sms_service import normalize_phone
+
+    phone = normalize_phone(parent_phone)
+    if resolve_canonical_parent_for_login(db, phone):
+        raise HTTPException(409, "该手机号已有家长账号（含已移出），请使用恢复功能")
+    user = auth_service.register_child(
+        db,
+        parent_phone=phone,
+        nickname=nickname.strip(),
+        password=password,
+        role=auth_service.ROLE_PARENT,
+        child_quota=child_quota,
+    )
+    return _parent_out(db, user)
+
+
+def restore_parent(db: Session, admin_id: int, parent_id: int) -> dict:
+    _require_admin(db, admin_id)
+    parent = db.get(ChildUser, parent_id)
+    if not parent or parent.role != auth_service.ROLE_PARENT:
+        raise HTTPException(404, "家长不存在")
+    if auth_service.is_account_active(parent):
+        return _parent_out(db, parent)
+    auth_service.restore_parent_account(db, parent)
+    db.commit()
+    db.refresh(parent)
+    return _parent_out(db, parent)
+
+
+def restore_parent_by_lookup(
+    db: Session,
+    admin_id: int,
+    *,
+    phone: str | None = None,
+    nickname: str | None = None,
+) -> dict:
+    _require_admin(db, admin_id)
+    if not phone and not nickname:
+        raise HTTPException(400, "请提供手机号或昵称")
+    parent = auth_service.find_parent_for_admin_restore(db, phone=phone, nickname=nickname)
+    if not parent:
+        raise HTTPException(404, "未找到已移出的家长账号")
+    auth_service.restore_parent_account(db, parent)
+    db.commit()
+    db.refresh(parent)
+    return _parent_out(db, parent)
+
+
+def restore_child(db: Session, admin_id: int, child_id: int) -> dict:
+    _require_admin(db, admin_id)
+    child = db.get(ChildUser, child_id)
+    if not child or child.role != auth_service.ROLE_STUDENT:
+        raise HTTPException(404, "孩子不存在")
+    if auth_service.is_account_active(child):
+        return auth_service.child_summary(db, child)
+    auth_service.restore_student_account(db, child)
+    db.commit()
+    db.refresh(child)
+    return auth_service.child_summary(db, child)
+
+
+def list_children(db: Session, admin_id: int, *, parent_id: int | None = None, q: str | None = None) -> list[dict]:
+    _require_admin(db, admin_id)
+    search = (q or "").strip()
+    stmt = (
         select(ChildUser, ParentChildBind.parent_id)
         .outerjoin(ParentChildBind, ParentChildBind.child_id == ChildUser.id)
         .where(
@@ -172,9 +257,17 @@ def list_children(db: Session, admin_id: int, *, parent_id: int | None = None) -
         )
     )
     if parent_id is not None:
-        q = q.where(ParentChildBind.parent_id == parent_id)
-    q = q.order_by(ChildUser.id.desc())
-    rows = db.execute(q).all()
+        from app.services.parent_reconcile_service import resolve_canonical_parent
+
+        parent_row = db.get(ChildUser, parent_id)
+        effective_id = parent_id
+        if parent_row and parent_row.role == auth_service.ROLE_PARENT:
+            canonical = resolve_canonical_parent(db, parent_row.parent_phone)
+            if canonical:
+                effective_id = canonical.id
+        stmt = stmt.where(ParentChildBind.parent_id == effective_id)
+    stmt = stmt.order_by(ChildUser.id.desc())
+    rows = db.execute(stmt).all()
     seen: set[int] = set()
     out = []
     for child, pid in rows:
@@ -190,6 +283,16 @@ def list_children(db: Session, admin_id: int, *, parent_id: int | None = None) -
         summary["parent_phone"] = parent.parent_phone if parent else None
         summary["parent_nickname"] = parent.nickname if parent else None
         out.append(summary)
+    if search:
+        key = search.lower()
+        out = [
+            c
+            for c in out
+            if key in (c.get("nickname") or "").lower()
+            or key in (c.get("login_name") or "").lower()
+            or key in (c.get("parent_phone") or "")
+            or key in (c.get("parent_nickname") or "").lower()
+        ]
     return out
 
 
@@ -209,9 +312,11 @@ def update_parent(
         raise HTTPException(404, "家长不存在")
     if parent_phone is not None:
         phone = parent_phone.strip()
-        other = auth_service.find_parent_by_phone(db, phone)
-        if other and other.id != parent_id:
-            raise HTTPException(409, "手机号已被使用")
+        from app.services.parent_reconcile_service import list_active_parents_by_phone
+
+        for other in list_active_parents_by_phone(db, phone):
+            if other.id != parent_id:
+                raise HTTPException(409, "手机号已被使用")
         parent.parent_phone = phone
     if nickname is not None:
         parent.nickname = nickname.strip()
@@ -233,6 +338,8 @@ def update_parent(
         "nickname": parent.nickname,
         "child_quota": auth_service.get_parent_quota_limit(parent),
         "children_count": used,
+        "account_status": parent.account_status,
+        "display_phone": auth_service.effective_parent_phone(parent),
     }
 
 
@@ -242,8 +349,8 @@ def delete_parent(db: Session, admin_id: int, parent_id: int) -> None:
     if not parent or parent.role != auth_service.ROLE_PARENT:
         raise HTTPException(404, "家长不存在")
     if not auth_service.is_account_active(parent):
-        raise HTTPException(410, "账号已归档")
-    _archive_parent_account(db, parent)
+        raise HTTPException(410, "账号已移出生产环境")
+    _suspend_parent_account(db, parent)
     db.commit()
 
 
@@ -326,8 +433,8 @@ def delete_child(db: Session, admin_id: int, child_id: int) -> None:
     if not child or child.role != auth_service.ROLE_STUDENT:
         raise HTTPException(404, "孩子不存在")
     if not auth_service.is_account_active(child):
-        raise HTTPException(410, "账号已归档")
-    _archive_student_account(db, child)
+        raise HTTPException(410, "账号已移出生产环境")
+    _suspend_student_account(db, child)
     db.commit()
 
 
@@ -390,29 +497,72 @@ def unbind_child(db: Session, admin_id: int, child_id: int) -> dict:
 def get_parent_detail(db: Session, admin_id: int, parent_id: int) -> dict:
     _require_admin(db, admin_id)
     parent = db.get(ChildUser, parent_id)
-    if not parent or parent.role != auth_service.ROLE_PARENT or not auth_service.is_account_active(parent):
+    if not parent or parent.role != auth_service.ROLE_PARENT:
         raise HTTPException(404, "家长不存在")
-    children = list_children(db, admin_id, parent_id=parent_id)
+
+    from app.services.parent_reconcile_service import (
+        duplicate_parent_summaries,
+        find_unbound_students_by_phone,
+        resolve_canonical_parent,
+    )
     from app.services.session_service import list_user_sessions
+
+    display_phone = auth_service.effective_parent_phone(parent)
+    active = auth_service.is_account_active(parent)
+    canonical = (resolve_canonical_parent(db, display_phone) or parent) if active else parent
+    children = list_children(db, admin_id, parent_id=parent.id) if active else []
+    if not active:
+        child_ids = db.scalars(
+            select(ParentChildBind.child_id).where(ParentChildBind.parent_id == parent.id)
+        ).all()
+        for cid in child_ids:
+            ch = db.get(ChildUser, cid)
+            if ch:
+                children.append(auth_service.child_summary(db, ch))
+    unbound = find_unbound_students_by_phone(db, display_phone) if active else []
+    dupes = duplicate_parent_summaries(db, display_phone, exclude_id=parent.id) if active else []
 
     return {
         "id": parent.id,
-        "parent_phone": parent.parent_phone,
+        "parent_phone": display_phone,
         "nickname": parent.nickname,
         "child_quota": auth_service.get_parent_quota_limit(parent),
         "children_count": len(children),
         "created_at": format_cst(parent.created_at),
         "children": children,
-        "active_sessions": list_user_sessions(db, parent.id),
+        "active_sessions": list_user_sessions(db, parent.id) if active else [],
+        "reconciled_count": 0,
+        "pending_unbound_count": len(unbound),
+        "unbound_children": [auth_service.child_summary(db, c) for c in unbound],
+        "duplicate_parents": dupes,
+        "canonical_parent_id": canonical.id,
+        "is_duplicate_account": active and canonical.id != parent.id,
+        "account_status": parent.account_status or auth_service.ACCOUNT_ACTIVE,
+        "removed_at": format_cst(parent.deleted_at) if parent.deleted_at else None,
     }
+
+
+def apply_parent_reconcile(db: Session, admin_id: int, parent_id: int) -> dict:
+    """管理员确认后，将同手机号未绑定孩子挂到主家长名下。"""
+    _require_admin(db, admin_id)
+    parent = db.get(ChildUser, parent_id)
+    if not parent or parent.role != auth_service.ROLE_PARENT or not auth_service.is_account_active(parent):
+        raise HTTPException(404, "家长不存在")
+
+    from app.services.parent_reconcile_service import reconcile_parent_children
+
+    bound = reconcile_parent_children(db, parent_id)
+    children = list_children(db, admin_id, parent_id=parent_id)
+    return {"reconciled_count": bound, "children_count": len(children), "children": children}
 
 
 def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
     _require_admin(db, admin_id)
     child = db.get(ChildUser, child_id)
-    if not child or child.role != auth_service.ROLE_STUDENT or not auth_service.is_account_active(child):
+    if not child or child.role != auth_service.ROLE_STUDENT:
         raise HTTPException(404, "孩子不存在")
 
+    active = auth_service.is_account_active(child)
     from app.services.child_training_state import get_training_progress, overall_tier, state_summary
     from app.services.session_service import list_user_sessions
     from app.services.training_service import (
@@ -427,17 +577,19 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
     if parent and not auth_service.is_account_active(parent):
         parent = None
 
-    progress = get_training_progress(child)
-    summary = state_summary(progress)
-    history_items = get_checkin_history(db, child_id, limit=80)
-    history_days = group_checkin_history_by_day(history_items)
+    progress = get_training_progress(child) if active else {}
+    summary = state_summary(progress) if active else {}
+    history_items = get_checkin_history(db, child_id, limit=80) if active else []
+    history_days = group_checkin_history_by_day(history_items) if active else []
 
-    plans = db.scalars(
-        select(TrainingPlan)
-        .where(TrainingPlan.child_user_id == child_id)
-        .order_by(TrainingPlan.plan_date.desc())
-        .limit(15)
-    ).all()
+    plans = []
+    if active:
+        plans = db.scalars(
+            select(TrainingPlan)
+            .where(TrainingPlan.child_user_id == child_id)
+            .order_by(TrainingPlan.plan_date.desc())
+            .limit(15)
+        ).all()
     recent_plans = [
         {
             "plan_id": p.id,
@@ -451,17 +603,21 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
 
     pj = child.profile_json or {}
     base = auth_service.child_summary(db, child)
+    login_name = auth_service.effective_student_login_name(child) or base.get("login_name")
 
     return {
         **base,
+        "login_name": login_name,
+        "account_status": child.account_status or auth_service.ACCOUNT_ACTIVE,
+        "removed_at": format_cst(child.deleted_at) if child.deleted_at else None,
         "talent_display": pj.get("talent_display") or base.get("talent"),
-        "overall_tier": summary.get("overall_tier") or overall_tier(progress),
+        "overall_tier": summary.get("overall_tier") or (overall_tier(progress) if active else 1),
         "parent_id": parent.id if parent else None,
         "parent_phone": parent.parent_phone if parent else None,
         "parent_nickname": parent.nickname if parent else None,
         "created_at": format_cst(child.created_at),
-        "training_progress": summary,
+        "training_progress": summary or None,
         "training_history_days": history_days[:30],
         "recent_plans": recent_plans,
-        "active_sessions": list_user_sessions(db, child_id),
+        "active_sessions": list_user_sessions(db, child_id) if active else [],
     }

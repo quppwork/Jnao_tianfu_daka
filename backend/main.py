@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import admin, auth, chat, dev, growth, guide, health, parent, qa, resources, talent, training, user, voice
+from app.api import admin, auth, chat, dev, growth, guide, health, meta, parent, qa, resources, talent, training, user, voice
 from app.core.logger import setup_logging
 from app.core.security import get_cors_origins, is_debug_routes_enabled
 from app.db.models import ContentItem
@@ -30,7 +30,8 @@ def _seed_catalog_if_empty() -> None:
     try:
         from app.services.auth_service import ensure_admin_account
 
-        ensure_admin_account(session)
+        if os.getenv("JNAO_SKIP_ADMIN_SEED") != "1":
+            ensure_admin_account(session)
         count = session.scalar(select(func.count()).select_from(ContentItem)) or 0
         if count == 0:
             inserted = sum(import_all_xet_catalogs(session).values())
@@ -52,6 +53,8 @@ async def lifespan(_app: FastAPI):
     from app.core.security import assert_production_auth_config
 
     assert_production_auth_config()
+    if not os.getenv("REDIS_URL", "").strip() and os.getenv("JNAO_SKIP_ADMIN_SEED") != "1":
+        logger.warning("未配置 REDIS_URL：多 worker 下限流/OAuth 状态不共享（B16）")
     init_db()
     _seed_catalog_if_empty()
     yield
@@ -99,6 +102,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(meta.router)
 app.include_router(talent.router)
 app.include_router(chat.router)
 app.include_router(guide.router)

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.core.deps import get_authenticated_user
+from app.core.deps import get_authenticated_student
 from app.core.rate_limit import check_rate_limit
 from app.services.doubao_client import chat_completion, chat_completion_stream, is_configured
 
@@ -26,7 +26,7 @@ class ChatRequest(BaseModel):
 @router.post("")
 async def chat(
     req: ChatRequest,
-    auth_user_id: int = Depends(get_authenticated_user),
+    auth_user_id: int = Depends(get_authenticated_student),
 ):
     """非流式对话 — 豆包（需登录 + 限流）"""
     check_rate_limit(f"chat:{auth_user_id}", max_calls=30, window_sec=60)
@@ -59,7 +59,7 @@ async def chat(
 async def stream_chat(
     message: str = Query(..., min_length=1, max_length=4000),
     user_id: str = Query("mobile_user", max_length=64),
-    auth_user_id: int = Depends(get_authenticated_user),
+    auth_user_id: int = Depends(get_authenticated_student),
 ):
     """SSE 流式对话 — 豆包（需登录 + 限流）"""
     check_rate_limit(f"chat_stream:{auth_user_id}", max_calls=30, window_sec=60)

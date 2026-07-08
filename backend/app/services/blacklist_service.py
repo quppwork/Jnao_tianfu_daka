@@ -8,13 +8,14 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.services.auth_challenge_store import challenge_get, challenge_incr, challenge_set
+from app.services.auth_challenge_store import challenge_get, challenge_get_count, challenge_incr, challenge_set
 from app.services.datetime_fmt import format_cst
 from app.services.platform_config import _config_admin
 from app.services.training_day import TZ
 
 LOGIN_FAIL_WINDOW = 900
 LOGIN_FAIL_THRESHOLD = 15
+LOGIN_NAME_FAIL_THRESHOLD = 10
 BLACKLIST_TTL = 86400 * 7
 
 
@@ -72,6 +73,7 @@ def check_auth_allowed(
     client_ip: str = "",
     phone: str = "",
     device_id: str = "",
+    login_name: str = "",
 ) -> None:
     bl = _blacklist_store(db)
     if _is_blocked(bl["ips"], client_ip):
@@ -80,6 +82,10 @@ def check_auth_allowed(
         raise HTTPException(403, "该手机号已被限制，请联系管理员")
     if device_id and _is_blocked(bl["devices"], device_id):
         raise HTTPException(403, "当前设备已被限制，请联系管理员")
+    if login_name:
+        key = f"auth:fail:login:{login_name.strip()}"
+        if challenge_get_count(key) >= LOGIN_NAME_FAIL_THRESHOLD:
+            raise HTTPException(429, "登录尝试过于频繁，请稍后再试")
 
 
 def record_auth_failure(
@@ -88,6 +94,7 @@ def record_auth_failure(
     client_ip: str = "",
     phone: str = "",
     device_id: str = "",
+    login_name: str = "",
     reason: str = "login_fail",
 ) -> None:
     if client_ip:
@@ -105,9 +112,20 @@ def record_auth_failure(
         n = challenge_incr(key, LOGIN_FAIL_WINDOW)
         if n >= LOGIN_FAIL_THRESHOLD:
             add_blacklist_entry(db, "device", device_id, reason=reason, ttl=BLACKLIST_TTL)
+    if login_name:
+        ln = login_name.strip()
+        if ln:
+            key = f"auth:fail:login:{ln}"
+            challenge_incr(key, LOGIN_FAIL_WINDOW)
 
 
-def clear_auth_failures(*, client_ip: str = "", phone: str = "", device_id: str = "") -> None:
+def clear_auth_failures(
+    *,
+    client_ip: str = "",
+    phone: str = "",
+    device_id: str = "",
+    login_name: str = "",
+) -> None:
     from app.services.auth_challenge_store import challenge_delete
 
     if client_ip:
@@ -116,6 +134,8 @@ def clear_auth_failures(*, client_ip: str = "", phone: str = "", device_id: str 
         challenge_delete(f"auth:fail:phone:{phone}")
     if device_id:
         challenge_delete(f"auth:fail:device:{device_id}")
+    if login_name:
+        challenge_delete(f"auth:fail:login:{login_name.strip()}")
 
 
 def add_blacklist_entry(

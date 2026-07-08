@@ -19,8 +19,10 @@ from app.schemas.auth import (
     SmsSendResponse,
     WechatBindPhoneRequest,
     WechatConfigResponse,
+    WechatExternalBindRequest,
     WechatOAuthUrlResponse,
     WechatSendBindSmsRequest,
+    PhoneCheckRequest,
 )
 from app.services import auth_service
 from app.services.blacklist_service import (
@@ -28,7 +30,7 @@ from app.services.blacklist_service import (
     clear_auth_failures,
     record_auth_failure,
 )
-from app.services.captcha_service import create_captcha
+from app.services.captcha_service import create_captcha, verify_captcha
 from app.services.parent_profile_service import (
     get_login_channel,
     login_parent_by_sms,
@@ -52,12 +54,16 @@ from app.services.wechat_auth_service import (
     build_external_bind_mobile_url,
     bind_mobile_return_url,
     complete_bind_phone,
+    complete_external_bind_phone,
     consume_oauth_state,
     consume_login_exchange_ticket,
+    create_bind_ticket,
     create_login_exchange_ticket,
     frontend_login_url,
     frontend_wechat_error_url,
+    lookup_member_for_oauth,
     resolve_wechat_login,
+    assert_bind_ticket_sms_allowed,
     use_external_bind_mobile,
     wechat_app_id,
     wechat_configured,
@@ -120,11 +126,26 @@ def get_captcha():
     return CaptchaResponse(**create_captcha())
 
 
-@router.get("/parent/phone-check")
-def parent_phone_check(phone: str = Query(..., min_length=11), db: Session = Depends(get_db)):
-    p = phone.strip()
-    exists = auth_service.find_parent_by_phone(db, p) is not None
-    return {"registered": exists}
+@router.post("/parent/phone-check")
+def parent_phone_check(req: PhoneCheckRequest, request: Request, db: Session = Depends(get_db)):
+    """手机号注册状态查询 — 需图形验证码 + IP 限流，降低枚举风险（B10）。"""
+    from app.services.auth_challenge_store import challenge_get_count, challenge_incr
+    from app.services.parent_identity_service import resolve_parent_registration_state
+
+    ip, _ = _auth_ctx(request, None)
+    ip_key = f"auth:phone_check:ip:{ip or 'unknown'}"
+    if challenge_get_count(ip_key) >= 30:
+        raise HTTPException(429, "查询过于频繁，请稍后再试")
+    challenge_incr(ip_key, 3600)
+
+    verify_captcha(req.captcha_id, req.captcha_code, consume=True)
+    state = resolve_parent_registration_state(db, req.phone.strip())
+    return {
+        "registered": state["action"] != "register",
+        "action": state["action"],
+        "message": state["message"],
+        "suggested_action": state["action"],
+    }
 
 
 @router.post("/sms/send", response_model=SmsSendResponse)
@@ -227,13 +248,15 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if req.login_name and req.password:
         from app.core.password import verify_password
 
-        user = auth_service.find_user_by_login_name(db, req.login_name)
+        login_name = req.login_name.strip()
+        check_auth_allowed(db, client_ip=ip, device_id=did, login_name=login_name)
+        user = auth_service.find_student_for_login(db, login_name)
         if not user or not verify_password(req.password, user.password_hash):
-            record_auth_failure(db, client_ip=ip, device_id=did)
+            record_auth_failure(db, client_ip=ip, device_id=did, login_name=login_name)
             raise HTTPException(401, "账号或密码错误")
         if not auth_service.has_active_parent_bind(db, user.id):
             raise HTTPException(403, "账号未绑定家长，请联系管理员")
-        clear_auth_failures(client_ip=ip, device_id=did)
+        clear_auth_failures(client_ip=ip, device_id=did, login_name=login_name)
         return _issue_and_respond(db, user)
 
     raise HTTPException(400, "请提供有效的登录信息")
@@ -296,6 +319,19 @@ def wechat_callback(
             )
 
         if next_step == "bind-phone" and use_external_bind_mobile():
+            ticket = bind_ticket
+            if not ticket and user is None:
+                snap = lookup_member_for_oauth(db, openid)
+                ticket = create_bind_ticket(
+                    openid=openid,
+                    unionid=unionid,
+                    wx_member_id=snap.wx_member_id if snap else None,
+                )
+            if ticket:
+                return RedirectResponse(
+                    url=build_external_bind_mobile_url(bind_ticket=ticket),
+                    status_code=302,
+                )
             return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
 
         params = {"wx": "1", "next_step": next_step}
@@ -326,7 +362,7 @@ def wechat_callback(
 
 @router.post("/wechat/send-bind-sms", response_model=SmsSendResponse)
 def wechat_send_bind_sms(req: WechatSendBindSmsRequest, request: Request, db: Session = Depends(get_db)):
-    get_bind_ticket(req.bind_ticket)
+    assert_bind_ticket_sms_allowed(req.bind_ticket, req.phone)
     ip, did = _auth_ctx(request, req.device_id)
     data = send_sms_code(
         db,
@@ -351,4 +387,23 @@ def wechat_bind_phone(req: WechatBindPhoneRequest, request: Request, db: Session
     except HTTPException as e:
         if e.status_code in (400, 429):
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
+        raise
+
+
+@router.post("/wechat/complete-external-bind", response_model=AuthResponse)
+def wechat_complete_external_bind(
+    req: WechatExternalBindRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """外链 m.jnao.com 绑手机完成后，凭 bind_ticket 换取登录 session。"""
+    ip, did = _auth_ctx(request, req.device_id)
+    check_auth_allowed(db, client_ip=ip, device_id=did)
+    try:
+        user = complete_external_bind_phone(db, bind_ticket=req.bind_ticket)
+        clear_auth_failures(client_ip=ip, device_id=did)
+        return _issue_and_respond(db, user)
+    except HTTPException as e:
+        if e.status_code in (400, 429):
+            record_auth_failure(db, client_ip=ip, device_id=did)
         raise

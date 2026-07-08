@@ -23,6 +23,15 @@
 
 import { getQaImageLocal, parseQaImageId } from './qaMedia.js'
 import { authHeaders, getDeviceId } from './loginGuard.js'
+import {
+  inferAuthKindFromPath,
+  readAuthSnapshot,
+  isTransientError,
+  isAuthExpiredError,
+  sessionKeysForKind,
+  rememberCurrentRoute,
+  getCurrentAppPath,
+} from './appSession.js'
 
 // ── localStorage 键名 ──
 const CHILD_KEY = 'jnao_child_user_id'
@@ -55,17 +64,137 @@ export function getLoggedInUserId() {
 
 /** 退出登录并回到登录页 */
 export function logoutAndGoLogin() {
-  try {
-    localStorage.removeItem('jnao_user')
-    localStorage.removeItem('jnao_logged_in')
-    localStorage.removeItem('jnao_login_channel')
-    clearChildUserId()
-  } catch (e) { /* ignore */ }
+  clearSessionForKind('parent')
+  clearSessionForKind('student')
   try {
     uni.reLaunch({ url: '/pages/login/index' })
   } catch (e) {
     window.location.href = '/pages/login/index'
   }
+}
+
+export function logoutAdminAndGoLogin() {
+  clearSessionForKind('admin')
+  try {
+    uni.redirectTo({ url: '/pages/admin/login' })
+  } catch (e) {
+    window.location.href = '/pages/admin/login'
+  }
+}
+
+export function clearSessionForKind(kind) {
+  for (const key of sessionKeysForKind(kind)) {
+    try {
+      localStorage.removeItem(key)
+    } catch (e) { /* ignore */ }
+  }
+  if (kind === 'student' || kind === 'parent') {
+    invalidateChildUserSession()
+  }
+}
+
+export function redirectToLoginForKind(kind) {
+  if (kind === 'admin') {
+    logoutAdminAndGoLogin()
+    return
+  }
+  logoutAndGoLogin()
+}
+
+const _authValidatedAt = { admin: 0, parent: 0, student: 0 }
+const _authValidatedUid = { admin: null, parent: null, student: null }
+const AUTH_VALIDATE_TTL = 60 * 1000
+
+export function invalidatePageAuthCache(kind = null) {
+  const kinds = kind ? [kind] : ['admin', 'parent', 'student']
+  for (const k of kinds) {
+    _authValidatedAt[k] = 0
+    _authValidatedUid[k] = null
+  }
+}
+
+/** 页面进入前校验 session；网络异常允许离线继续，仅 401 才登出 */
+export async function requirePageAuth(kind) {
+  const snap = readAuthSnapshot()
+  const session = kind === 'admin' ? snap.admin : kind === 'parent' ? snap.parent : snap.student
+
+  if (!session?.userId || !session?.token) {
+    if (kind === 'student' && snap.parent?.token) {
+      try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (_) { /* ignore */ }
+      return { ok: false, reason: 'wrong_role' }
+    }
+    if (kind === 'parent' && snap.student?.token) {
+      try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
+      return { ok: false, reason: 'wrong_role' }
+    }
+    redirectToLoginForKind(kind)
+    return { ok: false, reason: 'missing_local' }
+  }
+
+  if (
+    _authValidatedUid[kind] === session.userId
+    && (Date.now() - _authValidatedAt[kind]) < AUTH_VALIDATE_TTL
+  ) {
+    if (kind === 'student') markChildUserSessionValid(session.userId)
+    return { ok: true, userId: session.userId }
+  }
+
+  try {
+    if (kind === 'admin') {
+      await apiJson(withAdmin('/api/admin/settings', session.userId))
+    } else if (kind === 'parent') {
+      await apiJson(withUser('/api/parent/profile', session.userId))
+    } else {
+      await apiJson(withUser('/api/user/profile', session.userId))
+    }
+    _authValidatedUid[kind] = session.userId
+    _authValidatedAt[kind] = Date.now()
+    if (kind === 'student') markChildUserSessionValid(session.userId)
+    return { ok: true, userId: session.userId }
+  } catch (e) {
+    if (isTransientError(e.status)) {
+      _authValidatedUid[kind] = session.userId
+      _authValidatedAt[kind] = Date.now()
+      if (kind === 'student') markChildUserSessionValid(session.userId)
+      return { ok: true, userId: session.userId, offline: true }
+    }
+    if (isAuthExpiredError(e.status)) {
+      clearSessionForKind(kind)
+      redirectToLoginForKind(kind)
+      return { ok: false, reason: 'expired' }
+    }
+    if (e.status === 403) {
+      const snap = readAuthSnapshot()
+      let role = snap.role
+      try {
+        const raw = localStorage.getItem('jnao_user')
+        if (raw) role = JSON.parse(raw).role || role
+      } catch (_) { /* ignore */ }
+      if (kind === 'student' && (role === 'parent' || snap.parent?.token)) {
+        try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (_) { /* ignore */ }
+        return { ok: false, reason: 'wrong_role' }
+      }
+      if (kind === 'parent' && role === 'student') {
+        try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
+        return { ok: false, reason: 'wrong_role' }
+      }
+      redirectToLoginForKind(kind)
+      return { ok: false, reason: 'forbidden' }
+    }
+    _authValidatedUid[kind] = session.userId
+    _authValidatedAt[kind] = Date.now()
+    if (kind === 'student') markChildUserSessionValid(session.userId)
+    return { ok: true, userId: session.userId, offline: true }
+  }
+}
+
+/** App 启动：记录路由 + 静默校验当前页 session */
+export async function bootstrapAppSession() {
+  rememberCurrentRoute()
+  const { route } = getCurrentAppPath()
+  const kind = inferAuthKindFromPath(route)
+  if (!kind) return { ok: true, skipped: true }
+  return requirePageAuth(kind)
 }
 
 export function setChildUserId(id) {
@@ -82,6 +211,8 @@ export function clearChildUserId() {
     localStorage.removeItem(SESSION_TOKEN_KEY)
   } catch (e) { /* ignore */ }
   invalidateChildUserSession()
+  invalidatePageAuthCache('student')
+  invalidatePageAuthCache('parent')
 }
 
 /** 读取 session_token */
@@ -122,7 +253,44 @@ export function markChildUserSessionValid(uid) {
   }
 }
 
-/** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
+const AUTH_ATTEMPT_PREFIXES = [
+  '/api/auth/login',
+  '/api/auth/sms/',
+  '/api/auth/register',
+  '/api/auth/wechat/exchange',
+  '/api/admin/login',
+]
+
+function isAuthAttemptRequest(url) {
+  const path = String(url || '').split('?')[0]
+  return AUTH_ATTEMPT_PREFIXES.some((p) => path === p || path.startsWith(p))
+}
+
+function inferAuthKindFromUrl(url) {
+  if (String(url).includes('/api/admin/')) return 'admin'
+  if (String(url).includes('/api/parent/')) return 'parent'
+  return 'student'
+}
+
+let _sessionExpiryHandled = false
+
+export function resetSessionExpiryGuard() {
+  _sessionExpiryHandled = false
+}
+
+function handleMidSessionExpired(url) {
+  if (_sessionExpiryHandled || isAuthAttemptRequest(url)) return
+  const kind = inferAuthKindFromUrl(url)
+  const hasToken = kind === 'admin' ? !!getAdminSessionToken() : !!getSessionToken()
+  if (!hasToken) return
+  _sessionExpiryHandled = true
+  invalidatePageAuthCache(kind)
+  clearSessionForKind(kind)
+  try {
+    uni.showToast({ title: '登录已失效，请重新登录', icon: 'none' })
+  } catch (_) { /* ignore */ }
+  setTimeout(() => redirectToLoginForKind(kind), 400)
+}
 function formatApiError(data, status) {
   const d = data?.detail ?? data?.message
   if (typeof d === 'string' && d.trim()) return d
@@ -135,7 +303,7 @@ function formatApiError(data, status) {
 
 async function apiJson(url, options = {}) {
   const userId = extractUserIdFromUrl(url)
-  const headers = mergeAuthHeaders(options, userId)
+  const headers = mergeAuthHeaders({ ...options, _url: url }, userId)
   let res
   try {
     res = await fetch(url, { ...options, headers })
@@ -147,22 +315,8 @@ async function apiJson(url, options = {}) {
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    // 401：会话失效 → 仅清除本地状态，统一由 ensureChildUser / 页面守卫负责跳转
     if (res.status === 401) {
-      // 管理员 API → 清除管理员状态
-      if (String(url).includes('/api/admin/')) {
-        try {
-          localStorage.removeItem('jnao_admin_user')
-          localStorage.removeItem('jnao_admin_token')
-        } catch (e) { /* ignore */ }
-      }
-      clearChildUserId()
-      invalidateChildUserSession()
-      try {
-        localStorage.removeItem('jnao_user')
-        localStorage.removeItem('jnao_logged_in')
-        localStorage.removeItem('jnao_login_channel')
-      } catch (e) { /* ignore */ }
+      handleMidSessionExpired(url)
     }
     const msg = formatApiError(data, res.status)
     console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
@@ -175,7 +329,7 @@ async function apiJson(url, options = {}) {
 }
 
 /** POST + SSE 流式读取（首页引导 / 学科答疑） */
-async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
+async function streamPostSse(url, body, { onToken, onDone, onError, signal } = {}) {
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders(
     {
@@ -183,6 +337,7 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
       },
+      _url: url,
     },
     userId,
   )
@@ -190,17 +345,12 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    signal,
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     if (res.status === 401) {
-      clearChildUserId()
-      invalidateChildUserSession()
-      try {
-        localStorage.removeItem('jnao_user')
-        localStorage.removeItem('jnao_logged_in')
-        localStorage.removeItem('jnao_login_channel')
-      } catch (e) { /* ignore */ }
+      handleMidSessionExpired(url)
     }
     const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
     err.status = res.status
@@ -214,6 +364,10 @@ async function streamPostSse(url, body, { onToken, onDone, onError } = {}) {
   let finalPayload = null
 
   while (true) {
+    if (signal?.aborted) {
+      await reader.cancel().catch(() => {})
+      throw new DOMException('Aborted', 'AbortError')
+    }
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
@@ -262,10 +416,20 @@ function extractUserIdFromUrl(url) {
 
 function mergeAuthHeaders(options = {}, userId = null) {
   const headers = { ...(options.headers || {}), ...authHeaders() }
-  const token = getSessionToken()
-  if (token) headers['X-Session-Token'] = token
-  const uid = userId || extractUserIdFromUrl(options._url || '') || getChildUserId()
-  if (uid) headers['X-Child-User-Id'] = String(uid)
+  const url = options._url || ''
+  const isAdminApi = String(url).includes('/api/admin/')
+
+  if (isAdminApi) {
+    const adminTok = getAdminSessionToken()
+    if (adminTok) headers['X-Session-Token'] = adminTok
+    const aid = userId || getAdminUserId()
+    if (aid) headers['X-Child-User-Id'] = String(aid)
+  } else {
+    const token = getSessionToken()
+    if (token) headers['X-Session-Token'] = token
+    const uid = userId || extractUserIdFromUrl(url) || getChildUserId()
+    if (uid) headers['X-Child-User-Id'] = String(uid)
+  }
   return headers
 }
 
@@ -289,6 +453,10 @@ export function resolveQaImageUrl(url, userId) {
     } catch (_) { /* keep path */ }
   }
   path = ensureAuthQuery(path, userId)
+  const token = getSessionToken()
+  if (token && !/[?&]session_token=/.test(path)) {
+    path += `${path.includes('?') ? '&' : '?'}session_token=${encodeURIComponent(token)}`
+  }
   if (!origin && path.startsWith('/')) {
     try { origin = window.location.origin } catch (_) {}
   }
@@ -344,12 +512,20 @@ function _storeAuth(data) {
   } catch (e) { /* ignore */ }
   if (role === 'student') {
     setChildUserId(data.child_user_id)
+    try { localStorage.setItem('jnao_student_user_id', String(data.child_user_id)) } catch (_) {}
     markChildUserSessionValid(data.child_user_id)
-  } else {
-    try { localStorage.removeItem(CHILD_KEY) } catch (e) { /* ignore */ }
-    invalidateChildUserSession()
+    invalidatePageAuthCache('student')
+    _authValidatedUid.student = data.child_user_id
+    _authValidatedAt.student = Date.now()
+  } else if (role === 'parent') {
+    try { localStorage.setItem('jnao_parent_user_id', String(data.child_user_id)) } catch (_) {}
     setChildUserId(data.child_user_id)
+    invalidateChildUserSession()
+    invalidatePageAuthCache('parent')
+    _authValidatedUid.parent = data.child_user_id
+    _authValidatedAt.parent = Date.now()
   }
+  resetSessionExpiryGuard()
 }
 
 export class NeedLoginError extends Error {
@@ -389,6 +565,19 @@ export async function loginParent(phone, password) {
 /** 获取图形验证码 */
 export async function fetchCaptcha() {
   return apiJson('/api/auth/captcha')
+}
+
+/** 家长手机号注册状态 — 需图形验证码（B10） */
+export async function checkParentPhone(phone, { captchaId, captchaCode } = {}) {
+  return apiJson('/api/auth/parent/phone-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({
+      phone,
+      captcha_id: captchaId,
+      captcha_code: captchaCode,
+    }),
+  })
 }
 
 /** 发送短信验证码 scene: login | register */
@@ -488,6 +677,20 @@ export async function wechatBindPhone({ bindTicket, phone, smsCode }) {
   return data
 }
 
+/** 外链 m.jnao.com 绑手机完成后换取 session */
+export async function completeWechatExternalBind(bindTicket) {
+  const data = await apiJson('/api/auth/wechat/complete-external-bind', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({
+      bind_ticket: bindTicket,
+      device_id: getDeviceId(),
+    }),
+  })
+  _storeAuth({ ...data, login_channel: 'wechat' })
+  return data
+}
+
 export function storeWechatCallbackAuth(data) {
   _storeAuth({ ...data, login_channel: 'wechat' })
 }
@@ -497,11 +700,15 @@ export async function fetchParentProfile(parentId) {
 }
 
 export async function updateParentProfile(parentId, body) {
-  return apiJson(withUser('/api/parent/profile', parentId), {
+  const data = await apiJson(withUser('/api/parent/profile', parentId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (data.session_token) {
+    setSessionToken(data.session_token)
+  }
+  return data
 }
 
 export async function ensureParentAccountReady(parentId) {
@@ -660,47 +867,9 @@ export async function ensureChildUser(nickname = '学员') {
     throw new NeedLoginError('请使用学生账号登录')
   }
 
-  const existing = getChildUserId()
-  if (!existing) {
-    _redirectToLogin()
-    throw new NeedLoginError()
-  }
-  if (!getSessionToken()) {
-    clearChildUserId()
-    _redirectToLogin()
-    throw new NeedLoginError()
-  }
-
-  // 缓存命中 + 未超过 TTL → 跳过 API 校验
-  if (existing && _sessionValidatedUid === existing && (Date.now() - _sessionValidatedAt) < SESSION_VALID_TTL) {
-    return existing
-  }
-  if (!_validateInFlight) {
-    _validateInFlight = (async () => {
-      try {
-        await apiJson(withUser('/api/user/profile', existing))
-        markChildUserSessionValid(existing)
-      } catch (e) {
-        if (e.status === 404 || e.status === 401 || e.status === 403) {
-          clearChildUserId()
-          // 会话已失效 → 统一在此跳转登录页
-          _redirectToLogin()
-        } else {
-          // 网络错误等非鉴权错误 → 允许继续使用，下次再校验
-          markChildUserSessionValid(existing)
-        }
-      } finally {
-        _validateInFlight = null
-      }
-    })()
-  }
-  await _validateInFlight
-  const uid = getChildUserId()
-  if (!uid) {
-    _redirectToLogin()
-    throw new NeedLoginError()
-  }
-  return uid
+  const auth = await requirePageAuth('student')
+  if (!auth.ok) throw new NeedLoginError()
+  return auth.userId
 }
 
 /** JNAO 外部 API 用的 uid（存于 child_user.jnao_uid） */
@@ -961,11 +1130,13 @@ export async function sendGuideMessage(userId, message, sessionId = null) {
 }
 
 export function sendGuideMessageStream(userId, message, sessionId = null, handlers = {}) {
-  return streamPostSse(
+  const controller = new AbortController()
+  const promise = streamPostSse(
     withUser('/api/guide/chat/stream', userId),
     { message, session_id: sessionId },
-    handlers,
+    { ...handlers, signal: controller.signal },
   )
+  return { promise, abort: () => controller.abort() }
 }
 
 // ── 学科答疑 ──
@@ -1012,7 +1183,8 @@ export function sendQaMessageStream(userId, message, sessionId = null, options =
   const subject = typeof options === 'string' ? options : options.subject
   const imageId = options.image_id || options.imageId || null
   const useRag = options.use_rag ?? options.useRag ?? null
-  return streamPostSse(
+  const controller = new AbortController()
+  const promise = streamPostSse(
     withUser('/api/qa/chat/stream', userId),
     {
       message,
@@ -1021,8 +1193,9 @@ export function sendQaMessageStream(userId, message, sessionId = null, options =
       image_id: imageId,
       use_rag: useRag,
     },
-    handlers,
+    { ...handlers, signal: controller.signal },
   )
+  return { promise, abort: () => controller.abort() }
 }
 
 export async function uploadQaImage(userId, file) {
@@ -1150,18 +1323,11 @@ function withAdmin(url, adminId) {
     const sep = result.includes('?') ? '&' : '?'
     result = `${result}${sep}user_id=${id}`
   }
-  const token = getAdminSessionToken()
-  if (token && !/[?&]session_token=/.test(result)) {
-    result = `${result}&session_token=${encodeURIComponent(token)}`
-  }
   return result
 }
 
 export function clearAdminSession() {
-  try {
-    localStorage.removeItem(ADMIN_USER_KEY)
-    localStorage.removeItem(ADMIN_TOKEN_KEY)
-  } catch (_) {}
+  clearSessionForKind('admin')
 }
 
 export async function loginAdmin(loginName, password) {
@@ -1177,12 +1343,51 @@ export async function loginAdmin(loginName, password) {
     loginName: data.login_name,
   }))
   if (data.session_token) localStorage.setItem(ADMIN_TOKEN_KEY, data.session_token)
+  invalidatePageAuthCache('admin')
+  _authValidatedUid.admin = data.child_user_id
+  _authValidatedAt.admin = Date.now()
+  resetSessionExpiryGuard()
   return data
 }
 
-export async function fetchAdminParents(adminId) {
-  const data = await apiJson(withAdmin('/api/admin/parents', adminId))
+export async function fetchAdminParents(adminId, q = '') {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : ''
+  const data = await apiJson(withAdmin(`/api/admin/parents${qs}`, adminId))
   return data.parents || []
+}
+
+export async function fetchAdminRemovedParents(adminId, q = '') {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : ''
+  const data = await apiJson(withAdmin(`/api/admin/parents/removed${qs}`, adminId))
+  return data.parents || []
+}
+
+export async function createAdminParent(adminId, body) {
+  return apiJson(withAdmin('/api/admin/parents', adminId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function restoreAdminParent(adminId, parentId) {
+  return apiJson(withAdmin(`/api/admin/parents/${parentId}/restore`, adminId), {
+    method: 'POST',
+  })
+}
+
+export async function restoreAdminParentByPhone(adminId, { phone, nickname } = {}) {
+  return apiJson(withAdmin('/api/admin/parents/restore-by-phone', adminId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, nickname }),
+  })
+}
+
+export async function restoreAdminChild(adminId, childId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/restore`, adminId), {
+    method: 'POST',
+  })
 }
 
 export async function updateAdminParent(adminId, parentId, body) {
@@ -1197,9 +1402,12 @@ export async function deleteAdminParent(adminId, parentId) {
   return apiJson(withAdmin(`/api/admin/parents/${parentId}`, adminId), { method: 'DELETE' })
 }
 
-export async function fetchAdminChildren(adminId, parentId) {
-  const q = parentId ? `?parent_id=${parentId}` : ''
-  const data = await apiJson(withAdmin(`/api/admin/children${q}`, adminId))
+export async function fetchAdminChildren(adminId, { parentId = null, q = '' } = {}) {
+  const params = []
+  if (parentId) params.push(`parent_id=${parentId}`)
+  if (q) params.push(`q=${encodeURIComponent(q)}`)
+  const qs = params.length ? `?${params.join('&')}` : ''
+  const data = await apiJson(withAdmin(`/api/admin/children${qs}`, adminId))
   return data.children || []
 }
 
@@ -1258,6 +1466,12 @@ export async function updateAdminSettings(adminId, body) {
 
 export async function fetchAdminParentDetail(adminId, parentId) {
   return apiJson(withAdmin(`/api/admin/parents/${parentId}/detail`, adminId))
+}
+
+export async function reconcileAdminParent(adminId, parentId) {
+  return apiJson(withAdmin(`/api/admin/parents/${parentId}/reconcile`, adminId), {
+    method: 'POST',
+  })
 }
 
 export async function fetchAdminChildDetail(adminId, childId) {

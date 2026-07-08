@@ -104,13 +104,13 @@ def parent_next_step(user: ChildUser) -> str:
     return "home" if complete else "complete-profile"
 
 
-def parent_profile_to_dict(user: ChildUser) -> dict:
+def parent_profile_to_dict(user: ChildUser, *, session_token: str | None = None) -> dict:
     complete, missing = parent_profile_status(user)
     channel = get_login_channel(user)
     if channel == LOGIN_CHANNEL_WECHAT:
         missing = parent_wechat_missing_fields(user)
         complete = len(missing) == 0
-    return {
+    out = {
         "id": user.id,
         "parent_phone": user.parent_phone,
         "nickname": user.nickname,
@@ -123,6 +123,9 @@ def parent_profile_to_dict(user: ChildUser) -> dict:
         "account_ready": parent_account_ready(user),
         "next_step": parent_next_step(user),
     }
+    if session_token:
+        out["session_token"] = session_token
+    return out
 
 
 def assert_parent_account_ready(user: ChildUser) -> None:
@@ -140,13 +143,16 @@ def update_parent_profile(
     nickname: str | None = None,
     real_name: str | None = None,
     password: str | None = None,
+    old_password: str | None = None,
     require_password: bool = False,
-) -> ChildUser:
+) -> tuple[ChildUser, str | None]:
     user = db.get(ChildUser, user_id)
     if not user or user.role != auth_service.ROLE_PARENT:
         raise HTTPException(404, "家长不存在")
     if not auth_service.is_account_active(user):
         raise HTTPException(401, "账号已停用")
+
+    new_session_token: str | None = None
 
     if nickname is not None:
         nick = nickname.strip()
@@ -168,24 +174,31 @@ def update_parent_profile(
         if pwd and len(pwd) < 6:
             raise HTTPException(400, "密码至少6位")
         if pwd:
-            from app.core.password import hash_password
+            from app.core.password import hash_password, verify_password
+            from app.services.session_service import issue_session, revoke_all_sessions
 
-            had_password = bool(user.password_hash)
+            if user.password_hash:
+                old = (old_password or "").strip()
+                if not old:
+                    raise HTTPException(400, "修改密码需提供原密码")
+                if not verify_password(old, user.password_hash):
+                    raise HTTPException(401, "原密码错误")
             user.password_hash = hash_password(pwd)
-            if had_password:
-                from app.services.session_service import revoke_all_sessions
-
-                revoke_all_sessions(db, user.id)
+            revoke_all_sessions(db, user.id)
+            new_session_token = issue_session(db, user)
 
     user.profile_json = pj
     flag_modified(user, "profile_json")
     db.commit()
     db.refresh(user)
-    return user
+    return user, new_session_token
 
 
 def login_parent_by_sms(db: Session, *, phone: str) -> ChildUser:
-    existing = auth_service.find_parent_by_phone(db, phone)
+    from app.services.parent_identity_service import assert_can_login_sms, find_login_parent_user
+
+    assert_can_login_sms(db, phone)
+    existing = find_login_parent_user(db, phone)
     if not existing:
         raise HTTPException(404, "该手机号尚未注册，请先注册")
 
@@ -208,39 +221,50 @@ def register_parent_by_sms(
     real_name: str | None = None,
     password: str | None = None,
 ) -> ChildUser:
-    if auth_service.find_parent_by_phone(db, phone):
-        raise HTTPException(409, "该手机号已注册，请直接登录")
-
-    nick = (nickname or "").strip()
-    if not nick:
-        raise HTTPException(400, "请填写昵称")
-    name = (real_name or "").strip()
-    if not name:
-        raise HTTPException(400, "请填写真实姓名")
-
-    now = datetime.now(TZ).replace(tzinfo=None)
-    now_iso = format_cst(now)
-    pj: dict = {
-        "parent": {
-            "real_name": name,
-            "phone_verified_at": now_iso,
-        }
-    }
-    user = auth_service.register_child(
-        db,
-        parent_phone=phone,
-        nickname=nick,
-        password=password.strip() if password and password.strip() else None,
-        role=auth_service.ROLE_PARENT,
-        child_quota=auth_service.DEFAULT_CHILD_QUOTA,
-    )
-    user.profile_json = pj
-    flag_modified(user, "profile_json")
-    db.commit()
-    db.refresh(user)
-
+    from app.services.auth_challenge_store import challenge_release_lock, challenge_try_lock
     from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
+    from app.services.parent_identity_service import assert_parent_can_register
+    from app.services.sms_service import normalize_phone
 
-    register_daka_member_from_user(db, user, register_channel=CHANNEL_SMS)
-    db.commit()
-    return user
+    phone = normalize_phone(phone)
+    lock_key = f"auth:register:{phone}"
+    if not challenge_try_lock(lock_key, 30):
+        raise HTTPException(429, "注册处理中，请稍后再试")
+    try:
+        assert_parent_can_register(db, phone)
+
+        nick = (nickname or "").strip()
+        if not nick:
+            raise HTTPException(400, "请填写昵称")
+        name = (real_name or "").strip()
+        if not name:
+            raise HTTPException(400, "请填写真实姓名")
+
+        now = datetime.now(TZ).replace(tzinfo=None)
+        now_iso = format_cst(now)
+        pj: dict = {
+            "parent": {
+                "real_name": name,
+                "phone_verified_at": now_iso,
+            }
+        }
+        user = auth_service.register_child(
+            db,
+            parent_phone=phone,
+            nickname=nick,
+            password=password.strip() if password and password.strip() else None,
+            role=auth_service.ROLE_PARENT,
+            child_quota=auth_service.DEFAULT_CHILD_QUOTA,
+            commit=False,
+        )
+        user.profile_json = pj
+        flag_modified(user, "profile_json")
+        register_daka_member_from_user(db, user, register_channel=CHANNEL_SMS)
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        challenge_release_lock(lock_key)

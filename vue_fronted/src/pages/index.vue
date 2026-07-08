@@ -65,10 +65,6 @@
         <view class="chat-av ai" v-else><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl" :class="{ me: m.role==='user', ai: m.role!=='user' }">{{ m.text }}</view>
       </view>
-      <view v-if="loading" class="chat-row">
-        <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
-        <view class="chat-bbl ai"><text class="loading-dots">...</text></view>
-      </view>
     </view>
 
     <!-- Bottom Input -->
@@ -76,8 +72,9 @@
       <view class="input-wrap">
         <textarea class="chat-input" v-model="inputText" placeholder="输入问题..." :disabled="loading" @keydown="onKeyDown" :rows="1" />
         <view class="input-btns">
-          <view class="btn-send" @click="sendMsg">
-            <text style="color:#fff;font-size:14px;">➤</text>
+          <view class="btn-send" :class="{ 'btn-stop': loading }" @click="loading ? stopStream() : sendMsg()">
+            <text v-if="loading" style="color:#fff;font-size:12px;font-weight:700;">■</text>
+            <text v-else style="color:#fff;font-size:14px;">➤</text>
           </view>
         </view>
       </view>
@@ -155,6 +152,8 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import {
   clearChildUserId,
   ensureChildUser,
+  requirePageAuth,
+  logoutAndGoLogin,
   getChildUserId,
   markChildUserSessionValid,
   invalidateChildUserSession,
@@ -170,10 +169,13 @@ import {
   gradeToSchoolStage,
 } from '@/utils/userApi.js'
 import { refreshTalentState } from '@/utils/talentState.js'
+import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 const isLight = ref(true)
 const inputText = ref('')
 const loading = ref(false)
+let streamAbort = null
+let abortRequested = false
 const guideSessionId = ref(null)
 const messages = ref([])
 const showSettings = ref(false)
@@ -210,12 +212,17 @@ async function sendMsg() {
   inputText.value = ''
   const aiIdx = messages.value.length
   messages.value.push({ role: 'ai', text: '' })
-  loading.value = false
+  loading.value = true
+  abortRequested = false
   await nextTick()
   scrollChat()
   try {
     const uid = await ensureChildUser()
-    await sendGuideMessageStream(uid, text, guideSessionId.value, {
+    if (abortRequested) {
+      applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
+    const { promise, abort } = sendGuideMessageStream(uid, text, guideSessionId.value, {
       onToken(chunk) {
         messages.value[aiIdx].text += chunk
         scrollChat()
@@ -225,13 +232,26 @@ async function sendMsg() {
         if (data.reply) messages.value[aiIdx].text = data.reply
       },
     })
+    streamAbort = abort
+    await promise
   } catch (e) {
-    if (!messages.value[aiIdx].text) {
+    if (isStreamAborted(e)) {
+      applyStreamStoppedHint(messages, aiIdx)
+    } else if (!messages.value[aiIdx].text) {
       messages.value[aiIdx].text = e?.message || '网络错误，请稍后再试'
     }
+  } finally {
+    streamAbort = null
+    abortRequested = false
+    loading.value = false
   }
   await nextTick()
   scrollChat()
+}
+
+function stopStream() {
+  abortRequested = true
+  streamAbort?.()
 }
 
 function applyProfileData(data, uid, { fetchLatest = true } = {}) {
@@ -396,22 +416,13 @@ function confirmDeleteHistory(h) {
 }
 
 function doLogout() {
-  try {
-    clearChildUserId()
-    localStorage.removeItem('jnao_logged_in')
-    localStorage.removeItem('jnao_user')
-  } catch (_) {}
+  logoutAndGoLogin()
   showSettings.value = false
-  uni.redirectTo({ url: '/pages/login/index' })
 }
 
-onMounted(() => {
-  try {
-    if (localStorage.getItem('jnao_logged_in') !== '1') {
-      uni.redirectTo({ url: '/pages/login/index' })
-      return
-    }
-  } catch (_) {}
+onMounted(async () => {
+  const auth = await requirePageAuth('student')
+  if (!auth.ok) return
   initHome()
 })
 
@@ -503,8 +514,9 @@ function onNavTap() {
 .loading-dots { animation:dotPulse 1.4s infinite; }
 @keyframes dotPulse { 0%,80%,100% { opacity:0.2 } 40% { opacity:1 } }
 .btn-send { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex !important; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.btn-send.btn-stop { background:#ef4444; }
 .btn-send:active { opacity:0.8; }
-
+.btn-disabled { opacity:0.45; pointer-events:none; }
 
 /* Settings modal */
 .picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }

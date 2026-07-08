@@ -12,6 +12,26 @@ _mem: dict[str, tuple[float, dict[str, Any]]] = {}
 _lock = threading.Lock()
 
 
+def challenge_release_lock(key: str) -> None:
+    challenge_delete(key)
+
+
+def challenge_try_lock(key: str, ttl: int) -> bool:
+    """分布式注册/写锁；无 Redis 时内存近似实现。"""
+    if ttl <= 0:
+        return True
+    client = get_client()
+    if client:
+        try:
+            return bool(client.set(key, "1", nx=True, ex=ttl))
+        except Exception:
+            return False
+    if challenge_get(key):
+        return False
+    challenge_set(key, {"locked": True}, ttl)
+    return True
+
+
 def challenge_set(key: str, value: dict[str, Any], ttl: int) -> None:
     if ttl <= 0:
         return

@@ -101,10 +101,11 @@ class TestAdminArchiveFixes:
             json={"login_name": "pyx", "password": "123456"},
         ).json()
         return {
-            "params": {
-                "user_id": data["child_user_id"],
-                "session_token": data["session_token"],
-            }
+            "params": {"user_id": data["child_user_id"]},
+            "headers": {
+                "X-Child-User-Id": str(data["child_user_id"]),
+                "X-Session-Token": data["session_token"],
+            },
         }
 
     def test_delete_child_idempotent(self, client: TestClient, db_session: Session):
@@ -124,7 +125,8 @@ class TestAdminArchiveFixes:
         assert res.status_code == 410
 
         archived = db_session.get(ChildUser, cid)
-        assert archived.parent_phone.startswith("__deleted_student_")
+        assert archived.account_status == "removed"
+        assert archived.parent_phone  # 保留原手机号，不再改写 __deleted_
 
     def test_unbind_returns_warning(self, client: TestClient, db_session: Session):
         from tests.test_parent_auth import _parent_auth, _register_parent

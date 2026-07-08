@@ -27,9 +27,16 @@ def _send_register_sms(client: TestClient, phone: str) -> None:
 
 
 def _send_login_sms(client: TestClient, phone: str) -> None:
+    cap = client.get("/api/auth/captcha")
+    cid = cap.json()["captcha_id"]
     res = client.post(
         "/api/auth/sms/send",
-        json={"phone": phone, "scene": "login"},
+        json={
+            "phone": phone,
+            "scene": "login",
+            "captcha_id": cid,
+            "captcha_code": "0000",
+        },
     )
     assert res.status_code == 200, res.text
 
@@ -128,12 +135,48 @@ class TestSmsAuth:
         )
         assert res.status_code == 409
 
+    def test_register_rejected_after_snapshot(self, client: TestClient, db_session):
+        from app.db.models import WxMemberSnapshot
+
+        db_session.add(
+            WxMemberSnapshot(openid="o_dup_test", mobile="13900008817", nickname="老")
+        )
+        db_session.commit()
+        cap = client.get("/api/auth/captcha")
+        send = client.post(
+            "/api/auth/sms/send",
+            json={
+                "phone": "13900008817",
+                "scene": "register",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
+        )
+        assert send.status_code == 409
+
     def test_sms_login_rejects_unregistered(self, client: TestClient):
         res = client.post(
             "/api/auth/sms/login",
             json={"phone": "13900008899", "sms_code": "88888"},
         )
         assert res.status_code == 400
+
+    def test_login_sms_requires_captcha(self, client: TestClient, db_session):
+        from app.services.auth_service import register_child, ROLE_PARENT
+
+        register_child(
+            db_session,
+            parent_phone="13900008818",
+            nickname="需验证码",
+            role=ROLE_PARENT,
+            child_quota=5,
+        )
+        res = client.post(
+            "/api/auth/sms/send",
+            json={"phone": "13900008818", "scene": "login"},
+        )
+        assert res.status_code == 400
+        assert "图形验证" in res.json()["detail"]
 
     def test_admin_blacklist_unban(self, client: TestClient, db_session):
         from app.services.blacklist_service import add_blacklist_entry
@@ -143,10 +186,11 @@ class TestSmsAuth:
             json={"login_name": "pyx", "password": "123456"},
         ).json()
         auth = {
-            "params": {
-                "user_id": admin["child_user_id"],
-                "session_token": admin["session_token"],
-            }
+            "params": {"user_id": admin["child_user_id"]},
+            "headers": {
+                "X-Child-User-Id": str(admin["child_user_id"]),
+                "X-Session-Token": admin["session_token"],
+            },
         }
         add_blacklist_entry(db_session, "ip", "203.0.113.99", reason="test")
         lst = client.get("/api/admin/blacklist", **auth)

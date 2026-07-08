@@ -15,13 +15,173 @@ ROLE_STUDENT = "student"
 ROLE_ADMIN = "admin"
 DEFAULT_CHILD_QUOTA = 5
 ACCOUNT_ACTIVE = "active"
-ACCOUNT_DELETED = "deleted"
+ACCOUNT_REMOVED = "removed"  # 管理员移出生产环境；数据保留，可再次登录恢复
+ACCOUNT_DELETED = "deleted"  # 硬归档（如废弃管理员），不可恢复
 
 
 def is_account_active(user: ChildUser | None) -> bool:
     if not user:
         return False
     return (getattr(user, "account_status", None) or ACCOUNT_ACTIVE) == ACCOUNT_ACTIVE
+
+
+def is_account_removed(user: ChildUser | None) -> bool:
+    if not user:
+        return False
+    return getattr(user, "account_status", None) == ACCOUNT_REMOVED
+
+
+def reactivate_parent_with_children(db: Session, parent: ChildUser) -> None:
+    """移出生产的家长再次登录时恢复本人及名下已移出的孩子（不删数据）。"""
+    if parent.role != ROLE_PARENT:
+        return
+    if is_account_removed(parent):
+        parent.account_status = ACCOUNT_ACTIVE
+        parent.deleted_at = None
+    child_ids = list(
+        db.scalars(
+            select(ParentChildBind.child_id).where(ParentChildBind.parent_id == parent.id)
+        ).all()
+    )
+    for cid in child_ids:
+        child = db.get(ChildUser, cid)
+        if child and is_account_removed(child):
+            child.account_status = ACCOUNT_ACTIVE
+            child.deleted_at = None
+    db.flush()
+
+
+def reactivate_student_for_login(db: Session, student: ChildUser) -> None:
+    if not is_account_removed(student):
+        return
+    bind = db.scalar(select(ParentChildBind).where(ParentChildBind.child_id == student.id))
+    if bind:
+        parent = db.get(ChildUser, bind.parent_id)
+        if parent and parent.role == ROLE_PARENT:
+            if is_account_removed(parent):
+                reactivate_parent_with_children(db, parent)
+                return
+    student.account_status = ACCOUNT_ACTIVE
+    student.deleted_at = None
+    db.flush()
+
+
+def effective_parent_phone(user: ChildUser) -> str:
+    phone = (user.parent_phone or "").strip()
+    if phone.startswith("__deleted_parent_"):
+        archived = (user.profile_json or {}).get("archived_parent_phone") or ""
+        return archived.strip() or phone
+    return phone
+
+
+def effective_student_login_name(user: ChildUser) -> str | None:
+    ln = (user.login_name or "").strip()
+    if ln.startswith("__deleted_"):
+        archived = (user.profile_json or {}).get("archived_login_name") or ""
+        return archived.strip() or ln
+    return ln or None
+
+
+def restore_student_account(db: Session, student: ChildUser) -> None:
+    """管理员恢复：还原硬删时改写的 login_name / parent_phone。"""
+    if student.role != ROLE_STUDENT:
+        return
+    pj = dict(student.profile_json or {})
+    ln = effective_student_login_name(student)
+    if ln and ln != student.login_name and not ln.startswith("__deleted_"):
+        student.login_name = ln
+    archived_phone = (pj.get("archived_parent_phone") or "").strip()
+    if student.parent_phone.startswith("__deleted_student_") and archived_phone:
+        student.parent_phone = archived_phone
+    student.account_status = ACCOUNT_ACTIVE
+    student.deleted_at = None
+    db.flush()
+
+
+def restore_parent_account(db: Session, parent: ChildUser) -> ChildUser:
+    """管理员恢复家长；同步恢复名下孩子并尽量补回绑定。"""
+    from fastapi import HTTPException
+    from app.services.sms_service import normalize_phone
+
+    if parent.role != ROLE_PARENT:
+        raise ValueError("not a parent")
+    if is_account_active(parent):
+        return parent
+
+    pj = dict(parent.profile_json or {})
+    archived_phone = (pj.get("archived_parent_phone") or "").strip()
+    if parent.parent_phone.startswith("__deleted_parent_") and archived_phone:
+        parent.parent_phone = archived_phone
+    archived_nick = (pj.get("archived_nickname") or "").strip()
+    if archived_nick and parent.nickname != archived_nick:
+        parent.nickname = archived_nick
+
+    parent.account_status = ACCOUNT_ACTIVE
+    parent.deleted_at = None
+    db.flush()
+
+    phone = effective_parent_phone(parent)
+    norm_phone = normalize_phone(phone)
+    bound_ids = set(
+        db.scalars(
+            select(ParentChildBind.child_id).where(ParentChildBind.parent_id == parent.id)
+        ).all()
+    )
+    for cid in bound_ids:
+        child = db.get(ChildUser, cid)
+        if child and child.role == ROLE_STUDENT and not is_account_active(child):
+            restore_student_account(db, child)
+
+    orphans = db.scalars(
+        select(ChildUser).where(
+            ChildUser.role == ROLE_STUDENT,
+            ChildUser.account_status.in_((ACCOUNT_REMOVED, ACCOUNT_DELETED)),
+        )
+    ).all()
+    for child in orphans:
+        pj_c = child.profile_json or {}
+        phones = {
+            normalize_phone(child.parent_phone or ""),
+            normalize_phone(pj_c.get("archived_parent_phone") or ""),
+        }
+        if norm_phone not in phones:
+            continue
+        restore_student_account(db, child)
+        child.parent_phone = phone
+        if child.id not in bound_ids:
+            try:
+                bind_parent_child(db, parent.id, child.id, commit=False)
+            except HTTPException:
+                pass
+    db.flush()
+    return parent
+
+
+def find_parent_for_admin_restore(
+    db: Session,
+    *,
+    phone: str | None = None,
+    nickname: str | None = None,
+) -> ChildUser | None:
+    from app.services.sms_service import normalize_phone
+
+    target_phone = normalize_phone(phone) if phone else ""
+    target_nick = (nickname or "").strip()
+    rows = db.scalars(
+        select(ChildUser).where(
+            ChildUser.role == ROLE_PARENT,
+            ChildUser.account_status.in_((ACCOUNT_REMOVED, ACCOUNT_DELETED)),
+        )
+    ).all()
+    for row in rows:
+        if target_phone and normalize_phone(effective_parent_phone(row)) == target_phone:
+            return row
+        if target_nick and (row.nickname or "").strip() == target_nick:
+            return row
+        archived = ((row.profile_json or {}).get("archived_nickname") or "").strip()
+        if target_nick and archived == target_nick:
+            return row
+    return None
 
 
 def _generate_session_token() -> str:
@@ -48,7 +208,15 @@ def register_child(
     role: str = ROLE_STUDENT,
     login_name: str | None = None,
     child_quota: int | None = None,
+    commit: bool = True,
 ) -> ChildUser:
+    if role == ROLE_PARENT:
+        from app.services.parent_reconcile_service import resolve_canonical_parent_for_login
+
+        if resolve_canonical_parent_for_login(db, parent_phone):
+            from fastapi import HTTPException
+
+            raise HTTPException(409, "该手机号已注册，请直接登录")
     user = ChildUser(
         parent_phone=parent_phone,
         nickname=nickname,
@@ -60,8 +228,11 @@ def register_child(
         session_token=_generate_session_token(),
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    if commit:
+        db.commit()
+        db.refresh(user)
+    else:
+        db.flush()
     return user
 
 
@@ -70,6 +241,20 @@ def get_child_user(db: Session, child_user_id: int) -> ChildUser | None:
     if user and not is_account_active(user):
         return None
     return user
+
+
+def get_parent_for_login(db: Session, user_id: int) -> ChildUser | None:
+    """微信 OAuth 等：按 id 取家长，removed 时自动恢复。"""
+    user = db.get(ChildUser, user_id)
+    if not user or user.role != ROLE_PARENT:
+        return None
+    if user.account_status == ACCOUNT_DELETED:
+        return None
+    if is_account_removed(user):
+        reactivate_parent_with_children(db, user)
+        db.commit()
+        db.refresh(user)
+    return user if is_account_active(user) else None
 
 
 def find_child_by_phone(db: Session, parent_phone: str, nickname: str) -> ChildUser | None:
@@ -84,13 +269,21 @@ def find_child_by_phone(db: Session, parent_phone: str, nickname: str) -> ChildU
 
 
 def find_parent_by_phone(db: Session, parent_phone: str) -> ChildUser | None:
-    return db.scalar(
-        select(ChildUser).where(
-            ChildUser.parent_phone == parent_phone,
-            ChildUser.role == ROLE_PARENT,
-            ChildUser.account_status == ACCOUNT_ACTIVE,
-        )
-    )
+    from app.services.parent_reconcile_service import resolve_canonical_parent
+
+    return resolve_canonical_parent(db, parent_phone)
+
+
+def find_parent_by_phone_for_login(db: Session, parent_phone: str) -> ChildUser | None:
+    """登录/OAuth 用：可找到 removed 家长并在命中时自动恢复。"""
+    from app.services.parent_reconcile_service import resolve_canonical_parent_for_login
+
+    parent = resolve_canonical_parent_for_login(db, parent_phone)
+    if parent and is_account_removed(parent):
+        reactivate_parent_with_children(db, parent)
+        db.commit()
+        db.refresh(parent)
+    return parent if is_account_active(parent) else None
 
 
 def find_user_by_login_name(db: Session, login_name: str) -> ChildUser | None:
@@ -101,6 +294,24 @@ def find_user_by_login_name(db: Session, login_name: str) -> ChildUser | None:
             ChildUser.account_status == ACCOUNT_ACTIVE,
         )
     )
+
+
+def find_student_for_login(db: Session, login_name: str) -> ChildUser | None:
+    """学生密码登录：含 removed 账号，命中后自动恢复。"""
+    user = db.scalar(
+        select(ChildUser).where(
+            ChildUser.login_name == login_name,
+            ChildUser.role == ROLE_STUDENT,
+            ChildUser.account_status.in_((ACCOUNT_ACTIVE, ACCOUNT_REMOVED)),
+        )
+    )
+    if not user:
+        return None
+    if is_account_removed(user):
+        reactivate_student_for_login(db, user)
+        db.commit()
+        db.refresh(user)
+    return user if is_account_active(user) else None
 
 
 def find_admin_by_login_name(db: Session, login_name: str) -> ChildUser | None:
@@ -127,13 +338,13 @@ def has_active_parent_bind(db: Session, child_id: int) -> bool:
 
 
 def login_parent_by_password(db: Session, parent_phone: str, password: str) -> ChildUser | None:
-    user = find_parent_by_phone(db, parent_phone)
+    user = find_parent_by_phone_for_login(db, parent_phone)
     if not user or not verify_password(password, user.password_hash):
         return None
     return user
 
 def login_student_by_password(db: Session, login_name: str, password: str) -> ChildUser | None:
-    user = find_user_by_login_name(db, login_name)
+    user = find_student_for_login(db, login_name)
     if not user or not verify_password(password, user.password_hash):
         return None
     if not has_active_parent_bind(db, user.id):
@@ -143,24 +354,67 @@ def login_student_by_password(db: Session, login_name: str, password: str) -> Ch
 
 def login_admin_by_password(db: Session, login_name: str, password: str) -> ChildUser | None:
     user = find_admin_by_login_name(db, login_name.strip())
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not is_account_active(user):
+        return None
+    if not verify_password(password, user.password_hash):
         return None
     return user
 
 
+def retire_other_admin_accounts(db: Session, *, keep_id: int) -> int:
+    """废除 env 指定以外的所有活跃管理员，并吊销其全部 session。"""
+    import logging
+
+    from app.services.session_service import revoke_all_sessions
+
+    logger = logging.getLogger("jnao")
+    others = db.scalars(
+        select(ChildUser).where(
+            ChildUser.role == ROLE_ADMIN,
+            ChildUser.id != keep_id,
+            ChildUser.account_status == ACCOUNT_ACTIVE,
+        )
+    ).all()
+    if not others:
+        return 0
+    for admin in others:
+        admin.account_status = ACCOUNT_DELETED
+        revoke_all_sessions(db, admin.id)
+        logger.info("已废除旧管理员 login_name=%s id=%s", admin.login_name, admin.id)
+    db.commit()
+    return len(others)
+
+
 def ensure_admin_account(db: Session) -> ChildUser | None:
-    """启动时确保管理员账号存在（凭据来自环境变量）"""
+    """启动时确保管理员账号存在；凭据仅来自环境变量，并按 env 同步密码哈希。"""
+    import logging
     import os
 
-    login_name = (os.getenv("ADMIN_LOGIN_NAME") or "pyx").strip()
-    password = os.getenv("ADMIN_PASSWORD") or "123456"
+    from app.core.security import is_production
+
+    logger = logging.getLogger("jnao")
+    login_name = (os.getenv("ADMIN_LOGIN_NAME") or "").strip()
+    password = (os.getenv("ADMIN_PASSWORD") or "").strip()
     if not login_name or not password:
+        if is_production():
+            raise RuntimeError("生产环境必须配置 ADMIN_LOGIN_NAME 与 ADMIN_PASSWORD")
         return None
     existing = find_admin_by_login_name(db, login_name)
     if existing:
         existing.nickname = existing.nickname or "管理员"
+        pwd_changed = False
+        if not verify_password(password, existing.password_hash):
+            existing.password_hash = hash_password(password)
+            pwd_changed = True
+            logger.info("管理员密码已按环境变量更新")
         db.commit()
         db.refresh(existing)
+        if pwd_changed:
+            from app.services.session_service import revoke_all_sessions
+
+            revoke_all_sessions(db, existing.id)
+            db.commit()
+        retire_other_admin_accounts(db, keep_id=existing.id)
         return existing
     user = register_child(
         db,
@@ -170,10 +424,20 @@ def ensure_admin_account(db: Session) -> ChildUser | None:
         password=password,
         role=ROLE_ADMIN,
     )
+    logger.info("已创建管理员账号 login_name=%s", login_name)
+    retire_other_admin_accounts(db, keep_id=user.id)
     return user
 
 
-def bind_parent_child(db: Session, parent_id: int, child_id: int) -> ParentChildBind:
+def bind_parent_child(
+    db: Session,
+    parent_id: int,
+    child_id: int,
+    *,
+    commit: bool = True,
+) -> ParentChildBind:
+    from fastapi import HTTPException
+
     existing = db.scalar(
         select(ParentChildBind).where(
             ParentChildBind.parent_id == parent_id,
@@ -182,10 +446,16 @@ def bind_parent_child(db: Session, parent_id: int, child_id: int) -> ParentChild
     )
     if existing:
         return existing
+    other = db.scalar(select(ParentChildBind).where(ParentChildBind.child_id == child_id))
+    if other:
+        raise HTTPException(409, "孩子已绑定其他家长，请先解绑")
     row = ParentChildBind(parent_id=parent_id, child_id=child_id)
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return row
 
 

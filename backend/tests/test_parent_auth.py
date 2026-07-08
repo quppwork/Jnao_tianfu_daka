@@ -206,3 +206,48 @@ class TestParentAuth:
         pj = res.json()["profile_json"]
         assert pj.get("grade") == "五年级"
         assert pj.get("learner", {}).get("grade") == "五年级"
+
+    def test_update_child_age_up_to_120(self, client: TestClient):
+        parent = _register_parent(client, "13900003334")
+        auth = _parent_auth(parent)
+        created = client.post(
+            "/api/parent/children",
+            json={"login_name": "kid_age", "nickname": "年龄测试", "password": "111111"},
+            **auth,
+        ).json()
+        res = client.put(
+            f"/api/parent/children/{created['id']}",
+            json={"age": 30},
+            **auth,
+        )
+        assert res.status_code == 200, res.text
+
+    def test_parent_profile_password_returns_new_session(self, client: TestClient):
+        """改密后 API 返回新 session_token，供前端更新（生产环境会吊销旧 token）。"""
+        parent = _register_parent(client, "13900003335", password="123456")
+        auth = _parent_auth(parent)
+        res = client.put(
+            "/api/parent/profile",
+            json={
+                "real_name": "张三",
+                "nickname": "张家长",
+                "password": "654321",
+                "old_password": "123456",
+            },
+            **auth,
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert data.get("session_token")
+        assert data["session_token"] != parent["session_token"]
+
+    def test_parent_profile_password_requires_old_password(self, client: TestClient):
+        parent = _register_parent(client, "13900003336", password="123456")
+        auth = _parent_auth(parent)
+        res = client.put(
+            "/api/parent/profile",
+            json={"password": "654321"},
+            **auth,
+        )
+        assert res.status_code == 400
+        assert "原密码" in res.json()["detail"]

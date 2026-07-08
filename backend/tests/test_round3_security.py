@@ -53,7 +53,8 @@ class TestStudentRole:
         try:
             with TestClient(app) as c:
                 res = c.get(
-                    f"/api/training/entry?user_id={parent.id}&session_token={token}",
+                    f"/api/training/entry?user_id={parent.id}",
+                    headers={"X-Child-User-Id": str(parent.id), "X-Session-Token": token},
                 )
                 assert res.status_code == 403
         finally:

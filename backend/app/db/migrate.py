@@ -109,7 +109,81 @@ def apply_schema_patches(engine: Engine) -> None:
     _apply_user_session_table(engine)
     _apply_wechat_auth_tables(engine)
     _apply_daka_member_table(engine)
+    _apply_parent_child_unique_child(engine)
     _migrate_user_session_utc_to_cst(engine)
+
+
+def _apply_parent_child_unique_child(engine: Engine) -> None:
+    """一个孩子只能绑定一个家长 — 去重后加 UNIQUE(child_id)"""
+    insp = inspect(engine)
+    if "parent_child_bind" not in insp.get_table_names():
+        return
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS schema_data_patch (
+                    name VARCHAR(64) PRIMARY KEY
+                )
+                """
+            )
+        )
+        done = conn.execute(
+            text("SELECT 1 FROM schema_data_patch WHERE name = 'parent_child_bind_unique_child'")
+        ).fetchone()
+        if done:
+            return
+        if dialect == "mysql":
+            conn.execute(
+                text(
+                    """
+                    DELETE pcb1 FROM parent_child_bind pcb1
+                    INNER JOIN parent_child_bind pcb2
+                      ON pcb1.child_id = pcb2.child_id AND pcb1.id > pcb2.id
+                    """
+                )
+            )
+            idx = conn.execute(
+                text(
+                    """
+                    SELECT 1 FROM information_schema.statistics
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'parent_child_bind'
+                      AND index_name = 'uk_parent_child_child_id'
+                    LIMIT 1
+                    """
+                )
+            ).fetchone()
+            if not idx:
+                conn.execute(
+                    text(
+                        "ALTER TABLE parent_child_bind "
+                        "ADD UNIQUE KEY uk_parent_child_child_id (child_id)"
+                    )
+                )
+        else:
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM parent_child_bind
+                    WHERE id NOT IN (
+                        SELECT MIN(id) FROM parent_child_bind GROUP BY child_id
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uk_parent_child_child_id "
+                    "ON parent_child_bind(child_id)"
+                )
+            )
+        conn.execute(
+            text(
+                "INSERT INTO schema_data_patch (name) VALUES ('parent_child_bind_unique_child')"
+            )
+        )
 
 
 def _migrate_user_session_utc_to_cst(engine: Engine) -> None:

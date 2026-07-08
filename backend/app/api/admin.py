@@ -9,15 +9,18 @@ from app.schemas.admin import (
     AdminChildListResponse,
     AdminChildOut,
     AdminCreateChildRequest,
+    AdminCreateParentRequest,
     AdminLoginRequest,
     AdminParentListResponse,
     AdminParentOut,
+    AdminRestoreByPhoneRequest,
     AdminUpdateChildRequest,
     AdminUpdateParentRequest,
     AdminPlatformConfigResponse,
     AdminUpdatePlatformConfigRequest,
     AdminParentDetailResponse,
     AdminChildDetailResponse,
+    AdminReconcileResponse,
     AdminBlacklistResponse,
     BlacklistEntryOut,
 )
@@ -57,9 +60,62 @@ def admin_login(req: AdminLoginRequest, request: Request, db: Session = Depends(
 
 
 @router.get("/parents", response_model=AdminParentListResponse)
-def list_parents(admin_id: int = Depends(get_admin_user), db: Session = Depends(get_db)):
-    items = admin_service.list_parents(db, admin_id)
+def list_parents(
+    q: str | None = Query(None, max_length=50),
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    items = admin_service.list_parents(db, admin_id, q=q)
     return AdminParentListResponse(parents=[AdminParentOut(**p) for p in items])
+
+
+@router.get("/parents/removed", response_model=AdminParentListResponse)
+def list_removed_parents(
+    q: str | None = Query(None, max_length=50),
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    items = admin_service.list_removed_parents(db, admin_id, q=q)
+    return AdminParentListResponse(parents=[AdminParentOut(**p) for p in items])
+
+
+@router.post("/parents", response_model=AdminParentOut)
+def create_parent(
+    req: AdminCreateParentRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.create_parent(
+        db,
+        admin_id,
+        parent_phone=req.parent_phone,
+        nickname=req.nickname,
+        password=req.password,
+        child_quota=req.child_quota,
+    )
+    return AdminParentOut(**data)
+
+
+@router.post("/parents/restore-by-phone", response_model=AdminParentOut)
+def restore_parent_by_phone(
+    req: AdminRestoreByPhoneRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.restore_parent_by_lookup(
+        db, admin_id, phone=req.phone, nickname=req.nickname
+    )
+    return AdminParentOut(**data)
+
+
+@router.post("/parents/{parent_id}/restore", response_model=AdminParentOut)
+def restore_parent(
+    parent_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.restore_parent(db, admin_id, parent_id)
+    return AdminParentOut(**data)
 
 
 @router.put("/parents/{parent_id}", response_model=AdminParentOut)
@@ -94,10 +150,11 @@ def delete_parent(
 @router.get("/children", response_model=AdminChildListResponse)
 def list_children(
     parent_id: int | None = Query(None, ge=1),
+    q: str | None = Query(None, max_length=50),
     admin_id: int = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
-    items = admin_service.list_children(db, admin_id, parent_id=parent_id)
+    items = admin_service.list_children(db, admin_id, parent_id=parent_id, q=q)
     return AdminChildListResponse(children=[AdminChildOut(**c) for c in items])
 
 
@@ -150,6 +207,16 @@ def delete_child(
     return {"ok": True}
 
 
+@router.post("/children/{child_id}/restore", response_model=AdminChildOut)
+def restore_child(
+    child_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.restore_child(db, admin_id, child_id)
+    return AdminChildOut(**data)
+
+
 @router.post("/children/{child_id}/bind", response_model=AdminChildOut)
 def bind_child(
     child_id: int,
@@ -198,6 +265,20 @@ def parent_detail(
     db: Session = Depends(get_db),
 ):
     return AdminParentDetailResponse(**admin_service.get_parent_detail(db, admin_id, parent_id))
+
+
+@router.post("/parents/{parent_id}/reconcile", response_model=AdminReconcileResponse)
+def reconcile_parent(
+    parent_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    data = admin_service.apply_parent_reconcile(db, admin_id, parent_id)
+    return AdminReconcileResponse(
+        reconciled_count=data["reconciled_count"],
+        children_count=data["children_count"],
+        children=[AdminChildOut(**c) for c in data["children"]],
+    )
 
 
 @router.get("/children/{child_id}/detail", response_model=AdminChildDetailResponse)

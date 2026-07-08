@@ -96,7 +96,7 @@
 
 
 
-      <view v-if="loading" class="msg-row msg-ai">
+      <view v-if="showTypingIndicator" class="msg-row msg-ai">
 
 
         <view class="msg-body">
@@ -148,15 +148,16 @@
 
           <view class="input-btns">
 
-            <view class="btn-camera" @tap="openImageSheet">
+            <view class="btn-camera" :class="{ 'btn-disabled': loading }" @tap="openImageSheet">
 
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="3"/><circle cx="12" cy="13.5" r="3.5"/><circle cx="8" cy="9" r="1" fill="var(--text-dim)" stroke="none"/></svg>
 
             </view>
 
-            <view class="btn-send" :class="{ disabled: !canSend }" @tap="sendMsg">
+            <view class="btn-send" :class="{ 'btn-stop': loading, disabled: !loading && !canSend }" @tap="loading ? stopStream() : sendMsg()">
 
-              <text style="color:#fff;font-size:14px;">➤</text>
+              <text v-if="loading" style="color:#fff;font-size:12px;font-weight:700;">■</text>
+              <text v-else style="color:#fff;font-size:14px;">➤</text>
 
             </view>
 
@@ -269,6 +270,8 @@ import {
 
   ensureChildUser,
 
+  requirePageAuth,
+
   fetchQaSessions,
 
   createQaSession,
@@ -298,6 +301,7 @@ import {
 } from '@/utils/userApi.js'
 
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
+import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 import {
   chooseQuestionImage,
@@ -344,6 +348,8 @@ const inputText = ref('')
 const inputFocused = ref(false)
 
 const loading = ref(false)
+let streamAbort = null
+let abortRequested = false
 
 const qaSessionId = ref(null)
 
@@ -402,6 +408,12 @@ let qaLearnerDefaultApplied = false
 
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
+
+const showTypingIndicator = computed(() => {
+  if (!loading.value) return false
+  const last = messages.value[messages.value.length - 1]
+  return last?.role !== 'assistant'
+})
 
 
 
@@ -1320,7 +1332,7 @@ async function sendMsg() {
 
   if (!text || loading.value) return
 
-
+  abortRequested = false
 
   const pending = pendingImage.value
 
@@ -1351,11 +1363,18 @@ async function sendMsg() {
 
   scrollChat()
 
-
+  let aiIdx = -1
 
   try {
 
     const uid = await ensureChildUser()
+
+    if (abortRequested) {
+      aiIdx = messages.value.length
+      messages.value.push({ role: 'assistant', text: '' })
+      applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
 
     let imageId = null
 
@@ -1365,6 +1384,13 @@ async function sendMsg() {
       const file = await compressImage(rawFile)
 
       const up = await uploadQaImage(uid, file)
+
+      if (abortRequested) {
+        aiIdx = messages.value.length
+        messages.value.push({ role: 'assistant', text: '' })
+        applyStreamStoppedHint(messages, aiIdx)
+        return
+      }
 
       imageId = up.image_id
 
@@ -1378,13 +1404,17 @@ async function sendMsg() {
 
     }
 
-    const aiIdx = messages.value.length
+    aiIdx = messages.value.length
     messages.value.push({ role: 'assistant', text: '' })
-    loading.value = false
     await nextTick()
     scrollChat()
 
-    await sendQaMessageStream(uid, text, qaSessionId.value, {
+    if (abortRequested) {
+      applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
+
+    const { promise, abort } = sendQaMessageStream(uid, text, qaSessionId.value, {
       subject: subject.value,
       image_id: imageId,
     }, {
@@ -1397,8 +1427,15 @@ async function sendMsg() {
         if (data.reply) messages.value[aiIdx].text = data.reply
       },
     })
+    streamAbort = abort
+    await promise
 
   } catch (e) {
+
+    if (isStreamAborted(e)) {
+      if (aiIdx >= 0) applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
 
     const errText = e?.message || '请求失败，请稍后再试'
 
@@ -1409,6 +1446,8 @@ async function sendMsg() {
     }
 
   } finally {
+    streamAbort = null
+    abortRequested = false
     loading.value = false
   }
 
@@ -1416,6 +1455,13 @@ async function sendMsg() {
 
   scrollChat()
 
+}
+
+
+
+function stopStream() {
+  abortRequested = true
+  streamAbort?.()
 }
 
 
@@ -1431,6 +1477,9 @@ function scrollChat() {
 
 
 onMounted(async () => {
+
+  const auth = await requirePageAuth('student')
+  if (!auth) return
 
   try { localStorage.removeItem('jnao_learner_profile_set') } catch (_) {}
 
@@ -1982,8 +2031,10 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
 }
+.btn-send.btn-stop { background: #ef4444; }
 .btn-send.disabled { opacity: 0.45; pointer-events: none; }
 .btn-send:active:not(.disabled) { opacity: 0.8; }
+.btn-disabled { opacity: 0.45; pointer-events: none; }
 
 .sheet-mask {
 

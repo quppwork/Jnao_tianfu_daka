@@ -111,6 +111,9 @@
         <view class="input-wrap">
           <input class="form-input" v-model="profileForm.nickname" placeholder="昵称" />
         </view>
+        <view v-if="profileHasPassword" class="input-wrap">
+          <input class="form-input" v-model="profileForm.oldPassword" placeholder="原密码（改密必填）" type="password" />
+        </view>
         <view class="input-wrap">
           <input class="form-input" v-model="profileForm.password" placeholder="新密码（留空不改）" type="password" />
         </view>
@@ -129,8 +132,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  getLoggedInUserId,
-  getSessionToken,
+  requirePageAuth,
   logoutAndGoLogin,
   fetchParentChildren,
   fetchParentQuota,
@@ -154,9 +156,10 @@ const savingProfile = ref(false)
 const isLight = ref(false)
 const editingChild = ref(null)
 const childForm = ref({ loginName: '', nickname: '', password: '', age: null, grade: '' })
-const profileForm = ref({ phone: '', realName: '', nickname: '', password: '', confirm: '' })
+const profileForm = ref({ phone: '', realName: '', nickname: '', oldPassword: '', password: '', confirm: '' })
+const profileHasPassword = ref(false)
 
-const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120
+const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120，与后端校验一致
 const ageIndex = computed(() => {
   const idx = ageOptions.indexOf(childForm.value.age)
   return idx >= 0 ? idx : 0
@@ -179,23 +182,20 @@ onMounted(() => loadData())
 async function loadData() {
   loading.value = true
   try {
-    if (!getSessionToken()) {
-      logoutAndGoLogin()
-      return
-    }
+    const auth = await requirePageAuth('parent')
+    if (!auth.ok) return
+
     const raw = localStorage.getItem('jnao_user')
-    let role = null
     if (raw) {
       const u = JSON.parse(raw)
-      role = u.role
-      if (role !== 'parent') {
+      if (u.role !== 'parent') {
         logoutAndGoLogin()
         return
       }
       parentName.value = u.name || '家长'
-      parentId.value = u.id || getLoggedInUserId()
+      parentId.value = u.id || auth.userId
     } else {
-      parentId.value = getLoggedInUserId()
+      parentId.value = auth.userId
     }
     if (!parentId.value) {
       logoutAndGoLogin()
@@ -252,9 +252,11 @@ async function openProfileForm() {
       phone: p.parent_phone || '',
       realName: p.real_name || '',
       nickname: p.nickname || '',
+      oldPassword: '',
       password: '',
       confirm: '',
     }
+    profileHasPassword.value = !!p.has_password
     showProfileForm.value = true
   } catch (_) {
     uni.showToast({ title: '加载资料失败', icon: 'none' })
@@ -273,13 +275,19 @@ async function saveProfile() {
   if (!realName) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
   if (!nickname) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
   if (pwd || confirm) {
+    if (profileHasPassword.value && !profileForm.value.oldPassword.trim()) {
+      uni.showToast({ title: '请输入原密码', icon: 'none' }); return
+    }
     if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
     if (pwd !== confirm) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
   }
   savingProfile.value = true
   try {
     const body = { real_name: realName, nickname }
-    if (pwd) body.password = pwd
+    if (pwd) {
+      body.password = pwd
+      if (profileHasPassword.value) body.old_password = profileForm.value.oldPassword.trim()
+    }
     const p = await updateParentProfile(parentId.value, body)
     parentName.value = p.nickname || parentName.value
     try {
@@ -293,6 +301,7 @@ async function saveProfile() {
     closeProfileForm()
     uni.showToast({ title: '资料已更新', icon: 'none' })
   } catch (e) {
+    if (e.status === 401) return
     uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {
     savingProfile.value = false
@@ -306,7 +315,9 @@ async function saveChild() {
   saving.value = true
   try {
     if (editingChild.value) {
-      const body = { nickname: nick, grade: childForm.value.grade || null, age: childForm.value.age || null }
+      const body = { nickname: nick }
+      if (childForm.value.grade) body.grade = childForm.value.grade
+      if (childForm.value.age != null && childForm.value.age !== '') body.age = childForm.value.age
       if (pwd) {
         if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
         body.password = pwd
@@ -326,8 +337,9 @@ async function saveChild() {
     await loadData()
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch (e) {
+    if (e.status === 401) return
     if (e.status === 409) uni.showToast({ title: '账号已被使用', icon: 'none' })
-    else uni.showToast({ title: '保存失败', icon: 'none' })
+    else uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {
     saving.value = false
   }

@@ -188,7 +188,13 @@ class TestUnbindChild:
             "/api/admin/login",
             json={"login_name": "pyx", "password": "123456"},
         ).json()
-        return {"params": {"user_id": data["child_user_id"], "session_token": data["session_token"]}}
+        return {
+            "params": {"user_id": data["child_user_id"]},
+            "headers": {
+                "X-Child-User-Id": str(data["child_user_id"]),
+                "X-Session-Token": data["session_token"],
+            },
+        }
 
     def test_unbind_parent_id_rejected(self, client: TestClient, db_session: Session):
         from tests.test_parent_auth import _register_parent

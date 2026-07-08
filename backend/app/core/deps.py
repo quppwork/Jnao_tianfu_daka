@@ -1,8 +1,9 @@
 """FastAPI 依赖注入"""
 
 import logging
+import os
 
-from fastapi import Depends, Header, HTTPException, Query
+from fastapi import Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db as _get_db
@@ -12,6 +13,26 @@ logger = logging.getLogger("jnao")
 
 def get_db():
     yield from _get_db()
+
+
+def _resolve_session_token(
+    request: Request,
+    x_session_token: str | None,
+    session_token: str | None,
+) -> str | None:
+    """session_token 默认仅接受 Header；答疑图片等少数路径允许 query。"""
+    if x_session_token and x_session_token.strip():
+        return x_session_token.strip()
+    path = request.url.path
+    allow_query = (
+        path.startswith("/api/qa/images/")
+        or os.getenv("ALLOW_SESSION_TOKEN_QUERY", "0") == "1"
+    )
+    if allow_query and session_token and session_token.strip():
+        return session_token.strip()
+    if session_token and session_token.strip() and not allow_query:
+        logger.warning("已拒绝 query session_token: %s", path)
+    return None
 
 
 def get_child_user_id(
@@ -25,10 +46,11 @@ def get_child_user_id(
 
 
 def get_authenticated_user(
+    request: Request,
     user_id: int | None = Query(None, ge=1, description="孩子用户 ID"),
     x_child_user_id: int | None = Header(None, ge=1, alias="X-Child-User-Id"),
     x_session_token: str | None = Header(None, alias="X-Session-Token"),
-    session_token: str | None = Query(None, description="会话令牌"),
+    session_token: str | None = Query(None, description="会话令牌（已弃用，请用 Header）"),
     db: Session = Depends(get_db),
 ) -> int:
     """验证 user_id + session_token。"""
@@ -53,7 +75,7 @@ def get_authenticated_user(
     if not is_account_active(user):
         raise HTTPException(401, "账号已停用")
 
-    token = x_session_token or session_token
+    token = _resolve_session_token(request, x_session_token, session_token)
     if not token:
         raise HTTPException(401, "需要有效的 session_token（请重新登录）")
 
@@ -74,37 +96,38 @@ def get_authenticated_student(
     user = db.get(ChildUser, user_id)
     if not user or (user.role or auth_service.ROLE_STUDENT) != auth_service.ROLE_STUDENT:
         raise HTTPException(403, "需要学生账号")
+    if not auth_service.has_active_parent_bind(db, user_id):
+        raise HTTPException(403, "账号未绑定家长，请联系管理员")
     return user_id
 
 
 def get_admin_user(
+    request: Request,
     user_id: int | None = Query(None, ge=1, description="管理员用户 ID"),
     x_child_user_id: int | None = Header(None, ge=1, alias="X-Child-User-Id"),
     x_session_token: str | None = Header(None, alias="X-Session-Token"),
-    session_token: str | None = Query(None, description="会话令牌"),
+    session_token: str | None = Query(None, description="会话令牌（已弃用，请用 Header）"),
     db: Session = Depends(get_db),
 ) -> int:
-    """验证管理员 session_token + role=admin"""
+    """验证管理员 session；先校验 token 再查 role，避免枚举 admin user_id（B12）。"""
     uid = user_id or x_child_user_id
     if not uid or uid < 1:
-        raise HTTPException(401, "需要有效的管理员 user_id")
+        raise HTTPException(401, "管理员会话无效，请重新登录")
+
+    token = _resolve_session_token(request, x_session_token, session_token)
+    if not token:
+        raise HTTPException(401, "管理员会话无效，请重新登录")
 
     from app.db.models import ChildUser
     from app.services import auth_service
-
-    user = db.get(ChildUser, uid)
-    if not user or user.role != auth_service.ROLE_ADMIN:
-        raise HTTPException(403, "需要管理员权限")
-
     from app.services.auth_service import is_account_active
     from app.services.session_service import validate_session
 
-    if not is_account_active(user):
-        raise HTTPException(401, "管理员账号已停用")
-
-    token = x_session_token or session_token
-    if not token:
+    user = db.get(ChildUser, uid)
+    if not user or not is_account_active(user):
         raise HTTPException(401, "管理员会话无效，请重新登录")
     if not validate_session(db, uid, token):
         raise HTTPException(401, "管理员会话无效或已在其他设备登录，请重新登录")
+    if user.role != auth_service.ROLE_ADMIN:
+        raise HTTPException(401, "管理员会话无效，请重新登录")
     return uid

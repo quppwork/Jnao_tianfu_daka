@@ -12,12 +12,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { onLaunch } from '@dcloudio/uni-app'
+import { ref, onMounted } from 'vue'
+import { onLaunch, onShow } from '@dcloudio/uni-app'
+import { bootstrapAppSession } from '@/utils/userApi.js'
+import { rememberCurrentRoute } from '@/utils/appSession.js'
+import { startAppUpdateWatcher } from '@/utils/appUpdate.js'
 
 const showSplash = ref(false)
 
 onLaunch(() => {
+  bootstrapAppSession().catch(() => {})
+  startAppUpdateWatcher()
   // Splash：同浏览器会话只展示一次；2分钟内回来走 bfcache 不展示
   const SESSION_KEY = 'jnao_splash_session'
   const ACTIVE_KEY = 'jnao_last_active'
@@ -44,6 +49,10 @@ onLaunch(() => {
       (navigator.deviceMemory || 8) <= 2
     if (reduce) document.documentElement.setAttribute('data-reduced-motion', '')
   } catch (_) {}
+})
+
+onShow(() => {
+  rememberCurrentRoute()
 })
 </script>
 

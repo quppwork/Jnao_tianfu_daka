@@ -161,18 +161,24 @@ def send_sms_code(
 
     check_auth_allowed(db, client_ip=client_ip, phone=phone, device_id=device_id)
 
-    exists = auth_service.find_parent_by_phone(db, phone) is not None
-    if scene == SCENE_LOGIN and not exists:
-        raise HTTPException(404, "该手机号尚未注册，请先注册")
-    if scene == SCENE_REGISTER and exists:
-        raise HTTPException(409, "该手机号已注册，请直接登录")
-    if scene == SCENE_BIND:
-        pass
-    elif scene == SCENE_REGISTER:
+    from app.services.parent_identity_service import (
+        assert_can_send_login_sms,
+        assert_parent_can_register,
+    )
+
+    if scene == SCENE_LOGIN:
+        assert_can_send_login_sms(db, phone)
         if not captcha_id or not captcha_code:
             raise HTTPException(400, "请先完成图形验证")
         verify_captcha(captcha_id, captcha_code, consume=True)
-    # 登录发短信：仅靠限流 + 黑名单（无需图形码）
+    elif scene == SCENE_REGISTER:
+        assert_parent_can_register(db, phone)
+        if not captcha_id or not captcha_code:
+            raise HTTPException(400, "请先完成图形验证")
+        verify_captcha(captcha_id, captcha_code, consume=True)
+    elif scene == SCENE_BIND:
+        pass
+    # 登录/注册发短信均需图形验证码 + 限流
 
     _check_send_rate(phone, client_ip)
     code = _generate_code()
@@ -220,13 +226,12 @@ def verify_sms_code(phone: str, sms_code: str, scene: str) -> None:
 
 
 def client_ip_from_request(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host or ""
-    return ""
+    from app.core.client_ip import client_ip_from_request as _ip
+
+    return _ip(request)
 
 
 def device_id_from_request(request: Request) -> str:
-    return (request.headers.get("x-device-id") or request.headers.get("X-Device-Id") or "").strip()[:64]
+    from app.core.client_ip import device_id_from_request as _did
+
+    return _did(request)

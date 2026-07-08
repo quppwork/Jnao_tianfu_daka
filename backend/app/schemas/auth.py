@@ -55,6 +55,11 @@ class WechatBindPhoneRequest(BaseModel):
     device_id: str | None = Field(None, max_length=64)
 
 
+class WechatExternalBindRequest(BaseModel):
+    bind_ticket: str = Field(..., min_length=8, max_length=128)
+    device_id: str | None = Field(None, max_length=64)
+
+
 class WechatSendBindSmsRequest(BaseModel):
     bind_ticket: str = Field(..., min_length=8, max_length=128)
     phone: str = Field(..., min_length=11, max_length=20)
@@ -109,13 +114,21 @@ class ParentProfileResponse(BaseModel):
     login_channel: str = "standard"
     account_ready: bool = True
     next_step: str = "home"
+    session_token: str | None = None
 
 
 class ParentProfileUpdateRequest(BaseModel):
     nickname: str | None = Field(None, min_length=1, max_length=50)
     real_name: str | None = Field(None, min_length=1, max_length=50)
     password: str | None = Field(None, min_length=6, max_length=128)
+    old_password: str | None = Field(None, min_length=6, max_length=128)
     require_password: bool = False
+
+
+class PhoneCheckRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    captcha_id: str = Field(..., min_length=1, max_length=64)
+    captcha_code: str = Field(..., min_length=4, max_length=8)
 
 
 # 兼容旧引用
@@ -127,7 +140,7 @@ class CreateChildRequest(BaseModel):
     nickname: str = Field(..., min_length=1, max_length=50)
     password: str = Field(..., min_length=6, max_length=128)
     grade: str | None = Field(None, max_length=20)       # 🆕 年级
-    age: int | None = Field(None, ge=3, le=25)            # 🆕 年龄
+    age: int | None = Field(None, ge=3, le=120)            # 🆕 年龄（与前端 picker 一致）
     # --- 以下字段已建表，前端暂不使用，请勿删除 ---
     region: str | None = Field(None, max_length=50)       # 🆕 地区（前端暂不采集）
 
@@ -136,7 +149,7 @@ class UpdateChildRequest(BaseModel):
     nickname: str | None = Field(None, min_length=1, max_length=50)
     password: str | None = Field(None, min_length=6, max_length=128)
     grade: str | None = Field(None, max_length=20)        # 🆕
-    age: int | None = Field(None, ge=3, le=25)            # 🆕
+    age: int | None = Field(None, ge=3, le=120)            # 🆕 年龄（与前端 picker 一致）
     region: str | None = Field(None, max_length=50)       # 🆕
 
 
