@@ -250,7 +250,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
         login_name = req.login_name.strip()
         check_auth_allowed(db, client_ip=ip, device_id=did, login_name=login_name)
-        user = auth_service.find_user_by_login_name(db, login_name)
+        user = auth_service.find_student_for_login(db, login_name)
         if not user or not verify_password(req.password, user.password_hash):
             record_auth_failure(db, client_ip=ip, device_id=did, login_name=login_name)
             raise HTTPException(401, "账号或密码错误")

@@ -37,9 +37,11 @@ def lookup_snapshot_by_mobile(db: Session, phone: str) -> WxMemberSnapshot | Non
 
 def resolve_parent_registration_state(db: Session, phone: str) -> dict:
     """返回 registered / source / action / message，供 API 与短信场景复用。"""
+    from app.services.parent_reconcile_service import resolve_canonical_parent_for_login
+
     p = normalize_phone(phone)
 
-    parent = auth_service.find_parent_by_phone(db, p)
+    parent = resolve_canonical_parent_for_login(db, p)
     if parent:
         return {
             "registered": True,
@@ -50,8 +52,10 @@ def resolve_parent_registration_state(db: Session, phone: str) -> dict:
 
     dm = find_daka_member_by_mobile(db, p)
     if dm:
-        user = auth_service.get_child_user(db, dm.parent_id)
-        if user and auth_service.is_account_active(user):
+        from app.db.models import ChildUser
+
+        row = db.get(ChildUser, dm.parent_id)
+        if row and row.role == auth_service.ROLE_PARENT and row.account_status != auth_service.ACCOUNT_DELETED:
             return {
                 "registered": True,
                 "source": SOURCE_DAKA_MEMBER,
@@ -77,14 +81,14 @@ def resolve_parent_registration_state(db: Session, phone: str) -> dict:
 
 
 def find_login_parent_user(db: Session, phone: str):
-    """短信/密码登录解析家长 ChildUser（含 daka_member 兜底）。"""
+    """短信/密码登录解析家长 ChildUser（含 daka_member 兜底；removed 可恢复）。"""
     p = normalize_phone(phone)
-    user = auth_service.find_parent_by_phone(db, p)
+    user = auth_service.find_parent_by_phone_for_login(db, p)
     if user:
         return user
     dm = find_daka_member_by_mobile(db, p)
     if dm:
-        return auth_service.get_child_user(db, dm.parent_id)
+        return auth_service.get_parent_for_login(db, dm.parent_id)
     return None
 
 

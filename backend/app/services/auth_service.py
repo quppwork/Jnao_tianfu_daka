@@ -15,13 +15,55 @@ ROLE_STUDENT = "student"
 ROLE_ADMIN = "admin"
 DEFAULT_CHILD_QUOTA = 5
 ACCOUNT_ACTIVE = "active"
-ACCOUNT_DELETED = "deleted"
+ACCOUNT_REMOVED = "removed"  # 管理员移出生产环境；数据保留，可再次登录恢复
+ACCOUNT_DELETED = "deleted"  # 硬归档（如废弃管理员），不可恢复
 
 
 def is_account_active(user: ChildUser | None) -> bool:
     if not user:
         return False
     return (getattr(user, "account_status", None) or ACCOUNT_ACTIVE) == ACCOUNT_ACTIVE
+
+
+def is_account_removed(user: ChildUser | None) -> bool:
+    if not user:
+        return False
+    return getattr(user, "account_status", None) == ACCOUNT_REMOVED
+
+
+def reactivate_parent_with_children(db: Session, parent: ChildUser) -> None:
+    """移出生产的家长再次登录时恢复本人及名下已移出的孩子（不删数据）。"""
+    if parent.role != ROLE_PARENT:
+        return
+    if is_account_removed(parent):
+        parent.account_status = ACCOUNT_ACTIVE
+        parent.deleted_at = None
+    child_ids = list(
+        db.scalars(
+            select(ParentChildBind.child_id).where(ParentChildBind.parent_id == parent.id)
+        ).all()
+    )
+    for cid in child_ids:
+        child = db.get(ChildUser, cid)
+        if child and is_account_removed(child):
+            child.account_status = ACCOUNT_ACTIVE
+            child.deleted_at = None
+    db.flush()
+
+
+def reactivate_student_for_login(db: Session, student: ChildUser) -> None:
+    if not is_account_removed(student):
+        return
+    bind = db.scalar(select(ParentChildBind).where(ParentChildBind.child_id == student.id))
+    if bind:
+        parent = db.get(ChildUser, bind.parent_id)
+        if parent and parent.role == ROLE_PARENT:
+            if is_account_removed(parent):
+                reactivate_parent_with_children(db, parent)
+                return
+    student.account_status = ACCOUNT_ACTIVE
+    student.deleted_at = None
+    db.flush()
 
 
 def _generate_session_token() -> str:
@@ -50,10 +92,13 @@ def register_child(
     child_quota: int | None = None,
     commit: bool = True,
 ) -> ChildUser:
-    if role == ROLE_PARENT and find_parent_by_phone(db, parent_phone):
-        from fastapi import HTTPException
+    if role == ROLE_PARENT:
+        from app.services.parent_reconcile_service import resolve_canonical_parent_for_login
 
-        raise HTTPException(409, "该手机号已注册，请直接登录")
+        if resolve_canonical_parent_for_login(db, parent_phone):
+            from fastapi import HTTPException
+
+            raise HTTPException(409, "该手机号已注册，请直接登录")
     user = ChildUser(
         parent_phone=parent_phone,
         nickname=nickname,
@@ -80,6 +125,20 @@ def get_child_user(db: Session, child_user_id: int) -> ChildUser | None:
     return user
 
 
+def get_parent_for_login(db: Session, user_id: int) -> ChildUser | None:
+    """微信 OAuth 等：按 id 取家长，removed 时自动恢复。"""
+    user = db.get(ChildUser, user_id)
+    if not user or user.role != ROLE_PARENT:
+        return None
+    if user.account_status == ACCOUNT_DELETED:
+        return None
+    if is_account_removed(user):
+        reactivate_parent_with_children(db, user)
+        db.commit()
+        db.refresh(user)
+    return user if is_account_active(user) else None
+
+
 def find_child_by_phone(db: Session, parent_phone: str, nickname: str) -> ChildUser | None:
     return db.scalar(
         select(ChildUser).where(
@@ -97,6 +156,18 @@ def find_parent_by_phone(db: Session, parent_phone: str) -> ChildUser | None:
     return resolve_canonical_parent(db, parent_phone)
 
 
+def find_parent_by_phone_for_login(db: Session, parent_phone: str) -> ChildUser | None:
+    """登录/OAuth 用：可找到 removed 家长并在命中时自动恢复。"""
+    from app.services.parent_reconcile_service import resolve_canonical_parent_for_login
+
+    parent = resolve_canonical_parent_for_login(db, parent_phone)
+    if parent and is_account_removed(parent):
+        reactivate_parent_with_children(db, parent)
+        db.commit()
+        db.refresh(parent)
+    return parent if is_account_active(parent) else None
+
+
 def find_user_by_login_name(db: Session, login_name: str) -> ChildUser | None:
     return db.scalar(
         select(ChildUser).where(
@@ -105,6 +176,24 @@ def find_user_by_login_name(db: Session, login_name: str) -> ChildUser | None:
             ChildUser.account_status == ACCOUNT_ACTIVE,
         )
     )
+
+
+def find_student_for_login(db: Session, login_name: str) -> ChildUser | None:
+    """学生密码登录：含 removed 账号，命中后自动恢复。"""
+    user = db.scalar(
+        select(ChildUser).where(
+            ChildUser.login_name == login_name,
+            ChildUser.role == ROLE_STUDENT,
+            ChildUser.account_status.in_((ACCOUNT_ACTIVE, ACCOUNT_REMOVED)),
+        )
+    )
+    if not user:
+        return None
+    if is_account_removed(user):
+        reactivate_student_for_login(db, user)
+        db.commit()
+        db.refresh(user)
+    return user if is_account_active(user) else None
 
 
 def find_admin_by_login_name(db: Session, login_name: str) -> ChildUser | None:
@@ -131,13 +220,13 @@ def has_active_parent_bind(db: Session, child_id: int) -> bool:
 
 
 def login_parent_by_password(db: Session, parent_phone: str, password: str) -> ChildUser | None:
-    user = find_parent_by_phone(db, parent_phone)
+    user = find_parent_by_phone_for_login(db, parent_phone)
     if not user or not verify_password(password, user.password_hash):
         return None
     return user
 
 def login_student_by_password(db: Session, login_name: str, password: str) -> ChildUser | None:
-    user = find_user_by_login_name(db, login_name)
+    user = find_student_for_login(db, login_name)
     if not user or not verify_password(password, user.password_hash):
         return None
     if not has_active_parent_bind(db, user.id):

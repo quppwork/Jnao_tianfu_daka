@@ -125,7 +125,8 @@ class TestAdminArchiveFixes:
         assert res.status_code == 410
 
         archived = db_session.get(ChildUser, cid)
-        assert archived.parent_phone.startswith("__deleted_student_")
+        assert archived.account_status == "removed"
+        assert archived.parent_phone  # 保留原手机号，不再改写 __deleted_
 
     def test_unbind_returns_warning(self, client: TestClient, db_session: Session):
         from tests.test_parent_auth import _parent_auth, _register_parent

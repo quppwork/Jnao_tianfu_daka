@@ -25,9 +25,25 @@ def list_active_parents_by_phone(db: Session, phone: str) -> list[ChildUser]:
     )
 
 
-def resolve_canonical_parent(db: Session, phone: str) -> ChildUser | None:
-    """同手机号多个家长时，优先：daka_member > 孩子最多 > id 最小。"""
-    parents = list_active_parents_by_phone(db, phone)
+def list_parents_by_phone_for_login(db: Session, phone: str) -> list[ChildUser]:
+    """登录/OAuth：含 removed 家长（仍保留原手机号）。"""
+    p = normalize_phone(phone)
+    return list(
+        db.scalars(
+            select(ChildUser)
+            .where(
+                ChildUser.parent_phone == p,
+                ChildUser.role == auth_service.ROLE_PARENT,
+                ChildUser.account_status.in_(
+                    (auth_service.ACCOUNT_ACTIVE, auth_service.ACCOUNT_REMOVED)
+                ),
+            )
+            .order_by(ChildUser.id.asc())
+        ).all()
+    )
+
+
+def _pick_canonical_parent(db: Session, parents: list[ChildUser]) -> ChildUser | None:
     if not parents:
         return None
     if len(parents) == 1:
@@ -35,7 +51,7 @@ def resolve_canonical_parent(db: Session, phone: str) -> ChildUser | None:
 
     from app.services.member_registry_service import find_daka_member_by_mobile
 
-    dm = find_daka_member_by_mobile(db, phone)
+    dm = find_daka_member_by_mobile(db, parents[0].parent_phone)
     if dm:
         for p in parents:
             if p.id == dm.parent_id:
@@ -45,6 +61,15 @@ def resolve_canonical_parent(db: Session, phone: str) -> ChildUser | None:
         return auth_service.count_parent_children(db, pid)
 
     return max(parents, key=lambda p: (_child_count(p.id), -p.id))
+
+
+def resolve_canonical_parent(db: Session, phone: str) -> ChildUser | None:
+    """同手机号多个家长时，优先：daka_member > 孩子最多 > id 最小。"""
+    return _pick_canonical_parent(db, list_active_parents_by_phone(db, phone))
+
+
+def resolve_canonical_parent_for_login(db: Session, phone: str) -> ChildUser | None:
+    return _pick_canonical_parent(db, list_parents_by_phone_for_login(db, phone))
 
 
 def find_unbound_students_by_phone(db: Session, phone: str) -> list[ChildUser]:

@@ -557,7 +557,7 @@ def ensure_parent_for_phone(
         register_daka_member_from_user,
     )
 
-    existing = auth_service.find_parent_by_phone(db, phone)
+    existing = auth_service.find_parent_by_phone_for_login(db, phone)
     if existing:
         set_login_channel(existing, LOGIN_CHANNEL_WECHAT)
         mark_phone_verified(existing)
@@ -712,7 +712,7 @@ def resolve_wechat_login(
 
     bind = get_bind_by_openid(db, openid)
     if bind:
-        user = auth_service.get_child_user(db, bind.parent_id)
+        user = auth_service.get_parent_for_login(db, bind.parent_id)
         if user:
             set_login_channel(user, LOGIN_CHANNEL_WECHAT)
             upsert_wechat_bind(
@@ -730,7 +730,7 @@ def resolve_wechat_login(
 
     member = find_daka_member_by_openid(db, openid)
     if member:
-        user = auth_service.get_child_user(db, member.parent_id)
+        user = auth_service.get_parent_for_login(db, member.parent_id)
         if user:
             set_login_channel(user, LOGIN_CHANNEL_WECHAT)
             upsert_wechat_bind(
@@ -750,7 +750,7 @@ def resolve_wechat_login(
 
     mobile = snap.mobile
     if mobile:
-        existing = auth_service.find_parent_by_phone(db, mobile)
+        existing = auth_service.find_parent_by_phone_for_login(db, mobile)
         if existing:
             set_login_channel(existing, LOGIN_CHANNEL_WECHAT)
             mark_phone_verified(existing)
@@ -796,7 +796,7 @@ def complete_bind_phone(
     pending = consume_bind_ticket(bind_ticket)
     openid = pending["openid"]
     phone = normalize_phone(phone)
-    existing = auth_service.find_parent_by_phone(db, phone)
+    existing = auth_service.find_parent_by_phone_for_login(db, phone)
     if existing:
         other = get_bind_by_parent(db, existing.id)
         if other and other.openid != openid:

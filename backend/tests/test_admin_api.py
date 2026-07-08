@@ -107,7 +107,7 @@ class TestAdminApi:
         )
         assert login.status_code == 403
 
-    def test_admin_delete_child_archived_and_reuse_login_name(self, client: TestClient, db_session):
+    def test_admin_delete_child_removed_and_login_reactivates(self, client: TestClient, db_session):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
         pid = _seed_parent(db_session, "13900009903", "家长丙")
@@ -119,23 +119,24 @@ class TestAdminApi:
         res = client.delete(f"/api/admin/children/{cid}", **auth)
         assert res.status_code == 200
 
-        archived = db_session.get(__import__("app.db.models", fromlist=["ChildUser"]).ChildUser, cid)
-        assert archived is not None
-        assert archived.account_status == "deleted"
-        assert archived.profile_json.get("archived_login_name") == "kid_hard"
+        row = db_session.get(__import__("app.db.models", fromlist=["ChildUser"]).ChildUser, cid)
+        assert row is not None
+        assert row.account_status == "removed"
+        assert row.login_name == "kid_hard"
 
         login = client.post(
             "/api/auth/login",
             json={"login_name": "kid_hard", "password": "111111"},
         )
-        assert login.status_code == 401
+        assert login.status_code == 200, login.text
+        db_session.refresh(row)
+        assert row.account_status == "active"
 
         recreated = client.post(
             f"/api/parent/children?user_id={pid}",
             json={"login_name": "kid_hard", "nickname": "新童", "password": "222222"},
         )
-        assert recreated.status_code == 200
-        assert recreated.json()["login_name"] == "kid_hard"
+        assert recreated.status_code == 409
 
     def test_admin_update_quota(self, client: TestClient, db_session):
         admin = _admin_login(client)

@@ -70,40 +70,20 @@ def _purge_student_operational_data(db: Session, child_id: int) -> None:
     db.execute(delete(TalentAssessment).where(TalentAssessment.child_user_id == child_id))
 
 
-def _archive_student_account(db: Session, child: ChildUser) -> None:
-    """软删除孩子：归档账户信息，释放 login_name，不参与生产逻辑。
-
-    不在此函数内 commit — 调用方须在事务末尾统一 db.commit()。
-    """
+def _suspend_student_account(db: Session, child: ChildUser) -> None:
+    """移出生产环境：保留账号/训练数据/绑定，仅吊销 session。"""
     if child.role != auth_service.ROLE_STUDENT or not auth_service.is_account_active(child):
         return
-    _purge_student_operational_data(db, child.id)
-    db.execute(delete(ParentChildBind).where(ParentChildBind.child_id == child.id))
-
-    pj = dict(child.profile_json or {})
-    if child.login_name and not str(child.login_name).startswith("__deleted_"):
-        pj["archived_login_name"] = child.login_name
-        child.login_name = f"__deleted_{child.id}"
-    if child.parent_phone and not str(child.parent_phone).startswith("__deleted_"):
-        pj["archived_parent_phone"] = child.parent_phone
-        child.parent_phone = f"__deleted_student_{child.id}"
-    pj["archived_nickname"] = child.nickname
-    child.profile_json = pj
-    child.password_hash = None
     from app.services.session_service import revoke_all_sessions
 
     revoke_all_sessions(db, child.id)
     child.session_token = None
-    child.training_level = None
-    child.account_status = auth_service.ACCOUNT_DELETED
+    child.account_status = auth_service.ACCOUNT_REMOVED
     child.deleted_at = datetime.now(TZ)
 
 
-def _archive_parent_account(db: Session, parent: ChildUser) -> None:
-    """软删除家长：先归档名下孩子，再归档家长并释放手机号。
-
-    不在此函数内 commit — 调用方须在事务末尾统一 db.commit()。
-    """
+def _suspend_parent_account(db: Session, parent: ChildUser) -> None:
+    """移出生产环境：保留手机号/openid/孩子绑定与业务数据，仅吊销 session。"""
     if parent.role != auth_service.ROLE_PARENT or not auth_service.is_account_active(parent):
         return
     child_ids = list(
@@ -119,21 +99,13 @@ def _archive_parent_account(db: Session, parent: ChildUser) -> None:
     for cid in child_ids:
         child = db.get(ChildUser, cid)
         if child:
-            _archive_student_account(db, child)
+            _suspend_student_account(db, child)
 
-    db.execute(delete(ParentChildBind).where(ParentChildBind.parent_id == parent.id))
-
-    pj = dict(parent.profile_json or {})
-    pj["archived_parent_phone"] = parent.parent_phone
-    pj["archived_nickname"] = parent.nickname
-    parent.profile_json = pj
-    parent.parent_phone = f"__deleted_parent_{parent.id}"
-    parent.password_hash = None
     from app.services.session_service import revoke_all_sessions
 
     revoke_all_sessions(db, parent.id)
     parent.session_token = None
-    parent.account_status = auth_service.ACCOUNT_DELETED
+    parent.account_status = auth_service.ACCOUNT_REMOVED
     parent.deleted_at = datetime.now(TZ)
 
 
@@ -252,8 +224,8 @@ def delete_parent(db: Session, admin_id: int, parent_id: int) -> None:
     if not parent or parent.role != auth_service.ROLE_PARENT:
         raise HTTPException(404, "家长不存在")
     if not auth_service.is_account_active(parent):
-        raise HTTPException(410, "账号已归档")
-    _archive_parent_account(db, parent)
+        raise HTTPException(410, "账号已移出生产环境")
+    _suspend_parent_account(db, parent)
     db.commit()
 
 
@@ -336,8 +308,8 @@ def delete_child(db: Session, admin_id: int, child_id: int) -> None:
     if not child or child.role != auth_service.ROLE_STUDENT:
         raise HTTPException(404, "孩子不存在")
     if not auth_service.is_account_active(child):
-        raise HTTPException(410, "账号已归档")
-    _archive_student_account(db, child)
+        raise HTTPException(410, "账号已移出生产环境")
+    _suspend_student_account(db, child)
     db.commit()
 
 
