@@ -48,9 +48,6 @@
           <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
         </view>
 
-        <text class="flow-title">{{ form.role === 'parent' ? '家长登录' : '孩子登录' }}</text>
-        <text class="flow-desc">{{ roleHint }}</text>
-
         <view class="role-row">
           <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'">
             <text class="ri-label">学生</text>
@@ -204,14 +201,6 @@ let blockTimer = null
 
 const loginBlocked = computed(() => blockRemain.value > 0)
 const wechatParentOnly = computed(() => inWechat.value && !browserLogin.value)
-const roleHint = computed(() => {
-  if (form.value.role === 'parent') {
-    return parentMode.value === 'sms'
-      ? '使用注册时的11位手机号（不是昵称）'
-      : '使用注册手机号 + 密码，不是昵称或管理员账号'
-  }
-  return '输入家长在「家长中心」创建的孩子账号与密码'
-})
 
 function refreshBlockState() {
   const s = isLoginBlocked()
