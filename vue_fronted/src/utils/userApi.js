@@ -119,6 +119,14 @@ export async function requirePageAuth(kind) {
   const session = kind === 'admin' ? snap.admin : kind === 'parent' ? snap.parent : snap.student
 
   if (!session?.userId || !session?.token) {
+    if (kind === 'student' && snap.parent?.token) {
+      try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (_) { /* ignore */ }
+      return { ok: false, reason: 'wrong_role' }
+    }
+    if (kind === 'parent' && snap.student?.token) {
+      try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
+      return { ok: false, reason: 'wrong_role' }
+    }
     redirectToLoginForKind(kind)
     return { ok: false, reason: 'missing_local' }
   }
@@ -150,10 +158,28 @@ export async function requirePageAuth(kind) {
       if (kind === 'student') markChildUserSessionValid(session.userId)
       return { ok: true, userId: session.userId, offline: true }
     }
-    if (isAuthExpiredError(e.status) || e.status === 403) {
+    if (isAuthExpiredError(e.status)) {
       clearSessionForKind(kind)
       redirectToLoginForKind(kind)
       return { ok: false, reason: 'expired' }
+    }
+    if (e.status === 403) {
+      const snap = readAuthSnapshot()
+      let role = snap.role
+      try {
+        const raw = localStorage.getItem('jnao_user')
+        if (raw) role = JSON.parse(raw).role || role
+      } catch (_) { /* ignore */ }
+      if (kind === 'student' && (role === 'parent' || snap.parent?.token)) {
+        try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (_) { /* ignore */ }
+        return { ok: false, reason: 'wrong_role' }
+      }
+      if (kind === 'parent' && role === 'student') {
+        try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
+        return { ok: false, reason: 'wrong_role' }
+      }
+      redirectToLoginForKind(kind)
+      return { ok: false, reason: 'forbidden' }
     }
     _authValidatedUid[kind] = session.userId
     _authValidatedAt[kind] = Date.now()
@@ -227,7 +253,44 @@ export function markChildUserSessionValid(uid) {
   }
 }
 
-/** 底层 HTTP 封装：fetch → JSON → 错误抛出（status 挂 err.status 供上层判断） */
+const AUTH_ATTEMPT_PREFIXES = [
+  '/api/auth/login',
+  '/api/auth/sms/',
+  '/api/auth/register',
+  '/api/auth/wechat/exchange',
+  '/api/admin/login',
+]
+
+function isAuthAttemptRequest(url) {
+  const path = String(url || '').split('?')[0]
+  return AUTH_ATTEMPT_PREFIXES.some((p) => path === p || path.startsWith(p))
+}
+
+function inferAuthKindFromUrl(url) {
+  if (String(url).includes('/api/admin/')) return 'admin'
+  if (String(url).includes('/api/parent/')) return 'parent'
+  return 'student'
+}
+
+let _sessionExpiryHandled = false
+
+export function resetSessionExpiryGuard() {
+  _sessionExpiryHandled = false
+}
+
+function handleMidSessionExpired(url) {
+  if (_sessionExpiryHandled || isAuthAttemptRequest(url)) return
+  const kind = inferAuthKindFromUrl(url)
+  const hasToken = kind === 'admin' ? !!getAdminSessionToken() : !!getSessionToken()
+  if (!hasToken) return
+  _sessionExpiryHandled = true
+  invalidatePageAuthCache(kind)
+  clearSessionForKind(kind)
+  try {
+    uni.showToast({ title: '登录已失效，请重新登录', icon: 'none' })
+  } catch (_) { /* ignore */ }
+  setTimeout(() => redirectToLoginForKind(kind), 400)
+}
 function formatApiError(data, status) {
   const d = data?.detail ?? data?.message
   if (typeof d === 'string' && d.trim()) return d
@@ -240,7 +303,7 @@ function formatApiError(data, status) {
 
 async function apiJson(url, options = {}) {
   const userId = extractUserIdFromUrl(url)
-  const headers = mergeAuthHeaders(options, userId)
+  const headers = mergeAuthHeaders({ ...options, _url: url }, userId)
   let res
   try {
     res = await fetch(url, { ...options, headers })
@@ -252,6 +315,9 @@ async function apiJson(url, options = {}) {
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
+    if (res.status === 401) {
+      handleMidSessionExpired(url)
+    }
     const msg = formatApiError(data, res.status)
     console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
     const err = new Error(msg)
@@ -271,6 +337,7 @@ async function streamPostSse(url, body, { onToken, onDone, onError, signal } = {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
       },
+      _url: url,
     },
     userId,
   )
@@ -282,6 +349,9 @@ async function streamPostSse(url, body, { onToken, onDone, onError, signal } = {
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
+    if (res.status === 401) {
+      handleMidSessionExpired(url)
+    }
     const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
     err.status = res.status
     throw err
@@ -346,10 +416,20 @@ function extractUserIdFromUrl(url) {
 
 function mergeAuthHeaders(options = {}, userId = null) {
   const headers = { ...(options.headers || {}), ...authHeaders() }
-  const token = getSessionToken()
-  if (token) headers['X-Session-Token'] = token
-  const uid = userId || extractUserIdFromUrl(options._url || '') || getChildUserId()
-  if (uid) headers['X-Child-User-Id'] = String(uid)
+  const url = options._url || ''
+  const isAdminApi = String(url).includes('/api/admin/')
+
+  if (isAdminApi) {
+    const adminTok = getAdminSessionToken()
+    if (adminTok) headers['X-Session-Token'] = adminTok
+    const aid = userId || getAdminUserId()
+    if (aid) headers['X-Child-User-Id'] = String(aid)
+  } else {
+    const token = getSessionToken()
+    if (token) headers['X-Session-Token'] = token
+    const uid = userId || extractUserIdFromUrl(url) || getChildUserId()
+    if (uid) headers['X-Child-User-Id'] = String(uid)
+  }
   return headers
 }
 
@@ -373,6 +453,10 @@ export function resolveQaImageUrl(url, userId) {
     } catch (_) { /* keep path */ }
   }
   path = ensureAuthQuery(path, userId)
+  const token = getSessionToken()
+  if (token && !/[?&]session_token=/.test(path)) {
+    path += `${path.includes('?') ? '&' : '?'}session_token=${encodeURIComponent(token)}`
+  }
   if (!origin && path.startsWith('/')) {
     try { origin = window.location.origin } catch (_) {}
   }
@@ -440,6 +524,7 @@ function _storeAuth(data) {
     _authValidatedUid.parent = data.child_user_id
     _authValidatedAt.parent = Date.now()
   }
+  resetSessionExpiryGuard()
 }
 
 export class NeedLoginError extends Error {
@@ -1242,6 +1327,7 @@ export async function loginAdmin(loginName, password) {
   invalidatePageAuthCache('admin')
   _authValidatedUid.admin = data.child_user_id
   _authValidatedAt.admin = Date.now()
+  resetSessionExpiryGuard()
   return data
 }
 

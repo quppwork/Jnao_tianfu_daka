@@ -177,7 +177,15 @@ def ensure_admin_account(db: Session) -> ChildUser | None:
     return user
 
 
-def bind_parent_child(db: Session, parent_id: int, child_id: int) -> ParentChildBind:
+def bind_parent_child(
+    db: Session,
+    parent_id: int,
+    child_id: int,
+    *,
+    commit: bool = True,
+) -> ParentChildBind:
+    from fastapi import HTTPException
+
     existing = db.scalar(
         select(ParentChildBind).where(
             ParentChildBind.parent_id == parent_id,
@@ -186,10 +194,16 @@ def bind_parent_child(db: Session, parent_id: int, child_id: int) -> ParentChild
     )
     if existing:
         return existing
+    other = db.scalar(select(ParentChildBind).where(ParentChildBind.child_id == child_id))
+    if other:
+        raise HTTPException(409, "孩子已绑定其他家长，请先解绑")
     row = ParentChildBind(parent_id=parent_id, child_id=child_id)
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return row
 
 

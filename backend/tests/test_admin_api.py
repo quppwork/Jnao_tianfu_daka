@@ -21,7 +21,11 @@ def _auth_admin(data: dict) -> dict:
 def _seed_parent(db_session, phone: str, nickname: str) -> int:
     from app.core.password import hash_password
     from app.services.auth_service import ROLE_PARENT, register_child
+    from app.services.datetime_fmt import format_cst
+    from datetime import datetime
+    from app.services.training_day import TZ
 
+    now_iso = format_cst(datetime.now(TZ).replace(tzinfo=None))
     user = register_child(
         db_session,
         parent_phone=phone,
@@ -30,6 +34,15 @@ def _seed_parent(db_session, phone: str, nickname: str) -> int:
         role=ROLE_PARENT,
         child_quota=5,
     )
+    user.profile_json = {
+        "parent": {
+            "real_name": nickname,
+            "phone_verified_at": now_iso,
+            "login_channel": "standard",
+        }
+    }
+    db_session.commit()
+    db_session.refresh(user)
     return user.id
 
 

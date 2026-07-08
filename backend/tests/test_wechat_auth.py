@@ -84,10 +84,9 @@ def test_resolve_wechat_login_with_mobile_snapshot(db_session: Session, monkeypa
     db_session.commit()
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oTEST_mobile_001", unionid="u001")
-    assert user is not None
-    assert ticket is None
-    assert step in ("complete-profile", "home")
-    assert user.parent_phone == "13900003333"
+    assert user is None
+    assert ticket is not None
+    assert step == "bind-phone"
 
 
 def test_resolve_wechat_login_without_mobile(db_session: Session, monkeypatch):
@@ -137,9 +136,9 @@ def test_oauth_lazy_load_legacy_when_missing_local(db_session: Session, monkeypa
     monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fake_fetch)
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_001", unionid=None)
-    assert user is not None
-    assert user.parent_phone == "13900001234"
-    assert ticket is None
+    assert user is None
+    assert ticket is not None
+    assert step == "bind-phone"
 
     from app.services.wechat_auth_service import lookup_member_local
 
@@ -175,8 +174,9 @@ def test_oauth_lazy_refresh_mobile_when_local_empty(db_session: Session, monkeyp
     monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fake_fetch)
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_002", unionid=None)
-    assert user is not None
-    assert user.parent_phone == "13900005678"
+    assert user is None
+    assert ticket is not None
+    assert step == "bind-phone"
 
 
 def test_sync_wx_members_from_legacy(db_session: Session, monkeypatch):

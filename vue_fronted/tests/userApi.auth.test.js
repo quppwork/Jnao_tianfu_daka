@@ -5,6 +5,7 @@ const store = {}
 beforeEach(() => {
   Object.keys(store).forEach((k) => delete store[k])
   vi.resetModules()
+  global.fetch.mockClear()
 })
 
 global.localStorage = {
@@ -91,6 +92,20 @@ describe('requirePageAuth', () => {
     expect(global.uni.reLaunch).toHaveBeenCalled()
   })
 
+  it('家长 session 误入学生页 → 跳转家长中心', async () => {
+    store.jnao_child_user_id = '20'
+    store.jnao_session_token = 'par-tok'
+    store.jnao_user = JSON.stringify({ id: 20, role: 'parent' })
+    store.jnao_logged_in = '1'
+    const { requirePageAuth } = await import('../src/utils/userApi.js')
+    const r = await requirePageAuth('student')
+    expect(r.ok).toBe(false)
+    expect(r.reason).toBe('wrong_role')
+    expect(store.jnao_session_token).toBe('par-tok')
+    expect(global.uni.reLaunch).toHaveBeenCalledWith({ url: '/pages/parent/index' })
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
   it('管理员 401 不清学生 token', async () => {
     seedStudent()
     seedAdmin()
@@ -104,5 +119,41 @@ describe('requirePageAuth', () => {
     expect(r.ok).toBe(false)
     expect(store.jnao_admin_token).toBeUndefined()
     expect(store.jnao_session_token).toBe('tok-stu')
+  })
+})
+
+describe('resolveQaImageUrl — session_token', () => {
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+    vi.resetModules()
+  })
+
+  it('图片 URL 附带 session_token', async () => {
+    store.jnao_session_token = 'img-tok'
+    const { resolveQaImageUrl } = await import('../src/utils/userApi.js')
+    const url = resolveQaImageUrl('/api/qa/images/abc123', 5)
+    expect(url).toContain('user_id=5')
+    expect(url).toContain('session_token=img-tok')
+  })
+})
+
+describe('mergeAuthHeaders — admin 隔离', () => {
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+  })
+
+  it('admin API 使用 admin token 而非 student token', async () => {
+    store.jnao_session_token = 'stu-tok'
+    store.jnao_admin_token = 'adm-tok'
+    store.jnao_admin_user = JSON.stringify({ id: 1 })
+    const { fetchAdminParents, getAdminUserId } = await import('../src/utils/userApi.js')
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ parents: [] }),
+    })
+    await fetchAdminParents(getAdminUserId())
+    const headers = global.fetch.mock.calls[0][1].headers
+    expect(headers['X-Session-Token']).toBe('adm-tok')
   })
 })

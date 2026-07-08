@@ -721,23 +721,26 @@ def resolve_wechat_login(
 
     mobile = snap.mobile
     if mobile:
-        user = ensure_parent_for_phone(
-            db,
-            phone=mobile,
-            snap=snap,
+        existing = auth_service.find_parent_by_phone(db, mobile)
+        if existing:
+            set_login_channel(existing, LOGIN_CHANNEL_WECHAT)
+            mark_phone_verified(existing)
+            upsert_wechat_bind(
+                db,
+                parent_id=existing.id,
+                openid=openid,
+                unionid=unionid or snap.unionid,
+                wx_member_id=snap.wx_member_id,
+            )
+            db.commit()
+            db.refresh(existing)
+            return existing, None, parent_next_step(existing)
+        ticket = create_bind_ticket(
             openid=openid,
             unionid=unionid,
+            wx_member_id=snap.wx_member_id if snap else None,
         )
-        upsert_wechat_bind(
-            db,
-            parent_id=user.id,
-            openid=openid,
-            unionid=unionid or snap.unionid,
-            wx_member_id=snap.wx_member_id,
-        )
-        db.commit()
-        db.refresh(user)
-        return user, None, parent_next_step(user)
+        return None, ticket, "bind-phone"
 
     if use_external_bind_mobile():
         return None, None, "bind-phone"

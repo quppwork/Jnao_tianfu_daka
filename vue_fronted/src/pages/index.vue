@@ -156,6 +156,7 @@ import {
   clearChildUserId,
   ensureChildUser,
   requirePageAuth,
+  logoutAndGoLogin,
   getChildUserId,
   markChildUserSessionValid,
   invalidateChildUserSession,
@@ -419,13 +420,8 @@ function confirmDeleteHistory(h) {
 }
 
 function doLogout() {
-  try {
-    clearChildUserId()
-    localStorage.removeItem('jnao_logged_in')
-    localStorage.removeItem('jnao_user')
-  } catch (_) {}
+  logoutAndGoLogin()
   showSettings.value = false
-  uni.redirectTo({ url: '/pages/login/index' })
 }
 
 onMounted(async () => {

@@ -51,7 +51,9 @@ def create_child(
     age: int | None = None,
     region: str | None = None,
 ) -> ChildUser:
-    parent = _require_parent(db, parent_id)
+    from sqlalchemy import select
+
+    parent = _lock_parent_row(db, parent_id)
     if not auth_service.parent_can_add_child(db, parent):
         raise HTTPException(403, "孩子账号名额已满")
 
@@ -59,35 +61,53 @@ def create_child(
     if auth_service.find_user_by_login_name(db, login_name):
         raise HTTPException(409, "该账号已被使用")
 
-    child = auth_service.register_child(
-        db,
-        parent_phone=parent.parent_phone,
-        nickname=nickname.strip(),
-        login_name=login_name,
-        password=password,
-        role=auth_service.ROLE_STUDENT,
-    )
-    auth_service.bind_parent_child(db, parent_id, child.id)
-    pj = dict(child.profile_json or {})
-    pj["parentName"] = parent.nickname
-    # 🆕 存储孩子基本信息
-    learner = dict(pj.get("learner") or {})
-    if grade is not None:
-        learner["grade"] = grade
-        pj["grade"] = grade
-    if age is not None:
-        learner["age"] = age
-        pj["age"] = age
-    if region is not None:
-        learner["region"] = region
-        pj["region"] = region
-    if learner:
-        pj["learner"] = learner
-    child.profile_json = pj
-    flag_modified(child, "profile_json")
-    db.commit()
-    db.refresh(child)
-    return child
+    try:
+        child = auth_service.register_child(
+            db,
+            parent_phone=parent.parent_phone,
+            nickname=nickname.strip(),
+            login_name=login_name,
+            password=password,
+            role=auth_service.ROLE_STUDENT,
+            commit=False,
+        )
+        auth_service.bind_parent_child(db, parent_id, child.id, commit=False)
+        pj = dict(child.profile_json or {})
+        pj["parentName"] = parent.nickname
+        learner = dict(pj.get("learner") or {})
+        if grade is not None:
+            learner["grade"] = grade
+            pj["grade"] = grade
+        if age is not None:
+            learner["age"] = age
+            pj["age"] = age
+        if region is not None:
+            learner["region"] = region
+            pj["region"] = region
+        if learner:
+            pj["learner"] = learner
+        child.profile_json = pj
+        flag_modified(child, "profile_json")
+        db.commit()
+        db.refresh(child)
+        return child
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _lock_parent_row(db: Session, parent_id: int) -> ChildUser:
+    from sqlalchemy import select
+
+    if db.bind.dialect.name == "mysql":
+        parent = db.scalar(
+            select(ChildUser).where(ChildUser.id == parent_id).with_for_update()
+        )
+    else:
+        parent = db.get(ChildUser, parent_id)
+    if not parent or parent.role != auth_service.ROLE_PARENT:
+        raise HTTPException(403, "需要家长账号")
+    return parent
 
 
 def update_child(

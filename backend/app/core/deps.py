@@ -74,6 +74,8 @@ def get_authenticated_student(
     user = db.get(ChildUser, user_id)
     if not user or (user.role or auth_service.ROLE_STUDENT) != auth_service.ROLE_STUDENT:
         raise HTTPException(403, "需要学生账号")
+    if not auth_service.has_active_parent_bind(db, user_id):
+        raise HTTPException(403, "账号未绑定家长，请联系管理员")
     return user_id
 
 
