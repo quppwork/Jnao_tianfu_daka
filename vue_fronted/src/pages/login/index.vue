@@ -43,7 +43,7 @@
       </view>
 
       <!-- 浏览器 / 已切换为表单登录 -->
-      <view v-else class="login-main login-main--offset">
+      <view v-else class="login-main">
         <view class="form">
         <view v-if="loginBlocked" class="blocked-hint">
           <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
@@ -88,24 +88,26 @@
           </view>
         </template>
 
+        <!-- 家长：切换登录方式 / 返回微信 → 在登录按钮上方 -->
+        <view v-if="form.role === 'parent'" class="form-links-above">
+          <text class="form-link" @click="toggleParentMode">
+            {{ parentMode === 'sms' ? '改用密码登录' : '改用验证码登录' }}
+          </text>
+          <text v-if="inWechat" class="form-link-sep">·</text>
+          <text v-if="inWechat" class="form-link" @click="backToWechatLogin">返回微信一键登录</text>
+        </view>
+
+        <!-- 学生：家长入口在登录按钮上方 -->
+        <view v-if="form.role === 'student'" class="form-links-above">
+          <text class="form-link" @click="switchToParent">我是家长，去注册 / 登录</text>
+        </view>
+
         <view class="btn-login" :class="{ off: loginBlocked || loginBusy }" @click="doLogin">
           <text>{{ loginBusy ? '登录中...' : '登录' }}</text>
         </view>
 
-        <view v-if="form.role === 'student'" class="sub-actions">
-          <text class="hint-text hint-highlight">首次使用？请家长先注册并创建孩子账号</text>
-          <view class="link-row" @click="switchToParent"><text>我是家长，去注册 / 登录</text></view>
-        </view>
-        <view v-else class="sub-actions">
-          <view class="link-row-wrap">
-            <view class="link-row" @click="toggleParentMode">
-              <text>{{ parentMode === 'sms' ? '改用密码登录' : '改用验证码登录' }}</text>
-            </view>
-            <view class="link-row" @click="goRegister()"><text>新家长注册</text></view>
-            <view v-if="inWechat" class="link-row" @click="backToWechatLogin">
-              <text>返回微信一键登录</text>
-            </view>
-          </view>
+        <view v-if="form.role === 'parent'" class="btn-register" @click="goRegister()">
+          <text>新家长注册</text>
         </view>
         </view>
 
@@ -663,19 +665,29 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.app { height:100vh;height:100dvh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:12vh; position:relative; overflow:hidden; }
+.app {
+  height:100vh; height:100dvh; max-width:480px; margin:0 auto;
+  background:var(--bg); display:flex; align-items:center; justify-content:center;
+  padding:12px 20px; padding-top:max(12px, env(safe-area-inset-top));
+  padding-bottom:max(12px, env(safe-area-inset-bottom));
+  position:relative; overflow:hidden; box-sizing:border-box;
+}
 .glow { position:absolute; width:260px; height:260px; border-radius:50%; pointer-events:none; z-index:0; }
 .glow-top { top:-80px; right:-60px; background:radial-gradient(circle, rgba(88,166,255,0.18) 0%, transparent 70%); }
 .glow-bottom { bottom:-100px; left:-50px; background:radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%); }
-.card { width:100%; position:relative; z-index:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:36px 22px 28px; }
-.logo-row { display:flex; align-items:baseline; justify-content:center; gap:8px; margin-bottom:6px; }
-.logo-j { color:#dc2626; font-size:60px; font-weight:800; }
-.logo-nao, .logo-ai { color:var(--text); font-size:44px; font-weight:700; }
+.card {
+  width:100%; max-height:100%; position:relative; z-index:1;
+  background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08);
+  border-radius:20px; padding:24px 20px 18px; box-sizing:border-box; overflow:hidden;
+}
+.logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:4px; }
+.logo-j { color:#dc2626; font-size:48px; font-weight:800; line-height:1; }
+.logo-nao, .logo-ai { color:var(--text); font-size:36px; font-weight:700; line-height:1; }
 .logo-ai { font-weight:300; }
-.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; line-height:1.5; margin-top:-8px; margin-bottom:4px; }
-.sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.5; margin-bottom:20px; opacity:0.85; }
-.login-main--offset { margin-top:100px; }
-.login-flow { padding-top:4px; }
+.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; line-height:1.4; margin-bottom:2px; }
+.sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.4; margin-bottom:14px; opacity:0.85; }
+.login-main { margin-top:0; }
+.login-flow { padding-top:0; }
 .flow-title { display:block; text-align:center; color:var(--text); font-size:17px; font-weight:700; margin-bottom:6px; }
 .flow-desc { display:block; text-align:center; color:var(--text-dim); font-size:12px; line-height:1.5; margin-bottom:16px; padding:0 4px; }
 .divider { display:flex; align-items:center; gap:10px; margin:20px 0 14px; }
@@ -686,25 +698,25 @@ onUnmounted(() => {
 .btn-outline-student { border-color:rgba(167,139,250,0.35); }
 .btn-outline-title { display:block; color:var(--text); font-size:15px; font-weight:600; }
 .btn-outline-sub { display:block; color:var(--text-dim); font-size:11px; margin-top:4px; line-height:1.4; }
-.page-footer { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:22px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.06); }
+.page-footer { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06); }
 .footer-link { color:var(--text-dim); font-size:11px; padding:4px 2px; }
 .footer-link:active { opacity:0.6; }
 .footer-dot { color:var(--text-dim); font-size:11px; opacity:0.5; }
-.blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:10px; margin-bottom:12px; text-align:center; }
+.blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:8px; margin-bottom:10px; text-align:center; }
 .blocked-hint text { color:#f87171; font-size:12px; }
-.btn-wechat { background:linear-gradient(135deg, #07c160, #06ad56); border-radius:14px; padding:16px; text-align:center; }
+.btn-wechat { background:linear-gradient(135deg, #07c160, #06ad56); border-radius:14px; padding:14px; text-align:center; }
 .btn-wechat.off { opacity:0.5; }
-.btn-wechat text { color:#fff; font-size:17px; font-weight:700; }
-.wechat-loading { text-align:center; padding:10px 0 4px; }
+.btn-wechat text { color:#fff; font-size:16px; font-weight:700; }
+.wechat-loading { text-align:center; padding:8px 0 4px; }
 .wechat-loading text { color:var(--accent); font-size:13px; }
-.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); position:relative; z-index:2; }
+.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:10px; border:1.5px solid var(--border); position:relative; z-index:2; }
 .sms-row { padding-right:4px; }
 .sms-btn { flex-shrink:0; padding:8px 10px; border-radius:8px; background:rgba(88,166,255,0.15); }
 .sms-btn.off { opacity:0.5; }
 .sms-btn text { color:var(--accent); font-size:12px; }
-.login-input { flex:1; width:100%; min-height:48px; padding:14px 0; font-size:16px; line-height:1.4; color:var(--text); background:transparent; border:none; box-sizing:border-box; -webkit-user-select:text; user-select:text; }
-.role-row { display:flex; gap:0; margin-top:4px; margin-bottom:18px; border-radius:14px; overflow:hidden; border:1.5px solid var(--border); background:var(--accent-bg); }
-.role-item { flex:1; padding:16px; text-align:center; cursor:pointer; transition:all 0.25s; position:relative; }
+.login-input { flex:1; width:100%; min-height:44px; padding:12px 0; font-size:16px; line-height:1.4; color:var(--text); background:transparent; border:none; box-sizing:border-box; -webkit-user-select:text; user-select:text; }
+.role-row { display:flex; gap:0; margin-top:0; margin-bottom:12px; border-radius:14px; overflow:hidden; border:1.5px solid var(--border); background:var(--accent-bg); }
+.role-item { flex:1; padding:12px; text-align:center; cursor:pointer; transition:all 0.25s; position:relative; }
 .role-item:first-child { border-right:1.5px solid var(--border); }
 .role-item.active { background:var(--bg-card); }
 .role-item.active::after {
@@ -714,15 +726,17 @@ onUnmounted(() => {
 .ri-label { font-size:14px; font-weight:500; transition:all 0.25s; }
 .role-item.active .ri-label { color:var(--accent); font-weight:700; }
 .role-item:not(.active) .ri-label { color:var(--text-dim); }
-.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:15px; text-align:center; }
+.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:13px; text-align:center; margin-top:4px; }
 .btn-login.off { opacity:0.5; }
 .btn-login text { color:#fff; font-size:16px; font-weight:700; }
-.sub-actions { text-align:center; margin-top:12px; }
-.hint-text { color:var(--text-dim); font-size:12px; }
-.hint-highlight { color:#f5a623; font-weight:600; }
-.link-row { margin-top:12px; text-align:center; }
-.link-row text { color:#a78bfa; font-size:13px; }
-.link-row-wrap { display:flex; flex-wrap:wrap; gap:12px 16px; justify-content:center; margin-top:8px; }
+.form-links-above { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px 10px; margin:4px 0 10px; }
+.form-link { color:#a78bfa; font-size:13px; padding:4px 2px; }
+.form-link-sep { color:var(--text-dim); font-size:12px; opacity:0.5; }
+.btn-register {
+  margin-top:10px; padding:13px; text-align:center; border-radius:14px;
+  border:1.5px solid rgba(167,139,250,0.45); background:rgba(167,139,250,0.08);
+}
+.btn-register text { color:#c4b5fd; font-size:15px; font-weight:600; }
 .login-overlay {
   position: fixed; inset: 0; z-index: 9999;
   background: rgba(0,0,0,0.45);
