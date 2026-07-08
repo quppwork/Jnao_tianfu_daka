@@ -18,6 +18,7 @@ export function inferHomeFromSession() {
     const role = raw ? JSON.parse(raw).role : null
     if (role === 'parent') return '/pages/parent/index'
     if (role === 'student') return '/pages/index'
+    if (role === 'admin') return '/pages/admin/index'
   } catch (_) { /* ignore */ }
   return '/pages/login/index'
 }

@@ -12,15 +12,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { onLaunch, onShow } from '@dcloudio/uni-app'
-import { bootstrapAppSession } from '@/utils/userApi.js'
-import { rememberCurrentRoute } from '@/utils/appSession.js'
+import { bootstrapAppSession, invalidatePageAuthCache } from '@/utils/userApi.js'
+import { rememberCurrentRoute, installAuthStorageSync } from '@/utils/appSession.js'
 import { startAppUpdateWatcher } from '@/utils/appUpdate.js'
 
 const showSplash = ref(false)
+let unbindStorageSync = null
 
 onLaunch(() => {
+  unbindStorageSync = installAuthStorageSync(() => {
+    invalidatePageAuthCache()
+  })
   bootstrapAppSession().catch(() => {})
   startAppUpdateWatcher()
   // Splash：同浏览器会话只展示一次；2分钟内回来走 bfcache 不展示
@@ -53,6 +57,10 @@ onLaunch(() => {
 
 onShow(() => {
   rememberCurrentRoute()
+})
+
+onUnmounted(() => {
+  unbindStorageSync?.()
 })
 </script>
 

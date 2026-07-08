@@ -237,12 +237,18 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     ):
         if not req.parent_phone or not req.password:
             raise HTTPException(400, "请输入手机号和密码")
-        check_auth_allowed(db, client_ip=ip, phone=req.parent_phone.strip(), device_id=did)
-        user = auth_service.login_parent_by_password(db, req.parent_phone, req.password)
+        from app.services.sms_service import normalize_phone
+
+        try:
+            phone = normalize_phone(req.parent_phone.strip())
+        except HTTPException:
+            raise HTTPException(400, "家长请使用11位手机号登录（不是昵称或孩子账号）")
+        check_auth_allowed(db, client_ip=ip, phone=phone, device_id=did)
+        user = auth_service.login_parent_by_password(db, phone, req.password)
         if not user:
-            record_auth_failure(db, client_ip=ip, phone=req.parent_phone.strip(), device_id=did)
+            record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
             raise HTTPException(401, "手机号或密码错误")
-        clear_auth_failures(client_ip=ip, phone=req.parent_phone.strip(), device_id=did)
+        clear_auth_failures(client_ip=ip, phone=phone, device_id=did)
         return _issue_and_respond(db, user)
 
     if req.login_name and req.password:

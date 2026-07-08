@@ -12,16 +12,22 @@
         <text>{{ submitting ? '登录中...' : '进入管理后台' }}</text>
       </view>
       <view class="back" @click="goBack"><text>返回登录页</text></view>
+      <view class="back" @click="confirmClearCache"><text>登录异常？清除本机登录缓存</text></view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { loginAdmin } from '@/utils/userApi.js'
+import { ref, onMounted } from 'vue'
+import { loginAdmin, resetLocalAuthCache } from '@/utils/userApi.js'
+import { sanitizeAuthForLoginEntry } from '@/utils/appSession.js'
 
 const form = ref({ loginName: '', password: '' })
 const submitting = ref(false)
+
+onMounted(() => {
+  sanitizeAuthForLoginEntry('/pages/admin/login')
+})
 
 async function doLogin() {
   if (!form.value.loginName.trim() || !form.value.password.trim()) {
@@ -40,6 +46,18 @@ async function doLogin() {
 
 function goBack() {
   uni.redirectTo({ url: '/pages/login/index' })
+}
+
+function confirmClearCache() {
+  uni.showModal({
+    title: '清除登录缓存',
+    content: '仅清除本网站的登录信息，清除后需重新登录。确定？',
+    success: (r) => {
+      if (!r.confirm) return
+      resetLocalAuthCache()
+      uni.showToast({ title: '已清除', icon: 'none' })
+    },
+  })
 }
 </script>
 

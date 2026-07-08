@@ -31,6 +31,11 @@ import {
   sessionKeysForKind,
   rememberCurrentRoute,
   getCurrentAppPath,
+  clearSessionsExcept,
+  migrateAuthStorage,
+  sanitizeAuthForLoginEntry,
+  installAuthStorageSync,
+  clearAllAuthSessions,
 } from './appSession.js'
 
 // ── localStorage 键名 ──
@@ -188,13 +193,22 @@ export async function requirePageAuth(kind) {
   }
 }
 
-/** App 启动：记录路由 + 静默校验当前页 session */
+/** App 启动：迁移 storage + 记录路由 + 静默校验当前页 session */
 export async function bootstrapAppSession() {
+  migrateAuthStorage()
   rememberCurrentRoute()
   const { route } = getCurrentAppPath()
   const kind = inferAuthKindFromPath(route)
   if (!kind) return { ok: true, skipped: true }
   return requirePageAuth(kind)
+}
+
+/** 登录异常时一键清除本机全部登录缓存（无需清整个站点数据） */
+export function resetLocalAuthCache() {
+  clearAllAuthSessions()
+  invalidatePageAuthCache()
+  invalidateChildUserSession()
+  resetSessionExpiryGuard()
 }
 
 export function setChildUserId(id) {
@@ -493,10 +507,17 @@ export function saveAuthSession(data) {
 }
 
 function _storeAuth(data) {
+  const role = data.role || 'student'
+  if (role === 'parent') {
+    clearSessionsExcept('parent')
+    invalidatePageAuthCache('admin')
+  } else if (role === 'student') {
+    clearSessionsExcept('student')
+    invalidatePageAuthCache('admin')
+  }
   if (data.session_token) {
     setSessionToken(data.session_token)
   }
-  const role = data.role || 'student'
   try {
     localStorage.setItem('jnao_user', JSON.stringify({
       id: data.child_user_id,
@@ -1331,6 +1352,10 @@ export function clearAdminSession() {
 }
 
 export async function loginAdmin(loginName, password) {
+  clearSessionsExcept('admin')
+  invalidatePageAuthCache('parent')
+  invalidatePageAuthCache('student')
+  invalidateChildUserSession()
   const data = await apiJson('/api/admin/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

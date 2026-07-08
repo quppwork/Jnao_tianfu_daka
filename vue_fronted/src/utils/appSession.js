@@ -8,7 +8,24 @@ export const PUBLIC_PATH_PREFIXES = [
   '/pages/admin/login',
 ]
 
-export const LAST_ROUTE_KEY = 'jnao_last_route'
+export const LAST_ROUTE_KEY = 'jnao_last_route' // legacy,不再写入
+
+const LAST_ROUTE_KEYS = {
+  admin: 'jnao_last_route_admin',
+  parent: 'jnao_last_route_parent',
+  student: 'jnao_last_route_student',
+}
+
+/** 路由是否属于指定登录端 */
+export function routeMatchesAuthKind(route, kind) {
+  const inferred = inferAuthKindFromPath(route)
+  if (!inferred || !kind) return false
+  return inferred === kind
+}
+
+function lastRouteKeyForKind(kind) {
+  return LAST_ROUTE_KEYS[kind] || null
+}
 
 export function normalizePath(path) {
   let p = String(path || '').trim()
@@ -59,6 +76,166 @@ export function sessionKeysForKind(kind) {
     'jnao_guest_phone',
     'jnao_guest_nickname',
   ]
+}
+
+export const STORAGE_SCHEMA_VERSION = 2
+export const STORAGE_VERSION_KEY = 'jnao_storage_schema'
+
+/** 所有 auth 相关 localStorage 键（用于全量清理） */
+export function allAuthStorageKeys() {
+  const keys = new Set([
+    STORAGE_VERSION_KEY,
+    ...sessionKeysForKind('admin'),
+    ...sessionKeysForKind('parent'),
+    ...sessionKeysForKind('student'),
+  ])
+  return [...keys]
+}
+
+/** 清除全部登录态（用户自助 / 迁移） */
+export function clearAllAuthSessions() {
+  for (const key of allAuthStorageKeys()) {
+    try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+  }
+  purgeLegacyRouteSnapshots()
+}
+
+function purgeLegacyRouteSnapshots() {
+  try {
+    sessionStorage.removeItem(LAST_ROUTE_KEY)
+    for (const key of Object.values(LAST_ROUTE_KEYS)) {
+      sessionStorage.removeItem(key)
+    }
+  } catch (_) { /* ignore */ }
+}
+
+/**
+ * 修复 localStorage 中不一致的 session（孤儿 token、role 与槽位不符等）
+ * @returns {string[]} 已清理项描述，便于调试
+ */
+export function repairAuthStorage() {
+  const fixed = []
+  const snap = readAuthSnapshot()
+
+  purgeLegacyRouteSnapshots()
+
+  const adminRaw = defaultGetItem('jnao_admin_user')
+  const adminTok = defaultGetItem('jnao_admin_token')
+  if (adminTok && !adminRaw) {
+    for (const key of sessionKeysForKind('admin')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    fixed.push('orphan_admin_token')
+  }
+  if (adminRaw && !adminTok) {
+    for (const key of sessionKeysForKind('admin')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    fixed.push('orphan_admin_user')
+  }
+
+  const userTok = defaultGetItem('jnao_session_token')
+  const loggedIn = defaultGetItem('jnao_logged_in') === '1'
+  let role = snap.role
+  if (!role) {
+    try {
+      const raw = defaultGetItem('jnao_user')
+      if (raw) role = JSON.parse(raw).role
+    } catch (_) { /* ignore */ }
+  }
+
+  if (loggedIn && (!userTok || !role)) {
+    for (const key of sessionKeysForKind('parent')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    for (const key of sessionKeysForKind('student')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    fixed.push('logged_in_without_session')
+  }
+
+  if (userTok && role === 'parent' && !snap.parent) {
+    for (const key of sessionKeysForKind('student')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    fixed.push('parent_role_slot_repair')
+  }
+  if (userTok && role === 'student' && !snap.student) {
+    for (const key of sessionKeysForKind('parent')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    fixed.push('student_role_slot_repair')
+  }
+
+  // 三端 token 同时存在时只保留与当前页面匹配的一端
+  const { route } = getCurrentAppPath()
+  const pageKind = inferAuthKindFromPath(route)
+  if (pageKind === 'parent' || pageKind === 'student') {
+    if (snap.admin) {
+      for (const key of sessionKeysForKind('admin')) {
+        try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+      }
+      fixed.push('admin_on_user_page')
+    }
+  } else if (pageKind === 'admin' && (snap.parent || snap.student)) {
+    clearSessionsExcept('admin')
+    fixed.push('user_on_admin_page')
+  }
+
+  return fixed
+}
+
+/** App 启动 / 版本升级时迁移 storage，避免旧结构长期干扰 */
+export function migrateAuthStorage() {
+  try {
+    const prev = parseInt(defaultGetItem(STORAGE_VERSION_KEY) || '0', 10)
+    if (prev < STORAGE_SCHEMA_VERSION) {
+      purgeLegacyRouteSnapshots()
+      if (prev === 0) {
+        // v0：历史上 admin 与 user 共用跳转键、登录互不清 session
+        repairAuthStorage()
+      }
+      localStorage.setItem(STORAGE_VERSION_KEY, String(STORAGE_SCHEMA_VERSION))
+      return { migrated: true, from: prev, to: STORAGE_SCHEMA_VERSION }
+    }
+    repairAuthStorage()
+    return { migrated: false, version: prev }
+  } catch (_) {
+    return { migrated: false, error: true }
+  }
+}
+
+/**
+ * 进入公开登录页时剥离「不该出现在此入口」的 session
+ * - 用户登录页：去掉管理员残留
+ * - 管理员登录页：去掉家长/学生残留
+ */
+export function sanitizeAuthForLoginEntry(path) {
+  const p = normalizePath(path)
+  if (p.startsWith('/pages/admin/login')) {
+    clearSessionsExcept('admin')
+    return 'admin_login'
+  }
+  if (p.startsWith('/pages/login/') || p === '/pages/login/index') {
+    for (const key of sessionKeysForKind('admin')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    purgeLegacyRouteSnapshots()
+    return 'user_login'
+  }
+  return null
+}
+
+/** 多标签页：其它 tab 清 session 时同步失效内存校验缓存 */
+export function installAuthStorageSync(onExternalChange) {
+  if (typeof window === 'undefined' || window.__jnaoAuthStorageSync) return () => {}
+  const handler = (ev) => {
+    if (!ev.key || !ev.key.startsWith('jnao_')) return
+    onExternalChange?.(ev.key)
+  }
+  window.addEventListener('storage', handler)
+  window.__jnaoAuthStorageSync = true
+  return () => window.removeEventListener('storage', handler)
 }
 
 /**
@@ -140,16 +317,34 @@ export function saveRouteSnapshot(path, query = '') {
   try {
     const route = normalizePath(path)
     if (isPublicPath(route)) return
+    const kind = inferAuthKindFromPath(route)
+    if (!kind) return
+    const key = lastRouteKeyForKind(kind)
+    if (!key) return
     const q = String(query || '').replace(/^\?/, '')
-    sessionStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({ route, query: q }))
+    sessionStorage.setItem(key, JSON.stringify({ route, query: q }))
   } catch (_) { /* ignore */ }
 }
 
-export function readRouteSnapshot() {
+export function readRouteSnapshot(kind = null) {
   try {
+    if (kind) {
+      const key = lastRouteKeyForKind(kind)
+      if (!key) return null
+      const raw = sessionStorage.getItem(key)
+      if (!raw) return null
+      const snap = JSON.parse(raw)
+      if (snap?.route && routeMatchesAuthKind(snap.route, kind)) return snap
+      return null
+    }
+    // legacy fallback — 仅兼容旧数据，且必须能推断出 kind
     const raw = sessionStorage.getItem(LAST_ROUTE_KEY)
     if (!raw) return null
-    return JSON.parse(raw)
+    const snap = JSON.parse(raw)
+    if (!snap?.route) return null
+    const inferred = inferAuthKindFromPath(snap.route)
+    if (!inferred || !routeMatchesAuthKind(snap.route, inferred)) return null
+    return snap
   } catch (_) {
     return null
   }
@@ -186,12 +381,32 @@ export function routeToUrl(route, query = '') {
   return q ? `${route}?${q}` : route
 }
 
-/** 登录成功后恢复刷新前页面（F11） */
-export function consumePostLoginRoute(fallbackUrl) {
-  const snap = readRouteSnapshot()
+/** 登录成功后恢复刷新前页面；仅恢复与当前登录端一致的路由 */
+export function consumePostLoginRoute(fallbackUrl, kind) {
+  if (!kind) return fallbackUrl
+  const snap = readRouteSnapshot(kind)
   if (!snap?.route || isPublicPath(snap.route)) return fallbackUrl
+  if (!routeMatchesAuthKind(snap.route, kind)) return fallbackUrl
   try {
+    const key = lastRouteKeyForKind(kind)
+    if (key) sessionStorage.removeItem(key)
     sessionStorage.removeItem(LAST_ROUTE_KEY)
   } catch (_) { /* ignore */ }
   return routeToUrl(snap.route, snap.query)
+}
+
+/** 登录某一端时清除其它端的 session，避免串号 */
+export function clearSessionsExcept(kind) {
+  for (const k of ['admin', 'parent', 'student']) {
+    if (k === kind) continue
+    for (const key of sessionKeysForKind(k)) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+  }
+  if (kind !== 'student' && kind !== 'parent') {
+    try {
+      localStorage.removeItem('jnao_logged_in')
+    } catch (_) { /* ignore */ }
+  }
+  purgeLegacyRouteSnapshots()
 }

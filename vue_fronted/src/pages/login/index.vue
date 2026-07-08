@@ -9,6 +9,7 @@
       <text class="subtitle">欢迎来到天赋成长平台</text>
       <text class="sub-desc">我们立志于让中国少1亿个学习痛苦的孩子 让中国多1亿个天赋绽放的孩子</text>
       <view class="hint-admin-top" @click="goAdminLogin"><text>管理员入口</text></view>
+      <view class="hint-clear-cache" @click="confirmClearCache"><text>登录异常？清除本机登录缓存</text></view>
 
       <!-- 微信内：仅家长一键登录，不展示短信/密码表单 -->
       <view v-if="wechatParentOnly" class="wechat-only">
@@ -57,7 +58,7 @@
 
         <template v-else-if="parentMode === 'sms'">
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
+            <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
           <view class="input-wrap sms-row">
             <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="text" maxlength="6" confirm-type="done" :disabled="loginBusy" />
@@ -69,7 +70,7 @@
 
         <template v-else>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
+            <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
           <view class="input-wrap">
             <input class="login-input" v-model="form.password" placeholder="密码" type="password" maxlength="64" confirm-type="done" :disabled="loginBusy" />
@@ -141,6 +142,7 @@ import {
   studentNeedsOnboarding,
   getLoggedInUserId,
   getSessionToken,
+  resetLocalAuthCache,
 } from '@/utils/userApi.js'
 import {
   isLoginBlocked,
@@ -165,7 +167,7 @@ import {
   inferHomeFromSession,
   minDelay,
 } from '@/utils/useLoginFlow.js'
-import { consumePostLoginRoute } from '@/utils/appSession.js'
+import { consumePostLoginRoute, sanitizeAuthForLoginEntry } from '@/utils/appSession.js'
 
 const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
@@ -219,6 +221,12 @@ function backToWechatLogin() {
 
 function tryRedirectIfLoggedIn() {
   try {
+    // 管理员 session 与用户登录页隔离，不在此自动跳转
+    const adminRaw = localStorage.getItem('jnao_admin_user')
+    const adminTok = localStorage.getItem('jnao_admin_token')
+    if (adminRaw && adminTok && localStorage.getItem('jnao_logged_in') !== '1') {
+      return false
+    }
     if (localStorage.getItem('jnao_logged_in') !== '1') return false
     const uid = getLoggedInUserId()
     if (!uid || !getSessionToken()) return false
@@ -267,6 +275,7 @@ async function handleWechatCallback(wxCb) {
 }
 
 onMounted(async () => {
+  sanitizeAuthForLoginEntry('/pages/login/index')
   refreshBlockState()
   blockTimer = setInterval(refreshBlockState, 1000)
   inWechat.value = isWeChatBrowser()
@@ -460,7 +469,7 @@ async function routeParentHome(data) {
       }
     } catch (_) { /* fallback local bind page */ }
   }
-  if (target === '/pages/parent/index') target = consumePostLoginRoute(target)
+  if (target === '/pages/parent/index') target = consumePostLoginRoute(target, 'parent')
   uni.redirectTo({ url: target })
 }
 
@@ -475,7 +484,7 @@ async function routeStudentHome(data) {
     console.error('[login] studentNeedsOnboarding 检查失败，默认走引导:', e?.message || e)
     target = '/pages/login/onboarding/index'
   }
-  if (target === '/pages/index') target = consumePostLoginRoute(target)
+  if (target === '/pages/index') target = consumePostLoginRoute(target, 'student')
   uni.redirectTo({ url: target })
 }
 
@@ -578,6 +587,18 @@ function goAdminLogin() {
   uni.navigateTo({ url: '/pages/admin/login' })
 }
 
+function confirmClearCache() {
+  uni.showModal({
+    title: '清除登录缓存',
+    content: '仅清除本网站的登录信息（不影响微信/系统数据），清除后需重新登录。确定？',
+    success: (r) => {
+      if (!r.confirm) return
+      resetLocalAuthCache()
+      uni.showToast({ title: '已清除，请重新登录', icon: 'none' })
+    },
+  })
+}
+
 onUnmounted(() => {
   if (cooldownTimer) clearInterval(cooldownTimer)
   if (blockTimer) clearInterval(blockTimer)
@@ -634,6 +655,8 @@ onUnmounted(() => {
 .hint-admin-top { position:absolute; top:12px; right:16px; z-index:10; }
 .hint-admin-top text { color:var(--text-dim); font-size:10px; text-decoration:underline; cursor:pointer; }
 .hint-admin-top:active text { opacity:0.6; }
+.hint-clear-cache { text-align:center; margin-top:8px; }
+.hint-clear-cache text { color:var(--text-dim); font-size:10px; text-decoration:underline; opacity:0.85; }
 .login-overlay {
   position: fixed; inset: 0; z-index: 9999;
   background: rgba(0,0,0,0.45);

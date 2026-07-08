@@ -106,6 +106,69 @@ describe('isTransientError / isAuthExpiredError / shouldLogoutOnError', () => {
   })
 })
 
+describe('consumePostLoginRoute — 按角色隔离跳转', () => {
+  const store = {}
+
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+    global.sessionStorage = {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v },
+      removeItem: (k) => { delete store[k] },
+    }
+  })
+
+  it('家长登录不恢复管理员上次页面', async () => {
+    const { saveRouteSnapshot, consumePostLoginRoute } = await import('../src/utils/appSession.js')
+    saveRouteSnapshot('/pages/admin/index')
+    saveRouteSnapshot('/pages/parent/children')
+    expect(consumePostLoginRoute('/pages/parent/index', 'parent')).toBe('/pages/parent/children')
+    expect(consumePostLoginRoute('/pages/parent/index', 'parent')).toBe('/pages/parent/index')
+  })
+
+  it('学生登录不恢复家长/管理员页面', async () => {
+    const { saveRouteSnapshot, consumePostLoginRoute } = await import('../src/utils/appSession.js')
+    saveRouteSnapshot('/pages/admin/index')
+    saveRouteSnapshot('/pages/index')
+    expect(consumePostLoginRoute('/pages/index', 'student')).toBe('/pages/index')
+  })
+})
+describe('repairAuthStorage / sanitizeAuthForLoginEntry', () => {
+  const store = {}
+
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+    global.localStorage = {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v },
+      removeItem: (k) => { delete store[k] },
+    }
+    global.sessionStorage = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    }
+  })
+
+  it('用户登录页进入时清除管理员残留', async () => {
+    const { sanitizeAuthForLoginEntry, readAuthSnapshot } = await import('../src/utils/appSession.js')
+    store.jnao_admin_user = JSON.stringify({ id: 1 })
+    store.jnao_admin_token = 'adm'
+    sanitizeAuthForLoginEntry('/pages/login/index')
+    const snap = readAuthSnapshot((k) => store[k])
+    expect(snap.admin).toBeNull()
+  })
+
+  it('repair 清除 logged_in 但无 token 的脏数据', async () => {
+    const { repairAuthStorage } = await import('../src/utils/appSession.js')
+    store.jnao_logged_in = '1'
+    store.jnao_user = JSON.stringify({ id: 2, role: 'parent' })
+    const fixed = repairAuthStorage()
+    expect(fixed).toContain('logged_in_without_session')
+    expect(store.jnao_logged_in).toBeUndefined()
+  })
+})
+
 describe('sessionKeysForKind — 清 session 不串槽', () => {
   it('admin 只清 admin 键', () => {
     const keys = sessionKeysForKind('admin')
