@@ -3,17 +3,16 @@
     <view class="glow glow-top"></view>
 
     <view class="card">
-      <view class="logo-row">
-        <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
+      <view class="brand-head">
+        <view class="logo-row">
+          <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
+        </view>
+        <text class="subtitle">欢迎来到天赋成长平台</text>
+        <text class="sub-desc">天赋测评 · 每日训练 · 成长记录</text>
       </view>
-      <text class="subtitle">欢迎来到天赋成长平台</text>
-      <text class="sub-desc">天赋测评 · 每日训练 · 成长记录</text>
 
       <!-- 微信内：家长主路径 -->
       <view v-if="wechatParentOnly" class="login-flow">
-        <text class="flow-title">我是家长</text>
-        <text class="flow-desc">已绑定手机号的家长，点击下方绿色按钮直接进入</text>
-
         <view v-if="loginBlocked" class="blocked-hint">
           <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
         </view>
@@ -28,13 +27,13 @@
           <text>{{ wechatLoading ? '跳转中…' : '微信一键登录' }}</text>
         </view>
 
+        <view class="btn-phone-login" @click="openBrowserLogin">
+          <text>手机号登录</text>
+        </view>
+
         <view class="divider"><text>其他方式</text></view>
 
         <view class="alt-btns">
-          <view class="btn-outline" @click="openBrowserLogin">
-            <text class="btn-outline-title">手机号 / 密码</text>
-            <text class="btn-outline-sub">未绑微信或忘记微信登录时用</text>
-          </view>
           <view class="btn-outline btn-outline-student" @click="openStudentLogin">
             <text class="btn-outline-title">孩子账号登录</text>
             <text class="btn-outline-sub">使用家长分配的训练账号</text>
@@ -88,13 +87,12 @@
           </view>
         </template>
 
-        <!-- 家长：切换登录方式 / 返回微信 → 在登录按钮上方 -->
+        <!-- 家长：切换登录方式 / 返回微信 → 在登录按钮上方，左右对齐输入框 -->
         <view v-if="form.role === 'parent'" class="form-links-above">
-          <text class="form-link" @click="toggleParentMode">
-            {{ parentMode === 'sms' ? '改用密码登录' : '改用验证码登录' }}
+          <text class="form-link form-link-left" @click="toggleParentMode">
+            {{ parentMode === 'sms' ? '密码登录' : '验证码登录' }}
           </text>
-          <text v-if="inWechat" class="form-link-sep">·</text>
-          <text v-if="inWechat" class="form-link" @click="backToWechatLogin">返回微信一键登录</text>
+          <text v-if="inWechat" class="form-link form-link-right" @click="backToWechatLogin">返回微信登录</text>
         </view>
 
         <!-- 学生：家长入口在登录按钮上方 -->
@@ -680,17 +678,16 @@ onUnmounted(() => {
   background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08);
   border-radius:20px; padding:24px 20px 18px; box-sizing:border-box; overflow:hidden;
 }
+.brand-head { margin-top:-20px; margin-bottom:0; }
 .logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:4px; }
 .logo-j { color:#dc2626; font-size:48px; font-weight:800; line-height:1; }
 .logo-nao, .logo-ai { color:var(--text); font-size:36px; font-weight:700; line-height:1; }
 .logo-ai { font-weight:300; }
 .subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; line-height:1.4; margin-bottom:2px; }
-.sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.4; margin-bottom:14px; opacity:0.85; }
-.login-main { margin-top:0; }
-.login-flow { padding-top:0; }
-.flow-title { display:block; text-align:center; color:var(--text); font-size:17px; font-weight:700; margin-bottom:6px; }
-.flow-desc { display:block; text-align:center; color:var(--text-dim); font-size:12px; line-height:1.5; margin-bottom:16px; padding:0 4px; }
-.divider { display:flex; align-items:center; gap:10px; margin:20px 0 14px; }
+.sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.4; margin-bottom:0; opacity:0.85; }
+.login-main { margin-top:20px; }
+.login-flow { margin-top:20px; padding-top:0; }
+.divider { display:flex; align-items:center; gap:10px; margin:16px 0 12px; }
 .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
 .divider text { color:var(--text-dim); font-size:11px; flex-shrink:0; }
 .alt-btns { display:flex; flex-direction:column; gap:10px; }
@@ -707,6 +704,11 @@ onUnmounted(() => {
 .btn-wechat { background:linear-gradient(135deg, #07c160, #06ad56); border-radius:14px; padding:14px; text-align:center; }
 .btn-wechat.off { opacity:0.5; }
 .btn-wechat text { color:#fff; font-size:16px; font-weight:700; }
+.btn-phone-login {
+  margin-top:10px; padding:13px; text-align:center; border-radius:14px;
+  border:1.5px solid var(--border); background:var(--bg-card);
+}
+.btn-phone-login text { color:var(--text); font-size:15px; font-weight:600; }
 .wechat-loading { text-align:center; padding:8px 0 4px; }
 .wechat-loading text { color:var(--accent); font-size:13px; }
 .input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:10px; border:1.5px solid var(--border); position:relative; z-index:2; }
@@ -729,9 +731,13 @@ onUnmounted(() => {
 .btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:13px; text-align:center; margin-top:4px; }
 .btn-login.off { opacity:0.5; }
 .btn-login text { color:#fff; font-size:16px; font-weight:700; }
-.form-links-above { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px 10px; margin:4px 0 10px; }
-.form-link { color:#a78bfa; font-size:13px; padding:4px 2px; }
-.form-link-sep { color:var(--text-dim); font-size:12px; opacity:0.5; }
+.form-links-above {
+  display:flex; align-items:center; justify-content:space-between;
+  width:100%; margin:4px 0 10px; box-sizing:border-box;
+}
+.form-link { color:#a78bfa; font-size:13px; padding:4px 0; }
+.form-link-left { text-align:left; flex:1; }
+.form-link-right { text-align:right; flex:1; }
 .btn-register {
   margin-top:10px; padding:13px; text-align:center; border-radius:14px;
   border:1.5px solid rgba(167,139,250,0.45); background:rgba(167,139,250,0.08);
