@@ -129,8 +129,13 @@ def get_captcha():
 @router.post("/parent/phone-check")
 def parent_phone_check(req: PhoneCheckRequest, request: Request, db: Session = Depends(get_db)):
     """手机号注册状态查询 — 需图形验证码 + IP 限流，降低枚举风险（B10）。"""
-    from app.services.auth_challenge_store import challenge_get_count, challenge_incr
-    from app.services.parent_identity_service import resolve_parent_registration_state
+    from app.services.auth_challenge_store import (
+        challenge_get_count,
+        challenge_incr,
+    )
+    from app.services.parent_identity_service import (
+        resolve_parent_registration_state,
+    )
 
     ip, _ = _auth_ctx(request, None)
     ip_key = f"auth:phone_check:ip:{ip or 'unknown'}"

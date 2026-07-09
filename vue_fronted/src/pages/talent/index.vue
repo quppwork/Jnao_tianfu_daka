@@ -497,6 +497,9 @@ async function doSubmitReport() {
     if (json.talent_locked) {
       url += `&talent_locked=1&lock_message=${encodeURIComponent(json.lock_message || '')}`
     }
+    if (json.talent_last_chance) {
+      url += `&talent_last_chance=1&current_talent=${encodeURIComponent(json.current_talent || '')}&new_talent=${encodeURIComponent(json.data?.talent || '')}`
+    }
     if (fromOnboarding.value) {
       url += `&from=onboarding&student_type=${encodeURIComponent(studentTypeFromOnboarding.value || 'new')}`
     }

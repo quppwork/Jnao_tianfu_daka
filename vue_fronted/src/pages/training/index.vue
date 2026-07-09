@@ -237,6 +237,7 @@
               <view class="et-switch" :class="{ on: es.inPlan }" @click="toggleElective(es.skill)">
                 <view class="et-knob"></view>
               </view>
+              <view class="et-info" @click.stop="showElectiveInfoModal(es.skill)"><text>ⓘ</text></view>
             </view>
             <text class="elective-hint">开启后将在训练计划中增加对应的训练环节，可随时开关</text>
       </view>
@@ -289,6 +290,7 @@
 
             <text class="lock-tip">{{ phaseTip(phase) }}</text>
 
+            <template v-if="!isPerceptionPhase(phase)">
             <view class="checkin-block" :class="{ locked: !phaseClicked[phase.block] }">
               <view v-if="!phaseClicked[phase.block]" class="checkin-lock-overlay">
                 <text class="checkin-lock-text">🔒 请先观看音频/视频</text>
@@ -297,6 +299,11 @@
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
               </view>
             </view>
+            </template>
+            <template v-else>
+              <text v-if="phase.allDone" class="perception-done-text">✅ 多元感知训练已完成 · 点击音频可回听</text>
+              <text v-else class="perception-done-text">点击音频即可完成多元感知训练</text>
+            </template>
           </view>
         </view>
       </template>
@@ -1707,6 +1714,52 @@ async function toggleElective(skill) {
   }
 }
 
+// ── 选修说明 ──
+const ELECTIVE_INFO = {
+  '感知力': {
+    title: '🧩 多元感知是什么？',
+    desc: '多元感知是双人互动训练，需要家长或同学配合完成。通过听觉、视觉等多感官刺激，提升专注力和感知能力。',
+    age: '适合各年龄段孩子训练，低龄儿童可在家长陪伴下进行。',
+    how: '开启后，训练计划中将出现「多元感知」环节，按提示播放音频并完成互动即可。',
+  },
+}
+function showElectiveInfoModal(skill) {
+  const info = ELECTIVE_INFO[skill]
+  if (!info) return
+  uni.showModal({
+    title: info.title,
+    content: info.desc + '\n\n' + info.age + '\n\n' + info.how,
+    showCancel: false,
+    confirmText: '知道了',
+  })
+}
+
+function isPerceptionPhase(phase) {
+  if (!phase?.items?.length) return false
+  const item = phase.items[0]
+  return item.item_type === 'perception' || (item.title || '').includes('多元感知')
+}
+
+async function autoCompletePerception(phase) {
+  if (phase.allDone || phaseRecordIds.value[phase.block]) return
+  if (perceptionSubmitting.value) return
+  const item = phase.items[0]
+  if (!item?.id) return
+  perceptionSubmitting.value = true
+  try {
+    const uid = await ensureChildUser()
+    const cardsList = [{ name: '多元感知', time: item.duration_min || '', content: '已听音频', phaseBlock: phase.block }]
+    await persistPhaseCheckin(phase.block, cardsList)
+    await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
+    await loadTodayPlan(true)
+    uni.showToast({ title: '✅ 多元感知训练完成！', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '提交失败', icon: 'none', duration: 2500 })
+  } finally {
+    perceptionSubmitting.value = false
+  }
+}
+
 // ── 方案编辑 ──
 const showSubmitConfirm = ref(false)
 const pendingSubmitBlock = ref(null)
@@ -1842,6 +1895,7 @@ const phaseClicked = ref({})
 const primaryCheckinRecordId = ref(null)
 const planJustGenerated = ref(false)
 const checkinSubmitting = ref(false)
+const perceptionSubmitting = ref(false)
 
 const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
 const checkedPhaseCount = computed(() => new Set(submittedCards.value.map(c => c.phaseBlock).filter(Boolean)).size)
@@ -1892,7 +1946,11 @@ function isPhaseUnlocked(block) {
 
 const planExpanded = ref({})
 const visiblePhases = computed(() => {
-  return planPhases.value.filter(p => !p.allDone && !phaseRecordIds.value[p.block])
+  return planPhases.value.filter(p => {
+    if (p.allDone && !isPerceptionPhase(p)) return false
+    if (phaseRecordIds.value[p.block] && !isPerceptionPhase(p)) return false
+    return true
+  })
 })
 
 function togglePhase(block) {
@@ -1968,8 +2026,20 @@ function parseItemInstructions(instructions) {
   return {}
 }
 
-const planTotalCount = computed(() => (todayPlan.value?.items || []).length)
-const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => i.checkin_status === 'done').length)
+/** 排除选修/多元感知等不需要打卡的项，避免进度卡住 */
+function itemNeedsCheckin(item) {
+  if (!item) return false
+  const inst = parseItemInstructions(item.instructions)
+  // 选修 / 多元感知 / blocks_next=false 的项不参与完成计数
+  if (inst.item_type === 'elective' || inst.item_type === 'perception') return false
+  if (inst.blocks_next === false) return false
+  if (item.ability_type === 'elective') return false
+  if (item.item_type === 'elective' || item.item_type === 'perception') return false
+  return true
+}
+
+const planTotalCount = computed(() => (todayPlan.value?.items || []).filter(itemNeedsCheckin).length)
+const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => itemNeedsCheckin(i) && i.checkin_status === 'done').length)
 const planProgressPct = computed(() => {
   if (!planTotalCount.value) return 0
   return Math.round((planCompletedCount.value / planTotalCount.value) * 100)
@@ -2161,7 +2231,7 @@ function scrollToPhase(block) {
   body.scrollTo({ top: body.scrollTop + targetTop - bodyTop - 12, behavior: 'smooth' })
 }
 
-function openPhaseMediaItem(item, phase) {
+async function openPhaseMediaItem(item, phase) {
   if (!item) return
   if (!phase.unlocked && !devMode.value) {
     const idx = planPhases.value.findIndex(p => p.block === phase.block)
@@ -2169,8 +2239,17 @@ function openPhaseMediaItem(item, phase) {
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
-  // 记录该阶段已被点击，解锁打卡按钮
   phaseClicked.value = { ...phaseClicked.value, [phase.block]: true }
+
+  // 多元感知：首次点击自动完成，完成后可回听不重复提交
+  if (isPerceptionPhase(phase)) {
+    if (!phase.allDone) {
+      await autoCompletePerception(phase)
+    }
+    openMediaItem(item)
+    return
+  }
+
   openMediaItem(item)
 }
 
@@ -3303,6 +3382,10 @@ function triggerGlitch() {
 .et-switch.on { background:#00d2ff; }
 .et-knob { width:16px; height:16px; border-radius:50%; background:var(--text); position:absolute; top:2px; left:2px; transition:left 0.2s; }
 .et-switch.on .et-knob { background:#fff; left:18px; }
+.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(0,210,255,0.06); }
+.et-info text { color:rgba(0,210,255,0.6); font-size:13px; font-weight:700; line-height:1; }
+.et-info:active { background:rgba(0,210,255,0.12); }
+.et-info:active text { color:#00d2ff; }
 .et-arrow { color:rgba(255,255,255,0.3); font-size:16px; font-weight:300; margin-left:auto; flex-shrink:0; }
 .elective-section-label { width:100%; color:rgba(255,255,255,0.4); font-size:11px; font-weight:500; margin-bottom:2px; }
 .elective-hint { width:100%; color:rgba(255,255,255,0.3); font-size:12px; line-height:1.4; margin-top:2px; }
@@ -3373,6 +3456,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .checkin-block.locked { opacity:0.6; }
 .media-lock-overlay, .checkin-lock-overlay { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; pointer-events:none; }
 .media-lock-text, .checkin-lock-text { background:rgba(11,17,30,0.92); border:1px solid rgba(0,210,255,0.25); color:#00d2ff; font-size:12px; padding:8px 14px; border-radius:999px; }
+.perception-done-text { display:block; text-align:center; color:rgba(0,210,255,0.5); font-size:12px; padding:8px 4px; }
 .step-locked { cursor:not-allowed; }
 [data-theme="white"] .nav-dev { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .nav-dev text { color:#9ca3af; }

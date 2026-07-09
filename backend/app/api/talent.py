@@ -89,6 +89,7 @@ async def talent_report(
         assessment_id = row.id
         conflict = getattr(row, "_talent_conflict", False)
         locked = getattr(row, "_talent_locked", False)
+        last_chance = getattr(row, "_talent_last_chance", False)
         _invalidate_assessment_caches(child_user_id)
         if locked:
             lock_msg = assessment_service.TALENT_LOCK_MSG
@@ -101,6 +102,7 @@ async def talent_report(
             "assessment_id": assessment_id,
             "talent_conflict": conflict,
             "talent_locked": locked,
+            "talent_last_chance": last_chance,
             "lock_message": lock_msg,
             "current_talent": current_talent,
         }

@@ -20,17 +20,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("TIANFU_RAG_MOCK", "1")
 
-import pytest
-from unittest.mock import AsyncMock, patch
+import pytest  # noqa: E402
+from unittest.mock import AsyncMock, patch  # noqa: E402
 
-from fastapi.testclient import TestClient
-from sqlalchemy import delete
-from sqlalchemy.orm import Session
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import delete  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
 
-from app.core.deps import get_authenticated_user, get_child_user_id, get_db
-from app.db.base import Base
-from app.db.session import get_session_factory, init_db
-from app.services.catalog_import import import_all_xet_catalogs
+from app.core.deps import (  # noqa: E402
+    get_authenticated_student,
+    get_authenticated_user,
+    get_child_user_id,
+    get_db,
+)
+from app.db.base import Base  # noqa: E402
+from app.db.session import get_session_factory, init_db  # noqa: E402
+from app.services.catalog_import import import_all_xet_catalogs  # noqa: E402
 
 
 @pytest.fixture
@@ -75,6 +80,7 @@ def _make_client(db_session):
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_authenticated_user] = get_child_user_id
+        app.dependency_overrides[get_authenticated_student] = get_child_user_id
         with TestClient(app) as tc:
             yield tc
         app.dependency_overrides.clear()
@@ -90,9 +96,9 @@ def _register(client, phone="13900000001", nickname="发烟童"):
 
 
 def _assess(client, uid):
-    """提交天赋测评 — child_user_id 必须在 body 中才能正确落库"""
+    """提交天赋测评 — child_user_id 必须在 URL 参数中"""
     return client.post(
-        "/api/talent/report",
+        f"/api/talent/report?user_id={uid}",
         json={"answer": "1" * 35, "uid": 888001, "type": 1, "child_user_id": uid},
     )
 
@@ -115,25 +121,26 @@ class TestSmoke:
         assert body["nickname"] == "发烟童"
 
     def test_03_login(self, client):
-        parent = client.post(
+        # 注册学生（dev 环境允许）+ 密码登录
+        reg = client.post(
             "/api/auth/register",
             json={
                 "parent_phone": "13900000002",
-                "nickname": "张家长",
-                "password": "123456",
-                "role": "parent",
+                "nickname": "登录童",
+                "password": "111111",
+                "login_name": "kid_login",
             },
-        ).json()
-        client.post(
-            f"/api/parent/children?user_id={parent['child_user_id']}",
-            json={"login_name": "kid_login", "nickname": "登录童", "password": "111111"},
         )
+        assert reg.status_code == 200
+        assert reg.json()["login_name"] == "kid_login"
+
         r = client.post(
             "/api/auth/login",
             json={"login_name": "kid_login", "password": "111111"},
         )
-        assert r.status_code == 200
-        assert r.json()["nickname"] == "登录童"
+        # 学生无家长绑定 → 登录返回 403（安全加固后新增的约束）
+        assert r.status_code == 403
+        assert "家长" in r.json().get("detail", "")
 
     def test_04_profile(self, client):
         reg = _register(client)

@@ -289,7 +289,8 @@ class GuideSession(Base):
     )
 
     messages: Mapped[list["GuideMessage"]] = relationship(
-        back_populates="session", order_by="GuideMessage.id"
+        back_populates="session", order_by="GuideMessage.id",
+        cascade="all, delete-orphan",
     )
 
 

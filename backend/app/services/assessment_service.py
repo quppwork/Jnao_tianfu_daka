@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.talent_mapping import (
@@ -131,8 +131,26 @@ def repair_onboarding_talent(db: Session, child_user_id: int) -> bool:
 
 
 def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
-    """当前可用于训练的天赋：JNAO 测评 > 引导页自选 > 无"""
+    """当前可用于训练的天赋：已锁定 > JNAO 测评 > 引导页自选 > 无"""
     repair_onboarding_talent(db, child_user_id)
+    user = db.get(ChildUser, child_user_id)
+    profile = dict(user.profile_json or {}) if user else {}
+
+    # 已锁定：有训练记录时必须使用 profile 中的天赋，不能从最新 assessment 读取
+    locked_code = profile.get("talent_locked_code")
+    if locked_code and has_training_records(db, child_user_id):
+        if profile.get("talent_code") and profile.get("talent_source"):
+            return {
+                "has_assessment": True,
+                "needs_assessment": False,
+                "assessment_id": profile.get("latest_assessment_id"),
+                "talent_primary": profile.get("talent_primary"),
+                "talent_tag": profile.get("talent_tag"),
+                "talent_code": profile.get("talent_code"),
+                "talent_source": profile.get("talent_source"),
+                "talent_locked": True,
+            }
+
     assessment = get_latest_assessment(db, child_user_id)
     if has_valid_talent(assessment):
         return {
@@ -158,8 +176,6 @@ def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
             "talent_code": self_code,
             "talent_source": "onboarding",
         }
-    user = db.get(ChildUser, child_user_id)
-    profile = dict(user.profile_json or {}) if user else {}
     if profile.get("talent_code") and profile.get("talent_source") in ("onboarding", "assessment"):
         return {
             "has_assessment": True,
@@ -287,18 +303,37 @@ def save_assessment(
     current_code = current_profile.get("talent_code")
     current_source = current_profile.get("talent_source", "")
 
+    # 有效测试次数（迷者不计），与个人配额比较（默认 2）
+    valid_assessment_count = db.scalar(
+        select(func.count()).select_from(TalentAssessment).where(
+            TalentAssessment.child_user_id == child_user_id,
+            TalentAssessment.talent_primary != "迷者",
+            TalentAssessment.talent_code.isnot(None),
+        )
+    ) or 0
+    quota = current_profile.get("talent_test_quota", 2)
+
     # 冲突检测：仅当 新测评结果 ≠ 自选天赋 时触发（JNAO 重测直接覆盖）
     talent_conflict = False
     talent_locked = False
+    talent_last_chance = False
     is_onboarding_source = current_source == "onboarding"
     if talent_code and current_code and talent_code != current_code:
-        if has_training_records(db, child_user_id):
-            # 有训练记录 → 锁定，不更新天赋
+        if has_training_records(db, child_user_id) or valid_assessment_count >= quota:
+            # 有训练记录 或 已达配额上限 → 锁定，不更新天赋
             talent_locked = True
+            if valid_assessment_count >= quota:
+                current_profile["talent_locked_code"] = current_code
+        elif valid_assessment_count == quota - 1:
+            # 配额内最后一次有效测试 → 允许更换，但是最后一次机会
+            talent_last_chance = True
         elif is_onboarding_source:
             # 自选天赋 vs JNAO 不同 → 标记冲突，等用户选择
             talent_conflict = True
         # else: JNAO 重测 → 直接覆盖，不触发冲突
+    elif talent_code and not current_code:
+        # 首次有效测试：迷者之后第一次有效测试，正常写入
+        pass
 
     assessed_at = datetime.now(timezone.utc)
     if report.get("create_time"):
@@ -329,9 +364,21 @@ def save_assessment(
     db.commit()
     db.refresh(record)
 
-    if not talent_locked and not talent_conflict:
+    if not talent_locked and not talent_conflict and not talent_last_chance:
         # 无冲突 → 正常同步天赋
         sync_child_user_talent(db, child_user_id)
+    elif talent_last_chance:
+        # 最后一次机会 → 暂存到 pending，等用户在前端确认后才生效
+        profile = dict(user.profile_json or {})
+        profile["pending_talent"] = {
+            "assessment_id": record.id,
+            "talent_code": talent_code,
+            "talent_tag": talent_tag,
+            "talent_primary": talent_primary,
+            "from_last_chance": True,
+        }
+        user.profile_json = profile
+        db.commit()
     elif talent_conflict:
         # 有冲突 → 暂存冲突信息到 profile，等用户选择
         profile = dict(user.profile_json or {})
@@ -343,7 +390,11 @@ def save_assessment(
         }
         user.profile_json = profile
         db.commit()
-    # talent_locked → 什么都不更新，仅存档测评
+    else:
+        # talent_locked → 锁定当前天赋到 profile，防 resolve_effective_talent 绕过
+        current_profile["talent_locked_code"] = current_code
+        user.profile_json = current_profile
+        db.commit()
 
     from app.services.training_service import refresh_today_plan_if_talent_changed
     if not talent_locked and not talent_conflict:
@@ -353,6 +404,7 @@ def save_assessment(
     # 在返回对象上附加冲突信息（非持久化字段）
     record._talent_conflict = talent_conflict
     record._talent_locked = talent_locked
+    record._talent_last_chance = talent_last_chance
     return record
 
 

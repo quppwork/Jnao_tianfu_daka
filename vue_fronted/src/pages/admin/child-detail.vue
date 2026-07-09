@@ -28,6 +28,23 @@
         <view class="stat"><text class="stat-num">{{ detail.active_sessions?.length || 0 }}</text><text class="stat-label">在线设备</text></view>
       </view>
 
+      <view class="card" style="margin-top:12px;">
+        <view class="row-line" style="justify-content:space-between;">
+          <text class="label">🧪 天赋测试配额</text>
+          <view style="display:flex;align-items:center;gap:8px;">
+            <text class="val" style="font-weight:700;">{{ quotaInfo.remaining }} / {{ quotaInfo.quota }}</text>
+            <text class="val" style="font-size:11px;color:var(--text-dim);">(已用 {{ quotaInfo.used }})</text>
+          </view>
+        </view>
+        <view style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+          <input v-model.number="quotaForm.quota" type="number" placeholder="新配额" class="inp" style="flex:1;min-width:0;" />
+          <view class="btn-primary" @click="updateQuota" style="padding:6px 14px;font-size:13px;flex-shrink:0;">
+            <text>更新配额</text>
+          </view>
+        </view>
+        <text v-if="quotaForm.msg" class="hint" style="margin-top:4px;">{{ quotaForm.msg }}</text>
+      </view>
+
       <view v-if="detail.training_progress?.skills" class="section">
         <text class="section-title">训练进度</text>
         <view v-for="(sk, name) in detail.training_progress.skills" :key="name" class="mini-row">
@@ -95,6 +112,8 @@ import {
   deleteAdminChild,
   unbindAdminChild,
   restoreAdminChild,
+  fetchChildTalentQuota,
+  updateChildTalentQuota,
 } from '@/utils/userApi.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 
@@ -104,6 +123,32 @@ const loading = ref(true)
 const detail = ref(null)
 const showEdit = ref(false)
 const form = ref({})
+const quotaInfo = ref({ quota: 2, used: 0, remaining: 2 })
+const quotaForm = ref({ quota: 2, msg: '' })
+
+async function loadQuota() {
+  if (!childId.value || !adminId.value) return
+  try {
+    quotaInfo.value = await fetchChildTalentQuota(adminId.value, childId.value)
+    quotaForm.value.quota = quotaInfo.value.talent_test_quota
+  } catch (_) { /* ignore */ }
+}
+
+async function updateQuota() {
+  const q = parseInt(quotaForm.value.quota, 10)
+  if (isNaN(q) || q < 0) {
+    quotaForm.value.msg = '请输入有效配额（≥0）'
+    return
+  }
+  try {
+    const res = await updateChildTalentQuota(adminId.value, childId.value, q)
+    quotaInfo.value = res
+    quotaForm.value.quota = res.talent_test_quota
+    quotaForm.value.msg = `已更新！剩余 ${res.remaining} 次`
+  } catch (e) {
+    quotaForm.value.msg = e.message || '更新失败'
+  }
+}
 
 onLoad((q) => {
   childId.value = Number(q.id)
@@ -125,6 +170,7 @@ async function load() {
   try {
     detail.value = await fetchAdminChildDetail(adminId.value, childId.value)
     form.value = { ...detail.value, password: '' }
+    loadQuota()
   } catch (_) {
     uni.showToast({ title: '加载失败', icon: 'none' })
     goBack()
