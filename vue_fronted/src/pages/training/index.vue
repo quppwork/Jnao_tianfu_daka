@@ -301,7 +301,8 @@
             </view>
             </template>
             <template v-else>
-              <text class="perception-done-text">点击音频即可完成多元感知训练</text>
+              <text v-if="phase.allDone" class="perception-done-text">✅ 多元感知训练已完成 · 点击音频可回听</text>
+              <text v-else class="perception-done-text">点击音频即可完成多元感知训练</text>
             </template>
           </view>
         </view>
@@ -1741,8 +1742,10 @@ function isPerceptionPhase(phase) {
 
 async function autoCompletePerception(phase) {
   if (phase.allDone || phaseRecordIds.value[phase.block]) return
+  if (perceptionSubmitting.value) return
   const item = phase.items[0]
   if (!item?.id) return
+  perceptionSubmitting.value = true
   try {
     const uid = await ensureChildUser()
     const cardsList = [{ name: '多元感知', time: item.duration_min || '', content: '已听音频', phaseBlock: phase.block }]
@@ -1752,6 +1755,8 @@ async function autoCompletePerception(phase) {
     uni.showToast({ title: '✅ 多元感知训练完成！', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '提交失败', icon: 'none', duration: 2500 })
+  } finally {
+    perceptionSubmitting.value = false
   }
 }
 
@@ -1890,6 +1895,7 @@ const phaseClicked = ref({})
 const primaryCheckinRecordId = ref(null)
 const planJustGenerated = ref(false)
 const checkinSubmitting = ref(false)
+const perceptionSubmitting = ref(false)
 
 const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
 const checkedPhaseCount = computed(() => new Set(submittedCards.value.map(c => c.phaseBlock).filter(Boolean)).size)
@@ -1940,7 +1946,11 @@ function isPhaseUnlocked(block) {
 
 const planExpanded = ref({})
 const visiblePhases = computed(() => {
-  return planPhases.value.filter(p => !p.allDone && !phaseRecordIds.value[p.block])
+  return planPhases.value.filter(p => {
+    if (p.allDone && !isPerceptionPhase(p)) return false
+    if (phaseRecordIds.value[p.block] && !isPerceptionPhase(p)) return false
+    return true
+  })
 })
 
 function togglePhase(block) {
@@ -2016,8 +2026,20 @@ function parseItemInstructions(instructions) {
   return {}
 }
 
-const planTotalCount = computed(() => (todayPlan.value?.items || []).length)
-const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => i.checkin_status === 'done').length)
+/** 排除选修/多元感知等不需要打卡的项，避免进度卡住 */
+function itemNeedsCheckin(item) {
+  if (!item) return false
+  const inst = parseItemInstructions(item.instructions)
+  // 选修 / 多元感知 / blocks_next=false 的项不参与完成计数
+  if (inst.item_type === 'elective' || inst.item_type === 'perception') return false
+  if (inst.blocks_next === false) return false
+  if (item.ability_type === 'elective') return false
+  if (item.item_type === 'elective' || item.item_type === 'perception') return false
+  return true
+}
+
+const planTotalCount = computed(() => (todayPlan.value?.items || []).filter(itemNeedsCheckin).length)
+const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => itemNeedsCheckin(i) && i.checkin_status === 'done').length)
 const planProgressPct = computed(() => {
   if (!planTotalCount.value) return 0
   return Math.round((planCompletedCount.value / planTotalCount.value) * 100)
@@ -2209,7 +2231,7 @@ function scrollToPhase(block) {
   body.scrollTo({ top: body.scrollTop + targetTop - bodyTop - 12, behavior: 'smooth' })
 }
 
-function openPhaseMediaItem(item, phase) {
+async function openPhaseMediaItem(item, phase) {
   if (!item) return
   if (!phase.unlocked && !devMode.value) {
     const idx = planPhases.value.findIndex(p => p.block === phase.block)
@@ -2219,9 +2241,11 @@ function openPhaseMediaItem(item, phase) {
   }
   phaseClicked.value = { ...phaseClicked.value, [phase.block]: true }
 
-  // 多元感知：点击即完成，无需打卡
+  // 多元感知：首次点击自动完成，完成后可回听不重复提交
   if (isPerceptionPhase(phase)) {
-    autoCompletePerception(phase)
+    if (!phase.allDone) {
+      await autoCompletePerception(phase)
+    }
     openMediaItem(item)
     return
   }
