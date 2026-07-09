@@ -1,7 +1,7 @@
 import pytest
 """QA Agent 分学科提示词测试"""
 
-from app.agents.qa.prompt_builder import build_qa_system_prompt
+from app.agents.qa.prompt_builder import build_learner_context_block, build_qa_system_prompt
 from app.agents.qa.subjects.registry import get_subject_agent
 
 
@@ -24,11 +24,12 @@ class TestSubjectAgents:
 
 class TestBuildPromptBySubject:
     def test_math_prompt_includes_zhangyu_and_math_style(self):
-        prompt = build_qa_system_prompt(subject="数学", school_stage="junior", talent_primary="学者")
+        prompt = build_qa_system_prompt(subject="数学", school_stage="junior")
         assert "张宇老师" in prompt
         assert "数学" in prompt
-        assert "学者" in prompt
         assert "初中" in prompt
+        learner = build_learner_context_block(talent_primary="学者")
+        assert "学者" in learner
 
     def test_chinese_prompt_includes_evidence_rule(self):
         prompt = build_qa_system_prompt(subject="语文", school_stage="primary_high")

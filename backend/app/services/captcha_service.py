@@ -1,9 +1,10 @@
-"""图形验证码 — 发短信前人机校验"""
+"""图形验证码 — 发短信前人机校验（PNG 渲染，答案仅存服务端）"""
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import os
 import random
 import secrets
@@ -11,11 +12,19 @@ import string
 
 from fastapi import HTTPException
 
-from app.services.auth_challenge_store import challenge_delete, challenge_get, challenge_set
+from app.services.auth_challenge_store import (
+    challenge_delete,
+    challenge_get,
+    challenge_get_count,
+    challenge_incr,
+    challenge_set,
+)
 
 CAPTCHA_TTL = 120
 CAPTCHA_FAIL_LOCK = 5
 CAPTCHA_LOCK_TTL = 900
+CAPTCHA_IP_LIMIT = int(os.getenv("CAPTCHA_IP_LIMIT", "15"))
+CAPTCHA_IP_WINDOW = 60
 _KEY_PREFIX = "auth:captcha:"
 
 
@@ -27,30 +36,70 @@ def _hash_answer(text: str) -> str:
     return hashlib.sha256(text.strip().lower().encode()).hexdigest()
 
 
-def _make_svg(text: str) -> str:
-  lines = []
-  for i, ch in enumerate(text):
-    x = 18 + i * 24 + random.randint(-3, 3)
-    y = 26 + random.randint(-4, 4)
-    rot = random.randint(-25, 25)
-    color = f"rgb({random.randint(30,120)},{random.randint(30,120)},{random.randint(30,120)})"
-    lines.append(
-      f'<text x="{x}" y="{y}" fill="{color}" font-size="22" font-family="Arial,sans-serif" '
-      f'font-weight="700" transform="rotate({rot} {x} {y})">{ch}</text>'
-    )
-  noise = "".join(
-    f'<line x1="{random.randint(0,120)}" y1="{random.randint(0,40)}" '
-    f'x2="{random.randint(0,120)}" y2="{random.randint(0,40)}" stroke="#999" stroke-width="1" opacity="0.5"/>'
-    for _ in range(6)
-  )
-  svg = (
-    '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40">'
-    f'<rect width="120" height="40" fill="#f3f4f6" rx="4"/>{noise}{"".join(lines)}</svg>'
-  )
-  return base64.b64encode(svg.encode("utf-8")).decode("ascii")
+def check_captcha_rate_limit(client_ip: str) -> None:
+    ip = (client_ip or "unknown").strip() or "unknown"
+    key = f"auth:captcha:ip:{ip}"
+    if challenge_get_count(key) >= CAPTCHA_IP_LIMIT:
+        raise HTTPException(429, "验证码请求过于频繁，请稍后再试")
+    challenge_incr(key, CAPTCHA_IP_WINDOW)
 
 
-def create_captcha() -> dict:
+def _make_png(text: str) -> str:
+    from PIL import Image, ImageDraw, ImageFont
+
+    width, height = 140, 48
+    img = Image.new("RGB", (width, height), (243, 244, 246))
+    draw = ImageDraw.Draw(img)
+
+    for _ in range(8):
+        draw.line(
+            (
+                random.randint(0, width),
+                random.randint(0, height),
+                random.randint(0, width),
+                random.randint(0, height),
+            ),
+            fill=(
+                random.randint(120, 200),
+                random.randint(120, 200),
+                random.randint(120, 200),
+            ),
+            width=1,
+        )
+    for _ in range(40):
+        draw.point(
+            (random.randint(0, width - 1), random.randint(0, height - 1)),
+            fill=(
+                random.randint(80, 180),
+                random.randint(80, 180),
+                random.randint(80, 180),
+            ),
+        )
+
+    try:
+        font = ImageFont.truetype("arial.ttf", 24)
+    except OSError:
+        font = ImageFont.load_default()
+
+    x = 12
+    for ch in text:
+        y = random.randint(8, 16)
+        color = (
+            random.randint(20, 100),
+            random.randint(20, 100),
+            random.randint(20, 100),
+        )
+        draw.text((x, y), ch, fill=color, font=font)
+        x += 28
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def create_captcha(*, client_ip: str = "") -> dict:
+    check_captcha_rate_limit(client_ip)
+
     if _is_mock():
         captcha_id = "mock"
         challenge_set(
@@ -60,7 +109,8 @@ def create_captcha() -> dict:
         )
         return {
             "captcha_id": captcha_id,
-            "image_base64": _make_svg("0000"),
+            "image_base64": _make_png("0000"),
+            "image_format": "png",
             "expires_in": CAPTCHA_TTL,
         }
 
@@ -73,7 +123,8 @@ def create_captcha() -> dict:
     )
     return {
         "captcha_id": captcha_id,
-        "image_base64": _make_svg(text),
+        "image_base64": _make_png(text),
+        "image_format": "png",
         "expires_in": CAPTCHA_TTL,
     }
 

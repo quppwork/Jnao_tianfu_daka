@@ -197,18 +197,18 @@ class TestUnbindChild:
         }
 
     def test_unbind_parent_id_rejected(self, client: TestClient, db_session: Session):
-        from tests.test_parent_auth import _register_parent
+        from tests.test_parent_auth import STRONG_PWD, _register_parent
 
         auth = self._admin_auth(client)
-        parent = _register_parent(client, "13900008804", password="123456")
+        parent = _register_parent(client, "13900008804", password=STRONG_PWD)
         res = client.delete(f"/api/admin/children/{parent['child_user_id']}/bind", **auth)
         assert res.status_code == 404
 
     def test_unbind_clears_parent_fields(self, client: TestClient, db_session: Session):
-        from tests.test_parent_auth import _parent_auth, _register_parent
+        from tests.test_parent_auth import STRONG_PWD, _parent_auth, _register_parent
 
         auth = self._admin_auth(client)
-        parent = _register_parent(client, "13900008805", password="123456")
+        parent = _register_parent(client, "13900008805", password=STRONG_PWD)
         pauth = _parent_auth(parent)
         child = client.post(
             "/api/parent/children",

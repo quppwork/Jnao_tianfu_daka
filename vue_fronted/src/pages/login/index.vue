@@ -54,16 +54,16 @@
           </view>
         </view>
 
-        <template v-if="form.role === 'student'">
+        <template v-if="form.role === 'student'" key="login-student">
           <view class="input-wrap">
             <input class="login-input" v-model="form.loginName" placeholder="孩子账号" :disabled="loginBusy" />
           </view>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.password" placeholder="密码" type="password" :disabled="loginBusy" />
+            <input class="login-input" v-model="form.studentPassword" placeholder="密码" type="password" :disabled="loginBusy" />
           </view>
         </template>
 
-        <template v-else-if="parentMode === 'sms'">
+        <template v-else-if="parentMode === 'sms'" key="login-parent-sms">
           <view class="input-wrap">
             <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
@@ -75,12 +75,12 @@
           </view>
         </template>
 
-        <template v-else>
+        <template v-else key="login-parent-password">
           <view class="input-wrap">
             <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.password" placeholder="密码" type="password" maxlength="64" confirm-type="done" :disabled="loginBusy" />
+            <input class="login-input" v-model="form.parentPassword" placeholder="密码" type="password" maxlength="64" confirm-type="done" :disabled="loginBusy" />
           </view>
         </template>
 
@@ -191,7 +191,14 @@ import { consumePostLoginRoute, sanitizeAuthForLoginEntry, prepareRoleLoginEntry
 
 const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
-const form = ref({ phone: '', loginName: '', password: '', smsCode: '', role: 'student' })
+const form = ref({
+  phone: '',
+  loginName: '',
+  studentPassword: '',
+  parentPassword: '',
+  smsCode: '',
+  role: 'student',
+})
 const parentMode = ref('sms')
 const wechatLoading = ref(false)
 const inWechat = ref(false)
@@ -433,7 +440,7 @@ function startCooldown(sec = 60) {
 async function loadCaptcha() {
   const data = await fetchCaptcha()
   captchaId.value = data.captcha_id
-  captchaImage.value = `data:image/svg+xml;base64,${data.image_base64}`
+  captchaImage.value = `data:image/${data.image_format || 'png'};base64,${data.image_base64}`
   captchaCode.value = ''
 }
 
@@ -607,17 +614,17 @@ async function doLogin() {
           resetPhase()
           return null
         }
-        if (!form.value.password.trim() || form.value.password.trim().length < 6) {
+        if (!form.value.parentPassword.trim() || form.value.parentPassword.trim().length < 6) {
           uni.showToast({ title: '密码至少6位', icon: 'none' })
           resetPhase()
           return null
         }
-        const data = await loginParent(form.value.phone.trim(), form.value.password.trim())
+        const data = await loginParent(form.value.phone.trim(), form.value.parentPassword.trim())
         await completeAfterAuth(() => routeParentHome(data))
         return data
       }
 
-      if (!form.value.password.trim() || form.value.password.trim().length < 6) {
+      if (!form.value.studentPassword.trim() || form.value.studentPassword.trim().length < 6) {
         uni.showToast({ title: '密码至少6位', icon: 'none' })
         resetPhase()
         return null
@@ -627,7 +634,7 @@ async function doLogin() {
         resetPhase()
         return null
       }
-      const data = await loginStudent(form.value.loginName.trim(), form.value.password.trim())
+      const data = await loginStudent(form.value.loginName.trim(), form.value.studentPassword.trim())
       await completeAfterAuth(() => routeStudentHome(data))
       return data
     })

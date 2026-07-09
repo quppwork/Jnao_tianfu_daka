@@ -22,9 +22,18 @@ def _invalidate_qa_caches(child_user_id: int) -> None:
 from app.services.qa_coach import build_coach_metadata, fetch_recent_coach_context_for_prompt
 from app.services.qa_image_store import image_data_url
 from app.agents.qa.memory import QaMemory
-from app.agents.qa.prompt_builder import build_qa_system_prompt
+from app.agents.qa.prompt_builder import (
+    build_learner_context_block,
+    build_qa_system_prompt,
+    build_qa_user_message,
+)
 from app.agents.qa.router import check_subject_mismatch, mismatch_reply
 from app.agents.shared.stage import infer_school_stage
+from app.services.ai_output_guard import (
+    is_prompt_injection_attempt,
+    refusal_message,
+    sanitize_ai_reply,
+)
 from app.services.qa_rag_client import rag_chat
 from app.services.qa_rag_router import should_use_rag
 from app.services.text_sanitize import sanitize_subject, sanitize_text, session_title_from_message
@@ -137,6 +146,35 @@ async def chat(
     if not message and not image_id:
         raise ValueError("消息不能为空")
     subject = sanitize_subject(subject)
+
+    if is_prompt_injection_attempt(message):
+        user = db.get(ChildUser, child_user_id)
+        profile = _learner_profile(user)
+        assessment = get_latest_assessment(db, child_user_id)
+        talent = assessment.talent_primary if assessment else None
+        school_stage = infer_school_stage(
+            grade=profile.get("grade"),
+            age=profile.get("age"),
+            school_stage=profile.get("school_stage"),
+        )
+        if session_id:
+            session = db.get(QaSession, session_id)
+            if not session or session.child_user_id != child_user_id:
+                raise ValueError("会话不存在")
+        else:
+            session = create_session(db, child_user_id, subject)
+        QaMemory.append_message(db, session_id=session.id, role="user", content=message)
+        reply = refusal_message()
+        QaMemory.append_message(db, session_id=session.id, role="assistant", content=reply)
+        db.commit()
+        _invalidate_qa_caches(child_user_id)
+        return _public_chat_payload(
+            session_id=session.id,
+            reply=reply,
+            talent=talent,
+            school_stage=school_stage,
+        )
+
     user = db.get(ChildUser, child_user_id)
     profile = _learner_profile(user)
     assessment = get_latest_assessment(db, child_user_id)
@@ -232,17 +270,20 @@ async def chat(
         db, child_user_id, session_id=session.id
     )
 
-    system = build_qa_system_prompt(
-        school_stage=school_stage,
+    learner_context = build_learner_context_block(
         grade=profile.get("grade"),
         age=profile.get("age"),
         talent_primary=talent,
         report_json=report_json,
+        coach_context=coach_context,
+        ocr_preview=ocr_preview,
+    )
+    system = build_qa_system_prompt(
+        school_stage=school_stage,
         subject=subject or session.subject,
         rag_context=rag_context,
-        ocr_preview=ocr_preview,
-        coach_context=coach_context,
     )
+    user_message = build_qa_user_message(message, learner_context)
 
     user_row = QaMessage(
         session_id=session.id,
@@ -256,11 +297,13 @@ async def chat(
         session.title = session_title_from_message(message)
     db.commit()
 
-    if has_image and image_id:
+    if is_prompt_injection_attempt(message):
+        reply = refusal_message()
+    elif has_image and image_id:
         data_url = image_data_url(image_id, child_user_id)
         reply = await vision_chat_completion(
             system_prompt=system,
-            user_message=message,
+            user_message=user_message,
             image_data_url=data_url or "",
             history=history,
             max_tokens=900,
@@ -268,13 +311,14 @@ async def chat(
     else:
         reply = await chat_completion(
             system_prompt=system,
-            user_message=message,
+            user_message=user_message,
             history=history,
             max_tokens=900,
         )
 
     if not reply:
         reply = "抱歉，AI 暂时无法响应，请稍后再试。"
+    reply = sanitize_ai_reply(reply)
 
     assistant_meta = _assistant_meta_for_storage(
         coach_meta,
@@ -317,6 +361,41 @@ async def chat_stream(
         return
 
     subject = sanitize_subject(subject)
+
+    if is_prompt_injection_attempt(message):
+        user = db.get(ChildUser, child_user_id)
+        profile = _learner_profile(user)
+        assessment = get_latest_assessment(db, child_user_id)
+        talent = assessment.talent_primary if assessment else None
+        school_stage = infer_school_stage(
+            grade=profile.get("grade"),
+            age=profile.get("age"),
+            school_stage=profile.get("school_stage"),
+        )
+        if session_id:
+            session = db.get(QaSession, session_id)
+            if not session or session.child_user_id != child_user_id:
+                yield ("error", "会话不存在")
+                return
+        else:
+            session = create_session(db, child_user_id, subject)
+        QaMemory.append_message(db, session_id=session.id, role="user", content=message)
+        reply = refusal_message()
+        QaMemory.append_message(db, session_id=session.id, role="assistant", content=reply)
+        db.commit()
+        _invalidate_qa_caches(child_user_id)
+        yield ("token", reply)
+        yield (
+            "done",
+            _public_chat_payload(
+                session_id=session.id,
+                reply=reply,
+                talent=talent,
+                school_stage=school_stage,
+            ),
+        )
+        return
+
     user = db.get(ChildUser, child_user_id)
     profile = _learner_profile(user)
     assessment = get_latest_assessment(db, child_user_id)
@@ -415,17 +494,20 @@ async def chat_stream(
             rag_context = rag["answer"]
 
     coach_context = fetch_recent_coach_context_for_prompt(db, child_user_id, session_id=session.id)
-    system = build_qa_system_prompt(
-        school_stage=school_stage,
+    learner_context = build_learner_context_block(
         grade=profile.get("grade"),
         age=profile.get("age"),
         talent_primary=talent,
         report_json=report_json,
+        coach_context=coach_context,
+        ocr_preview=ocr_preview,
+    )
+    system = build_qa_system_prompt(
+        school_stage=school_stage,
         subject=subject or session.subject,
         rag_context=rag_context,
-        ocr_preview=ocr_preview,
-        coach_context=coach_context,
     )
+    user_message = build_qa_user_message(message, learner_context)
 
     user_row = QaMessage(
         session_id=session.id,
@@ -439,34 +521,39 @@ async def chat_stream(
         session.title = session_title_from_message(message)
     db.commit()
 
-    from app.services.doubao_client import chat_completion_stream, vision_chat_completion_stream
-
-    parts: list[str] = []
-    if has_image and image_id:
-        data_url = image_data_url(image_id, child_user_id) or ""
-        token_iter = vision_chat_completion_stream(
-            system_prompt=system,
-            user_message=message,
-            image_data_url=data_url,
-            history=history,
-            max_tokens=900,
-        )
+    if is_prompt_injection_attempt(message):
+        reply = refusal_message()
+        yield ("token", reply)
     else:
-        token_iter = chat_completion_stream(
-            system_prompt=system,
-            user_message=message,
-            history=history,
-            max_tokens=900,
-        )
+        from app.services.doubao_client import chat_completion_stream, vision_chat_completion_stream
 
-    async for token in token_iter:
-        if token.startswith("[ERROR]"):
-            yield ("error", token)
-            return
-        parts.append(token)
-        yield ("token", token)
+        parts: list[str] = []
+        if has_image and image_id:
+            data_url = image_data_url(image_id, child_user_id) or ""
+            token_iter = vision_chat_completion_stream(
+                system_prompt=system,
+                user_message=user_message,
+                image_data_url=data_url,
+                history=history,
+                max_tokens=900,
+            )
+        else:
+            token_iter = chat_completion_stream(
+                system_prompt=system,
+                user_message=user_message,
+                history=history,
+                max_tokens=900,
+            )
 
-    reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+        async for token in token_iter:
+            if token.startswith("[ERROR]"):
+                yield ("error", token)
+                return
+            parts.append(token)
+            yield ("token", token)
+
+        reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+        reply = sanitize_ai_reply(reply)
     assistant_meta = _assistant_meta_for_storage(
         coach_meta,
         rag_used=rag_used,

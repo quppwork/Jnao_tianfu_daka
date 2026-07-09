@@ -27,7 +27,7 @@
             <text>{{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}</text>
           </view>
         </view>
-        <view class="input-wrap"><input v-model="form.password" class="inp" placeholder="登录密码（可选，至少6位）" type="password" :disabled="loginBusy" /></view>
+        <view class="input-wrap"><input v-model="form.password" class="inp" placeholder="登录密码（可选，至少8位含字母数字）" type="password" :disabled="loginBusy" /></view>
         <view class="input-wrap"><input v-model="form.confirm" class="inp" placeholder="确认密码" type="password" :disabled="loginBusy" /></view>
 
         <view class="agree"><text>注册即代表您同意《用户协议》和《隐私政策》</text></view>
@@ -65,7 +65,6 @@ import {
   registerParentSms,
   fetchCaptcha,
   sendParentSmsCode,
-  checkParentPhone,
   saveAuthSession,
   parentNeedsProfileComplete,
   parentNeedsAccountReady,
@@ -93,7 +92,7 @@ onLoad((opts) => {
 async function loadCaptcha() {
   const data = await fetchCaptcha()
   captchaId.value = data.captcha_id
-  captchaImage.value = `data:image/svg+xml;base64,${data.image_base64}`
+  captchaImage.value = `data:image/${data.image_format || 'png'};base64,${data.image_base64}`
   captchaCode.value = ''
 }
 
@@ -137,43 +136,15 @@ async function confirmSendSms() {
   sendingSms.value = true
   try {
     const phone = form.value.phone.trim()
-    const st = await checkParentPhone(phone, {
-      captchaId: captchaId.value,
-      captchaCode: captchaCode.value.trim(),
-    })
-    if (st.registered) {
-      phoneBlocked.value = true
-      phoneHint.value = st.message || '该手机号已注册'
-      showCaptcha.value = false
-      if (st.action === 'wechat_login') {
-        uni.showModal({
-          title: '请使用微信登录',
-          content: st.message,
-          confirmText: '去登录',
-          success: (r) => { if (r.confirm) goLogin(phone) },
-        })
-      } else {
-        uni.showModal({
-          title: '已注册',
-          content: '该手机号已注册，是否前往登录？',
-          confirmText: '去登录',
-          success: (r) => { if (r.confirm) goLogin(phone) },
-        })
-      }
-      return
-    }
     await sendParentSmsCode(phone, 'register', {
       captchaId: captchaId.value,
       captchaCode: captchaCode.value.trim(),
     })
     showCaptcha.value = false
     startCooldown(60)
-    uni.showToast({ title: '验证码已发送', icon: 'none' })
+    uni.showToast({ title: '若号码有效，验证码已发送', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '发送失败', icon: 'none' })
-    if (e.status === 409) {
-      setTimeout(() => goLogin(form.value.phone.trim()), 800)
-    }
     await loadCaptcha()
   } finally {
     sendingSms.value = false

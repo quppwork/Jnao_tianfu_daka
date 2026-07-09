@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/dev", tags=["dev"])
 
 def _require_dev_mode() -> None:
     if not is_dev_api_enabled():
-        raise HTTPException(403, "开发者 API 已关闭（本地开发设 JNAO_DEV_MODE=1）")
+        raise HTTPException(403, "开发者 API 已关闭")
 
 
 @router.get("/training/status")

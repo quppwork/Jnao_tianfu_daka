@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.db.models import GuideMessage, GuideSession
 from app.agents.guide.persona import GREETING, SYSTEM_PROMPT
+from app.services.ai_output_guard import (
+    is_prompt_injection_attempt,
+    refusal_message,
+    sanitize_ai_reply,
+)
 from app.services.doubao_client import chat_completion
 
 
@@ -67,13 +72,17 @@ async def chat(
         session.title = message[:30]
     db.commit()
 
-    reply = await chat_completion(
-        system_prompt=SYSTEM_PROMPT,
-        user_message=message,
-        history=history,
-    )
-    if not reply:
-        reply = "抱歉，AI 暂时无法响应，请稍后再试。"
+    if is_prompt_injection_attempt(message):
+        reply = refusal_message()
+    else:
+        reply = await chat_completion(
+            system_prompt=SYSTEM_PROMPT,
+            user_message=message,
+            history=history,
+        )
+        if not reply:
+            reply = "抱歉，AI 暂时无法响应，请稍后再试。"
+        reply = sanitize_ai_reply(reply)
 
     db.add(GuideMessage(session_id=session.id, role="assistant", content=reply))
     db.commit()
@@ -97,22 +106,28 @@ async def chat_stream(
         session.title = message[:30]
     db.commit()
 
-    from app.services.doubao_client import chat_completion_stream
+    if is_prompt_injection_attempt(message):
+        reply = refusal_message()
+        yield ("token", reply)
+    else:
+        from app.services.doubao_client import chat_completion_stream
 
-    parts: list[str] = []
-    async for token in chat_completion_stream(
-        system_prompt=SYSTEM_PROMPT,
-        user_message=message,
-        history=history,
-        max_tokens=800,
-    ):
-        if token.startswith("[ERROR]"):
-            yield ("error", token)
-            return
-        parts.append(token)
-        yield ("token", token)
+        parts: list[str] = []
+        async for token in chat_completion_stream(
+            system_prompt=SYSTEM_PROMPT,
+            user_message=message,
+            history=history,
+            max_tokens=800,
+        ):
+            if token.startswith("[ERROR]"):
+                yield ("error", token)
+                return
+            parts.append(token)
+            yield ("token", token)
 
-    reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+        reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+        reply = sanitize_ai_reply(reply)
+
     db.add(GuideMessage(session_id=session.id, role="assistant", content=reply))
     db.commit()
     yield ("done", {"session_id": session.id, "reply": reply})

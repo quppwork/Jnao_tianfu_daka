@@ -35,12 +35,26 @@ PHONE_RE = re.compile(r"^1\d{10}$")
 SMS_TTL = 300
 SMS_SEND_INTERVAL = 60
 SMS_DAILY_PER_PHONE = 10
-SMS_HOURLY_PER_IP = 20
+SMS_HOURLY_PER_IP = int(os.getenv("SMS_HOURLY_PER_IP", "5"))
 SMS_MAX_VERIFY_FAIL = 5
 SMS_VERIFY_LOCK_TTL = 900
 SCENE_LOGIN = "login"
 SCENE_REGISTER = "register"
 SCENE_BIND = "bind"
+
+SMS_OK_MESSAGE = "若号码有效，验证码已发送"
+
+
+def _unified_sms_response(*, debug_code: str | None = None) -> dict:
+    out: dict = {
+        "ok": True,
+        "message": SMS_OK_MESSAGE,
+        "expires_in": SMS_TTL,
+        "resend_after": SMS_SEND_INTERVAL,
+    }
+    if debug_code:
+        out["debug_code"] = debug_code
+    return out
 
 
 def _is_mock() -> bool:
@@ -218,41 +232,46 @@ def send_sms_code(
     if scene not in (SCENE_LOGIN, SCENE_REGISTER, SCENE_BIND):
         raise HTTPException(400, "无效的发送场景")
 
+    if scene in (SCENE_LOGIN, SCENE_REGISTER):
+        if not captcha_id or not captcha_code:
+            raise HTTPException(400, "请先完成图形验证")
+        verify_captcha(captcha_id, captcha_code, consume=True)
+
     check_auth_allowed(db, client_ip=client_ip, phone=phone, device_id=device_id)
+    _check_send_rate(phone, client_ip)
 
-    from app.services.parent_identity_service import (
-        assert_can_send_login_sms,
-        assert_parent_can_register,
-    )
-
+    should_send = True
     if scene == SCENE_LOGIN:
-        assert_can_send_login_sms(db, phone)
-        if not captcha_id or not captcha_code:
-            raise HTTPException(400, "请先完成图形验证")
-        verify_captcha(captcha_id, captcha_code, consume=True)
+        from app.services.parent_identity_service import assert_can_send_login_sms
+
+        try:
+            assert_can_send_login_sms(db, phone)
+        except HTTPException:
+            should_send = False
     elif scene == SCENE_REGISTER:
-        assert_parent_can_register(db, phone)
-        if not captcha_id or not captcha_code:
-            raise HTTPException(400, "请先完成图形验证")
-        verify_captcha(captcha_id, captcha_code, consume=True)
+        from app.services.parent_identity_service import assert_parent_can_register
+
+        try:
+            assert_parent_can_register(db, phone)
+        except HTTPException:
+            should_send = False
     elif scene == SCENE_BIND:
         pass
-    # 登录/注册发短信均需图形验证码 + 限流
 
-    _check_send_rate(phone, client_ip)
-    code = _generate_code()
-    challenge_set(
-        _sms_key(scene, phone),
-        {"code_hash": _hash_code(code), "fail_count": 0},
-        SMS_TTL,
-    )
-    _record_send(phone, client_ip)
-    _dispatch_sms(phone, code, scene)
+    debug_code = None
+    if should_send:
+        code = _generate_code()
+        challenge_set(
+            _sms_key(scene, phone),
+            {"code_hash": _hash_code(code), "fail_count": 0},
+            SMS_TTL,
+        )
+        _record_send(phone, client_ip)
+        _dispatch_sms(phone, code, scene)
+        if _is_mock() and os.getenv("SMS_MOCK_EXPOSE", "").strip() in ("1", "true", "yes"):
+            debug_code = code
 
-    out: dict = {"ok": True, "expires_in": SMS_TTL, "resend_after": SMS_SEND_INTERVAL}
-    if _is_mock() and os.getenv("SMS_MOCK_EXPOSE", "").strip() in ("1", "true", "yes"):
-        out["debug_code"] = code
-    return out
+    return _unified_sms_response(debug_code=debug_code)
 
 
 def verify_sms_code(phone: str, sms_code: str, scene: str) -> None:

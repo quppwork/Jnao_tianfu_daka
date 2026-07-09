@@ -3,7 +3,7 @@ import pytest
 """答疑 coach_hint / mistake_pattern 跨轮复用"""
 
 from app.db.models import QaMessage, QaSession
-from app.agents.qa.prompt_builder import build_qa_system_prompt
+from app.agents.qa.prompt_builder import build_learner_context_block, build_qa_system_prompt
 from app.services.qa_coach import fetch_recent_coach_context_for_prompt
 
 
@@ -27,5 +27,7 @@ def test_fetch_recent_coach_context_from_meta(db_session, registered_user):
     assert "想太多" in ctx
     assert "思者型" not in ctx
 
-    prompt = build_qa_system_prompt(subject="数学", coach_context=ctx)
-    assert "想太多" in prompt
+    learner_ctx = build_learner_context_block(coach_context=ctx)
+    assert "想太多" in learner_ctx
+    prompt = build_qa_system_prompt(subject="数学")
+    assert "想太多" not in prompt

@@ -8,6 +8,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def _tiny_png() -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(255, 0, 0)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
 class TestQaLearnerProfile:
     def test_update_learner_profile(self, client: TestClient, child_with_assessment):
         uid = child_with_assessment
@@ -24,10 +32,7 @@ class TestQaLearnerProfile:
 class TestQaImageUpload:
     def test_upload_image_local(self, client: TestClient, child_with_assessment):
         uid = child_with_assessment
-        png = (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
+        png = _tiny_png()
         res = client.post(
             f"/api/qa/upload-image?user_id={uid}",
             files={"file": ("q.png", io.BytesIO(png), "image/png")},
@@ -36,6 +41,15 @@ class TestQaImageUpload:
         data = res.json()
         assert data["image_id"]
         assert data["url"]
+
+    def test_upload_rejects_svg(self, client: TestClient, child_with_assessment):
+        uid = child_with_assessment
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+        res = client.post(
+            f"/api/qa/upload-image?user_id={uid}",
+            files={"file": ("evil.svg", io.BytesIO(svg), "image/svg+xml")},
+        )
+        assert res.status_code == 400
 
 
 class TestQaChatEnhanced:
@@ -60,10 +74,7 @@ class TestQaChatEnhanced:
 
     def test_chat_with_image_id(self, client: TestClient, child_with_assessment, mock_doubao):
         uid = child_with_assessment
-        png = (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
+        png = _tiny_png()
         up = client.post(
             f"/api/qa/upload-image?user_id={uid}",
             files={"file": ("q.png", io.BytesIO(png), "image/png")},

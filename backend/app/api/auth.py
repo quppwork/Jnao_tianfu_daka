@@ -122,8 +122,9 @@ def _issue_and_respond(db: Session, user) -> AuthResponse:
 
 
 @router.get("/captcha", response_model=CaptchaResponse)
-def get_captcha():
-    return CaptchaResponse(**create_captcha())
+def get_captcha(request: Request):
+    ip, _ = _auth_ctx(request, None)
+    return CaptchaResponse(**create_captcha(client_ip=ip))
 
 
 @router.post("/parent/phone-check")
@@ -133,9 +134,6 @@ def parent_phone_check(req: PhoneCheckRequest, request: Request, db: Session = D
         challenge_get_count,
         challenge_incr,
     )
-    from app.services.parent_identity_service import (
-        resolve_parent_registration_state,
-    )
 
     ip, _ = _auth_ctx(request, None)
     ip_key = f"auth:phone_check:ip:{ip or 'unknown'}"
@@ -144,12 +142,9 @@ def parent_phone_check(req: PhoneCheckRequest, request: Request, db: Session = D
     challenge_incr(ip_key, 3600)
 
     verify_captcha(req.captcha_id, req.captcha_code, consume=True)
-    state = resolve_parent_registration_state(db, req.phone.strip())
     return {
-        "registered": state["action"] != "register",
-        "action": state["action"],
-        "message": state["message"],
-        "suggested_action": state["action"],
+        "ok": True,
+        "message": "若号码有效，可继续获取验证码",
     }
 
 

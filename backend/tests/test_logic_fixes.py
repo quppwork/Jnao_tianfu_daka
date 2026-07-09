@@ -109,10 +109,10 @@ class TestAdminArchiveFixes:
         }
 
     def test_delete_child_idempotent(self, client: TestClient, db_session: Session):
-        from tests.test_parent_auth import _parent_auth, _register_parent
+        from tests.test_parent_auth import STRONG_PWD, _parent_auth, _register_parent
 
         auth = self._admin_auth(client)
-        parent = _register_parent(client, "13900007703", password="123456")
+        parent = _register_parent(client, "13900007703", password=STRONG_PWD)
         pauth = _parent_auth(parent)
         child = client.post(
             "/api/parent/children",
@@ -129,10 +129,10 @@ class TestAdminArchiveFixes:
         assert archived.parent_phone  # 保留原手机号，不再改写 __deleted_
 
     def test_unbind_returns_warning(self, client: TestClient, db_session: Session):
-        from tests.test_parent_auth import _parent_auth, _register_parent
+        from tests.test_parent_auth import STRONG_PWD, _parent_auth, _register_parent
 
         auth = self._admin_auth(client)
-        parent = _register_parent(client, "13900007704", password="123456")
+        parent = _register_parent(client, "13900007704", password=STRONG_PWD)
         pauth = _parent_auth(parent)
         child = client.post(
             "/api/parent/children",

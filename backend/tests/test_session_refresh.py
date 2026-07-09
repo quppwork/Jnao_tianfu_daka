@@ -50,9 +50,9 @@ class TestSessionRefresh:
             assert res.status_code == 200, res.text
 
     def test_parent_profile_survives_repeated_calls(self, client_strict_auth: TestClient):
-        from tests.test_parent_auth import _register_parent
+        from tests.test_parent_auth import STRONG_PWD, _register_parent
 
-        parent = _register_parent(client_strict_auth, "13900007701", password="123456")
+        parent = _register_parent(client_strict_auth, "13900007701", password=STRONG_PWD)
         auth = _auth_params(parent)
 
         for _ in range(3):

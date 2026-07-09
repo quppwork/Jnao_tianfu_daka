@@ -14,7 +14,11 @@ from app.services.qa_image_store import get_qa_image, save_qa_image
 
 router = APIRouter(prefix="/api/qa", tags=["qa"])
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_IMAGE_RESPONSE_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Disposition": "inline",
+    "Cache-Control": "private, max-age=3600",
+}
 
 
 class QaChatRequest(BaseModel):
@@ -84,13 +88,9 @@ async def qa_upload_image(
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
 ):
-    content_type = (file.content_type or "").split(";")[0].strip().lower()
-    if content_type and content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(400, "仅支持 JPEG/PNG/WebP/GIF 图片")
+    del db
     raw = await file.read()
-    if not raw or len(raw) > 8 * 1024 * 1024:
-        raise HTTPException(400, "图片为空或超过 8MB")
-    result = save_qa_image(child_user_id, file.filename or "photo.jpg", raw, content_type or "image/jpeg")
+    result = save_qa_image(child_user_id, file.filename or "photo.jpg", raw, "")
     return result
 
 
@@ -105,7 +105,11 @@ def qa_get_image(
     path = Path(meta["path"])
     if not path.is_file():
         raise HTTPException(404, "图片文件不存在")
-    return FileResponse(path, media_type=meta.get("content_type") or "image/jpeg")
+    return FileResponse(
+        path,
+        media_type=meta.get("content_type") or "image/jpeg",
+        headers=_IMAGE_RESPONSE_HEADERS,
+    )
 
 
 @router.get("/sessions")

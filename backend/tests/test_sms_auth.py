@@ -3,6 +3,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
+SMS_OK = "若号码有效，验证码已发送"
+
 
 @pytest.fixture(autouse=True)
 def _auth_mock_env(monkeypatch):
@@ -24,6 +26,7 @@ def _send_register_sms(client: TestClient, phone: str) -> None:
         },
     )
     assert res.status_code == 200, res.text
+    assert res.json()["message"] == SMS_OK
 
 
 def _send_login_sms(client: TestClient, phone: str) -> None:
@@ -39,6 +42,7 @@ def _send_login_sms(client: TestClient, phone: str) -> None:
         },
     )
     assert res.status_code == 200, res.text
+    assert res.json()["message"] == SMS_OK
 
 
 class TestSmsAuth:
@@ -69,23 +73,45 @@ class TestSmsAuth:
                 "sms_code": "88888",
                 "real_name": "李家长",
                 "nickname": "李妈妈",
-                "password": "123456",
+                "password": "abc12345",
             },
         )
         assert reg.status_code == 200, reg.text
         login = client.post(
             "/api/auth/login",
-            json={"parent_phone": phone, "password": "123456", "role": "parent"},
+            json={"parent_phone": phone, "password": "abc12345", "role": "parent"},
         )
         assert login.status_code == 200, login.text
         assert login.json()["child_user_id"] == reg.json()["child_user_id"]
 
-    def test_login_sms_unregistered_phone(self, client: TestClient):
+    def test_register_rejects_weak_password(self, client: TestClient):
+        phone = "13900008819"
+        _send_register_sms(client, phone)
+        reg = client.post(
+            "/api/auth/sms/register",
+            json={
+                "phone": phone,
+                "sms_code": "88888",
+                "real_name": "弱口令",
+                "nickname": "家长",
+                "password": "12345678",
+            },
+        )
+        assert reg.status_code == 400
+
+    def test_login_sms_unregistered_phone_unified_response(self, client: TestClient):
+        cap = client.get("/api/auth/captcha")
         res = client.post(
             "/api/auth/sms/send",
-            json={"phone": "13900008812", "scene": "login"},
+            json={
+                "phone": "13900008812",
+                "scene": "login",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
         )
-        assert res.status_code == 404
+        assert res.status_code == 200
+        assert res.json()["message"] == SMS_OK
 
     def test_login_sms_existing_parent(self, client: TestClient, db_session):
         from app.services.auth_service import register_child, ROLE_PARENT
@@ -113,7 +139,7 @@ class TestSmsAuth:
         )
         assert res.status_code == 400
 
-    def test_register_duplicate_phone(self, client: TestClient, db_session):
+    def test_register_duplicate_phone_unified_sms(self, client: TestClient, db_session):
         from app.services.auth_service import register_child, ROLE_PARENT
 
         register_child(
@@ -133,7 +159,8 @@ class TestSmsAuth:
                 "captcha_code": "0000",
             },
         )
-        assert res.status_code == 409
+        assert res.status_code == 200
+        assert res.json()["message"] == SMS_OK
 
     def test_register_rejected_after_snapshot(self, client: TestClient, db_session):
         from app.db.models import WxMemberSnapshot
@@ -152,7 +179,8 @@ class TestSmsAuth:
                 "captcha_code": "0000",
             },
         )
-        assert send.status_code == 409
+        assert send.status_code == 200
+        assert send.json()["message"] == SMS_OK
 
     def test_sms_login_rejects_unregistered(self, client: TestClient):
         res = client.post(
@@ -177,6 +205,13 @@ class TestSmsAuth:
         )
         assert res.status_code == 400
         assert "图形验证" in res.json()["detail"]
+
+    def test_captcha_returns_png_format(self, client: TestClient):
+        res = client.get("/api/auth/captcha")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["image_format"] == "png"
+        assert "image_base64" in data
 
     def test_admin_blacklist_unban(self, client: TestClient, db_session):
         from app.services.blacklist_service import add_blacklist_entry

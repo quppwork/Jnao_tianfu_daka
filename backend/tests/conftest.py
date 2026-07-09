@@ -7,6 +7,8 @@ os.environ.setdefault("TIANFU_RAG_MOCK", "1")
 os.environ.setdefault("AUTH_CHALLENGE_MOCK", "1")
 os.environ.setdefault("SMS_PROVIDER", "mock")
 os.environ.setdefault("SMS_MOCK_CODE", "88888")
+os.environ.setdefault("SMS_HOURLY_PER_IP", "1000")
+os.environ.setdefault("CAPTCHA_IP_LIMIT", "1000")
 os.environ.setdefault("JNAO_LEGACY_REGISTER", "1")
 os.environ["ADMIN_LOGIN_NAME"] = "pyx"
 os.environ["ADMIN_PASSWORD"] = "123456"
@@ -27,6 +29,18 @@ from app.services.auth_service import register_child
 from app.services.catalog_import import import_all_xet_catalogs
 
 # 前端模块 ↔ API 映射见 backend/tests/README.md
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_challenge_memory():
+    """每个用例清空内存限流/验证码，避免跨用例串扰。"""
+    from app.services.auth_challenge_store import _lock, _mem
+
+    with _lock:
+        _mem.clear()
+    yield
+    with _lock:
+        _mem.clear()
 
 
 @pytest.fixture

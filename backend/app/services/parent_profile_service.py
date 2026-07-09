@@ -171,12 +171,12 @@ def update_parent_profile(
         pwd = password.strip()
         if require_password and not pwd:
             raise HTTPException(400, "请设置登录密码")
-        if pwd and len(pwd) < 6:
-            raise HTTPException(400, "密码至少6位")
         if pwd:
             from app.core.password import hash_password, verify_password
+            from app.core.password_policy import validate_password_strength
             from app.services.session_service import issue_session, revoke_all_sessions
 
+            validate_password_strength(pwd)
             if user.password_hash:
                 old = (old_password or "").strip()
                 if not old:
@@ -240,6 +240,12 @@ def register_parent_by_sms(
         if not name:
             raise HTTPException(400, "请填写真实姓名")
 
+        pwd_value = None
+        if password and password.strip():
+            from app.core.password_policy import validate_password_strength
+
+            pwd_value = validate_password_strength(password.strip())
+
         now = datetime.now(TZ).replace(tzinfo=None)
         now_iso = format_cst(now)
         pj: dict = {
@@ -252,7 +258,7 @@ def register_parent_by_sms(
             db,
             parent_phone=phone,
             nickname=nick,
-            password=password.strip() if password and password.strip() else None,
+            password=pwd_value,
             role=auth_service.ROLE_PARENT,
             child_quota=auth_service.DEFAULT_CHILD_QUOTA,
             commit=False,

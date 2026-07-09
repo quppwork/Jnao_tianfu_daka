@@ -13,3 +13,4 @@ bcrypt>=4.0.0
 redis>=5.0.0
 alibabacloud_dysmsapi20170525>=4.0.0
 alibabacloud_tea_openapi>=0.3.14
+Pillow>=10.0.0

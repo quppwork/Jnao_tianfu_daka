@@ -52,7 +52,7 @@ def test_resolve_wx_snapshot_blocks_register(db_session):
 
 
 class TestParentIdentityApi:
-    def test_phone_check_enhanced(self, client: TestClient, db_session):
+    def test_phone_check_unified_response(self, client: TestClient, db_session):
         db_session.add(
             WxMemberSnapshot(openid="o_api_snap", mobile="13900009904", nickname="镜像")
         )
@@ -68,8 +68,9 @@ class TestParentIdentityApi:
         )
         assert res.status_code == 200
         data = res.json()
-        assert data["registered"] is True
-        assert data["action"] == ACTION_WECHAT_LOGIN
+        assert data["ok"] is True
+        assert "registered" not in data
+        assert "action" not in data
 
     def test_phone_check_requires_captcha(self, client: TestClient):
         res = client.post(
@@ -78,7 +79,7 @@ class TestParentIdentityApi:
         )
         assert res.status_code in (400, 422)
 
-    def test_register_sms_blocked_by_snapshot(self, client: TestClient, db_session):
+    def test_register_sms_blocked_by_snapshot_unified(self, client: TestClient, db_session):
         db_session.add(
             WxMemberSnapshot(openid="o_reg_block", mobile="13900009905", nickname="镜像")
         )
@@ -93,16 +94,23 @@ class TestParentIdentityApi:
                 "captcha_code": "0000",
             },
         )
-        assert res.status_code == 409
+        assert res.status_code == 200
+        assert res.json()["message"] == "若号码有效，验证码已发送"
 
-    def test_login_sms_blocked_by_snapshot_only(self, client: TestClient, db_session):
+    def test_login_sms_unregistered_unified(self, client: TestClient, db_session):
         db_session.add(
             WxMemberSnapshot(openid="o_login_block", mobile="13900009906", nickname="镜像")
         )
         db_session.commit()
+        cap = client.get("/api/auth/captcha")
         res = client.post(
             "/api/auth/sms/send",
-            json={"phone": "13900009906", "scene": "login"},
+            json={
+                "phone": "13900009906",
+                "scene": "login",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
         )
-        assert res.status_code == 404
-        assert "微信" in res.json()["detail"]
+        assert res.status_code == 200
+        assert res.json()["message"] == "若号码有效，验证码已发送"

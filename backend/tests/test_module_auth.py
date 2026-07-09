@@ -23,9 +23,9 @@ class TestModuleAuth:
         assert r2.status_code == 409
 
     def test_login_student_password(self, client: TestClient):
-        from tests.test_parent_auth import _parent_auth, _register_parent
+        from tests.test_parent_auth import STRONG_PWD, _parent_auth, _register_parent
 
-        parent = _register_parent(client, "13955556666", password="123456")
+        parent = _register_parent(client, "13955556666", password=STRONG_PWD)
         auth = _parent_auth(parent)
         client.post(
             "/api/parent/children",

@@ -2,6 +2,7 @@ import pytest
 """学科答疑 Prompt 构建 — 学段 + 天赋画像"""
 
 from app.services.qa_prompt_builder import (
+    build_learner_context_block,
     build_qa_system_prompt,
     infer_school_stage,
     talent_coaching_hint,
@@ -31,14 +32,11 @@ class TestTalentCoaching:
 
 class TestBuildPrompt:
     def test_primary_low_language(self):
-        prompt = build_qa_system_prompt(
-            school_stage="primary_low",
-            grade="二年级",
-            talent_primary="学者",
-        )
+        prompt = build_qa_system_prompt(school_stage="primary_low")
         assert "小学低" in prompt or "短句" in prompt
-        assert "学者" in prompt
+        learner = build_learner_context_block(grade="二年级", talent_primary="学者")
+        assert "学者" in learner
 
     def test_includes_subject(self):
-        prompt = build_qa_system_prompt(subject="数学", talent_primary="赢者")
+        prompt = build_qa_system_prompt(subject="数学")
         assert "数学" in prompt
