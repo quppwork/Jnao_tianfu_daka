@@ -183,3 +183,37 @@ describe('sessionKeysForKind — 清 session 不串槽', () => {
     expect(pKeys).not.toContain('jnao_admin_token')
   })
 })
+
+describe('prepareRoleLoginEntry — 切到学生登录前清家长 session', () => {
+  const store = {}
+
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+    global.localStorage = {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v },
+      removeItem: (k) => { delete store[k] },
+    }
+    global.sessionStorage = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    }
+  })
+
+  it('清除家长 token 与 jnao_user，避免学生登录后进家长页', async () => {
+    const { prepareRoleLoginEntry, readAuthSnapshot } = await import('../src/utils/appSession.js')
+    store.jnao_parent_user_id = '9'
+    store.jnao_session_token = 'parent-tok'
+    store.jnao_user = JSON.stringify({ id: 9, role: 'parent' })
+    store.jnao_logged_in = '1'
+    store.jnao_child_user_id = '9'
+
+    prepareRoleLoginEntry('student')
+
+    const snap = readAuthSnapshot((k) => store[k] ?? null)
+    expect(snap.parent).toBeNull()
+    expect(store.jnao_session_token).toBeUndefined()
+    expect(store.jnao_user).toBeUndefined()
+  })
+})

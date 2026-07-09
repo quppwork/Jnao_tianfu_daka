@@ -36,6 +36,7 @@ import {
   sanitizeAuthForLoginEntry,
   installAuthStorageSync,
   clearAllAuthSessions,
+  prepareRoleLoginEntry,
 } from './appSession.js'
 
 // ── localStorage 键名 ──
@@ -125,7 +126,8 @@ export async function requirePageAuth(kind) {
 
   if (!session?.userId || !session?.token) {
     if (kind === 'student' && snap.parent?.token) {
-      try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (_) { /* ignore */ }
+      prepareRoleLoginEntry('student')
+      try { uni.reLaunch({ url: '/pages/login/index?role=student' }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
     if (kind === 'parent' && snap.student?.token) {

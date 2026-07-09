@@ -395,6 +395,21 @@ export function consumePostLoginRoute(fallbackUrl, kind) {
   return routeToUrl(snap.route, snap.query)
 }
 
+/** 从某一端切到登录页前，清除其它端与共享 token，避免家长 session 把学生带进家长页 */
+export function prepareRoleLoginEntry(targetRole) {
+  const role = (targetRole || '').trim().toLowerCase()
+  if (role !== 'student' && role !== 'parent') return
+  for (const k of ['parent', 'student']) {
+    for (const key of sessionKeysForKind(k)) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+  }
+  for (const key of ['jnao_user', 'jnao_session_token', 'jnao_logged_in', 'jnao_child_user_id', 'jnao_login_channel']) {
+    try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+  }
+  purgeLegacyRouteSnapshots()
+}
+
 /** 登录某一端时清除其它端的 session，避免串号 */
 export function clearSessionsExcept(kind) {
   for (const k of ['admin', 'parent', 'student']) {

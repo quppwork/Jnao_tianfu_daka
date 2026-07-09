@@ -162,6 +162,7 @@ import {
   getLoggedInUserId,
   getSessionToken,
   resetLocalAuthCache,
+  invalidatePageAuthCache,
 } from '@/utils/userApi.js'
 import {
   isLoginBlocked,
@@ -186,7 +187,7 @@ import {
   inferHomeFromSession,
   minDelay,
 } from '@/utils/useLoginFlow.js'
-import { consumePostLoginRoute, sanitizeAuthForLoginEntry } from '@/utils/appSession.js'
+import { consumePostLoginRoute, sanitizeAuthForLoginEntry, prepareRoleLoginEntry } from '@/utils/appSession.js'
 
 const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
@@ -207,6 +208,10 @@ const loginEntryRole = ref('')
 onLoad((opts) => {
   const role = (opts?.role || '').trim().toLowerCase()
   if (role === 'student' || role === 'parent') loginEntryRole.value = role
+  if (role === 'student') {
+    prepareRoleLoginEntry('student')
+    invalidatePageAuthCache()
+  }
 })
 let cooldownTimer = null
 let blockTimer = null
@@ -534,13 +539,20 @@ async function routeStudentHome(data) {
     target = '/pages/login/onboarding/index'
   }
   if (target === '/pages/index') target = consumePostLoginRoute(target, 'student')
-  uni.redirectTo({ url: target })
+  uni.reLaunch({ url: target })
+}
+
+function postLoginFallbackUrl() {
+  if (form.value.role === 'student' || loginEntryRole.value === 'student') {
+    return '/pages/index'
+  }
+  return inferHomeFromSession()
 }
 
 function handleLoginError(e) {
   resetPhase()
   if (hasValidSession()) {
-    uni.reLaunch({ url: inferHomeFromSession() })
+    uni.reLaunch({ url: postLoginFallbackUrl() })
     return
   }
   if (e.status === 403) {
@@ -620,7 +632,7 @@ async function doLogin() {
       return data
     })
     if (result?._sessionFallback) {
-      await completeAfterAuth(() => uni.reLaunch({ url: inferHomeFromSession() }))
+      await completeAfterAuth(() => uni.reLaunch({ url: postLoginFallbackUrl() }))
     }
   } catch (e) {
     handleLoginError(e)
