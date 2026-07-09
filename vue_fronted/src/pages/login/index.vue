@@ -3,15 +3,16 @@
     <view class="glow glow-top"></view>
 
     <view class="card">
-      <view class="logo-row">
-        <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
+      <view class="brand-head">
+        <view class="logo-row">
+          <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
+        </view>
+        <text class="subtitle">欢迎来到天赋成长平台</text>
+        <text class="sub-desc">天赋测评 · 每日训练 · 成长记录</text>
       </view>
-      <text class="subtitle">欢迎来到天赋成长平台</text>
-      <text class="sub-desc">我们立志于让中国少1亿个学习痛苦的孩子 让中国多1亿个天赋绽放的孩子</text>
-      <view class="hint-admin-top" @click="goAdminLogin"><text>管理员入口</text></view>
 
-      <!-- 微信内：仅家长一键登录，不展示短信/密码表单 -->
-      <view v-if="wechatParentOnly" class="wechat-only">
+      <!-- 微信内：家长主路径 -->
+      <view v-if="wechatParentOnly" class="login-flow">
         <view v-if="loginBlocked" class="blocked-hint">
           <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
         </view>
@@ -23,16 +24,26 @@
           :class="{ off: loginBlocked || loginBusy }"
           @click="doWechatLogin"
         >
-          <text>{{ wechatLoading ? '跳转中…' : '微信家长一键登录' }}</text>
+          <text>{{ wechatLoading ? '跳转中…' : '微信一键登录' }}</text>
         </view>
-        <text class="wechat-hint">已绑定手机号的家长点击后直接进入</text>
-        <view class="link-row" @click="openBrowserLogin">
-          <text>使用手机号 / 密码登录</text>
+
+        <view class="btn-phone-login" @click="openBrowserLogin">
+          <text>手机号登录</text>
+        </view>
+
+        <view class="divider"><text>其他方式</text></view>
+
+        <view class="alt-btns">
+          <view class="btn-outline btn-outline-student" @click="openStudentLogin">
+            <text class="btn-outline-title">孩子账号登录</text>
+            <text class="btn-outline-sub">使用家长分配的训练账号</text>
+          </view>
         </view>
       </view>
 
-      <!-- 非微信，或微信内主动选择手机号登录 -->
-      <view v-else class="form">
+      <!-- 浏览器 / 已切换为表单登录 -->
+      <view v-else class="login-main">
+        <view class="form">
         <view v-if="loginBlocked" class="blocked-hint">
           <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
         </view>
@@ -57,7 +68,7 @@
 
         <template v-else-if="parentMode === 'sms'">
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
+            <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
           <view class="input-wrap sms-row">
             <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="text" maxlength="6" confirm-type="done" :disabled="loginBusy" />
@@ -69,35 +80,46 @@
 
         <template v-else>
           <view class="input-wrap">
-            <input class="login-input" v-model="form.phone" placeholder="手机号" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
+            <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
           </view>
           <view class="input-wrap">
             <input class="login-input" v-model="form.password" placeholder="密码" type="password" maxlength="64" confirm-type="done" :disabled="loginBusy" />
           </view>
         </template>
 
+        <!-- 家长：切换登录方式 / 返回微信 → 在登录按钮上方，左右对齐输入框 -->
+        <view v-if="form.role === 'parent'" class="form-links-above">
+          <text class="form-link form-link-left" @click="toggleParentMode">
+            {{ parentMode === 'sms' ? '密码登录' : '验证码登录' }}
+          </text>
+          <text v-if="inWechat" class="form-link form-link-right" @click="backToWechatLogin">返回微信登录</text>
+        </view>
+
+        <!-- 学生：家长入口在登录按钮上方 -->
+        <view v-if="form.role === 'student'" class="form-links-above">
+          <text class="form-link" @click="switchToParent">我是家长，去注册 / 登录</text>
+        </view>
+
         <view class="btn-login" :class="{ off: loginBlocked || loginBusy }" @click="doLogin">
           <text>{{ loginBusy ? '登录中...' : '登录' }}</text>
         </view>
 
-        <view v-if="form.role === 'student'" class="sub-actions">
-          <text class="hint-text hint-highlight">👆 首次使用？请点「家长」标签注册</text>
-          <text class="hint-text">家长注册后可在家长中心创建孩子账号，</text>
-          <text class="hint-text">将账号和密码交给孩子即可登录</text>
+        <view v-if="form.role === 'parent'" class="btn-register" @click="goRegister()">
+          <text>新家长注册</text>
         </view>
-        <view v-else class="sub-actions">
-          <text class="hint-text">注册后可在家长中心创建孩子账号，</text>
-          <text class="hint-text">将账号密码交给孩子即可登录训练</text>
-          <view class="link-row-wrap">
-            <view class="link-row" @click="toggleParentMode">
-              <text>{{ parentMode === 'sms' ? '使用密码登录' : '使用验证码登录' }}</text>
-            </view>
-            <view class="link-row" @click="goRegister()"><text>注册家长账户</text></view>
-            <view v-if="inWechat" class="link-row" @click="backToWechatLogin">
-              <text>返回微信一键登录</text>
-            </view>
-          </view>
         </view>
+
+        <view class="page-footer">
+          <text class="footer-link" @click="goAdminLogin">管理员后台</text>
+          <text class="footer-dot">·</text>
+          <text class="footer-link" @click="showLoginHelp">登录帮助</text>
+        </view>
+      </view>
+
+      <view v-if="wechatParentOnly" class="page-footer">
+        <text class="footer-link" @click="goAdminLogin">管理员后台</text>
+        <text class="footer-dot">·</text>
+        <text class="footer-link" @click="showLoginHelp">登录帮助</text>
       </view>
     </view>
 
@@ -141,6 +163,7 @@ import {
   studentNeedsOnboarding,
   getLoggedInUserId,
   getSessionToken,
+  resetLocalAuthCache,
 } from '@/utils/userApi.js'
 import {
   isLoginBlocked,
@@ -165,7 +188,7 @@ import {
   inferHomeFromSession,
   minDelay,
 } from '@/utils/useLoginFlow.js'
-import { consumePostLoginRoute } from '@/utils/appSession.js'
+import { consumePostLoginRoute, sanitizeAuthForLoginEntry } from '@/utils/appSession.js'
 
 const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
@@ -210,6 +233,19 @@ function openBrowserLogin() {
   browserLogin.value = true
   wechatLoading.value = false
   form.value.role = 'parent'
+  parentMode.value = 'password'
+}
+
+function openStudentLogin() {
+  skipWechatAutoLogin()
+  browserLogin.value = true
+  wechatLoading.value = false
+  form.value.role = 'student'
+}
+
+function switchToParent() {
+  form.value.role = 'parent'
+  parentMode.value = 'sms'
 }
 
 function backToWechatLogin() {
@@ -219,6 +255,12 @@ function backToWechatLogin() {
 
 function tryRedirectIfLoggedIn() {
   try {
+    // 管理员 session 与用户登录页隔离，不在此自动跳转
+    const adminRaw = localStorage.getItem('jnao_admin_user')
+    const adminTok = localStorage.getItem('jnao_admin_token')
+    if (adminRaw && adminTok && localStorage.getItem('jnao_logged_in') !== '1') {
+      return false
+    }
     if (localStorage.getItem('jnao_logged_in') !== '1') return false
     const uid = getLoggedInUserId()
     if (!uid || !getSessionToken()) return false
@@ -267,6 +309,7 @@ async function handleWechatCallback(wxCb) {
 }
 
 onMounted(async () => {
+  sanitizeAuthForLoginEntry('/pages/login/index')
   refreshBlockState()
   blockTimer = setInterval(refreshBlockState, 1000)
   inWechat.value = isWeChatBrowser()
@@ -460,7 +503,7 @@ async function routeParentHome(data) {
       }
     } catch (_) { /* fallback local bind page */ }
   }
-  if (target === '/pages/parent/index') target = consumePostLoginRoute(target)
+  if (target === '/pages/parent/index') target = consumePostLoginRoute(target, 'parent')
   uni.redirectTo({ url: target })
 }
 
@@ -475,7 +518,7 @@ async function routeStudentHome(data) {
     console.error('[login] studentNeedsOnboarding 检查失败，默认走引导:', e?.message || e)
     target = '/pages/login/onboarding/index'
   }
-  if (target === '/pages/index') target = consumePostLoginRoute(target)
+  if (target === '/pages/index') target = consumePostLoginRoute(target, 'student')
   uni.redirectTo({ url: target })
 }
 
@@ -578,6 +621,41 @@ function goAdminLogin() {
   uni.navigateTo({ url: '/pages/admin/login' })
 }
 
+function confirmClearCache() {
+  uni.showModal({
+    title: '清除登录状态',
+    content: '仅清除本网站的登录信息（不影响微信），清除后需重新登录。确定？',
+    success: (r) => {
+      if (!r.confirm) return
+      resetLocalAuthCache()
+      uni.showToast({ title: '已清除，请重新登录', icon: 'none' })
+    },
+  })
+}
+
+function showLoginHelp() {
+  uni.showActionSheet({
+    itemList: ['清除本机登录状态', '家长登录说明', '孩子登录说明'],
+    success: (r) => {
+      if (r.tapIndex === 0) confirmClearCache()
+      if (r.tapIndex === 1) {
+        uni.showModal({
+          title: '家长怎么登录',
+          content: '微信内：点绿色「微信一键登录」。\n\n其它情况：选「家长」→ 输入注册时的11位手机号（不是昵称 pyx 这类名字）+ 密码或验证码。\n\n管理员请点底部「管理员后台」，不要在这里用管理员账号。',
+          showCancel: false,
+        })
+      }
+      if (r.tapIndex === 2) {
+        uni.showModal({
+          title: '孩子怎么登录',
+          content: '选「学生」→ 输入家长创建的孩子账号和密码。\n\n首次使用需家长先注册，在家长中心添加孩子后再登录训练。',
+          showCancel: false,
+        })
+      }
+    },
+  })
+}
+
 onUnmounted(() => {
   if (cooldownTimer) clearInterval(cooldownTimer)
   if (blockTimer) clearInterval(blockTimer)
@@ -585,34 +663,62 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.app { height:100vh;height:100dvh; max-width:480px; margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:12vh; position:relative; overflow:hidden; }
+.app {
+  height:100vh; height:100dvh; max-width:480px; margin:0 auto;
+  background:var(--bg); display:flex; align-items:center; justify-content:center;
+  padding:12px 20px; padding-top:max(12px, env(safe-area-inset-top));
+  padding-bottom:max(12px, env(safe-area-inset-bottom));
+  position:relative; overflow:hidden; box-sizing:border-box;
+}
 .glow { position:absolute; width:260px; height:260px; border-radius:50%; pointer-events:none; z-index:0; }
 .glow-top { top:-80px; right:-60px; background:radial-gradient(circle, rgba(88,166,255,0.18) 0%, transparent 70%); }
 .glow-bottom { bottom:-100px; left:-50px; background:radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%); }
-.card { width:100%; position:relative; z-index:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:36px 22px 28px; }
-.logo-row { display:flex; align-items:baseline; justify-content:center; gap:8px; margin-bottom:6px; }
-.logo-j { color:#dc2626; font-size:60px; font-weight:800; }
-.logo-nao, .logo-ai { color:var(--text); font-size:44px; font-weight:700; }
+.card {
+  width:100%; max-height:100%; position:relative; z-index:1;
+  background:rgba(255,255,255,0.03); border:none;
+  border-radius:20px; padding:24px 20px 18px; box-sizing:border-box;
+}
+.brand-head { margin-top:-40px; margin-bottom:0; }
+.logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:4px; }
+.logo-j { color:#dc2626; font-size:48px; font-weight:800; line-height:1; }
+.logo-nao, .logo-ai { color:var(--text); font-size:36px; font-weight:700; line-height:1; }
 .logo-ai { font-weight:300; }
-.subtitle { color:var(--text-dim); font-size:10px; text-align:center; display:block; line-height:1.5; margin-top:-15px; margin-bottom:2px; }
-.sub-desc { color:var(--text-dim); font-size:10px; text-align:center; display:block; line-height:1.5; margin-bottom:16px; }
-.blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:10px; margin-bottom:12px; text-align:center; }
+.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; line-height:1.4; margin-bottom:2px; }
+.sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.4; margin-bottom:0; opacity:0.85; }
+.login-main { margin-top:60px; }
+.login-flow { margin-top:20px; padding-top:0; }
+.divider { display:flex; align-items:center; gap:10px; margin:16px 0 12px; }
+.divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+.divider text { color:var(--text-dim); font-size:11px; flex-shrink:0; }
+.alt-btns { display:flex; flex-direction:column; gap:10px; }
+.btn-outline { border:1.5px solid var(--border); border-radius:12px; padding:14px 16px; background:var(--bg-card); }
+.btn-outline-student { border-color:rgba(167,139,250,0.35); }
+.btn-outline-title { display:block; color:var(--text); font-size:15px; font-weight:600; }
+.btn-outline-sub { display:block; color:var(--text-dim); font-size:11px; margin-top:4px; line-height:1.4; }
+.page-footer { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06); }
+.footer-link { color:var(--text-dim); font-size:11px; padding:4px 2px; }
+.footer-link:active { opacity:0.6; }
+.footer-dot { color:var(--text-dim); font-size:11px; opacity:0.5; }
+.blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:8px; margin-bottom:10px; text-align:center; }
 .blocked-hint text { color:#f87171; font-size:12px; }
-.wechat-only { padding-top:8px; }
-.btn-wechat { background:linear-gradient(135deg, #07c160, #06ad56); border-radius:14px; padding:16px; text-align:center; margin-top:8px; }
+.btn-wechat { background:linear-gradient(135deg, #07c160, #06ad56); border-radius:14px; padding:14px; text-align:center; }
 .btn-wechat.off { opacity:0.5; }
-.btn-wechat text { color:#fff; font-size:17px; font-weight:700; }
-.wechat-hint { display:block; text-align:center; color:var(--text-dim); font-size:12px; margin-top:14px; }
-.wechat-loading { text-align:center; padding:10px 0 4px; }
+.btn-wechat text { color:#fff; font-size:16px; font-weight:700; }
+.btn-phone-login {
+  margin-top:10px; padding:13px; text-align:center; border-radius:14px;
+  border:1.5px solid var(--border); background:var(--bg-card);
+}
+.btn-phone-login text { color:var(--text); font-size:15px; font-weight:600; }
+.wechat-loading { text-align:center; padding:8px 0 4px; }
 .wechat-loading text { color:var(--accent); font-size:13px; }
-.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); position:relative; z-index:2; }
+.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:10px; border:1.5px solid var(--border); position:relative; z-index:2; }
 .sms-row { padding-right:4px; }
 .sms-btn { flex-shrink:0; padding:8px 10px; border-radius:8px; background:rgba(88,166,255,0.15); }
 .sms-btn.off { opacity:0.5; }
 .sms-btn text { color:var(--accent); font-size:12px; }
-.login-input { flex:1; width:100%; min-height:48px; padding:14px 0; font-size:16px; line-height:1.4; color:var(--text); background:transparent; border:none; box-sizing:border-box; -webkit-user-select:text; user-select:text; }
-.role-row { display:flex; gap:0; margin-top:100px; margin-bottom:22px; border-radius:14px; overflow:hidden; border:1.5px solid var(--border); background:var(--accent-bg); }
-.role-item { flex:1; padding:16px; text-align:center; cursor:pointer; transition:all 0.25s; position:relative; }
+.login-input { flex:1; width:100%; min-height:44px; padding:12px 0; font-size:16px; line-height:1.4; color:var(--text); background:transparent; border:none; box-sizing:border-box; -webkit-user-select:text; user-select:text; }
+.role-row { display:flex; gap:0; margin-top:0; margin-bottom:12px; border-radius:14px; overflow:hidden; border:1.5px solid var(--border); background:var(--accent-bg); }
+.role-item { flex:1; padding:12px; text-align:center; cursor:pointer; transition:all 0.25s; position:relative; }
 .role-item:first-child { border-right:1.5px solid var(--border); }
 .role-item.active { background:var(--bg-card); }
 .role-item.active::after {
@@ -622,18 +728,21 @@ onUnmounted(() => {
 .ri-label { font-size:14px; font-weight:500; transition:all 0.25s; }
 .role-item.active .ri-label { color:var(--accent); font-weight:700; }
 .role-item:not(.active) .ri-label { color:var(--text-dim); }
-.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:15px; text-align:center; }
+.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:13px; text-align:center; margin-top:4px; }
 .btn-login.off { opacity:0.5; }
 .btn-login text { color:#fff; font-size:16px; font-weight:700; }
-.sub-actions { text-align:center; margin-top:12px; }
-.hint-text { color:var(--text-dim); font-size:12px; }
-.hint-highlight { color:#f5a623; font-weight:600; }
-.link-row { margin-top:12px; text-align:center; }
-.link-row text { color:#a78bfa; font-size:13px; }
-.link-row-wrap { display:flex; gap:16px; justify-content:center; margin-top:8px; }
-.hint-admin-top { position:absolute; top:12px; right:16px; z-index:10; }
-.hint-admin-top text { color:var(--text-dim); font-size:10px; text-decoration:underline; cursor:pointer; }
-.hint-admin-top:active text { opacity:0.6; }
+.form-links-above {
+  display:flex; align-items:center; justify-content:space-between;
+  width:100%; margin:4px 0 10px; box-sizing:border-box;
+}
+.form-link { color:#a78bfa; font-size:13px; padding:4px 0; }
+.form-link-left { text-align:left; flex:1; }
+.form-link-right { text-align:right; flex:1; }
+.btn-register {
+  margin-top:10px; padding:13px; text-align:center; border-radius:14px;
+  border:1.5px solid rgba(167,139,250,0.45); background:rgba(167,139,250,0.08);
+}
+.btn-register text { color:#c4b5fd; font-size:15px; font-weight:600; }
 .login-overlay {
   position: fixed; inset: 0; z-index: 9999;
   background: rgba(0,0,0,0.45);

@@ -87,6 +87,18 @@ class TestParentAuth:
         )
         assert res.status_code == 401
 
+    def test_parent_login_rejects_nickname_as_phone(self, client: TestClient):
+        _register_parent(client, "13900001117", nickname="pyx")
+        res = client.post(
+            "/api/auth/login",
+            json={"parent_phone": "pyx", "password": "123456", "role": "parent"},
+        )
+        assert res.status_code in (400, 422)
+        detail = res.json().get("detail", "")
+        if isinstance(detail, list):
+            detail = str(detail)
+        assert "手机号" in detail or "parent_phone" in detail.lower()
+
     def test_create_and_login_child(self, client: TestClient):
         parent = _register_parent(client, "13900001116")
         auth = _parent_auth(parent)
