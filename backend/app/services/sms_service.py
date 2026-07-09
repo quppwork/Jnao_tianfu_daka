@@ -1,12 +1,13 @@
 """短信验证码 — 浏览器家长登录/注册（login/register）
 
 微信内缺手机号走 m.jnao.com 绑手机页，不经本模块。
-后期浏览器验证码单独接阿里云（SMS_PROVIDER=aliyun），与微信绑手机分离。
+浏览器验证码经 SMS_PROVIDER=aliyun 走阿里云，与微信绑手机分离。
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import random
@@ -100,6 +101,63 @@ def _generate_code() -> str:
     return f"{random.randint(0, 999999):06d}"
 
 
+def _aliyun_sms_credentials() -> tuple[str, str]:
+    ak = (os.getenv("ALIYUN_SMS_ACCESS_KEY_ID") or os.getenv("OSS_ACCESS_KEY_ID") or "").strip()
+    sk = (
+        os.getenv("ALIYUN_SMS_ACCESS_KEY_SECRET")
+        or os.getenv("OSS_ACCESS_KEY_SECRET")
+        or ""
+    ).strip()
+    return ak, sk
+
+
+def _dispatch_aliyun_sms(phone: str, code: str, scene: str) -> None:
+    ak, sk = _aliyun_sms_credentials()
+    sign = (os.getenv("ALIYUN_SMS_SIGN_NAME") or "").strip()
+    tpl = (os.getenv("ALIYUN_SMS_TEMPLATE_CODE") or "").strip()
+    if not all([ak, sk, sign, tpl]):
+        raise HTTPException(503, "阿里云短信参数未配置完整")
+
+    try:
+        from alibabacloud_dysmsapi20170525.client import Client
+        from alibabacloud_dysmsapi20170525 import models as sms_models
+        from alibabacloud_tea_openapi import models as open_models
+    except ImportError as e:
+        logger.exception("Aliyun SMS SDK not installed")
+        raise HTTPException(503, "阿里云短信 SDK 未安装") from e
+
+    client = Client(
+        open_models.Config(
+            access_key_id=ak,
+            access_key_secret=sk,
+            endpoint="dysmsapi.aliyuncs.com",
+        )
+    )
+    req = sms_models.SendSmsRequest(
+        phone_numbers=phone,
+        sign_name=sign,
+        template_code=tpl,
+        template_param=json.dumps({"code": code}, ensure_ascii=False),
+    )
+    try:
+        resp = client.send_sms(req)
+    except Exception as e:
+        logger.exception("Aliyun SMS request error phone=%s scene=%s", phone, scene)
+        raise HTTPException(502, "短信服务暂不可用") from e
+
+    body = resp.body
+    if not body or (body.code or "").upper() != "OK":
+        logger.warning(
+            "Aliyun SMS failed phone=%s scene=%s code=%s message=%s biz=%s",
+            phone,
+            scene,
+            getattr(body, "code", ""),
+            getattr(body, "message", ""),
+            getattr(body, "biz_id", ""),
+        )
+        raise HTTPException(502, "短信发送失败，请稍后再试")
+
+
 def _dispatch_company_sms(phone: str, code: str, scene: str) -> None:
     import httpx
 
@@ -138,7 +196,8 @@ def _dispatch_sms(phone: str, code: str, scene: str = SCENE_LOGIN) -> None:
         _dispatch_company_sms(phone, code, scene)
         return
     if provider == "aliyun":
-        raise HTTPException(503, "阿里云短信尚未接入，请设置 SMS_PROVIDER=mock 或 company")
+        _dispatch_aliyun_sms(phone, code, scene)
+        return
     if provider == "tencent":
         raise HTTPException(503, "腾讯云短信尚未接入，请设置 SMS_PROVIDER=mock 或 company")
     raise HTTPException(503, "短信服务未配置")
