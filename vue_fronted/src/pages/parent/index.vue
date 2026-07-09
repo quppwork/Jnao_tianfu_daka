@@ -1,7 +1,9 @@
 <template>
   <view class="app">
     <view class="nav-bar">
-      <view class="nav-spacer"></view>
+      <view class="nav-back" @click="goToStudentLogin">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </view>
       <text class="nav-center">家长中心</text>
       <view class="nav-actions">
         <view class="nav-icon-btn" @click="toggleTheme">
@@ -357,12 +359,16 @@ function doLogout() {
   showSettings.value = false
   logoutAndGoLogin()
 }
+
+function goToStudentLogin() {
+  uni.redirectTo({ url: '/pages/login/index?role=student' })
+}
 </script>
 
 <style scoped>
 .app { min-height: 100vh; min-height: 100dvh; height: 100dvh; max-width: var(--app-max-width, 480px); margin: 0 auto; background: var(--bg); font-family: -apple-system, "PingFang SC", sans-serif; display: flex; flex-direction: column; padding: 0 0 40px; }
 .nav-bar { display:flex; align-items:center; padding:14px 14px 10px; }
-.nav-spacer { width:36px; }
+.nav-back { width:34px; height:34px; border-radius:50%; background:var(--bg-card); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .nav-center { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
 .nav-actions { display:flex; gap:8px; }
 .nav-icon-btn { width:34px; height:34px; border-radius:50%; background:var(--bg-card); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; }
