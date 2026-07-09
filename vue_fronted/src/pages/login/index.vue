@@ -143,6 +143,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import {
   loginParent,
   loginStudent,
@@ -201,6 +202,12 @@ const captchaId = ref('')
 const captchaCode = ref('')
 const captchaImage = ref('')
 const sendingSms = ref(false)
+const loginEntryRole = ref('')
+
+onLoad((opts) => {
+  const role = (opts?.role || '').trim().toLowerCase()
+  if (role === 'student' || role === 'parent') loginEntryRole.value = role
+})
 let cooldownTimer = null
 let blockTimer = null
 
@@ -263,6 +270,13 @@ function tryRedirectIfLoggedIn() {
     if (!uid || !getSessionToken()) return false
     const raw = localStorage.getItem('jnao_user')
     const role = raw ? JSON.parse(raw).role : null
+    if (loginEntryRole.value === 'student') {
+      if (role === 'student') {
+        uni.reLaunch({ url: '/pages/index' })
+        return true
+      }
+      return false
+    }
     if (role === 'parent') {
       uni.reLaunch({ url: '/pages/parent/index' })
       return true
@@ -312,7 +326,11 @@ onMounted(async () => {
   inWechat.value = isWeChatBrowser()
   cleanLandingQuery()
 
-  if (inWechat.value) {
+  if (loginEntryRole.value === 'student') {
+    skipWechatAutoLogin()
+    form.value.role = 'student'
+    browserLogin.value = true
+  } else if (inWechat.value) {
     form.value.role = 'parent'
     browserLogin.value = false
   } else {
