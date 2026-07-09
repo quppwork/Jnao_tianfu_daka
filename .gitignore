@@ -57,3 +57,4 @@ h5_fronted/
 *.wav
 *.oggdata/*.db
 .trash/
+.mcp.json
