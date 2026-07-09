@@ -32,17 +32,25 @@
         <view class="row-line" style="justify-content:space-between;">
           <text class="label">🧪 天赋测试配额</text>
           <view style="display:flex;align-items:center;gap:8px;">
-            <text class="val" style="font-weight:700;">{{ quotaInfo.remaining }} / {{ quotaInfo.quota }}</text>
-            <text class="val" style="font-size:11px;color:var(--text-dim);">(已用 {{ quotaInfo.used }})</text>
+            <text class="val" style="font-weight:700;">剩余 {{ quotaInfo.remaining }} 次</text>
+            <text class="val" style="font-size:11px;color:var(--text-dim);">(总额 {{ quotaInfo.quota }} / 已用 {{ quotaInfo.used }})</text>
           </view>
         </view>
-        <view style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-          <input v-model.number="quotaForm.quota" type="number" placeholder="新配额" class="inp" style="flex:1;min-width:0;" />
-          <view class="btn-primary" @click="updateQuota" style="padding:6px 14px;font-size:13px;flex-shrink:0;">
-            <text>更新配额</text>
-          </view>
+        <view style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+          <text style="font-size:12px;color:var(--text-dim);white-space:nowrap;">调整：</text>
+          <input v-model.number="quotaForm.add" type="number" placeholder="+加 / -减" class="inp" style="flex:1;min-width:0;" />
+          <view class="btn-save" @click="addQuota"><text>确认</text></view>
         </view>
+        <text style="font-size:11px;color:var(--text-dim);margin-top:4px;">正数增加，负数减少（最低 {{ Math.max(2, quotaInfo.used) }} 次）</text>
         <text v-if="quotaForm.msg" class="hint" style="margin-top:4px;">{{ quotaForm.msg }}</text>
+      </view>
+
+      <view v-if="assessments.length" class="card" style="margin-top:12px;">
+        <text class="card-title">📋 天赋测评记录</text>
+        <view v-for="a in assessments" :key="a.id" class="mini-row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+          <text class="mini-name" :style="{ color: a.is_valid ? 'var(--text)' : '#f59e0b' }">{{ a.talent_primary }}</text>
+          <text class="mini-sub">{{ a.is_valid ? '✅ 有效' : '🌀 迷者不计' }} · {{ a.assessed_at || a.created_at || '—' }}</text>
+        </view>
       </view>
 
       <view v-if="detail.training_progress?.skills" class="section">
@@ -114,6 +122,7 @@ import {
   restoreAdminChild,
   fetchChildTalentQuota,
   updateChildTalentQuota,
+  fetchAdminChildAssessments,
 } from '@/utils/userApi.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 
@@ -124,29 +133,33 @@ const detail = ref(null)
 const showEdit = ref(false)
 const form = ref({})
 const quotaInfo = ref({ quota: 2, used: 0, remaining: 2 })
-const quotaForm = ref({ quota: 2, msg: '' })
+const quotaForm = ref({ add: 1, msg: '' })
+const assessments = ref([])
 
 async function loadQuota() {
   if (!childId.value || !adminId.value) return
   try {
-    quotaInfo.value = await fetchChildTalentQuota(adminId.value, childId.value)
-    quotaForm.value.quota = quotaInfo.value.talent_test_quota
+    const [info, hist] = await Promise.all([
+      fetchChildTalentQuota(adminId.value, childId.value),
+      fetchAdminChildAssessments(adminId.value, childId.value).catch(() => []),
+    ])
+    quotaInfo.value = info
+    assessments.value = hist
   } catch (_) { /* ignore */ }
 }
 
-async function updateQuota() {
-  const q = parseInt(quotaForm.value.quota, 10)
-  if (isNaN(q) || q < 0) {
-    quotaForm.value.msg = '请输入有效配额（≥0）'
+async function addQuota() {
+  const n = parseInt(quotaForm.value.add, 10)
+  if (isNaN(n) || n < 1) {
+    quotaForm.value.msg = '请输入有效次数（≥1）'
     return
   }
   try {
-    const res = await updateChildTalentQuota(adminId.value, childId.value, q)
+    const res = await updateChildTalentQuota(adminId.value, childId.value, n)
     quotaInfo.value = res
-    quotaForm.value.quota = res.talent_test_quota
-    quotaForm.value.msg = `已更新！剩余 ${res.remaining} 次`
+    quotaForm.value.msg = `已增加 ${n} 次，剩余 ${res.remaining} 次`
   } catch (e) {
-    quotaForm.value.msg = e.message || '更新失败'
+    quotaForm.value.msg = e.message || '操作失败'
   }
 }
 
@@ -285,6 +298,10 @@ function confirmDelete() {
 .inp { width:100%; padding:12px 0; font-size:14px; color:var(--text); }
 .btn-primary { background:#f59e0b; border-radius:10px; padding:12px; text-align:center; margin-top:8px; }
 .btn-primary text { color:#fff; font-weight:600; }
+.btn-primary:active { opacity:0.8; transform:scale(0.97); }
+.btn-save { background:var(--accent); border-radius:8px; padding:7px 16px; cursor:pointer; flex-shrink:0; transition:all 0.15s; }
+.btn-save text { color:#fff; font-size:13px; font-weight:600; }
+.btn-save:active { opacity:0.75; transform:scale(0.96); background:#2563eb; }
 .btn-warn { margin-top:8px; padding:12px; text-align:center; border-radius:10px; background:rgba(245,158,11,0.12); }
 .btn-warn text { color:#d97706; font-size:13px; }
 .btn-danger { margin-top:8px; padding:12px; text-align:center; border-radius:10px; background:rgba(220,38,38,0.1); }

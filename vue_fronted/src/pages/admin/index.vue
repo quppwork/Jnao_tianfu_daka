@@ -47,9 +47,11 @@
         <view class="btn-sm" @click="openChildCreate"><text>+ 新建孩子</text></view>
       </view>
       <view class="toolbar" style="margin-top:6px;padding:8px 10px;background:var(--bg-card);border-radius:8px;display:flex;align-items:center;gap:8px;">
-        <text style="font-size:12px;color:var(--text-dim);white-space:nowrap;">🧪 批量配额</text>
-        <input v-model.number="batchQuota" type="number" placeholder="次数" class="search-inp" style="flex:1;min-width:0;height:30px;font-size:13px;" />
-        <view class="btn-sm" @click="applyBatchQuota" style="flex-shrink:0;"><text>应用到全部</text></view>
+        <text style="font-size:12px;color:var(--text-dim);white-space:nowrap;">🧪 批量调整测试次数</text>
+        <view class="btn-sm" @click="applyBatchQuota(1)" style="flex-shrink:0;"><text>全部 +1</text></view>
+        <view class="btn-sm" @click="applyBatchQuota(-1)" style="flex-shrink:0;"><text>全部 -1</text></view>
+        <view class="btn-sm" @click="applyBatchQuota(3)" style="flex-shrink:0;"><text>全部 +3</text></view>
+        <view class="btn-sm" @click="applyBatchQuota(5)" style="flex-shrink:0;"><text>全部 +5</text></view>
       </view>
       <view v-for="c in children" :key="c.id" class="row" @click="goChild(c.id)">
         <view class="main">
@@ -175,7 +177,6 @@ const tab = ref('parents')
 const parentSubTab = ref('active')
 const parentSearch = ref('')
 const childSearch = ref('')
-const batchQuota = ref(2)
 const loading = ref(true)
 const parents = ref([])
 const removedParents = ref([])
@@ -385,26 +386,21 @@ function goChild(id) {
   uni.navigateTo({ url: `/pages/admin/child-detail?id=${id}` })
 }
 
-async function applyBatchQuota() {
-  const q = parseInt(batchQuota.value, 10)
-  if (isNaN(q) || q < 0) {
-    uni.showToast({ title: '请输入有效配额（≥0）', icon: 'none' })
-    return
-  }
+async function applyBatchQuota(n) {
   const ids = children.value.map(c => c.id)
   if (!ids.length) {
     uni.showToast({ title: '暂无孩子可操作', icon: 'none' })
     return
   }
   uni.showModal({
-    title: '批量修改配额',
-    content: `确定将当前列表中 ${ids.length} 个孩子的天赋测试配额全部设为 ${q} 次吗？`,
+    title: '批量增加测试次数',
+    content: `确定为当前列表中 ${ids.length} 个孩子各增加 ${n} 次天赋测试机会吗？`,
     confirmText: '确定',
     success: async (res) => {
       if (!res.confirm) return
       try {
-        const result = await batchUpdateTalentQuota(adminId.value, { childIds: ids, quota: q })
-        uni.showToast({ title: `已更新 ${result.updated} 个孩子`, icon: 'none' })
+        const result = await batchUpdateTalentQuota(adminId.value, { childIds: ids, add: n })
+        uni.showToast({ title: `已为 ${result.updated} 个孩子增加 ${n} 次`, icon: 'none' })
       } catch (e) {
         uni.showToast({ title: e.message || '操作失败', icon: 'none' })
       }

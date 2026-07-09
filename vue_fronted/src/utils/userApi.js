@@ -1507,18 +1507,22 @@ export async function fetchChildTalentQuota(adminId, childId) {
   return apiJson(withAdmin(`/api/admin/children/${childId}/talent-quota`, adminId))
 }
 
-export async function updateChildTalentQuota(adminId, childId, quota) {
+export async function updateChildTalentQuota(adminId, childId, add) {
   return apiJson(withAdmin(`/api/admin/children/${childId}/talent-quota`, adminId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ quota }),
+    body: JSON.stringify({ add }),
   })
 }
 
-export async function batchUpdateTalentQuota(adminId, { childIds, quota } = {}) {
+export async function batchUpdateTalentQuota(adminId, { childIds, add } = {}) {
   return apiJson(withAdmin('/api/admin/children/talent-quota/batch', adminId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ child_ids: childIds, quota }),
+    body: JSON.stringify({ child_ids: childIds, add }),
   })
+}
+
+export async function fetchAdminChildAssessments(adminId, childId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/talent-assessments`, adminId))
 }

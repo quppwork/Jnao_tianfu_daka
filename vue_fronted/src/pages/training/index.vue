@@ -114,7 +114,6 @@
                 <text class="mini-card-name">{{ c.name }}{{ c.phaseBlock ? ` · 训练${c.phaseBlock}` : '' }}</text>
                 <text class="mini-card-summary">{{ miniCardSummary(c) }}</text>
               </view>
-              <text class="mini-card-del" @click.stop="deleteCard(idx)">✕</text>
             </view>
           </view>
           <view class="summary-attitude">
@@ -635,6 +634,21 @@
       </view>
     </view>
 
+    <!-- 删除确认弹窗 -->
+    <view v-if="showDeleteConfirm" class="picker-overlay" @click="cancelDeleteConfirm">
+      <view class="picker-card confirm-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title" style="color:#ef4444;">⚠️ 删除打卡记录</text>
+          <view class="modal-close" @click="cancelDeleteConfirm">✕</view>
+        </view>
+        <text class="confirm-modal-text">确定删除「{{ deleteTargetName }}」的打卡记录吗？删除后需重新按顺序打卡，该训练项会重新出现在下方列表中。</text>
+        <view class="confirm-modal-actions">
+          <view class="editor-btn secondary" @click="cancelDeleteConfirm"><text>取消</text></view>
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;background:#ef4444;" @click="confirmDelete"><text>确定删除</text></view>
+        </view>
+      </view>
+    </view>
+
 <!-- Media Player Overlay -->
     <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
       <view class="player-card" @click.stop>
@@ -831,7 +845,7 @@
       <view class="detail-actions">
         <template v-if="!detailEditing">
           <view class="btn-outline-sm" @click="startDetailEdit">✎ 编辑</view>
-          <view class="btn-del-sm" @click="deleteCard(detailCardIndex); closeCardDetail()">删除</view>
+          <view class="btn-del-sm" @click="confirmDeleteCard(detailCardIndex)">删除</view>
         </template>
         <template v-else>
           <view class="btn-outline-sm" @click="cancelDetailEdit">取消</view>
@@ -1763,6 +1777,9 @@ async function autoCompletePerception(phase) {
 // ── 方案编辑 ──
 const showSubmitConfirm = ref(false)
 const pendingSubmitBlock = ref(null)
+const showDeleteConfirm = ref(false)
+const deleteTargetIdx = ref(-1)
+const deleteTargetName = ref('')
 const showPlanEditor = ref(false)
 const editorSkills = ref([])
 
@@ -2717,10 +2734,34 @@ function cardDetailFields(c) {
   return map
 }
 
+function confirmDeleteCard(idx) {
+  const c = submittedCards.value[idx]
+  if (!c) return
+  if (!guardCheckin(c.phaseBlock || 'A')) return
+  deleteTargetIdx.value = idx
+  deleteTargetName.value = c.name || ('训练' + (c.phaseBlock || 'A'))
+  showDeleteConfirm.value = true
+}
+
+function cancelDeleteConfirm() {
+  showDeleteConfirm.value = false
+  deleteTargetIdx.value = -1
+  deleteTargetName.value = ''
+}
+
+async function confirmDelete() {
+  showDeleteConfirm.value = false
+  closeCardDetail()
+  const idx = deleteTargetIdx.value
+  deleteTargetIdx.value = -1
+  deleteTargetName.value = ''
+  if (idx < 0) return
+  await deleteCard(idx)
+}
+
 async function deleteCard(idx) {
   const c = submittedCards.value[idx]
   const block = c.phaseBlock || 'A'
-  if (!guardCheckin(block)) return
   const remaining = submittedCards.value.filter((_, i) => i !== idx && (_.phaseBlock || 'A') === block)
   checkinSubmitting.value = true
   try {
@@ -2731,13 +2772,15 @@ async function deleteCard(idx) {
     }
     const uid = await ensureChildUser()
     await loadTodayCheckinRecords(uid, todayPlan.value?.plan_id)
+    // 删除后重新加载方案，确保 item 状态与后端对齐
+    await loadTodayPlan(true)
     if (!submittedCards.value.length) closeCardDetail()
     nextTick(() => syncPhaseExpand())
     uni.showToast({ title: '已删除', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '删除失败', icon: 'none', duration: 2500 })
+    uni.showToast({ title: e.message || '删除失败', icon: 'none', duration: 2500 })
   } finally {
-        checkinSubmitting.value = false
+    checkinSubmitting.value = false
   }
 }
 
@@ -3954,8 +3997,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .mini-card-left { flex:1; min-width:0; }
 .mini-card-name { color:#fff; font-size:12px; font-weight:600; display:block; }
 .mini-card-summary { color:rgba(255,255,255,0.45); font-size:10px; display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.mini-card-del { color:rgba(255,255,255,0.25); font-size:14px; padding:4px; flex-shrink:0; }
-.mini-card-del:active { color:#ff6b6b; }
+
 .summary-add-btn {
   text-align:center; padding:10px; border-radius:10px;
   background:linear-gradient(135deg,rgba(0,210,255,0.25),rgba(0,136,204,0.25));
@@ -4067,7 +4109,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .mini-card-v2 .mini-card-accent::after { background:#2563eb; box-shadow:0 0 6px #2563eb; }
 [data-theme="white"] .mini-card-name { color:#1a1a2e; }
 [data-theme="white"] .mini-card-summary { color:#9ca3af; }
-[data-theme="white"] .mini-card-del { color:#d1d5db; }
+
 
 /* ═══════════════════════════════════════════
    交互感增强
