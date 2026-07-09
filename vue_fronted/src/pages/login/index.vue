@@ -33,11 +33,8 @@
 
         <view class="divider"><text>其他方式</text></view>
 
-        <view class="alt-btns">
-          <view class="btn-outline btn-outline-student" @click="openStudentLogin">
-            <text class="btn-outline-title">孩子账号登录</text>
-            <text class="btn-outline-sub">使用家长分配的训练账号</text>
-          </view>
+        <view class="btn-phone-login" @click="openStudentLogin">
+          <text>孩子账号登录</text>
         </view>
       </view>
 
@@ -690,11 +687,6 @@ onUnmounted(() => {
 .divider { display:flex; align-items:center; gap:10px; margin:16px 0 12px; }
 .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
 .divider text { color:var(--text-dim); font-size:11px; flex-shrink:0; }
-.alt-btns { display:flex; flex-direction:column; gap:10px; }
-.btn-outline { border:1.5px solid var(--border); border-radius:12px; padding:14px 16px; background:var(--bg-card); }
-.btn-outline-student { border-color:rgba(167,139,250,0.35); }
-.btn-outline-title { display:block; color:var(--text); font-size:15px; font-weight:600; }
-.btn-outline-sub { display:block; color:var(--text-dim); font-size:11px; margin-top:4px; line-height:1.4; }
 .page-footer { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06); }
 .footer-link { color:var(--text-dim); font-size:11px; padding:4px 2px; }
 .footer-link:active { opacity:0.6; }
