@@ -173,3 +173,20 @@ class AdminBlacklistResponse(BaseModel):
     ips: list[BlacklistEntryOut] = []
     phones: list[BlacklistEntryOut] = []
     devices: list[BlacklistEntryOut] = []
+
+
+class AdminTalentQuotaRequest(BaseModel):
+    quota: int = Field(..., ge=0, le=99, description="天赋测试配额（0 表示禁止测试）")
+
+
+class AdminTalentQuotaBatchRequest(BaseModel):
+    child_ids: list[int] = Field(..., min_length=1, max_length=200)
+    quota: int = Field(..., ge=0, le=99)
+
+
+class AdminTalentQuotaResponse(BaseModel):
+    child_id: int
+    nickname: str
+    talent_test_quota: int
+    valid_tests_used: int = 0
+    remaining: int = 0

@@ -1502,3 +1502,23 @@ export async function reconcileAdminParent(adminId, parentId) {
 export async function fetchAdminChildDetail(adminId, childId) {
   return apiJson(withAdmin(`/api/admin/children/${childId}/detail`, adminId))
 }
+
+export async function fetchChildTalentQuota(adminId, childId) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/talent-quota`, adminId))
+}
+
+export async function updateChildTalentQuota(adminId, childId, quota) {
+  return apiJson(withAdmin(`/api/admin/children/${childId}/talent-quota`, adminId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quota }),
+  })
+}
+
+export async function batchUpdateTalentQuota(adminId, { childIds, quota } = {}) {
+  return apiJson(withAdmin('/api/admin/children/talent-quota/batch', adminId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ child_ids: childIds, quota }),
+  })
+}

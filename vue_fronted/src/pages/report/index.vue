@@ -48,6 +48,21 @@
           <text v-if="resolving" class="conflict-hint">处理中...</text>
         </view>
 
+        <!-- ══ 最后一次换天赋警告 ══ -->
+        <view v-if="talentLastChance" class="card mizhe-warn" style="border-color:#f59e0b;background:rgba(245,158,11,0.06);">
+          <view class="mizhe-icon">⚠️</view>
+          <text class="mizhe-title" style="color:#f59e0b;">最后一次更换机会</text>
+          <text class="mizhe-desc" style="color:#fbbf24;">您之前的天赋是「{{ currentTalent }}」，本次测评结果为「{{ lastChanceNewTalent }}」。这是您最后一次更换天赋的机会，更换后将永久锁定无法再改。确定更换吗？</text>
+          <view class="conflict-actions" style="margin-top:12px;">
+            <view class="btn-outline conflict-btn" @tap="handleLastChance('keep')">
+              <text>保留「{{ currentTalent }}」</text>
+            </view>
+            <view class="btn-solid conflict-btn-new" style="background:#f59e0b;border-color:#f59e0b;" @tap="handleLastChance('replace')">
+              <text>更换为「{{ lastChanceNewTalent }}」</text>
+            </view>
+          </view>
+        </view>
+
         <!-- ══ 天赋锁定提示 ══ -->
         <view v-if="talentLocked" class="card mizhe-warn">
           <view class="mizhe-icon">🔒</view>
@@ -233,6 +248,11 @@ onMounted(async () => {
       talentLocked.value = true
       lockMessage.value = decodeURIComponent(page?.options?.lock_message || '天赋已锁定')
     }
+    if (page?.options?.talent_last_chance === '1') {
+      talentLastChance.value = true
+      currentTalent.value = decodeURIComponent(page?.options?.current_talent || '')
+      lastChanceNewTalent.value = decodeURIComponent(page?.options?.new_talent || '')
+    }
 
     if (!assessmentId) {
       loadError.value = '缺少测评记录 ID'
@@ -256,6 +276,8 @@ onMounted(async () => {
 const talentConflict = ref(false)
 const currentTalent = ref('')
 const talentLocked = ref(false)
+const talentLastChance = ref(false)
+const lastChanceNewTalent = ref('')
 const lockMessage = ref('')
 const resolving = ref(false)
 
@@ -271,6 +293,48 @@ async function handleConflictResolve(action) {
     uni.showToast({ title: e.message || '操作失败', icon: 'none' })
   }
   resolving.value = false
+}
+
+async function handleLastChance(action) {
+  if (action === 'keep') {
+    resolving.value = true
+    try {
+      const uid = await ensureChildUser()
+      const { resolveTalentConflict } = await import('@/utils/userApi.js')
+      await resolveTalentConflict(uid, 'keep_old')
+      talentLastChance.value = false
+      uni.showToast({ title: '已保留原天赋', icon: 'none' })
+    } catch (e) {
+      uni.showToast({ title: e.message || '操作失败', icon: 'none' })
+    }
+    resolving.value = false
+    return
+  }
+  // 确认更换 → 弹二次确认
+  uni.showModal({
+    title: '⚠️ 最终确认',
+    content: `确定要将天赋从「${currentTalent.value}」更换为「${lastChanceNewTalent.value}」吗？\n\n⚠️ 这是您最后一次更换机会，更换后将永久锁定，无法再改！`,
+    confirmText: '我确定，永久更换',
+    cancelText: '我再想想',
+    confirmColor: '#ef4444',
+    success: async (res) => {
+      if (!res.confirm) return
+      resolving.value = true
+      try {
+        const uid = await ensureChildUser()
+        const { resolveTalentConflict } = await import('@/utils/userApi.js')
+        await resolveTalentConflict(uid, 'use_new')
+        talentLastChance.value = false
+        // 刷新天赋状态
+        const { refreshTalentState } = await import('@/utils/talentState.js')
+        await refreshTalentState(uid)
+        uni.showToast({ title: '天赋已更新，此为最终结果，无法再改', icon: 'none', duration: 3000 })
+      } catch (e) {
+        uni.showToast({ title: e.message || '操作失败', icon: 'none' })
+      }
+      resolving.value = false
+    },
+  })
 }
 
 function reTestFromMizhe() {

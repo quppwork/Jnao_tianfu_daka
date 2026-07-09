@@ -22,6 +22,9 @@ from app.schemas.admin import (
     AdminChildDetailResponse,
     AdminReconcileResponse,
     AdminBlacklistResponse,
+    AdminTalentQuotaRequest,
+    AdminTalentQuotaBatchRequest,
+    AdminTalentQuotaResponse,
     BlacklistEntryOut,
 )
 from app.schemas.auth import AuthResponse
@@ -318,3 +321,93 @@ def remove_blacklist(
     if not ok:
         raise HTTPException(404, "未找到该黑名单记录")
     return {"ok": True}
+
+
+# ── 天赋测试配额管理 ──
+
+@router.get("/children/{child_id}/talent-quota", response_model=AdminTalentQuotaResponse)
+def get_child_talent_quota(
+    child_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """查看孩子的天赋测试配额"""
+    from app.db.models import ChildUser, TalentAssessment
+    from sqlalchemy import func, select as sa_select
+
+    user = db.get(ChildUser, child_id)
+    if not user:
+        raise HTTPException(404, "孩子不存在")
+    profile = dict(user.profile_json or {})
+    quota = profile.get("talent_test_quota", 2)
+    used = db.scalar(
+        sa_select(func.count()).select_from(TalentAssessment).where(
+            TalentAssessment.child_user_id == child_id,
+            TalentAssessment.talent_primary != "迷者",
+            TalentAssessment.talent_code.isnot(None),
+        )
+    ) or 0
+    return AdminTalentQuotaResponse(
+        child_id=child_id,
+        nickname=user.nickname or "",
+        talent_test_quota=quota,
+        valid_tests_used=used,
+        remaining=max(0, quota - used),
+    )
+
+
+@router.put("/children/{child_id}/talent-quota", response_model=AdminTalentQuotaResponse)
+def update_child_talent_quota(
+    child_id: int,
+    req: AdminTalentQuotaRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """修改单个孩子的天赋测试配额"""
+    from app.db.models import ChildUser, TalentAssessment
+    from sqlalchemy import func, select as sa_select
+
+    user = db.get(ChildUser, child_id)
+    if not user:
+        raise HTTPException(404, "孩子不存在")
+    profile = dict(user.profile_json or {})
+    profile["talent_test_quota"] = req.quota
+    user.profile_json = profile
+    db.commit()
+    used = db.scalar(
+        sa_select(func.count()).select_from(TalentAssessment).where(
+            TalentAssessment.child_user_id == child_id,
+            TalentAssessment.talent_primary != "迷者",
+            TalentAssessment.talent_code.isnot(None),
+        )
+    ) or 0
+    return AdminTalentQuotaResponse(
+        child_id=child_id,
+        nickname=user.nickname or "",
+        talent_test_quota=req.quota,
+        valid_tests_used=used,
+        remaining=max(0, req.quota - used),
+    )
+
+
+@router.put("/children/talent-quota/batch")
+def batch_update_talent_quota(
+    req: AdminTalentQuotaBatchRequest,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """批量修改孩子的天赋测试配额"""
+    from app.db.models import ChildUser
+    from sqlalchemy import update as sql_update
+
+    updated = 0
+    for cid in req.child_ids:
+        user = db.get(ChildUser, cid)
+        if not user:
+            continue
+        profile = dict(user.profile_json or {})
+        profile["talent_test_quota"] = req.quota
+        user.profile_json = profile
+        updated += 1
+    db.commit()
+    return {"ok": True, "updated": updated, "quota": req.quota}
