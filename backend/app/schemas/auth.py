@@ -106,7 +106,7 @@ class SmsRegisterRequest(BaseModel):
     sms_code: str = Field(..., min_length=4, max_length=8)
     real_name: str = Field(..., min_length=2, max_length=20)
     nickname: str = Field(..., min_length=2, max_length=20)
-    password: str | None = Field(None, min_length=8, max_length=128)
+    password: str = Field(..., min_length=8, max_length=128)
     device_id: str | None = Field(None, max_length=64)
 
 

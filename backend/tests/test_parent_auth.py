@@ -69,6 +69,7 @@ class TestParentAuth:
                 "sms_code": "88888",
                 "real_name": "张三",
                 "nickname": "重复家长",
+                "password": STRONG_PWD,
             },
         )
         assert res.status_code in (400, 409)

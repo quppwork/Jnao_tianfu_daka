@@ -71,6 +71,7 @@ import {
 } from '@/utils/userApi.js'
 import { clearLoginGuard } from '@/utils/loginGuard.js'
 import { useLoginFlow, hasValidSession, inferHomeFromSession } from '@/utils/useLoginFlow.js'
+import { validatePasswordClient } from '@/utils/passwordPolicy.js'
 
 const { overlayText, loginBusy, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
@@ -176,11 +177,11 @@ async function doRegister() {
     uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
   }
   if (!form.value.smsCode.trim()) { uni.showToast({ title: '请输入短信验证码', icon: 'none' }); return }
-  if (form.value.password.trim()) {
-    if (form.value.password.trim().length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
-    if (form.value.password.trim() !== form.value.confirm.trim()) {
-      uni.showToast({ title: '两次密码不一致', icon: 'none' }); return
-    }
+  if (!form.value.password.trim()) { uni.showToast({ title: '请设置登录密码', icon: 'none' }); return }
+  const pwdErr = validatePasswordClient(form.value.password.trim())
+  if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); return }
+  if (form.value.password.trim() !== form.value.confirm.trim()) {
+    uni.showToast({ title: '两次密码不一致', icon: 'none' }); return
   }
 
   try {
@@ -190,7 +191,7 @@ async function doRegister() {
         smsCode: form.value.smsCode.trim(),
         realName: form.value.realName.trim(),
         nickname: form.value.nickname.trim(),
-        password: form.value.password.trim() || undefined,
+        password: form.value.password.trim(),
       })
       await completeAfterAuth(() => routeAfterRegister(data), { busyText: '正在进入…' })
       return data

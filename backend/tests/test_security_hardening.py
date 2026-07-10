@@ -63,7 +63,7 @@ class TestPasswordPolicy:
         assert res.status_code == 400
         assert "大写" in res.json()["detail"]
 
-    def test_login_weak_password_flags_must_change(
+    def test_login_does_not_force_password_change(
         self, client_strict_auth: TestClient, db_session
     ):
         from tests.test_parent_auth import STRONG_PWD, _register_parent
@@ -73,17 +73,17 @@ class TestPasswordPolicy:
         child = auth_service.register_child(
             db_session,
             parent_phone=parent["parent_phone"],
-            nickname="旧密码童",
-            login_name="oldweak",
-            password="123456",
+            nickname="测试童",
+            login_name="testkid1",
+            password=STRONG_PWD,
             role=auth_service.ROLE_STUDENT,
         )
         auth_service.bind_parent_child(db_session, parent["child_user_id"], child.id)
         res = client_strict_auth.post(
             "/api/auth/login",
-            json={"login_name": "oldweak", "password": "123456"},
+            json={"login_name": "testkid1", "password": STRONG_PWD},
         )
         assert res.status_code == 200
         data = res.json()
-        assert data.get("must_change_password") is True
-        assert data.get("next_step") == "change-password"
+        assert not data.get("must_change_password")
+        assert data.get("next_step") != "change-password"

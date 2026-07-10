@@ -56,6 +56,7 @@ class TestSmsAuth:
                 "sms_code": "88888",
                 "real_name": "张家长",
                 "nickname": "张妈妈",
+                "password": "Zhang123A",
             },
         )
         assert res.status_code == 200, res.text

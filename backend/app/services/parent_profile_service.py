@@ -238,10 +238,7 @@ def register_parent_by_sms(
 
         nick = validate_nickname(nickname, field_label="昵称")
         name = validate_real_name(real_name or "")
-
-        pwd_value = None
-        if password and password.strip():
-            pwd_value = validate_password_strength(password.strip())
+        pwd_value = validate_password_strength((password or "").strip())
 
         now = datetime.now(TZ).replace(tzinfo=None)
         now_iso = format_cst(now)

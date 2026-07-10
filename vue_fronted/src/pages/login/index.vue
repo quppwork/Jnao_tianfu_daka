@@ -272,10 +272,6 @@ function backToWechatLogin() {
 
 function tryRedirectIfLoggedIn() {
   try {
-    if (sessionStorage.getItem('jnao_must_change_password') === '1') {
-      uni.redirectTo({ url: '/pages/login/change-password' })
-      return true
-    }
     // 管理员 session 与用户登录页隔离，不在此自动跳转
     const adminRaw = localStorage.getItem('jnao_admin_user')
     const adminLoggedIn = localStorage.getItem('jnao_admin_logged_in') === '1'
@@ -533,10 +529,6 @@ async function routeParentHome(data) {
   clearLoginGuard()
   saveAuthSession(data)
   try { sessionStorage.removeItem('jnao_browser_login') } catch (_) { /* ignore */ }
-  if (data.must_change_password || data.next_step === 'change-password') {
-    uni.redirectTo({ url: '/pages/login/change-password' })
-    return
-  }
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = resolveParentTarget(data)
   if (parentNeedsAccountReady(data) && data.next_step === 'bind-phone') {
@@ -555,10 +547,6 @@ async function routeParentHome(data) {
 async function routeStudentHome(data) {
   clearLoginGuard()
   saveAuthSession(data)
-  if (data.must_change_password || data.next_step === 'change-password') {
-    uni.redirectTo({ url: '/pages/login/change-password' })
-    return
-  }
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = '/pages/index'
   try {

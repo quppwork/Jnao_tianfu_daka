@@ -50,7 +50,3 @@ def validate_password_strength(password: str, *, field_label: str = "密码") ->
         raise HTTPException(400, f"{field_label}{_PASSWORD_HINT}")
     return pwd
 
-
-def password_needs_upgrade(plain_password: str) -> bool:
-    """登录成功后：明文密码是否符合现行策略（用于强制改密）。"""
-    return not password_meets_policy((plain_password or "").strip())

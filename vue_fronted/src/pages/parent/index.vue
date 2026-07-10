@@ -146,6 +146,7 @@ import {
   invalidatePageAuthCache,
 } from '@/utils/userApi.js'
 import { prepareRoleLoginEntry } from '@/utils/appSession.js'
+import { validatePasswordClient } from '@/utils/passwordPolicy.js'
 
 const showSettings = ref(false)
 const showProfileForm = ref(false)
@@ -282,7 +283,9 @@ async function saveProfile() {
     if (profileHasPassword.value && !profileForm.value.oldPassword.trim()) {
       uni.showToast({ title: '请输入原密码', icon: 'none' }); return
     }
-    if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); return }
+    if (!pwd) { uni.showToast({ title: '请填写新密码', icon: 'none' }); return }
+    const pwdErr = validatePasswordClient(pwd)
+    if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); return }
     if (pwd !== confirm) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
   }
   savingProfile.value = true
@@ -323,14 +326,16 @@ async function saveChild() {
       if (childForm.value.grade) body.grade = childForm.value.grade
       if (childForm.value.age != null && childForm.value.age !== '') body.age = childForm.value.age
       if (pwd) {
-        if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
+        const pwdErr = validatePasswordClient(pwd)
+        if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); saving.value = false; return }
         body.password = pwd
       }
       await updateParentChild(parentId.value, editingChild.value.id, body)
     } else {
       const loginName = childForm.value.loginName.trim()
       if (!loginName || loginName.length < 2) { uni.showToast({ title: '账号至少2位', icon: 'none' }); saving.value = false; return }
-      if (!pwd || pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
+      const pwdErr = validatePasswordClient(pwd)
+      if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); saving.value = false; return }
       await createParentChild(parentId.value, {
         loginName, nickname: nick, password: pwd,
         grade: childForm.value.grade || null,

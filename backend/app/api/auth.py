@@ -86,7 +86,6 @@ def _to_response(
     user,
     *,
     bind_ticket: str | None = None,
-    must_change_password: bool = False,
 ) -> AuthResponse:
     from app.core.session_cookie import maybe_strip_token
 
@@ -105,8 +104,6 @@ def _to_response(
             complete, missing = parent_profile_status(user)
             ready = complete
             step = "home" if complete else "complete-profile"
-    if must_change_password:
-        step = "change-password"
     return AuthResponse(
         child_user_id=user.id,
         parent_phone=user.parent_phone,
@@ -120,7 +117,6 @@ def _to_response(
         account_ready=ready,
         next_step=step,
         bind_ticket=bind_ticket,
-        must_change_password=must_change_password,
     )
 
 
@@ -129,7 +125,6 @@ def _issue_and_respond(
     user,
     response: Response,
     *,
-    must_change_password: bool = False,
     bind_ticket: str | None = None,
 ) -> AuthResponse:
     from app.core.session_cookie import set_session_cookie
@@ -142,7 +137,6 @@ def _issue_and_respond(
     return _to_response(
         user,
         bind_ticket=bind_ticket,
-        must_change_password=must_change_password,
     )
 
 
@@ -273,8 +267,6 @@ def register(req: RegisterRequest, response: Response, db: Session = Depends(get
 
 @router.post("/login", response_model=AuthResponse)
 def login(req: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    from app.core.password_policy import password_needs_upgrade
-
     ip, did = _auth_ctx(request, None)
 
     if req.role == auth_service.ROLE_PARENT or (
@@ -294,8 +286,7 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
             raise HTTPException(401, "手机号或密码错误")
         clear_auth_failures(client_ip=ip, phone=phone, device_id=did)
-        must_change = password_needs_upgrade(req.password)
-        return _issue_and_respond(db, user, response, must_change_password=must_change)
+        return _issue_and_respond(db, user, response)
 
     if req.login_name and req.password:
         from app.core.password import verify_password
@@ -309,8 +300,7 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
         if not auth_service.has_active_parent_bind(db, user.id):
             raise HTTPException(403, "账号未绑定家长，请联系管理员")
         clear_auth_failures(client_ip=ip, device_id=did, login_name=login_name)
-        must_change = password_needs_upgrade(req.password)
-        return _issue_and_respond(db, user, response, must_change_password=must_change)
+        return _issue_and_respond(db, user, response)
 
     raise HTTPException(400, "请提供有效的登录信息")
 

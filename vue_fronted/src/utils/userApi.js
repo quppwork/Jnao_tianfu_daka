@@ -540,11 +540,6 @@ function _storeAuth(data) {
     if (data.login_channel === 'wechat') {
       localStorage.setItem('jnao_login_channel', 'wechat')
     }
-    if (data.must_change_password) {
-      sessionStorage.setItem('jnao_must_change_password', '1')
-    } else {
-      sessionStorage.removeItem('jnao_must_change_password')
-    }
   } catch (e) { /* ignore */ }
   if (role === 'student') {
     setChildUserId(data.child_user_id)
@@ -1370,17 +1365,6 @@ function withAdmin(url, adminId) {
 
 export function clearAdminSession() {
   clearSessionForKind('admin')
-}
-
-/** 修改密码（家长/学生，需已登录） */
-export async function changePassword(oldPassword, newPassword) {
-  const data = await apiJson('/api/auth/change-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
-  })
-  saveAuthSession(data)
-  return data
 }
 
 export async function loginAdmin(loginName, password) {
