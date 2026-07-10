@@ -63,6 +63,9 @@
           <input class="form-input" v-model="childForm.password" :placeholder="editingChild ? '新密码（留空不改，8-32位含大小写+数字）' : '登录密码（8-32位，含大小写+数字）'" type="password" />
         </view>
         <view class="input-wrap">
+          <input class="form-input" v-model="childForm.confirm" :placeholder="editingChild ? '确认新密码' : '确认密码'" type="password" />
+        </view>
+        <view class="input-wrap">
           <picker class="form-picker" :range="ageOptions" :value="ageIndex" @change="onAgeChange">
             <view class="form-picker-display" :class="{ placeholder: !childForm.age }">
               {{ childForm.age ? childForm.age + ' 岁' : '请选择年龄' }}
@@ -160,7 +163,7 @@ const saving = ref(false)
 const savingProfile = ref(false)
 const isLight = ref(false)
 const editingChild = ref(null)
-const childForm = ref({ loginName: '', nickname: '', password: '', age: null, grade: '' })
+const childForm = ref({ loginName: '', nickname: '', password: '', confirm: '', age: null, grade: '' })
 const profileForm = ref({ phone: '', realName: '', nickname: '', oldPassword: '', password: '', confirm: '' })
 const profileHasPassword = ref(false)
 
@@ -233,13 +236,13 @@ async function openAddChild() {
     return
   }
   editingChild.value = null
-  childForm.value = { loginName: '', nickname: '', password: '', age: null, grade: '' }
+  childForm.value = { loginName: '', nickname: '', password: '', confirm: '', age: null, grade: '' }
   showChildForm.value = true
 }
 
 function openEditChild(child) {
   editingChild.value = child
-  childForm.value = { loginName: child.login_name || '', nickname: child.nickname || '', password: '', age: child.age || null, grade: child.grade || '' }
+  childForm.value = { loginName: child.login_name || '', nickname: child.nickname || '', password: '', confirm: '', age: child.age || null, grade: child.grade || '' }
   showChildForm.value = true
 }
 
@@ -318,24 +321,26 @@ async function saveProfile() {
 async function saveChild() {
   const nick = childForm.value.nickname.trim()
   const pwd = childForm.value.password.trim()
+  const confirm = childForm.value.confirm.trim()
   if (!nick) { uni.showToast({ title: '请输入孩子姓名', icon: 'none' }); return }
+  if (pwd || confirm) {
+    if (!pwd) { uni.showToast({ title: '请填写密码', icon: 'none' }); return }
+    const pwdErr = validatePasswordClient(pwd)
+    if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); return }
+    if (pwd !== confirm) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
+  }
   saving.value = true
   try {
     if (editingChild.value) {
       const body = { nickname: nick }
       if (childForm.value.grade) body.grade = childForm.value.grade
       if (childForm.value.age != null && childForm.value.age !== '') body.age = childForm.value.age
-      if (pwd) {
-        const pwdErr = validatePasswordClient(pwd)
-        if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); saving.value = false; return }
-        body.password = pwd
-      }
+      if (pwd) body.password = pwd
       await updateParentChild(parentId.value, editingChild.value.id, body)
     } else {
       const loginName = childForm.value.loginName.trim()
       if (!loginName || loginName.length < 2) { uni.showToast({ title: '账号至少2位', icon: 'none' }); saving.value = false; return }
-      const pwdErr = validatePasswordClient(pwd)
-      if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); saving.value = false; return }
+      if (!pwd) { uni.showToast({ title: '请设置登录密码', icon: 'none' }); saving.value = false; return }
       await createParentChild(parentId.value, {
         loginName, nickname: nick, password: pwd,
         grade: childForm.value.grade || null,
