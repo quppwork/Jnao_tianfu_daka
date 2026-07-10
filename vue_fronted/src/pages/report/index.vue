@@ -133,7 +133,6 @@
           <view v-if="Ability.some(a=>a.desp)" class="ab-desp-block">
             <view v-if="!collapseOpen['abilityDesp']" class="collapse-btn" @tap="collapseOpen['abilityDesp']=true"><text>展示更多</text></view>
             <template v-if="collapseOpen['abilityDesp']">
-              <view class="video-banner" @tap="openVideo"><text>▶ 视频讲解</text></view>
               <text class="card-label">综合能力解读</text>
               <view v-for="ab in Ability.filter(a=>a.desp)" :key="ab.abilityID" class="ab-desp">
                 <text class="ab-desp-name">-{{ ab.abilityName }}-</text>
@@ -164,10 +163,7 @@
           <text class="sec-title">给你的建议</text>
           <view v-if="advice.career" class="advice-item">
             <text class="card-label">事业建议</text>
-            <view class="advice-video-wrap">
-              <view class="video-placeholder video-float" @tap="openVideo"><text>▶ 视频</text></view>
-              <text class="advice-text">{{ advice.career }}</text>
-            </view>
+            <text class="advice-text">{{ advice.career }}</text>
           </view>
           <view v-if="advice.emotion" class="advice-item">
             <text class="card-label">情感建议</text>
@@ -198,12 +194,32 @@
         <view style="height:40px;"></view>
       </view>
     </scroll-view>
+
+    <!-- 天赋视频弹窗 -->
+    <view v-if="showTalentVideo" class="player-overlay" @click="closeTalentVideo">
+      <view class="player-card" @click.stop>
+        <view class="player-header">
+          <text class="player-title">五者天赋视频讲解</text>
+          <view class="player-close" @click="closeTalentVideo">✕</view>
+        </view>
+        <view class="player-body">
+          <video
+            v-if="talentVideoUrl"
+            class="talent-video"
+            :src="talentVideoUrl"
+            controls
+            autoplay
+          />
+          <text v-else>视频加载中...</text>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ensureChildUser, fetchAssessmentReport, fetchProfile, saveProfile } from '@/utils/userApi.js'
+import { ensureChildUser, fetchAssessmentReport, fetchProfile, getSessionToken, saveProfile } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
@@ -657,7 +673,16 @@ const talentWheelSvg = computed(() => {
   svg += '</svg>'
   return svg
 })
-function openVideo() { uni.showToast({ title: '视频功能开发中', icon: 'none' }) }
+const talentVideoUrl = ref('')
+const showTalentVideo = ref(false)
+function openVideo() {
+  if (!talentVideoUrl.value) {
+    const u = JSON.parse(localStorage.getItem('jnao_user') || '{}')
+    talentVideoUrl.value = `/api/training/video/talent/stream?user_id=${u.id || 1}`
+  }
+  showTalentVideo.value = true
+}
+function closeTalentVideo() { showTalentVideo.value = false }
 function reTest() { goBack() }
 function openOldReport() {
   const id = report.value?.id
@@ -792,6 +817,13 @@ function openOldReport() {
 .advice-video-wrap { overflow:hidden; }
 .video-banner { width:100%; height:120px; background-color:#e5e7eb; background-size:cover; background-position:center; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; margin-bottom:14px; font-size:14px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
 .video-banner:active { background:#d1d5db; }
+.player-overlay { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; }
+.player-card { width:92vw; max-width:640px; background:#fff; border-radius:12px; overflow:hidden; }
+.player-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #e5e7eb; }
+.player-title { font-size:16px; font-weight:600; color:#1f2937; }
+.player-close { font-size:20px; color:#9ca3af; cursor:pointer; padding:4px; }
+.player-body { padding:0; background:#000; }
+.talent-video { width:100%; display:block; border-radius:0 0 12px 12px; background:#000; }
 </style>
 
 <!-- 全局样式，穿透 v-html 内容 -->

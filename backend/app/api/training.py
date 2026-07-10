@@ -3,9 +3,10 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_student, get_db
+from app.core.deps import get_authenticated_student, get_authenticated_user, get_db
 from app.core.cache import (
     cache_get_json,
     cache_set_json,
@@ -60,16 +61,38 @@ async def schedule_training(
 
 @router.get("/video/talent", response_model=TalentVideoResponse)
 def talent_training_video(
-    child_user_id: int = Depends(get_authenticated_student),
+    auth_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    """按天赋返回固定训练视频（支持测评结果或引导页自选天赋）"""
-    from app.services.training_service import _resolve_effective_talent
+    """天赋能力视频讲解 — 返回 OSS 五者天赋视频（家长/学生均可观看）"""
+    return get_talent_training_video(None)
 
-    talent = _resolve_effective_talent(db, child_user_id)
-    if not talent or not talent.get("talent_code"):
-        raise HTTPException(403, "请先完成天赋测评或选择天赋")
-    return get_talent_training_video(talent["talent_code"])
+
+@router.get("/video/talent/stream")
+def talent_video_stream(
+    auth_user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """代理 OSS 视频流 — 后端读取 OSS，转发给前端（绕过 CORS）"""
+    info = get_talent_training_video(None)
+    url = info.get("url", "")
+    if not url:
+        raise HTTPException(404, "视频资源未找到")
+
+    import requests as req
+
+    def stream():
+        with req.get(url, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+
+    return StreamingResponse(
+        stream(),
+        media_type="video/mp4",
+        headers={"Content-Disposition": "inline"},
+    )
 
 
 @router.post("/items/{item_id}/watch-progress", response_model=WatchProgressResponse)

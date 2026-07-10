@@ -31,14 +31,44 @@ def _settings_videos() -> dict[int, dict]:
 
 
 def get_talent_training_video(talent_code: int | None) -> dict:
-    """按天赋返回固定训练视频（训练 A 视频步骤）"""
+    """按天赋返回固定训练视频（优先 OSS content_item 五者天赋视频）"""
+    # 优先查 content_item 中的五者天赋视频
+    from app.services.oss_client import resolve_play_url as _sign
+    try:
+        from app.db.session import get_session_factory as _gsf
+        from sqlalchemy import select
+        from app.db.models import ContentItem
+        from app.services.content_meta import parse_item_meta
+        db = _gsf()()
+        try:
+            rows = db.scalars(
+                select(ContentItem).where(
+                    ContentItem.content_type == "video",
+                    ContentItem.status == 1,
+                )
+            ).all()
+            for row in rows:
+                meta = parse_item_meta(row)
+                if meta.get("skill") == "五者天赋":
+                    return {
+                        "title": "五者天赋视频讲解",
+                        "url": _sign(row.play_url) or row.play_url,
+                        "talent_code": talent_code,
+                        "source": "oss_content",
+                    }
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+    # fallback: 本地固定视频
     if not talent_code:
         return {"title": "五者天赋视频", "url": "/static/training_video.mp4", "source": "default"}
     cfg = _settings_videos().get(talent_code) or DEFAULT_TALENT_VIDEOS.get(talent_code)
     if not cfg:
         tag = TALENT_CODE_TO_TAG.get(talent_code, "")
         cfg = {"title": f"{tag}者·五者天赋视频", "url": "/static/training_video.mp4"}
-    url = resolve_play_url(cfg["url"]) if cfg["url"].startswith("http") else cfg["url"]
+    url = _sign(cfg["url"]) if cfg["url"].startswith("http") else cfg["url"]
     return {
         "title": cfg.get("title", "五者天赋视频"),
         "url": url,
