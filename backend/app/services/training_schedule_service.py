@@ -126,6 +126,8 @@ def _plan_structure_invalid(plan: TrainingPlan, planned_minutes: int) -> bool:
 
 def _attach_videos_to_items(db: Session, plan: TrainingPlan) -> None:
     """为训练项匹配对应技能的视频（如极速运算 → _1.5极速运算的原理及过程.mp4）"""
+    from app.services.content_meta import parse_item_instruction, skill_from_title
+
     video_items = db.scalars(
         select(ContentItem).where(
             ContentItem.content_type == "video",
@@ -135,8 +137,6 @@ def _attach_videos_to_items(db: Session, plan: TrainingPlan) -> None:
     if not video_items:
         return
 
-    # 技能名 → 视频 ContentItem 映射
-    from app.services.content_meta import skill_from_title
     video_map: dict[str, ContentItem] = {}
     for v in video_items:
         skill = skill_from_title(v.lesson_title)
