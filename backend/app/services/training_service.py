@@ -1401,12 +1401,6 @@ def _item_block(item: TrainingItem) -> str | None:
     return parse_item_instruction(item.instructions).get("block")
 
 
-def _revert_block_checkin(db: Session, plan: TrainingPlan, block: str) -> None:
-    for it in plan.items:
-        if _item_block(it) == block:
-            it.checkin_status = "pending"
-
-
 def _sync_plan_after_record_change(
     db: Session,
     plan: TrainingPlan | None,
@@ -1426,12 +1420,8 @@ def _sync_plan_after_record_change(
     if deleted_record and deleted_record.item_id:
         item = db.get(TrainingItem, deleted_record.item_id)
         if item:
-            block = _item_block(item)
-            if block:
-                _revert_block_checkin(db, plan, block)
-            else:
-                # 简单推送计划无 block，直接回退该 item
-                item.checkin_status = "pending"
+            # v2.0: 只回退当前被删除的 item，不影响同 block 其他 item
+            item.checkin_status = "pending"
 
     pending = [it for it in plan.items if it.checkin_status != "done"]
     plan.status = "pending" if pending else "completed"

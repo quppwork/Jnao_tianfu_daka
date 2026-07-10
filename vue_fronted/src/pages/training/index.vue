@@ -2027,7 +2027,7 @@ function isPhaseUnlocked(block) {
 const planExpanded = ref({})
 const visiblePhases = computed(() => {
   return planPhases.value.filter(p => {
-    if (p.allDone && !isPerceptionPhase(p)) return false
+    // 有打卡记录且不是多元感知 → 隐藏
     if (phaseRecordIds.value[p.block] && !isPerceptionPhase(p)) return false
     return true
   })
@@ -2063,11 +2063,12 @@ const planPhases = computed(() => {
   return sorted.map((item, idx) => {
     const inst = parseItemInstructions(item.instructions)
     const isRequired = inst.item_type !== 'elective' && inst.blocks_next !== false
-    const unlocked = isRequired ? prevDone : true  // elective always unlocked
     const isDone = item.checkin_status === 'done'
+    const unlocked = isRequired ? (prevDone || isDone) : true  // elective always unlocked
 
-    // Update prevDone for next iteration
+    // Update prevDone for next iteration — completed items keep the chain alive
     if (isRequired && !isDone) prevDone = false
+    if (isDone) prevDone = true
 
     const skillName = inst.skill || resolvePlanItemSkill(item) || ''
     const isElective = !isRequired
