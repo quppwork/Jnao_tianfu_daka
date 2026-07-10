@@ -554,7 +554,11 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
     training_day = _training_day_for_child(db, plan.child_user_id) if db is not None else 1
     optional_offers: list[dict] = []
     if db is not None and plan.items:
-        optional_offers = []  # v2.0: 选修由 formula_engine + elective_service 管理
+        from app.services.training_elective_service import get_elective_offers
+        optional_offers = get_elective_offers(
+            plan.planned_minutes or 0,
+            overall_tier=plan.content_index or 1,
+        )
     timer_fields = _build_timer_fields(db, plan.child_user_id, plan, now) if db is not None else {
         "timer_phase": "setup",
         "timer_end_at": None,
@@ -1242,13 +1246,17 @@ def append_elective_item(
         )
 
     if content:
+        is_video = (content.content_type == "video")
         inst_data = {"skill": skill, "item_type": "elective", "blocks_next": False}
+        if is_video:
+            inst_data["content_type"] = "video"
         inst = json.dumps(inst_data, ensure_ascii=False)
         db.add(TrainingItem(
             plan_id=plan.id, sort_order=next_sort, ability_type="elective",
             title=content_display_title(content),
             duration_min=estimate_duration_min(content),
-            audio_url=content.play_url, video_url=content.video_url,
+            audio_url=None if is_video else content.play_url,
+            video_url=content.play_url if is_video else content.video_url,
             content_item_id=content.id, instructions=inst,
             checkin_status="pending",
         ))
@@ -1972,6 +1980,10 @@ def customize_plan_items(
             target_item.content_item_id = None
             target_item.instructions = item_instruction("A", "placeholder")
             target_item.ability_type = "placeholder"
+
+    # 匹配视频（极速运算等）
+    from app.services.training_schedule_service import _attach_videos_to_items
+    _attach_videos_to_items(db, plan)
 
     repair_plan_media_items(db, plan, talent_code)
     plan.report_text = build_coach_text_for_plan(plan)

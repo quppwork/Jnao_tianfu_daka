@@ -259,24 +259,44 @@
 
             <template v-if="phase.items.length">
               <view class="step-grid">
-              <view
-                v-for="(item, idx) in phase.items"
-                :key="item.id || idx"
-                class="step"
-                :class="{
-                  'step-preview-locked': !phase.unlocked,
-                  'step-locked': phase.unlocked && isMediaLocked,
-                  'step-watched': phase.unlocked && isItemWatched(item),
-                }"
-                @click="openPhaseMediaItem(item, phase)"
-              >
-                <view class="step-num" :class="{ 'step-num-done': isItemWatched(item), dim: !phase.unlocked }">{{ idx + 1 }}</view>
-                <view class="step-content">
-                  <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">{{ itemLabel(item) }}</text>
-                  <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</view>
-                  <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">{{ itemStepHint(item, phase) }}</text>
-                </view>
-              </view>
+                <template v-for="(item, idx) in phase.items" :key="item.id || idx">
+                  <!-- 音频卡片（仅当有音频时） -->
+                  <view
+                    v-if="item.audio_url"
+                    class="step"
+                    :class="{
+                      'step-preview-locked': !phase.unlocked,
+                      'step-locked': phase.unlocked && isMediaLocked,
+                      'step-watched': phase.unlocked && isItemWatched(item),
+                    }"
+                    @click="openPhaseMediaItem(item, phase, 'audio')"
+                  >
+                    <view class="step-num" :class="{ 'step-num-done': isItemWatched(item), dim: !phase.unlocked }">{{ idx + 1 }}</view>
+                    <view class="step-content">
+                      <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">🎧 音频训练</text>
+                      <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ item.title || '训练项' }}</view>
+                      <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">{{ itemStepHint(item, phase) }}</text>
+                    </view>
+                  </view>
+                  <!-- 视频卡片（仅当有 video_url 时） -->
+                  <view
+                    v-if="item.video_url"
+                    class="step step-video"
+                    :class="{
+                      'step-preview-locked': !phase.unlocked,
+                      'step-locked': phase.unlocked && isMediaLocked,
+                      'step-watched': phase.unlocked && isItemWatched(item),
+                    }"
+                    @click.stop="openPhaseMediaItem(item, phase, 'video')"
+                  >
+                    <view class="step-num" :class="{ 'step-num-done': isItemWatched(item), dim: !phase.unlocked }">▶</view>
+                    <view class="step-content">
+                      <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">🎬 视频训练</text>
+                      <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ videoTitle(item) }}</view>
+                      <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">点击播放</text>
+                    </view>
+                  </view>
+                </template>
               </view>
             </template>
             <view v-else class="step dim-step">
@@ -1734,6 +1754,8 @@ const electiveSkills = computed(() => {
 
   // 多元感知（OSS 内部名：感知力）：始终可选
   list.push({ skill: '感知力', label: '多元感知', inPlan: skillInPlan('感知力') })
+  // 开口窍：视频选修，不打卡不阻塞
+  list.push({ skill: '开口窍', label: '开口窍 🎬', inPlan: skillInPlan('开口窍') })
 
   return list
 })
@@ -2147,6 +2169,19 @@ function isVideoItem(item) {
   return item?.item_type === 'video' || !!item?.video_url
 }
 
+function videoTitle(item) {
+  if (!item?.video_url) return '训练视频'
+  try {
+    const url = item.video_url
+    const name = decodeURIComponent(url.split('/').pop().split('?')[0])
+    const base = name.replace(/\.[^.]*$/, '')
+    // 去掉 shipin/ shipin_ / 前导数字和点
+    return base.replace(/^shipin[\/_]/, '').replace(/^[_0-9.]+/, '') || '训练视频'
+  } catch {
+    return '训练视频'
+  }
+}
+
 function isItemWatched(item) {
   if (!item?.id) return false
   if (isVideoItem(item)) return false
@@ -2291,7 +2326,7 @@ function scrollToPhase(block) {
   body.scrollTo({ top: body.scrollTop + targetTop - bodyTop - 12, behavior: 'smooth' })
 }
 
-async function openPhaseMediaItem(item, phase) {
+async function openPhaseMediaItem(item, phase, forceType) {
   if (!item) return
   if (!phase.unlocked && !devMode.value) {
     const idx = planPhases.value.findIndex(p => p.block === phase.block)
@@ -2306,11 +2341,11 @@ async function openPhaseMediaItem(item, phase) {
     if (!phase.allDone) {
       await autoCompletePerception(phase)
     }
-    openMediaItem(item)
+    openMediaItem(item, forceType)
     return
   }
 
-  openMediaItem(item)
+  openMediaItem(item, forceType)
 }
 
 const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
@@ -2842,7 +2877,7 @@ function applyPlanMedia(plan) {
   }
 }
 
-function openMediaItem(item) {
+function openMediaItem(item, forceType) {
   if (!item) return
   if (item.media_hidden || item.item_type === 'placeholder') {
     if (item.item_type === 'perception' && item.audio_url) {
@@ -2858,6 +2893,18 @@ function openMediaItem(item) {
   }
   if (!guardMedia()) return
   lastOpenedItem.value = item
+  // forceType 优先；否则有视频默认用视频
+  if (forceType === 'video' && item.video_url) {
+    videoSrc.value = item.video_url
+    mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
+    return
+  }
+  if (forceType === 'audio' && item.audio_url) {
+    audioSrc.value = item.audio_url
+    audioTitle.value = item.title || ''
+    mediaPlayer.value = { show: true, type: 'audio', title: audioTitle.value }
+    return
+  }
   if (item.video_url) {
     videoSrc.value = item.video_url
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
@@ -3310,7 +3357,7 @@ function triggerGlitch() {
 .section-title { color:#fff; font-size:14px; font-weight:700; margin-bottom:8px; display:block; }
 .section-title.dim { color:rgba(255,255,255,0.35); }
 
-.step { background:rgba(15,28,48,0.8); border-radius:8px; padding:14px; display:flex; gap:10px; align-items:flex-start; border-left:4px solid #00d2ff; margin-bottom:8px; cursor:pointer; transition:all 0.15s; position:relative; box-shadow:0 6px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.25); }
+.step { background:rgba(15,28,48,0.85); border-radius:10px; padding:14px; display:flex; gap:10px; align-items:flex-start; border:1px solid rgba(0,210,255,0.15); border-left:4px solid #00d2ff; margin-bottom:10px; cursor:pointer; transition:all 0.15s; position:relative; box-shadow:0 0 0 1px rgba(0,210,255,0.08), 0 4px 20px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.3); }
 .step-grid { display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box; }
 .step-grid .step { width:100%; box-sizing:border-box; max-width:100%; }
 .step:active { background:#1a3040; }
@@ -3328,6 +3375,7 @@ function triggerGlitch() {
 .step-label.dim-text { color:rgba(255,255,255,0.35); }
 .step-box { background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:20px 14px; text-align:center; font-size:24px; color:#0b111e; }
 .step-box.dim-box { opacity:0.3; }
+.step-video { border-left-color:#f59e0b; }
 .step-time { color:rgba(255,255,255,0.4); font-size:10px; text-align:center; display:block; margin-top:4px; }
 .step-time.dim-text { color:rgba(255,255,255,0.35); }
 
@@ -3712,7 +3760,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
 [data-theme="white"] .plan-ai-hint { color:#9ca3af; }
 [data-theme="white"] .section-title { color:#1a1a2e; }
-[data-theme="white"] .step { background:#fff; border-left-color:#2563eb; box-shadow:0 2px 8px rgba(0,0,0,0.03); }
+[data-theme="white"] .step { background:#fff; border-color:#e5e7eb; border-left-color:#2563eb; box-shadow:0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06); }
 [data-theme="white"] .step-num { background:#2563eb; }
 [data-theme="white"] .step-label { color:#1a1a2e; }
 [data-theme="white"] .step-box { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
