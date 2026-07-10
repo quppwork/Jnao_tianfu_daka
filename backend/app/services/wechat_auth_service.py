@@ -246,6 +246,9 @@ def fetch_legacy_member(openid: str) -> dict | None:
     engine = get_legacy_engine()
     if not engine:
         return None
+    oid = (openid or "").strip()
+    if not oid:
+        return None
     try:
         with engine.connect() as conn:
             result = conn.execute(
@@ -257,7 +260,7 @@ def fetch_legacy_member(openid: str) -> dict | None:
                     LIMIT 1
                     """
                 ),
-                {"openid": openid},
+                {"openid": oid},
             )
             row = result.mappings().first()
             if not row:
@@ -268,13 +271,68 @@ def fetch_legacy_member(openid: str) -> dict | None:
         return None
 
 
+def fetch_legacy_member_by_mobile(mobile: str) -> dict | None:
+    """老库按手机号查 ys_wx_member（用于 openid 与手机号对齐诊断/补同步）。"""
+    engine = get_legacy_engine()
+    if not engine:
+        return None
+    phone = _normalize_mobile(mobile)
+    if not phone:
+        return None
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text(
+                    """
+                    SELECT id, openid, unionid, mobile, nickname, truename
+                    FROM ys_wx_member
+                    WHERE REPLACE(REPLACE(mobile, ' ', ''), '-', '') = :phone
+                       OR mobile = :phone
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """
+                ),
+                {"phone": phone},
+            )
+            row = result.mappings().first()
+            if not row:
+                return None
+            return _row_to_snapshot(dict(row))
+    except Exception as e:
+        logger.warning("Legacy ys_wx_member mobile lookup failed: %s", e)
+        return None
+
+
+def sync_snapshot_from_legacy(
+    db: Session,
+    *,
+    openid: str,
+    mobile: str | None = None,
+) -> WxMemberSnapshot | None:
+    """将老库 ys_wx_member 字段写入 wx_member_snapshot（openid 优先，可按手机号补查）。"""
+    oid = (openid or "").strip()
+    if not oid:
+        return None
+    data = fetch_legacy_member(oid)
+    if not data and mobile:
+        data = fetch_legacy_member_by_mobile(mobile)
+    if not data:
+        return lookup_member_local(db, oid)
+    if mobile and not data.get("mobile"):
+        data["mobile"] = _normalize_mobile(mobile)
+    snap = upsert_snapshot(db, data)
+    db.commit()
+    db.refresh(snap)
+    return snap
+
+
 def lookup_member_local(db: Session, openid: str) -> WxMemberSnapshot | None:
     """仅查本地 wx_member_snapshot。"""
     return db.scalar(select(WxMemberSnapshot).where(WxMemberSnapshot.openid == openid))
 
 
 def lookup_member_for_oauth(db: Session, openid: str) -> WxMemberSnapshot | None:
-    """C：优先本地 snapshot；缺失或缺手机号时 OAuth 按 openid 懒查老库 1 条并回写。"""
+    """C：优先本地 snapshot；缺手机号时 OAuth 按 openid 懒查老库 1 条并回写。"""
     oid = (openid or "").strip()
     if not oid:
         return None
@@ -818,6 +876,7 @@ def resolve_wechat_login(
         )
         return None, ticket, "bind-phone"
 
+    # 老库有 openid 但 snapshot 仍无手机号：走公司绑手机页
     if use_external_bind_mobile():
         ticket = create_bind_ticket(
             openid=openid,
@@ -851,7 +910,7 @@ def complete_bind_phone(
     by_openid = get_bind_by_openid(db, openid)
     if by_openid and existing and by_openid.parent_id != existing.id:
         raise HTTPException(409, "该微信已绑定其他家长账号")
-    snap = lookup_member_for_oauth(db, openid)
+    snap = sync_snapshot_from_legacy(db, openid=openid, mobile=phone)
     user = ensure_parent_for_phone(
         db,
         phone=phone,
@@ -859,30 +918,30 @@ def complete_bind_phone(
         openid=openid,
         unionid=pending.get("unionid"),
     )
-    upsert_wechat_bind(
+    step = finalize_wechat_login_user(
         db,
-        parent_id=user.id,
+        user,
         openid=openid,
         unionid=pending.get("unionid"),
-        wx_member_id=pending.get("wx_member_id"),
+        snap=snap,
     )
-    db.commit()
-    db.refresh(user)
+    logger.info("bind-phone complete user=%s openid=%s… step=%s", user.id, openid[:10], step)
     return user
 
 
 def complete_external_bind_phone(db: Session, *, bind_ticket: str) -> ChildUser:
-    """外链绑手机页返回后：刷新 snapshot 手机号并完成登录。"""
-    from app.services.member_registry_service import find_daka_member_by_openid
+    """外链绑手机页返回后：强制从老库刷新 snapshot，再完成 openid+手机号绑定。"""
+    from app.services.member_registry_service import find_daka_member_by_mobile, find_daka_member_by_openid
 
     pending = get_bind_ticket(bind_ticket)
     openid = pending["openid"]
-    snap = lookup_member_for_oauth(db, openid)
+    snap = sync_snapshot_from_legacy(db, openid=openid)
     mobile = (snap.mobile if snap and snap.mobile else None)
     if not mobile:
         dm = find_daka_member_by_openid(db, openid)
         if dm and dm.mobile:
             mobile = dm.mobile
+            snap = sync_snapshot_from_legacy(db, openid=openid, mobile=mobile)
     if not mobile:
         bind = get_bind_by_openid(db, openid)
         if bind:
@@ -890,5 +949,22 @@ def complete_external_bind_phone(db: Session, *, bind_ticket: str) -> ChildUser:
             if user and user.parent_phone:
                 mobile = user.parent_phone
     if not mobile:
+        legacy = fetch_legacy_member(openid)
+        if legacy and legacy.get("mobile"):
+            mobile = legacy["mobile"]
+            snap = sync_snapshot_from_legacy(db, openid=openid, mobile=mobile)
+    if not mobile:
         raise HTTPException(400, "尚未完成手机号绑定，请先在绑手机页完成操作后再返回")
-    return complete_bind_phone(db, bind_ticket=bind_ticket, phone=mobile)
+    user = complete_bind_phone(db, bind_ticket=bind_ticket, phone=mobile)
+    # 公司页注册后：再按手机号对齐老库字段（openid 可能刚写入 ys_wx_member）
+    legacy_by_phone = fetch_legacy_member_by_mobile(mobile)
+    if legacy_by_phone:
+        sync_snapshot_from_legacy(db, openid=openid, mobile=mobile)
+        finalize_wechat_login_user(
+            db,
+            user,
+            openid=legacy_by_phone.get("openid") or openid,
+            unionid=legacy_by_phone.get("unionid") or pending.get("unionid"),
+            snap=lookup_member_local(db, openid),
+        )
+    return user

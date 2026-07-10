@@ -453,3 +453,30 @@ def test_resolve_wechat_login_bound_parent_not_bind_phone(db_session: Session, m
     assert linked is not None
     assert ticket is None
     assert step != "bind-phone"
+
+
+def test_fetch_legacy_member_by_mobile_mock(monkeypatch):
+    monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: object())
+
+    def fake_mobile(mobile: str):
+        if mobile == "19805031756":
+            return {
+                "wx_member_id": 1001,
+                "openid": "oLEGACY_198",
+                "unionid": None,
+                "mobile": "19805031756",
+                "nickname": "qupp",
+                "truename": "测试",
+            }
+        return None
+
+    monkeypatch.setattr(
+        "app.services.wechat_auth_service.fetch_legacy_member_by_mobile",
+        fake_mobile,
+    )
+    from app.services.wechat_auth_service import fetch_legacy_member_by_mobile
+
+    row = fetch_legacy_member_by_mobile("19805031756")
+    assert row is not None
+    assert row["openid"] == "oLEGACY_198"
+    assert row["mobile"] == "19805031756"
