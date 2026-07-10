@@ -363,7 +363,7 @@ def update_child_talent_quota(
     admin_id: int = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
-    """修改单个孩子的天赋测试配额"""
+    """调整孩子的天赋测试次数（正数增加，负数减少，不低于已用次数或默认2）"""
     from app.db.models import ChildUser, TalentAssessment
     from sqlalchemy import func, select as sa_select
 
@@ -371,9 +371,7 @@ def update_child_talent_quota(
     if not user:
         raise HTTPException(404, "孩子不存在")
     profile = dict(user.profile_json or {})
-    profile["talent_test_quota"] = req.quota
-    user.profile_json = profile
-    db.commit()
+    old_quota = profile.get("talent_test_quota", 2)
     used = db.scalar(
         sa_select(func.count()).select_from(TalentAssessment).where(
             TalentAssessment.child_user_id == child_id,
@@ -381,12 +379,19 @@ def update_child_talent_quota(
             TalentAssessment.talent_code.isnot(None),
         )
     ) or 0
+    floor = max(2, used)  # 最低不少于默认2次或已用次数
+    new_quota = old_quota + req.add
+    if new_quota < floor:
+        raise HTTPException(400, f"不能低于 {floor} 次（已用 {used} 次，默认最低 2 次）")
+    profile["talent_test_quota"] = new_quota
+    user.profile_json = profile
+    db.commit()
     return AdminTalentQuotaResponse(
         child_id=child_id,
         nickname=user.nickname or "",
-        talent_test_quota=req.quota,
+        talent_test_quota=new_quota,
         valid_tests_used=used,
-        remaining=max(0, req.quota - used),
+        remaining=max(0, new_quota - used),
     )
 
 
@@ -396,9 +401,8 @@ def batch_update_talent_quota(
     admin_id: int = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
-    """批量修改孩子的天赋测试配额"""
+    """批量为孩子增加天赋测试次数"""
     from app.db.models import ChildUser
-    from sqlalchemy import update as sql_update
 
     updated = 0
     for cid in req.child_ids:
@@ -406,8 +410,37 @@ def batch_update_talent_quota(
         if not user:
             continue
         profile = dict(user.profile_json or {})
-        profile["talent_test_quota"] = req.quota
+        old_quota = profile.get("talent_test_quota", 2)
+        profile["talent_test_quota"] = old_quota + req.add
         user.profile_json = profile
         updated += 1
     db.commit()
-    return {"ok": True, "updated": updated, "quota": req.quota}
+    return {"ok": True, "updated": updated, "add": req.add}
+
+
+@router.get("/children/{child_id}/talent-assessments")
+def get_child_assessments(
+    child_id: int,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """查看孩子的天赋测评历史"""
+    from app.db.models import TalentAssessment
+    from app.services.datetime_fmt import format_cst
+
+    rows = db.scalars(
+        __import__("sqlalchemy").select(TalentAssessment)
+        .where(TalentAssessment.child_user_id == child_id)
+        .order_by(TalentAssessment.id.desc())
+    ).all()
+    return [
+        {
+            "id": r.id,
+            "talent_primary": r.talent_primary or "迷者",
+            "talent_tag": r.talent_tag,
+            "is_valid": r.talent_primary != "迷者" and r.talent_code is not None,
+            "assessed_at": format_cst(r.assessed_at) if r.assessed_at else None,
+            "created_at": format_cst(r.created_at),
+        }
+        for r in rows
+    ]

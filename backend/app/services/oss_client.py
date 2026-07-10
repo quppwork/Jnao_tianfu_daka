@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from typing import Literal
 from urllib.parse import unquote, urlparse
 
 from config.loader import load_settings
@@ -11,6 +12,10 @@ from config.loader import load_settings
 DEFAULT_ENDPOINT = "oss-cn-beijing.aliyuncs.com"
 DEFAULT_BUCKET = "jnao-talent-ai"
 DEFAULT_PREFIX = "yinpin/"
+
+VIDEO_EXTENSIONS = frozenset({".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"})
+AUDIO_EXTENSIONS = frozenset({".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"})
+MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 
 
 def _oss_cfg() -> dict:
@@ -21,6 +26,7 @@ def _oss_cfg() -> dict:
         "bucket": settings.get("bucket", DEFAULT_BUCKET),
         "endpoint": settings.get("endpoint", DEFAULT_ENDPOINT),
         "prefix": settings.get("prefix", DEFAULT_PREFIX),
+        "prefixes": settings.get("prefixes", [settings.get("prefix", DEFAULT_PREFIX)]),
         "signed_url": settings.get("signed_url", True),
         "sign_expires": int(settings.get("sign_expires", 7200)),
     }
@@ -58,28 +64,74 @@ def _bucket_client():
     return oss2.Bucket(auth, f"https://{cfg['endpoint']}", cfg["bucket"])
 
 
+def _all_prefixes() -> list[str]:
+    """返回所有配置的 OSS 前缀"""
+    cfg = _oss_cfg()
+    prefixes = cfg.get("prefixes", [cfg["prefix"]])
+    return prefixes if prefixes else [cfg["prefix"]]
+
+
 def list_audio_objects(prefix: str | None = None) -> list[dict]:
-    """列举 OSS 下 MP3 文件，返回 [{key, size, url, last_modified}]"""
+    """列举 OSS 下音频文件，返回 [{key, size, url, last_modified}]"""
+    return _list_objects(prefix, "audio")
+
+
+def list_video_objects(prefix: str | None = None) -> list[dict]:
+    """列举 OSS 下视频文件，返回 [{key, size, url, last_modified}]"""
+    return _list_objects(prefix, "video")
+
+
+def list_all_media(prefix: str | None = None) -> list[dict]:
+    """列举 OSS 下所有媒体文件（音频+视频，可跨多前缀）"""
+    if prefix is not None:
+        return _list_objects(prefix, "all")
+    # 扫描所有配置的前缀
+    all_rows: list[dict] = []
+    seen: set[str] = set()
+    for p in _all_prefixes():
+        for row in _list_objects(p, "all"):
+            if row["key"] not in seen:
+                seen.add(row["key"])
+                all_rows.append(row)
+    all_rows.sort(key=lambda r: r["key"])
+    return all_rows
+
+
+def _list_objects(
+    prefix: str | None = None,
+    media_type: Literal["audio", "video", "all"] = "audio",
+) -> list[dict]:
+    """列举 OSS 对象，按类型过滤"""
     import oss2
 
     cfg = _oss_cfg()
     if not is_oss_configured():
-        raise RuntimeError("OSS 未配置，请在 backend/.env 填写 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET")
+        raise RuntimeError(
+            "OSS 未配置，请在 backend/.env 填写 "
+            "OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET"
+        )
 
     use_prefix = prefix if prefix is not None else cfg["prefix"]
     bucket = _bucket_client()
     rows: list[dict] = []
     for obj in oss2.ObjectIterator(bucket, prefix=use_prefix):
         key = obj.key
-        if not key.lower().endswith(".mp3"):
+        ext = os.path.splitext(key)[1].lower()
+        if media_type == "audio" and ext not in AUDIO_EXTENSIONS:
+            continue
+        if media_type == "video" and ext not in VIDEO_EXTENSIONS:
+            continue
+        if media_type == "all" and ext not in MEDIA_EXTENSIONS:
             continue
         rows.append(
             {
                 "key": key,
                 "file_name": key.rsplit("/", 1)[-1],
+                "ext": ext,
                 "size": obj.size,
                 "last_modified": str(obj.last_modified),
                 "url": public_url(key),
+                "media_type": "video" if ext in VIDEO_EXTENSIONS else "audio",
             }
         )
     rows.sort(key=lambda r: r["key"])

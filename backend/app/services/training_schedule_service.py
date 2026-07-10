@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload, Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
@@ -21,7 +21,11 @@ from app.services.content_meta import estimate_duration_min, item_instruction, p
 from app.services.talent_content_pool import get_talent_content_pool
 from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
 from app.services.training_child_guide import build_coach_text_for_plan
-from app.services.training_formula_engine import duration_slot, expand_formula
+from app.services.training_formula_engine import (
+    duration_slot,
+    expand_formula,
+    HistoryEntry,
+)
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
@@ -128,7 +132,7 @@ async def populate_plan_items(
     *,
     plan_date: date | None = None,
 ) -> dict:
-    """v2.0: 公式引擎展开 → 取各技能 OSS 音频 → 生成 plan_items"""
+    """v3.0: Decision Tree 选策略 → 权重引擎展开 → OSS 音频 → plan_items"""
     ensure_supplementary_catalogs(db)
     plan_date = plan_date or plan.plan_date
     talent = resolve_effective_talent(db, child_user_id)
@@ -139,7 +143,7 @@ async def populate_plan_items(
     child = db.get(ChildUser, child_user_id)
     state = get_training_progress(child) if child else {}
 
-    # v2.0: overall_tier 替代 content_index — 只算有打卡记录的技能
+    # v3.0: overall_tier 替代 content_index — 只算有打卡记录的技能
     skills_with_records = get_skills_with_records(db, child_user_id)
     active_state = filter_active_skills(state, skills_with_records)
     o_tier = overall_tier(active_state)
@@ -152,8 +156,40 @@ async def populate_plan_items(
     from app.services.training_mastery import _grade_band
     grade_band = _grade_band(grade) or "primary_low"
 
+    # 提取每个技能的个体 Tier
+    skill_tiers: dict[str, int] = {}
+    skills_state = state.get("skills", {})
+    for skill_name, skill_info in skills_state.items():
+        if isinstance(skill_info, dict) and "tier" in skill_info:
+            skill_tiers[skill_name] = int(skill_info["tier"])
+
+    # 构建近 30 天训练历史（供 Decision Tree 条件判断）
+    recent_plans = db.scalars(
+        select(TrainingPlan)
+        .where(TrainingPlan.child_user_id == child_user_id)
+        .where(TrainingPlan.status.in_(["completed", "pending"]))
+        .order_by(desc(TrainingPlan.plan_date))
+        .limit(30)
+    ).all()
+    history: tuple[HistoryEntry, ...] = tuple(
+        HistoryEntry(
+            plan_date=p.plan_date,
+            planned_minutes=p.planned_minutes or 0,
+            skills=tuple(
+                it.title or "" for it in (p.items or [])
+            ),
+        )
+        for p in reversed(recent_plans)  # 时间升序
+    )
+
     # 公式引擎展开技能组合
-    formula_result = expand_formula(planned_minutes, overall_tier=o_tier, grade_band=grade_band)
+    formula_result = expand_formula(
+        planned_minutes,
+        overall_tier=o_tier,
+        grade_band=grade_band,
+        skill_tiers=skill_tiers,
+        history=history,
+    )
     slots = formula_result["slots"]
 
     # OSS 音频池
@@ -233,10 +269,7 @@ async def populate_plan_items(
             )
         sort_order += 1
 
-    # 训练时长 >= 8 小时 → 末尾追加精力恢复
-    if planned_minutes >= 480:
-        slots = list(slots) + ["精力恢复"]
-
+    # v3.0: 精力恢复已由引擎在 _ctx_to_result 中追加，此处不再重复
     # 遍历公式槽位，为每个技能取对应 OSS 音频
     elective_rules = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum().get("elective_rules") or {}
     for skill_name in slots:
@@ -264,7 +297,12 @@ async def populate_plan_items(
         "c_note": formula_result.get("c_note"),
         "exam_note": formula_result.get("exam_note"),
         "elective_notes": formula_result.get("elective_notes", []),
-        "mode": "formula_v2",
+        "mode": f"v3_{formula_result.get('strategy', 'unknown')}",
+        "strategy": formula_result.get("strategy"),
+        "bundle_id": formula_result.get("bundle_id"),
+        "bundle_note": formula_result.get("bundle_note"),
+        "grade_notes": formula_result.get("grade_notes", []),
+        "reason": formula_result.get("reason"),
     }
 
 

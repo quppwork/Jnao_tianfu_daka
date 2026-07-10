@@ -1,23 +1,25 @@
-# 训练推课体系 — 业务规则 v2.0
+# 训练推课体系 — 业务规则 v3.0
+# 架构：Decision Tree + Strategy Pipeline
 # 加载：config.loader.load_training_curriculum()
-# 变更：从 main_lines 主线模型 → duration_formula 多技能并行公式引擎
 
-version: 2
+version: 3
 
 # ══════════════════════════════════════════════════
 # 一、技能定义
 # ══════════════════════════════════════════════════
 
 skills:
-  # 必修技能（5个）— 严格按序打卡，阻塞后续
   required:
     - 超脑阅读    # A — 单音频，无 OSS stage，各 Tier 复用
     - 影像追忆    # B — OSS stage 1-5
     - 扫描速记    # C — OSS stage 1-5，Tier 1 练但不考
     - 极速运算    # D — OSS stage 2-5，Tier 3 开始出现
     - 极速学习    # E — OSS stage 2/3-5（起点因天赋而异），Tier 4 开始考核
+    - 文科奥秘    # F — Tier 5 引入
+    - 理科奥秘    # G — Tier 5 引入
+    - 天赋绘画    # H — Tier 6 引入
+    - 音乐灵感    # I — Tier 6 引入
 
-  # 选修技能（3个）— 不阻塞后续，独立弹窗/入口
   elective:
     - 精力恢复    # 训练时长 ≥ 8h 时弹出，无打卡
     - 多元感知    # 可打可不打，有打卡按钮+卡片
@@ -29,65 +31,222 @@ skills:
 
 elective_rules:
   精力恢复:
-    trigger: duration_gte_8h        # 用户选择训练时长 ≥ 8h 时触发
-    has_checkin: false              # 无打卡按钮
-    blocks_next: false              # 不阻塞后续
-    display_order: after_required   # 在必修项之后展示
+    trigger: duration_gte_8h
+    has_checkin: false
+    blocks_next: false
+    display_order: after_required
 
   多元感知:
-    trigger: manual                 # 用户主动触发（始终可用）
-    has_checkin: true               # 有打卡按钮 + 打卡卡片
+    trigger: manual
+    has_checkin: true
     checkin_fields: [card_count, accuracy_pct]
-    blocks_next: false              # 可打可不打，不阻塞
+    blocks_next: false
 
   高效作业:
-    trigger: formula_slot           # 时长公式中包含时自动展示
-    has_checkin: false              # 无打卡
-    blocks_next: false              # 不阻塞
-    skip_carryover: true            # 不纳入昨日续推
+    trigger: formula_slot
+    has_checkin: false
+    blocks_next: false
+    skip_carryover: true
 
 # ══════════════════════════════════════════════════
-# 三、时长 → 技能公式（核心排课引擎）
+# 三、Decision Tree（策略选择）
 # ══════════════════════════════════════════════════
 
-duration_formula:
+decision_tree:
+  root: check_consecutive_14
+
+  nodes:
+    # ── 连续 14 天 ≤20min → 强制升级 ──
+    check_consecutive_14:
+      type: condition
+      predicate: consecutive_days_short
+      params: { min_days: 14, max_minutes: 20 }
+      on_true: force_upgrade
+      on_false: check_consecutive_7
+
+    # ── 连续 7 天 ≤20min → 轮换排课 ──
+    check_consecutive_7:
+      type: condition
+      predicate: consecutive_days_short
+      params: { min_days: 7, max_minutes: 20 }
+      on_true: compensate_diversity
+      on_false: check_tier_bundle
+
+    # ── Tier 3 → 捆绑排课 ──
+    check_tier_bundle:
+      type: condition
+      predicate: tier_in
+      params: { tiers: [3] }
+      on_true: weight_with_bundle
+      on_false: normal_weight
+
+    # ── 策略叶子 ──
+    force_upgrade:
+      type: strategy
+      strategy: forced_upgrade
+      params:
+        min_minutes: 40
+        reason: "已连续 14 天选择 20 分钟，自动升级时长以保证训练效果"
+
+    compensate_diversity:
+      type: strategy
+      strategy: diversity_round_robin
+      params:
+        reason: "连续 7 天短时训练，启用轮换排课保持内容多样性"
+
+    weight_with_bundle:
+      type: strategy
+      strategy: weight_with_bundle
+
+    normal_weight:
+      type: strategy
+      strategy: weight_based
+
+# ══════════════════════════════════════════════════
+# 四、槽位表（§3）
+# ══════════════════════════════════════════════════
+
+slot_table:
   - minutes: 20
-    slots: [A]                                          # 超脑阅读 ×1
-
+    slots: 1
   - minutes: 40
-    slots: [A, B]                                       # 超脑+影像追忆
-
+    slots: 2
   - minutes: [60, 120]
-    primary_school: [A, B, C]                           # 小学：+扫描速记
-    junior_high:    [A, B, C]                           # 初高中：同公式
-    junior_high_c_note: "不建议"                         # 但 C 标注不建议
-
+    slots: 3
   - minutes: [121, 180]
-    primary_school: [A, B, B, C, 高效作业]               # 2B = 影像追忆×2
-    junior_high:    [A, B, B, C, 高效作业]
-    junior_high_c_note: "不建议"
-    tier_replace:                                       # ≥3阶替换规则
-      "高效作业": "极速学习"                              # 高效作业 → E
+    slots: 4
+    homework:
+      tier_1: { skill: 高效作业, count: 1 }
+      tier_2: { skill: 高效作业, count: 1 }
+      tier_3: { skill: 极速学习, count: 1 }
+      tier_4: { skill: 极速学习, count: 1 }
+      tier_5: { skill: 极速学习, count: 1 }
+      tier_6: { skill: 极速学习, count: 1 }
     exam_note: "建议准备2套以上试卷"
-
   - minutes: [181, 240]
-    primary_school: [A, B, B, C, 高效作业]
-    junior_high:    [A, B, B, C, 高效作业]
-    junior_high_c_note: "不建议"
-    tier_replace:
-      "高效作业": ["极速学习", "极速学习"]                # ≥3阶：高效作业 → 2E
+    slots: 4
+    homework:
+      tier_1: { skill: 高效作业, count: 1 }
+      tier_2: { skill: 高效作业, count: 1 }
+      tier_3: { skill: 极速学习, count: 2 }
+      tier_4: { skill: 极速学习, count: 2 }
+      tier_5: { skill: 极速学习, count: 2 }
+      tier_6: { skill: 极速学习, count: 2 }
     exam_note: "建议准备3套以上试卷"
-
   - minutes: [241, 300]
-    primary_school: [A, B, B, B, C, 高效作业]            # 3B = 影像追忆×3
-    junior_high:    [A, B, B, B, C, 高效作业]
-    junior_high_c_note: "不建议"
-    tier_replace:
-      "高效作业": ["极速学习", "极速学习", "极速学习"]     # ≥3阶：高效作业 → 3E
+    slots: 5
+    homework:
+      tier_1: { skill: 高效作业, count: 1 }
+      tier_2: { skill: 高效作业, count: 1 }
+      tier_3: { skill: 极速学习, count: 3 }
+      tier_4: { skill: 极速学习, count: 3 }
+      tier_5: { skill: 极速学习, count: 3 }
+      tier_6: { skill: 极速学习, count: 3 }
     exam_note: "建议准备4套以上试卷"
+  - minutes: [480, 9999]
+    slots: 6
+    homework:
+      tier_1: { skill: 高效作业, count: 1 }
+      tier_2: { skill: 高效作业, count: 1 }
+      tier_3: { skill: 极速学习, count: 3 }
+      tier_4: { skill: 极速学习, count: 3 }
+      tier_5: { skill: 极速学习, count: 3 }
+      tier_6: { skill: 极速学习, count: 3 }
 
 # ══════════════════════════════════════════════════
-# 四、学段行为
+# 五、各阶可用技能 + 权重（§4）
+# ══════════════════════════════════════════════════
+
+tier_skills:
+  tier_1: [A, B, C, D, E]
+  tier_2: [A, B, C, D, E]
+  tier_3: [A, B, C, D, E]
+  tier_4: [A, B, C, D, E]
+  tier_5: [A, B, C, D, E, F, G]
+  tier_6: [B, C, D, H, I]
+
+tier_weights:
+  tier_1: { A: 0.40, B: 0.35, C: 0.12, D: 0.08, E: 0.05 }
+  tier_2: { A: 0.25, B: 0.35, C: 0.25, D: 0.10, E: 0.05 }
+  tier_3: { A: 0.05, B: 0.30, C: 0.28, D: 0.22, E: 0.15 }
+  tier_4: { A: 0.03, B: 0.28, C: 0.26, D: 0.23, E: 0.20 }
+  tier_5: { A: 0.02, B: 0.18, C: 0.16, D: 0.14, E: 0.10, F: 0.20, G: 0.20 }
+  tier_6: { B: 0.22, C: 0.18, D: 0.16, H: 0.22, I: 0.22 }
+
+# ══════════════════════════════════════════════════
+# 六、衰减规则（§5）
+# ══════════════════════════════════════════════════
+
+decay_rules:
+  key_skills:
+    tier_1: [A, B]
+    tier_2: [A, B, C]
+    tier_3: [B, C, D, E]
+    tier_4: [B, C, D, E]
+    tier_5: [A, B, C, D, E, F, G]
+    tier_6: [B, C, D, H, I]
+  secondary_skills:
+    tier_1: [C, D, E]
+    tier_2: [D, E]
+    tier_3: [A]
+    tier_4: [A]
+    tier_5: [A]
+    tier_6: []
+  factors:
+    key: 0.7
+    secondary: 0.5
+  threshold: 0.01
+
+# ══════════════════════════════════════════════════
+# 七、捆绑配置（§8）
+# ══════════════════════════════════════════════════
+
+bundles:
+  tier_3:
+    - id: B1
+      skills: [多元感知, 极速运算]
+      cost_slots: 2
+    - id: B2
+      skills: [扫描速记, 极速运算]
+      cost_slots: 2
+      grade_note:
+        junior: "不推荐"
+        senior: "不推荐"
+    - id: B3
+      skills: [影像追忆, 极速运算]
+      cost_slots: 2
+    - id: B4
+      skills: [极速运算, 极速学习]
+      cost_slots: 3
+      min_total_slots: 3
+  tier_4: []
+  tier_5: []
+  tier_6: []
+
+# ══════════════════════════════════════════════════
+# 八、学段标注（Phase: annotate_grades）
+# ══════════════════════════════════════════════════
+
+grade_notes:
+  junior:
+    - { skill: 扫描速记, mark: "不推荐" }
+  senior:
+    - { skill: 扫描速记, mark: "不推荐" }
+
+# ══════════════════════════════════════════════════
+# 九、轮换序（Phase: round_robin_fill）
+# ══════════════════════════════════════════════════
+
+tier_skills_order:
+  tier_1: [A, B]
+  tier_2: [A, B, C]
+  tier_3: [B, C, D, E, A]
+  tier_4: [B, C, D, E]
+  tier_5: [F, G, B, C, D, E]
+  tier_6: [H, I, B, C, D]
+
+# ══════════════════════════════════════════════════
+# 十、学段定义
 # ══════════════════════════════════════════════════
 
 grade_bands:
@@ -97,55 +256,53 @@ grade_bands:
   senior:       [高一, 高二, 高三]
 
 grade_behavior:
-  junior_high_c: not_recommended     # 展示但标注"不建议"
+  junior_high_c: not_recommended
   senior_high_c: not_recommended
 
-# 初高中极速运算可选修（Tier 3+）
 optional_in_grades:
   极速运算:
     junior: true
     senior: true
 
 # ══════════════════════════════════════════════════
-# 五、感知力（多元感知 OSS）
+# 十一、感知力
 # ══════════════════════════════════════════════════
 
 perception:
   display_name: 多元感知
   oss_series: duoyuanganzhi
   skill_name: 感知力
-  # v2.0：从必修辅助改为选修，不再自动附在超脑阅读后面
   push_enabled: true
-  skip_checkin: false               # v2.0：可打卡
+  skip_checkin: false
 
 # ══════════════════════════════════════════════════
-# 六、LLM 辅助（非核心调度）
+# 十二、LLM 辅助
 # ══════════════════════════════════════════════════
 
 llm_routing:
-  enabled: false                     # v2.0：核心调度不走 LLM
+  enabled: false
   provider: doubao
-  usage: coach_text_only             # 仅用于生成教练文案
+  usage: coach_text_only
 
 # ══════════════════════════════════════════════════
-# 七、训练日
+# 十三、训练日
 # ══════════════════════════════════════════════════
 
 training_day:
-  cutoff_hour: 4                     # 凌晨 4:00 日切
-  freeze_minutes: 5                  # 4:00-4:05 冻结窗口
+  cutoff_hour: 4
+  freeze_minutes: 5
 
 # ══════════════════════════════════════════════════
-# 八、版本范围
+# 十四、版本范围
 # ══════════════════════════════════════════════════
 
 scope:
-  current_tier_formulas: [1]         # 当前只实现 Tier 1 的时长公式
-  current_tier_thresholds: [1]       # 当前只实现 Tier 1 的达标标准
-  exclude_tiers: [6, 7, 8, 9]       # 六阶及以上暂不纳入
+  current_tier_formulas: [1, 2, 3, 4, 5, 6]
+  current_tier_thresholds: [1]
+  exclude_tiers: [7, 8, 9]
 
 # ══════════════════════════════════════════════════
-# 九、槽位符号映射（供公式引擎解析）
+# 十五、槽位符号映射
 # ══════════════════════════════════════════════════
 
 slot_mapping:
@@ -154,3 +311,7 @@ slot_mapping:
   C: 扫描速记
   D: 极速运算
   E: 极速学习
+  F: 文科奥秘
+  G: 理科奥秘
+  H: 天赋绘画
+  I: 音乐灵感

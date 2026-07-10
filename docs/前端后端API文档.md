@@ -1,8 +1,8 @@
 # 前端-后端 API 文档
 
-> 最后更新：2026-07-02
+> 最后更新：2026-07-10
 > 按前端页面编排，请求/响应格式 + 后端业务逻辑
-> **API 覆盖率：45/45 前端核心调用 + 家长端 9 个端点 + 训练 v2.0 新增端点**
+> **API 覆盖率：45/45 前端核心调用 + 家长端 9 个端点 + 训练 v3.0**
 
 ---
 
@@ -296,15 +296,15 @@ GET /api/talent/assessment/{assessment_id}?user_id={uid}
 
 ---
 
-## 今日训练（v2.0）
+## 今日训练（v3.0）
 
 **前端**: `vue_fronted/src/pages/training/index.vue`
 **后端**: `app/api/training.py`
-**核心引擎**: `training_formula_engine.py` + `training_mastery.py` + `child_training_state.py`
+**核心引擎**: `training_formula_engine.py`（Decision Tree + 权重引擎）+ `training_mastery.py` + `child_training_state.py`
 
 ### API 列表
 
-| 方法 | 路径 | 说明 | v2.0 |
+| 方法 | 路径 | 说明 | v3.0 |
 |------|------|------|:--:|
 | GET | `/api/training/entry` | 训练入口：校验天赋 + 检查方案 | 🟡 |
 | POST | `/api/training/schedule` | 选时长 → 公式引擎生成方案 | 🔄 |
@@ -469,19 +469,23 @@ Response:
 ```
 
 ---
-### 排课引擎流程（v2.0）
+### 排课引擎流程（v3.0）
 
 ```
 POST /api/training/schedule { planned_minutes: 120 }
-  1. 读取 child_training_state → 各技能 Tier + OSS stage/part
+  1. 读取 child_training_state → 各技能 Tier + OSS stage/part + skill_tiers
   2. overall_tier = min(所有技能 tier)
-  3. 公式引擎 expand_formula(120, overall_tier, grade_band)
-     → ["超脑阅读", "影像追忆", "影像追忆", "扫描速记", "高效作业"]
-  4. 遍历 slots → 取各技能当前 OSS (stage,part) 音频
-  5. 生成 TrainingItem（required 标记 blocks_next=true, elective 标记 false）
+  3. Decision Tree 选策略（连续天数 / Tier / 学段 → 4选1）
+  4. Strategy Pipeline 执行：
+     - resolve_slots (槽位表)
+     - require_bundle (仅 Tier 3，个体Tier优先选捆绑)
+     - greedy_fill (权重贪心 max(w)×decay)
+     - ≥121min 追加高效作业/极速学习
+  5. 遍历 slots → 取各技能当前 OSS (stage,part) 音频
+  6. 生成 TrainingItem（required 标记 blocks_next=true, elective 标记 false）
 ```
 
-### 晋级流程（v2.0）
+### 晋级流程（不变）
 
 ```
 POST /api/training/checkin { cards }
@@ -495,7 +499,7 @@ POST /api/training/checkin { cards }
   8. 返回 per-skill 结果 + overall_tier
 ```
 
-**核心引擎**: `training_schedule_service.py` + `training_formula_engine.py` + `training_mastery.py` + `child_training_state.py` + `training_day.py`
+**核心引擎**: `training_formula_engine.py` (Decision Tree + Strategy Pipeline) + `training_mastery.py` + `child_training_state.py` + `training_day.py`
 
 ### 打卡校验（v2.0）
 

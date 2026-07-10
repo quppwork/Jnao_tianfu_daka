@@ -1,4 +1,4 @@
-"""音频目录 JSON → content_item"""
+"""音频/视频目录 → content_item（JSON catalog + OSS 直扫）"""
 
 import json
 import os
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.talent_mapping import EXPECTED_COUNTS_BY_TAG
 from app.db.models import ContentItem
-from app.services.content_meta import build_instructions_meta
+from app.services.content_meta import build_instructions_meta, parse_item_meta
 
 
 def catalog_data_dir() -> Path:
@@ -179,3 +179,153 @@ def import_all_xet_catalogs(db: Session, *, replace: bool = False) -> dict[str, 
             db, path, replace=replace and i == 0,
         )
     return results
+
+
+# ═══════════════════════════════════════════════════════════════
+# OSS 直扫导入（无需 JSON catalog，直接从 OSS 列举 + 入库）
+# ═══════════════════════════════════════════════════════════════
+
+def import_from_oss(
+    db: Session,
+    *,
+    prefix: str | None = None,
+    media_type: str = "all",
+    talent_tag_map: dict[str, str] | None = None,
+    dry_run: bool = False,
+) -> dict:
+    """扫描 OSS 目录，将新媒体文件导入 content_item。
+
+    Args:
+        db: 数据库会话
+        prefix: OSS 扫描前缀（默认取配置的 yinpin/）
+        media_type: "audio" | "video" | "all"
+        talent_tag_map: 文件名关键词 → 天赋标签映射
+        dry_run: True = 只返回扫描结果，不写入数据库
+
+    Returns:
+        {scanned: int, new_audio: int, new_video: int, skipped: int, items: [...]}
+    """
+    from app.services.oss_client import (
+        _oss_cfg,
+        _list_objects,
+        is_oss_configured,
+    )
+
+    if not is_oss_configured():
+        return {"error": "OSS 未配置", "scanned": 0, "new_audio": 0,
+                "new_video": 0, "skipped": 0, "items": []}
+
+    cfg = _oss_cfg()
+    use_prefix = prefix or cfg["prefix"]
+
+    # 扫描 OSS
+    objects = _list_objects(use_prefix, media_type)  # type: ignore[arg-type]
+    if not objects:
+        return {"scanned": 0, "new_audio": 0, "new_video": 0,
+                "skipped": 0, "items": []}
+
+    # 现有 URL → ContentItem 映射（去重）
+    existing_urls: set[str] = {
+        url for url in
+        db.scalars(select(ContentItem.play_url)).all()
+        if url
+    }
+
+    # 天赋标签映射（文件名关键词 → talent_code, talent_tag）
+    if talent_tag_map is None:
+        talent_tag_map = _default_talent_tag_map()
+
+    new_audio = 0
+    new_video = 0
+    skipped = 0
+    new_items: list[dict] = []
+
+    for obj in objects:
+        url = obj["url"]
+        if url in existing_urls:
+            skipped += 1
+            continue
+
+        file_name = obj["file_name"]
+        content_type = obj["media_type"]
+        talent_code, talent_tag = _guess_talent(file_name, talent_tag_map)
+
+        # 解析技能/阶段元数据
+        meta = _parse_oss_file_name(file_name)
+        instructions = json.dumps(meta, ensure_ascii=False)
+
+        if not dry_run:
+            db.add(ContentItem(
+                talent_code=talent_code,
+                talent_tag=talent_tag,
+                lesson_title=file_name,
+                lesson_sort=meta.get("lesson_sort", 0),
+                play_url=url,
+                video_url=url if content_type == "video" else None,
+                content_type=content_type,
+                instructions=instructions,
+                status=1,
+            ))
+
+        if content_type == "video":
+            new_video += 1
+        else:
+            new_audio += 1
+
+        new_items.append({
+            "file_name": file_name,
+            "content_type": content_type,
+            "talent_code": talent_code,
+            "talent_tag": talent_tag,
+            "url": url,
+        })
+
+    if not dry_run and (new_audio + new_video) > 0:
+        db.commit()
+
+    return {
+        "scanned": len(objects),
+        "new_audio": new_audio,
+        "new_video": new_video,
+        "skipped": skipped,
+        "items": new_items,
+    }
+
+
+def _default_talent_tag_map() -> dict[str, tuple[int, str]]:
+    """默认天赋标签映射：文件名包含关键词 → (talent_code, talent_tag)"""
+    return {
+        "学者": (1, "学"),
+        "学_": (1, "学"),
+        "思者": (2, "思"),
+        "思_": (2, "思"),
+        "行者": (3, "行"),
+        "行_": (3, "行"),
+        "德者": (4, "德"),
+        "德_": (4, "德"),
+        "赢者": (5, "赢"),
+        "赢_": (5, "赢"),
+    }
+
+
+def _guess_talent(
+    file_name: str,
+    tag_map: dict[str, tuple[int, str]],
+) -> tuple[int, str]:
+    """根据文件名猜测天赋编码和标签"""
+    for keyword, (code, tag) in tag_map.items():
+        if keyword in file_name:
+            return code, tag
+    return 0, "?"
+
+
+def _parse_oss_file_name(file_name: str) -> dict:
+    """从 OSS 文件名解析技能/阶段/part 等元数据"""
+    from app.services.content_meta import guess_skill_stage_part
+
+    meta = guess_skill_stage_part(file_name)
+    # 判断内容类型
+    ext = os.path.splitext(file_name)[1].lower()
+    from app.services.oss_client import VIDEO_EXTENSIONS
+    meta["content_type"] = "video" if ext in VIDEO_EXTENSIONS else "audio"
+    return meta

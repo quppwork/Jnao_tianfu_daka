@@ -176,12 +176,12 @@ class AdminBlacklistResponse(BaseModel):
 
 
 class AdminTalentQuotaRequest(BaseModel):
-    quota: int = Field(..., ge=0, le=99, description="天赋测试配额（0 表示禁止测试）")
+    add: int = Field(1, ge=-20, le=20, description="调整次数：正数增加，负数减少")
 
 
 class AdminTalentQuotaBatchRequest(BaseModel):
     child_ids: list[int] = Field(..., min_length=1, max_length=200)
-    quota: int = Field(..., ge=0, le=99)
+    add: int = Field(1, ge=-20, le=20)
 
 
 class AdminTalentQuotaResponse(BaseModel):

@@ -188,8 +188,11 @@ const showQuickActions = computed(() => !messages.value.some(m => m.role === 'us
 
 try {
   const saved = localStorage.getItem('jnao_theme')
-  isLight.value = saved === 'white'
+  // 默认白色主题，仅当明确存了 dark 时才用暗色
+  isLight.value = saved !== 'dark'
 } catch (e) {}
+// 初始应用主题
+document.documentElement.setAttribute('data-theme', isLight.value ? 'white' : 'dark')
 
 function toggleTheme() {
   isLight.value = !isLight.value
