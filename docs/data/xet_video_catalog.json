@@ -1,0 +1,72 @@
+{
+  "source": "oss_shipin",
+  "series_code": "shipin",
+  "generated_at": "2026-07-10",
+  "items": [
+    {
+      "id": 1,
+      "file_name": "_1.5极速运算的原理及过程.mp4",
+      "oss_key": "shipin/_1.5极速运算的原理及过程.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/_1.5极速运算的原理及过程.mp4",
+      "lesson_title": "极速运算原理及过程",
+      "skill": "极速运算",
+      "talent_code": 0,
+      "talent_tag": "?",
+      "lesson_sort": 1,
+      "series": "shipin",
+      "file_size_bytes": 1355812016
+    },
+    {
+      "id": 2,
+      "file_name": "五者天赋.mp4",
+      "oss_key": "shipin/天赋-视频/五者天赋.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/天赋-视频/五者天赋.mp4",
+      "lesson_title": "五者天赋视频讲解",
+      "skill": "五者天赋",
+      "talent_code": 0,
+      "talent_tag": "?",
+      "lesson_sort": 1,
+      "series": "shipin",
+      "file_size_bytes": 65091426
+    },
+    {
+      "id": 3,
+      "file_name": "超脑阅读技术.mp4",
+      "oss_key": "shipin/天赋-视频/超脑阅读技术.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/天赋-视频/超脑阅读技术.mp4",
+      "lesson_title": "超脑阅读技术",
+      "skill": "超脑阅读",
+      "talent_code": 0,
+      "talent_tag": "?",
+      "lesson_sort": 1,
+      "series": "shipin",
+      "file_size_bytes": 354676251
+    },
+    {
+      "id": 4,
+      "file_name": "开口窍的训练视频.mp4",
+      "oss_key": "shipin/开口窍的训练视频.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/开口窍的训练视频.mp4",
+      "lesson_title": "开口窍训练视频",
+      "skill": "开口窍",
+      "talent_code": 0,
+      "talent_tag": "?",
+      "lesson_sort": 1,
+      "series": "shipin",
+      "file_size_bytes": 390441745
+    },
+    {
+      "id": 5,
+      "file_name": "极速运算-潜意识觉醒.mp4",
+      "oss_key": "shipin/极速运算-潜意识觉醒.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/极速运算-潜意识觉醒.mp4",
+      "lesson_title": "极速运算潜意识觉醒",
+      "skill": "极速运算",
+      "talent_code": 0,
+      "talent_tag": "?",
+      "lesson_sort": 2,
+      "series": "shipin",
+      "file_size_bytes": 311487225
+    }
+  ]
+}

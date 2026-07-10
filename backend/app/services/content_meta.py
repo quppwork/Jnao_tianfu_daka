@@ -27,9 +27,12 @@ SKILL_PATTERNS = (
     "感知力",
     "超能力",
     "专注力",
+    "开口窍",
+    "五者天赋",
 )
 
 SERIES_FROM_URL = (
+    ("shipin", "shipin"),
     ("suzhiaomi", "suzhiaomi"),
     ("xuekeaomi", "xuekeaomi"),
     ("chaonengli", "chaonengli"),

@@ -48,5 +48,8 @@ oss:
   bucket: "jnao-talent-ai"
   endpoint: "oss-cn-beijing.aliyuncs.com"
   prefix: "yinpin/"
+  prefixes:
+    - "yinpin/"
+    - "shipin/"
   signed_url: true
   sign_expires: 7200

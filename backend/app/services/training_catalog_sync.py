@@ -31,15 +31,22 @@ from app.services.training_curriculum import _find_lesson
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SUPPLEMENTARY_CATALOGS = (
     "xet_duoyuanganzhi_catalog.json",
+    "xet_video_catalog.json",
 )
 
 
 def ensure_supplementary_catalogs(db: Session) -> int:
-    """合并导入多元感知等补充目录（已有库也执行）"""
+    """合并导入多元感知、训练视频等补充目录（已有库也执行）"""
     total = 0
     for name in SUPPLEMENTARY_CATALOGS:
         path = PROJECT_ROOT / "docs" / "data" / name
-        if path.exists():
+        if not path.exists():
+            continue
+        if name == "xet_video_catalog.json":
+            from app.services.catalog_import import import_video_catalog
+
+            total += import_video_catalog(db, path, replace=False)
+        else:
             total += import_catalog(db, path, replace=False)
     return total
 

@@ -138,9 +138,13 @@ def _attach_videos_to_items(db: Session, plan: TrainingPlan) -> None:
         return
 
     video_map: dict[str, ContentItem] = {}
-    for v in video_items:
+    sorted_videos = sorted(
+        video_items,
+        key=lambda v: (skill_from_title(v.lesson_title), v.lesson_sort or 0),
+    )
+    for v in sorted_videos:
         skill = skill_from_title(v.lesson_title)
-        if skill and skill not in video_map:
+        if skill and skill != "训练" and skill not in video_map:
             video_map[skill] = v
 
     if not video_map:

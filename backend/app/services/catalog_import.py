@@ -181,6 +181,76 @@ def import_all_xet_catalogs(db: Session, *, replace: bool = False) -> dict[str, 
     return results
 
 
+def _content_item_by_oss_key(db: Session, oss_key: str) -> ContentItem | None:
+    """按 instructions 中的 oss_key 查找已有 content_item"""
+    for row in db.scalars(select(ContentItem)).all():
+        meta = parse_item_meta(row)
+        if meta.get("oss_key") == oss_key:
+            return row
+    return None
+
+
+def import_video_catalog(db: Session, path: Path | None = None, *, replace: bool = False) -> int:
+    """OSS 视频目录 → content_item（开口窍/极速运算/五者天赋等）"""
+    p = path or (catalog_data_dir() / "xet_video_catalog.json")
+    if not p.exists():
+        return 0
+    data = load_catalog_data(p)
+    items = data.get("items", [])
+    if replace:
+        db.query(ContentItem).filter(ContentItem.content_type == "video").delete()
+    inserted = 0
+    updated = 0
+    for row in items:
+        if not row.get("play_url"):
+            continue
+        oss_key = row.get("oss_key") or ""
+        title = row.get("lesson_title") or row.get("file_name", "")
+        instructions = build_instructions_meta(row, play_url=row["play_url"])
+        existing = _content_item_by_oss_key(db, oss_key) if oss_key else None
+        if not existing and row.get("play_url"):
+            existing = db.scalar(
+                select(ContentItem).where(ContentItem.play_url == row["play_url"])
+            )
+        if existing:
+            changed = False
+            if existing.play_url != row["play_url"]:
+                existing.play_url = row["play_url"]
+                changed = True
+            if existing.video_url != row["play_url"]:
+                existing.video_url = row["play_url"]
+                changed = True
+            if existing.lesson_title != title:
+                existing.lesson_title = title
+                changed = True
+            if existing.instructions != instructions:
+                existing.instructions = instructions
+                changed = True
+            if existing.content_type != "video":
+                existing.content_type = "video"
+                changed = True
+            if changed:
+                updated += 1
+            continue
+        db.add(
+            ContentItem(
+                source_id=row.get("id"),
+                talent_code=row.get("talent_code", 0),
+                talent_tag=row.get("talent_tag"),
+                lesson_title=title,
+                lesson_sort=row.get("lesson_sort", 0),
+                play_url=row["play_url"],
+                video_url=row["play_url"],
+                content_type="video",
+                instructions=instructions,
+                status=1,
+            )
+        )
+        inserted += 1
+    db.commit()
+    return inserted + updated
+
+
 # ═══════════════════════════════════════════════════════════════
 # OSS 直扫导入（无需 JSON catalog，直接从 OSS 列举 + 入库）
 # ═══════════════════════════════════════════════════════════════

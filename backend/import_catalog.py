@@ -25,7 +25,7 @@ if not os.getenv("DATABASE_URL"):
         load_dotenv(_prod, override=False)
 
 from app.db.session import get_session_factory, init_db
-from app.services.catalog_import import import_all_xet_catalogs
+from app.services.catalog_import import import_all_xet_catalogs, import_catalog, import_video_catalog
 from sqlalchemy import func, select
 from app.db.models import ContentItem
 
@@ -36,10 +36,12 @@ def main() -> None:
     try:
         before = db.scalar(select(func.count()).select_from(ContentItem)) or 0
         results = import_all_xet_catalogs(db)
+        video_n = import_video_catalog(db)
         after = db.scalar(select(func.count()).select_from(ContentItem)) or 0
         print(f"OK: content_item {before} -> {after}")
         for name, n in results.items():
             print(f"  {name}: {n}")
+        print(f"  xet_video_catalog.json: {video_n}")
     finally:
         db.close()
 
