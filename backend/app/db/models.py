@@ -86,6 +86,8 @@ class DakaMember(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+    wechat_bound_at: Mapped[datetime | None] = mapped_column(DateTime)
+    company_verified_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class ParentWechatBind(Base):

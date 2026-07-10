@@ -555,6 +555,7 @@ function _storeAuth(data) {
     invalidatePageAuthCache('parent')
     _authValidatedUid.parent = data.child_user_id
     _authValidatedAt.parent = Date.now()
+    saveParentGateCache({ role: 'parent', ...data })
   }
   resetSessionExpiryGuard()
 }
@@ -659,8 +660,40 @@ export function parentNeedsProfileComplete(data) {
 
 export function parentNeedsAccountReady(data) {
   if (data?.role !== 'parent') return false
-  if (data?.login_channel === 'wechat') return data?.account_ready === false
+  if (data?.gate_passed === false) return true
+  if (data?.account_ready === false) return true
+  if (data?.next_step === 'bind-phone') return true
   return data?.profile_complete === false
+}
+
+const PARENT_GATE_KEY = 'jnao_parent_gate'
+
+export function saveParentGateCache(data) {
+  if (data?.role !== 'parent') return
+  try {
+    const passed = data.gate_passed !== false && data.next_step !== 'bind-phone'
+    localStorage.setItem(PARENT_GATE_KEY, JSON.stringify({
+      passed,
+      account_ready: data.account_ready !== false,
+      next_step: data.next_step || 'home',
+      at: Date.now(),
+    }))
+  } catch (_) { /* ignore */ }
+}
+
+export function readParentGateCache() {
+  try {
+    const raw = localStorage.getItem(PARENT_GATE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch (_) {
+    return null
+  }
+}
+
+export function clearParentGateCache() {
+  try {
+    localStorage.removeItem(PARENT_GATE_KEY)
+  } catch (_) { /* ignore */ }
 }
 
 export async function fetchWechatConfig() {
@@ -742,9 +775,17 @@ export async function updateParentProfile(parentId, body) {
   return data
 }
 
-export async function ensureParentAccountReady(parentId) {
+export async function ensureParentAccountReady(parentId, { forceRefresh = false } = {}) {
+  if (!forceRefresh) {
+    const cached = readParentGateCache()
+    if (cached?.passed && cached?.account_ready) {
+      return true
+    }
+  }
   const p = await fetchParentProfile(parentId)
-  if (p.login_channel === 'wechat' && !p.account_ready) {
+  saveParentGateCache({ role: 'parent', ...p })
+  const needsGate = p.gate_passed === false || p.next_step === 'bind-phone'
+  if (needsGate) {
     if (p.next_step === 'bind-phone') {
       try {
         const cfg = await fetchWechatConfig()
@@ -754,9 +795,11 @@ export async function ensureParentAccountReady(parentId) {
         }
       } catch (_) { /* fallback */ }
       uni.redirectTo({ url: '/pages/login/index' })
-    } else {
-      uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })
+      return false
     }
+  }
+  if (p.login_channel === 'wechat' && !p.account_ready) {
+    uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })
     return false
   }
   if (!p.profile_complete) {

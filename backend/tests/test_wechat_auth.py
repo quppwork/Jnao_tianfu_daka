@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, WxMemberSnapshot
@@ -110,44 +111,32 @@ def test_resolve_wechat_login_without_mobile(db_session: Session, monkeypatch):
 
 def test_resolve_wechat_login_unknown_openid(db_session: Session, monkeypatch):
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    monkeypatch.setenv("WECHAT_BIND_MOBILE_URL", "https://m.jnao.com/home/member/bindmobile.html")
     monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: None)
     user, ticket, step = resolve_wechat_login(db_session, openid="oUNKNOWN_not_in_snapshot", unionid=None)
     assert user is None
-    assert ticket is None
-    assert step == "register"
+    assert ticket is not None
+    assert step == "bind-phone"
 
 
-def test_oauth_lazy_load_legacy_when_missing_local(db_session: Session, monkeypatch):
+def test_oauth_local_only_no_lazy_legacy(db_session: Session, monkeypatch):
+    """OAuth 不懒查老库；缺本地 snapshot 时走公司绑手机。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
 
-    def fake_fetch(openid: str):
-        if openid == "oLAZY_001":
-            return {
-                "wx_member_id": 9001,
-                "openid": openid,
-                "unionid": None,
-                "mobile": "13900001234",
-                "nickname": "懒加载",
-                "truename": "测试",
-            }
-        return None
+    def fail_fetch(_openid: str):
+        raise AssertionError("OAuth must not fetch legacy DB")
 
     monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: object())
-    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fake_fetch)
+    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fail_fetch)
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_001", unionid=None)
     assert user is None
     assert ticket is not None
     assert step == "bind-phone"
 
-    from app.services.wechat_auth_service import lookup_member_local
 
-    snap = lookup_member_local(db_session, "oLAZY_001")
-    assert snap is not None
-    assert snap.mobile == "13900001234"
-
-
-def test_oauth_lazy_refresh_mobile_when_local_empty(db_session: Session, monkeypatch):
+def test_oauth_local_snapshot_no_mobile_stays_bind_phone(db_session: Session, monkeypatch):
+    """本地 snapshot 有 openid 无手机号、且 Jnao 无对应家长 → 走 bind-phone，不查老库。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
     upsert_snapshot(
         db_session,
@@ -160,18 +149,11 @@ def test_oauth_lazy_refresh_mobile_when_local_empty(db_session: Session, monkeyp
     )
     db_session.commit()
 
-    def fake_fetch(openid: str):
-        if openid == "oLAZY_002":
-            return {
-                "wx_member_id": 9002,
-                "openid": openid,
-                "mobile": "13900005678",
-                "nickname": "已绑手机",
-            }
-        return None
+    def fail_fetch(_openid: str):
+        raise AssertionError("OAuth must not fetch legacy DB")
 
     monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: object())
-    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fake_fetch)
+    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fail_fetch)
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_002", unionid=None)
     assert user is None
@@ -378,7 +360,7 @@ def test_login_exchange_ticket_one_time(monkeypatch):
 
 
 def test_resolve_wechat_login_links_sms_registered_parent(db_session: Session, monkeypatch):
-    """snapshot 手机号已在 Jnao 短信注册 → 直接登录，不走 bind-phone。"""
+    """snapshot 有手机号 + Jnao 短信注册无 openid → 须走公司绑手机，不直接登录。"""
     from app.core.password import hash_password
     from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
 
@@ -415,10 +397,9 @@ def test_resolve_wechat_login_links_sms_registered_parent(db_session: Session, m
     linked, ticket, step = resolve_wechat_login(
         db_session, openid="oSMS_link_test", unionid=None
     )
-    assert linked is not None
-    assert linked.id == user.id
-    assert ticket is None
-    assert step == "home"
+    assert linked is None
+    assert ticket is not None
+    assert step == "bind-phone"
 
 
 def test_resolve_wechat_login_bound_parent_not_bind_phone(db_session: Session, monkeypatch):
@@ -453,6 +434,175 @@ def test_resolve_wechat_login_bound_parent_not_bind_phone(db_session: Session, m
     assert linked is not None
     assert ticket is None
     assert step != "bind-phone"
+
+
+def test_resolve_links_sms_parent_via_legacy_wx_member_id(db_session: Session, monkeypatch):
+    """短信注册无 openid，即使 legacy_wx_member_id 对齐也须走公司绑手机。"""
+    from app.core.password import hash_password
+    from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
+
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    user = auth_service.register_child(
+        db_session,
+        parent_phone="19805031756",
+        nickname="qupp",
+        role=auth_service.ROLE_PARENT,
+        child_quota=5,
+        password="Zhang123A",
+    )
+    user.password_hash = hash_password("Zhang123A")
+    user.profile_json = {
+        "parent": {
+            "real_name": "测试",
+            "phone_verified_at": "2026-07-10 12:00:00",
+        }
+    }
+    register_daka_member_from_user(
+        db_session,
+        user,
+        register_channel=CHANNEL_SMS,
+        legacy_wx_member_id=1001,
+        legacy_matched=True,
+    )
+    db_session.commit()
+
+    upsert_snapshot(
+        db_session,
+        {
+            "wx_member_id": 1001,
+            "openid": "oLEGACY_198",
+            "mobile": None,
+            "nickname": "qupp",
+            "truename": "测试",
+        },
+    )
+    db_session.commit()
+
+    linked, ticket, step = resolve_wechat_login(
+        db_session, openid="oLEGACY_198", unionid=None
+    )
+    assert linked is None
+    assert ticket is not None
+    assert step == "bind-phone"
+
+
+def test_sms_login_requires_company_verification(db_session: Session, monkeypatch):
+    """浏览器短信注册无 openid → gate 未通过，写操作应被拦截。"""
+    from app.core.password import hash_password
+    from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
+    from app.services.parent_profile_service import (
+        parent_gate_passed,
+        parent_needs_company_verification,
+    )
+
+    user = auth_service.register_child(
+        db_session,
+        parent_phone="13900006601",
+        nickname="待验证",
+        role=auth_service.ROLE_PARENT,
+        child_quota=5,
+        password="Zhang123A",
+    )
+    user.password_hash = hash_password("Zhang123A")
+    user.profile_json = {
+        "parent": {"real_name": "待验证", "phone_verified_at": "2026-07-10 12:00:00"}
+    }
+    register_daka_member_from_user(db_session, user, register_channel=CHANNEL_SMS)
+    db_session.commit()
+
+    assert parent_needs_company_verification(db_session, user) is True
+    assert parent_gate_passed(db_session, user) is False
+
+
+def test_finalize_wechat_sets_gate_passed(db_session: Session, monkeypatch):
+    """微信绑定完成后写入 wechat_bound_at。"""
+    from app.core.password import hash_password
+    from app.services.member_registry_service import CHANNEL_SMS, find_daka_member_by_parent, register_daka_member_from_user
+    from app.services.parent_profile_service import parent_gate_passed
+    from app.services.wechat_auth_service import finalize_wechat_login_user, upsert_snapshot
+
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    user = auth_service.register_child(
+        db_session,
+        parent_phone="13900006602",
+        nickname="老用户",
+        role=auth_service.ROLE_PARENT,
+        child_quota=5,
+        password="Zhang123A",
+    )
+    user.password_hash = hash_password("Zhang123A")
+    user.profile_json = {
+        "parent": {"real_name": "老", "phone_verified_at": "2026-07-10 12:00:00"}
+    }
+    register_daka_member_from_user(
+        db_session,
+        user,
+        register_channel=CHANNEL_SMS,
+        legacy_wx_member_id=2001,
+        legacy_matched=True,
+    )
+    snap = upsert_snapshot(
+        db_session,
+        {
+            "wx_member_id": 2001,
+            "openid": "oGATE_pass_01",
+            "mobile": "13900006602",
+            "truename": "老",
+        },
+    )
+    db_session.commit()
+
+    finalize_wechat_login_user(
+        db_session, user, openid="oGATE_pass_01", unionid=None, snap=snap
+    )
+    dm = find_daka_member_by_parent(db_session, user.id)
+    assert dm.wechat_bound_at is not None
+    assert dm.company_verified_at is not None
+    assert parent_gate_passed(db_session, user) is True
+
+
+def test_sms_login_does_not_auto_attach_openid(db_session: Session, monkeypatch):
+    """短信登录不再自动绑定 snapshot openid（须先走公司验证）。"""
+    from app.core.password import hash_password
+    from app.db.models import ParentWechatBind
+    from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
+    from app.services.parent_profile_service import login_parent_by_sms
+
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    user = auth_service.register_child(
+        db_session,
+        parent_phone="13900008888",
+        nickname="自动绑",
+        role=auth_service.ROLE_PARENT,
+        child_quota=5,
+        password="Zhang123A",
+    )
+    user.password_hash = hash_password("Zhang123A")
+    user.profile_json = {
+        "parent": {
+            "real_name": "自动绑",
+            "phone_verified_at": "2026-07-10 12:00:00",
+        }
+    }
+    register_daka_member_from_user(db_session, user, register_channel=CHANNEL_SMS)
+    db_session.commit()
+
+    upsert_snapshot(
+        db_session,
+        {
+            "wx_member_id": 8802,
+            "openid": "oSMS_attach_reg",
+            "mobile": "13900008888",
+            "truename": "自动绑",
+        },
+    )
+    db_session.commit()
+
+    login_parent_by_sms(db_session, phone="13900008888")
+    bind = db_session.scalar(
+        select(ParentWechatBind).where(ParentWechatBind.parent_id == user.id)
+    )
+    assert bind is None
 
 
 def test_fetch_legacy_member_by_mobile_mock(monkeypatch):

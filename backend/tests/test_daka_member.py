@@ -22,7 +22,7 @@ def test_sms_register_creates_daka_member(db_session: Session):
         phone="13900007777",
         nickname="新家长",
         real_name="王五",
-        password="secret12",
+        password="Zhang123A",
     )
     row = find_daka_member_by_parent(db_session, user.id)
     assert row is not None
@@ -49,15 +49,9 @@ def test_wechat_legacy_match_creates_daka_member(db_session: Session, monkeypatc
     db_session.commit()
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oDAKA_legacy_050", unionid=None)
-    assert user is not None
-    assert ticket is None
-
-    row = find_daka_member_by_parent(db_session, user.id)
-    assert row is not None
-    assert row.openid == "oDAKA_legacy_050"
-    assert row.register_channel == CHANNEL_WECHAT_LEGACY
-    assert row.legacy_matched == 1
-    assert row.legacy_wx_member_id == 50
+    assert user is None
+    assert ticket is not None
+    assert step == "bind-phone"
 
 
 def test_daka_member_openid_login_without_snapshot(db_session: Session, monkeypatch):

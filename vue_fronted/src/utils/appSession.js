@@ -64,6 +64,7 @@ export function sessionKeysForKind(kind) {
       'jnao_login_channel',
       'jnao_guest_phone',
       'jnao_guest_nickname',
+      'jnao_parent_gate',
     ]
   }
   return [

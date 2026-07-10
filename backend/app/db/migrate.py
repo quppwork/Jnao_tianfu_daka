@@ -46,6 +46,16 @@ def apply_schema_patches(engine: Engine) -> None:
             "train_date",
             "ALTER TABLE training_record ADD COLUMN train_date DATE",
         ),
+        (
+            "daka_member",
+            "wechat_bound_at",
+            "ALTER TABLE daka_member ADD COLUMN wechat_bound_at DATETIME",
+        ),
+        (
+            "daka_member",
+            "company_verified_at",
+            "ALTER TABLE daka_member ADD COLUMN company_verified_at DATETIME",
+        ),
     ]
     dialect = engine.dialect.name
     for table, column, ddl in patches:
@@ -109,6 +119,7 @@ def apply_schema_patches(engine: Engine) -> None:
     _apply_user_session_table(engine)
     _apply_wechat_auth_tables(engine)
     _apply_daka_member_table(engine)
+    _backfill_daka_member_gate(engine)
     _apply_parent_child_unique_child(engine)
     _migrate_user_session_utc_to_cst(engine)
 
@@ -353,6 +364,23 @@ def _apply_daka_member_table(engine: Engine) -> None:
         """
     with engine.begin() as conn:
         conn.execute(text(ddl))
+
+
+def _backfill_daka_member_gate(engine: Engine) -> None:
+    if "wechat_bound_at" not in _column_names(engine, "daka_member"):
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE daka_member
+                SET wechat_bound_at = COALESCE(wechat_bound_at, updated_at),
+                    company_verified_at = COALESCE(company_verified_at, updated_at)
+                WHERE openid IS NOT NULL AND openid != ''
+                  AND wechat_bound_at IS NULL
+                """
+            )
+        )
 
 
 def _apply_user_session_table(engine: Engine) -> None:

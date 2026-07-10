@@ -104,7 +104,68 @@ def parent_next_step(user: ChildUser) -> str:
     return "home" if complete else "complete-profile"
 
 
-def parent_profile_to_dict(user: ChildUser, *, session_token: str | None = None) -> dict:
+def parent_needs_company_verification(db: Session, user: ChildUser) -> bool:
+    """Jnao 短信/密码注册且尚未完成微信 openid 进门验证。"""
+    if user.role != auth_service.ROLE_PARENT:
+        return False
+    if parent_gate_passed(db, user):
+        return False
+    from app.services.member_registry_service import (
+        CHANNEL_PASSWORD,
+        CHANNEL_SMS,
+        find_daka_member_by_parent,
+    )
+
+    dm = find_daka_member_by_parent(db, user.id)
+    if dm and dm.register_channel in (CHANNEL_SMS, CHANNEL_PASSWORD):
+        return True
+    if not dm and get_login_channel(user) == LOGIN_CHANNEL_STANDARD:
+        return True
+    return False
+
+
+def parent_gate_passed(db: Session, user: ChildUser) -> bool:
+    """进门验证已通过：本地字段一次写入，进门后 API 只读。"""
+    if user.role != auth_service.ROLE_PARENT:
+        return True
+    from app.services.member_registry_service import find_daka_member_by_parent
+    from app.services.wechat_auth_service import get_bind_by_parent
+
+    dm = find_daka_member_by_parent(db, user.id)
+    if dm and dm.wechat_bound_at:
+        return True
+    if get_bind_by_parent(db, user.id):
+        return True
+    return False
+
+
+def assert_parent_gate_passed(db: Session, user: ChildUser) -> None:
+    if user.role != auth_service.ROLE_PARENT:
+        return
+    if not parent_gate_passed(db, user):
+        raise HTTPException(
+            403,
+            "请先完成公司服务号手机验证（微信内一键登录或绑定手机）",
+        )
+
+
+def parent_auth_flags(db: Session, user: ChildUser) -> tuple[bool, bool, str]:
+    """返回 (gate_passed, account_ready, next_step)。"""
+    needs_company = parent_needs_company_verification(db, user)
+    ready = parent_account_ready(user)
+    step = parent_next_step(user)
+    if needs_company:
+        ready = False
+        step = "bind-phone"
+    return parent_gate_passed(db, user), ready, step
+
+
+def parent_profile_to_dict(
+    user: ChildUser,
+    *,
+    session_token: str | None = None,
+    db: Session | None = None,
+) -> dict:
     from app.core.session_cookie import maybe_strip_token
 
     complete, missing = parent_profile_status(user)
@@ -112,6 +173,11 @@ def parent_profile_to_dict(user: ChildUser, *, session_token: str | None = None)
     if channel == LOGIN_CHANNEL_WECHAT:
         missing = parent_wechat_missing_fields(user)
         complete = len(missing) == 0
+    gate_passed = True
+    account_ready = parent_account_ready(user)
+    next_step = parent_next_step(user)
+    if db is not None and user.role == auth_service.ROLE_PARENT:
+        gate_passed, account_ready, next_step = parent_auth_flags(db, user)
     out = {
         "id": user.id,
         "parent_phone": user.parent_phone,
@@ -122,17 +188,20 @@ def parent_profile_to_dict(user: ChildUser, *, session_token: str | None = None)
         "profile_complete": complete,
         "missing_fields": missing,
         "login_channel": channel,
-        "account_ready": parent_account_ready(user),
-        "next_step": parent_next_step(user),
+        "account_ready": account_ready,
+        "next_step": next_step,
+        "gate_passed": gate_passed,
     }
     if session_token:
         out["session_token"] = maybe_strip_token(session_token)
     return out
 
 
-def assert_parent_account_ready(user: ChildUser) -> None:
+def assert_parent_account_ready(user: ChildUser, db: Session | None = None) -> None:
     if user.role != auth_service.ROLE_PARENT:
         return
+    if db is not None:
+        assert_parent_gate_passed(db, user)
     if not parent_account_ready(user):
         step = parent_next_step(user)
         raise HTTPException(403, f"请先完善家长资料（{step}）")

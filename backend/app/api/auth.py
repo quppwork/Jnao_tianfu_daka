@@ -40,6 +40,7 @@ from app.services.parent_profile_service import (
     parent_profile_status,
     parent_wechat_missing_fields,
     register_parent_by_sms,
+    LOGIN_CHANNEL_WECHAT,
 )
 from app.services.sms_service import (
     SCENE_BIND,
@@ -87,24 +88,30 @@ def _to_response(
     user,
     *,
     bind_ticket: str | None = None,
+    db: Session | None = None,
 ) -> AuthResponse:
     from app.core.session_cookie import maybe_strip_token
+    from app.services.parent_profile_service import parent_auth_flags
 
     complete, missing = (True, [])
     channel = "standard"
+    gate_passed = True
     ready = True
     step = "home"
     if (user.role or auth_service.ROLE_STUDENT) == auth_service.ROLE_PARENT:
         channel = get_login_channel(user)
-        if channel == "wechat":
+        if channel == LOGIN_CHANNEL_WECHAT:
             missing = parent_wechat_missing_fields(user)
             complete = len(missing) == 0
-            ready = parent_account_ready(user)
-            step = parent_next_step(user)
         else:
             complete, missing = parent_profile_status(user)
-            ready = complete
-            step = "home" if complete else "complete-profile"
+        if db is not None:
+            gate_passed, ready, step = parent_auth_flags(db, user)
+        else:
+            ready = parent_account_ready(user) if channel == LOGIN_CHANNEL_WECHAT else complete
+            step = parent_next_step(user) if channel == LOGIN_CHANNEL_WECHAT else (
+                "home" if complete else "complete-profile"
+            )
     return AuthResponse(
         child_user_id=user.id,
         parent_phone=user.parent_phone,
@@ -117,6 +124,7 @@ def _to_response(
         login_channel=channel,
         account_ready=ready,
         next_step=step,
+        gate_passed=gate_passed,
         bind_ticket=bind_ticket,
     )
 
@@ -138,6 +146,7 @@ def _issue_and_respond(
     return _to_response(
         user,
         bind_ticket=bind_ticket,
+        db=db,
     )
 
 
@@ -392,18 +401,14 @@ def wechat_callback(
         openid, unionid = exchange_code_for_openid(code)
         user, bind_ticket, next_step = resolve_wechat_login(db, openid=openid, unionid=unionid)
 
-        if next_step == "register":
-            return RedirectResponse(
-                url=frontend_wechat_error_url(
-                    "您的微信尚未登记会员，请点击「使用手机号/密码登录」注册家长账户"
-                ),
-                status_code=302,
-            )
+        from app.services.parent_profile_service import parent_needs_company_verification
 
-        # 已识别用户不再跳外链绑手机（避免与公司注册页「已注册」死循环）
-        if user is not None:
-            bind_ticket = None
-            if next_step == "bind-phone":
+        # 已识别用户且已完成公司验证的，不再跳外链绑手机（避免死循环）
+        if user is not None and next_step == "bind-phone":
+            if parent_needs_company_verification(db, user):
+                user = None
+            else:
+                bind_ticket = None
                 snap = lookup_member_for_oauth(db, openid)
                 next_step = finalize_wechat_login_user(
                     db, user, openid=openid, unionid=unionid, snap=snap

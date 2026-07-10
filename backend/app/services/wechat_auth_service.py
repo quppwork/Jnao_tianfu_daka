@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.legacy_session import get_legacy_engine
-from app.db.models import ChildUser, ParentWechatBind, WxMemberSnapshot
+from app.db.models import ChildUser, DakaMember, ParentWechatBind, WxMemberSnapshot
 from app.services import auth_service
 from app.services.auth_challenge_store import challenge_delete, challenge_get, challenge_set
 from app.services.datetime_fmt import format_cst
@@ -332,27 +332,20 @@ def lookup_member_local(db: Session, openid: str) -> WxMemberSnapshot | None:
 
 
 def lookup_member_for_oauth(db: Session, openid: str) -> WxMemberSnapshot | None:
-    """C：优先本地 snapshot；缺手机号时 OAuth 按 openid 懒查老库 1 条并回写。"""
-    oid = (openid or "").strip()
-    if not oid:
+    """OAuth 仅查本地 wx_member_snapshot；老库请走定时同步 sync_wx_member_snapshot。"""
+    return lookup_member_local(db, openid)
+
+
+def lookup_snapshot_by_mobile(db: Session, mobile: str) -> WxMemberSnapshot | None:
+    phone = _normalize_mobile(mobile)
+    if not phone:
         return None
-    snap = lookup_member_local(db, oid)
-    if snap and snap.mobile:
-        return snap
-    if not get_legacy_engine():
-        return snap
-    legacy = fetch_legacy_member(oid)
-    if not legacy:
-        return snap
-    snap = upsert_snapshot(db, legacy)
-    db.commit()
-    db.refresh(snap)
-    logger.info(
-        "OAuth lazy-sync wx snapshot openid=%s… mobile=%s",
-        oid[:10],
-        snap.mobile or "-",
+    return db.scalar(
+        select(WxMemberSnapshot)
+        .where(WxMemberSnapshot.mobile == phone)
+        .order_by(WxMemberSnapshot.id.desc())
+        .limit(1)
     )
-    return snap
 
 
 def lookup_member(db: Session, openid: str, *, refresh_legacy: bool = False) -> WxMemberSnapshot | None:
@@ -532,6 +525,18 @@ def sync_wx_members_from_legacy(db: Session) -> dict[str, int | str]:
     return stats
 
 
+def sync_snapshot_for_openid(db: Session, openid: str, *, mobile: str | None = None) -> WxMemberSnapshot | None:
+    """公司绑手机完成后单条同步老库 → 本地 snapshot（不阻塞日常 API）。"""
+    snap = sync_snapshot_from_legacy(db, openid=openid, mobile=mobile)
+    if snap:
+        logger.info(
+            "single sync wx snapshot openid=%s… mobile=%s",
+            (openid or "")[:10],
+            snap.mobile or "-",
+        )
+    return snap
+
+
 def get_bind_by_openid(db: Session, openid: str) -> ParentWechatBind | None:
     app_id = wechat_app_id()
     if not app_id:
@@ -637,6 +642,9 @@ def finalize_wechat_login_user(
         legacy_matched=bool(snap),
         legacy_wx_member_id=wx_mid,
     )
+    from app.services.member_registry_service import mark_parent_gate_passed
+
+    mark_parent_gate_passed(db, user, company_verified=True)
     db.commit()
     db.refresh(user)
     return parent_next_step(user)
@@ -808,17 +816,107 @@ def consume_login_exchange_ticket(ticket: str) -> dict:
     return row
 
 
+def try_attach_openid_from_local_snapshot(db: Session, user: ChildUser) -> ChildUser:
+    """保留供公司绑手机完成后调用；短信注册/登录不再自动绑 openid（须先走公司验证）。"""
+    return user
+
+
+def _try_link_user_from_local(
+    db: Session,
+    *,
+    openid: str,
+    unionid: str | None,
+    snap: WxMemberSnapshot | None,
+) -> tuple[ChildUser | None, str | None]:
+    """本地 snapshot/daka_member 关联已注册家长；成功返回 (user, next_step)。"""
+    from app.services.member_registry_service import (
+        find_daka_member_by_legacy_wx_member_id,
+        find_daka_member_by_mobile,
+    )
+    from app.services.parent_profile_service import parent_needs_company_verification
+
+    oid = (openid or "").strip()
+    if not oid:
+        return None, None
+
+    u_union = unionid or (snap.unionid if snap else None)
+    mobile = _normalize_mobile(snap.mobile if snap else None) if snap else None
+
+    if mobile:
+        existing = auth_service.find_parent_by_phone_for_login(db, mobile)
+        if not existing:
+            dm = find_daka_member_by_mobile(db, mobile)
+            if dm:
+                existing = auth_service.get_parent_for_login(db, dm.parent_id)
+        if existing:
+            if parent_needs_company_verification(db, existing):
+                return None, None
+            step = finalize_wechat_login_user(
+                db,
+                existing,
+                openid=oid,
+                unionid=u_union,
+                snap=snap,
+            )
+            return existing, step
+
+    if snap and snap.wx_member_id:
+        dm = find_daka_member_by_legacy_wx_member_id(db, snap.wx_member_id)
+        if dm and dm.mobile:
+            user = auth_service.get_parent_for_login(db, dm.parent_id)
+            if not user:
+                user = auth_service.find_parent_by_phone_for_login(db, dm.mobile)
+            if user:
+                if parent_needs_company_verification(db, user):
+                    return None, None
+                step = finalize_wechat_login_user(
+                    db,
+                    user,
+                    openid=oid,
+                    unionid=u_union,
+                    snap=snap,
+                )
+                return user, step
+
+    if snap and not mobile:
+        rows = list(
+            db.scalars(
+                select(DakaMember).where(
+                    DakaMember.openid.is_(None),
+                    DakaMember.mobile.isnot(None),
+                )
+            )
+        )
+        for dm in rows:
+            snap_by_phone = lookup_snapshot_by_mobile(db, dm.mobile)
+            if not snap_by_phone or (snap_by_phone.openid or "").strip() != oid:
+                continue
+            user = auth_service.get_parent_for_login(db, dm.parent_id)
+            if not user:
+                user = auth_service.find_parent_by_phone_for_login(db, dm.mobile)
+            if user:
+                if parent_needs_company_verification(db, user):
+                    return None, None
+                step = finalize_wechat_login_user(
+                    db,
+                    user,
+                    openid=oid,
+                    unionid=u_union,
+                    snap=snap_by_phone,
+                )
+                return user, step
+
+    return None, None
+
+
 def resolve_wechat_login(
     db: Session,
     *,
     openid: str,
     unionid: str | None,
 ) -> tuple[ChildUser | None, str | None, str]:
-    """返回 (user, bind_ticket, next_step)。B+C：本地优先，OAuth 可懒查老库 1 条。"""
-    from app.services.member_registry_service import (
-        find_daka_member_by_mobile,
-        find_daka_member_by_openid,
-    )
+    """返回 (user, bind_ticket, next_step)。本地 snapshot/daka_member 优先，老库仅定时同步。"""
+    from app.services.member_registry_service import find_daka_member_by_openid
 
     bind = get_bind_by_openid(db, openid)
     if bind:
@@ -849,26 +947,23 @@ def resolve_wechat_login(
         member.openid = None
         db.flush()
 
-    snap = lookup_member_for_oauth(db, openid)
+    snap = lookup_member_local(db, openid)
     if not snap:
-        return None, None, "register"
+        ticket = create_bind_ticket(
+            openid=openid,
+            unionid=unionid,
+            wx_member_id=None,
+        )
+        return None, ticket, "bind-phone"
+
+    linked, step = _try_link_user_from_local(
+        db, openid=openid, unionid=unionid, snap=snap
+    )
+    if linked and step:
+        return linked, None, step
 
     mobile = snap.mobile
     if mobile:
-        existing = auth_service.find_parent_by_phone_for_login(db, mobile)
-        if not existing:
-            dm = find_daka_member_by_mobile(db, mobile)
-            if dm:
-                existing = auth_service.get_parent_for_login(db, dm.parent_id)
-        if existing:
-            step = finalize_wechat_login_user(
-                db,
-                existing,
-                openid=openid,
-                unionid=unionid or snap.unionid,
-                snap=snap,
-            )
-            return existing, None, step
         ticket = create_bind_ticket(
             openid=openid,
             unionid=unionid,
@@ -935,7 +1030,8 @@ def complete_external_bind_phone(db: Session, *, bind_ticket: str) -> ChildUser:
 
     pending = get_bind_ticket(bind_ticket)
     openid = pending["openid"]
-    snap = sync_snapshot_from_legacy(db, openid=openid)
+    sync_snapshot_for_openid(db, openid)
+    snap = lookup_member_local(db, openid)
     mobile = (snap.mobile if snap and snap.mobile else None)
     if not mobile:
         dm = find_daka_member_by_openid(db, openid)

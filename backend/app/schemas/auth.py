@@ -32,6 +32,7 @@ class AuthResponse(BaseModel):
     login_channel: str = "standard"
     account_ready: bool = True
     next_step: str = "home"
+    gate_passed: bool = True
     bind_ticket: str | None = None
     must_change_password: bool = False
 
@@ -122,6 +123,7 @@ class ParentProfileResponse(BaseModel):
     login_channel: str = "standard"
     account_ready: bool = True
     next_step: str = "home"
+    gate_passed: bool = True
     session_token: str | None = None
 
 

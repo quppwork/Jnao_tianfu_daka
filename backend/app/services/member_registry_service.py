@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, DakaMember
+from app.services import auth_service
 from app.services.sms_service import normalize_phone
 from app.services.training_day import TZ
 
@@ -32,6 +33,16 @@ def find_daka_member_by_openid(db: Session, openid: str) -> DakaMember | None:
     if not oid:
         return None
     return db.scalar(select(DakaMember).where(DakaMember.openid == oid))
+
+
+def find_daka_member_by_legacy_wx_member_id(
+    db: Session, wx_member_id: int | None
+) -> DakaMember | None:
+    if not wx_member_id:
+        return None
+    return db.scalar(
+        select(DakaMember).where(DakaMember.legacy_wx_member_id == wx_member_id)
+    )
 
 
 def upsert_daka_member(
@@ -123,3 +134,34 @@ def register_daka_member_from_user(
         real_name=real_name,
         nickname=user.nickname,
     )
+
+
+def mark_parent_gate_passed(
+    db: Session,
+    user: ChildUser,
+    *,
+    company_verified: bool = True,
+) -> DakaMember | None:
+    """微信 openid 绑定完成时写入进门标记（进门一次，之后 API 只读字段）。"""
+    if user.role != auth_service.ROLE_PARENT:
+        return None
+    from app.services.wechat_auth_service import get_bind_by_parent
+
+    dm = find_daka_member_by_parent(db, user.id)
+    if not dm and get_bind_by_parent(db, user.id):
+        dm = register_daka_member_from_user(
+            db,
+            user,
+            register_channel=CHANNEL_WECHAT,
+            openid=get_bind_by_parent(db, user.id).openid,
+        )
+    if not dm:
+        return None
+    now = datetime.now(TZ).replace(tzinfo=None)
+    if not dm.wechat_bound_at:
+        dm.wechat_bound_at = now
+    if company_verified and not dm.company_verified_at:
+        dm.company_verified_at = now
+    dm.updated_at = now
+    db.flush()
+    return dm

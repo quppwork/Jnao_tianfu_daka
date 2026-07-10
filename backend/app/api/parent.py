@@ -42,7 +42,7 @@ def get_profile(
     from app.services import auth_service
 
     user = auth_service.get_child_user(db, user_id)
-    return ParentProfileResponse(**parent_profile_to_dict(user))
+    return ParentProfileResponse(**parent_profile_to_dict(user, db=db))
 
 
 @router.put("/profile", response_model=ParentProfileResponse)
@@ -66,7 +66,7 @@ def put_profile(
 
         set_session_cookie(response, new_token, role=auth_service.ROLE_PARENT)
     invalidate_user_profile(user_id)
-    return ParentProfileResponse(**parent_profile_to_dict(user, session_token=new_token))
+    return ParentProfileResponse(**parent_profile_to_dict(user, session_token=new_token, db=db))
 
 
 @router.get("/quota", response_model=ParentQuotaResponse)
@@ -90,7 +90,7 @@ def create_child(
     from app.services import auth_service
 
     parent = auth_service.get_child_user(db, user_id)
-    assert_parent_account_ready(parent)
+    assert_parent_account_ready(parent, db)
     child = parent_service.create_child(
         db,
         user_id,
