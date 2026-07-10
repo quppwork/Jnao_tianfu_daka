@@ -540,6 +540,11 @@ function _storeAuth(data) {
     if (data.login_channel === 'wechat') {
       localStorage.setItem('jnao_login_channel', 'wechat')
     }
+    if (data.must_change_password) {
+      sessionStorage.setItem('jnao_must_change_password', '1')
+    } else {
+      sessionStorage.removeItem('jnao_must_change_password')
+    }
   } catch (e) { /* ignore */ }
   if (role === 'student') {
     setChildUserId(data.child_user_id)

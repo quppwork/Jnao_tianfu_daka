@@ -136,15 +136,34 @@ export function repairAuthStorage() {
 
   const userTok = defaultGetItem('jnao_session_token')
   const loggedIn = defaultGetItem('jnao_logged_in') === '1'
+  const schemaV3 = parseInt(defaultGetItem(STORAGE_VERSION_KEY) || '0', 10) >= STORAGE_SCHEMA_VERSION
   let role = snap.role
-  if (!role) {
+  let userId = snap.parent?.userId || snap.student?.userId || null
+  if (!role || !userId) {
     try {
       const raw = defaultGetItem('jnao_user')
-      if (raw) role = JSON.parse(raw).role
+      if (raw) {
+        const u = JSON.parse(raw)
+        if (!role) role = u.role
+        if (!userId && u.id) userId = Number(u.id)
+      }
     } catch (_) { /* ignore */ }
   }
+  if (!userId) {
+    const childRaw = defaultGetItem('jnao_child_user_id')
+    if (childRaw) userId = parseInt(childRaw, 10) || null
+  }
 
-  if (loggedIn && (!userTok || !role)) {
+  // v3：HttpOnly Cookie，本地无 token 仍可为有效登录态
+  if (loggedIn && (!role || !userId)) {
+    for (const key of sessionKeysForKind('parent')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    for (const key of sessionKeysForKind('student')) {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    }
+    fixed.push('logged_in_without_identity')
+  } else if (loggedIn && !userTok && !schemaV3) {
     for (const key of sessionKeysForKind('parent')) {
       try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
     }

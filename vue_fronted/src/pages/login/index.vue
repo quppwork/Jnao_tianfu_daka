@@ -247,6 +247,7 @@ function cleanLandingQuery() {
 function openBrowserLogin() {
   skipWechatAutoLogin()
   browserLogin.value = true
+  try { sessionStorage.setItem('jnao_browser_login', '1') } catch (_) { /* ignore */ }
   wechatLoading.value = false
   form.value.role = 'parent'
   parentMode.value = 'password'
@@ -271,6 +272,10 @@ function backToWechatLogin() {
 
 function tryRedirectIfLoggedIn() {
   try {
+    if (sessionStorage.getItem('jnao_must_change_password') === '1') {
+      uni.redirectTo({ url: '/pages/login/change-password' })
+      return true
+    }
     // 管理员 session 与用户登录页隔离，不在此自动跳转
     const adminRaw = localStorage.getItem('jnao_admin_user')
     const adminLoggedIn = localStorage.getItem('jnao_admin_logged_in') === '1'
@@ -344,7 +349,15 @@ onMounted(async () => {
     browserLogin.value = true
   } else if (inWechat.value) {
     form.value.role = 'parent'
-    browserLogin.value = false
+    try {
+      if (sessionStorage.getItem('jnao_browser_login') === '1') {
+        browserLogin.value = true
+      } else {
+        browserLogin.value = false
+      }
+    } catch (_) {
+      browserLogin.value = false
+    }
   } else {
     browserLogin.value = true
   }
@@ -519,6 +532,7 @@ function resolveParentTarget(data) {
 async function routeParentHome(data) {
   clearLoginGuard()
   saveAuthSession(data)
+  try { sessionStorage.removeItem('jnao_browser_login') } catch (_) { /* ignore */ }
   if (data.must_change_password || data.next_step === 'change-password') {
     uni.redirectTo({ url: '/pages/login/change-password' })
     return

@@ -66,21 +66,21 @@ def set_session_cookie(response: Response, token: str, *, role: str) -> None:
         httponly=True,
         secure=_cookie_secure(),
         samesite=_cookie_samesite(),
-        path="/api",
+        path="/",
         max_age=SESSION_MAX_AGE,
     )
     other = COOKIE_USER if name == COOKIE_ADMIN else COOKIE_ADMIN
-    response.delete_cookie(key=other, path="/api")
+    response.delete_cookie(key=other, path="/")
 
 
 def clear_session_cookie(response: Response, *, role: str | None = None) -> None:
     if role == auth_service.ROLE_ADMIN:
-        response.delete_cookie(key=COOKIE_ADMIN, path="/api")
+        response.delete_cookie(key=COOKIE_ADMIN, path="/")
         return
     if role in (auth_service.ROLE_PARENT, auth_service.ROLE_STUDENT, None):
-        response.delete_cookie(key=COOKIE_USER, path="/api")
+        response.delete_cookie(key=COOKIE_USER, path="/")
     if role is None:
-        response.delete_cookie(key=COOKIE_ADMIN, path="/api")
+        response.delete_cookie(key=COOKIE_ADMIN, path="/")
 
 
 def maybe_strip_token(token: str | None) -> str | None:

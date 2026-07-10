@@ -26,20 +26,28 @@
 <script setup>
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { changePassword, requirePageAuth } from '@/utils/userApi.js'
+import { changePassword, redirectToLoginForKind, requirePageAuth } from '@/utils/userApi.js'
+import { readAuthSnapshot } from '@/utils/appSession.js'
 
 const form = ref({ oldPassword: '', newPassword: '', confirm: '' })
 const busy = ref(false)
 let authKind = 'student'
 
 onLoad(async () => {
-  const snap = await requirePageAuth('student')
-  if (snap.ok) {
-    authKind = 'student'
+  const snap = readAuthSnapshot()
+  if (snap.parent?.userId) {
+    authKind = 'parent'
+    const auth = await requirePageAuth('parent')
+    if (!auth.ok) return
     return
   }
-  const parent = await requirePageAuth('parent')
-  if (parent.ok) authKind = 'parent'
+  if (snap.student?.userId) {
+    authKind = 'student'
+    const auth = await requirePageAuth('student')
+    if (!auth.ok) return
+    return
+  }
+  redirectToLoginForKind('parent')
 })
 
 async function submit() {
@@ -56,6 +64,7 @@ async function submit() {
   busy.value = true
   try {
     const data = await changePassword(oldPassword, newPassword)
+    try { sessionStorage.removeItem('jnao_must_change_password') } catch (_) { /* ignore */ }
     uni.showToast({ title: '密码已更新', icon: 'none' })
     const home = data.role === 'parent' ? '/pages/parent/index' : '/pages/index'
     setTimeout(() => uni.reLaunch({ url: home }), 400)

@@ -159,12 +159,24 @@ describe('repairAuthStorage / sanitizeAuthForLoginEntry', () => {
     expect(snap.admin).toBeNull()
   })
 
-  it('repair 清除 logged_in 但无 token 的脏数据', async () => {
+  it('repair 清除 logged_in 但无 token 的脏数据（v3 Cookie 模式保留有效登录）', async () => {
     const { repairAuthStorage } = await import('../src/utils/appSession.js')
+    store.jnao_storage_schema = '3'
     store.jnao_logged_in = '1'
     store.jnao_user = JSON.stringify({ id: 2, role: 'parent' })
+    store.jnao_parent_user_id = '2'
+    store.jnao_child_user_id = '2'
     const fixed = repairAuthStorage()
-    expect(fixed).toContain('logged_in_without_session')
+    expect(fixed).not.toContain('logged_in_without_session')
+    expect(store.jnao_logged_in).toBe('1')
+  })
+
+  it('repair 清除 logged_in 但无身份信息的脏数据', async () => {
+    const { repairAuthStorage } = await import('../src/utils/appSession.js')
+    store.jnao_logged_in = '1'
+    store.jnao_user = JSON.stringify({ role: 'parent' })
+    const fixed = repairAuthStorage()
+    expect(fixed).toContain('logged_in_without_identity')
     expect(store.jnao_logged_in).toBeUndefined()
   })
 })
