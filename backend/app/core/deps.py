@@ -20,9 +20,17 @@ def _resolve_session_token(
     x_session_token: str | None,
     session_token: str | None,
 ) -> str | None:
-    """session_token 默认仅接受 Header；答疑图片等少数路径允许 query。"""
+    """优先 Header；其次 HttpOnly Cookie；图片等少数路径允许 query（兼容旧客户端）。"""
     if x_session_token and x_session_token.strip():
         return x_session_token.strip()
+
+    from app.core.session_cookie import cookies_enabled, read_session_cookie
+
+    if cookies_enabled():
+        cookie_token = read_session_cookie(request)
+        if cookie_token:
+            return cookie_token
+
     path = request.url.path
     allow_query = (
         path.startswith("/api/qa/images/")

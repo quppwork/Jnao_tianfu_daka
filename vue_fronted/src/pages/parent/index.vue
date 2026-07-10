@@ -60,7 +60,7 @@
           <input class="form-input" v-model="childForm.nickname" placeholder="孩子姓名/昵称" />
         </view>
         <view class="input-wrap">
-          <input class="form-input" v-model="childForm.password" :placeholder="editingChild ? '新密码（留空不改）' : '登录密码（至少6位）'" type="password" />
+          <input class="form-input" v-model="childForm.password" :placeholder="editingChild ? '新密码（留空不改，8-32位含大小写+数字）' : '登录密码（8-32位，含大小写+数字）'" type="password" />
         </view>
         <view class="input-wrap">
           <picker class="form-picker" :range="ageOptions" :value="ageIndex" @change="onAgeChange">

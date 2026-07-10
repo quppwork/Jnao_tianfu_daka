@@ -71,6 +71,13 @@
       }
     },
     {
+      "path": "pages/login/change-password",
+      "style": {
+        "navigationBarTitleText": "修改密码",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/login/onboarding/index",
       "style": {
         "navigationBarTitleText": "完善信息",

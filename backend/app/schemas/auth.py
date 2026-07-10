@@ -33,6 +33,12 @@ class AuthResponse(BaseModel):
     account_ready: bool = True
     next_step: str = "home"
     bind_ticket: str | None = None
+    must_change_password: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class WechatOAuthUrlResponse(BaseModel):
@@ -98,9 +104,9 @@ class SmsLoginRequest(BaseModel):
 class SmsRegisterRequest(BaseModel):
     phone: str = Field(..., min_length=11, max_length=20)
     sms_code: str = Field(..., min_length=4, max_length=8)
-    real_name: str = Field(..., min_length=1, max_length=50)
-    nickname: str = Field(..., min_length=1, max_length=50)
-    password: str | None = Field(None, min_length=6, max_length=128)
+    real_name: str = Field(..., min_length=2, max_length=20)
+    nickname: str = Field(..., min_length=2, max_length=20)
+    password: str | None = Field(None, min_length=8, max_length=128)
     device_id: str | None = Field(None, max_length=64)
 
 
@@ -138,9 +144,9 @@ RegisterResponse = AuthResponse
 
 
 class CreateChildRequest(BaseModel):
-    login_name: str = Field(..., min_length=2, max_length=50)
-    nickname: str = Field(..., min_length=1, max_length=50)
-    password: str = Field(..., min_length=6, max_length=128)
+    login_name: str = Field(..., min_length=2, max_length=30)
+    nickname: str = Field(..., min_length=2, max_length=20)
+    password: str = Field(..., min_length=8, max_length=128)
     grade: str | None = Field(None, max_length=20)       # 🆕 年级
     age: int | None = Field(None, ge=3, le=120)            # 🆕 年龄（与前端 picker 一致）
     # --- 以下字段已建表，前端暂不使用，请勿删除 ---
@@ -148,8 +154,8 @@ class CreateChildRequest(BaseModel):
 
 
 class UpdateChildRequest(BaseModel):
-    nickname: str | None = Field(None, min_length=1, max_length=50)
-    password: str | None = Field(None, min_length=6, max_length=128)
+    nickname: str | None = Field(None, min_length=2, max_length=20)
+    password: str | None = Field(None, min_length=8, max_length=128)
     grade: str | None = Field(None, max_length=20)        # 🆕
     age: int | None = Field(None, ge=3, le=120)            # 🆕 年龄（与前端 picker 一致）
     region: str | None = Field(None, max_length=50)       # 🆕

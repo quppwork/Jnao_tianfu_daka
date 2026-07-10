@@ -1,4 +1,4 @@
-"""密码强度校验 — 注册/改密"""
+"""密码强度校验 — 注册/改密/创建账号"""
 
 from __future__ import annotations
 
@@ -17,19 +17,40 @@ _WEAK_PASSWORDS = frozenset(
         "password",
         "qwerty",
         "abc123",
+        "abc12345",
         "123123",
         "888888",
         "666666",
+        "password1",
+        "qwerty123",
     }
 )
+
+_PASSWORD_HINT = "密码需8-32位，且同时包含大写字母、小写字母和数字"
+
+
+def password_meets_policy(password: str) -> bool:
+    pwd = (password or "").strip()
+    if len(pwd) < 8 or len(pwd) > 32:
+        return False
+    if not re.search(r"[a-z]", pwd):
+        return False
+    if not re.search(r"[A-Z]", pwd):
+        return False
+    if not re.search(r"\d", pwd):
+        return False
+    if pwd.lower() in _WEAK_PASSWORDS:
+        return False
+    return True
 
 
 def validate_password_strength(password: str, *, field_label: str = "密码") -> str:
     pwd = (password or "").strip()
-    if len(pwd) < 8:
-        raise HTTPException(400, f"{field_label}至少8位，且需包含字母和数字")
-    if not re.search(r"[A-Za-z]", pwd) or not re.search(r"\d", pwd):
-        raise HTTPException(400, f"{field_label}需同时包含字母和数字")
-    if pwd.lower() in _WEAK_PASSWORDS:
-        raise HTTPException(400, f"{field_label}过于简单，请更换")
+    if not password_meets_policy(pwd):
+        raise HTTPException(400, f"{field_label}{_PASSWORD_HINT}")
     return pwd
+
+
+def password_needs_upgrade(plain_password: str) -> bool:
+    """登录成功后：明文密码是否符合现行策略（用于强制改密）。"""
+    return not password_meets_policy((plain_password or "").strip())

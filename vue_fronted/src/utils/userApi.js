@@ -3,7 +3,7 @@
  *
  * 架构约定:
  * - 用户标识: localStorage 存 child_user_id，请求通过 Query ?user_id= 传递
- * - 认证方式: 明文 user_id（MVP 阶段，生产需升级为 JWT）
+ * - 认证方式: HttpOnly Cookie（jnao_session / jnao_admin_session）+ X-Child-User-Id
  * - 数据流:   Vue 页面 → userApi.js → fetch() → FastAPI → Service → DB
  * - 错误处理: 非 2xx 响应抛出 Error，调用方 try/catch
  *
@@ -43,7 +43,8 @@ import {
 const CHILD_KEY = 'jnao_child_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
-const SESSION_TOKEN_KEY = 'jnao_session_token'
+const SESSION_TOKEN_KEY = 'jnao_session_token' // legacy，迁移后不再写入
+const ADMIN_LOGGED_IN_KEY = 'jnao_admin_logged_in'
 
 /** 读取当前登录的 child_user_id，无则返回 null */
 export function getChildUserId() {
@@ -70,22 +71,36 @@ export function getLoggedInUserId() {
 
 /** 退出登录并回到登录页 */
 export function logoutAndGoLogin() {
-  clearSessionForKind('parent')
-  clearSessionForKind('student')
-  try {
-    uni.reLaunch({ url: '/pages/login/index' })
-  } catch (e) {
-    window.location.href = '/pages/login/index'
-  }
+  logoutSession('parent').finally(() => {
+    logoutSession('student').finally(() => {
+      try {
+        uni.reLaunch({ url: '/pages/login/index' })
+      } catch (e) {
+        window.location.href = '/pages/login/index'
+      }
+    })
+  })
 }
 
 export function logoutAdminAndGoLogin() {
-  clearSessionForKind('admin')
+  logoutSession('admin').finally(() => {
+    try {
+      uni.redirectTo({ url: '/pages/admin/login' })
+    } catch (e) {
+      window.location.href = '/pages/admin/login'
+    }
+  })
+}
+
+export async function logoutSession(kind) {
   try {
-    uni.redirectTo({ url: '/pages/admin/login' })
-  } catch (e) {
-    window.location.href = '/pages/admin/login'
-  }
+    if (kind === 'admin') {
+      await apiJson('/api/admin/logout', { method: 'POST' })
+    } else if (kind === 'parent' || kind === 'student') {
+      await apiJson('/api/auth/logout', { method: 'POST' })
+    }
+  } catch (_) { /* ignore */ }
+  clearSessionForKind(kind)
 }
 
 export function clearSessionForKind(kind) {
@@ -124,13 +139,13 @@ export async function requirePageAuth(kind) {
   const snap = readAuthSnapshot()
   const session = kind === 'admin' ? snap.admin : kind === 'parent' ? snap.parent : snap.student
 
-  if (!session?.userId || !session?.token) {
-    if (kind === 'student' && snap.parent?.token) {
+  if (!session?.userId) {
+    if (kind === 'student' && snap.parent?.userId) {
       prepareRoleLoginEntry('student')
       try { uni.reLaunch({ url: '/pages/login/index?role=student' }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
-    if (kind === 'parent' && snap.student?.token) {
+    if (kind === 'parent' && snap.student?.userId) {
       try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
@@ -177,7 +192,7 @@ export async function requirePageAuth(kind) {
         const raw = localStorage.getItem('jnao_user')
         if (raw) role = JSON.parse(raw).role || role
       } catch (_) { /* ignore */ }
-      if (kind === 'student' && (role === 'parent' || snap.parent?.token)) {
+      if (kind === 'student' && (role === 'parent' || snap.parent?.userId)) {
         try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (_) { /* ignore */ }
         return { ok: false, reason: 'wrong_role' }
       }
@@ -231,23 +246,21 @@ export function clearChildUserId() {
   invalidatePageAuthCache('parent')
 }
 
-/** 读取 session_token */
-export function getSessionToken() {
+/** 是否已有用户端登录态（Cookie + local 标记） */
+export function hasUserSession() {
   try {
-    return localStorage.getItem(SESSION_TOKEN_KEY) || ''
-  } catch (e) { /* ignore */ }
+    return localStorage.getItem('jnao_logged_in') === '1' && !!getLoggedInUserId()
+  } catch (e) { return false }
+}
+
+/** 读取 session_token（HttpOnly Cookie 模式下恒为空，保留兼容） */
+export function getSessionToken() {
   return ''
 }
 
-/** 存储 session_token */
-export function setSessionToken(token) {
-  try {
-    if (token) {
-      localStorage.setItem(SESSION_TOKEN_KEY, token)
-    } else {
-      localStorage.removeItem(SESSION_TOKEN_KEY)
-    }
-  } catch (e) { /* ignore */ }
+/** 不再向 localStorage 存 token */
+export function setSessionToken(_token) {
+  /* HttpOnly Cookie 由服务端 Set-Cookie */
 }
 
 /** 会话内已验证 uid，避免重复 ping /api/user/profile */
@@ -297,8 +310,10 @@ export function resetSessionExpiryGuard() {
 function handleMidSessionExpired(url) {
   if (_sessionExpiryHandled || isAuthAttemptRequest(url)) return
   const kind = inferAuthKindFromUrl(url)
-  const hasToken = kind === 'admin' ? !!getAdminSessionToken() : !!getSessionToken()
-  if (!hasToken) return
+  const hasSession = kind === 'admin'
+    ? (localStorage.getItem(ADMIN_LOGGED_IN_KEY) === '1' && !!getAdminUserId())
+    : hasUserSession()
+  if (!hasSession) return
   _sessionExpiryHandled = true
   invalidatePageAuthCache(kind)
   clearSessionForKind(kind)
@@ -322,7 +337,7 @@ async function apiJson(url, options = {}) {
   const headers = mergeAuthHeaders({ ...options, _url: url }, userId)
   let res
   try {
-    res = await fetch(url, { ...options, headers })
+    res = await fetch(url, { ...options, headers, credentials: 'include' })
   } catch (e) {
     console.error(`[api] NETWORK ${options.method || 'GET'} ${url} — ${e.message || 'fetch failed'}`)
     const err = new Error('网络连接失败，请检查网络')
@@ -362,6 +377,7 @@ async function streamPostSse(url, body, { onToken, onDone, onError, signal } = {
     headers,
     body: JSON.stringify(body),
     signal,
+    credentials: 'include',
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
@@ -436,13 +452,9 @@ function mergeAuthHeaders(options = {}, userId = null) {
   const isAdminApi = String(url).includes('/api/admin/')
 
   if (isAdminApi) {
-    const adminTok = getAdminSessionToken()
-    if (adminTok) headers['X-Session-Token'] = adminTok
     const aid = userId || getAdminUserId()
     if (aid) headers['X-Child-User-Id'] = String(aid)
   } else {
-    const token = getSessionToken()
-    if (token) headers['X-Session-Token'] = token
     const uid = userId || extractUserIdFromUrl(url) || getChildUserId()
     if (uid) headers['X-Child-User-Id'] = String(uid)
   }
@@ -469,10 +481,6 @@ export function resolveQaImageUrl(url, userId) {
     } catch (_) { /* keep path */ }
   }
   path = ensureAuthQuery(path, userId)
-  const token = getSessionToken()
-  if (token && !/[?&]session_token=/.test(path)) {
-    path += `${path.includes('?') ? '&' : '?'}session_token=${encodeURIComponent(token)}`
-  }
   if (!origin && path.startsWith('/')) {
     try { origin = window.location.origin } catch (_) {}
   }
@@ -1237,7 +1245,7 @@ export async function uploadQaImage(userId, file) {
 
 export async function transcribeVoice(audioBlob, filename = 'speech.webm') {
   const userId = getChildUserId()
-  if (!userId || !getSessionToken()) throw new NeedLoginError()
+  if (!userId || !hasUserSession()) throw new NeedLoginError()
   const form = new FormData()
   form.append('audio', audioBlob, filename)
   const headers = mergeAuthHeaders({}, userId)
@@ -1336,7 +1344,13 @@ export function getAdminUserId() {
 }
 
 export function getAdminSessionToken() {
-  try { return localStorage.getItem(ADMIN_TOKEN_KEY) || '' } catch (_) { return '' }
+  return ''
+}
+
+export function hasAdminSession() {
+  try {
+    return localStorage.getItem(ADMIN_LOGGED_IN_KEY) === '1' && !!getAdminUserId()
+  } catch (_) { return false }
 }
 
 function withAdmin(url, adminId) {
@@ -1351,6 +1365,17 @@ function withAdmin(url, adminId) {
 
 export function clearAdminSession() {
   clearSessionForKind('admin')
+}
+
+/** 修改密码（家长/学生，需已登录） */
+export async function changePassword(oldPassword, newPassword) {
+  const data = await apiJson('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  })
+  saveAuthSession(data)
+  return data
 }
 
 export async function loginAdmin(loginName, password) {
@@ -1369,7 +1394,7 @@ export async function loginAdmin(loginName, password) {
     role: 'admin',
     loginName: data.login_name,
   }))
-  if (data.session_token) localStorage.setItem(ADMIN_TOKEN_KEY, data.session_token)
+  try { localStorage.setItem(ADMIN_LOGGED_IN_KEY, '1') } catch (_) {}
   invalidatePageAuthCache('admin')
   _authValidatedUid.admin = data.child_user_id
   _authValidatedAt.admin = Date.now()

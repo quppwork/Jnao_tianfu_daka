@@ -8,7 +8,7 @@ os.environ.setdefault("AUTH_CHALLENGE_MOCK", "1")
 os.environ.setdefault("SMS_PROVIDER", "mock")
 os.environ.setdefault("SMS_MOCK_CODE", "88888")
 os.environ.setdefault("SMS_HOURLY_PER_IP", "1000")
-os.environ.setdefault("CAPTCHA_IP_LIMIT", "1000")
+os.environ.setdefault("SESSION_EXPOSE_TOKEN_IN_JSON", "1")
 os.environ.setdefault("JNAO_LEGACY_REGISTER", "1")
 os.environ["ADMIN_LOGIN_NAME"] = "pyx"
 os.environ["ADMIN_PASSWORD"] = "123456"

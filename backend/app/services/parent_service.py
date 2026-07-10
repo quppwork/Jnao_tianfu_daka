@@ -50,11 +50,17 @@ def create_child(
 ) -> ChildUser:
     from sqlalchemy import select
 
+    from app.core.nickname_policy import validate_login_name, validate_nickname
+    from app.core.password_policy import validate_password_strength
+
     parent = _lock_parent_row(db, parent_id)
     if not auth_service.parent_can_add_child(db, parent):
         raise HTTPException(403, "孩子账号名额已满")
 
-    login_name = login_name.strip()
+    login_name = validate_login_name(login_name)
+    nickname = validate_nickname(nickname, field_label="孩子姓名", prefer_real_name=True)
+    password = validate_password_strength(password, field_label="登录密码")
+
     if auth_service.find_user_by_login_name(db, login_name):
         raise HTTPException(409, "该账号已被使用")
 
@@ -127,9 +133,13 @@ def update_child(
         raise HTTPException(404, "孩子不存在")
 
     if nickname is not None:
-        child.nickname = nickname.strip()
+        from app.core.nickname_policy import validate_nickname
+
+        child.nickname = validate_nickname(nickname, field_label="孩子姓名", prefer_real_name=True)
     if password is not None:
-        child.password_hash = hash_password(password)
+        from app.core.password_policy import validate_password_strength
+
+        child.password_hash = hash_password(validate_password_strength(password))
     # 🆕 更新孩子基本信息
     pj = dict(child.profile_json or {})
     learner = dict(pj.get("learner") or {})

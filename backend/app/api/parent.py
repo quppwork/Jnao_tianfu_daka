@@ -1,10 +1,11 @@
 """家长端 API — 孩子账号分配与管理"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_user, get_db
 from app.core.cache import invalidate_user_profile
+from app.core.session_cookie import set_session_cookie
 from app.schemas.auth import (
     ChildDetailResponse,
     ChildSummaryOut,
@@ -47,6 +48,7 @@ def get_profile(
 @router.put("/profile", response_model=ParentProfileResponse)
 def put_profile(
     req: ParentProfileUpdateRequest,
+    response: Response,
     user_id: int = Depends(_require_parent_id),
     db: Session = Depends(get_db),
 ):
@@ -59,6 +61,10 @@ def put_profile(
         old_password=req.old_password,
         require_password=req.require_password,
     )
+    if new_token:
+        from app.services import auth_service
+
+        set_session_cookie(response, new_token, role=auth_service.ROLE_PARENT)
     invalidate_user_profile(user_id)
     return ParentProfileResponse(**parent_profile_to_dict(user, session_token=new_token))
 

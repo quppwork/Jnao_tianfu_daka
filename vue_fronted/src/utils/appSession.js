@@ -52,7 +52,7 @@ export function inferAuthKindFromPath(path) {
 
 export function sessionKeysForKind(kind) {
   if (kind === 'admin') {
-    return ['jnao_admin_user', 'jnao_admin_token']
+    return ['jnao_admin_user', 'jnao_admin_logged_in', 'jnao_admin_token']
   }
   if (kind === 'parent') {
     return [
@@ -78,7 +78,7 @@ export function sessionKeysForKind(kind) {
   ]
 }
 
-export const STORAGE_SCHEMA_VERSION = 2
+export const STORAGE_SCHEMA_VERSION = 3
 export const STORAGE_VERSION_KEY = 'jnao_storage_schema'
 
 /** 所有 auth 相关 localStorage 键（用于全量清理） */
@@ -189,9 +189,13 @@ export function repairAuthStorage() {
 export function migrateAuthStorage() {
   try {
     const prev = parseInt(defaultGetItem(STORAGE_VERSION_KEY) || '0', 10)
-    if (prev < STORAGE_SCHEMA_VERSION) {
-      purgeLegacyRouteSnapshots()
-      if (prev === 0) {
+      if (prev < STORAGE_SCHEMA_VERSION) {
+        purgeLegacyRouteSnapshots()
+        try {
+          localStorage.removeItem('jnao_session_token')
+          localStorage.removeItem('jnao_admin_token')
+        } catch (_) { /* ignore */ }
+        if (prev === 0) {
         // v0：历史上 admin 与 user 共用跳转键、登录互不清 session
         repairAuthStorage()
       }
@@ -246,15 +250,15 @@ export function readAuthSnapshot(getItem) {
 
   let admin = null
   const adminRaw = get('jnao_admin_user')
-  if (adminRaw) {
+  const adminLoggedIn = get('jnao_admin_logged_in') === '1'
+  if (adminRaw && adminLoggedIn) {
     try {
       const a = JSON.parse(adminRaw)
-      const token = get('jnao_admin_token') || ''
-      if (a?.id && token) admin = { userId: Number(a.id), token }
+      if (a?.id) admin = { userId: Number(a.id), active: true }
     } catch (_) { /* ignore */ }
   }
 
-  const token = get('jnao_session_token') || ''
+  const loggedIn = get('jnao_logged_in') === '1'
   let userId = null
   const childRaw = get('jnao_child_user_id')
   if (childRaw) userId = parseInt(childRaw, 10)
@@ -273,13 +277,13 @@ export function readAuthSnapshot(getItem) {
   let student = null
   const parentSlotId = parseInt(get('jnao_parent_user_id') || '', 10) || null
   const studentSlotId = parseInt(get('jnao_student_user_id') || '', 10) || null
-  if (token) {
+  if (loggedIn) {
     if (role === 'parent') {
       const pid = parentSlotId || userId
-      if (pid) parent = { userId: pid, token }
+      if (pid) parent = { userId: pid, active: true }
     } else if (role === 'student') {
       const sid = studentSlotId || userId
-      if (sid) student = { userId: sid, token }
+      if (sid) student = { userId: sid, active: true }
     }
   }
 
@@ -287,7 +291,7 @@ export function readAuthSnapshot(getItem) {
     admin,
     parent,
     student,
-    loggedIn: get('jnao_logged_in') === '1',
+    loggedIn,
     role,
   }
 }

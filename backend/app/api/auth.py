@@ -2,15 +2,16 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.core.security import is_legacy_register_enabled
 from app.schemas.auth import (
     AuthResponse,
     CaptchaResponse,
+    ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
     SmsLoginRequest,
@@ -81,7 +82,14 @@ def _auth_ctx(request: Request, device_id: str | None = None) -> tuple[str, str]
     return ip, did
 
 
-def _to_response(user, *, bind_ticket: str | None = None) -> AuthResponse:
+def _to_response(
+    user,
+    *,
+    bind_ticket: str | None = None,
+    must_change_password: bool = False,
+) -> AuthResponse:
+    from app.core.session_cookie import maybe_strip_token
+
     complete, missing = (True, [])
     channel = "standard"
     ready = True
@@ -97,27 +105,52 @@ def _to_response(user, *, bind_ticket: str | None = None) -> AuthResponse:
             complete, missing = parent_profile_status(user)
             ready = complete
             step = "home" if complete else "complete-profile"
+    if must_change_password:
+        step = "change-password"
     return AuthResponse(
         child_user_id=user.id,
         parent_phone=user.parent_phone,
         nickname=user.nickname,
         role=user.role or auth_service.ROLE_STUDENT,
         login_name=user.login_name,
-        session_token=user.session_token,
+        session_token=maybe_strip_token(user.session_token),
         profile_complete=complete,
         missing_fields=missing,
         login_channel=channel,
         account_ready=ready,
         next_step=step,
         bind_ticket=bind_ticket,
+        must_change_password=must_change_password,
     )
 
 
-def _issue_and_respond(db: Session, user) -> AuthResponse:
+def _issue_and_respond(
+    db: Session,
+    user,
+    response: Response,
+    *,
+    must_change_password: bool = False,
+    bind_ticket: str | None = None,
+) -> AuthResponse:
+    from app.core.session_cookie import set_session_cookie
     from app.services.session_service import issue_session
 
     issue_session(db, user)
     db.refresh(user)
+    role = user.role or auth_service.ROLE_STUDENT
+    set_session_cookie(response, user.session_token or "", role=role)
+    return _to_response(
+        user,
+        bind_ticket=bind_ticket,
+        must_change_password=must_change_password,
+    )
+
+
+def _attach_cookie_for_user(response: Response, user) -> AuthResponse:
+    from app.core.session_cookie import set_session_cookie
+
+    role = user.role or auth_service.ROLE_STUDENT
+    set_session_cookie(response, user.session_token or "", role=role)
     return _to_response(user)
 
 
@@ -164,14 +197,19 @@ def sms_send(req: SmsSendRequest, request: Request, db: Session = Depends(get_db
 
 
 @router.post("/sms/login", response_model=AuthResponse)
-def sms_login(req: SmsLoginRequest, request: Request, db: Session = Depends(get_db)):
+def sms_login(
+    req: SmsLoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     ip, did = _auth_ctx(request, req.device_id)
     check_auth_allowed(db, client_ip=ip, phone=req.phone.strip(), device_id=did)
     try:
         verify_sms_code(req.phone, req.sms_code, SCENE_LOGIN)
         user = login_parent_by_sms(db, phone=req.phone.strip())
         clear_auth_failures(client_ip=ip, phone=req.phone.strip(), device_id=did)
-        return _issue_and_respond(db, user)
+        return _issue_and_respond(db, user, response)
     except HTTPException as e:
         if e.status_code in (400, 401, 404, 429):
             record_auth_failure(db, client_ip=ip, phone=req.phone.strip(), device_id=did)
@@ -179,7 +217,12 @@ def sms_login(req: SmsLoginRequest, request: Request, db: Session = Depends(get_
 
 
 @router.post("/sms/register", response_model=AuthResponse)
-def sms_register(req: SmsRegisterRequest, request: Request, db: Session = Depends(get_db)):
+def sms_register(
+    req: SmsRegisterRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     ip, did = _auth_ctx(request, req.device_id)
     check_auth_allowed(db, client_ip=ip, phone=req.phone.strip(), device_id=did)
     try:
@@ -192,7 +235,7 @@ def sms_register(req: SmsRegisterRequest, request: Request, db: Session = Depend
             password=req.password,
         )
         clear_auth_failures(client_ip=ip, phone=req.phone.strip(), device_id=did)
-        return _issue_and_respond(db, user)
+        return _issue_and_respond(db, user, response)
     except HTTPException as e:
         if e.status_code in (400, 409, 429):
             record_auth_failure(db, client_ip=ip, phone=req.phone.strip(), device_id=did)
@@ -200,7 +243,7 @@ def sms_register(req: SmsRegisterRequest, request: Request, db: Session = Depend
 
 
 @router.post("/register", response_model=AuthResponse)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
+def register(req: RegisterRequest, response: Response, db: Session = Depends(get_db)):
     role = req.role or auth_service.ROLE_STUDENT
 
     if role == auth_service.ROLE_PARENT:
@@ -225,11 +268,13 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         login_name=req.login_name,
         role=auth_service.ROLE_STUDENT,
     )
-    return _issue_and_respond(db, user)
+    return _issue_and_respond(db, user, response)
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
+def login(req: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    from app.core.password_policy import password_needs_upgrade
+
     ip, did = _auth_ctx(request, None)
 
     if req.role == auth_service.ROLE_PARENT or (
@@ -249,7 +294,8 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
             raise HTTPException(401, "手机号或密码错误")
         clear_auth_failures(client_ip=ip, phone=phone, device_id=did)
-        return _issue_and_respond(db, user)
+        must_change = password_needs_upgrade(req.password)
+        return _issue_and_respond(db, user, response, must_change_password=must_change)
 
     if req.login_name and req.password:
         from app.core.password import verify_password
@@ -263,9 +309,44 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         if not auth_service.has_active_parent_bind(db, user.id):
             raise HTTPException(403, "账号未绑定家长，请联系管理员")
         clear_auth_failures(client_ip=ip, device_id=did, login_name=login_name)
-        return _issue_and_respond(db, user)
+        must_change = password_needs_upgrade(req.password)
+        return _issue_and_respond(db, user, response, must_change_password=must_change)
 
     raise HTTPException(400, "请提供有效的登录信息")
+
+
+@router.post("/logout")
+def logout(
+    response: Response,
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    from app.core.session_cookie import clear_session_cookie
+    from app.db.models import ChildUser
+    from app.services.session_service import revoke_all_sessions
+
+    user = db.get(ChildUser, user_id)
+    role = (user.role if user else None) or auth_service.ROLE_STUDENT
+    revoke_all_sessions(db, user_id)
+    db.commit()
+    clear_session_cookie(response, role=role)
+    return {"ok": True}
+
+
+@router.post("/change-password", response_model=AuthResponse)
+def change_password(
+    req: ChangePasswordRequest,
+    response: Response,
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    user = auth_service.change_user_password(
+        db,
+        user_id,
+        old_password=req.old_password,
+        new_password=req.new_password,
+    )
+    return _attach_cookie_for_user(response, user)
 
 
 @router.get("/wechat/config", response_model=WechatConfigResponse)
@@ -289,13 +370,17 @@ def wechat_oauth_url(redirect: str = Query("", max_length=500)):
 
 
 @router.get("/wechat/exchange", response_model=AuthResponse)
-def wechat_login_exchange(login_ticket: str = Query(..., min_length=8, max_length=128), db: Session = Depends(get_db)):
+def wechat_login_exchange(
+    login_ticket: str = Query(..., min_length=8, max_length=128),
+    response: Response = ...,
+    db: Session = Depends(get_db),
+):
     """OAuth 回调后一次性换取 session，避免 token 出现在 URL"""
     row = consume_login_exchange_ticket(login_ticket)
     user = auth_service.get_child_user(db, int(row["user_id"]))
     if not user:
         raise HTTPException(404, "用户不存在")
-    return _to_response(user)
+    return _attach_cookie_for_user(response, user)
 
 
 @router.get("/wechat/callback")
@@ -381,7 +466,12 @@ def wechat_send_bind_sms(req: WechatSendBindSmsRequest, request: Request, db: Se
 
 
 @router.post("/wechat/bind-phone", response_model=AuthResponse)
-def wechat_bind_phone(req: WechatBindPhoneRequest, request: Request, db: Session = Depends(get_db)):
+def wechat_bind_phone(
+    req: WechatBindPhoneRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     ip, did = _auth_ctx(request, req.device_id)
     phone = req.phone.strip()
     check_auth_allowed(db, client_ip=ip, phone=phone, device_id=did)
@@ -389,7 +479,7 @@ def wechat_bind_phone(req: WechatBindPhoneRequest, request: Request, db: Session
         verify_sms_code(phone, req.sms_code, SCENE_BIND)
         user = complete_bind_phone(db, bind_ticket=req.bind_ticket, phone=phone)
         clear_auth_failures(client_ip=ip, phone=phone, device_id=did)
-        return _issue_and_respond(db, user)
+        return _issue_and_respond(db, user, response)
     except HTTPException as e:
         if e.status_code in (400, 429):
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
@@ -400,6 +490,7 @@ def wechat_bind_phone(req: WechatBindPhoneRequest, request: Request, db: Session
 def wechat_complete_external_bind(
     req: WechatExternalBindRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     """外链 m.jnao.com 绑手机完成后，凭 bind_ticket 换取登录 session。"""
@@ -408,7 +499,7 @@ def wechat_complete_external_bind(
     try:
         user = complete_external_bind_phone(db, bind_ticket=req.bind_ticket)
         clear_auth_failures(client_ip=ip, device_id=did)
-        return _issue_and_respond(db, user)
+        return _issue_and_respond(db, user, response)
     except HTTPException as e:
         if e.status_code in (400, 429):
             record_auth_failure(db, client_ip=ip, device_id=did)

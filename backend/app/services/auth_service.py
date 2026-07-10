@@ -361,6 +361,36 @@ def login_admin_by_password(db: Session, login_name: str, password: str) -> Chil
     return user
 
 
+def change_user_password(
+    db: Session,
+    user_id: int,
+    *,
+    old_password: str,
+    new_password: str,
+) -> ChildUser:
+    from fastapi import HTTPException
+
+    from app.core.password import hash_password, verify_password
+    from app.core.password_policy import validate_password_strength
+    from app.services.session_service import issue_session, revoke_all_sessions
+
+    user = get_child_user(db, user_id)
+    if not user or not is_account_active(user):
+        raise HTTPException(404, "用户不存在")
+    if not user.password_hash:
+        raise HTTPException(400, "当前账号未设置密码")
+    old = (old_password or "").strip()
+    if not verify_password(old, user.password_hash):
+        raise HTTPException(401, "原密码错误")
+    pwd = validate_password_strength((new_password or "").strip())
+    user.password_hash = hash_password(pwd)
+    revoke_all_sessions(db, user.id)
+    issue_session(db, user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def retire_other_admin_accounts(db: Session, *, keep_id: int) -> int:
     """废除 env 指定以外的所有活跃管理员，并吊销其全部 session。"""
     import logging

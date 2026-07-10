@@ -27,7 +27,7 @@
             <text>{{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}</text>
           </view>
         </view>
-        <view class="input-wrap"><input v-model="form.password" class="inp" placeholder="登录密码（可选，至少8位含字母数字）" type="password" :disabled="loginBusy" /></view>
+        <view class="input-wrap"><input v-model="form.password" class="inp" placeholder="登录密码（8-32位，含大小写+数字）" type="password" :disabled="loginBusy" /></view>
         <view class="input-wrap"><input v-model="form.confirm" class="inp" placeholder="确认密码" type="password" :disabled="loginBusy" /></view>
 
         <view class="agree"><text>注册即代表您同意《用户协议》和《隐私政策》</text></view>

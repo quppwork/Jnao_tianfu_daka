@@ -1,9 +1,10 @@
 """管理员 API — 最高权限账号管理"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_admin_user, get_db
+from app.core.session_cookie import clear_session_cookie, maybe_strip_token, set_session_cookie
 from app.schemas.admin import (
     AdminBindChildRequest,
     AdminChildListResponse,
@@ -40,7 +41,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.post("/login", response_model=AuthResponse)
-def admin_login(req: AdminLoginRequest, request: Request, db: Session = Depends(get_db)):
+def admin_login(req: AdminLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     ip = client_ip_from_request(request)
     did = device_id_from_request(request) or ""
     check_auth_allowed(db, client_ip=ip, device_id=did)
@@ -52,14 +53,29 @@ def admin_login(req: AdminLoginRequest, request: Request, db: Session = Depends(
     from app.services.session_service import issue_session
 
     issue_session(db, user)
+    set_session_cookie(response, user.session_token or "", role=auth_service.ROLE_ADMIN)
     return AuthResponse(
         child_user_id=user.id,
         parent_phone=user.parent_phone,
         nickname=user.nickname,
         role=auth_service.ROLE_ADMIN,
         login_name=user.login_name,
-        session_token=user.session_token,
+        session_token=maybe_strip_token(user.session_token),
     )
+
+
+@router.post("/logout")
+def admin_logout(
+    response: Response,
+    admin_id: int = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    from app.services.session_service import revoke_all_sessions
+
+    revoke_all_sessions(db, admin_id)
+    db.commit()
+    clear_session_cookie(response, role=auth_service.ROLE_ADMIN)
+    return {"ok": True}
 
 
 @router.get("/parents", response_model=AdminParentListResponse)

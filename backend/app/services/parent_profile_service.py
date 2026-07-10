@@ -105,6 +105,8 @@ def parent_next_step(user: ChildUser) -> str:
 
 
 def parent_profile_to_dict(user: ChildUser, *, session_token: str | None = None) -> dict:
+    from app.core.session_cookie import maybe_strip_token
+
     complete, missing = parent_profile_status(user)
     channel = get_login_channel(user)
     if channel == LOGIN_CHANNEL_WECHAT:
@@ -124,7 +126,7 @@ def parent_profile_to_dict(user: ChildUser, *, session_token: str | None = None)
         "next_step": parent_next_step(user),
     }
     if session_token:
-        out["session_token"] = session_token
+        out["session_token"] = maybe_strip_token(session_token)
     return out
 
 
@@ -155,17 +157,15 @@ def update_parent_profile(
     new_session_token: str | None = None
 
     if nickname is not None:
-        nick = nickname.strip()
-        if not nick:
-            raise HTTPException(400, "昵称不能为空")
-        user.nickname = nick
+        from app.core.nickname_policy import validate_nickname
+
+        user.nickname = validate_nickname(nickname, field_label="昵称")
 
     pj, parent = _parent_block(user.profile_json)
     if real_name is not None:
-        name = real_name.strip()
-        if not name:
-            raise HTTPException(400, "姓名不能为空")
-        parent["real_name"] = name
+        from app.core.nickname_policy import validate_real_name
+
+        parent["real_name"] = validate_real_name(real_name)
 
     if password is not None:
         pwd = password.strip()
@@ -233,17 +233,14 @@ def register_parent_by_sms(
     try:
         assert_parent_can_register(db, phone)
 
-        nick = (nickname or "").strip()
-        if not nick:
-            raise HTTPException(400, "请填写昵称")
-        name = (real_name or "").strip()
-        if not name:
-            raise HTTPException(400, "请填写真实姓名")
+        from app.core.nickname_policy import validate_nickname, validate_real_name
+        from app.core.password_policy import validate_password_strength
+
+        nick = validate_nickname(nickname, field_label="昵称")
+        name = validate_real_name(real_name or "")
 
         pwd_value = None
         if password and password.strip():
-            from app.core.password_policy import validate_password_strength
-
             pwd_value = validate_password_strength(password.strip())
 
         now = datetime.now(TZ).replace(tzinfo=None)

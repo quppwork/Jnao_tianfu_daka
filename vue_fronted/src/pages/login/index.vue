@@ -160,7 +160,7 @@ import {
   fetchWechatConfig,
   studentNeedsOnboarding,
   getLoggedInUserId,
-  getSessionToken,
+  hasUserSession,
   resetLocalAuthCache,
   invalidatePageAuthCache,
 } from '@/utils/userApi.js'
@@ -273,13 +273,13 @@ function tryRedirectIfLoggedIn() {
   try {
     // 管理员 session 与用户登录页隔离，不在此自动跳转
     const adminRaw = localStorage.getItem('jnao_admin_user')
-    const adminTok = localStorage.getItem('jnao_admin_token')
-    if (adminRaw && adminTok && localStorage.getItem('jnao_logged_in') !== '1') {
+    const adminLoggedIn = localStorage.getItem('jnao_admin_logged_in') === '1'
+    if (adminRaw && adminLoggedIn && localStorage.getItem('jnao_logged_in') !== '1') {
       return false
     }
     if (localStorage.getItem('jnao_logged_in') !== '1') return false
     const uid = getLoggedInUserId()
-    if (!uid || !getSessionToken()) return false
+    if (!uid || !hasUserSession()) return false
     const raw = localStorage.getItem('jnao_user')
     const role = raw ? JSON.parse(raw).role : null
     if (loginEntryRole.value === 'student') {
@@ -519,6 +519,10 @@ function resolveParentTarget(data) {
 async function routeParentHome(data) {
   clearLoginGuard()
   saveAuthSession(data)
+  if (data.must_change_password || data.next_step === 'change-password') {
+    uni.redirectTo({ url: '/pages/login/change-password' })
+    return
+  }
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = resolveParentTarget(data)
   if (parentNeedsAccountReady(data) && data.next_step === 'bind-phone') {
@@ -537,6 +541,10 @@ async function routeParentHome(data) {
 async function routeStudentHome(data) {
   clearLoginGuard()
   saveAuthSession(data)
+  if (data.must_change_password || data.next_step === 'change-password') {
+    uni.redirectTo({ url: '/pages/login/change-password' })
+    return
+  }
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = '/pages/index'
   try {

@@ -73,13 +73,13 @@ class TestSmsAuth:
                 "sms_code": "88888",
                 "real_name": "李家长",
                 "nickname": "李妈妈",
-                "password": "abc12345",
+                "password": "Zhang123A",
             },
         )
         assert reg.status_code == 200, reg.text
         login = client.post(
             "/api/auth/login",
-            json={"parent_phone": phone, "password": "abc12345", "role": "parent"},
+            json={"parent_phone": phone, "password": "Zhang123A", "role": "parent"},
         )
         assert login.status_code == 200, login.text
         assert login.json()["child_user_id"] == reg.json()["child_user_id"]

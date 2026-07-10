@@ -321,7 +321,9 @@ def update_parent(
     if nickname is not None:
         parent.nickname = nickname.strip()
     if password is not None:
-        parent.password_hash = hash_password(password)
+        from app.core.password_policy import validate_password_strength
+
+        parent.password_hash = hash_password(validate_password_strength(password))
         from app.services.session_service import revoke_all_sessions
 
         revoke_all_sessions(db, parent.id)
@@ -407,7 +409,9 @@ def update_child(
     if nickname is not None:
         child.nickname = nickname.strip()
     if password is not None:
-        child.password_hash = hash_password(password)
+        from app.core.password_policy import validate_password_strength
+
+        child.password_hash = hash_password(validate_password_strength(password))
         from app.services.session_service import revoke_all_sessions
 
         revoke_all_sessions(db, child.id)
