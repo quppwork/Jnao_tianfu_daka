@@ -1,5 +1,10 @@
 <template>
   <view class="app">
+    <view v-if="pageLoading" class="page-loading">
+      <view class="login-spinner"></view>
+      <text class="page-loading-text">加载中…</text>
+    </view>
+    <template v-else>
     <!-- Nav Bar -->
     <view class="nav-bar">
       <view class="nav-spacer"></view>
@@ -144,6 +149,7 @@
         <view class="picker-close" @click="showSettings = false"><text>关闭</text></view>
       </view>
     </view>
+    </template>
   </view>
 </template>
 
@@ -157,6 +163,7 @@ import {
   getChildUserId,
   markChildUserSessionValid,
   invalidateChildUserSession,
+  isFreshLogin,
   fetchGuideSession,
   sendGuideMessageStream,
   clearGuideSession,
@@ -172,6 +179,7 @@ import { refreshTalentState } from '@/utils/talentState.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 const isLight = ref(true)
+const pageLoading = ref(true)
 const inputText = ref('')
 const loading = ref(false)
 let streamAbort = null
@@ -307,16 +315,21 @@ async function initHome() {
     let profileData
     let history
     let guideData
+    const loadAll = async () => Promise.all([
+      fetchProfile(uid),
+      fetchAssessmentHistory(uid),
+      fetchGuideSession(uid),
+      refreshTalentState(uid).catch(() => null),
+    ])
     try {
-      ;[profileData, history, guideData] = await Promise.all([
-        fetchProfile(uid),
-        fetchAssessmentHistory(uid),
-        fetchGuideSession(uid),
-        refreshTalentState(uid).catch(() => null),  // 并行，不阻塞
-      ])
+      ;[profileData, history, guideData] = await loadAll()
       markChildUserSessionValid(uid)
     } catch (e) {
-      if (e.status === 404 && getChildUserId()) {
+      if (e.status === 401 && isFreshLogin()) {
+        await new Promise((r) => setTimeout(r, 500))
+        ;[profileData, history, guideData] = await loadAll()
+        markChildUserSessionValid(uid)
+      } else if (e.status === 404 && getChildUserId()) {
         invalidateChildUserSession()
         clearChildUserId()
         uid = await ensureChildUser()
@@ -419,14 +432,21 @@ function confirmDeleteHistory(h) {
 }
 
 function doLogout() {
-  logoutAndGoLogin()
+  logoutAndGoLogin('/pages/login/index?role=student')
   showSettings.value = false
 }
 
 onMounted(async () => {
   const auth = await requirePageAuth('student')
-  if (!auth.ok) return
-  initHome()
+  if (!auth.ok) {
+    pageLoading.value = false
+    return
+  }
+  try {
+    await initHome()
+  } finally {
+    pageLoading.value = false
+  }
 })
 
 function scrollChat() {
@@ -471,6 +491,16 @@ function onNavTap() {
   display:flex; flex-direction:column; height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto;
   background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden;
 }
+.page-loading {
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+}
+.page-loading-text { color:var(--text-dim); font-size:14px; }
+.login-spinner {
+  width:36px; height:36px; border-radius:50%;
+  border:3px solid rgba(255,255,255,0.25); border-top-color:#58a6ff;
+  animation:loginSpin 0.8s linear infinite;
+}
+@keyframes loginSpin { to { transform:rotate(360deg); } }
 
 .nav-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 8px; }
 .nav-spacer { width:78px; flex-shrink:0; }

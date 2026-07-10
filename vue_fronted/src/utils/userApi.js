@@ -45,6 +45,30 @@ const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
 const SESSION_TOKEN_KEY = 'jnao_session_token' // legacy，迁移后不再写入
 const ADMIN_LOGGED_IN_KEY = 'jnao_admin_logged_in'
+const FRESH_LOGIN_KEY = 'jnao_fresh_login_until'
+const FRESH_LOGIN_MS = 20000
+
+/** 刚完成登录后的宽限期：Cookie 写入前避免 401 误踢回登录页 */
+export function markFreshLogin() {
+  try {
+    sessionStorage.setItem(FRESH_LOGIN_KEY, String(Date.now() + FRESH_LOGIN_MS))
+  } catch (_) { /* ignore */ }
+}
+
+export function isFreshLogin() {
+  try {
+    const until = parseInt(sessionStorage.getItem(FRESH_LOGIN_KEY) || '0', 10)
+    return until > Date.now()
+  } catch (_) {
+    return false
+  }
+}
+
+function clearFreshLogin() {
+  try {
+    sessionStorage.removeItem(FRESH_LOGIN_KEY)
+  } catch (_) { /* ignore */ }
+}
 
 /** 读取当前登录的 child_user_id，无则返回 null */
 export function getChildUserId() {
@@ -70,13 +94,14 @@ export function getLoggedInUserId() {
 }
 
 /** 退出登录并回到登录页 */
-export function logoutAndGoLogin() {
+export function logoutAndGoLogin(targetUrl = '/pages/login/index') {
   logoutSession('parent').finally(() => {
     logoutSession('student').finally(() => {
+      clearFreshLogin()
       try {
-        uni.reLaunch({ url: '/pages/login/index' })
+        uni.reLaunch({ url: targetUrl })
       } catch (e) {
-        window.location.href = '/pages/login/index'
+        window.location.href = targetUrl
       }
     })
   })
@@ -119,7 +144,8 @@ export function redirectToLoginForKind(kind) {
     logoutAdminAndGoLogin()
     return
   }
-  logoutAndGoLogin()
+  const url = kind === 'student' ? '/pages/login/index?role=student' : '/pages/login/index'
+  logoutAndGoLogin(url)
 }
 
 const _authValidatedAt = { admin: 0, parent: 0, student: 0 }
@@ -181,7 +207,11 @@ export async function requirePageAuth(kind) {
       return { ok: true, userId: session.userId, offline: true }
     }
     if (isAuthExpiredError(e.status)) {
+      if (isFreshLogin()) {
+        return { ok: true, userId: session.userId, fresh: true }
+      }
       clearSessionForKind(kind)
+      clearFreshLogin()
       redirectToLoginForKind(kind)
       return { ok: false, reason: 'expired' }
     }
@@ -309,6 +339,7 @@ export function resetSessionExpiryGuard() {
 
 function handleMidSessionExpired(url) {
   if (_sessionExpiryHandled || isAuthAttemptRequest(url)) return
+  if (isFreshLogin()) return
   const kind = inferAuthKindFromUrl(url)
   const hasSession = kind === 'admin'
     ? (localStorage.getItem(ADMIN_LOGGED_IN_KEY) === '1' && !!getAdminUserId())
@@ -343,6 +374,10 @@ async function apiJson(url, options = {}) {
     const err = new Error('网络连接失败，请检查网络')
     err.status = 0
     throw err
+  }
+  if (res.status === 401 && isFreshLogin() && !isAuthAttemptRequest(url)) {
+    await new Promise((r) => setTimeout(r, 400))
+    res = await fetch(url, { ...options, headers, credentials: 'include' })
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -558,6 +593,7 @@ function _storeAuth(data) {
     saveParentGateCache({ role: 'parent', ...data })
   }
   resetSessionExpiryGuard()
+  markFreshLogin()
 }
 
 export class NeedLoginError extends Error {
@@ -842,6 +878,7 @@ export async function studentNeedsOnboarding(userId) {
     const profile = await fetchProfile(userId)
     return !profile.profile_json?.onboarding?.completed_at
   } catch (e) {
+    if (isFreshLogin()) return false
     return true
   }
 }

@@ -311,7 +311,7 @@ async function goHome() {
 
 onMounted(async () => {
   const auth = await requirePageAuth('student')
-  if (!auth) return
+  if (!auth.ok) return
 
   const pages = getCurrentPages()
   const opts = pages[pages.length - 1]?.options || {}

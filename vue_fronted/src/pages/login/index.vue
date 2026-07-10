@@ -620,10 +620,12 @@ async function routeStudentHome(data) {
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = '/pages/index'
   try {
-    if (await studentNeedsOnboarding(data.child_user_id)) target = '/pages/login/onboarding/index'
+    if (await studentNeedsOnboarding(data.child_user_id)) {
+      target = '/pages/login/onboarding/index'
+    }
   } catch (e) {
-    console.error('[login] studentNeedsOnboarding 检查失败，默认走引导:', e?.message || e)
-    target = '/pages/login/onboarding/index'
+    console.error('[login] studentNeedsOnboarding 检查失败，先进首页:', e?.message || e)
+    target = '/pages/index'
   }
   if (target === '/pages/index') target = consumePostLoginRoute(target, 'student')
   uni.reLaunch({ url: target })
