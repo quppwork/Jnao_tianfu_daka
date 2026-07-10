@@ -14,15 +14,23 @@ import sys
 from dotenv import load_dotenv
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_BACKEND = os.path.join(_HERE, "..", "backend")
+# Docker 镜像内代码在 /app；本地开发在 backend/ 目录
+if os.path.isdir(os.path.join(_HERE, "app")):
+    _BACKEND = _HERE
+else:
+    _BACKEND = os.path.abspath(os.path.join(_HERE, "..", "backend"))
 sys.path.insert(0, _BACKEND)
 os.chdir(_BACKEND)
 
 if not os.getenv("DATABASE_URL"):
     load_dotenv(os.path.join(_BACKEND, ".env"), override=False)
-    _prod = os.path.join(_HERE, "..", ".env.production")
-    if os.path.isfile(_prod):
-        load_dotenv(_prod, override=False)
+    for _prod in (
+        os.path.join(_BACKEND, "..", ".env.production"),
+        os.path.join(_HERE, "..", ".env.production"),
+    ):
+        if os.path.isfile(_prod):
+            load_dotenv(_prod, override=False)
+            break
 
 from app.db.session import get_session_factory, init_db
 from app.services.catalog_import import import_all_xet_catalogs, import_catalog, import_video_catalog
