@@ -1746,15 +1746,13 @@ const electiveSkills = computed(() => {
   function skillInPlan(skill) {
     return items.some(item => {
       const inst = parseItemInstructions(item.instructions)
-      // OSS 内部名为「感知力」，展示名为「多元感知」，两者都匹配
-      return inst.skill === skill || inst.skill === '感知力' || inst.skill === '多元感知'
-        || (item.title || '').includes(skill) || (item.title || '').includes('多元感知')
+      return inst.skill === skill
     })
   }
 
-  // 多元感知（OSS 内部名：感知力）：始终可选
+  // 多元感知（OSS 内部名：感知力）
   list.push({ skill: '感知力', label: '多元感知', inPlan: skillInPlan('感知力') })
-  // 开口窍：视频选修，不打卡不阻塞
+  // 开口窍：视频选修，独立开关
   list.push({ skill: '开口窍', label: '开口窍 🎬', inPlan: skillInPlan('开口窍') })
 
   return list
