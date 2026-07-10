@@ -8,6 +8,19 @@ from fastapi import HTTPException
 
 from app.services import sms_service
 
+# SDK 未安装时跳过需要 mock SDK 的测试
+_sms_sdk_installed = False
+try:
+    import alibabacloud_dysmsapi20170525  # noqa: F401
+    _sms_sdk_installed = True
+except ImportError:
+    pass
+
+requires_sms_sdk = pytest.mark.skipif(
+    not _sms_sdk_installed,
+    reason="阿里云短信 SDK 未安装（alibabacloud_dysmsapi20170525）",
+)
+
 
 def test_aliyun_credentials_fallback_to_oss(monkeypatch):
     monkeypatch.delenv("ALIYUN_SMS_ACCESS_KEY_ID", raising=False)
@@ -30,6 +43,7 @@ def test_aliyun_dispatch_missing_config(monkeypatch):
     assert exc.value.status_code == 503
 
 
+@requires_sms_sdk
 @patch("alibabacloud_dysmsapi20170525.client.Client")
 def test_aliyun_dispatch_success(mock_client_cls, monkeypatch):
     monkeypatch.setenv("ALIYUN_SMS_ACCESS_KEY_ID", "ak")
@@ -53,6 +67,7 @@ def test_aliyun_dispatch_success(mock_client_cls, monkeypatch):
     assert req.template_param == '{"code": "123456"}'
 
 
+@requires_sms_sdk
 @patch("alibabacloud_dysmsapi20170525.client.Client")
 def test_aliyun_dispatch_api_error(mock_client_cls, monkeypatch):
     monkeypatch.setenv("ALIYUN_SMS_ACCESS_KEY_ID", "ak")
