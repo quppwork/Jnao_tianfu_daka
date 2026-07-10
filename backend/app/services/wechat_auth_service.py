@@ -535,6 +535,55 @@ def upsert_wechat_bind(
     return row
 
 
+def finalize_wechat_login_user(
+    db: Session,
+    user: ChildUser,
+    *,
+    openid: str,
+    unionid: str | None = None,
+    snap: WxMemberSnapshot | None = None,
+) -> str:
+    """同步微信绑定与 daka_member；平台已注册手机号视为已验证，返回真实 next_step。"""
+    from app.services.member_registry_service import (
+        CHANNEL_WECHAT,
+        CHANNEL_WECHAT_LEGACY,
+        find_daka_member_by_parent,
+        register_daka_member_from_user,
+    )
+
+    oid = (openid or "").strip()
+    if not oid:
+        return parent_next_step(user)
+
+    set_login_channel(user, LOGIN_CHANNEL_WECHAT)
+    dm = find_daka_member_by_parent(db, user.id)
+    if dm and dm.mobile:
+        mark_phone_verified(user)
+    elif (user.parent_phone or "").strip():
+        mark_phone_verified(user)
+
+    wx_mid = snap.wx_member_id if snap else (dm.legacy_wx_member_id if dm else None)
+    upsert_wechat_bind(
+        db,
+        parent_id=user.id,
+        openid=oid,
+        unionid=unionid,
+        wx_member_id=wx_mid,
+    )
+    register_daka_member_from_user(
+        db,
+        user,
+        register_channel=CHANNEL_WECHAT_LEGACY if snap else CHANNEL_WECHAT,
+        openid=oid,
+        unionid=unionid,
+        legacy_matched=bool(snap),
+        legacy_wx_member_id=wx_mid,
+    )
+    db.commit()
+    db.refresh(user)
+    return parent_next_step(user)
+
+
 def _default_nickname(snap: WxMemberSnapshot | None, phone: str) -> str:
     if snap:
         for candidate in (snap.truename, snap.nickname):
@@ -708,41 +757,39 @@ def resolve_wechat_login(
     unionid: str | None,
 ) -> tuple[ChildUser | None, str | None, str]:
     """返回 (user, bind_ticket, next_step)。B+C：本地优先，OAuth 可懒查老库 1 条。"""
-    from app.services.member_registry_service import find_daka_member_by_openid
+    from app.services.member_registry_service import (
+        find_daka_member_by_mobile,
+        find_daka_member_by_openid,
+    )
 
     bind = get_bind_by_openid(db, openid)
     if bind:
         user = auth_service.get_parent_for_login(db, bind.parent_id)
         if user:
-            set_login_channel(user, LOGIN_CHANNEL_WECHAT)
-            upsert_wechat_bind(
-                db,
-                parent_id=user.id,
-                openid=openid,
-                unionid=unionid,
-                wx_member_id=bind.wx_member_id,
+            snap = lookup_member_for_oauth(db, openid)
+            step = finalize_wechat_login_user(
+                db, user, openid=openid, unionid=unionid, snap=snap
             )
-            db.commit()
-            db.refresh(user)
-            return user, None, parent_next_step(user)
+            return user, None, step
         db.delete(bind)
         db.commit()
 
     member = find_daka_member_by_openid(db, openid)
     if member:
         user = auth_service.get_parent_for_login(db, member.parent_id)
+        if not user and member.mobile:
+            user = auth_service.find_parent_by_phone_for_login(db, member.mobile)
+            if user:
+                member.parent_id = user.id
+                db.flush()
         if user:
-            set_login_channel(user, LOGIN_CHANNEL_WECHAT)
-            upsert_wechat_bind(
-                db,
-                parent_id=user.id,
-                openid=openid,
-                unionid=unionid,
-                wx_member_id=member.legacy_wx_member_id,
+            snap = lookup_member_for_oauth(db, openid)
+            step = finalize_wechat_login_user(
+                db, user, openid=openid, unionid=unionid, snap=snap
             )
-            db.commit()
-            db.refresh(user)
-            return user, None, parent_next_step(user)
+            return user, None, step
+        member.openid = None
+        db.flush()
 
     snap = lookup_member_for_oauth(db, openid)
     if not snap:
@@ -751,19 +798,19 @@ def resolve_wechat_login(
     mobile = snap.mobile
     if mobile:
         existing = auth_service.find_parent_by_phone_for_login(db, mobile)
+        if not existing:
+            dm = find_daka_member_by_mobile(db, mobile)
+            if dm:
+                existing = auth_service.get_parent_for_login(db, dm.parent_id)
         if existing:
-            set_login_channel(existing, LOGIN_CHANNEL_WECHAT)
-            mark_phone_verified(existing)
-            upsert_wechat_bind(
+            step = finalize_wechat_login_user(
                 db,
-                parent_id=existing.id,
+                existing,
                 openid=openid,
                 unionid=unionid or snap.unionid,
-                wx_member_id=snap.wx_member_id,
+                snap=snap,
             )
-            db.commit()
-            db.refresh(existing)
-            return existing, None, parent_next_step(existing)
+            return existing, None, step
         ticket = create_bind_ticket(
             openid=openid,
             unionid=unionid,
@@ -826,9 +873,22 @@ def complete_bind_phone(
 
 def complete_external_bind_phone(db: Session, *, bind_ticket: str) -> ChildUser:
     """外链绑手机页返回后：刷新 snapshot 手机号并完成登录。"""
+    from app.services.member_registry_service import find_daka_member_by_openid
+
     pending = get_bind_ticket(bind_ticket)
     openid = pending["openid"]
     snap = lookup_member_for_oauth(db, openid)
-    if not snap or not snap.mobile:
+    mobile = (snap.mobile if snap and snap.mobile else None)
+    if not mobile:
+        dm = find_daka_member_by_openid(db, openid)
+        if dm and dm.mobile:
+            mobile = dm.mobile
+    if not mobile:
+        bind = get_bind_by_openid(db, openid)
+        if bind:
+            user = auth_service.get_parent_for_login(db, bind.parent_id)
+            if user and user.parent_phone:
+                mobile = user.parent_phone
+    if not mobile:
         raise HTTPException(400, "尚未完成手机号绑定，请先在绑手机页完成操作后再返回")
-    return complete_bind_phone(db, bind_ticket=bind_ticket, phone=snap.mobile)
+    return complete_bind_phone(db, bind_ticket=bind_ticket, phone=mobile)

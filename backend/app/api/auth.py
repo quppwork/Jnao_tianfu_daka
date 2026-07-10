@@ -63,6 +63,7 @@ from app.services.wechat_auth_service import (
     frontend_login_url,
     frontend_wechat_error_url,
     lookup_member_for_oauth,
+    finalize_wechat_login_user,
     resolve_wechat_login,
     assert_bind_ticket_sms_allowed,
     use_external_bind_mobile,
@@ -399,7 +400,16 @@ def wechat_callback(
                 status_code=302,
             )
 
-        if next_step == "bind-phone" and use_external_bind_mobile():
+        # 已识别用户不再跳外链绑手机（避免与公司注册页「已注册」死循环）
+        if user is not None:
+            bind_ticket = None
+            if next_step == "bind-phone":
+                snap = lookup_member_for_oauth(db, openid)
+                next_step = finalize_wechat_login_user(
+                    db, user, openid=openid, unionid=unionid, snap=snap
+                )
+
+        if next_step == "bind-phone" and use_external_bind_mobile() and user is None:
             ticket = bind_ticket
             if not ticket and user is None:
                 snap = lookup_member_for_oauth(db, openid)

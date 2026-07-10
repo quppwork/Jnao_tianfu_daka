@@ -375,3 +375,81 @@ def test_login_exchange_ticket_one_time(monkeypatch):
         assert False, "expected expired"
     except HTTPException as e:
         assert e.status_code == 400
+
+
+def test_resolve_wechat_login_links_sms_registered_parent(db_session: Session, monkeypatch):
+    """snapshot 手机号已在 Jnao 短信注册 → 直接登录，不走 bind-phone。"""
+    from app.core.password import hash_password
+    from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
+
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    user = auth_service.register_child(
+        db_session,
+        parent_phone="15309546393",
+        nickname="pyx",
+        role=auth_service.ROLE_PARENT,
+        child_quota=5,
+        password="Zhang123A",
+    )
+    user.password_hash = hash_password("Zhang123A")
+    user.profile_json = {
+        "parent": {
+            "real_name": "彭",
+            "phone_verified_at": "2026-07-07 12:00:00",
+        }
+    }
+    register_daka_member_from_user(db_session, user, register_channel=CHANNEL_SMS)
+    db_session.commit()
+
+    upsert_snapshot(
+        db_session,
+        {
+            "wx_member_id": 8801,
+            "openid": "oSMS_link_test",
+            "mobile": "15309546393",
+            "truename": "彭",
+        },
+    )
+    db_session.commit()
+
+    linked, ticket, step = resolve_wechat_login(
+        db_session, openid="oSMS_link_test", unionid=None
+    )
+    assert linked is not None
+    assert linked.id == user.id
+    assert ticket is None
+    assert step == "home"
+
+
+def test_resolve_wechat_login_bound_parent_not_bind_phone(db_session: Session, monkeypatch):
+    """已绑定微信且 daka_member 有手机号，缺 phone_verified 标记也不应走 bind-phone。"""
+    from app.core.password import hash_password
+    from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
+
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    user = auth_service.register_child(
+        db_session,
+        parent_phone="13900007777",
+        nickname="已注册",
+        role=auth_service.ROLE_PARENT,
+        child_quota=5,
+        password="Zhang123A",
+    )
+    user.password_hash = hash_password("Zhang123A")
+    user.profile_json = {"parent": {"real_name": "王", "login_channel": LOGIN_CHANNEL_WECHAT}}
+    register_daka_member_from_user(db_session, user, register_channel=CHANNEL_SMS)
+    upsert_wechat_bind(
+        db_session,
+        parent_id=user.id,
+        openid="oBOUND_no_verify",
+        unionid=None,
+        wx_member_id=None,
+    )
+    db_session.commit()
+
+    linked, ticket, step = resolve_wechat_login(
+        db_session, openid="oBOUND_no_verify", unionid=None
+    )
+    assert linked is not None
+    assert ticket is None
+    assert step != "bind-phone"
