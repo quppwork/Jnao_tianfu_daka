@@ -1232,6 +1232,15 @@ def append_elective_item(
             content = item
             break
 
+    # fallback: talent pool 未命中时，查 content_item 全表（视频等跨天赋内容）
+    if not content:
+        content = db.scalar(
+            select(ContentItem).where(
+                ContentItem.status == 1,
+                ContentItem.instructions.contains(search_skill),
+            ).limit(1)
+        )
+
     if content:
         inst_data = {"skill": skill, "item_type": "elective", "blocks_next": False}
         inst = json.dumps(inst_data, ensure_ascii=False)

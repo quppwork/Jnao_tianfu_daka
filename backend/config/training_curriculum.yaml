@@ -48,6 +48,12 @@ elective_rules:
     blocks_next: false
     skip_carryover: true
 
+  开口窍:
+    trigger: manual
+    has_checkin: false
+    blocks_next: false
+    display_order: after_required
+
 # ══════════════════════════════════════════════════
 # 三、Decision Tree（策略选择）
 # ══════════════════════════════════════════════════
