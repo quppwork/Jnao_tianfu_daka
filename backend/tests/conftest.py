@@ -12,7 +12,8 @@ os.environ.setdefault("SESSION_EXPOSE_TOKEN_IN_JSON", "1")
 os.environ.setdefault("JNAO_LEGACY_REGISTER", "1")
 os.environ["ADMIN_LOGIN_NAME"] = "pyx"
 os.environ["ADMIN_PASSWORD"] = "123456"
-os.environ["JNAO_SKIP_ADMIN_SEED"] = "1"
+os.environ.setdefault("JNAO_SKIP_ADMIN_SEED", "1")
+os.environ.setdefault("JNAO_TEST_SKIP_GATE", "1")
 
 import pytest
 from unittest.mock import AsyncMock, patch

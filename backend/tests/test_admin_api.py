@@ -163,7 +163,7 @@ class TestAdminApi:
         pid = _seed_parent(db_session, "13900009901", "测家长")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_del", "nickname": "小孩", "password": "111111"},
+            json={"login_name": "kid_del", "nickname": "小孩", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
         res = client.delete(f"/api/parent/children/{cid}?user_id={pid}")
@@ -175,13 +175,13 @@ class TestAdminApi:
         pid = _seed_parent(db_session, "13900009902", "家长乙")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_unbind", "nickname": "解绑童", "password": "111111"},
+            json={"login_name": "kid_unbind", "nickname": "解绑童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
         client.delete(f"/api/admin/children/{cid}/bind", **auth)
         login = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_unbind", "password": "111111"},
+            json={"login_name": "kid_unbind", "password": "XiaoMing1"},
         )
         assert login.status_code == 403
 
@@ -191,7 +191,7 @@ class TestAdminApi:
         pid = _seed_parent(db_session, "13900009903", "家长丙")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_hard", "nickname": "硬删童", "password": "111111"},
+            json={"login_name": "kid_hard", "nickname": "硬删童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
         res = client.delete(f"/api/admin/children/{cid}", **auth)
@@ -204,7 +204,7 @@ class TestAdminApi:
 
         login = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_hard", "password": "111111"},
+            json={"login_name": "kid_hard", "password": "XiaoMing1"},
         )
         assert login.status_code == 200, login.text
         db_session.refresh(row)
@@ -255,7 +255,7 @@ class TestAdminApi:
         pid = _seed_parent(db_session, "13900009905", "家长戊")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_detail", "nickname": "详情童", "password": "111111"},
+            json={"login_name": "kid_detail", "nickname": "详情童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
 
@@ -278,20 +278,20 @@ class TestAdminApi:
         pid = _seed_parent(db_session, "13900009906", "家长己")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_single", "nickname": "单端童", "password": "111111"},
+            json={"login_name": "kid_single", "nickname": "单端童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
 
         login1 = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_single", "password": "111111"},
+            json={"login_name": "kid_single", "password": "XiaoMing1"},
         )
         assert login1.status_code == 200
         token1 = login1.json()["session_token"]
 
         login2 = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_single", "password": "111111"},
+            json={"login_name": "kid_single", "password": "XiaoMing1"},
         )
         assert login2.status_code == 200
         token2 = login2.json()["session_token"]

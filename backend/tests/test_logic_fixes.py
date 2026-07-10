@@ -116,7 +116,7 @@ class TestAdminArchiveFixes:
         pauth = _parent_auth(parent)
         child = client.post(
             "/api/parent/children",
-            json={"login_name": "arch_kid", "nickname": "归档童", "password": "111111"},
+            json={"login_name": "arch_kid", "nickname": "归档童", "password": "XiaoMing1"},
             **pauth,
         ).json()
         cid = child["id"]
@@ -136,7 +136,7 @@ class TestAdminArchiveFixes:
         pauth = _parent_auth(parent)
         child = client.post(
             "/api/parent/children",
-            json={"login_name": "warn_kid", "nickname": "解绑童", "password": "111111"},
+            json={"login_name": "warn_kid", "nickname": "解绑童", "password": "XiaoMing1"},
             **pauth,
         ).json()
         res = client.delete(f"/api/admin/children/{child['id']}/bind", **auth)

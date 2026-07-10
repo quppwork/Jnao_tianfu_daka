@@ -32,9 +32,10 @@ def test_sms_register_creates_daka_member(db_session: Session):
 
 
 def test_wechat_legacy_match_creates_daka_member(db_session: Session, monkeypatch):
+    """snapshot 有 openid+手机号、Jnao 无账号 → 自动建号登录，不走公司页。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
     from app.services.wechat_auth_service import resolve_wechat_login, upsert_snapshot
-    from app.services.member_registry_service import CHANNEL_WECHAT_LEGACY
+    from app.services.member_registry_service import find_daka_member_by_parent
 
     upsert_snapshot(
         db_session,
@@ -49,9 +50,15 @@ def test_wechat_legacy_match_creates_daka_member(db_session: Session, monkeypatc
     db_session.commit()
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oDAKA_legacy_050", unionid=None)
-    assert user is None
-    assert ticket is not None
-    assert step == "bind-phone"
+    assert user is not None
+    assert ticket is None
+    assert step in ("home", "complete-profile", "bind-phone")
+
+    row = find_daka_member_by_parent(db_session, user.id)
+    assert row is not None
+    assert row.openid == "oDAKA_legacy_050"
+    assert row.mobile == "13900008888"
+    assert row.wechat_bound_at is not None
 
 
 def test_daka_member_openid_login_without_snapshot(db_session: Session, monkeypatch):

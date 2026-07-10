@@ -29,12 +29,12 @@ class TestModuleAuth:
         auth = _parent_auth(parent)
         client.post(
             "/api/parent/children",
-            json={"login_name": "kid_xiaogang", "nickname": "小刚", "password": "111111"},
+            json={"login_name": "kid_xiaogang", "nickname": "小刚", "password": "XiaoMing1"},
             **auth,
         )
         res = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_xiaogang", "password": "111111"},
+            json={"login_name": "kid_xiaogang", "password": "XiaoMing1"},
         )
         assert res.status_code == 200
 

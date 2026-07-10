@@ -909,6 +909,50 @@ def _try_link_user_from_local(
     return None, None
 
 
+def _provision_legacy_parent_from_snapshot(
+    db: Session,
+    *,
+    openid: str,
+    unionid: str | None,
+    snap: WxMemberSnapshot,
+) -> tuple[ChildUser | None, str | None]:
+    """老库 snapshot 已有 openid+手机号、Jnao 无账号 → 自动建号绑定，免走公司验证页。"""
+    from app.services.parent_profile_service import parent_needs_company_verification
+
+    mobile = _normalize_mobile(snap.mobile)
+    if not mobile:
+        return None, None
+
+    oid = (openid or "").strip()
+    u_union = unionid or snap.unionid
+    existing = auth_service.find_parent_by_phone_for_login(db, mobile)
+    if existing:
+        if parent_needs_company_verification(db, existing):
+            return None, None
+        step = finalize_wechat_login_user(
+            db, existing, openid=oid, unionid=u_union, snap=snap
+        )
+        return existing, step
+
+    user = ensure_parent_for_phone(
+        db,
+        phone=mobile,
+        snap=snap,
+        openid=oid,
+        unionid=u_union,
+    )
+    step = finalize_wechat_login_user(
+        db, user, openid=oid, unionid=u_union, snap=snap
+    )
+    logger.info(
+        "legacy snapshot auto-provision user=%s phone=%s openid=%s…",
+        user.id,
+        mobile[-4:],
+        oid[:10],
+    )
+    return user, step
+
+
 def resolve_wechat_login(
     db: Session,
     *,
@@ -964,6 +1008,11 @@ def resolve_wechat_login(
 
     mobile = snap.mobile
     if mobile:
+        provisioned, step = _provision_legacy_parent_from_snapshot(
+            db, openid=openid, unionid=unionid, snap=snap
+        )
+        if provisioned and step:
+            return provisioned, None, step
         ticket = create_bind_ticket(
             openid=openid,
             unionid=unionid,

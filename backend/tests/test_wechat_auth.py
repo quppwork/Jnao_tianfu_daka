@@ -70,6 +70,7 @@ def test_wechat_parent_account_ready_with_password(db_session: Session):
 
 
 def test_resolve_wechat_login_with_mobile_snapshot(db_session: Session, monkeypatch):
+    """snapshot 有手机号、Jnao 无账号 → 老用户自动建号。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
     upsert_snapshot(
         db_session,
@@ -85,9 +86,10 @@ def test_resolve_wechat_login_with_mobile_snapshot(db_session: Session, monkeypa
     db_session.commit()
 
     user, ticket, step = resolve_wechat_login(db_session, openid="oTEST_mobile_001", unionid="u001")
-    assert user is None
-    assert ticket is not None
-    assert step == "bind-phone"
+    assert user is not None
+    assert user.parent_phone == "13900003333"
+    assert ticket is None
+    assert step in ("home", "complete-profile")
 
 
 def test_resolve_wechat_login_without_mobile(db_session: Session, monkeypatch):
@@ -559,6 +561,45 @@ def test_finalize_wechat_sets_gate_passed(db_session: Session, monkeypatch):
     assert dm.wechat_bound_at is not None
     assert dm.company_verified_at is not None
     assert parent_gate_passed(db_session, user) is True
+
+
+def test_legacy_snapshot_auto_provision_like_19805031756(db_session: Session, monkeypatch):
+    """模拟 19805031756：老库 snapshot 齐全、Jnao 无账号 → 微信直达。"""
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    from app.db.models import ParentWechatBind
+    from app.services.member_registry_service import find_daka_member_by_parent
+    from sqlalchemy import select
+
+    upsert_snapshot(
+        db_session,
+        {
+            "wx_member_id": 57231,
+            "openid": "o830W6_legacy_57231",
+            "unionid": "u57231",
+            "mobile": "19805031756",
+            "nickname": "自在",
+            "truename": None,
+        },
+    )
+    db_session.commit()
+
+    user, ticket, step = resolve_wechat_login(
+        db_session, openid="o830W6_legacy_57231", unionid="u57231"
+    )
+    assert user is not None
+    assert user.parent_phone == "19805031756"
+    assert ticket is None
+    assert step in ("home", "complete-profile")
+
+    dm = find_daka_member_by_parent(db_session, user.id)
+    assert dm.openid == "o830W6_legacy_57231"
+    assert dm.wechat_bound_at is not None
+
+    bind = db_session.scalar(
+        select(ParentWechatBind).where(ParentWechatBind.parent_id == user.id)
+    )
+    assert bind is not None
+    assert bind.openid == "o830W6_legacy_57231"
 
 
 def test_sms_login_does_not_auto_attach_openid(db_session: Session, monkeypatch):

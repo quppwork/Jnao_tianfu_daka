@@ -212,7 +212,7 @@ class TestUnbindChild:
         pauth = _parent_auth(parent)
         child = client.post(
             "/api/parent/children",
-            json={"login_name": "clr_kid", "nickname": "清字段童", "password": "111111"},
+            json={"login_name": "clr_kid", "nickname": "清字段童", "password": "XiaoMing1"},
             **pauth,
         ).json()
         cid = child["id"]
