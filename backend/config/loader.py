@@ -65,7 +65,9 @@ def load_settings() -> dict:
     oss["access_key_secret"] = os.getenv("OSS_ACCESS_KEY_SECRET", oss.get("access_key_secret", ""))
     oss["bucket"] = os.getenv("OSS_BUCKET", oss.get("bucket", "jnao-talent-ai"))
     oss["endpoint"] = os.getenv("OSS_ENDPOINT", oss.get("endpoint", "oss-cn-beijing.aliyuncs.com"))
-    oss["prefix"] = os.getenv("OSS_PREFIX", oss.get("prefix", "yinpin/"))
+    oss_prefix = os.getenv("OSS_PREFIX", oss.get("prefix", "yinpin/"))
+    oss["prefix"] = oss_prefix.split(",")[0].strip()
+    oss["prefixes"] = [p.strip() for p in oss_prefix.split(",") if p.strip()]
     signed = os.getenv("OSS_SIGNED_URL", str(oss.get("signed_url", True)))
     oss["signed_url"] = signed.lower() in ("1", "true", "yes")
     oss["sign_expires"] = int(os.getenv("OSS_SIGN_EXPIRES", oss.get("sign_expires", 7200)))

@@ -218,11 +218,12 @@
 
           <!-- 🆕 编辑方案 -->
           <view v-if="canCustomizePlan" class="plan-edit-block">
+            <text class="plan-edit-guide">点击 ⓘ 查看解释说明</text>
             <view class="plan-edit-bar" @click="openPlanEditor">
               <view class="plan-edit-bar-text">
                 <text class="peb-title">📝 编辑方案</text>
-                <text class="peb-desc">认可方案可直接训练，不满意可点击编辑</text>
               </view>
+              <view class="et-info" @click.stop="showElectiveInfoModal('edit_plan')"><text>ⓘ</text></view>
               <text class="et-arrow">›</text>
             </view>
             <text class="plan-edit-tip">⚠️ 仅可编辑一次，开始打卡后不可再修改</text>
@@ -619,6 +620,37 @@
       </view>
     </view>
 
+    <!-- 信息说明弹窗 -->
+    <view v-if="showInfoModal" class="picker-overlay" @click="showInfoModal = false">
+      <view class="picker-card confirm-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">{{ infoModalData.title }}</text>
+          <view class="modal-close" @click="showInfoModal = false">✕</view>
+        </view>
+        <text class="confirm-modal-text">{{ infoModalData.desc }}</text>
+        <text v-if="infoModalData.age" class="confirm-modal-text" style="margin-top:-8px;">{{ infoModalData.age }}</text>
+        <text v-if="infoModalData.how" class="confirm-modal-text" style="margin-top:-8px;">{{ infoModalData.how }}</text>
+        <view class="confirm-modal-actions">
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;" @click="showInfoModal = false"><text>知道了</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 确认修改方案弹窗 -->
+    <view v-if="showCustomizeConfirm" class="picker-overlay" @click="showCustomizeConfirm = false; pendingCustomize = null">
+      <view class="picker-card confirm-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">确认修改方案</text>
+          <view class="modal-close" @click="showCustomizeConfirm = false; pendingCustomize = null">✕</view>
+        </view>
+        <text class="confirm-modal-text">每个训练日仅可修改一次，打卡后不可再改。修改后将按所选技能重新匹配训练内容，请谨慎操作。确定继续吗？</text>
+        <view class="confirm-modal-actions">
+          <view class="editor-btn secondary" @click="showCustomizeConfirm = false; pendingCustomize = null"><text>取消</text></view>
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;" @click="doCustomize"><text>确认修改</text></view>
+        </view>
+      </view>
+    </view>
+
     <!-- 提交确认弹窗 -->
     <view v-if="showSubmitConfirm" class="picker-overlay" @click="showSubmitConfirm = false; pendingSubmitBlock = null">
       <view class="picker-card confirm-modal" @click.stop>
@@ -635,7 +667,7 @@
     </view>
 
     <!-- 删除确认弹窗 -->
-    <view v-if="showDeleteConfirm" class="picker-overlay" @click="cancelDeleteConfirm">
+    <view v-if="showDeleteConfirm" class="picker-overlay" style="z-index:650;" @click="cancelDeleteConfirm">
       <view class="picker-card confirm-modal" @click.stop>
         <view class="modal-header">
           <text class="modal-title" style="color:#ef4444;">⚠️ 删除打卡记录</text>
@@ -1736,16 +1768,21 @@ const ELECTIVE_INFO = {
     age: '适合各年龄段孩子训练，低龄儿童可在家长陪伴下进行。',
     how: '开启后，训练计划中将出现「多元感知」环节，按提示播放音频并完成互动即可。',
   },
+  'edit_plan': {
+    title: '📝 编辑方案说明',
+    desc: '如果您觉得推荐内容可以，就点击音频｜视频开始训练吧，不认可可以自行编辑方案哦。',
+    age: '',
+    how: '⚠️ 仅可编辑一次，开始打卡后不可再修改。',
+  },
 }
+const showInfoModal = ref(false)
+const infoModalData = ref({ title: '', desc: '', age: '', how: '' })
+
 function showElectiveInfoModal(skill) {
   const info = ELECTIVE_INFO[skill]
   if (!info) return
-  uni.showModal({
-    title: info.title,
-    content: info.desc + '\n\n' + info.age + '\n\n' + info.how,
-    showCancel: false,
-    confirmText: '知道了',
-  })
+  infoModalData.value = { ...info }
+  showInfoModal.value = true
 }
 
 function isPerceptionPhase(phase) {
@@ -1775,6 +1812,8 @@ async function autoCompletePerception(phase) {
 }
 
 // ── 方案编辑 ──
+const showCustomizeConfirm = ref(false)
+const pendingCustomize = ref(null)
 const showSubmitConfirm = ref(false)
 const pendingSubmitBlock = ref(null)
 const showDeleteConfirm = ref(false)
@@ -1837,28 +1876,32 @@ function openPlanEditor() {
 
 function closePlanEditor() { showPlanEditor.value = false }
 
-async function confirmCustomize() {
-  const uid = await ensureChildUser()
+function confirmCustomize() {
+  const uid = ensureChildUser()
   const planId = todayPlan.value?.plan_id
   if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
   const skills = editorSkills.value.map(s => s.split(':')[1])
-  uni.showModal({
-    title: '确认修改方案',
-    content: '每个训练日仅可修改一次，打卡后不可再改。修改后将按所选技能重新匹配训练内容，请谨慎操作，后果自负。确定继续吗？',
-    success: async (r) => {
-      if (!r.confirm) return
-      try {
-        await customizePlan(uid, planId, skills)
-        uni.showToast({ title: '方案已更新', icon: 'none' })
-        closePlanEditor()
-        await loadTodayPlan(true)
-      } catch (e) {
-        const detail = e.data?.detail || e.message || '修改失败'
-        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
-        uni.showToast({ title: msg, icon: 'none', duration: 3000 })
-      }
-    },
-  })
+  pendingCustomize.value = { uid, planId, skills }
+  showCustomizeConfirm.value = true
+}
+
+async function doCustomize() {
+  const c = pendingCustomize.value
+  if (!c) return
+  showCustomizeConfirm.value = false
+  try {
+    const uid = await c.uid
+    await customizePlan(uid, c.planId, c.skills)
+    uni.showToast({ title: '方案已更新', icon: 'none' })
+    closePlanEditor()
+    await loadTodayPlan(true)
+  } catch (e) {
+    const detail = e.data?.detail || e.message || '修改失败'
+    const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
+    uni.showToast({ title: msg, icon: 'none', duration: 3000 })
+  } finally {
+    pendingCustomize.value = null
+  }
 }
 
 const attitudeTouched = ref(false)
@@ -3413,11 +3456,12 @@ function triggerGlitch() {
 .editor-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
 .editor-btn.secondary text { color:var(--text-dim); }
 .plan-edit-block { margin-top:8px; }
+.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:12px; margin-bottom:4px; }
 .plan-edit-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
 .plan-edit-bar-text { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
 .peb-title { color:var(--text); font-size:13px; font-weight:600; }
-.peb-desc { color:rgba(255,255,255,0.35); font-size:10px; line-height:1.35; }
-.plan-edit-tip { display:block; color:rgba(255,255,255,0.3); font-size:11px; margin-top:4px; }
+.peb-desc { color:rgba(255,255,255,0.55); font-size:11px; line-height:1.4; }
+.plan-edit-tip { display:block; color:rgba(255,255,255,0.4); font-size:11px; margin-top:4px; }
 .elective-toggles { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
 .elective-toggle-item { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:6px 12px; cursor:pointer; }
 .et-label { color:var(--text); font-size:12px; font-weight:500; }
@@ -3425,12 +3469,12 @@ function triggerGlitch() {
 .et-switch.on { background:#00d2ff; }
 .et-knob { width:16px; height:16px; border-radius:50%; background:var(--text); position:absolute; top:2px; left:2px; transition:left 0.2s; }
 .et-switch.on .et-knob { background:#fff; left:18px; }
-.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(0,210,255,0.06); }
-.et-info text { color:rgba(0,210,255,0.6); font-size:13px; font-weight:700; line-height:1; }
-.et-info:active { background:rgba(0,210,255,0.12); }
-.et-info:active text { color:#00d2ff; }
+.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(255,71,87,0.12); }
+.et-info text { color:#ff4757; font-size:13px; font-weight:700; line-height:1; }
+.et-info:active { background:rgba(255,71,87,0.2); }
+.et-info:active text { color:#ff6b81; }
 .et-arrow { color:rgba(255,255,255,0.3); font-size:16px; font-weight:300; margin-left:auto; flex-shrink:0; }
-.elective-section-label { width:100%; color:rgba(255,255,255,0.4); font-size:11px; font-weight:500; margin-bottom:2px; }
+.elective-section-label { width:100%; color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; margin-bottom:2px; }
 .elective-hint { width:100%; color:rgba(255,255,255,0.3); font-size:12px; line-height:1.4; margin-top:2px; }
 ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .picker-close text { color:rgba(255,255,255,0.5); font-size:14px; }
@@ -3646,9 +3690,14 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .plan-done-title { color:#16a34a; }
 [data-theme="white"] .plan-done-sub { color:#6b7280; }
 [data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
-[data-theme="white"] .peb-desc { color:rgba(0,0,0,0.35); }
-[data-theme="white"] .plan-edit-tip { color:rgba(0,0,0,0.35); }
-[data-theme="white"] .elective-section-label { color:rgba(0,0,0,0.45); }
+[data-theme="white"] .plan-edit-guide { color:rgba(0,0,0,0.5); }
+[data-theme="white"] .peb-desc { color:rgba(0,0,0,0.55); }
+[data-theme="white"] .plan-edit-tip { color:rgba(0,0,0,0.45); }
+[data-theme="white"] .et-info { background:rgba(255,71,87,0.1); }
+[data-theme="white"] .et-info text { color:#ff4757; }
+[data-theme="white"] .et-info:active { background:rgba(255,71,87,0.18); }
+[data-theme="white"] .et-info:active text { color:#ff6b81; }
+[data-theme="white"] .elective-section-label { color:rgba(0,0,0,0.5); }
 [data-theme="white"] .elective-entry { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .elective-entry text { color:#2563eb; }
 [data-theme="white"] .elective-item { border-bottom-color:#e5e7eb; }

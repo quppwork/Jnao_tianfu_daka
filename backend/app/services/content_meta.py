@@ -147,6 +147,40 @@ def parse_item_instruction(raw: str | None) -> dict:
         return {}
 
 
+# OSS 文件名 → 技能/阶段/part 解析
+_STAGE_PART_RE = re.compile(r"(\d+)\s*阶段\s*(\d+)")
+
+
+def guess_skill_stage_part(file_name: str) -> dict:
+    """从 OSS 文件名推断 skill / stage / part / series。
+
+    示例:
+        "学者影像追忆1阶段1.mp3" → {skill: "影像追忆", stage: 1, part: 1}
+        "思者超脑速读.MP3"       → {skill: "超脑阅读", stage: 0, part: 0}
+        "赢者高效作业.mp4"        → {skill: "高效作业", stage: 0, part: 0, content_type: "video"}
+    """
+    name_no_ext = file_name.rsplit(".", 1)[0]
+    skill = skill_from_title(file_name)
+    stage = 0
+    part = 0
+
+    m = _STAGE_PART_RE.search(name_no_ext)
+    if m:
+        stage = int(m.group(1))
+        part = int(m.group(2))
+
+    # 提取系列（chaonaoaomi / xuekeaomi 等）
+    series = "chaonaoaomi"
+
+    return {
+        "skill": skill,
+        "stage": stage,
+        "part": part,
+        "series": series,
+        "lesson_sort": stage * 10 + part if stage > 0 else 0,
+    }
+
+
 def is_json_instruction(raw: str | None) -> bool:
     if not raw:
         return False
