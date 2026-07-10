@@ -64,7 +64,7 @@ export function useLoginFlow() {
         throw e
       }
     } finally {
-      setPhase('redirecting', busyText)
+      resetPhase()
     }
   }
 

@@ -352,6 +352,10 @@ async function saveChild() {
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch (e) {
     if (e.status === 401) return
+    if (e.status === 403) {
+      uni.showToast({ title: e.message || '请先完善家长资料', icon: 'none' })
+      return
+    }
     if (e.status === 409) uni.showToast({ title: '账号已被使用', icon: 'none' })
     else uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {

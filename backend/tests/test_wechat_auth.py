@@ -340,9 +340,11 @@ def test_upsert_wechat_bind_rejects_openid_conflict(db_session: Session, monkeyp
         assert e.status_code == 409
 
 
-def test_login_exchange_ticket_one_time(monkeypatch):
+def test_login_exchange_ticket_idempotent_retry(monkeypatch):
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    from app.services.auth_challenge_store import challenge_delete
     from app.services.wechat_auth_service import (
+        _login_exchange_used_key,
         create_login_exchange_ticket,
         consume_login_exchange_ticket,
     )
@@ -352,6 +354,10 @@ def test_login_exchange_ticket_one_time(monkeypatch):
     assert row["user_id"] == 99
     assert row["next_step"] == "home"
 
+    row2 = consume_login_exchange_ticket(ticket)
+    assert row2["user_id"] == 99
+
+    challenge_delete(_login_exchange_used_key(ticket))
     from fastapi import HTTPException
 
     try:

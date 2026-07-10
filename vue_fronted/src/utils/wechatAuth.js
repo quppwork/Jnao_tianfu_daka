@@ -58,11 +58,46 @@ export function wechatLoginRedirectUrl() {
   return `${window.location.origin}${window.location.pathname}?from=mp`
 }
 
+let _cachedOAuthUrl = ''
+let _cachedOAuthAt = 0
+const OAUTH_URL_CACHE_MS = 240000
+
+/** 微信内进入登录页时预取 OAuth 链接，点击按钮可立即跳转 */
+export async function prefetchWechatOAuthUrl(fetchOAuthUrl) {
+  try {
+    const redirect = wechatLoginRedirectUrl()
+    const data = await fetchOAuthUrl(redirect)
+    if (data?.url) {
+      _cachedOAuthUrl = data.url
+      _cachedOAuthAt = Date.now()
+    }
+    return data
+  } catch (_) {
+    return null
+  }
+}
+
+function takeCachedOAuthUrl() {
+  if (_cachedOAuthUrl && Date.now() - _cachedOAuthAt < OAUTH_URL_CACHE_MS) {
+    const url = _cachedOAuthUrl
+    _cachedOAuthUrl = ''
+    _cachedOAuthAt = 0
+    return url
+  }
+  _cachedOAuthUrl = ''
+  _cachedOAuthAt = 0
+  return ''
+}
+
 export async function startWechatOAuth(fetchOAuthUrl) {
-  const redirect = wechatLoginRedirectUrl()
-  const data = await fetchOAuthUrl(redirect)
-  if (data?.url) {
-    window.location.href = data.url
+  let url = takeCachedOAuthUrl()
+  if (!url) {
+    const redirect = wechatLoginRedirectUrl()
+    const data = await fetchOAuthUrl(redirect)
+    url = data?.url || ''
+  }
+  if (url) {
+    window.location.replace(url)
     return true
   }
   return false
@@ -86,6 +121,7 @@ export function readWechatCallbackParams() {
     if (params.get('wx') !== '1') return null
     return {
       loginTicket: params.get('login_ticket') || '',
+      userId: params.get('user_id') || '',
       nextStep: params.get('next_step') || 'home',
       bindTicket: params.get('bind_ticket') || '',
       role: params.get('role') || 'parent',

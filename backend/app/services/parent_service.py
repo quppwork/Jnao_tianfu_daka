@@ -94,8 +94,15 @@ def create_child(
         db.commit()
         db.refresh(child)
         return child
-    except Exception:
+    except HTTPException:
         db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        from sqlalchemy.exc import IntegrityError
+
+        if isinstance(e, IntegrityError):
+            raise HTTPException(409, "该账号已被使用") from e
         raise
 
 
@@ -156,9 +163,17 @@ def update_child(
         pj["learner"] = learner
     child.profile_json = pj
     flag_modified(child, "profile_json")
-    db.commit()
-    db.refresh(child)
-    return child
+    try:
+        db.commit()
+        db.refresh(child)
+        return child
+    except Exception as e:
+        db.rollback()
+        from sqlalchemy.exc import IntegrityError
+
+        if isinstance(e, IntegrityError):
+            raise HTTPException(409, "保存失败：数据冲突，请刷新后重试") from e
+        raise
 
 
 def delete_child(db: Session, parent_id: int, child_id: int) -> None:

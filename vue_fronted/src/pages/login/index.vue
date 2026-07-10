@@ -21,8 +21,8 @@
         </view>
         <view
           class="btn-wechat"
-          :class="{ off: loginBlocked || loginBusy }"
-          @click="doWechatLogin"
+          :class="{ off: loginBlocked || wechatLoading }"
+          @tap.stop="doWechatLogin"
         >
           <text>{{ wechatLoading ? '跳转中…' : '微信一键登录' }}</text>
         </view>
@@ -143,7 +143,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import {
   loginParent,
   loginStudent,
@@ -163,6 +163,7 @@ import {
   hasUserSession,
   resetLocalAuthCache,
   invalidatePageAuthCache,
+  setChildUserId,
 } from '@/utils/userApi.js'
 import {
   isLoginBlocked,
@@ -177,6 +178,7 @@ import {
   isWeChatBrowser,
   skipWechatAutoLogin,
   startWechatOAuth,
+  prefetchWechatOAuthUrl,
   readWechatError,
   markWechatOAuthFailed,
   clearWechatOAuthCooldown,
@@ -201,6 +203,7 @@ const form = ref({
 })
 const parentMode = ref('sms')
 const wechatLoading = ref(false)
+let wechatLoadingTimer = null
 const inWechat = ref(false)
 const browserLogin = ref(false)
 const smsCooldown = ref(0)
@@ -303,24 +306,54 @@ function tryRedirectIfLoggedIn() {
 }
 
 async function handleWechatCallback(wxCb) {
-  clearWechatQueryFromUrl()
   setPhase('authenticating', '正在登录…')
+  let exchanged = false
   try {
     await exchangeWechatLogin(wxCb.loginTicket)
+    exchanged = true
+    clearWechatQueryFromUrl()
   } catch (e) {
-    markWechatOAuthFailed()
+    const fallbackUid = wxCb.userId ? parseInt(wxCb.userId, 10) : 0
+    if (e.status === 400 && fallbackUid > 0) {
+      try {
+        const p = await fetchParentProfile(fallbackUid)
+        if (p?.id) {
+          try {
+            localStorage.setItem('jnao_user', JSON.stringify({
+              id: p.id,
+              name: p.nickname,
+              phone: p.parent_phone,
+              role: 'parent',
+              loginChannel: p.login_channel || 'wechat',
+            }))
+            localStorage.setItem('jnao_logged_in', '1')
+            localStorage.setItem('jnao_parent_user_id', String(p.id))
+            setChildUserId(p.id)
+          } catch (_) { /* ignore */ }
+          exchanged = true
+          clearWechatQueryFromUrl()
+        }
+      } catch (_) { /* cookie 也未就绪 */ }
+    }
+    if (!exchanged) {
+      markWechatOAuthFailed()
+      uni.showModal({
+        title: '微信登录失败',
+        content: e.message || '登录凭证已过期，请重新进入',
+        showCancel: false,
+      })
+      return
+    }
+  } finally {
     resetPhase()
-    uni.showModal({
-      title: '微信登录失败',
-      content: e.message || '登录凭证已过期，请重新进入',
-      showCancel: false,
-    })
-    return
+    wechatLoading.value = false
+    clearWechatLoadingTimer()
   }
   setPhase('settling', '正在进入…')
   try {
+    const uid = getLoggedInUserId() || (wxCb.userId ? parseInt(wxCb.userId, 10) : 0)
     const [profile, cfg] = await Promise.all([
-      fetchParentProfile(getLoggedInUserId()),
+      fetchParentProfile(uid),
       fetchWechatConfig().catch(() => ({})),
     ])
     await minDelay(400)
@@ -329,7 +362,26 @@ async function handleWechatCallback(wxCb) {
     console.warn('[login] wechat post-auth fallback', e?.message || e)
     await minDelay(400)
     redirectParentNextStep(wxCb.nextStep || 'home', wxCb.bindTicket)
+  } finally {
+    resetPhase()
+    wechatLoading.value = false
+    clearWechatLoadingTimer()
   }
+}
+
+function clearWechatLoadingTimer() {
+  if (wechatLoadingTimer) {
+    clearTimeout(wechatLoadingTimer)
+    wechatLoadingTimer = null
+  }
+}
+
+function armWechatLoadingTimeout(ms = 12000) {
+  clearWechatLoadingTimer()
+  wechatLoadingTimer = setTimeout(() => {
+    wechatLoading.value = false
+    wechatLoadingTimer = null
+  }, ms)
 }
 
 onMounted(async () => {
@@ -406,21 +458,39 @@ onMounted(async () => {
   }
 
   if (tryRedirectIfLoggedIn()) return
+
+  if (inWechat.value && !browserLogin.value && !readWechatCallbackParams()) {
+    prefetchWechatOAuthUrl(fetchWechatOAuthUrl).catch(() => {})
+  }
+})
+
+onShow(() => {
+  wechatLoading.value = false
+  clearWechatLoadingTimer()
+  resetPhase()
 })
 
 async function doWechatLogin() {
-  if (wechatLoading.value || loginBusy.value || loginBlocked.value) return
+  if (loginBlocked.value) return
+  if (wechatLoading.value) {
+    uni.showToast({ title: '正在跳转，请稍候', icon: 'none' })
+    return
+  }
   clearWechatOAuthCooldown()
+  resetPhase()
   wechatLoading.value = true
+  armWechatLoadingTimeout()
   try {
     const ok = await startWechatOAuth(fetchWechatOAuthUrl)
     if (!ok) {
       wechatLoading.value = false
+      clearWechatLoadingTimer()
       markWechatOAuthFailed()
       uni.showToast({ title: '微信登录暂不可用', icon: 'none' })
     }
   } catch (e) {
     wechatLoading.value = false
+    clearWechatLoadingTimer()
     markWechatOAuthFailed()
     uni.showModal({
       title: '微信登录失败',
@@ -703,6 +773,7 @@ function showLoginHelp() {
 onUnmounted(() => {
   if (cooldownTimer) clearInterval(cooldownTimer)
   if (blockTimer) clearInterval(blockTimer)
+  clearWechatLoadingTimer()
 })
 </script>
 
@@ -740,7 +811,7 @@ onUnmounted(() => {
 .footer-dot { color:var(--text-dim); font-size:11px; opacity:0.5; }
 .blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:8px; margin-bottom:10px; text-align:center; }
 .blocked-hint text { color:#f87171; font-size:12px; }
-.btn-wechat { background:linear-gradient(135deg, #07c160, #06ad56); border-radius:14px; padding:14px; text-align:center; }
+.btn-wechat { background:linear-gradient(135deg, #07c160, #06ad56); border-radius:14px; padding:14px; text-align:center; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
 .btn-wechat.off { opacity:0.5; }
 .btn-wechat text { color:#fff; font-size:16px; font-weight:700; }
 .btn-phone-login {

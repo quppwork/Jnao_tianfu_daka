@@ -19,7 +19,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.db.legacy_session import get_legacy_engine
 from app.db.models import ChildUser, DakaMember, ParentWechatBind, WxMemberSnapshot
 from app.services import auth_service
-from app.services.auth_challenge_store import challenge_delete, challenge_get, challenge_set
+from app.services.auth_challenge_store import challenge_delete, challenge_get, challenge_set, challenge_try_lock
 from app.services.datetime_fmt import format_cst
 from app.services.parent_profile_service import (
     LOGIN_CHANNEL_WECHAT,
@@ -35,6 +35,7 @@ logger = logging.getLogger("jnao")
 WX_STATE_TTL = 300
 WX_BIND_TTL = 1800
 WX_LOGIN_EXCHANGE_TTL = 120
+WX_LOGIN_EXCHANGE_GRACE = 90  # 已消费 ticket 短时内可幂等重试（防前端重复 exchange）
 WECHAT_TOKEN_URL = "https://api.weixin.qq.com/sns/oauth2/access_token"
 
 _LEGACY_TIME_COLUMNS = (
@@ -798,6 +799,10 @@ def delete_bind_ticket(ticket: str) -> None:
     challenge_delete(_bind_key(ticket))
 
 
+def _login_exchange_used_key(ticket: str) -> str:
+    return f"auth:wx:login:used:{ticket}"
+
+
 def create_login_exchange_ticket(*, user_id: int, next_step: str, role: str) -> str:
     ticket = secrets.token_urlsafe(18)
     challenge_set(
@@ -809,11 +814,17 @@ def create_login_exchange_ticket(*, user_id: int, next_step: str, role: str) -> 
 
 
 def consume_login_exchange_ticket(ticket: str) -> dict:
-    row = challenge_get(_login_exchange_key(ticket))
-    if not row:
-        raise HTTPException(400, "登录凭证已过期，请重新从微信进入")
-    challenge_delete(_login_exchange_key(ticket))
-    return row
+    """一次性 ticket；短时内重复 exchange 幂等返回（避免前端重试误报失败）。"""
+    key = _login_exchange_key(ticket)
+    row = challenge_get(key)
+    if row:
+        challenge_delete(key)
+        challenge_set(_login_exchange_used_key(ticket), row, WX_LOGIN_EXCHANGE_GRACE)
+        return row
+    used = challenge_get(_login_exchange_used_key(ticket))
+    if used:
+        return used
+    raise HTTPException(400, "登录凭证已过期，请重新从微信进入")
 
 
 def try_attach_openid_from_local_snapshot(db: Session, user: ChildUser) -> ChildUser:
@@ -924,33 +935,44 @@ def _provision_legacy_parent_from_snapshot(
         return None, None
 
     oid = (openid or "").strip()
-    u_union = unionid or snap.unionid
-    existing = auth_service.find_parent_by_phone_for_login(db, mobile)
-    if existing:
-        if parent_needs_company_verification(db, existing):
-            return None, None
-        step = finalize_wechat_login_user(
-            db, existing, openid=oid, unionid=u_union, snap=snap
+    lock_key = f"auth:wx:provision:{oid}"
+    if not challenge_try_lock(lock_key, 20):
+        linked, step = _try_link_user_from_local(
+            db, openid=oid, unionid=unionid, snap=snap
         )
-        return existing, step
+        if linked and step:
+            return linked, step
+        return None, None
+    try:
+        u_union = unionid or snap.unionid
+        existing = auth_service.find_parent_by_phone_for_login(db, mobile)
+        if existing:
+            if parent_needs_company_verification(db, existing):
+                return None, None
+            step = finalize_wechat_login_user(
+                db, existing, openid=oid, unionid=u_union, snap=snap
+            )
+            return existing, step
 
-    user = ensure_parent_for_phone(
-        db,
-        phone=mobile,
-        snap=snap,
-        openid=oid,
-        unionid=u_union,
-    )
-    step = finalize_wechat_login_user(
-        db, user, openid=oid, unionid=u_union, snap=snap
-    )
-    logger.info(
-        "legacy snapshot auto-provision user=%s phone=%s openid=%s…",
-        user.id,
-        mobile[-4:],
-        oid[:10],
-    )
-    return user, step
+        user = ensure_parent_for_phone(
+            db,
+            phone=mobile,
+            snap=snap,
+            openid=oid,
+            unionid=u_union,
+        )
+        step = finalize_wechat_login_user(
+            db, user, openid=oid, unionid=u_union, snap=snap
+        )
+        logger.info(
+            "legacy snapshot auto-provision user=%s phone=%s openid=%s…",
+            user.id,
+            mobile[-4:],
+            oid[:10],
+        )
+        return user, step
+    finally:
+        challenge_delete(lock_key)
 
 
 def resolve_wechat_login(

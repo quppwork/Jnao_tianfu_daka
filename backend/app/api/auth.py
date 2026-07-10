@@ -431,7 +431,9 @@ def wechat_callback(
             return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
 
         params = {"wx": "1", "next_step": next_step}
+        redirect_resp = None
         if user:
+            from app.core.session_cookie import set_session_cookie
             from app.services.session_service import issue_session
 
             issue_session(db, user)
@@ -441,9 +443,18 @@ def wechat_callback(
                 next_step=next_step,
                 role=user.role or auth_service.ROLE_PARENT,
             )
+            params["user_id"] = str(user.id)
+            redirect_resp = RedirectResponse(url=frontend_login_url(**params), status_code=302)
+            set_session_cookie(
+                redirect_resp,
+                user.session_token or "",
+                role=user.role or auth_service.ROLE_PARENT,
+            )
         if bind_ticket:
             params["bind_ticket"] = bind_ticket
 
+        if redirect_resp is not None:
+            return redirect_resp
         return RedirectResponse(url=frontend_login_url(**params), status_code=302)
     except HTTPException as e:
         detail = e.detail if isinstance(e.detail, str) else "微信登录失败，请重新进入"
