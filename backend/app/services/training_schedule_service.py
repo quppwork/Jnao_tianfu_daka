@@ -124,6 +124,39 @@ def _plan_structure_invalid(plan: TrainingPlan, planned_minutes: int) -> bool:
     return False
 
 
+def _attach_videos_to_items(db: Session, plan: TrainingPlan) -> None:
+    """为训练项匹配对应技能的视频（如极速运算 → _1.5极速运算的原理及过程.mp4）"""
+    video_items = db.scalars(
+        select(ContentItem).where(
+            ContentItem.content_type == "video",
+            ContentItem.status == 1,
+        )
+    ).all()
+    if not video_items:
+        return
+
+    # 技能名 → 视频 ContentItem 映射
+    from app.services.content_meta import skill_from_title
+    video_map: dict[str, ContentItem] = {}
+    for v in video_items:
+        skill = skill_from_title(v.lesson_title)
+        if skill and skill not in video_map:
+            video_map[skill] = v
+
+    if not video_map:
+        return
+
+    for item in plan.items:
+        inst = parse_item_instruction(
+            item.instructions
+            if item.instructions and item.instructions.strip().startswith("{")
+            else None
+        )
+        skill = inst.get("skill", "")
+        if skill in video_map:
+            item.video_url = video_map[skill].play_url
+
+
 async def populate_plan_items(
     db: Session,
     plan: TrainingPlan,
@@ -281,6 +314,9 @@ async def populate_plan_items(
 
         content = _find_content_for_skill(skill_name)
         _add_item(content=content, skill_name=skill_name, is_elective=is_elective, blocks_next=blocks_next)
+
+    # 匹配视频：为有对应视频的技能附加 video_url
+    _attach_videos_to_items(db, plan)
 
     plan.planned_minutes = planned_minutes
     plan.media_exhausted = 0

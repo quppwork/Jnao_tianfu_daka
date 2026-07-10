@@ -447,7 +447,7 @@ def _item_to_dict(item: TrainingItem, *, hide_media: bool = False, content: Cont
     )
     wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
     audio_url = None if hide_media else resolve_play_url(item.audio_url)
-    video_url = None if hide_media else item.video_url
+    video_url = None if hide_media else resolve_play_url(item.video_url)
     return {
         "id": item.id,
         "sort_order": item.sort_order,
