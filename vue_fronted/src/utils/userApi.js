@@ -704,7 +704,6 @@ export function parentNeedsProfileComplete(data) {
 
 export function parentNeedsAccountReady(data) {
   if (data?.role !== 'parent') return false
-  if (data?.gate_passed === false) return true
   if (data?.account_ready === false) return true
   if (data?.next_step === 'bind-phone') return true
   return data?.profile_complete === false
@@ -715,7 +714,7 @@ const PARENT_GATE_KEY = 'jnao_parent_gate'
 export function saveParentGateCache(data) {
   if (data?.role !== 'parent') return
   try {
-    const passed = data.gate_passed !== false && data.next_step !== 'bind-phone'
+    const passed = data.next_step !== 'bind-phone' && data.account_ready !== false
     localStorage.setItem(PARENT_GATE_KEY, JSON.stringify({
       passed,
       account_ready: data.account_ready !== false,
@@ -828,16 +827,9 @@ export async function ensureParentAccountReady(parentId, { forceRefresh = false 
   }
   const p = await fetchParentProfile(parentId)
   saveParentGateCache({ role: 'parent', ...p })
-  const needsGate = p.gate_passed === false || p.next_step === 'bind-phone'
+  const needsGate = p.next_step === 'bind-phone'
   if (needsGate) {
     if (p.next_step === 'bind-phone') {
-      try {
-        const cfg = await fetchWechatConfig()
-        if (cfg.use_external_bind_mobile && cfg.bind_mobile_url) {
-          window.location.href = cfg.bind_mobile_url
-          return false
-        }
-      } catch (_) { /* fallback */ }
       uni.redirectTo({ url: '/pages/login/index' })
       return false
     }

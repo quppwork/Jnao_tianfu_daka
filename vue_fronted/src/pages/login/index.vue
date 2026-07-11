@@ -365,12 +365,11 @@ async function handleWechatCallback(wxCb) {
   setPhase('settling', '正在进入…')
   try {
     const uid = getLoggedInUserId() || (wxCb.userId ? parseInt(wxCb.userId, 10) : 0)
-    const [profile, cfg] = await Promise.all([
+    const [profile] = await Promise.all([
       fetchParentProfile(uid),
-      fetchWechatConfig().catch(() => ({})),
     ])
     await minDelay(400)
-    redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket, cfg?.bind_mobile_url)
+    redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket)
   } catch (e) {
     console.warn('[login] wechat post-auth fallback', e?.message || e)
     await minDelay(400)
@@ -442,12 +441,7 @@ onMounted(async () => {
   }
   if (wxCb?.nextStep === 'bind-phone') {
     clearWechatQueryFromUrl()
-    try {
-      const cfg = await fetchWechatConfig()
-      redirectParentNextStep('bind-phone', wxCb.bindTicket, cfg?.bind_mobile_url)
-    } catch (_) {
-      redirectParentNextStep('bind-phone', wxCb.bindTicket)
-    }
+    redirectParentNextStep('bind-phone', wxCb.bindTicket)
     return
   }
 
@@ -611,15 +605,6 @@ async function routeParentHome(data) {
   try { sessionStorage.removeItem('jnao_browser_login') } catch (_) { /* ignore */ }
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = resolveParentTarget(data)
-  if (parentNeedsAccountReady(data) && data.next_step === 'bind-phone') {
-    try {
-      const cfg = await fetchWechatConfig()
-      if (cfg.use_external_bind_mobile && cfg.bind_mobile_url) {
-        window.location.href = cfg.bind_mobile_url
-        return
-      }
-    } catch (_) { /* fallback local bind page */ }
-  }
   if (target === '/pages/parent/index') target = consumePostLoginRoute(target, 'parent')
   uni.redirectTo({ url: target })
 }

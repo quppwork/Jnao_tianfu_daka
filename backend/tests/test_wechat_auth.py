@@ -70,7 +70,7 @@ def test_wechat_parent_account_ready_with_password(db_session: Session):
 
 
 def test_resolve_wechat_login_with_mobile_snapshot(db_session: Session, monkeypatch):
-    """snapshot 有手机号、Jnao 无账号 → 老用户自动建号。"""
+    """snapshot 有 openid+手机号、Jnao 无账号 → 自动建号，引导补密码。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
     upsert_snapshot(
         db_session,
@@ -89,7 +89,8 @@ def test_resolve_wechat_login_with_mobile_snapshot(db_session: Session, monkeypa
     assert user is not None
     assert user.parent_phone == "13900003333"
     assert ticket is None
-    assert step in ("home", "complete-profile")
+    assert step == "complete-profile"
+    assert not user.password_hash
 
 
 def test_resolve_wechat_login_without_mobile(db_session: Session, monkeypatch):
@@ -122,7 +123,7 @@ def test_resolve_wechat_login_unknown_openid(db_session: Session, monkeypatch):
 
 
 def test_oauth_local_only_no_lazy_legacy(db_session: Session, monkeypatch):
-    """OAuth 不懒查老库；缺本地 snapshot 时走公司绑手机。"""
+    """OAuth 不懒查老库；缺本地 snapshot 时走 Jnao 内置绑手机。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
 
     def fail_fetch(_openid: str):
@@ -368,7 +369,7 @@ def test_login_exchange_ticket_idempotent_retry(monkeypatch):
 
 
 def test_resolve_wechat_login_links_sms_registered_parent(db_session: Session, monkeypatch):
-    """snapshot 有手机号 + Jnao 短信注册无 openid → 须走公司绑手机，不直接登录。"""
+    """snapshot 有手机号 + Jnao 短信注册 → 微信直达绑定并登录。"""
     from app.core.password import hash_password
     from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
 
@@ -405,9 +406,10 @@ def test_resolve_wechat_login_links_sms_registered_parent(db_session: Session, m
     linked, ticket, step = resolve_wechat_login(
         db_session, openid="oSMS_link_test", unionid=None
     )
-    assert linked is None
-    assert ticket is not None
-    assert step == "bind-phone"
+    assert linked is not None
+    assert linked.parent_phone == "15309546393"
+    assert ticket is None
+    assert step == "home"
 
 
 def test_resolve_wechat_login_bound_parent_not_bind_phone(db_session: Session, monkeypatch):
@@ -445,7 +447,7 @@ def test_resolve_wechat_login_bound_parent_not_bind_phone(db_session: Session, m
 
 
 def test_resolve_links_sms_parent_via_legacy_wx_member_id(db_session: Session, monkeypatch):
-    """短信注册无 openid，即使 legacy_wx_member_id 对齐也须走公司绑手机。"""
+    """snapshot 无手机号但 legacy_wx_member_id 对齐 → 直接绑定已有短信账号。"""
     from app.core.password import hash_password
     from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
 
@@ -489,13 +491,14 @@ def test_resolve_links_sms_parent_via_legacy_wx_member_id(db_session: Session, m
     linked, ticket, step = resolve_wechat_login(
         db_session, openid="oLEGACY_198", unionid=None
     )
-    assert linked is None
-    assert ticket is not None
-    assert step == "bind-phone"
+    assert linked is not None
+    assert linked.parent_phone == "19805031756"
+    assert ticket is None
+    assert step == "home"
 
 
-def test_sms_login_requires_company_verification(db_session: Session, monkeypatch):
-    """浏览器短信注册无 openid → gate 未通过，写操作应被拦截。"""
+def test_sms_registered_parent_no_company_gate(db_session: Session, monkeypatch):
+    """浏览器短信注册无 openid → 不再要求公司验证进门。"""
     from app.core.password import hash_password
     from app.services.member_registry_service import CHANNEL_SMS, register_daka_member_from_user
     from app.services.parent_profile_service import (
@@ -518,7 +521,7 @@ def test_sms_login_requires_company_verification(db_session: Session, monkeypatc
     register_daka_member_from_user(db_session, user, register_channel=CHANNEL_SMS)
     db_session.commit()
 
-    assert parent_needs_company_verification(db_session, user) is True
+    assert parent_needs_company_verification(db_session, user) is False
     assert parent_gate_passed(db_session, user) is False
 
 

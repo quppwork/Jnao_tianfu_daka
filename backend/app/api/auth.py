@@ -401,35 +401,6 @@ def wechat_callback(
         openid, unionid = exchange_code_for_openid(code)
         user, bind_ticket, next_step = resolve_wechat_login(db, openid=openid, unionid=unionid)
 
-        from app.services.parent_profile_service import parent_needs_company_verification
-
-        # 已识别用户且已完成公司验证的，不再跳外链绑手机（避免死循环）
-        if user is not None and next_step == "bind-phone":
-            if parent_needs_company_verification(db, user):
-                user = None
-            else:
-                bind_ticket = None
-                snap = lookup_member_for_oauth(db, openid)
-                next_step = finalize_wechat_login_user(
-                    db, user, openid=openid, unionid=unionid, snap=snap
-                )
-
-        if next_step == "bind-phone" and use_external_bind_mobile() and user is None:
-            ticket = bind_ticket
-            if not ticket and user is None:
-                snap = lookup_member_for_oauth(db, openid)
-                ticket = create_bind_ticket(
-                    openid=openid,
-                    unionid=unionid,
-                    wx_member_id=snap.wx_member_id if snap else None,
-                )
-            if ticket:
-                return RedirectResponse(
-                    url=build_external_bind_mobile_url(bind_ticket=ticket),
-                    status_code=302,
-                )
-            return RedirectResponse(url=build_external_bind_mobile_url(), status_code=302)
-
         params = {"wx": "1", "next_step": next_step}
         redirect_resp = None
         if user:

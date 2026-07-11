@@ -139,12 +139,8 @@ export function clearWechatQueryFromUrl() {
   } catch (_) { /* ignore */ }
 }
 
-export function redirectParentNextStep(nextStep, bindTicket = '', bindMobileUrl = '') {
+export function redirectParentNextStep(nextStep, bindTicket = '') {
   if (nextStep === 'bind-phone') {
-    if (bindMobileUrl) {
-      window.location.replace(bindMobileUrl)
-      return
-    }
     if (bindTicket) {
       uni.reLaunch({ url: `/pages/login/bind-phone?bind_ticket=${encodeURIComponent(bindTicket)}` })
       return

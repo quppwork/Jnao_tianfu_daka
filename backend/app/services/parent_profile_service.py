@@ -105,22 +105,7 @@ def parent_next_step(user: ChildUser) -> str:
 
 
 def parent_needs_company_verification(db: Session, user: ChildUser) -> bool:
-    """Jnao 短信/密码注册且尚未完成微信 openid 进门验证。"""
-    if user.role != auth_service.ROLE_PARENT:
-        return False
-    if parent_gate_passed(db, user):
-        return False
-    from app.services.member_registry_service import (
-        CHANNEL_PASSWORD,
-        CHANNEL_SMS,
-        find_daka_member_by_parent,
-    )
-
-    dm = find_daka_member_by_parent(db, user.id)
-    if dm and dm.register_channel in (CHANNEL_SMS, CHANNEL_PASSWORD):
-        return True
-    if not dm and get_login_channel(user) == LOGIN_CHANNEL_STANDARD:
-        return True
+    """已废弃：不再走公司服务号验证码进门。"""
     return False
 
 
@@ -140,27 +125,16 @@ def parent_gate_passed(db: Session, user: ChildUser) -> bool:
 
 
 def assert_parent_gate_passed(db: Session, user: ChildUser) -> None:
-    import os
-
-    if os.getenv("JNAO_TEST_SKIP_GATE") == "1":
-        return
-    if user.role != auth_service.ROLE_PARENT:
-        return
-    if not parent_gate_passed(db, user):
-        raise HTTPException(
-            403,
-            "请先完成公司服务号手机验证（微信内一键登录或绑定手机）",
-        )
+    """浏览器短信/密码家长无需微信进门验证。"""
+    return
 
 
 def parent_auth_flags(db: Session, user: ChildUser) -> tuple[bool, bool, str]:
     """返回 (gate_passed, account_ready, next_step)。"""
-    needs_company = parent_needs_company_verification(db, user)
     ready = parent_account_ready(user)
     step = parent_next_step(user)
-    if needs_company:
-        ready = False
-        step = "bind-phone"
+    if get_login_channel(user) == LOGIN_CHANNEL_STANDARD:
+        return True, ready, step
     return parent_gate_passed(db, user), ready, step
 
 

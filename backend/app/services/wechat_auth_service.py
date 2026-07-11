@@ -114,7 +114,8 @@ def build_external_bind_mobile_url(*, bind_ticket: str | None = None) -> str:
 
 
 def use_external_bind_mobile() -> bool:
-    return bool(external_bind_mobile_url())
+    """统一走 Jnao 内置绑手机（阿里云短信），不再跳转公司 H5。"""
+    return False
 
 
 def _state_key(state: str) -> str:
@@ -828,7 +829,7 @@ def consume_login_exchange_ticket(ticket: str) -> dict:
 
 
 def try_attach_openid_from_local_snapshot(db: Session, user: ChildUser) -> ChildUser:
-    """保留供公司绑手机完成后调用；短信注册/登录不再自动绑 openid（须先走公司验证）。"""
+    """外链绑手机回调保留；浏览器短信登录不自动绑 openid。"""
     return user
 
 
@@ -844,8 +845,6 @@ def _try_link_user_from_local(
         find_daka_member_by_legacy_wx_member_id,
         find_daka_member_by_mobile,
     )
-    from app.services.parent_profile_service import parent_needs_company_verification
-
     oid = (openid or "").strip()
     if not oid:
         return None, None
@@ -860,8 +859,6 @@ def _try_link_user_from_local(
             if dm:
                 existing = auth_service.get_parent_for_login(db, dm.parent_id)
         if existing:
-            if parent_needs_company_verification(db, existing):
-                return None, None
             step = finalize_wechat_login_user(
                 db,
                 existing,
@@ -878,8 +875,6 @@ def _try_link_user_from_local(
             if not user:
                 user = auth_service.find_parent_by_phone_for_login(db, dm.mobile)
             if user:
-                if parent_needs_company_verification(db, user):
-                    return None, None
                 step = finalize_wechat_login_user(
                     db,
                     user,
@@ -906,8 +901,6 @@ def _try_link_user_from_local(
             if not user:
                 user = auth_service.find_parent_by_phone_for_login(db, dm.mobile)
             if user:
-                if parent_needs_company_verification(db, user):
-                    return None, None
                 step = finalize_wechat_login_user(
                     db,
                     user,
@@ -927,9 +920,7 @@ def _provision_legacy_parent_from_snapshot(
     unionid: str | None,
     snap: WxMemberSnapshot,
 ) -> tuple[ChildUser | None, str | None]:
-    """老库 snapshot 已有 openid+手机号、Jnao 无账号 → 自动建号绑定，免走公司验证页。"""
-    from app.services.parent_profile_service import parent_needs_company_verification
-
+    """snapshot 已有 openid+手机号、Jnao 无账号 → 自动建号，补密码后进家长端。"""
     mobile = _normalize_mobile(snap.mobile)
     if not mobile:
         return None, None
@@ -947,8 +938,6 @@ def _provision_legacy_parent_from_snapshot(
         u_union = unionid or snap.unionid
         existing = auth_service.find_parent_by_phone_for_login(db, mobile)
         if existing:
-            if parent_needs_company_verification(db, existing):
-                return None, None
             step = finalize_wechat_login_user(
                 db, existing, openid=oid, unionid=u_union, snap=snap
             )
@@ -1035,15 +1024,6 @@ def resolve_wechat_login(
         )
         if provisioned and step:
             return provisioned, None, step
-        ticket = create_bind_ticket(
-            openid=openid,
-            unionid=unionid,
-            wx_member_id=snap.wx_member_id if snap else None,
-        )
-        return None, ticket, "bind-phone"
-
-    # 老库有 openid 但 snapshot 仍无手机号：走公司绑手机页
-    if use_external_bind_mobile():
         ticket = create_bind_ticket(
             openid=openid,
             unionid=unionid,
