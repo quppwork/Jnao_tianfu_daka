@@ -315,7 +315,7 @@
 
             <text class="lock-tip">{{ phaseTip(phase) }}</text>
 
-            <template v-if="!isPerceptionPhase(phase)">
+            <template v-if="!isPerceptionPhase(phase) && !phase.isElective">
             <view class="checkin-block" :class="{ locked: !phaseClicked[phase.block] }">
               <view v-if="!phaseClicked[phase.block]" class="checkin-lock-overlay">
                 <text class="checkin-lock-text">🔒 请先观看音频/视频</text>
@@ -325,7 +325,7 @@
               </view>
             </view>
             </template>
-            <template v-else>
+            <template v-else-if="isPerceptionPhase(phase)">
               <text v-if="phase.allDone" class="perception-done-text">✅ 多元感知训练已完成 · 点击音频可回听</text>
               <text v-else class="perception-done-text">点击音频即可完成多元感知训练</text>
             </template>
