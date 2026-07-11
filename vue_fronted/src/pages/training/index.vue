@@ -202,7 +202,7 @@
               </view>
             </view>
           </view>
-          <view v-else class="plan-empty">
+          <view v-else class="plan-empty card-empty">
             <text class="plan-empty-text">{{ planEmptyHint }}</text>
           </view>
 
@@ -3311,6 +3311,7 @@ function triggerGlitch() {
 .plan-done-title { display:block; color:#22c55e; font-size:15px; font-weight:700; margin-bottom:4px; }
 .plan-done-sub { display:block; color:rgba(255,255,255,0.45); font-size:12px; }
 .plan-empty { padding:10px 0 4px; }
+.card-empty { background:rgba(10,18,30,0.6); border:1px solid rgba(0,210,255,0.12); border-radius:14px; padding:20px 16px; text-align:center; }
 .plan-empty-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.5; }
 .plan-transition-wrap { padding:16px 8px; text-align:center; }
 .plan-transition-icon { font-size:28px; display:block; margin-bottom:8px; }
@@ -3851,6 +3852,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 
 /* ---- 时间轴总览 — 白色主题 ---- */
 [data-theme="white"] .plan-header-meta { color:#6b7280; }
+[data-theme="white"] .card-empty { background:#fff; border-color:#e5e7eb; }
 [data-theme="white"] .plan-empty-text { color:#9ca3af; }
 [data-theme="white"] .tl-phase-title { color:#1a1a2e; }
 [data-theme="white"] .tl-phase-meta { color:#9ca3af; }
