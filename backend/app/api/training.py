@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -38,7 +38,7 @@ from app.services.training_elective_service import get_elective_offers, submit_e
 from app.services.training_plan_generator import ensure_plan_report
 from app.services.training_schedule_service import schedule_training_by_duration
 from app.services.training_service import TrainingError
-from app.services.video_push_service import get_talent_training_video
+from app.services.video_push_service import get_talent_training_video, get_talent_video_raw_url
 
 router = APIRouter(prefix="/api/training", tags=["training"])
 
@@ -70,29 +70,50 @@ def talent_training_video(
 
 @router.get("/video/talent/stream")
 def talent_video_stream(
+    request: Request,
     auth_user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    """代理 OSS 视频流 — 后端读取 OSS，转发给前端（绕过 CORS）"""
-    info = get_talent_training_video(None)
-    url = info.get("url", "")
+    """代理 OSS 视频流 — 后端读取 OSS，转发给前端（绕过 CORS / 签名过期）"""
+    from app.services.oss_stream_service import stream_oss_media
+
+    url = get_talent_video_raw_url(db)
     if not url:
         raise HTTPException(404, "视频资源未找到")
+    if url.startswith("/static/"):
+        from pathlib import Path
+        from fastapi.responses import FileResponse
 
-    import requests as req
+        static_path = Path(__file__).resolve().parents[2] / url.lstrip("/")
+        if static_path.is_file():
+            return FileResponse(static_path, media_type="video/mp4", headers={"Accept-Ranges": "bytes"})
+        raise HTTPException(404, "视频资源未找到")
+    return stream_oss_media(url, range_header=request.headers.get("range"))
 
-    def stream():
-        with req.get(url, stream=True, timeout=30) as r:
-            r.raise_for_status()
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    yield chunk
 
-    return StreamingResponse(
-        stream(),
-        media_type="video/mp4",
-        headers={"Content-Disposition": "inline"},
-    )
+@router.get("/items/{item_id}/stream")
+def training_item_media_stream(
+    item_id: int,
+    request: Request,
+    media: str = Query("video", pattern="^(audio|video)$"),
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """训练项音视频流 — 鉴权后从 OSS 代理播放（避免签名 URL 过期）"""
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.oss_stream_service import stream_oss_media
+
+    item = db.get(TrainingItem, item_id)
+    if not item:
+        raise HTTPException(404, "训练项不存在")
+    plan = db.get(TrainingPlan, item.plan_id)
+    if not plan or plan.child_user_id != child_user_id:
+        raise HTTPException(403, "无权访问该训练项")
+
+    stored = item.video_url if media == "video" else item.audio_url
+    if not stored:
+        raise HTTPException(404, f"该训练项无{media}资源")
+    return stream_oss_media(stored, range_header=request.headers.get("range"))
 
 
 @router.post("/items/{item_id}/watch-progress", response_model=WatchProgressResponse)

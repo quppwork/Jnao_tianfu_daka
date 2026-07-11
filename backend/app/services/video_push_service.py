@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from config.loader import load_settings
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.core.talent_mapping import TALENT_CODE_TO_TAG
 from app.services.oss_client import resolve_play_url
 
@@ -28,6 +31,38 @@ def _settings_videos() -> dict[int, dict]:
         if isinstance(val, dict) and val.get("url"):
             out[code] = val
     return out
+
+
+def get_talent_video_raw_url(db: Session | None = None) -> str | None:
+    """五者天赋视频原始 play_url（未签名，供 stream 代理）"""
+    from app.db.models import ContentItem
+    from app.services.content_meta import parse_item_meta
+
+    own_db = False
+    session = db
+    if session is None:
+        from app.db.session import get_session_factory
+
+        session = get_session_factory()()
+        own_db = True
+    try:
+        rows = session.scalars(
+            select(ContentItem).where(
+                ContentItem.content_type == "video",
+                ContentItem.status == 1,
+            )
+        ).all()
+        for row in rows:
+            meta = parse_item_meta(row)
+            if meta.get("skill") == "五者天赋" and row.play_url:
+                return row.play_url
+    finally:
+        if own_db:
+            session.close()
+
+    cfg = _settings_videos().get(1) or DEFAULT_TALENT_VIDEOS.get(1) or {}
+    url = cfg.get("url", "")
+    return url if url.startswith("http") else None
 
 
 def get_talent_training_video(talent_code: int | None) -> dict:

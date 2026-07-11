@@ -24,7 +24,7 @@ from app.services.child_training_state import (
 )
 from app.services.content_meta import parse_item_instruction, resolve_training_item_title
 from app.services.datetime_fmt import format_cst
-from app.services.oss_client import resolve_play_url
+from app.services.oss_stream_service import training_item_stream_path
 from app.services.training_day import (
     get_training_day,
     is_plan_day_locked,
@@ -446,8 +446,19 @@ def _item_to_dict(item: TrainingItem, *, hide_media: bool = False, content: Cont
         item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
     )
     wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
-    audio_url = None if hide_media else resolve_play_url(item.audio_url)
-    video_url = None if hide_media else resolve_play_url(item.video_url)
+    if hide_media:
+        audio_url = None
+        video_url = None
+    elif item.id and item.audio_url:
+        audio_url = training_item_stream_path(item.id, "audio")
+    else:
+        audio_url = None
+    if hide_media:
+        video_url = None
+    elif item.id and item.video_url:
+        video_url = training_item_stream_path(item.id, "video")
+    else:
+        video_url = None
     return {
         "id": item.id,
         "sort_order": item.sort_order,

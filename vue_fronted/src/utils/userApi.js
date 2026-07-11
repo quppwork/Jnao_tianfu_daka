@@ -500,6 +500,14 @@ function withUser(url, userId) {
   return ensureAuthQuery(url, userId)
 }
 
+/** 训练音视频流 — 同源代理 URL，附带 user_id 鉴权 */
+export function resolveTrainingStreamUrl(url, userId) {
+  if (!url || !userId) return url || ''
+  if (url.startsWith('blob:') || url.startsWith('data:')) return url
+  if (!url.includes('/api/training/') || !url.includes('/stream')) return url
+  return ensureAuthQuery(url, userId)
+}
+
 /** 答疑图片需带 user_id + session_token 鉴权；补全绝对路径供 <image> 加载 */
 export function resolveQaImageUrl(url, userId) {
   if (!url || !userId) return url

@@ -911,7 +911,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { requirePageAuth, ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
+import { requirePageAuth, ensureChildUser, getChildUserId, resolveTrainingStreamUrl, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -2861,21 +2861,21 @@ async function deleteCard(idx) {
 }
 
 function applyPlanMedia(plan) {
+  const uid = getChildUserId()
   const items = plan?.items || []
   const videoItem = items.find(i => i.item_type === 'video' || i.video_url)
   if (videoItem?.video_url) {
-    videoSrc.value = videoItem.video_url
+    videoSrc.value = resolveTrainingStreamUrl(videoItem.video_url, uid)
   }
-  // v2.0: items 无 block 属性，按 sort_order 取第一个有音频的项
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
   const firstAudio = sorted.find(i => i.audio_url)
   if (firstAudio) {
-    audioSrc.value = firstAudio.audio_url
+    audioSrc.value = resolveTrainingStreamUrl(firstAudio.audio_url, uid)
     audioTitle.value = `🎧 ${firstAudio.title || '今日训练音频'}`
   }
 }
 
-function openMediaItem(item, forceType) {
+async function openMediaItem(item, forceType) {
   if (!item) return
   if (item.media_hidden || item.item_type === 'placeholder') {
     if (item.item_type === 'perception' && item.audio_url) {
@@ -2891,25 +2891,25 @@ function openMediaItem(item, forceType) {
   }
   if (!guardMedia()) return
   lastOpenedItem.value = item
-  // forceType 优先；否则有视频默认用视频
+  const uid = await ensureChildUser()
   if (forceType === 'video' && item.video_url) {
-    videoSrc.value = item.video_url
+    videoSrc.value = resolveTrainingStreamUrl(item.video_url, uid)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
     return
   }
   if (forceType === 'audio' && item.audio_url) {
-    audioSrc.value = item.audio_url
+    audioSrc.value = resolveTrainingStreamUrl(item.audio_url, uid)
     audioTitle.value = item.title || ''
     mediaPlayer.value = { show: true, type: 'audio', title: audioTitle.value }
     return
   }
   if (item.video_url) {
-    videoSrc.value = item.video_url
+    videoSrc.value = resolveTrainingStreamUrl(item.video_url, uid)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
     return
   }
   if (item.audio_url) {
-    audioSrc.value = item.audio_url
+    audioSrc.value = resolveTrainingStreamUrl(item.audio_url, uid)
     audioTitle.value = item.title || '训练音频'
     mediaPlayer.value = { show: true, type: 'audio', title: item.title || '训练音频' }
     return
