@@ -83,6 +83,7 @@ import {
   saveParentGateCache,
 } from '@/utils/userApi.js'
 import { validatePasswordClient, PASSWORD_HINT } from '@/utils/passwordPolicy.js'
+import { validateRealNameClient, validateNicknameClient } from '@/utils/namePolicy.js'
 
 const parentId = ref(null)
 const missing = ref([])
@@ -128,12 +129,16 @@ async function submit() {
     if (!form.value.realName.trim()) {
       uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return
     }
+    const nameErr = validateRealNameClient(form.value.realName.trim())
+    if (nameErr) { uni.showToast({ title: nameErr, icon: 'none' }); return }
     body.real_name = form.value.realName.trim()
   }
   if (missing.value.includes('nickname') || form.value.nickname.trim()) {
     if (!form.value.nickname.trim()) {
       uni.showToast({ title: '请填写昵称', icon: 'none' }); return
     }
+    const nickErr = validateNicknameClient(form.value.nickname.trim())
+    if (nickErr) { uni.showToast({ title: nickErr, icon: 'none' }); return }
     body.nickname = form.value.nickname.trim()
   }
   if (isWechat.value || form.value.password.trim()) {

@@ -588,8 +588,12 @@ async function confirmLoginSms() {
       captchaCode: captchaCode.value.trim(),
     })
     showCaptcha.value = false
-    if (res.sent === false && res.hint === 'not_registered') {
-      showNotRegisteredModal(form.value.phone.trim())
+    if (res.sent !== true) {
+      if (res.hint === 'not_registered') {
+        showNotRegisteredModal(form.value.phone.trim())
+      } else {
+        uni.showToast({ title: res.message || '发送失败', icon: 'none' })
+      }
       return
     }
     startCooldown(60)

@@ -42,7 +42,9 @@ def _send_login_sms(client: TestClient, phone: str) -> None:
         },
     )
     assert res.status_code == 200, res.text
-    assert res.json()["message"] == SMS_OK
+    data = res.json()
+    assert data["message"] == SMS_OK
+    assert data["sent"] is True
 
 
 class TestSmsAuth:
@@ -116,6 +118,55 @@ class TestSmsAuth:
         assert data["message"] == SMS_OK
         assert data["sent"] is False
         assert data["hint"] == "not_registered"
+
+    def test_login_sms_unregistered_does_not_store_code(self, client: TestClient):
+        from app.services.auth_challenge_store import challenge_get
+        from app.services.sms_service import SCENE_LOGIN, _sms_key
+
+        phone = "13900008812"
+        cap = client.get("/api/auth/captcha")
+        res = client.post(
+            "/api/auth/sms/send",
+            json={
+                "phone": phone,
+                "scene": "login",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
+        )
+        assert res.status_code == 200
+        assert res.json()["sent"] is False
+        assert challenge_get(_sms_key(SCENE_LOGIN, phone)) is None
+
+    def test_login_sms_registered_sends_code(self, client: TestClient, db_session):
+        from app.services.auth_challenge_store import challenge_get
+        from app.services.auth_service import register_child, ROLE_PARENT
+        from app.services.sms_service import SCENE_LOGIN, _sms_key
+
+        phone = "13900008819"
+        register_child(
+            db_session,
+            parent_phone=phone,
+            nickname="验证码家长",
+            password=None,
+            role=ROLE_PARENT,
+            child_quota=5,
+        )
+        cap = client.get("/api/auth/captcha")
+        res = client.post(
+            "/api/auth/sms/send",
+            json={
+                "phone": phone,
+                "scene": "login",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["sent"] is True
+        assert data.get("hint") is None
+        assert challenge_get(_sms_key(SCENE_LOGIN, phone)) is not None
 
     def test_login_sms_existing_parent(self, client: TestClient, db_session):
         from app.services.auth_service import register_child, ROLE_PARENT

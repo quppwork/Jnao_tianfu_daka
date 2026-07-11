@@ -17,13 +17,11 @@
             type="number"
             maxlength="11"
             :disabled="loginBusy"
-            @blur="onPhoneBlur"
           />
         </view>
-        <view v-if="phoneHint" class="phone-hint"><text>{{ phoneHint }}</text></view>
         <view class="input-wrap sms-row">
           <input v-model="form.smsCode" class="inp" placeholder="短信验证码" type="number" maxlength="6" :disabled="loginBusy" />
-          <view class="sms-btn" :class="{ off: smsCooldown > 0 || loginBusy || phoneBlocked }" @click="openCaptchaModal">
+          <view class="sms-btn" :class="{ off: smsCooldown > 0 || loginBusy }" @click="openCaptchaModal">
             <text>{{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}</text>
           </view>
         </view>
@@ -72,6 +70,7 @@ import {
 import { clearLoginGuard } from '@/utils/loginGuard.js'
 import { useLoginFlow, hasValidSession, inferHomeFromSession } from '@/utils/useLoginFlow.js'
 import { validatePasswordClient } from '@/utils/passwordPolicy.js'
+import { validateRealNameClient, validateNicknameClient } from '@/utils/namePolicy.js'
 
 const { overlayText, loginBusy, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
@@ -82,8 +81,6 @@ const captchaCode = ref('')
 const captchaImage = ref('')
 const sendingSms = ref(false)
 const smsCooldown = ref(0)
-const phoneHint = ref('')
-const phoneBlocked = ref(false)
 const fromWechat = ref(false)
 const bindTicket = ref('')
 let cooldownTimer = null
@@ -113,25 +110,28 @@ function startCooldown(sec = 60) {
   }, 1000)
 }
 
-function onPhoneBlur() {
-  phoneHint.value = ''
-  phoneBlocked.value = false
+function validateRegisterFields() {
+  const nameErr = validateRealNameClient(form.value.realName.trim())
+  if (nameErr) return nameErr
+  const nickErr = validateNicknameClient(form.value.nickname.trim())
+  if (nickErr) return nickErr
+  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
+    return '请输入正确的手机号'
+  }
+  return null
+}
+
+async function openCaptchaModal() {
+  if (smsCooldown.value > 0 || loginBusy.value) return
+  const err = validateRegisterFields()
+  if (err) { uni.showToast({ title: err, icon: 'none' }); return }
+  await loadCaptcha()
+  showCaptcha.value = true
 }
 
 function goLogin(phone = '') {
   const q = phone ? `?phone=${encodeURIComponent(phone)}` : ''
   uni.redirectTo({ url: `/pages/login/index${q}` })
-}
-
-async function openCaptchaModal() {
-  if (smsCooldown.value > 0 || loginBusy.value || phoneBlocked.value) return
-  if (!form.value.realName.trim()) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
-  if (!form.value.nickname.trim()) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
-  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
-    uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
-  }
-  await loadCaptcha()
-  showCaptcha.value = true
 }
 
 async function confirmSendSms() {
@@ -146,13 +146,17 @@ async function confirmSendSms() {
       captchaCode: captchaCode.value.trim(),
     })
     showCaptcha.value = false
-    if (res.sent === false && res.hint === 'already_registered') {
-      uni.showToast({ title: '该手机号已注册，请直接登录', icon: 'none' })
-      setTimeout(() => goLogin(phone), 800)
+    if (res.sent !== true) {
+      if (res.hint === 'already_registered') {
+        uni.showToast({ title: '该手机号已注册，请直接登录', icon: 'none' })
+        setTimeout(() => goLogin(phone), 800)
+      } else {
+        uni.showToast({ title: res.message || '发送失败', icon: 'none' })
+      }
       return
     }
     startCooldown(60)
-    uni.showToast({ title: '若号码有效，验证码已发送', icon: 'none' })
+    uni.showToast({ title: '验证码已发送', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '发送失败', icon: 'none' })
     await loadCaptcha()
@@ -180,11 +184,8 @@ async function routeAfterRegister(data) {
 
 async function doRegister() {
   if (loginBusy.value) return
-  if (!form.value.realName.trim()) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
-  if (!form.value.nickname.trim()) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
-  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
-    uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
-  }
+  const fieldErr = validateRegisterFields()
+  if (fieldErr) { uni.showToast({ title: fieldErr, icon: 'none' }); return }
   if (!form.value.smsCode.trim()) { uni.showToast({ title: '请输入短信验证码', icon: 'none' }); return }
   if (!form.value.password.trim()) { uni.showToast({ title: '请设置登录密码', icon: 'none' }); return }
   const pwdErr = validatePasswordClient(form.value.password.trim())
@@ -246,8 +247,6 @@ onUnmounted(() => {
 .sms-btn { flex-shrink:0; padding:8px 10px; border-radius:8px; background:rgba(88,166,255,0.15); }
 .sms-btn.off { opacity:0.5; }
 .sms-btn text { color:var(--accent); font-size:12px; }
-.phone-hint { margin:-4px 0 8px 4px; }
-.phone-hint text { color:#f59e0b; font-size:12px; }
 .agree { margin:8px 0 16px; }
 .agree text { font-size:11px; color:var(--text-dim); }
 .btn-primary { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:12px; padding:14px; text-align:center; }

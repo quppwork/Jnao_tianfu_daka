@@ -643,7 +643,11 @@ export async function fetchCaptcha() {
   return apiJson('/api/auth/captcha')
 }
 
-/** 家长手机号注册状态 — 需图形验证码（B10） */
+/**
+ * 家长手机号预检 — 需图形验证码（B10）。
+ * 注意：接口为防枚举统一返回，不包含 registered/action，不能用于判断是否已注册。
+ * @deprecated 注册/登录发码请直接用 sendParentSmsCode
+ */
 export async function checkParentPhone(phone, { captchaId, captchaCode } = {}) {
   return apiJson('/api/auth/parent/phone-check', {
     method: 'POST',
@@ -829,12 +833,12 @@ export async function ensureParentAccountReady(parentId, { forceRefresh = false 
   }
   const p = await fetchParentProfile(parentId)
   saveParentGateCache({ role: 'parent', ...p })
-  const needsGate = p.next_step === 'bind-phone'
-  if (needsGate) {
-    if (p.next_step === 'bind-phone') {
-      uni.redirectTo({ url: '/pages/login/index' })
-      return false
-    }
+  if (p.next_step === 'bind-phone') {
+    const phoneQ = p.parent_phone
+      ? `&phone=${encodeURIComponent(p.parent_phone)}`
+      : ''
+    uni.reLaunch({ url: `/pages/login/register-parent?from=wechat${phoneQ}` })
+    return false
   }
   if (p.login_channel === 'wechat' && !p.account_ready) {
     uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })
@@ -858,20 +862,11 @@ export async function loginStudent(loginName, password) {
   return data
 }
 
-/** 注册家长账户 */
-export async function registerParent(phone, nickname, password) {
-  const data = await apiJson('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      parent_phone: phone,
-      nickname,
-      password,
-      role: 'parent',
-    }),
-  })
-  _storeAuth(data)
-  return data
+/**
+ * @deprecated 家长请使用 registerParentSms（POST /api/auth/sms/register）
+ */
+export async function registerParent() {
+  throw new Error('家长请使用验证码注册')
 }
 
 /** 孩子是否仍需完成登录后引导（onboarding） */

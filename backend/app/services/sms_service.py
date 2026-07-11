@@ -258,7 +258,6 @@ def send_sms_code(
         verify_captcha(captcha_id, captcha_code, consume=True)
 
     check_auth_allowed(db, client_ip=client_ip, phone=phone, device_id=device_id)
-    _check_send_rate(phone, client_ip)
 
     should_send = True
     hint: str | None = None
@@ -289,6 +288,7 @@ def send_sms_code(
 
     debug_code = None
     if should_send:
+        _check_send_rate(phone, client_ip)
         code = _generate_code()
         challenge_set(
             _sms_key(scene, phone),
