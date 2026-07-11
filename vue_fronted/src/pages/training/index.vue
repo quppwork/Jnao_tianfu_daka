@@ -150,12 +150,6 @@
         </view>
 
         <!-- Done -->
-        <view v-else-if="planJustGenerated" class="plan-done-wrap">
-          <text class="plan-done-icon">✅</text>
-          <text class="plan-done-title">方案生成完毕</text>
-          <text class="plan-done-sub">请开始今日的训练</text>
-        </view>
-
         <!-- Plan content (loaded) -->
         <template v-else>
           <view v-if="todayPlan?.status === 'transition' || dayTransition" class="plan-transition-wrap">
@@ -215,10 +209,16 @@
 
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
 
+          <!-- 全部必修完成 -->
+          <view v-if="allRequiredDone" class="training-done-wrap">
+            <view class="btn-confirm-plan" style="background:linear-gradient(135deg,#22c55e,#16a34a);" @click="showDoneConfirm = true">
+              <text>🎉 今日训练已完成</text>
+            </view>
+          </view>
 
           <!-- 🆕 编辑方案 -->
+          <text class="plan-edit-guide">点击 ⓘ 查看解释说明</text>
           <view v-if="canCustomizePlan" class="plan-edit-block">
-            <text class="plan-edit-guide">点击 ⓘ 查看解释说明</text>
             <view class="plan-edit-bar" @click="openPlanEditor">
               <view class="plan-edit-bar-text">
                 <text class="peb-title">📝 编辑方案</text>
@@ -244,8 +244,13 @@
         </template>
       </view>
 
-      <!-- 训练阶段（v2.0：逐个训练项，已打卡的隐藏） -->
-      <template v-if="timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in visiblePhases" :key="phase.block">
+      <!-- 确认今日方案 -->
+      <view v-if="planJustGenerated" class="btn-confirm-plan" @click="confirmPlan">
+        <text>确认今日方案并开始训练</text>
+      </view>
+
+      <!-- 训练阶段 -->
+      <template v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in visiblePhases" :key="phase.block">
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
           <text class="section-title" :class="{ dim: !phase.unlocked, elective: phase.isElective }">
@@ -310,7 +315,7 @@
 
             <text class="lock-tip">{{ phaseTip(phase) }}</text>
 
-            <template v-if="!isPerceptionPhase(phase)">
+            <template v-if="!isPerceptionPhase(phase) && !phase.isElective">
             <view class="checkin-block" :class="{ locked: !phaseClicked[phase.block] }">
               <view v-if="!phaseClicked[phase.block]" class="checkin-lock-overlay">
                 <text class="checkin-lock-text">🔒 请先观看音频/视频</text>
@@ -320,7 +325,7 @@
               </view>
             </view>
             </template>
-            <template v-else>
+            <template v-else-if="isPerceptionPhase(phase)">
               <text v-if="phase.allDone" class="perception-done-text">✅ 多元感知训练已完成 · 点击音频可回听</text>
               <text v-else class="perception-done-text">点击音频即可完成多元感知训练</text>
             </template>
@@ -701,6 +706,25 @@
       </view>
     </view>
 
+    <!-- 完成确认弹窗 -->
+    <view v-if="showDoneConfirm" class="picker-overlay" @click="showDoneConfirm = false">
+      <view class="picker-card" style="max-width:360px;" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">今日配合度</text>
+          <view class="modal-close" @click="showDoneConfirm = false">✕</view>
+        </view>
+        <view class="sa-grid" style="padding:16px;">
+          <view v-for="s in scores" :key="s.pct" class="sa-item" :class="{ active: summaryAttitude === s.pct }" @click="summaryAttitude = s.pct">
+            <text class="sa-pct">{{ s.pct }}%</text>
+            <text class="sa-emoji">{{ s.emoji }}</text>
+          </view>
+        </view>
+        <view class="btn-confirm-plan" style="margin:0 16px 16px;background:linear-gradient(135deg,#22c55e,#16a34a);" @click="showDoneConfirm = false">
+          <text>确认完成</text>
+        </view>
+      </view>
+    </view>
+
 <!-- Media Player Overlay -->
     <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
       <view class="player-card" @click.stop>
@@ -826,15 +850,12 @@
               <text v-for="t in ['书本','视频','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tool === t }" @click="detailEditCard.tool = t">{{ t }}</text>
             </view>
           </view>
-          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
+          <view class="detail-form-row" style="align-items:center;">
             <text class="detail-form-label">训练</text>
-            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
-              <text class="detail-form-unit">用时</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
-              <text class="detail-form-unit">分钟，看完</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
-              <text class="detail-form-unit">字</text>
-            </view>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:56px;" />
+            <text class="detail-form-unit">分钟</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:56px;" />
+            <text class="detail-form-unit">字</text>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">材料</text>
@@ -1376,11 +1397,7 @@ async function startTrainingTimer() {
       const result = await scheduleTrainingPlan(uid, plannedMinutes)
       if (result.error) throw new Error(result.message || '生成训练内容失败')
       await applyScheduledPlan(uid, result.data)
-      if (!planAnimShownToday()) {
-        markPlanAnimShown()
-        planJustGenerated.value = true
-        setTimeout(() => { planJustGenerated.value = false }, 2000)
-      }
+      planJustGenerated.value = true
     }
 
     const totalSec = plannedMinutes * 60
@@ -1496,6 +1513,8 @@ function resetAllLocalState() {
   submittedCards.value = []
   phaseRecordIds.value = {}
   primaryCheckinRecordId.value = null
+  showTraining.value = false
+  planJustGenerated.value = false
   summaryAttitude.value = 60
   attitudeTouched.value = false
   closeMedia()
@@ -1543,6 +1562,8 @@ async function devResetToday() {
     videoSrc.value = ''
     audioSrc.value = ''
     submittedCards.value = []
+    showTraining.value = false
+    planJustGenerated.value = false
     await loadTodayPlan(true)
     await loadDevStatus()
     uni.showToast({ title: '今日方案已清空（历史保留）', icon: 'none' })
@@ -1788,6 +1809,12 @@ const ELECTIVE_INFO = {
     age: '适合各年龄段孩子训练，低龄儿童可在家长陪伴下进行。',
     how: '开启后，训练计划中将出现「多元感知」环节，按提示播放音频并完成互动即可。',
   },
+  '开口窍': {
+    title: '🗣️ 开口窍是什么？',
+    desc: '开口窍通过朗读口腔操训练唇舌灵活度，激活语言中枢，促进左右脑协同工作，有效提升阅读速度与理解能力。',
+    age: '适合各年龄段，低龄孩子可每天跟练5分钟，发音更清晰流畅。',
+    how: '开启后，训练计划中将出现「开口窍」视频环节，跟随老师朗读练习即可。',
+  },
   'edit_plan': {
     title: '📝 编辑方案说明',
     desc: '如果您觉得推荐内容可以，就点击音频｜视频开始训练吧，不认可可以自行编辑方案哦。',
@@ -1974,6 +2001,27 @@ const phaseRecordIds = ref({})
 const phaseClicked = ref({})
 const primaryCheckinRecordId = ref(null)
 const planJustGenerated = ref(false)
+const showTraining = ref(false)
+const showDoneConfirm = ref(false)
+
+async function confirmPlan() {
+  const uid = await ensureChildUser()
+  const planId = todayPlan.value?.plan_id
+  const skills = (todayPlan.value?.items || [])
+    .filter(i => {
+      const inst = parseItemInstructions(i.instructions)
+      return inst.item_type !== 'elective' && inst.blocks_next !== false
+    })
+    .map(i => resolvePlanItemSkill(i))
+    .filter(Boolean)
+  if (planId && skills.length) {
+    await customizePlan(uid, planId, skills)
+    await loadTodayPlan(true)
+  }
+  showTraining.value = true
+  planJustGenerated.value = false
+}
+
 const checkinSubmitting = ref(false)
 const perceptionSubmitting = ref(false)
 const accErrorCards = ref({})
@@ -2125,6 +2173,9 @@ const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(
 const planProgressPct = computed(() => {
   if (!planTotalCount.value) return 0
   return Math.round((planCompletedCount.value / planTotalCount.value) * 100)
+})
+const allRequiredDone = computed(() => {
+  return planTotalCount.value > 0 && planCompletedCount.value === planTotalCount.value
 })
 
 function itemTypeEmoji(item) {
@@ -3529,6 +3580,12 @@ function triggerGlitch() {
 .editor-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
 .editor-btn.secondary text { color:var(--text-dim); }
 .plan-edit-block { margin-top:8px; }
+.training-done-wrap { margin-top:12px; }
+.training-done-card { text-align:center; padding:16px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:12px; }
+.training-done-icon { font-size:28px; display:block; margin-bottom:4px; }
+.training-done-title { font-size:15px; font-weight:600; color:#22c55e; }
+.btn-confirm-plan { display:block; margin:16px auto 0; padding:12px 28px; background:linear-gradient(135deg,#00d2ff,#0088cc); color:#fff; font-size:14px; font-weight:600; border-radius:24px; text-align:center; cursor:pointer; box-shadow:0 4px 16px rgba(0,210,255,0.3); }
+.btn-confirm-plan text { color:#fff; }
 .plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:12px; margin-bottom:4px; }
 .plan-edit-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
 .plan-edit-bar-text { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
@@ -3769,6 +3826,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .plan-edit-guide { color:rgba(0,0,0,0.5); }
 [data-theme="white"] .peb-desc { color:rgba(0,0,0,0.55); }
 [data-theme="white"] .plan-edit-tip { color:rgba(0,0,0,0.45); }
+[data-theme="white"] .btn-confirm-plan { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .btn-confirm-plan text { color:#fff; }
 [data-theme="white"] .et-info { background:rgba(255,71,87,0.1); }
 [data-theme="white"] .et-info text { color:#ff4757; }
 [data-theme="white"] .et-info:active { background:rgba(255,71,87,0.18); }
@@ -4178,8 +4237,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 }
 .detail-form-input.short { width:72px; flex:none; }
 .detail-form-textarea {
-  flex:1; min-height:52px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
-  border-radius:8px; padding:8px 10px; font-size:12px; color:#fff;
+  flex:1; min-height:36px; height:36px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
+  border-radius:8px; padding:6px 10px; font-size:12px; color:#fff;
 }
 .detail-form-inline { display:flex; align-items:center; gap:6px; flex:1; flex-wrap:wrap; }
 .detail-form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }

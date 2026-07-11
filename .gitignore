@@ -3,6 +3,10 @@
 backend/.env
 backend/venv
 
+# Claude Code 本地记忆
+CLAUDE.md
+.claude/
+
 # Python
 .venv/
 venv/
