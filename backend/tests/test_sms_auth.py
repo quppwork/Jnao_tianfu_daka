@@ -163,25 +163,26 @@ class TestSmsAuth:
         assert res.status_code == 200
         assert res.json()["message"] == SMS_OK
 
-    def test_register_rejected_after_snapshot(self, client: TestClient, db_session):
+    def test_register_allowed_after_snapshot(self, client: TestClient, db_session):
         from app.db.models import WxMemberSnapshot
 
         db_session.add(
             WxMemberSnapshot(openid="o_dup_test", mobile="13900008817", nickname="老")
         )
         db_session.commit()
-        cap = client.get("/api/auth/captcha")
-        send = client.post(
-            "/api/auth/sms/send",
+        _send_register_sms(client, "13900008817")
+        res = client.post(
+            "/api/auth/sms/register",
             json={
                 "phone": "13900008817",
-                "scene": "register",
-                "captcha_id": cap.json()["captcha_id"],
-                "captcha_code": "0000",
+                "sms_code": "88888",
+                "real_name": "王家长",
+                "nickname": "王妈妈",
+                "password": "Zhang123A",
             },
         )
-        assert send.status_code == 200
-        assert send.json()["message"] == SMS_OK
+        assert res.status_code == 200, res.text
+        assert res.json()["role"] == "parent"
 
     def test_sms_login_rejects_unregistered(self, client: TestClient):
         res = client.post(

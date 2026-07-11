@@ -1,7 +1,5 @@
 """家长身份解析 — 防重复注册"""
 
-import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.db.models import WxMemberSnapshot
@@ -9,10 +7,23 @@ from app.services import auth_service
 from app.services.parent_identity_service import (
     ACTION_LOGIN,
     ACTION_REGISTER,
-    ACTION_WECHAT_LOGIN,
     assert_parent_can_register,
     resolve_parent_registration_state,
 )
+
+
+def _send_register_sms(client: TestClient, phone: str) -> None:
+    cap = client.get("/api/auth/captcha")
+    res = client.post(
+        "/api/auth/sms/send",
+        json={
+            "phone": phone,
+            "scene": "register",
+            "captcha_id": cap.json()["captcha_id"],
+            "captcha_code": "0000",
+        },
+    )
+    assert res.status_code == 200, res.text
 
 
 def test_resolve_none(db_session):
@@ -34,7 +45,7 @@ def test_resolve_child_user(db_session):
     assert st["action"] == ACTION_LOGIN
 
 
-def test_resolve_wx_snapshot_blocks_register(db_session):
+def test_resolve_wx_snapshot_allows_register(db_session):
     db_session.add(
         WxMemberSnapshot(
             openid="o_test_snapshot_1",
@@ -44,11 +55,9 @@ def test_resolve_wx_snapshot_blocks_register(db_session):
     )
     db_session.commit()
     st = resolve_parent_registration_state(db_session, "13900009903")
-    assert st["registered"] is True
-    assert st["action"] == ACTION_WECHAT_LOGIN
-    with pytest.raises(HTTPException) as exc:
-        assert_parent_can_register(db_session, "13900009903")
-    assert exc.value.status_code == 409
+    assert st["registered"] is False
+    assert st["action"] == ACTION_REGISTER
+    assert_parent_can_register(db_session, "13900009903")
 
 
 class TestParentIdentityApi:
@@ -79,23 +88,24 @@ class TestParentIdentityApi:
         )
         assert res.status_code in (400, 422)
 
-    def test_register_sms_blocked_by_snapshot_unified(self, client: TestClient, db_session):
+    def test_register_sms_allowed_with_snapshot_only(self, client: TestClient, db_session):
         db_session.add(
             WxMemberSnapshot(openid="o_reg_block", mobile="13900009905", nickname="镜像")
         )
         db_session.commit()
-        cap = client.get("/api/auth/captcha")
+        _send_register_sms(client, "13900009905")
         res = client.post(
-            "/api/auth/sms/send",
+            "/api/auth/sms/register",
             json={
                 "phone": "13900009905",
-                "scene": "register",
-                "captcha_id": cap.json()["captcha_id"],
-                "captcha_code": "0000",
+                "sms_code": "88888",
+                "real_name": "新家长",
+                "nickname": "新家长",
+                "password": "Zhang123A",
             },
         )
         assert res.status_code == 200
-        assert res.json()["message"] == "若号码有效，验证码已发送"
+        assert res.json()["role"] == "parent"
 
     def test_login_sms_unregistered_unified(self, client: TestClient, db_session):
         db_session.add(
