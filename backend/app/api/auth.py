@@ -150,12 +150,12 @@ def _issue_and_respond(
     )
 
 
-def _attach_cookie_for_user(response: Response, user) -> AuthResponse:
+def _attach_cookie_for_user(response: Response, user, db: Session | None = None) -> AuthResponse:
     from app.core.session_cookie import set_session_cookie
 
     role = user.role or auth_service.ROLE_STUDENT
     set_session_cookie(response, user.session_token or "", role=role)
-    return _to_response(user)
+    return _to_response(user, db=db)
 
 
 @router.get("/captcha", response_model=CaptchaResponse)
@@ -356,7 +356,7 @@ def change_password(
         old_password=req.old_password,
         new_password=req.new_password,
     )
-    return _attach_cookie_for_user(response, user)
+    return _attach_cookie_for_user(response, user, db=db)
 
 
 @router.get("/wechat/config", response_model=WechatConfigResponse)
@@ -390,7 +390,7 @@ def wechat_login_exchange(
     user = auth_service.get_child_user(db, int(row["user_id"]))
     if not user:
         raise HTTPException(404, "用户不存在")
-    return _attach_cookie_for_user(response, user)
+    return _attach_cookie_for_user(response, user, db=db)
 
 
 @router.get("/wechat/callback")

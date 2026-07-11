@@ -322,9 +322,10 @@ async function handleWechatCallback(wxCb) {
   setPhase('authenticating', '正在登录…')
   let exchanged = false
   try {
-    await exchangeWechatLogin(wxCb.loginTicket)
+    const authData = await exchangeWechatLogin(wxCb.loginTicket)
     exchanged = true
     clearWechatQueryFromUrl()
+    wxCb._authData = authData
   } catch (e) {
     const fallbackUid = wxCb.userId ? parseInt(wxCb.userId, 10) : 0
     if (e.status === 400 && fallbackUid > 0) {
@@ -368,12 +369,34 @@ async function handleWechatCallback(wxCb) {
     const [profile] = await Promise.all([
       fetchParentProfile(uid),
     ])
+    const authData = wxCb._authData || null
+    const nextStep =
+      authData?.next_step ||
+      profile?.next_step ||
+      wxCb.nextStep
+    const needsComplete =
+      nextStep === 'complete-profile' ||
+      authData?.account_ready === false ||
+      profile?.account_ready === false
     await minDelay(400)
-    redirectParentNextStep(profile.next_step || wxCb.nextStep, wxCb.bindTicket)
+    if (needsComplete && nextStep !== 'bind-phone') {
+      redirectParentNextStep('complete-profile', wxCb.bindTicket)
+    } else {
+      redirectParentNextStep(nextStep, wxCb.bindTicket)
+    }
   } catch (e) {
     console.warn('[login] wechat post-auth fallback', e?.message || e)
     await minDelay(400)
-    redirectParentNextStep(wxCb.nextStep || 'home', wxCb.bindTicket)
+    const authData = wxCb._authData || null
+    const nextStep = authData?.next_step || wxCb.nextStep || 'home'
+    if (
+      nextStep === 'complete-profile' ||
+      authData?.account_ready === false
+    ) {
+      redirectParentNextStep('complete-profile', wxCb.bindTicket)
+    } else {
+      redirectParentNextStep(nextStep, wxCb.bindTicket)
+    }
   } finally {
     resetPhase()
     wechatLoading.value = false

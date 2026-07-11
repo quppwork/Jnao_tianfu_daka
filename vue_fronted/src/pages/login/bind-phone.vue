@@ -32,7 +32,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { wechatBindPhone, sendWechatBindSms, logoutAndGoLogin } from '@/utils/userApi.js'
+import { wechatBindPhone, sendWechatBindSms, logoutAndGoLogin, saveParentGateCache } from '@/utils/userApi.js'
 
 const phone = ref('')
 const smsCode = ref('')
@@ -104,9 +104,10 @@ async function submit() {
       smsCode: smsCode.value.trim(),
     })
     if (data.next_step === 'complete-profile' || !data.account_ready) {
-      uni.redirectTo({ url: '/pages/login/complete-parent?from=wechat' })
+      saveParentGateCache({ role: 'parent', ...data })
+      uni.reLaunch({ url: '/pages/login/complete-parent?from=wechat' })
     } else {
-      uni.redirectTo({ url: '/pages/parent/index' })
+      uni.reLaunch({ url: '/pages/parent/index' })
     }
   } catch (e) {
     uni.showToast({ title: e.message || '绑定失败', icon: 'none' })

@@ -815,6 +815,7 @@ export async function updateParentProfile(parentId, body) {
   if (data.session_token) {
     setSessionToken(data.session_token)
   }
+  saveParentGateCache({ role: 'parent', ...data })
   return data
 }
 

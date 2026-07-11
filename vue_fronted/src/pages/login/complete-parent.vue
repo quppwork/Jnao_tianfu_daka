@@ -7,7 +7,7 @@
     </view>
     <view class="card">
       <text class="title">{{ isWechat ? '设置登录密码' : '完善家长资料' }}</text>
-      <text class="hint">{{ isWechat ? '设置密码后可在任意设备使用手机号+密码登录' : '还差一步即可进入家长中心' }}</text>
+      <text class="hint">{{ isWechat ? '设置密码后可在任意设备使用手机号+密码登录（' + PASSWORD_HINT + '）' : '还差一步即可进入家长中心' }}</text>
 
       <view v-if="missing.includes('real_name')" class="field">
         <text class="label">真实姓名</text>
@@ -43,7 +43,7 @@
             v-model="form.password"
             class="inp"
             type="password"
-            placeholder="至少6位"
+            placeholder="8-32位，含大小写+数字"
             maxlength="64"
             confirm-type="done"
           />
@@ -80,7 +80,9 @@ import {
   fetchParentProfile,
   updateParentProfile,
   logoutAndGoLogin,
+  saveParentGateCache,
 } from '@/utils/userApi.js'
+import { validatePasswordClient, PASSWORD_HINT } from '@/utils/passwordPolicy.js'
 
 const parentId = ref(null)
 const missing = ref([])
@@ -136,11 +138,16 @@ async function submit() {
   }
   if (isWechat.value || form.value.password.trim()) {
     const pwd = form.value.password.trim()
-    if (isWechat.value && pwd.length < 6) {
-      uni.showToast({ title: '密码至少6位', icon: 'none' }); return
-    }
-    if (isWechat.value && pwd !== form.value.confirm.trim()) {
-      uni.showToast({ title: '两次密码不一致', icon: 'none' }); return
+    if (isWechat.value) {
+      const pwdErr = validatePasswordClient(pwd)
+      if (pwdErr) {
+        uni.showToast({ title: pwdErr, icon: 'none' })
+        return
+      }
+      if (pwd !== form.value.confirm.trim()) {
+        uni.showToast({ title: '两次密码不一致', icon: 'none' })
+        return
+      }
     }
     if (pwd) body.password = pwd
   }
@@ -157,6 +164,7 @@ async function submit() {
       uni.showToast({ title: '请补全必填项', icon: 'none' })
       return
     }
+    saveParentGateCache({ role: 'parent', ...p })
     uni.redirectTo({ url: '/pages/parent/index' })
   } catch (e) {
     uni.showToast({ title: e.message || '保存失败', icon: 'none' })

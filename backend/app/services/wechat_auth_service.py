@@ -334,8 +334,45 @@ def lookup_member_local(db: Session, openid: str) -> WxMemberSnapshot | None:
 
 
 def lookup_member_for_oauth(db: Session, openid: str) -> WxMemberSnapshot | None:
-    """OAuth 仅查本地 wx_member_snapshot；老库请走定时同步 sync_wx_member_snapshot。"""
-    return lookup_member_local(db, openid)
+    """OAuth 查本地 snapshot；无记录时尝试老库 openid 同步。"""
+    snap = lookup_member_local(db, openid)
+    if snap:
+        return snap
+    return sync_snapshot_for_openid(db, openid)
+
+
+def _is_legacy_snapshot(snap: WxMemberSnapshot | None) -> bool:
+    return bool(snap and snap.wx_member_id)
+
+
+def ensure_oauth_snapshot(
+    db: Session,
+    *,
+    openid: str,
+    unionid: str | None,
+) -> WxMemberSnapshot:
+    """OAuth 后确保本地有 snapshot：先本地 → 老库 openid → 用微信 openid 建占位。"""
+    oid = (openid or "").strip()
+    if not oid:
+        raise HTTPException(400, "未获取到微信 openid")
+    snap = lookup_member_local(db, oid)
+    if snap:
+        if unionid and not snap.unionid:
+            snap.unionid = unionid
+            db.flush()
+        return snap
+    snap = sync_snapshot_for_openid(db, oid)
+    if snap:
+        if unionid and not snap.unionid:
+            snap.unionid = unionid
+            db.commit()
+            db.refresh(snap)
+        return snap
+    snap = upsert_snapshot(db, {"openid": oid, "unionid": unionid})
+    db.commit()
+    db.refresh(snap)
+    logger.info("oauth placeholder snapshot openid=%s…", oid[:10])
+    return snap
 
 
 def lookup_snapshot_by_mobile(db: Session, mobile: str) -> WxMemberSnapshot | None:
@@ -628,6 +665,7 @@ def finalize_wechat_login_user(
         mark_phone_verified(user)
 
     wx_mid = snap.wx_member_id if snap else (dm.legacy_wx_member_id if dm else None)
+    legacy = _is_legacy_snapshot(snap)
     upsert_wechat_bind(
         db,
         parent_id=user.id,
@@ -638,10 +676,10 @@ def finalize_wechat_login_user(
     register_daka_member_from_user(
         db,
         user,
-        register_channel=CHANNEL_WECHAT_LEGACY if snap else CHANNEL_WECHAT,
+        register_channel=CHANNEL_WECHAT_LEGACY if legacy else CHANNEL_WECHAT,
         openid=oid,
         unionid=unionid,
-        legacy_matched=bool(snap),
+        legacy_matched=legacy,
         legacy_wx_member_id=wx_mid,
     )
     from app.services.member_registry_service import mark_parent_gate_passed
@@ -686,10 +724,10 @@ def ensure_parent_for_phone(
         register_daka_member_from_user(
             db,
             existing,
-            register_channel=CHANNEL_WECHAT_LEGACY if snap else CHANNEL_WECHAT,
+            register_channel=CHANNEL_WECHAT_LEGACY if _is_legacy_snapshot(snap) else CHANNEL_WECHAT,
             openid=openid,
             unionid=unionid,
-            legacy_matched=bool(snap),
+            legacy_matched=_is_legacy_snapshot(snap),
             legacy_wx_member_id=snap.wx_member_id if snap else None,
         )
         db.commit()
@@ -718,10 +756,10 @@ def ensure_parent_for_phone(
     register_daka_member_from_user(
         db,
         user,
-        register_channel=CHANNEL_WECHAT_LEGACY if snap else CHANNEL_WECHAT,
+        register_channel=CHANNEL_WECHAT_LEGACY if _is_legacy_snapshot(snap) else CHANNEL_WECHAT,
         openid=openid,
         unionid=unionid,
-        legacy_matched=bool(snap),
+        legacy_matched=_is_legacy_snapshot(snap),
         legacy_wx_member_id=snap.wx_member_id if snap else None,
     )
     db.commit()
@@ -1002,14 +1040,7 @@ def resolve_wechat_login(
         member.openid = None
         db.flush()
 
-    snap = lookup_member_local(db, openid)
-    if not snap:
-        ticket = create_bind_ticket(
-            openid=openid,
-            unionid=unionid,
-            wx_member_id=None,
-        )
-        return None, ticket, "bind-phone"
+    snap = ensure_oauth_snapshot(db, openid=openid, unionid=unionid)
 
     linked, step = _try_link_user_from_local(
         db, openid=openid, unionid=unionid, snap=snap
@@ -1024,12 +1055,6 @@ def resolve_wechat_login(
         )
         if provisioned and step:
             return provisioned, None, step
-        ticket = create_bind_ticket(
-            openid=openid,
-            unionid=unionid,
-            wx_member_id=snap.wx_member_id if snap else None,
-        )
-        return None, ticket, "bind-phone"
 
     ticket = create_bind_ticket(
         openid=openid,

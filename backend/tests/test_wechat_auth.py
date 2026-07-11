@@ -122,24 +122,54 @@ def test_resolve_wechat_login_unknown_openid(db_session: Session, monkeypatch):
     assert step == "bind-phone"
 
 
-def test_oauth_local_only_no_lazy_legacy(db_session: Session, monkeypatch):
-    """OAuth 不懒查老库；缺本地 snapshot 时走 Jnao 内置绑手机。"""
+def test_oauth_without_legacy_creates_placeholder_snapshot(db_session: Session, monkeypatch):
+    """OAuth 无本地 snapshot、老库也无记录 → 用微信 openid 建占位后走绑手机。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+    monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: None)
 
-    def fail_fetch(_openid: str):
-        raise AssertionError("OAuth must not fetch legacy DB")
-
-    monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: object())
-    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fail_fetch)
-
-    user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_001", unionid=None)
+    user, ticket, step = resolve_wechat_login(db_session, openid="oLAZY_001", unionid="u_lazy")
     assert user is None
     assert ticket is not None
     assert step == "bind-phone"
+    from app.services.wechat_auth_service import lookup_member_local
+
+    snap = lookup_member_local(db_session, "oLAZY_001")
+    assert snap is not None
+    assert snap.openid == "oLAZY_001"
+    assert snap.unionid == "u_lazy"
+
+
+def test_oauth_lazy_legacy_with_mobile_auto_provisions(db_session: Session, monkeypatch):
+    """OAuth 无本地 snapshot、老库有 openid+手机号 → 自动建号并引导补密码。"""
+    monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+
+    def fake_legacy(openid: str):
+        if openid == "oLEGACY_lazy_01":
+            return {
+                "wx_member_id": 7701,
+                "openid": openid,
+                "unionid": "u7701",
+                "mobile": "13900005555",
+                "nickname": "老用户",
+                "truename": "老用户",
+            }
+        return None
+
+    monkeypatch.setattr("app.services.wechat_auth_service.get_legacy_engine", lambda: object())
+    monkeypatch.setattr("app.services.wechat_auth_service.fetch_legacy_member", fake_legacy)
+
+    user, ticket, step = resolve_wechat_login(
+        db_session, openid="oLEGACY_lazy_01", unionid="u7701"
+    )
+    assert user is not None
+    assert user.parent_phone == "13900005555"
+    assert ticket is None
+    assert step == "complete-profile"
+    assert not user.password_hash
 
 
 def test_oauth_local_snapshot_no_mobile_stays_bind_phone(db_session: Session, monkeypatch):
-    """本地 snapshot 有 openid 无手机号、且 Jnao 无对应家长 → 走 bind-phone，不查老库。"""
+    """本地 snapshot 有 openid 无手机号 → 走 bind-phone。"""
     monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
     upsert_snapshot(
         db_session,
@@ -598,7 +628,7 @@ def test_legacy_snapshot_auto_provision_like_19805031756(db_session: Session, mo
     assert user is not None
     assert user.parent_phone == "19805031756"
     assert ticket is None
-    assert step in ("home", "complete-profile")
+    assert step == "complete-profile"
 
     dm = find_daka_member_by_parent(db_session, user.id)
     assert dm.openid == "o830W6_legacy_57231"
@@ -680,3 +710,105 @@ def test_fetch_legacy_member_by_mobile_mock(monkeypatch):
     assert row is not None
     assert row["openid"] == "oLEGACY_198"
     assert row["mobile"] == "19805031756"
+
+
+STRONG_PWD = "Zhang123A"
+
+
+class TestWechatClosedLoop:
+    """微信一键登录 → 补密码/绑手机 → 家长中心 闭环"""
+
+    def test_legacy_mobile_login_set_password_then_home(self, client, db_session, monkeypatch):
+        from app.services.parent_profile_service import parent_account_ready
+        from app.services.wechat_auth_service import upsert_snapshot, resolve_wechat_login
+
+        monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+        upsert_snapshot(
+            db_session,
+            {
+                "wx_member_id": 88001,
+                "openid": "oLOOP_mobile_01",
+                "mobile": "13900006688",
+                "truename": "闭环测试",
+                "nickname": "闭环家长",
+            },
+        )
+        db_session.commit()
+
+        user, ticket, step = resolve_wechat_login(
+            db_session, openid="oLOOP_mobile_01", unionid=None
+        )
+        assert user is not None
+        assert ticket is None
+        assert step == "complete-profile"
+
+        res = client.put(
+            "/api/parent/profile",
+            json={"password": STRONG_PWD, "require_password": True},
+            params={"user_id": user.id},
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert data["account_ready"] is True
+        assert data["next_step"] == "home"
+        db_session.refresh(user)
+        assert parent_account_ready(user)
+
+        user2, ticket2, step2 = resolve_wechat_login(
+            db_session, openid="oLOOP_mobile_01", unionid=None
+        )
+        assert user2.id == user.id
+        assert ticket2 is None
+        assert step2 == "home"
+
+    def test_bind_phone_then_set_password_closed_loop(self, client, db_session, monkeypatch):
+        from app.services.wechat_auth_service import (
+            create_bind_ticket,
+            complete_bind_phone,
+            upsert_snapshot,
+            resolve_wechat_login,
+        )
+
+        monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
+        upsert_snapshot(
+            db_session,
+            {
+                "wx_member_id": 88002,
+                "openid": "oLOOP_bind_02",
+                "mobile": None,
+                "nickname": "待绑手机",
+            },
+        )
+        db_session.commit()
+
+        user0, ticket0, step0 = resolve_wechat_login(
+            db_session, openid="oLOOP_bind_02", unionid=None
+        )
+        assert user0 is None
+        assert ticket0 is not None
+        assert step0 == "bind-phone"
+
+        ticket = create_bind_ticket(openid="oLOOP_bind_02", unionid=None, wx_member_id=88002)
+        client.post(
+            "/api/auth/wechat/send-bind-sms",
+            json={"bind_ticket": ticket, "phone": "13900006689"},
+        )
+        user = complete_bind_phone(db_session, bind_ticket=ticket, phone="13900006689")
+        assert user.parent_phone == "13900006689"
+
+        res = client.put(
+            "/api/parent/profile",
+            json={"password": STRONG_PWD, "require_password": True},
+            params={"user_id": user.id},
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert data["account_ready"] is True
+        assert data["next_step"] == "home"
+
+        user2, ticket2, step2 = resolve_wechat_login(
+            db_session, openid="oLOOP_bind_02", unionid=None
+        )
+        assert user2.id == user.id
+        assert ticket2 is None
+        assert step2 == "home"
