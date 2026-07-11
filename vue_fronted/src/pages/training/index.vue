@@ -344,7 +344,7 @@
               <text class="pph-dot">◆</text>
             </view>
             <view class="picker-grid">
-              <view v-for="(item, ai) in abilities" :key="item" class="picker-item" :class="{ active: hasPickerCard(item), 'ability-spark': sparkAbi === ai }" @click="togglePickerCard(item, ai)">
+              <view v-for="(item, ai) in abilities" :key="item" class="picker-item" :class="{ active: hasPickerCard(item), disabled: allowedAbility && item !== allowedAbility, 'ability-spark': sparkAbi === ai }" @click="togglePickerCard(item, ai)">
                 <text class="pi-text">{{ item }}</text>
               </view>
             </view>
@@ -2349,6 +2349,7 @@ async function openPhaseMediaItem(item, phase, forceType) {
 
 const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const pickerCards = ref([])
+const allowedAbility = ref('')
 const sparkAbi = ref(-1)
 const abilities = TRAINING_ABILITIES
 
@@ -2390,6 +2391,7 @@ function missingFields(card) {
 }
 
 function togglePickerCard(name, abi) {
+  if (allowedAbility.value && name !== allowedAbility.value) return
   const idx = pickerCards.value.findIndex(c => c.name === name)
   if (idx >= 0) {
     pickerCards.value.splice(idx, 1)
@@ -2619,6 +2621,7 @@ function openPicker(block) {
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
+  allowedAbility.value = phase.skillName || ''
   activePickerBlock.value = block
   const isEdit = phase.allDone && phaseRecordIds.value[block]
   if (isEdit) {
@@ -2638,6 +2641,7 @@ function closePicker() {
   activePickerBlock.value = null
   pickerCards.value = []
   pendingSubmitBlock.value = null
+  allowedAbility.value = ''
 }
 
 function submitFormWithAnim() {
@@ -3643,6 +3647,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .pi-text { color:#fff; font-size:11px; font-weight:600; letter-spacing:0.02em; }
 .picker-item.active { border-color:#00d2ff; background:#0088cc; box-shadow:0 0 20px rgba(0,210,255,0.35),inset 0 0 10px rgba(0,0,0,0.15); }
 .picker-item.active .pi-text { color:#fff; text-shadow:0 0 6px rgba(0,210,255,0.5); }
+.picker-item.disabled { opacity:0.25; pointer-events:none; }
 .picker-item.ability-spark::before {
   content:''; position:absolute;
   width:30px; height:2px;
@@ -3786,6 +3791,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .pi-text { color:#374151; }
 [data-theme="white"] .picker-item.active { background:#2563eb; border-color:#2563eb; }
 [data-theme="white"] .picker-item.active .pi-text { color:#fff; text-shadow:none; }
+[data-theme="white"] .picker-item.disabled { opacity:0.2; }
 [data-theme="white"] .score-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 20px rgba(0,0,0,0.04); }
 [data-theme="white"] .score-item { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .score-item.active { background:rgba(37,99,235,0.08); border-color:#2563eb; }
