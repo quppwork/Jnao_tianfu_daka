@@ -719,8 +719,8 @@
             <text class="sa-emoji">{{ s.emoji }}</text>
           </view>
         </view>
-        <view class="btn-confirm-plan" style="margin:0 16px 16px;background:linear-gradient(135deg,#22c55e,#16a34a);" @click="showDoneConfirm = false">
-          <text>确认完成</text>
+        <view class="btn-checkin" style="margin:0;" @click="showDoneConfirm = false">
+          <text class="btn-checkin-text">确认完成</text>
         </view>
       </view>
     </view>
@@ -3586,7 +3586,7 @@ function triggerGlitch() {
 .training-done-title { font-size:15px; font-weight:600; color:#22c55e; }
 .btn-confirm-plan { display:block; margin:16px auto 0; padding:12px 28px; background:linear-gradient(135deg,#00d2ff,#0088cc); color:#fff; font-size:14px; font-weight:600; border-radius:24px; text-align:center; cursor:pointer; box-shadow:0 4px 16px rgba(0,210,255,0.3); }
 .btn-confirm-plan text { color:#fff; }
-.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:12px; margin-bottom:4px; }
+.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:13px; margin-bottom:4px; }
 .plan-edit-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
 .plan-edit-bar-text { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
 .peb-title { color:var(--text); font-size:13px; font-weight:600; }
@@ -3599,10 +3599,10 @@ function triggerGlitch() {
 .et-switch.on { background:#00d2ff; }
 .et-knob { width:16px; height:16px; border-radius:50%; background:var(--text); position:absolute; top:2px; left:2px; transition:left 0.2s; }
 .et-switch.on .et-knob { background:#fff; left:18px; }
-.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(255,71,87,0.12); }
-.et-info text { color:#ff4757; font-size:13px; font-weight:700; line-height:1; }
-.et-info:active { background:rgba(255,71,87,0.2); }
-.et-info:active text { color:#ff6b81; }
+.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(0,210,255,0.12); }
+.et-info text { color:#00d2ff; font-size:13px; font-weight:700; line-height:1; }
+.et-info:active { background:rgba(0,210,255,0.2); }
+.et-info:active text { color:#5ce0ff; }
 .et-arrow { color:rgba(255,255,255,0.3); font-size:16px; font-weight:300; margin-left:auto; flex-shrink:0; }
 .elective-section-label { width:100%; color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; margin-bottom:2px; }
 .elective-hint { width:100%; color:rgba(255,255,255,0.3); font-size:12px; line-height:1.4; margin-top:2px; }
@@ -3828,10 +3828,10 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .plan-edit-tip { color:rgba(0,0,0,0.45); }
 [data-theme="white"] .btn-confirm-plan { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 [data-theme="white"] .btn-confirm-plan text { color:#fff; }
-[data-theme="white"] .et-info { background:rgba(255,71,87,0.1); }
-[data-theme="white"] .et-info text { color:#ff4757; }
-[data-theme="white"] .et-info:active { background:rgba(255,71,87,0.18); }
-[data-theme="white"] .et-info:active text { color:#ff6b81; }
+[data-theme="white"] .et-info { background:rgba(0,210,255,0.1); }
+[data-theme="white"] .et-info text { color:#00d2ff; }
+[data-theme="white"] .et-info:active { background:rgba(0,210,255,0.18); }
+[data-theme="white"] .et-info:active text { color:#5ce0ff; }
 [data-theme="white"] .elective-section-label { color:rgba(0,0,0,0.5); }
 [data-theme="white"] .elective-entry { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .elective-entry text { color:#2563eb; }
