@@ -388,7 +388,7 @@
                     <text class="form-unit" style="width:24px;">题</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.accuracy" placeholder="正确率" type="number" />
+                    <input class="form-input" :class="{ 'form-input-err': accErrorCards[idx]?.accuracy }" style="flex:1;min-width:0;" v-model="card.accuracy" placeholder="正确率" type="number" />
                     <text class="form-unit" style="width:24px;">%</text>
                   </view>
                 </view>
@@ -446,7 +446,7 @@
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
                   <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardTime" placeholder="用时" type="number" />
                   <text class="form-unit">分钟</text>
-                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardAcc" placeholder="正确率" type="number" />
+                  <input class="form-input" :class="{ 'form-input-err': accErrorCards[idx]?.forwardAcc }" style="flex:1;min-width:0;" v-model="card.forwardAcc" placeholder="正确率" type="number" />
                   <text class="form-unit">%</text>
                 </view>
               </view>
@@ -455,7 +455,7 @@
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
                   <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardTime" placeholder="用时" type="number" />
                   <text class="form-unit">分钟</text>
-                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
+                  <input class="form-input" :class="{ 'form-input-err': accErrorCards[idx]?.backwardAcc }" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
                   <text class="form-unit">%</text>
                 </view>
               </view>
@@ -506,7 +506,7 @@
               <view class="form-row">
                 <text class="form-label">追忆率<text class="req-star">*</text></text>
                 <view class="form-inline">
-                  <input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" />
+                  <input class="form-input short" :class="{ 'form-input-err': accErrorCards[idx]?.accuracy }" v-model="card.accuracy" placeholder="正确率" type="number" />
                   <text class="form-unit">%</text>
                 </view>
               </view>
@@ -1976,6 +1976,7 @@ const primaryCheckinRecordId = ref(null)
 const planJustGenerated = ref(false)
 const checkinSubmitting = ref(false)
 const perceptionSubmitting = ref(false)
+const accErrorCards = ref({})
 
 const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
 const checkedPhaseCount = computed(() => new Set(submittedCards.value.map(c => c.phaseBlock).filter(Boolean)).size)
@@ -2669,6 +2670,26 @@ async function submitForm() {
     if (missing.length) {
       uni.showToast({ title: card.name + '的「' + missing.join('、') + '」为必填', icon: 'none', duration: 2500 })
       return
+    }
+  }
+
+  // 校验正确率不超过 100
+  for (let ci = 0; ci < pickerCards.value.length; ci++) {
+    const card = pickerCards.value[ci]
+    const accFields = [
+      { key: 'accuracy', val: card.accuracy },
+      { key: 'forwardAcc', val: card.forwardAcc },
+      { key: 'backwardAcc', val: card.backwardAcc },
+    ]
+    for (const f of accFields) {
+      const v = parseFloat(f.val)
+      if (!isNaN(v) && v > 100) {
+        accErrorCards.value[ci] = (accErrorCards.value[ci] || {})
+        accErrorCards.value[ci][f.key] = true
+        uni.showToast({ title: '数据填写有误，请重新填写', icon: 'none', duration: 2500 })
+        setTimeout(() => { accErrorCards.value = {} }, 3000)
+        return
+      }
     }
   }
 
@@ -3687,6 +3708,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
 .form-label { color:rgba(255,255,255,0.5); font-size:13px; width:auto; min-width:56px; flex-shrink:0; }
 .form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; }
+.form-input-err { border-color:#ef4444 !important; animation: flash-red 0.5s ease-in-out 3; }
+@keyframes flash-red { 0%,100% { background:#fff; } 50% { background:rgba(239,68,68,0.2); } }
 .form-textarea { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; height:60px; }
 .form-textarea-sm { height:36px; padding:6px 10px; }
 .form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
