@@ -879,7 +879,15 @@ export async function registerParent() {
 export async function studentNeedsOnboarding(userId) {
   try {
     const profile = await fetchProfile(userId)
-    return !profile.profile_json?.onboarding?.completed_at
+    const ob = profile.profile_json?.onboarding || {}
+    if (ob.completed_at || profile.onboarding_completed) return false
+    // 新学员已完成天赋测评但未写入 completed_at（如从首页直接测评）→ 不再重复引导
+    const studentType = ob.student_type || 'new'
+    if (studentType !== 'returning') {
+      if (profile.latest_assessment_id || profile.talent_source === 'assessment') return false
+      if (ob.talent_test_done) return false
+    }
+    return true
   } catch (e) {
     if (isFreshLogin()) return false
     return true

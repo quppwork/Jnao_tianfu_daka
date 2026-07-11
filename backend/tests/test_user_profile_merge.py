@@ -164,3 +164,40 @@ def test_repair_onboarding_conflicting_unknown_flag():
     assert ob["self_reported_talent"] == "学者"
     assert ob["talent_unknown"] is False
     db.close()
+
+
+def test_ensure_onboarding_completed_after_assessment():
+    from datetime import datetime, timezone
+
+    from app.db.models import TalentAssessment
+    from app.services.assessment_service import ensure_onboarding_completed_after_assessment
+
+    init_db()
+    db = get_session_factory()()
+    user = ChildUser(parent_phone="13800006666", nickname="assessed_no_ob")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    db.add(
+        TalentAssessment(
+            child_user_id=user.id,
+            jnao_record_id="r1",
+            answer_bitstring="1" * 35,
+            test_type=1,
+            talent_primary="学者",
+            talent_tag="xuezhe",
+            talent_code=1,
+            report_json={},
+            assessed_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
+
+    assert ensure_onboarding_completed_after_assessment(db, user.id) is True
+    db.refresh(user)
+    ob = user.profile_json["onboarding"]
+    assert ob["completed_at"]
+    assert ob["talent_test_done"] is True
+    assert ensure_onboarding_completed_after_assessment(db, user.id) is False
+    db.close()

@@ -130,6 +130,39 @@ def repair_onboarding_talent(db: Session, child_user_id: int) -> bool:
     return changed
 
 
+def ensure_onboarding_completed_after_assessment(db: Session, child_user_id: int) -> bool:
+    """已有天赋测评但 onboarding 未标记完成时自动补全（避免登录重复走引导）"""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    user = db.get(ChildUser, child_user_id)
+    if not user:
+        return False
+    profile = dict(user.profile_json or {})
+    raw_ob = profile.get("onboarding")
+    ob = dict(raw_ob) if isinstance(raw_ob, dict) else {}
+    if ob.get("completed_at"):
+        return False
+    if ob.get("student_type") == "returning":
+        return False
+    latest = get_latest_assessment(db, child_user_id)
+    if not latest:
+        return False
+    assessed = latest.assessed_at or datetime.now(timezone.utc)
+    ob.setdefault("student_type", "new")
+    ob["talent_test_done"] = True
+    ob["completed_at"] = assessed.isoformat() if hasattr(assessed, "isoformat") else str(assessed)
+    profile["onboarding"] = ob
+    user.profile_json = profile
+    flag_modified(user, "profile_json")
+    db.commit()
+    try:
+        from app.core.cache import invalidate_user_profile
+        invalidate_user_profile(child_user_id)
+    except Exception:
+        pass
+    return True
+
+
 def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
     """当前可用于训练的天赋：已锁定 > JNAO 测评 > 引导页自选 > 无"""
     repair_onboarding_talent(db, child_user_id)
@@ -363,6 +396,8 @@ def save_assessment(
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    ensure_onboarding_completed_after_assessment(db, child_user_id)
 
     if not talent_locked and not talent_conflict and not talent_last_chance:
         # 无冲突 → 正常同步天赋

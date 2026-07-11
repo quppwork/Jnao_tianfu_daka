@@ -45,8 +45,9 @@ def get_profile(
     child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
+    repaired = assessment_service.ensure_onboarding_completed_after_assessment(db, child_user_id)
     key = key_profile(child_user_id)
-    cached = cache_get_json(key)
+    cached = None if repaired else cache_get_json(key)
     if cached is not None:
         pj = cached.get("profile_json")
         if isinstance(pj, dict):

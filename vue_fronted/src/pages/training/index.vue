@@ -2221,12 +2221,14 @@ function isVideoItem(item) {
 }
 
 function videoTitle(item) {
+  if (item?.title) return item.title
   if (!item?.video_url) return '训练视频'
+  const url = item.video_url
+  // 后端代理流地址不含文件名，勿从 /stream 解析
+  if (url.includes('/stream')) return '训练视频'
   try {
-    const url = item.video_url
     const name = decodeURIComponent(url.split('/').pop().split('?')[0])
     const base = name.replace(/\.[^.]*$/, '')
-    // 去掉 shipin/ shipin_ / 前导数字和点
     return base.replace(/^shipin[\/_]/, '').replace(/^[_0-9.]+/, '') || '训练视频'
   } catch {
     return '训练视频'
