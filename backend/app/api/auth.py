@@ -210,6 +210,9 @@ def sms_login(
     ip, did = _auth_ctx(request, req.device_id)
     check_auth_allowed(db, client_ip=ip, phone=req.phone.strip(), device_id=did)
     try:
+        from app.services.parent_identity_service import assert_can_login_sms
+
+        assert_can_login_sms(db, req.phone.strip())
         verify_sms_code(req.phone, req.sms_code, SCENE_LOGIN)
         user = login_parent_by_sms(db, phone=req.phone.strip())
         clear_auth_failures(client_ip=ip, phone=req.phone.strip(), device_id=did)
@@ -291,10 +294,17 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
         except HTTPException:
             raise HTTPException(400, "家长请使用11位手机号登录（不是昵称或孩子账号）")
         check_auth_allowed(db, client_ip=ip, phone=phone, device_id=did)
-        user = auth_service.login_parent_by_password(db, phone, req.password)
+        from app.services.parent_identity_service import find_login_parent_user
+
+        user = find_login_parent_user(db, phone)
         if not user:
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
-            raise HTTPException(401, "手机号或密码错误")
+            raise HTTPException(404, "该手机号尚未注册，请先注册")
+        from app.core.password import verify_password
+
+        if not verify_password(req.password, user.password_hash):
+            record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
+            raise HTTPException(401, "密码错误")
         clear_auth_failures(client_ip=ip, phone=phone, device_id=did)
         return _issue_and_respond(db, user, response)
 

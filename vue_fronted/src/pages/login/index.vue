@@ -543,33 +543,32 @@ async function requestLoginSms() {
   }
 }
 
+function showNotRegisteredModal(phone = '') {
+  pendingRegPhone.value = (phone || form.value.phone || '').trim()
+  showNotRegistered.value = true
+}
+
 async function confirmLoginSms() {
   if (!captchaCode.value.trim()) {
     uni.showToast({ title: '请输入图形验证码', icon: 'none' }); return
   }
   sendingSms.value = true
   try {
-    await sendParentSmsCode(form.value.phone.trim(), 'login', {
+    const res = await sendParentSmsCode(form.value.phone.trim(), 'login', {
       captchaId: captchaId.value,
       captchaCode: captchaCode.value.trim(),
     })
     showCaptcha.value = false
+    if (res.sent === false && res.hint === 'not_registered') {
+      showNotRegisteredModal(form.value.phone.trim())
+      return
+    }
     startCooldown(60)
     uni.showToast({ title: '验证码已发送', icon: 'none' })
   } catch (e) {
     if (e.status === 404) {
-      const msg = e.message || ''
       showCaptcha.value = false
-      if (msg.includes('老系统') || msg.includes('微信')) {
-        uni.showModal({
-          title: '请使用微信登录',
-          content: msg,
-          showCancel: false,
-        })
-      } else {
-        pendingRegPhone.value = form.value.phone.trim()
-        showNotRegistered.value = true
-      }
+      showNotRegisteredModal(form.value.phone.trim())
     } else {
       uni.showToast({ title: e.message || '发送失败', icon: 'none' })
       await loadCaptcha()
@@ -642,15 +641,9 @@ function handleLoginError(e) {
   if (e.status === 403) {
     uni.showToast({ title: e.message || '访问受限', icon: 'none', duration: 3000 })
   } else if (e.status === 404) {
-    const msg = e.message || ''
-    if (msg.includes('老系统') || msg.includes('微信')) {
-      uni.showModal({ title: '请使用微信登录', content: msg, showCancel: false })
-    } else {
-      pendingRegPhone.value = form.value.phone.trim()
-      showNotRegistered.value = true
-    }
+    showNotRegisteredModal(form.value.phone.trim())
   } else if (e.status === 401) {
-    uni.showToast({ title: '账号或密码错误', icon: 'none' })
+    uni.showToast({ title: e.message || '账号或密码错误', icon: 'none' })
   } else if (e.status === 429) {
     uni.showToast({ title: e.message || '操作太频繁', icon: 'none' })
   } else {

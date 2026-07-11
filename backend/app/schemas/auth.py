@@ -90,7 +90,9 @@ class SmsSendRequest(BaseModel):
 
 class SmsSendResponse(BaseModel):
     ok: bool = True
+    sent: bool = True
     message: str = "若号码有效，验证码已发送"
+    hint: str | None = None
     expires_in: int = 300
     resend_after: int = 60
     debug_code: str | None = None

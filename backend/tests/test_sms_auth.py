@@ -112,7 +112,10 @@ class TestSmsAuth:
             },
         )
         assert res.status_code == 200
-        assert res.json()["message"] == SMS_OK
+        data = res.json()
+        assert data["message"] == SMS_OK
+        assert data["sent"] is False
+        assert data["hint"] == "not_registered"
 
     def test_login_sms_existing_parent(self, client: TestClient, db_session):
         from app.services.auth_service import register_child, ROLE_PARENT
@@ -161,9 +164,10 @@ class TestSmsAuth:
             },
         )
         assert res.status_code == 200
-        assert res.json()["message"] == SMS_OK
-
-    def test_register_allowed_after_snapshot(self, client: TestClient, db_session):
+        data = res.json()
+        assert data["message"] == SMS_OK
+        assert data["sent"] is False
+        assert data["hint"] == "already_registered"
         from app.db.models import WxMemberSnapshot
 
         db_session.add(
@@ -189,7 +193,20 @@ class TestSmsAuth:
             "/api/auth/sms/login",
             json={"phone": "13900008899", "sms_code": "88888"},
         )
-        assert res.status_code == 400
+        assert res.status_code == 404
+        assert "尚未注册" in res.json()["detail"]
+
+    def test_password_login_unregistered_returns_404(self, client: TestClient):
+        res = client.post(
+            "/api/auth/login",
+            json={
+                "parent_phone": "13900008898",
+                "password": "Zhang123A",
+                "role": "parent",
+            },
+        )
+        assert res.status_code == 404
+        assert "尚未注册" in res.json()["detail"]
 
     def test_login_sms_requires_captcha(self, client: TestClient, db_session):
         from app.services.auth_service import register_child, ROLE_PARENT

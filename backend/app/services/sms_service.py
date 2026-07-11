@@ -43,15 +43,25 @@ SCENE_REGISTER = "register"
 SCENE_BIND = "bind"
 
 SMS_OK_MESSAGE = "若号码有效，验证码已发送"
+HINT_NOT_REGISTERED = "not_registered"
+HINT_ALREADY_REGISTERED = "already_registered"
 
 
-def _unified_sms_response(*, debug_code: str | None = None) -> dict:
+def _unified_sms_response(
+    *,
+    debug_code: str | None = None,
+    sent: bool = True,
+    hint: str | None = None,
+) -> dict:
     out: dict = {
         "ok": True,
+        "sent": sent,
         "message": SMS_OK_MESSAGE,
         "expires_in": SMS_TTL,
         "resend_after": SMS_SEND_INTERVAL,
     }
+    if hint:
+        out["hint"] = hint
     if debug_code:
         out["debug_code"] = debug_code
     return out
@@ -251,20 +261,29 @@ def send_sms_code(
     _check_send_rate(phone, client_ip)
 
     should_send = True
+    hint: str | None = None
     if scene == SCENE_LOGIN:
         from app.services.parent_identity_service import assert_can_send_login_sms
 
         try:
             assert_can_send_login_sms(db, phone)
-        except HTTPException:
-            should_send = False
+        except HTTPException as e:
+            if e.status_code == 404:
+                should_send = False
+                hint = HINT_NOT_REGISTERED
+            else:
+                raise
     elif scene == SCENE_REGISTER:
         from app.services.parent_identity_service import assert_parent_can_register
 
         try:
             assert_parent_can_register(db, phone)
-        except HTTPException:
-            should_send = False
+        except HTTPException as e:
+            if e.status_code == 409:
+                should_send = False
+                hint = HINT_ALREADY_REGISTERED
+            else:
+                raise
     elif scene == SCENE_BIND:
         pass
 
@@ -281,7 +300,7 @@ def send_sms_code(
         if _is_mock() and os.getenv("SMS_MOCK_EXPOSE", "").strip() in ("1", "true", "yes"):
             debug_code = code
 
-    return _unified_sms_response(debug_code=debug_code)
+    return _unified_sms_response(debug_code=debug_code, sent=should_send, hint=hint)
 
 
 def verify_sms_code(phone: str, sms_code: str, scene: str) -> None:
