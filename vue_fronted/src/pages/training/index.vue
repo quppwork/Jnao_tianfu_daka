@@ -217,8 +217,8 @@
           </view>
 
           <!-- 🆕 编辑方案 -->
+          <text class="plan-edit-guide">点击 ⓘ 查看解释说明</text>
           <view v-if="canCustomizePlan" class="plan-edit-block">
-            <text class="plan-edit-guide">点击 ⓘ 查看解释说明</text>
             <view class="plan-edit-bar" @click="openPlanEditor">
               <view class="plan-edit-bar-text">
                 <text class="peb-title">📝 编辑方案</text>
@@ -850,15 +850,12 @@
               <text v-for="t in ['书本','视频','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tool === t }" @click="detailEditCard.tool = t">{{ t }}</text>
             </view>
           </view>
-          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
+          <view class="detail-form-row" style="align-items:center;">
             <text class="detail-form-label">训练</text>
-            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
-              <text class="detail-form-unit">用时</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
-              <text class="detail-form-unit">分钟，看完</text>
-              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
-              <text class="detail-form-unit">字</text>
-            </view>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:56px;" />
+            <text class="detail-form-unit">分钟</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:56px;" />
+            <text class="detail-form-unit">字</text>
           </view>
           <view class="detail-form-row">
             <text class="detail-form-label">材料</text>
@@ -1811,6 +1808,12 @@ const ELECTIVE_INFO = {
     desc: '多元感知是双人互动训练，需要家长或同学配合完成。通过听觉、视觉等多感官刺激，提升专注力和感知能力。',
     age: '适合各年龄段孩子训练，低龄儿童可在家长陪伴下进行。',
     how: '开启后，训练计划中将出现「多元感知」环节，按提示播放音频并完成互动即可。',
+  },
+  '开口窍': {
+    title: '🗣️ 开口窍是什么？',
+    desc: '开口窍通过朗读口腔操训练唇舌灵活度，激活语言中枢，促进左右脑协同工作，有效提升阅读速度与理解能力。',
+    age: '适合各年龄段，低龄孩子可每天跟练5分钟，发音更清晰流畅。',
+    how: '开启后，训练计划中将出现「开口窍」视频环节，跟随老师朗读练习即可。',
   },
   'edit_plan': {
     title: '📝 编辑方案说明',
@@ -4234,8 +4237,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 }
 .detail-form-input.short { width:72px; flex:none; }
 .detail-form-textarea {
-  flex:1; min-height:52px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
-  border-radius:8px; padding:8px 10px; font-size:12px; color:#fff;
+  flex:1; min-height:36px; height:36px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
+  border-radius:8px; padding:6px 10px; font-size:12px; color:#fff;
 }
 .detail-form-inline { display:flex; align-items:center; gap:6px; flex:1; flex-wrap:wrap; }
 .detail-form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
