@@ -127,6 +127,17 @@
       <text class="login-overlay-text">{{ overlayText || '请稍候…' }}</text>
     </view>
 
+    <view v-if="showNotRegistered" class="login-modal-overlay" @click="showNotRegistered = false">
+      <view class="login-modal-card" @click.stop>
+        <text class="login-modal-title">尚未注册</text>
+        <text class="login-modal-text">该手机号未注册，是否前往注册？</text>
+        <view class="login-modal-actions">
+          <view class="login-modal-btn secondary" @click="showNotRegistered = false"><text>取消</text></view>
+          <view class="login-modal-btn primary" @click="showNotRegistered = false; goRegister(pendingRegPhone)"><text>前往注册</text></view>
+        </view>
+      </view>
+    </view>
+
     <view v-if="showCaptcha" class="overlay" @click="showCaptcha = false">
       <view class="captcha-panel" @click.stop>
         <text class="captcha-title">安全验证</text>
@@ -208,6 +219,8 @@ const inWechat = ref(false)
 const browserLogin = ref(false)
 const smsCooldown = ref(0)
 const blockRemain = ref(0)
+const showNotRegistered = ref(false)
+const pendingRegPhone = ref('')
 const showCaptcha = ref(false)
 const captchaId = ref('')
 const captchaCode = ref('')
@@ -560,11 +573,8 @@ async function confirmLoginSms() {
           showCancel: false,
         })
       } else {
-        uni.showModal({
-          title: '尚未注册',
-          content: '该手机号未注册，是否前往注册？',
-          success: (r) => { if (r.confirm) goRegister(form.value.phone.trim()) },
-        })
+        pendingRegPhone.value = form.value.phone.trim()
+        showNotRegistered.value = true
       }
     } else {
       uni.showToast({ title: e.message || '发送失败', icon: 'none' })
@@ -651,11 +661,8 @@ function handleLoginError(e) {
     if (msg.includes('老系统') || msg.includes('微信')) {
       uni.showModal({ title: '请使用微信登录', content: msg, showCancel: false })
     } else {
-      uni.showModal({
-        title: '尚未注册',
-        content: '该手机号未注册，是否前往注册？',
-        success: (r) => { if (r.confirm) goRegister(form.value.phone.trim()) },
-      })
+      pendingRegPhone.value = form.value.phone.trim()
+      showNotRegistered.value = true
     }
   } else if (e.status === 401) {
     uni.showToast({ title: '账号或密码错误', icon: 'none' })
@@ -869,6 +876,22 @@ onUnmounted(() => {
 }
 .login-overlay-text { color: #fff; font-size: 14px; }
 @keyframes loginSpin { to { transform: rotate(360deg); } }
+.login-modal-overlay { position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:24px; }
+.login-modal-card { background:linear-gradient(135deg,#0f1a2e,#0a1425); border:1px solid rgba(0,210,255,0.2); border-radius:14px; padding:28px 24px; width:100%; max-width:320px; }
+.login-modal-title { display:block; color:#fff; font-size:16px; font-weight:700; text-align:center; margin-bottom:12px; }
+.login-modal-text { display:block; color:rgba(255,255,255,0.7); font-size:13px; line-height:1.5; text-align:left; margin-bottom:20px; }
+.login-modal-actions { display:flex; gap:10px; }
+.login-modal-btn { flex:1; padding:12px; border-radius:10px; text-align:center; cursor:pointer; }
+.login-modal-btn text { font-size:14px; font-weight:600; }
+.login-modal-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
+.login-modal-btn.secondary text { color:var(--text-dim); }
+.login-modal-btn.primary { background:linear-gradient(135deg,rgba(0,210,255,0.2),rgba(0,136,204,0.2)); border:1px solid rgba(0,210,255,0.15); }
+.login-modal-btn.primary text { color:#fff; }
+[data-theme="white"] .login-modal-card { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .login-modal-title { color:#1a1a2e; }
+[data-theme="white"] .login-modal-text { color:rgba(0,0,0,0.6); }
+[data-theme="white"] .login-modal-btn.primary { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .login-modal-btn.primary text { color:#fff; }
 .overlay { position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; padding:20px; }
 .captcha-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px; border:1px solid var(--border); }
 .captcha-title { display:block; text-align:center; font-weight:700; color:var(--text); margin-bottom:12px; }
