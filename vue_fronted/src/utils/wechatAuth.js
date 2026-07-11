@@ -7,6 +7,7 @@ export function isWeChatBrowser() {
 
 const SKIP_WECHAT_AUTO_KEY = 'jnao_skip_wechat_oauth'
 const WECHAT_OAUTH_FAIL_KEY = 'jnao_wechat_oauth_fail_until'
+const BROWSER_LOGIN_KEY = 'jnao_browser_login'
 
 /** 用户主动选择手机号/密码登录时调用，本会话内不再自动跳 OAuth */
 export function skipWechatAutoLogin() {
@@ -32,10 +33,41 @@ function wechatOAuthInCooldown() {
   }
 }
 
-export function readWechatError() {
+/** 合并 URL search、hash 查询串与 uni-app onLoad 参数 */
+export function readLandingQueryParams(pageOpts = null) {
+  const merged = new URLSearchParams()
   try {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('wx_error') || ''
+    const url = new URL(window.location.href)
+    url.searchParams.forEach((v, k) => merged.set(k, v))
+    const hash = url.hash || ''
+    const qIdx = hash.indexOf('?')
+    if (qIdx >= 0) {
+      new URLSearchParams(hash.slice(qIdx + 1)).forEach((v, k) => {
+        if (!merged.has(k)) merged.set(k, v)
+      })
+    }
+  } catch (_) { /* ignore */ }
+  if (pageOpts && typeof pageOpts === 'object') {
+    for (const [k, v] of Object.entries(pageOpts)) {
+      if (v != null && String(v).trim() && !merged.has(k)) {
+        merged.set(k, String(v).trim())
+      }
+    }
+  }
+  return merged
+}
+
+function pickQuery(params, ...keys) {
+  for (const k of keys) {
+    const v = params.get(k)
+    if (v != null && String(v).trim()) return String(v).trim()
+  }
+  return ''
+}
+
+export function readWechatError(pageOpts = null) {
+  try {
+    return pickQuery(readLandingQueryParams(pageOpts), 'wx_error') || ''
   } catch (_) {
     return ''
   }
@@ -47,6 +79,27 @@ export function clearWechatOAuthCooldown() {
     sessionStorage.removeItem(WECHAT_OAUTH_FAIL_KEY)
     sessionStorage.removeItem(SKIP_WECHAT_AUTO_KEY)
   } catch (_) { /* ignore */ }
+}
+
+export function clearBrowserLoginPreference() {
+  try {
+    sessionStorage.removeItem(BROWSER_LOGIN_KEY)
+  } catch (_) { /* ignore */ }
+}
+
+export function setBrowserLoginPreference() {
+  skipWechatAutoLogin()
+  try {
+    sessionStorage.setItem(BROWSER_LOGIN_KEY, '1')
+  } catch (_) { /* ignore */ }
+}
+
+export function hasBrowserLoginPreference() {
+  try {
+    return sessionStorage.getItem(BROWSER_LOGIN_KEY) === '1'
+  } catch (_) {
+    return false
+  }
 }
 
 export function shouldAutoWechatOAuth() {
@@ -90,6 +143,7 @@ function takeCachedOAuthUrl() {
 }
 
 export async function startWechatOAuth(fetchOAuthUrl) {
+  clearBrowserLoginPreference()
   let url = takeCachedOAuthUrl()
   if (!url) {
     const redirect = wechatLoginRedirectUrl()
@@ -103,9 +157,9 @@ export async function startWechatOAuth(fetchOAuthUrl) {
   return false
 }
 
-export function readExternalBindReturn() {
+export function readExternalBindReturn(pageOpts = null) {
   try {
-    const params = new URLSearchParams(window.location.search)
+    const params = readLandingQueryParams(pageOpts)
     if (params.get('from') !== 'mp') return null
     const bindTicket = params.get('bind_ticket') || ''
     if (!bindTicket) return null
@@ -115,16 +169,16 @@ export function readExternalBindReturn() {
   }
 }
 
-export function readWechatCallbackParams() {
+export function readWechatCallbackParams(pageOpts = null) {
   try {
-    const params = new URLSearchParams(window.location.search)
+    const params = readLandingQueryParams(pageOpts)
     if (params.get('wx') !== '1') return null
     return {
-      loginTicket: params.get('login_ticket') || '',
-      userId: params.get('user_id') || '',
-      nextStep: params.get('next_step') || 'home',
-      bindTicket: params.get('bind_ticket') || '',
-      role: params.get('role') || 'parent',
+      loginTicket: pickQuery(params, 'login_ticket'),
+      userId: pickQuery(params, 'user_id'),
+      nextStep: pickQuery(params, 'next_step') || 'home',
+      bindTicket: pickQuery(params, 'bind_ticket'),
+      role: pickQuery(params, 'role') || 'parent',
     }
   } catch (_) {
     return null
@@ -134,8 +188,27 @@ export function readWechatCallbackParams() {
 export function clearWechatQueryFromUrl() {
   try {
     const url = new URL(window.location.href)
-    ;['wx', 'login_ticket', 'session_token', 'user_id', 'next_step', 'bind_ticket', 'role', 'wx_error', 'manual', 'from'].forEach((k) => url.searchParams.delete(k))
-    window.history.replaceState({}, '', url.pathname + (url.search || ''))
+    const stripKeys = [
+      'wx', 'login_ticket', 'session_token', 'user_id', 'next_step',
+      'bind_ticket', 'role', 'wx_error', 'manual', 'from',
+    ]
+    stripKeys.forEach((k) => url.searchParams.delete(k))
+    let hash = url.hash || ''
+    const qIdx = hash.indexOf('?')
+    if (qIdx >= 0) {
+      const route = hash.slice(0, qIdx)
+      const hq = new URLSearchParams(hash.slice(qIdx + 1))
+      stripKeys.forEach((k) => hq.delete(k))
+      const rest = hq.toString()
+      hash = rest ? `${route}?${rest}` : route
+      url.hash = hash
+    }
+    const search = url.searchParams.toString()
+    window.history.replaceState(
+      {},
+      '',
+      url.pathname + (search ? `?${search}` : '') + (url.hash || ''),
+    )
   } catch (_) { /* ignore */ }
 }
 

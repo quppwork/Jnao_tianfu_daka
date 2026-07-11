@@ -174,7 +174,6 @@ import {
   hasUserSession,
   resetLocalAuthCache,
   invalidatePageAuthCache,
-  setChildUserId,
 } from '@/utils/userApi.js'
 import {
   isLoginBlocked,
@@ -193,6 +192,10 @@ import {
   readWechatError,
   markWechatOAuthFailed,
   clearWechatOAuthCooldown,
+  clearBrowserLoginPreference,
+  setBrowserLoginPreference,
+  hasBrowserLoginPreference,
+  readLandingQueryParams,
 } from '@/utils/wechatAuth.js'
 import {
   useLoginFlow,
@@ -228,14 +231,18 @@ const captchaCode = ref('')
 const captchaImage = ref('')
 const sendingSms = ref(false)
 const loginEntryRole = ref('')
+const wxPageOpts = ref({})
+const wechatHandling = ref(false)
 
 onLoad((opts) => {
+  wxPageOpts.value = { ...(opts || {}) }
   const role = (opts?.role || '').trim().toLowerCase()
   if (role === 'student' || role === 'parent') loginEntryRole.value = role
   if (role === 'student') {
     prepareRoleLoginEntry('student')
     invalidatePageAuthCache()
   }
+  if (opts?.phone) form.value.phone = String(opts.phone)
 })
 let cooldownTimer = null
 let blockTimer = null
@@ -262,16 +269,15 @@ function cleanLandingQuery() {
 }
 
 function openBrowserLogin() {
-  skipWechatAutoLogin()
+  setBrowserLoginPreference()
   browserLogin.value = true
-  try { sessionStorage.setItem('jnao_browser_login', '1') } catch (_) { /* ignore */ }
   wechatLoading.value = false
   form.value.role = 'parent'
   parentMode.value = 'password'
 }
 
 function openStudentLogin() {
-  skipWechatAutoLogin()
+  setBrowserLoginPreference()
   browserLogin.value = true
   wechatLoading.value = false
   form.value.role = 'student'
@@ -283,6 +289,7 @@ function switchToParent() {
 }
 
 function backToWechatLogin() {
+  clearBrowserLoginPreference()
   browserLogin.value = false
   form.value.role = 'parent'
 }
@@ -320,92 +327,100 @@ function tryRedirectIfLoggedIn() {
 }
 
 async function handleWechatCallback(wxCb) {
-  setPhase('authenticating', '正在登录…')
-  let exchanged = false
+  wechatHandling.value = true
+  clearBrowserLoginPreference()
+  browserLogin.value = false
   try {
-    const authData = await exchangeWechatLogin(wxCb.loginTicket)
-    exchanged = true
-    clearWechatQueryFromUrl()
-    wxCb._authData = authData
-  } catch (e) {
-    const fallbackUid = wxCb.userId ? parseInt(wxCb.userId, 10) : 0
-    if (e.status === 400 && fallbackUid > 0) {
-      try {
-        const p = await fetchParentProfile(fallbackUid)
-        if (p?.id) {
-          try {
-            localStorage.setItem('jnao_user', JSON.stringify({
-              id: p.id,
-              name: p.nickname,
-              phone: p.parent_phone,
+    setPhase('authenticating', '正在登录…')
+    let exchanged = false
+    try {
+      const authData = await exchangeWechatLogin(wxCb.loginTicket)
+      exchanged = true
+      clearWechatQueryFromUrl()
+      wxCb._authData = authData
+    } catch (e) {
+      const fallbackUid = wxCb.userId ? parseInt(wxCb.userId, 10) : 0
+      if (fallbackUid > 0 && (e.status === 400 || e.status === 401)) {
+        try {
+          const p = await fetchParentProfile(fallbackUid)
+          if (p?.id) {
+            const authData = {
+              child_user_id: p.id,
+              nickname: p.nickname,
+              parent_phone: p.parent_phone,
               role: 'parent',
-              loginChannel: p.login_channel || 'wechat',
-            }))
-            localStorage.setItem('jnao_logged_in', '1')
-            localStorage.setItem('jnao_parent_user_id', String(p.id))
-            setChildUserId(p.id)
-          } catch (_) { /* ignore */ }
-          exchanged = true
-          clearWechatQueryFromUrl()
-        }
-      } catch (_) { /* cookie 也未就绪 */ }
+              login_channel: p.login_channel || 'wechat',
+              profile_complete: p.profile_complete,
+              account_ready: p.account_ready,
+              next_step: p.next_step,
+              gate_passed: p.gate_passed,
+            }
+            saveAuthSession(authData)
+            wxCb._authData = authData
+            exchanged = true
+            clearWechatQueryFromUrl()
+          }
+        } catch (_) { /* cookie 也未就绪 */ }
+      }
+      if (!exchanged) {
+        markWechatOAuthFailed()
+        uni.showModal({
+          title: '微信登录失败',
+          content: e.message || '登录凭证已过期，请重新进入',
+          showCancel: false,
+        })
+        return
+      }
+    } finally {
+      resetPhase()
+      wechatLoading.value = false
+      clearWechatLoadingTimer()
     }
-    if (!exchanged) {
-      markWechatOAuthFailed()
-      uni.showModal({
-        title: '微信登录失败',
-        content: e.message || '登录凭证已过期，请重新进入',
-        showCancel: false,
-      })
-      return
+    setPhase('settling', '正在进入…')
+    try {
+      const uid = getLoggedInUserId() || (wxCb.userId ? parseInt(wxCb.userId, 10) : 0)
+      const [profile] = await Promise.all([
+        fetchParentProfile(uid),
+      ])
+      const authData = wxCb._authData || null
+      const nextStep =
+        authData?.next_step ||
+        profile?.next_step ||
+        wxCb.nextStep
+      const needsComplete =
+        nextStep === 'complete-profile' ||
+        authData?.account_ready === false ||
+        profile?.account_ready === false
+      await minDelay(400)
+      if (needsComplete && nextStep !== 'bind-phone') {
+        redirectParentNextStep('complete-profile', wxCb.bindTicket)
+      } else if (nextStep === 'bind-phone') {
+        showNotRegisteredModal('', wxCb.bindTicket)
+      } else {
+        redirectParentNextStep(nextStep, wxCb.bindTicket)
+      }
+    } catch (e) {
+      console.warn('[login] wechat post-auth fallback', e?.message || e)
+      await minDelay(400)
+      const authData = wxCb._authData || null
+      const nextStep = authData?.next_step || wxCb.nextStep || 'home'
+      if (
+        nextStep === 'complete-profile' ||
+        authData?.account_ready === false
+      ) {
+        redirectParentNextStep('complete-profile', wxCb.bindTicket)
+      } else if (nextStep === 'bind-phone') {
+        showNotRegisteredModal('', wxCb.bindTicket)
+      } else {
+        redirectParentNextStep(nextStep, wxCb.bindTicket)
+      }
+    } finally {
+      resetPhase()
+      wechatLoading.value = false
+      clearWechatLoadingTimer()
     }
   } finally {
-    resetPhase()
-    wechatLoading.value = false
-    clearWechatLoadingTimer()
-  }
-  setPhase('settling', '正在进入…')
-  try {
-    const uid = getLoggedInUserId() || (wxCb.userId ? parseInt(wxCb.userId, 10) : 0)
-    const [profile] = await Promise.all([
-      fetchParentProfile(uid),
-    ])
-    const authData = wxCb._authData || null
-    const nextStep =
-      authData?.next_step ||
-      profile?.next_step ||
-      wxCb.nextStep
-    const needsComplete =
-      nextStep === 'complete-profile' ||
-      authData?.account_ready === false ||
-      profile?.account_ready === false
-    await minDelay(400)
-    if (needsComplete && nextStep !== 'bind-phone') {
-      redirectParentNextStep('complete-profile', wxCb.bindTicket)
-    } else if (nextStep === 'bind-phone') {
-      showNotRegisteredModal('', wxCb.bindTicket)
-    } else {
-      redirectParentNextStep(nextStep, wxCb.bindTicket)
-    }
-  } catch (e) {
-    console.warn('[login] wechat post-auth fallback', e?.message || e)
-    await minDelay(400)
-    const authData = wxCb._authData || null
-    const nextStep = authData?.next_step || wxCb.nextStep || 'home'
-    if (
-      nextStep === 'complete-profile' ||
-      authData?.account_ready === false
-    ) {
-      redirectParentNextStep('complete-profile', wxCb.bindTicket)
-    } else if (nextStep === 'bind-phone') {
-      showNotRegisteredModal('', wxCb.bindTicket)
-    } else {
-      redirectParentNextStep(nextStep, wxCb.bindTicket)
-    }
-  } finally {
-    resetPhase()
-    wechatLoading.value = false
-    clearWechatLoadingTimer()
+    wechatHandling.value = false
   }
 }
 
@@ -431,30 +446,13 @@ onMounted(async () => {
   inWechat.value = isWeChatBrowser()
   cleanLandingQuery()
 
-  if (loginEntryRole.value === 'student') {
-    skipWechatAutoLogin()
-    form.value.role = 'student'
-    browserLogin.value = true
-  } else if (inWechat.value) {
-    form.value.role = 'parent'
-    try {
-      if (sessionStorage.getItem('jnao_browser_login') === '1') {
-        browserLogin.value = true
-      } else {
-        browserLogin.value = false
-      }
-    } catch (_) {
-      browserLogin.value = false
-    }
-  } else {
-    browserLogin.value = true
-  }
-
-  const wxErr = readWechatError()
+  const pageOpts = wxPageOpts.value
+  const wxErr = readWechatError(pageOpts)
   if (wxErr) {
     wechatLoading.value = false
     markWechatOAuthFailed()
     clearWechatQueryFromUrl()
+    browserLogin.value = readLandingQueryParams(pageOpts).get('manual') === '1' || hasBrowserLoginPreference()
     uni.showModal({
       title: '微信登录失败',
       content: wxErr,
@@ -462,18 +460,31 @@ onMounted(async () => {
     })
   }
 
-  const wxCb = readWechatCallbackParams()
+  const wxCb = readWechatCallbackParams(pageOpts)
   if (wxCb?.loginTicket) {
     await handleWechatCallback(wxCb)
     return
   }
-  if (wxCb?.nextStep === 'bind-phone') {
+  if (wxCb?.nextStep === 'bind-phone' || (wxCb?.bindTicket && !wxCb.loginTicket)) {
+    clearBrowserLoginPreference()
+    browserLogin.value = false
     clearWechatQueryFromUrl()
     showNotRegisteredModal('', wxCb.bindTicket)
     return
   }
+  if (wxCb && !wxCb.loginTicket && !wxCb.bindTicket) {
+    clearBrowserLoginPreference()
+    browserLogin.value = false
+    clearWechatQueryFromUrl()
+    uni.showModal({
+      title: '微信登录未完成',
+      content: '登录凭证未收到，请重新点击「微信一键登录」',
+      showCancel: false,
+    })
+    return
+  }
 
-  const extBind = readExternalBindReturn()
+  const extBind = readExternalBindReturn(pageOpts)
   if (extBind?.bindTicket) {
     setPhase('authenticating', '正在完成绑手机…')
     try {
@@ -492,9 +503,20 @@ onMounted(async () => {
     return
   }
 
+  if (loginEntryRole.value === 'student') {
+    skipWechatAutoLogin()
+    form.value.role = 'student'
+    browserLogin.value = true
+  } else if (inWechat.value) {
+    form.value.role = 'parent'
+    browserLogin.value = hasBrowserLoginPreference()
+  } else {
+    browserLogin.value = true
+  }
+
   if (tryRedirectIfLoggedIn()) return
 
-  if (inWechat.value && !browserLogin.value && !readWechatCallbackParams()) {
+  if (inWechat.value && !browserLogin.value && !readWechatCallbackParams(pageOpts)) {
     prefetchWechatOAuthUrl(fetchWechatOAuthUrl).catch(() => {})
   }
 })
@@ -502,7 +524,7 @@ onMounted(async () => {
 onShow(() => {
   wechatLoading.value = false
   clearWechatLoadingTimer()
-  resetPhase()
+  if (!wechatHandling.value && !loginBusy.value) resetPhase()
 })
 
 async function doWechatLogin() {

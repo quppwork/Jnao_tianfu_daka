@@ -23,6 +23,7 @@
 
 import { getQaImageLocal, parseQaImageId } from './qaMedia.js'
 import { authHeaders, getDeviceId } from './loginGuard.js'
+import { clearBrowserLoginPreference } from './wechatAuth.js'
 import {
   inferAuthKindFromPath,
   readAuthSnapshot,
@@ -95,6 +96,7 @@ export function getLoggedInUserId() {
 
 /** 退出登录并回到登录页 */
 export function logoutAndGoLogin(targetUrl = '/pages/login/index') {
+  clearBrowserLoginPreference()
   logoutSession('parent').finally(() => {
     logoutSession('student').finally(() => {
       clearFreshLogin()
@@ -145,6 +147,10 @@ export function redirectToLoginForKind(kind) {
     return
   }
   const url = kind === 'student' ? '/pages/login/index?role=student' : '/pages/login/index'
+  const msg = kind === 'student' ? '请先登录孩子账号' : '登录已失效，请重新登录'
+  try {
+    uni.showToast({ title: msg, icon: 'none', duration: 2500 })
+  } catch (_) { /* ignore */ }
   logoutAndGoLogin(url)
 }
 
