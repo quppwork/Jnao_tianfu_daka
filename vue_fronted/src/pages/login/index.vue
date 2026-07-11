@@ -133,7 +133,7 @@
         <text class="login-modal-text">该手机号未注册，是否前往注册？</text>
         <view class="login-modal-actions">
           <view class="login-modal-btn secondary" @click="showNotRegistered = false"><text>取消</text></view>
-          <view class="login-modal-btn primary" @click="showNotRegistered = false; goRegister(pendingRegPhone)"><text>前往注册</text></view>
+          <view class="login-modal-btn primary" @click="showNotRegistered = false; goRegister()"><text>前往注册</text></view>
         </view>
       </view>
     </view>
@@ -221,6 +221,7 @@ const smsCooldown = ref(0)
 const blockRemain = ref(0)
 const showNotRegistered = ref(false)
 const pendingRegPhone = ref('')
+const pendingBindTicket = ref('')
 const showCaptcha = ref(false)
 const captchaId = ref('')
 const captchaCode = ref('')
@@ -381,6 +382,8 @@ async function handleWechatCallback(wxCb) {
     await minDelay(400)
     if (needsComplete && nextStep !== 'bind-phone') {
       redirectParentNextStep('complete-profile', wxCb.bindTicket)
+    } else if (nextStep === 'bind-phone') {
+      showNotRegisteredModal('', wxCb.bindTicket)
     } else {
       redirectParentNextStep(nextStep, wxCb.bindTicket)
     }
@@ -394,6 +397,8 @@ async function handleWechatCallback(wxCb) {
       authData?.account_ready === false
     ) {
       redirectParentNextStep('complete-profile', wxCb.bindTicket)
+    } else if (nextStep === 'bind-phone') {
+      showNotRegisteredModal('', wxCb.bindTicket)
     } else {
       redirectParentNextStep(nextStep, wxCb.bindTicket)
     }
@@ -464,7 +469,7 @@ onMounted(async () => {
   }
   if (wxCb?.nextStep === 'bind-phone') {
     clearWechatQueryFromUrl()
-    redirectParentNextStep('bind-phone', wxCb.bindTicket)
+    showNotRegisteredModal('', wxCb.bindTicket)
     return
   }
 
@@ -566,8 +571,9 @@ async function requestLoginSms() {
   }
 }
 
-function showNotRegisteredModal(phone = '') {
+function showNotRegisteredModal(phone = '', bindTicket = '') {
   pendingRegPhone.value = (phone || form.value.phone || '').trim()
+  pendingBindTicket.value = bindTicket || ''
   showNotRegistered.value = true
 }
 
@@ -607,14 +613,9 @@ function resolveParentTarget(data) {
   let target = '/pages/parent/index'
   if (parentNeedsAccountReady(data)) {
     if (data.next_step === 'bind-phone') {
-      if (data.bind_ticket) {
-        target = `/pages/login/bind-phone?bind_ticket=${encodeURIComponent(data.bind_ticket)}`
-      } else {
-        target = '/pages/login/index'
-      }
-    } else {
-      target = '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
+      return '__register__'
     }
+    target = '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
   } else if (parentNeedsProfileComplete(data)) {
     target = '/pages/login/complete-parent'
   }
@@ -627,6 +628,10 @@ async function routeParentHome(data) {
   try { sessionStorage.removeItem('jnao_browser_login') } catch (_) { /* ignore */ }
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = resolveParentTarget(data)
+  if (target === '__register__') {
+    goRegister(form.value.phone.trim(), data.bind_ticket || pendingBindTicket.value)
+    return
+  }
   if (target === '/pages/parent/index') target = consumePostLoginRoute(target, 'parent')
   uni.redirectTo({ url: target })
 }
@@ -736,8 +741,17 @@ async function doLogin() {
   }
 }
 
-function goRegister(phone = '') {
-  const q = phone ? `?phone=${encodeURIComponent(phone)}` : ''
+function goRegister(phone = '', bindTicket = '') {
+  const p = (phone || pendingRegPhone.value || '').trim()
+  const t = bindTicket || pendingBindTicket.value || ''
+  const params = new URLSearchParams()
+  if (p) params.set('phone', p)
+  if (t) {
+    params.set('from', 'wechat')
+    params.set('bind_ticket', t)
+  }
+  const q = params.toString() ? `?${params.toString()}` : ''
+  pendingBindTicket.value = ''
   uni.navigateTo({ url: `/pages/login/register-parent${q}` })
 }
 

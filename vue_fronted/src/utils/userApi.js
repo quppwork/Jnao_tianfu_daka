@@ -680,7 +680,7 @@ export async function loginParentSms({ phone, smsCode }) {
 }
 
 /** 家长验证码注册 */
-export async function registerParentSms({ phone, smsCode, realName, nickname, password }) {
+export async function registerParentSms({ phone, smsCode, realName, nickname, password, bindTicket }) {
   const body = {
     phone,
     sms_code: smsCode,
@@ -689,6 +689,7 @@ export async function registerParentSms({ phone, smsCode, realName, nickname, pa
     device_id: getDeviceId(),
   }
   if (password) body.password = password
+  if (bindTicket) body.bind_ticket = bindTicket
   const data = await apiJson('/api/auth/sms/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

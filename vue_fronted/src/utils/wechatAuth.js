@@ -139,13 +139,16 @@ export function clearWechatQueryFromUrl() {
   } catch (_) { /* ignore */ }
 }
 
+export function redirectToParentRegister(bindTicket = '') {
+  const q = bindTicket
+    ? `?from=wechat&bind_ticket=${encodeURIComponent(bindTicket)}`
+    : ''
+  uni.reLaunch({ url: `/pages/login/register-parent${q}` })
+}
+
 export function redirectParentNextStep(nextStep, bindTicket = '') {
   if (nextStep === 'bind-phone') {
-    if (bindTicket) {
-      uni.reLaunch({ url: `/pages/login/bind-phone?bind_ticket=${encodeURIComponent(bindTicket)}` })
-      return
-    }
-    uni.reLaunch({ url: '/pages/login/index' })
+    redirectToParentRegister(bindTicket)
     return
   }
   if (nextStep === 'complete-profile') {

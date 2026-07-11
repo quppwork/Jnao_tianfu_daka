@@ -111,6 +111,7 @@ class SmsRegisterRequest(BaseModel):
     nickname: str = Field(..., min_length=2, max_length=20)
     password: str = Field(..., min_length=8, max_length=128)
     device_id: str | None = Field(None, max_length=64)
+    bind_ticket: str | None = Field(None, min_length=8, max_length=128)
 
 
 class ParentProfileResponse(BaseModel):

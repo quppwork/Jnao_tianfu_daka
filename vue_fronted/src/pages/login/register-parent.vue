@@ -4,7 +4,7 @@
       <view class="logo-row">
         <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
       </view>
-      <text class="subtitle">注册家长账户</text>
+      <text class="subtitle">{{ fromWechat ? '微信登录 · 验证码注册' : '注册家长账户' }}</text>
 
       <view class="form">
         <view class="input-wrap"><input v-model="form.realName" class="inp" placeholder="真实姓名（必填）" :disabled="loginBusy" /></view>
@@ -84,10 +84,14 @@ const sendingSms = ref(false)
 const smsCooldown = ref(0)
 const phoneHint = ref('')
 const phoneBlocked = ref(false)
+const fromWechat = ref(false)
+const bindTicket = ref('')
 let cooldownTimer = null
 
 onLoad((opts) => {
   if (opts?.phone) form.value.phone = String(opts.phone)
+  if (opts?.from === 'wechat') fromWechat.value = true
+  if (opts?.bind_ticket) bindTicket.value = String(opts.bind_ticket)
 })
 
 async function loadCaptcha() {
@@ -137,11 +141,16 @@ async function confirmSendSms() {
   sendingSms.value = true
   try {
     const phone = form.value.phone.trim()
-    await sendParentSmsCode(phone, 'register', {
+    const res = await sendParentSmsCode(phone, 'register', {
       captchaId: captchaId.value,
       captchaCode: captchaCode.value.trim(),
     })
     showCaptcha.value = false
+    if (res.sent === false && res.hint === 'already_registered') {
+      uni.showToast({ title: '该手机号已注册，请直接登录', icon: 'none' })
+      setTimeout(() => goLogin(phone), 800)
+      return
+    }
     startCooldown(60)
     uni.showToast({ title: '若号码有效，验证码已发送', icon: 'none' })
   } catch (e) {
@@ -192,6 +201,7 @@ async function doRegister() {
         realName: form.value.realName.trim(),
         nickname: form.value.nickname.trim(),
         password: form.value.password.trim(),
+        bindTicket: bindTicket.value || undefined,
       })
       await completeAfterAuth(() => routeAfterRegister(data), { busyText: '正在进入…' })
       return data

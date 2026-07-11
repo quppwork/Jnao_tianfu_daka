@@ -761,13 +761,15 @@ class TestWechatClosedLoop:
         assert ticket2 is None
         assert step2 == "home"
 
-    def test_bind_phone_then_set_password_closed_loop(self, client, db_session, monkeypatch):
+    def test_wechat_register_with_bind_ticket_closed_loop(self, client, db_session, monkeypatch):
+        from app.services.parent_profile_service import parent_account_ready
         from app.services.wechat_auth_service import (
             create_bind_ticket,
-            complete_bind_phone,
-            upsert_snapshot,
             resolve_wechat_login,
+            upsert_snapshot,
         )
+        from app.db.models import ParentWechatBind
+        from sqlalchemy import select
 
         monkeypatch.setenv("WECHAT_MP_APP_ID", "wx_test_app")
         upsert_snapshot(
@@ -789,26 +791,43 @@ class TestWechatClosedLoop:
         assert step0 == "bind-phone"
 
         ticket = create_bind_ticket(openid="oLOOP_bind_02", unionid=None, wx_member_id=88002)
+        cap = client.get("/api/auth/captcha")
         client.post(
-            "/api/auth/wechat/send-bind-sms",
-            json={"bind_ticket": ticket, "phone": "13900006689"},
+            "/api/auth/sms/send",
+            json={
+                "phone": "13900006689",
+                "scene": "register",
+                "captcha_id": cap.json()["captcha_id"],
+                "captcha_code": "0000",
+            },
         )
-        user = complete_bind_phone(db_session, bind_ticket=ticket, phone="13900006689")
-        assert user.parent_phone == "13900006689"
-
-        res = client.put(
-            "/api/parent/profile",
-            json={"password": STRONG_PWD, "require_password": True},
-            params={"user_id": user.id},
+        res = client.post(
+            "/api/auth/sms/register",
+            json={
+                "phone": "13900006689",
+                "sms_code": "88888",
+                "real_name": "闭环家长",
+                "nickname": "闭环家长",
+                "password": STRONG_PWD,
+                "bind_ticket": ticket,
+            },
         )
         assert res.status_code == 200, res.text
         data = res.json()
         assert data["account_ready"] is True
-        assert data["next_step"] == "home"
+        assert data["login_channel"] == "wechat"
+        user_id = data["child_user_id"]
+
+        bind = db_session.scalar(
+            select(ParentWechatBind).where(ParentWechatBind.parent_id == user_id)
+        )
+        assert bind is not None
+        assert bind.openid == "oLOOP_bind_02"
 
         user2, ticket2, step2 = resolve_wechat_login(
             db_session, openid="oLOOP_bind_02", unionid=None
         )
-        assert user2.id == user.id
+        assert user2.id == user_id
         assert ticket2 is None
         assert step2 == "home"
+        assert parent_account_ready(user2)

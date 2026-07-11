@@ -241,6 +241,15 @@ def sms_register(
             real_name=req.real_name,
             password=req.password,
         )
+        if req.bind_ticket:
+            from app.services.wechat_auth_service import link_wechat_openid_after_register
+
+            user = link_wechat_openid_after_register(
+                db,
+                user=user,
+                bind_ticket=req.bind_ticket.strip(),
+                phone=req.phone.strip(),
+            )
         clear_auth_failures(client_ip=ip, phone=req.phone.strip(), device_id=did)
         return _issue_and_respond(db, user, response)
     except HTTPException as e:

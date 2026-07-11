@@ -1064,6 +1064,44 @@ def resolve_wechat_login(
     return None, ticket, "bind-phone"
 
 
+def link_wechat_openid_after_register(
+    db: Session,
+    *,
+    user: ChildUser,
+    bind_ticket: str,
+    phone: str,
+) -> ChildUser:
+    """验证码注册完成后绑定微信 openid（免二次短信）。"""
+    pending = consume_bind_ticket(bind_ticket)
+    openid = (pending.get("openid") or "").strip()
+    if not openid:
+        raise HTTPException(400, "绑定会话无效，请重新从微信进入")
+    phone = normalize_phone(phone)
+    if (user.parent_phone or "").strip() != phone:
+        raise HTTPException(400, "手机号与注册信息不一致")
+    by_openid = get_bind_by_openid(db, openid)
+    if by_openid and by_openid.parent_id != user.id:
+        raise HTTPException(409, "该微信已绑定其他家长账号")
+    snap = lookup_member_local(db, openid)
+    if not snap:
+        snap = ensure_oauth_snapshot(
+            db,
+            openid=openid,
+            unionid=pending.get("unionid"),
+        )
+    sync_snapshot_from_legacy(db, openid=openid, mobile=phone)
+    snap = lookup_member_local(db, openid)
+    finalize_wechat_login_user(
+        db,
+        user,
+        openid=openid,
+        unionid=pending.get("unionid"),
+        snap=snap,
+    )
+    logger.info("wechat linked after sms register user=%s openid=%s…", user.id, openid[:10])
+    return user
+
+
 def complete_bind_phone(
     db: Session,
     *,
