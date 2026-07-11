@@ -83,4 +83,4 @@ def test_aliyun_dispatch_api_error(mock_client_cls, monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         sms_service._dispatch_aliyun_sms("13900001111", "123456", "register")
-    assert exc.value.status_code == 502
+    assert exc.value.status_code == 429

@@ -35,7 +35,7 @@ PHONE_RE = re.compile(r"^1\d{10}$")
 SMS_TTL = 300
 SMS_SEND_INTERVAL = 60
 SMS_DAILY_PER_PHONE = 10
-SMS_HOURLY_PER_IP = int(os.getenv("SMS_HOURLY_PER_IP", "5"))
+SMS_HOURLY_PER_IP = int(os.getenv("SMS_HOURLY_PER_IP", "30"))
 SMS_MAX_VERIFY_FAIL = 5
 SMS_VERIFY_LOCK_TTL = 900
 SCENE_LOGIN = "login"
@@ -161,14 +161,24 @@ def _dispatch_aliyun_sms(phone: str, code: str, scene: str) -> None:
 
     body = resp.body
     if not body or (body.code or "").upper() != "OK":
+        err_code = getattr(body, "code", "") or ""
+        err_msg = getattr(body, "message", "") or ""
         logger.warning(
             "Aliyun SMS failed phone=%s scene=%s code=%s message=%s biz=%s",
             phone,
             scene,
-            getattr(body, "code", ""),
-            getattr(body, "message", ""),
+            err_code,
+            err_msg,
             getattr(body, "biz_id", ""),
         )
+        # 常见配置错误给出更明确提示（不暴露给未注册探测场景以外的内部细节）
+        hint = err_msg or err_code or "unknown"
+        if err_code in ("isv.SMS_SIGNATURE_ILLEGAL", "isv.SMS_TEMPLATE_ILLEGAL"):
+            raise HTTPException(502, "短信签名或模板未通过审核，请联系管理员")
+        if err_code == "isv.BUSINESS_LIMIT_CONTROL":
+            raise HTTPException(429, "短信发送过于频繁，请稍后再试")
+        if err_code == "isv.INVALID_PARAMETERS":
+            raise HTTPException(502, f"短信参数错误：{hint}")
         raise HTTPException(502, "短信发送失败，请稍后再试")
 
 
