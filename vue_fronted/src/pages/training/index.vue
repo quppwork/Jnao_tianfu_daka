@@ -209,11 +209,9 @@
 
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
 
-          <!-- 全部必修完成 -->
-          <view v-if="allRequiredDone" class="training-done-wrap">
-            <view class="btn-confirm-plan" style="background:linear-gradient(135deg,#22c55e,#16a34a);" @click="showDoneConfirm = true">
-              <text>🎉 今日训练已完成</text>
-            </view>
+          <!-- 确认今日方案 -->
+          <view v-if="planJustGenerated" class="btn-confirm-plan" style="margin-bottom:12px;" @click="confirmPlan">
+            <text>确认今日方案并开始训练</text>
           </view>
 
           <!-- 🆕 编辑方案 -->
@@ -244,9 +242,11 @@
         </template>
       </view>
 
-      <!-- 确认今日方案 -->
-      <view v-if="planJustGenerated" class="btn-confirm-plan" @click="confirmPlan">
-        <text>确认今日方案并开始训练</text>
+      <!-- 全部必修完成 -->
+      <view v-if="allRequiredDone" class="training-done-wrap">
+        <view class="btn-checkin" @click="showDoneConfirm = true">
+          <text class="btn-checkin-text">🎉 点击我进行自我评分哦～</text>
+        </view>
       </view>
 
       <!-- 训练阶段 -->
@@ -3580,7 +3580,7 @@ function triggerGlitch() {
 .editor-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
 .editor-btn.secondary text { color:var(--text-dim); }
 .plan-edit-block { margin-top:8px; }
-.training-done-wrap { margin-top:12px; }
+.training-done-wrap { margin-top:12px; margin-bottom:20px; }
 .training-done-card { text-align:center; padding:16px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:12px; }
 .training-done-icon { font-size:28px; display:block; margin-bottom:4px; }
 .training-done-title { font-size:15px; font-weight:600; color:#22c55e; }
