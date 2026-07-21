@@ -36,7 +36,9 @@ vue_fronted/.cert/
 logs/
 backups/
 debug-*.log
-.cursor/debug-*.log
+
+# Cursor 本地规则/skills（对应 .claude，不入库）
+.cursor/
 
 # Build output
 dist/

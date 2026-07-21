@@ -1,8 +1,8 @@
 """v3.0 公式引擎 — Decision Tree + Strategy Pipeline
 
 架构：
-  Layer 1: Decision Tree — 根据上下文选择策略
-  Layer 2: Strategy Pipeline — 策略 = Phase 序列，Phase 间通过 PlanContext 传递
+  Layer 1: Decision Tree — Tier3 → weight_with_bundle，否则 weight_based
+  Layer 2: Strategy Pipeline — resolve_slots →（捆绑）→ greedy_fill（含近史软惩罚）
 
 用法:
     from app.services.training_formula_engine import expand_formula
@@ -41,7 +41,7 @@ ELECTIVE_SKILLS: frozenset[str] = frozenset({"多元感知", "精力恢复", "�
 
 @dataclass(frozen=True)
 class HistoryEntry:
-    """单日训练摘要，供 Decision Tree 条件判断"""
+    """单日训练摘要：供主干 greedy 历史软惩罚（skills 应为中文技能名）"""
     plan_date: date
     planned_minutes: int
     skills: tuple[str, ...]
@@ -91,16 +91,6 @@ class Strategy:
 # 谓词库（Decision Tree 条件节点）
 # ═══════════════════════════════════════════════════════════════
 
-def _predicate_consecutive_days_short(ctx: PlanContext, params: dict) -> bool:
-    """用户是否连续 N 天选择 ≤max_minutes 的短时训练"""
-    min_days = params.get("min_days", 7)
-    max_minutes = params.get("max_minutes", 20)
-    if len(ctx.history) < min_days:
-        return False
-    recent = ctx.history[-min_days:]
-    return all(h.planned_minutes <= max_minutes for h in recent)
-
-
 def _predicate_tier_in(ctx: PlanContext, params: dict) -> bool:
     """当前整体 Tier 是否在指定集合中"""
     return ctx.tier in params.get("tiers", [])
@@ -123,7 +113,6 @@ def _predicate_always(ctx: PlanContext, params: dict) -> bool:
 
 
 PREDICATES: dict[str, Callable[[PlanContext, dict], bool]] = {
-    "consecutive_days_short": _predicate_consecutive_days_short,
     "tier_in": _predicate_tier_in,
     "grade_in": _predicate_grade_in,
     "duration_range": _predicate_duration_range,
@@ -159,9 +148,30 @@ def resolve_strategy(
 
 # ── 槽位工具 ──
 
+def _entry_minute_threshold(entry: dict) -> int:
+    """条目生效门槛：精确点取该分钟；区间取下界。"""
+    mins = entry["minutes"]
+    if isinstance(mins, int):
+        return mins
+    if isinstance(mins, list) and len(mins) >= 1:
+        return int(mins[0])
+    raise ValueError(f"invalid slot_table minutes: {mins!r}")
+
+
 def _lookup_slot_entry(slot_table: list[dict],
                        planned_minutes: int) -> dict:
-    """§3 槽位表: 返回匹配的完整条目（含 homework / exam_note）"""
+    """§3 槽位表: 返回匹配的完整条目（含 homework / exam_note）。
+
+    匹配规则：
+    1. 精确点（如 20 / 40）或闭区间（如 [60,120]）直接命中；
+    2. 否则向下取最近已解锁档（floor）：如 30→20档(1槽)、45→40档(2槽)、350→241档(5槽)；
+    3. 低于所有门槛 → 第一档。
+
+    旧实现未命中时回退到最后一档（≥480），会导致 30 分钟排出 6+ 项。
+    """
+    if not slot_table:
+        raise ValueError("slot_table is empty")
+
     for entry in slot_table:
         mins = entry["minutes"]
         if isinstance(mins, int) and planned_minutes == mins:
@@ -170,19 +180,24 @@ def _lookup_slot_entry(slot_table: list[dict],
             if mins[0] <= planned_minutes <= mins[1]:
                 return entry
 
-    # fallback
-    first = slot_table[0]
-    first_min = first["minutes"]
-    lo = first_min if isinstance(first_min, int) else first_min[0]
-    if planned_minutes < lo:
-        return first
-    return slot_table[-1]
+    # floor：门槛 ≤ planned_minutes 的最高档
+    best: dict | None = None
+    best_thr = -1
+    for entry in slot_table:
+        thr = _entry_minute_threshold(entry)
+        if thr <= planned_minutes and thr > best_thr:
+            best = entry
+            best_thr = thr
+    if best is not None:
+        return best
+
+    return slot_table[0]
 
 
 # ── Phase 1: 槽位解析 ──
 
 def resolve_slots(ctx: PlanContext, cfg: dict) -> PlanContext:
-    assert ctx.planned_minutes >= 5, "训练时长至少 5 分钟"
+    assert ctx.planned_minutes >= 20, "训练时长至少 20 分钟"
     entry = _lookup_slot_entry(cfg["slot_table"], ctx.planned_minutes)
 
     # 高效作业/极速学习（上级要求：≥2h 追加，≥3阶替换）
@@ -197,15 +212,6 @@ def resolve_slots(ctx: PlanContext, cfg: dict) -> PlanContext:
         homework_skill=hw_skill,
         homework_count=hw_count,
     )
-
-
-# ── Phase: 最小分钟数覆写（forced_upgrade 策略首步）──
-
-def override_min_minutes(ctx: PlanContext, params: dict) -> PlanContext:
-    floor = params.get("min_minutes", 0)
-    if ctx.planned_minutes < floor:
-        return ctx.evolve(planned_minutes=floor)
-    return ctx
 
 
 # ── 捆绑选择（按个体技能 Tier）──
@@ -302,10 +308,43 @@ def require_bundle(ctx: PlanContext, cfg: dict) -> PlanContext:
     )
 
 
-# ── Phase 3a: 权重贪心填充 ──
+# ── Phase 3: 权重贪心填充（含近史软惩罚）──
+
+def _apply_history_soft_penalty(
+    weights: dict[str, float],
+    ctx: PlanContext,
+    cfg: dict,
+) -> dict[str, float]:
+    """近 lookback 日出现过的技能临时 ×factor，减轻单槽多日粘同一技能。"""
+    rules = (cfg.get("decay_rules") or {}).get("history_penalty") or {}
+    if rules.get("enabled", True) is False:
+        return weights
+    lookback = int(rules.get("lookback_days", 3))
+    factor = float(rules.get("factor", 0.55))
+    if lookback <= 0 or not ctx.history or factor >= 1.0:
+        return weights
+
+    recent = ctx.history[-lookback:]
+    hit_codes: set[str] = set()
+    for entry in recent:
+        for name in entry.skills or ():
+            code = SKILL_CODE.get(name, "")
+            if not code and name in weights:
+                code = name
+            if code and code in weights:
+                hit_codes.add(code)
+
+    if not hit_codes:
+        return weights
+
+    out = dict(weights)
+    for code in hit_codes:
+        out[code] = round(float(out[code]) * factor, 6)
+    return out
+
 
 def greedy_fill(ctx: PlanContext, cfg: dict) -> PlanContext:
-    """贪心 max(w) → 衰减 → 重复，填满剩余槽位"""
+    """贪心 max(w) → 衰减 → 重复，填满剩余槽位。"""
     remaining = ctx.total_slots - ctx.slots_used_by_bundle
     if remaining <= 0:
         return ctx
@@ -314,6 +353,7 @@ def greedy_fill(ctx: PlanContext, cfg: dict) -> PlanContext:
     weights = dict(ctx.weights) if ctx.weights else dict(
         cfg["tier_weights"].get(f"tier_{ctx.tier}", {})
     )
+    weights = _apply_history_soft_penalty(weights, ctx, cfg)
     decay_map = dict(ctx.decay_map) if ctx.decay_map else _build_decay_map(
         ctx.tier, cfg
     )
@@ -334,38 +374,6 @@ def greedy_fill(ctx: PlanContext, cfg: dict) -> PlanContext:
         decay_map=decay_map,
         selected=tuple(selected),
     )
-
-
-# ── Phase 3b: 轮换填充（diversity_round_robin 策略）──
-
-def round_robin_fill(ctx: PlanContext, cfg: dict) -> PlanContext:
-    """权重系统下线，技能按固定轮序排列"""
-    remaining = ctx.total_slots - ctx.slots_used_by_bundle
-    if remaining <= 0:
-        return ctx
-
-    tier_key = f"tier_{ctx.tier}"
-    order_cfg = cfg.get("tier_skills_order", {})
-    ordered: list[str] = list(order_cfg.get(tier_key, ctx.available_skills))
-    if not ordered:
-        ordered = list(ctx.available_skills)
-
-    # 上次出现过的技能排到末尾
-    if ctx.history:
-        last_codes = set()
-        for skill_name in ctx.history[-1].skills:
-            code = SKILL_CODE.get(skill_name, "")
-            if code:
-                last_codes.add(code)
-        ordered = [c for c in ordered if c not in last_codes] + \
-                  [c for c in ordered if c in last_codes]
-
-    selected: list[str] = []
-    for i in range(remaining):
-        skill = ordered[i % len(ordered)]
-        selected.append(skill)
-
-    return ctx.evolve(selected=tuple(selected))
 
 
 # ── Phase 4: 学段标注 ──
@@ -426,7 +434,7 @@ def _make_strategy(name: str, description: str, *phases) -> Strategy:
 STRATEGIES: dict[str, Strategy] = {
     "weight_based": _make_strategy(
         "weight_based",
-        "标准权重贪心排课（Tier 1/2/4/5/6+ 默认）",
+        "标准权重贪心排课（含近史软惩罚）",
         resolve_slots,
         greedy_fill,
         annotate_grades,
@@ -435,24 +443,6 @@ STRATEGIES: dict[str, Strategy] = {
     "weight_with_bundle": _make_strategy(
         "weight_with_bundle",
         "捆绑 + 权重贪心补位（Tier 3）",
-        resolve_slots,
-        require_bundle,
-        greedy_fill,
-        annotate_grades,
-        tag_electives,
-    ),
-    "diversity_round_robin": _make_strategy(
-        "diversity_round_robin",
-        "轮换排课（连续 7 天短时）",
-        resolve_slots,
-        round_robin_fill,
-        annotate_grades,
-        tag_electives,
-    ),
-    "forced_upgrade": _make_strategy(
-        "forced_upgrade",
-        "强制升级时长 + 捆绑排课（连续 14 天短时）",
-        override_min_minutes,
         resolve_slots,
         require_bundle,
         greedy_fill,
@@ -583,12 +573,7 @@ def expand_formula(
             tree["root"], tree.get("nodes", {}), ctx, PREDICATES
         )
 
-    # 参数覆写
     reason: str | None = params.get("reason")
-    if "min_minutes" in params:
-        min_min = int(params["min_minutes"])
-        if ctx.planned_minutes < min_min:
-            ctx = ctx.evolve(planned_minutes=min_min)
 
     # Layer 2: Strategy → Phase Pipeline
     strategy = STRATEGIES.get(strategy_name, STRATEGIES["weight_based"])

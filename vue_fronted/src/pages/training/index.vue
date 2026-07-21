@@ -939,7 +939,10 @@ import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/uti
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+/** 0 小时时可选分钟（最短 20）；有小时时含 0/5/10/15 以便拼整点 */
+const MINUTE_OPTIONS_WITH_HOUR = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+const MINUTE_OPTIONS_ZERO_HOUR = [20, 25, 30, 35, 40, 45, 50, 55]
+const MIN_TRAINING_MINUTES = 20
 
 const devToolsAvailable = isDevToolsAvailable()
 const devMode = ref(getDevMode())
@@ -965,10 +968,21 @@ function planAnimShownToday() { try { return localStorage.getItem(todayAnimKey()
 function markPlanAnimShown() { try { localStorage.setItem(todayAnimKey(), '1') } catch (_) {} }
 
 const hourLabels = HOUR_OPTIONS.map(h => `${h} 小时`)
-const minuteLabels = MINUTE_OPTIONS.map(m => `${m} 分钟`)
+const minuteOptions = computed(() =>
+  selectedHours.value === 0 ? MINUTE_OPTIONS_ZERO_HOUR : MINUTE_OPTIONS_WITH_HOUR
+)
+const minuteLabels = computed(() => minuteOptions.value.map(m => `${m} 分钟`))
 const hourIndex = computed(() => Math.max(0, HOUR_OPTIONS.indexOf(selectedHours.value)))
-const minuteIndex = computed(() => Math.max(0, MINUTE_OPTIONS.indexOf(selectedMinutes.value)))
-const canStartTimer = computed(() => !trainingDayLocked.value && !scheduleLoading.value && !entryLoading.value && (selectedHours.value > 0 || selectedMinutes.value > 0))
+const minuteIndex = computed(() => {
+  const opts = minuteOptions.value
+  const idx = opts.indexOf(selectedMinutes.value)
+  return idx >= 0 ? idx : 0
+})
+const canStartTimer = computed(() => {
+  if (trainingDayLocked.value || scheduleLoading.value || entryLoading.value) return false
+  const total = selectedHours.value * 60 + selectedMinutes.value
+  return total >= MIN_TRAINING_MINUTES
+})
 const isPageLoading = computed(() => scheduleLoading.value || entryLoading.value || planJustGenerated.value)
 const hasPlanItems = computed(() => (todayPlan.value?.items?.length || 0) > 0)
 const trainingHasStarted = computed(() => {
@@ -1133,11 +1147,16 @@ const redAlertActive = ref(false)
 
 function onHourPick(e) {
   selectedHours.value = HOUR_OPTIONS[Number(e.detail.value)] ?? 0
+  // 切回 0 小时时，分钟不得低于 20
+  if (selectedHours.value === 0 && selectedMinutes.value < MIN_TRAINING_MINUTES) {
+    selectedMinutes.value = MIN_TRAINING_MINUTES
+  }
   showGuideArrow.value = false
   redAlertActive.value = false
 }
 function onMinutePick(e) {
-  selectedMinutes.value = MINUTE_OPTIONS[Number(e.detail.value)] ?? 0
+  const opts = minuteOptions.value
+  selectedMinutes.value = opts[Number(e.detail.value)] ?? opts[0] ?? MIN_TRAINING_MINUTES
   showGuideArrow.value = false
   redAlertActive.value = false
 }
@@ -1262,12 +1281,13 @@ function resetDurationPickers() {
 }
 
 function syncPickersFromPlannedMinutes(minutes) {
-  if (!minutes || minutes < 5) return
+  if (!minutes || minutes < MIN_TRAINING_MINUTES) return
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   if (HOUR_OPTIONS.includes(h)) selectedHours.value = h
-  let best = MINUTE_OPTIONS[0]
-  for (const x of MINUTE_OPTIONS) {
+  const opts = h === 0 ? MINUTE_OPTIONS_ZERO_HOUR : MINUTE_OPTIONS_WITH_HOUR
+  let best = opts[0]
+  for (const x of opts) {
     if (Math.abs(x - m) < Math.abs(best - m)) best = x
   }
   selectedMinutes.value = best
@@ -1284,7 +1304,8 @@ function syncPickersAfterTimerRestore(planMinutes) {
 
 function syncPlanMetaFromApi(data) {
   if (!data) return
-  lessonIndex.value = data.training_day_number ?? data.lesson_day ?? (data.content_index ?? 0) + 1
+  // 课序用训练天数；勿用 content_index（v3 存 overall_tier）
+  lessonIndex.value = data.training_day_number ?? data.lesson_day ?? 1
   if (data.overall_tier != null) overallTier.value = data.overall_tier
 }
 
@@ -1354,11 +1375,14 @@ function tickTrainingTimer() {
 }
 
 function maxBlocksForMinutes(minutes) {
-  if (minutes <= 45) return 1
-  if (minutes <= 90) return 2
-  if (minutes <= 120) return 3
-  if (minutes <= 160) return 5
-  return 6
+  // 与 backend slot_table + homework 上界对齐（含非精确点 floor）
+  if (minutes < 40) return 1       // 5–39 → 20min 档
+  if (minutes < 60) return 2       // 40–59 → 40min 档
+  if (minutes <= 120) return 3     // 60–120
+  if (minutes <= 180) return 5     // 4 + homework
+  if (minutes <= 240) return 6     // 4 + 最多 2 homework
+  if (minutes < 480) return 8      // 5 + 最多 3 homework
+  return 10                        // ≥480：6 + homework / 精力恢复
 }
 
 function isPlanStructureStale(plannedMinutes) {
@@ -1382,17 +1406,27 @@ async function startTrainingTimer() {
     return
   }
   const plannedMinutes = selectedHours.value * 60 + selectedMinutes.value
-  if (plannedMinutes < 5) {
-    uni.showToast({ title: '训练时长至少 5 分钟', icon: 'none' })
+  if (plannedMinutes < MIN_TRAINING_MINUTES) {
+    uni.showToast({ title: `训练时长至少 ${MIN_TRAINING_MINUTES} 分钟`, icon: 'none' })
     return
   }
 
-  scheduleLoading.value = true
+    scheduleLoading.value = true
   try {
     const uid = await ensureChildUser()
-    const needSchedule = !trainingHasStarted.value
-      || todayPlan.value?.planned_minutes !== plannedMinutes
+    // 一天一次：仅未开始时允许生成/按新时长重生；已开始绝不因 stale 再调 schedule
+    const hasContent = (todayPlan.value?.items?.length || 0) > 0
+    const minutesChanged = todayPlan.value?.planned_minutes !== plannedMinutes
+    const needSchedule = !trainingHasStarted.value && (
+      !hasContent
+      || minutesChanged
       || isPlanStructureStale(plannedMinutes)
+    )
+    if (trainingHasStarted.value && minutesChanged) {
+      uni.showToast({ title: '今日训练已开始，无法更改时长', icon: 'none' })
+      scheduleLoading.value = false
+      return
+    }
     if (needSchedule) {
       const result = await scheduleTrainingPlan(uid, plannedMinutes)
       if (result.error) throw new Error(result.message || '生成训练内容失败')
@@ -1616,13 +1650,13 @@ async function devGoNextDay() {
     } else {
       videoSrc.value = ''
       audioSrc.value = ''
-      lessonIndex.value = (res.status?.content_index ?? res.today?.content_index ?? 0) + 1
+      lessonIndex.value = res.status?.training_day_number ?? res.today?.training_day_number ?? 1
       syncPlanMetaFromApi(res.today || res.status)
     }
     await loadTodayPlan(true)
     nextTick(() => syncPhaseExpand())
     await loadDevStatus()
-    const idx = res.today?.content_index ?? res.status?.content_index ?? '?'
+    const idx = res.today?.training_day_number ?? res.status?.training_day_number ?? '?'
     uni.showToast({ title: res.message || `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
   } catch (e) {
         uni.showToast({ title: e.message || '模拟下一天失败', icon: 'none', duration: 2500 })
@@ -2005,19 +2039,9 @@ const showTraining = ref(false)
 const showDoneConfirm = ref(false)
 
 async function confirmPlan() {
-  const uid = await ensureChildUser()
-  const planId = todayPlan.value?.plan_id
-  const skills = (todayPlan.value?.items || [])
-    .filter(i => {
-      const inst = parseItemInstructions(i.instructions)
-      return inst.item_type !== 'elective' && inst.blocks_next !== false
-    })
-    .map(i => resolvePlanItemSkill(i))
-    .filter(Boolean)
-  if (planId && skills.length) {
-    await customizePlan(uid, planId, skills)
-    await loadTodayPlan(true)
-  }
+  // 仅解锁训练块展示；勿再调 customizePlan。
+  // 「编辑方案」已单独消耗「每日一次」额度，此处再调会导致 403，
+  // 且异常时 planJustGenerated 无法清掉，媒体长期锁在「方案生成中」。
   showTraining.value = true
   planJustGenerated.value = false
 }

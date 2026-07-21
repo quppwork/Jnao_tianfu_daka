@@ -57,48 +57,20 @@ elective_rules:
 # ══════════════════════════════════════════════════
 # 三、Decision Tree（策略选择）
 # ══════════════════════════════════════════════════
+# 主干：按时长定槽 + 权重贪心；Tier 3 额外捆绑。
+# 已移除 7/14 天短时旁路（diversity / long_short）——短时多样性由权重衰减
+# + greedy 历史软惩罚覆盖。
 
 decision_tree:
-  root: check_consecutive_14
+  root: check_tier_bundle
 
   nodes:
-    # ── 连续 14 天 ≤20min → 强制升级 ──
-    check_consecutive_14:
-      type: condition
-      predicate: consecutive_days_short
-      params: { min_days: 14, max_minutes: 20 }
-      on_true: force_upgrade
-      on_false: check_consecutive_7
-
-    # ── 连续 7 天 ≤20min → 轮换排课 ──
-    check_consecutive_7:
-      type: condition
-      predicate: consecutive_days_short
-      params: { min_days: 7, max_minutes: 20 }
-      on_true: compensate_diversity
-      on_false: check_tier_bundle
-
-    # ── Tier 3 → 捆绑排课 ──
     check_tier_bundle:
       type: condition
       predicate: tier_in
       params: { tiers: [3] }
       on_true: weight_with_bundle
       on_false: normal_weight
-
-    # ── 策略叶子 ──
-    force_upgrade:
-      type: strategy
-      strategy: forced_upgrade
-      params:
-        min_minutes: 40
-        reason: "已连续 14 天选择 20 分钟，自动升级时长以保证训练效果"
-
-    compensate_diversity:
-      type: strategy
-      strategy: diversity_round_robin
-      params:
-        reason: "连续 7 天短时训练，启用轮换排课保持内容多样性"
 
     weight_with_bundle:
       type: strategy
@@ -139,7 +111,8 @@ slot_table:
       tier_5: { skill: 极速学习, count: 2 }
       tier_6: { skill: 极速学习, count: 2 }
     exam_note: "建议准备3套以上试卷"
-  - minutes: [241, 300]
+  # 241–479：填补原 301–479 空档（旧逻辑会误落到 ≥480）
+  - minutes: [241, 479]
     slots: 5
     homework:
       tier_1: { skill: 高效作业, count: 1 }
@@ -202,6 +175,11 @@ decay_rules:
     key: 0.7
     secondary: 0.5
   threshold: 0.01
+  # 近几日已练技能临时降权，避免单槽多日总抽同一技能（替代旧短时旁路）
+  history_penalty:
+    enabled: true
+    lookback_days: 3
+    factor: 0.55
 
 # ══════════════════════════════════════════════════
 # 七、捆绑配置（§8）
@@ -240,19 +218,7 @@ grade_notes:
     - { skill: 扫描速记, mark: "不推荐" }
 
 # ══════════════════════════════════════════════════
-# 九、轮换序（Phase: round_robin_fill）
-# ══════════════════════════════════════════════════
-
-tier_skills_order:
-  tier_1: [A, B]
-  tier_2: [A, B, C]
-  tier_3: [B, C, D, E, A]
-  tier_4: [B, C, D, E]
-  tier_5: [F, G, B, C, D, E]
-  tier_6: [H, I, B, C, D]
-
-# ══════════════════════════════════════════════════
-# 十、学段定义
+# 九、学段定义
 # ══════════════════════════════════════════════════
 
 grade_bands:
