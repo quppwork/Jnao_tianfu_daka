@@ -35,13 +35,12 @@ class TestCurriculumV3:
         assert "root" in tree
         assert tree["root"] in tree["nodes"]
 
-    def test_decision_tree_four_strategy_leaves(self):
+    def test_decision_tree_two_strategy_leaves(self):
         cur = load_training_curriculum()
         nodes = cur["decision_tree"]["nodes"]
         strategies = {v["strategy"] for v in nodes.values()
                       if v["type"] == "strategy"}
-        assert strategies == {"weight_based", "weight_with_bundle",
-                              "diversity_round_robin", "forced_upgrade"}
+        assert strategies == {"weight_based", "weight_with_bundle"}
 
     def test_decision_tree_no_dead_ends(self):
         """所有条件节点都有 on_true/on_false 指向有效节点"""
@@ -60,7 +59,7 @@ class TestCurriculumV3:
 
     def test_slot_table_has_six_entries(self):
         cur = load_training_curriculum()
-        assert len(cur["slot_table"]) == 7  # 20/40/60-120/121-180/181-240/241-300/480+
+        assert len(cur["slot_table"]) == 7  # 20/40/60-120/121-180/181-240/241-479/480+
 
     def test_slot_20min_is_1(self):
         cur = load_training_curriculum()

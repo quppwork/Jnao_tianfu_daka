@@ -88,7 +88,7 @@ class TrainingTodayResponse(BaseModel):
 
 
 class ScheduleRequest(BaseModel):
-    planned_minutes: int = Field(..., ge=5, le=480, description="今日计划训练总时长（分钟）")
+    planned_minutes: int = Field(..., ge=20, le=480, description="今日计划训练总时长（分钟）")
 
 
 class TalentVideoResponse(BaseModel):

@@ -136,18 +136,17 @@ def _clean_skills_for_save(skills: dict) -> dict:
 # ─── 整体 Tier ──────────────────────────────────────
 
 def overall_tier(state: dict) -> int:
-    """取所有技能 tier 的平均值后向下取整。
+    """最低原则：取所有活跃技能 tier 的最小值。
 
-    例: [1, 2, 3] → avg=2.0 → 2
-         [1, 1, 2, 2, 2] → avg=1.6 → 1
-         [5, 5, 3, 1, 1] → avg=3.0 → 3
+    例: [1, 2, 3] → 1
+         [2, 2, 3] → 2
+         [5, 5, 5] → 5
     """
     skills = state.get("skills") or {}
     tiers = [sd.get("tier", 1) for sd in skills.values() if isinstance(sd, dict)]
     if not tiers:
         return 1
-    import math
-    return math.floor(sum(tiers) / len(tiers))
+    return min(tiers)
 
 
 # ─── 按打卡记录过滤活跃技能 ───────────────────────────
@@ -419,6 +418,11 @@ def rotate_part_after_checkin(
 
     count = int(sd.get("part_listen_count", 0)) + 1
     sd["part_listen_count"] = count
+    # 缺时间戳则补写（含：本 part 首次计数；以及老数据有 count 无 first_at）
+    if not sd.get("part_first_listen_at"):
+        from datetime import datetime, timezone, timedelta
+
+        sd["part_first_listen_at"] = datetime.now(timezone(timedelta(hours=8))).isoformat()
 
     threshold = _part_rotation_threshold(student_type, sd)
     if count < threshold:

@@ -719,8 +719,8 @@
             <text class="sa-emoji">{{ s.emoji }}</text>
           </view>
         </view>
-        <view class="btn-confirm-plan" style="margin:0 16px 16px;background:linear-gradient(135deg,#22c55e,#16a34a);" @click="showDoneConfirm = false">
-          <text>确认完成</text>
+        <view class="btn-checkin" style="margin:0;" @click="showDoneConfirm = false">
+          <text class="btn-checkin-text">确认完成</text>
         </view>
       </view>
     </view>
@@ -939,7 +939,10 @@ import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/uti
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+/** 0 小时时可选分钟（最短 20）；有小时时含 0/5/10/15 以便拼整点 */
+const MINUTE_OPTIONS_WITH_HOUR = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+const MINUTE_OPTIONS_ZERO_HOUR = [20, 25, 30, 35, 40, 45, 50, 55]
+const MIN_TRAINING_MINUTES = 20
 
 const devToolsAvailable = isDevToolsAvailable()
 const devMode = ref(getDevMode())
@@ -965,10 +968,21 @@ function planAnimShownToday() { try { return localStorage.getItem(todayAnimKey()
 function markPlanAnimShown() { try { localStorage.setItem(todayAnimKey(), '1') } catch (_) {} }
 
 const hourLabels = HOUR_OPTIONS.map(h => `${h} 小时`)
-const minuteLabels = MINUTE_OPTIONS.map(m => `${m} 分钟`)
+const minuteOptions = computed(() =>
+  selectedHours.value === 0 ? MINUTE_OPTIONS_ZERO_HOUR : MINUTE_OPTIONS_WITH_HOUR
+)
+const minuteLabels = computed(() => minuteOptions.value.map(m => `${m} 分钟`))
 const hourIndex = computed(() => Math.max(0, HOUR_OPTIONS.indexOf(selectedHours.value)))
-const minuteIndex = computed(() => Math.max(0, MINUTE_OPTIONS.indexOf(selectedMinutes.value)))
-const canStartTimer = computed(() => !trainingDayLocked.value && !scheduleLoading.value && !entryLoading.value && (selectedHours.value > 0 || selectedMinutes.value > 0))
+const minuteIndex = computed(() => {
+  const opts = minuteOptions.value
+  const idx = opts.indexOf(selectedMinutes.value)
+  return idx >= 0 ? idx : 0
+})
+const canStartTimer = computed(() => {
+  if (trainingDayLocked.value || scheduleLoading.value || entryLoading.value) return false
+  const total = selectedHours.value * 60 + selectedMinutes.value
+  return total >= MIN_TRAINING_MINUTES
+})
 const isPageLoading = computed(() => scheduleLoading.value || entryLoading.value || planJustGenerated.value)
 const hasPlanItems = computed(() => (todayPlan.value?.items?.length || 0) > 0)
 const trainingHasStarted = computed(() => {
@@ -1133,11 +1147,16 @@ const redAlertActive = ref(false)
 
 function onHourPick(e) {
   selectedHours.value = HOUR_OPTIONS[Number(e.detail.value)] ?? 0
+  // 切回 0 小时时，分钟不得低于 20
+  if (selectedHours.value === 0 && selectedMinutes.value < MIN_TRAINING_MINUTES) {
+    selectedMinutes.value = MIN_TRAINING_MINUTES
+  }
   showGuideArrow.value = false
   redAlertActive.value = false
 }
 function onMinutePick(e) {
-  selectedMinutes.value = MINUTE_OPTIONS[Number(e.detail.value)] ?? 0
+  const opts = minuteOptions.value
+  selectedMinutes.value = opts[Number(e.detail.value)] ?? opts[0] ?? MIN_TRAINING_MINUTES
   showGuideArrow.value = false
   redAlertActive.value = false
 }
@@ -1262,12 +1281,13 @@ function resetDurationPickers() {
 }
 
 function syncPickersFromPlannedMinutes(minutes) {
-  if (!minutes || minutes < 5) return
+  if (!minutes || minutes < MIN_TRAINING_MINUTES) return
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   if (HOUR_OPTIONS.includes(h)) selectedHours.value = h
-  let best = MINUTE_OPTIONS[0]
-  for (const x of MINUTE_OPTIONS) {
+  const opts = h === 0 ? MINUTE_OPTIONS_ZERO_HOUR : MINUTE_OPTIONS_WITH_HOUR
+  let best = opts[0]
+  for (const x of opts) {
     if (Math.abs(x - m) < Math.abs(best - m)) best = x
   }
   selectedMinutes.value = best
@@ -1284,7 +1304,8 @@ function syncPickersAfterTimerRestore(planMinutes) {
 
 function syncPlanMetaFromApi(data) {
   if (!data) return
-  lessonIndex.value = data.training_day_number ?? data.lesson_day ?? (data.content_index ?? 0) + 1
+  // 课序用训练天数；勿用 content_index（v3 存 overall_tier）
+  lessonIndex.value = data.training_day_number ?? data.lesson_day ?? 1
   if (data.overall_tier != null) overallTier.value = data.overall_tier
 }
 
@@ -1354,11 +1375,14 @@ function tickTrainingTimer() {
 }
 
 function maxBlocksForMinutes(minutes) {
-  if (minutes <= 45) return 1
-  if (minutes <= 90) return 2
-  if (minutes <= 120) return 3
-  if (minutes <= 160) return 5
-  return 6
+  // 与 backend slot_table + homework 上界对齐（含非精确点 floor）
+  if (minutes < 40) return 1       // 5–39 → 20min 档
+  if (minutes < 60) return 2       // 40–59 → 40min 档
+  if (minutes <= 120) return 3     // 60–120
+  if (minutes <= 180) return 5     // 4 + homework
+  if (minutes <= 240) return 6     // 4 + 最多 2 homework
+  if (minutes < 480) return 8      // 5 + 最多 3 homework
+  return 10                        // ≥480：6 + homework / 精力恢复
 }
 
 function isPlanStructureStale(plannedMinutes) {
@@ -1382,17 +1406,27 @@ async function startTrainingTimer() {
     return
   }
   const plannedMinutes = selectedHours.value * 60 + selectedMinutes.value
-  if (plannedMinutes < 5) {
-    uni.showToast({ title: '训练时长至少 5 分钟', icon: 'none' })
+  if (plannedMinutes < MIN_TRAINING_MINUTES) {
+    uni.showToast({ title: `训练时长至少 ${MIN_TRAINING_MINUTES} 分钟`, icon: 'none' })
     return
   }
 
-  scheduleLoading.value = true
+    scheduleLoading.value = true
   try {
     const uid = await ensureChildUser()
-    const needSchedule = !trainingHasStarted.value
-      || todayPlan.value?.planned_minutes !== plannedMinutes
+    // 一天一次：仅未开始时允许生成/按新时长重生；已开始绝不因 stale 再调 schedule
+    const hasContent = (todayPlan.value?.items?.length || 0) > 0
+    const minutesChanged = todayPlan.value?.planned_minutes !== plannedMinutes
+    const needSchedule = !trainingHasStarted.value && (
+      !hasContent
+      || minutesChanged
       || isPlanStructureStale(plannedMinutes)
+    )
+    if (trainingHasStarted.value && minutesChanged) {
+      uni.showToast({ title: '今日训练已开始，无法更改时长', icon: 'none' })
+      scheduleLoading.value = false
+      return
+    }
     if (needSchedule) {
       const result = await scheduleTrainingPlan(uid, plannedMinutes)
       if (result.error) throw new Error(result.message || '生成训练内容失败')
@@ -1616,13 +1650,13 @@ async function devGoNextDay() {
     } else {
       videoSrc.value = ''
       audioSrc.value = ''
-      lessonIndex.value = (res.status?.content_index ?? res.today?.content_index ?? 0) + 1
+      lessonIndex.value = res.status?.training_day_number ?? res.today?.training_day_number ?? 1
       syncPlanMetaFromApi(res.today || res.status)
     }
     await loadTodayPlan(true)
     nextTick(() => syncPhaseExpand())
     await loadDevStatus()
-    const idx = res.today?.content_index ?? res.status?.content_index ?? '?'
+    const idx = res.today?.training_day_number ?? res.status?.training_day_number ?? '?'
     uni.showToast({ title: res.message || `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
   } catch (e) {
         uni.showToast({ title: e.message || '模拟下一天失败', icon: 'none', duration: 2500 })
@@ -2005,19 +2039,9 @@ const showTraining = ref(false)
 const showDoneConfirm = ref(false)
 
 async function confirmPlan() {
-  const uid = await ensureChildUser()
-  const planId = todayPlan.value?.plan_id
-  const skills = (todayPlan.value?.items || [])
-    .filter(i => {
-      const inst = parseItemInstructions(i.instructions)
-      return inst.item_type !== 'elective' && inst.blocks_next !== false
-    })
-    .map(i => resolvePlanItemSkill(i))
-    .filter(Boolean)
-  if (planId && skills.length) {
-    await customizePlan(uid, planId, skills)
-    await loadTodayPlan(true)
-  }
+  // 仅解锁训练块展示；勿再调 customizePlan。
+  // 「编辑方案」已单独消耗「每日一次」额度，此处再调会导致 403，
+  // 且异常时 planJustGenerated 无法清掉，媒体长期锁在「方案生成中」。
   showTraining.value = true
   planJustGenerated.value = false
 }
@@ -3588,7 +3612,7 @@ function triggerGlitch() {
 .training-done-title { font-size:15px; font-weight:600; color:#22c55e; }
 .btn-confirm-plan { display:block; margin:16px auto 0; padding:12px 28px; background:linear-gradient(135deg,#00d2ff,#0088cc); color:#fff; font-size:14px; font-weight:600; border-radius:24px; text-align:center; cursor:pointer; box-shadow:0 4px 16px rgba(0,210,255,0.3); }
 .btn-confirm-plan text { color:#fff; }
-.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:12px; margin-bottom:4px; }
+.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:13px; margin-bottom:4px; }
 .plan-edit-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
 .plan-edit-bar-text { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
 .peb-title { color:var(--text); font-size:13px; font-weight:600; }
@@ -3601,10 +3625,10 @@ function triggerGlitch() {
 .et-switch.on { background:#00d2ff; }
 .et-knob { width:16px; height:16px; border-radius:50%; background:var(--text); position:absolute; top:2px; left:2px; transition:left 0.2s; }
 .et-switch.on .et-knob { background:#fff; left:18px; }
-.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(255,71,87,0.12); }
-.et-info text { color:#ff4757; font-size:13px; font-weight:700; line-height:1; }
-.et-info:active { background:rgba(255,71,87,0.2); }
-.et-info:active text { color:#ff6b81; }
+.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(0,210,255,0.12); }
+.et-info text { color:#00d2ff; font-size:13px; font-weight:700; line-height:1; }
+.et-info:active { background:rgba(0,210,255,0.2); }
+.et-info:active text { color:#5ce0ff; }
 .et-arrow { color:rgba(255,255,255,0.3); font-size:16px; font-weight:300; margin-left:auto; flex-shrink:0; }
 .elective-section-label { width:100%; color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; margin-bottom:2px; }
 .elective-hint { width:100%; color:rgba(255,255,255,0.3); font-size:12px; line-height:1.4; margin-top:2px; }
@@ -3830,10 +3854,10 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .plan-edit-tip { color:rgba(0,0,0,0.45); }
 [data-theme="white"] .btn-confirm-plan { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 [data-theme="white"] .btn-confirm-plan text { color:#fff; }
-[data-theme="white"] .et-info { background:rgba(255,71,87,0.1); }
-[data-theme="white"] .et-info text { color:#ff4757; }
-[data-theme="white"] .et-info:active { background:rgba(255,71,87,0.18); }
-[data-theme="white"] .et-info:active text { color:#ff6b81; }
+[data-theme="white"] .et-info { background:rgba(0,210,255,0.1); }
+[data-theme="white"] .et-info text { color:#00d2ff; }
+[data-theme="white"] .et-info:active { background:rgba(0,210,255,0.18); }
+[data-theme="white"] .et-info:active text { color:#5ce0ff; }
 [data-theme="white"] .elective-section-label { color:rgba(0,0,0,0.5); }
 [data-theme="white"] .elective-entry { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .elective-entry text { color:#2563eb; }

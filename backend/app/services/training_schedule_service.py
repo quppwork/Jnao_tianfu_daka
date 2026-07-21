@@ -60,21 +60,6 @@ def _candidate_dict(item: ContentItem) -> dict:
     }
 
 
-def _build_full_candidate_pool(
-    db: Session,
-    talent_code: int,
-    content_index: int,
-) -> list[ContentItem]:
-    """该天赋全部系列混合候选池（不按 OSS 系列拆分）"""
-    pool_limit = 80 if content_index <= 0 else 48
-    return get_talent_content_pool(
-        db,
-        talent_code,
-        start_index=content_index,
-        limit=pool_limit,
-    )
-
-
 def _plan_has_started(db: Session, plan: TrainingPlan) -> bool:
     if plan.status == "completed":
         return True
@@ -180,7 +165,8 @@ async def populate_plan_items(
     child = db.get(ChildUser, child_user_id)
     state = get_training_progress(child) if child else {}
 
-    # v3.0: overall_tier 替代 content_index — 只算有打卡记录的技能
+    # v3.0: 排课后把 overall_tier 写入 content_index（兼容列；真源仍是 training_progress）
+    # 只算有打卡记录的技能
     skills_with_records = get_skills_with_records(db, child_user_id)
     active_state = filter_active_skills(state, skills_with_records)
     o_tier = overall_tier(active_state)
@@ -200,24 +186,46 @@ async def populate_plan_items(
         if isinstance(skill_info, dict) and "tier" in skill_info:
             skill_tiers[skill_name] = int(skill_info["tier"])
 
-    # 构建近 30 天训练历史（供 Decision Tree 条件判断）
+    # 近史：仅有效排课日（有时长+有项），排除当日壳；skills 用技能名供主干软惩罚
     recent_plans = db.scalars(
         select(TrainingPlan)
         .where(TrainingPlan.child_user_id == child_user_id)
         .where(TrainingPlan.status.in_(["completed", "pending"]))
         .order_by(desc(TrainingPlan.plan_date))
-        .limit(30)
+        .limit(40)
     ).all()
-    history: tuple[HistoryEntry, ...] = tuple(
-        HistoryEntry(
-            plan_date=p.plan_date,
-            planned_minutes=p.planned_minutes or 0,
-            skills=tuple(
-                it.title or "" for it in (p.items or [])
-            ),
+
+    def _item_skill_name(it: TrainingItem) -> str | None:
+        from app.services.content_meta import parse_item_instruction, skill_from_title
+
+        inst = it.instructions
+        if inst and str(inst).strip().startswith("{"):
+            sk = parse_item_instruction(inst).get("skill")
+            if sk:
+                return str(sk).strip()
+        title_sk = skill_from_title(it.title or "")
+        return title_sk or None
+
+    hist_list: list[HistoryEntry] = []
+    for p in reversed(recent_plans):
+        if plan_date and p.plan_date == plan_date:
+            continue
+        mins = p.planned_minutes
+        if mins is None or int(mins) <= 0:
+            continue
+        if not p.items:
+            continue
+        skills = tuple(
+            sk for it in p.items if (sk := _item_skill_name(it))
         )
-        for p in reversed(recent_plans)  # 时间升序
-    )
+        hist_list.append(
+            HistoryEntry(
+                plan_date=p.plan_date,
+                planned_minutes=int(mins),
+                skills=skills,
+            )
+        )
+    history: tuple[HistoryEntry, ...] = tuple(hist_list[-30:])
 
     # 公式引擎展开技能组合
     formula_result = expand_formula(
@@ -372,9 +380,12 @@ async def schedule_training_by_duration(
     *,
     plan_date: date | None = None,
 ) -> dict:
-    """用户选定时长 → 生成今日 plan_item（LLM 框架内路由）"""
-    if planned_minutes < 5:
-        raise TrainingError("训练时长至少 5 分钟")
+    """用户选定时长 → 生成今日 plan_item。
+
+    一天一次训练：未开始可生成/按新时长重生；已开始禁止清表重排，改时长直接 403。
+    """
+    if planned_minutes < 20:
+        raise TrainingError("训练时长至少 20 分钟")
 
     from app.services.dev_clock import resolve_training_now
 
@@ -387,15 +398,30 @@ async def schedule_training_by_duration(
     if plan.status == "completed":
         raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
 
-    if not _plan_has_started(db, plan) or _plan_structure_invalid(plan, planned_minutes):
-        route = await populate_plan_items(
-            db, plan, child_user_id, planned_minutes, plan_date=plan_date
-        )
-        schedule_mode = route.get("mode", "rule")
-    elif not _has_plan_content(plan) or plan.planned_minutes != planned_minutes:
-        raise TrainingError("训练已开始，无法更改今日设定时长", 403)
-    else:
+    started = _plan_has_started(db, plan)
+    has_content = _has_plan_content(plan)
+
+    if started:
+        # 已开始：绝不 populate（避免清掉观看/打卡）；仅允许沿用现有方案
+        if plan.planned_minutes is not None and int(plan.planned_minutes) != int(planned_minutes):
+            raise TrainingError("训练已开始，无法更改今日设定时长", 403)
+        if not has_content:
+            raise TrainingError("训练方案异常，请联系管理员", 500)
         schedule_mode = "existing"
+    else:
+        # 未开始：无内容 / 改时长 / 旧结构非法 → 允许生成或重生
+        need_populate = (
+            not has_content
+            or plan.planned_minutes != planned_minutes
+            or _plan_structure_invalid(plan, planned_minutes)
+        )
+        if need_populate:
+            route = await populate_plan_items(
+                db, plan, child_user_id, planned_minutes, plan_date=plan_date
+            )
+            schedule_mode = route.get("mode", "rule")
+        else:
+            schedule_mode = "existing"
 
     db.commit()
     # 方案变更后清除缓存，确保 GET /today 返回最新数据

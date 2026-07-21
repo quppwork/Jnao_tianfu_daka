@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.services.assessment_service import get_latest_assessment
 from app.services.doubao_client import chat_completion
-from app.services.training_service import get_or_create_today_plan, get_yesterday_training_context
+from app.services.training_service import get_yesterday_training_context
 
 REPORT_SYSTEM = """你是陪伴孩子的训练老师。用简单、温暖的话告诉孩子今天怎么练（2-4 句）。
 说清楚：先练什么、再练什么、练完怎么打卡。不要用「主线」「训练块」「轮次」等技术词。"""

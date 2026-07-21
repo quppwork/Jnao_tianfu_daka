@@ -277,7 +277,10 @@ def sync_pending_plan_content(
     *,
     plan_date: date | None = None,
 ) -> bool:
-    """天赋未变时同步今日方案：推进 content_index、更新推送音频与 level"""
+    """仅同步「未排课的简单单条推送」；v3 已选时长方案不改 content_index / items。
+
+    v3 排课后 content_index 表示 overall_tier，旧课程序号逻辑不得覆盖。
+    """
     tc = _talent_attr(assessment, "talent_code")
     if not assessment or not tc:
         return False
@@ -286,6 +289,15 @@ def sync_pending_plan_content(
     if not plan or plan.status == "completed":
         return False
     if not _plan_matches_latest_talent(plan, assessment):
+        return False
+
+    # 已按时长排课：只允许校正 level，禁止旧 content_index / 音频覆盖
+    if plan.planned_minutes is not None:
+        talent_primary = _talent_attr(assessment, "talent_primary") or ""
+        if talent_primary and plan.level != talent_primary:
+            plan.level = talent_primary
+            db.commit()
+            return True
         return False
 
     talent_code = _talent_attr(assessment, "talent_code")
@@ -307,14 +319,16 @@ def sync_pending_plan_content(
         plan.level = talent_primary
         changed = True
 
-    # 仅同步「简单推送」单条音频计划；已排课的 A/B 方案保留结构
-    is_simple = len(plan.items) <= 1 and plan.planned_minutes is None
+    # 仅同步「简单推送」单条音频计划
+    is_simple = len(plan.items) <= 1
     if not is_simple:
         if changed:
             db.commit()
         return changed
 
     if not plan.items:
+        if changed:
+            db.commit()
         return changed
 
     item = plan.items[0]
@@ -548,6 +562,8 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
     main_line_name = ""
     progress_main_line = "A"
     progress_main_line_name = ""
+    tp: dict = {}
+    o_tier = 1
     if db is not None:
         ids = [i.content_item_id for i in plan.items if i.content_item_id]
         if ids:
@@ -558,17 +574,19 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
 
         child = db.get(ChildUser, plan.child_user_id)
         tp = get_training_progress(child) if child else {}
+        o_tier = overall_tier(tp) if tp else 1
         main_line_key = f"T{tp.get('training_days', 0)}"  # v2.0: tier-based, not main_line
-        main_line_name = f"整体 Tier {overall_tier(tp)}"
+        main_line_name = f"整体 Tier {o_tier}"
         progress_main_line = main_line_key
         progress_main_line_name = main_line_name
     training_day = _training_day_for_child(db, plan.child_user_id) if db is not None else 1
     optional_offers: list[dict] = []
     if db is not None and plan.items:
         from app.services.training_elective_service import get_elective_offers
+        # 勿用 plan.content_index：v3 虽常写入 overall_tier，壳/旧简单推送语义不同
         optional_offers = get_elective_offers(
             plan.planned_minutes or 0,
-            overall_tier=plan.content_index or 1,
+            overall_tier=o_tier,
         )
     timer_fields = _build_timer_fields(db, plan.child_user_id, plan, now) if db is not None else {
         "timer_phase": "setup",
@@ -584,6 +602,7 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "plan_date": plan.plan_date,
         "status": plan.status,
         "report_text": plan.report_text,
+        # v3 排课后存 overall_tier；建壳为 0；旧简单推送为课程序号。展示/选修请用 overall_tier 字段
         "content_index": plan.content_index,
         "main_line": main_line_key,
         "main_line_name": main_line_name,
@@ -600,7 +619,7 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
             _item_to_dict(item, hide_media=hide_media, content=content_map.get(item.content_item_id))
             for item in sorted(plan.items, key=lambda i: i.sort_order)
         ],
-        "overall_tier": overall_tier(tp) if tp else 1,  # 🆕 v2.0
+        "overall_tier": o_tier,
         "optional_offers": optional_offers,
         "day_locked": locked,
         "globally_cutoff": globally_cutoff,
@@ -810,14 +829,14 @@ def create_plan_for_schedule(db: Session, child_user_id: int, plan_date: date | 
     if plan:
         return plan
 
-    content_index = _preview_content_index(db, child_user_id, plan_date, assessment)
+    # v3：建壳时 content_index 占位 0，排课后由 populate 写入 overall_tier
     talent_primary = _talent_attr(assessment, "talent_primary") or ""
     plan = TrainingPlan(
         child_user_id=child_user_id,
         plan_date=plan_date,
         level=talent_primary,
         report_text="",
-        content_index=content_index,
+        content_index=0,
         status="pending",
         generated_at=datetime.now(timezone.utc),
     )
@@ -829,6 +848,11 @@ def create_plan_for_schedule(db: Session, child_user_id: int, plan_date: date | 
 
 
 def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | None = None) -> dict:
+    """[已弃用] 旧「简单推送」自动建单条音频方案。
+
+    主路径请用 get_today_plan + POST /schedule（populate_plan_items）。
+    保留仅防外部脚本误调；新代码勿再引用。
+    """
     plan_date = plan_date or _today_for(db, child_user_id)
     if not is_new_day_ready(_user_now(db, child_user_id)):
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
@@ -990,8 +1014,10 @@ def submit_checkin(
                 grade=child_grade(child),
             )
 
-            # Part 轮换判定
-            _try_rotate_part_after_checkin(db, child, talent_code)
+            # Part 轮换：仅对本次打卡涉及的必修技能计数（一天一次训练前提下按项/卡片计）
+            _try_rotate_part_after_checkin(
+                db, child, talent_code, cards=cards, target_item=target_item
+            )
 
     db.commit()
     db.refresh(record)
@@ -1166,29 +1192,78 @@ def group_checkin_history_by_day(items: list[dict]) -> list[dict]:
     return out
 
 
-def _try_rotate_part_after_checkin(db: Session, child: ChildUser, talent_code: int) -> None:
-    """打卡后触发各技能的 part 轮换判定"""
+def _skills_for_part_rotation(
+    cards: list[dict] | None,
+    target_item: TrainingItem | None,
+) -> list[str]:
+    """解析本次打卡应推进 part 计数的必修技能（去重、保序）。
+
+    优先 cards[].name；无卡片时回退到当前训练项 instructions.skill / 标题。
+    """
+    from app.services.child_training_state import REQUIRED_SKILLS
+    from app.services.content_meta import skill_from_title
+
+    required = set(REQUIRED_SKILLS)
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _add(name: str | None) -> None:
+        sk = (name or "").strip()
+        if sk in required and sk not in seen:
+            seen.add(sk)
+            out.append(sk)
+
+    for card in cards or []:
+        if isinstance(card, dict):
+            _add(card.get("name"))
+
+    if out:
+        return out
+
+    if target_item is None:
+        return out
+
+    inst = target_item.instructions
+    if inst and str(inst).strip().startswith("{"):
+        meta = parse_item_instruction(inst)
+        _add(meta.get("skill"))
+    if not out:
+        _add(skill_from_title(target_item.title or ""))
+    return out
+
+
+def _try_rotate_part_after_checkin(
+    db: Session,
+    child: ChildUser,
+    talent_code: int,
+    *,
+    cards: list[dict] | None = None,
+    target_item: TrainingItem | None = None,
+) -> None:
+    """打卡后仅对本次涉及的必修技能做 part 轮换判定（计数变化必须落库）。"""
     from app.services.child_training_state import (
         get_training_progress,
         save_training_progress,
         rotate_part_after_checkin,
-        REQUIRED_SKILLS,
     )
     from sqlalchemy.orm.attributes import flag_modified
+
+    skills = _skills_for_part_rotation(cards, target_item)
+    if not skills:
+        return
 
     pj = child.profile_json if isinstance(child.profile_json, dict) else {}
     onboarding = pj.get("onboarding") or {}
     student_type = str(onboarding.get("student_type", "new"))
     state = get_training_progress(child)
-    rotated = False
 
-    for skill in REQUIRED_SKILLS:
-        if rotate_part_after_checkin(state, skill, student_type=student_type, db=db, talent_code=talent_code):
-            rotated = True
+    for skill in skills:
+        rotate_part_after_checkin(
+            state, skill, student_type=student_type, db=db, talent_code=talent_code
+        )
 
-    if rotated:
-        save_training_progress(db, child, state)
-        flag_modified(child, "profile_json")
+    save_training_progress(db, child, state)
+    flag_modified(child, "profile_json")
 
 
 def append_elective_item(
@@ -1336,9 +1411,14 @@ def remove_plan_item(
 
 
 def _auto_promote_to_returning(db: Session, child_user_id: int) -> None:
-    """累计打卡 >= 30 次的新学员 -> 自动转为老学员"""
+    """累计打卡 >= 30 次的新学员 -> 自动转为老学员。
+
+    与是否已完成 onboarding（completed_at）无关；已是 returning 则跳过。
+    一天一次训练前提下，TrainingRecord 行数即可代表累计打卡次数。
+    """
     from app.db.models import TrainingRecord
     from sqlalchemy import func, select
+    from sqlalchemy.orm.attributes import flag_modified
 
     user = db.get(ChildUser, child_user_id)
     if not user or not isinstance(user.profile_json, dict):
@@ -1348,24 +1428,25 @@ def _auto_promote_to_returning(db: Session, child_user_id: int) -> None:
         return
     if onboarding.get("student_type") != "new":
         return
-    if onboarding.get("completed_at"):
-        return  # 已完成引导的新学员，不重复处理
 
     count = db.scalar(
         select(func.count()).select_from(TrainingRecord).where(
             TrainingRecord.child_user_id == child_user_id,
         )
     ) or 0
-    if count >= 30:
-        from sqlalchemy.orm.attributes import flag_modified
+    if count < 30:
+        return
 
-        ob = dict(onboarding)
-        ob["student_type"] = "returning"
-        pj = dict(user.profile_json)
-        pj["onboarding"] = ob
-        user.profile_json = pj
-        flag_modified(user, "profile_json")
-        db.commit()
+    from datetime import datetime, timezone, timedelta
+
+    ob = dict(onboarding)
+    ob["student_type"] = "returning"
+    ob["promoted_to_returning_at"] = datetime.now(timezone(timedelta(hours=8))).isoformat()
+    pj = dict(user.profile_json)
+    pj["onboarding"] = ob
+    user.profile_json = pj
+    flag_modified(user, "profile_json")
+    db.commit()
 
 
 def _is_elective_item(item: TrainingItem) -> bool:

@@ -55,6 +55,67 @@ class TestScheduleV2:
         res = client.post("/api/training/schedule", json={"planned_minutes": 3}, **_auth(uid))
         assert res.status_code in (400, 422)
 
+    def test_started_cannot_change_minutes(self, client, user_ready_for_training):
+        """已开始后改时长 → 403，不重生"""
+        uid = user_ready_for_training
+        auth = _auth(uid)
+        first = client.post("/api/training/schedule", json={"planned_minutes": 20}, **auth)
+        assert first.status_code == 200
+        plan = first.json()
+        item_id = plan["items"][0]["id"]
+        # 上报观看进度 → 视为已开始
+        wp = client.post(
+            f"/api/training/items/{item_id}/watch-progress",
+            json={"watched_sec": 30, "duration_sec": 100},
+            **auth,
+        )
+        assert wp.status_code == 200, wp.text
+        second = client.post("/api/training/schedule", json={"planned_minutes": 40}, **auth)
+        assert second.status_code == 403
+        assert "无法更改" in second.json().get("detail", "")
+
+    def test_started_bloated_plan_not_wiped(self, client, user_ready_for_training, db_session):
+        """已开始 + 项数超上界：仍返回 existing，不清表"""
+        from app.db.models import TrainingItem, TrainingPlan
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        uid = user_ready_for_training
+        auth = _auth(uid)
+        first = client.post("/api/training/schedule", json={"planned_minutes": 20}, **auth)
+        assert first.status_code == 200
+        plan_id = first.json()["plan_id"]
+        item_id = first.json()["items"][0]["id"]
+        client.post(
+            f"/api/training/items/{item_id}/watch-progress",
+            json={"watched_sec": 10, "duration_sec": 60},
+            **auth,
+        )
+        # 人为塞入超额项，模拟脏结构
+        plan = db_session.scalar(
+            select(TrainingPlan).options(selectinload(TrainingPlan.items)).where(TrainingPlan.id == plan_id)
+        )
+        before_count = len(plan.items)
+        for i in range(5):
+            db_session.add(
+                TrainingItem(
+                    plan_id=plan_id,
+                    sort_order=10 + i,
+                    ability_type="audio",
+                    title=f"脏数据{i}",
+                    checkin_status="pending",
+                    instructions='{"skill": "影像追忆", "item_type": "audio"}',
+                )
+            )
+        db_session.commit()
+        again = client.post("/api/training/schedule", json={"planned_minutes": 20}, **auth)
+        assert again.status_code == 200
+        assert again.json().get("schedule_mode") == "existing"
+        plan2 = db_session.scalar(
+            select(TrainingPlan).options(selectinload(TrainingPlan.items)).where(TrainingPlan.id == plan_id)
+        )
+        assert len(plan2.items) == before_count + 5
+
 
 class TestCheckinV2:
     """POST /api/training/checkin — 打卡 + Tier 晋级判定"""
@@ -128,7 +189,9 @@ class TestElectiveV2:
     def test_list_three_offers(self, client):
         res = client.get("/api/training/elective/list?planned_minutes=120")
         assert res.status_code == 200
-        assert len(res.json()["offers"]) == 3
+        skills = {o["skill"] for o in res.json()["offers"]}
+        assert {"精力恢复", "多元感知", "高效作业"}.issubset(skills)
+        assert len(res.json()["offers"]) >= 3
 
     def test_energy_disabled_under_8h(self, client):
         res = client.get("/api/training/elective/list?planned_minutes=120")

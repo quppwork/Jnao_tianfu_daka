@@ -65,85 +65,70 @@ class TestNewUserJourney:
     # ── Day 2：中等时长 40min ──
 
     def test_day2_40min(self):
-        r = _call(40, history=_h([1], 120))
+        # 昨日真实技能进 history，A/B 同受软惩罚 → 相对序与无惩罚一致
+        r = _call(40, history=_h([1], 120, skills=("超脑阅读", "影像追忆", "超脑阅读")))
         assert r["strategy"] == "weight_based"
         assert len(r["slots"]) == 2
         assert r["slots"] == ["超脑阅读", "影像追忆"]
 
-    # ── Day 3-8：逐步积累连续短时，触发策略切换 ──
+    # ── Day 3-8：短时积累仍走主干（历史软惩罚，无旁路）──
 
     def test_day3_short_20min_accumulating(self):
-        """Day3: 连续2天短时 → 仍为 weight_based（未达7天阈值）"""
+        """Day3: 连续2天短时 → weight_based"""
         r = _call(20, history=_h([1, 2], 20))
         assert r["strategy"] == "weight_based"
         assert len(r["slots"]) == 1
 
     def test_day7_6days_short_still_normal(self):
-        """Day7: 前6天短时 → 仍 weight_based（history 中仅6条）"""
+        """Day7: 前6天短时 → weight_based"""
         r = _call(20, history=_h([1, 2, 3, 4, 5, 6], 20))
         assert r["strategy"] == "weight_based"
 
-    def test_day8_7days_short_triggers_diversity(self):
-        """Day8: 前7天连续短时 → 触发 diversity_round_robin"""
+    def test_day8_7days_short_stays_on_trunk(self):
+        """Day8: 前7天短时 → 仍主干；近史超脑被软惩罚 → 倾向影像"""
         r = _call(20, history=_h([1, 2, 3, 4, 5, 6, 7], 20))
-        assert r["strategy"] == "diversity_round_robin"
+        assert r["strategy"] == "weight_based"
         assert len(r["slots"]) == 1
-        assert "reason" in r
+        assert r["slots"][0] == "影像追忆"
 
-    # ── Day 9：脱离短时，回归正常 ──
+    # ── Day 9：长时长仍主干 ──
 
     def test_day9_back_to_180min(self):
-        """Day9: 选长时长 → 权重策略（中断连续短时）"""
-        # 注意：前8天短时、第9天选180min，history 中最近几天是20min
-        # 但 consecutive_days_short 只检查最近N天的 max_minutes
-        # Day9 本身选 180min → 不会触发短时规则
+        """Day9: 选长时长 → 权重策略"""
         history = _h([1, 2, 3, 4, 5, 6, 7, 8], 20)
         r = _call(180, history=history)
-        # 当天选180min，不是短时，check_consecutive 条件检查的是 history
-        # history 中都是20min → 条件仍成立！
-        # 所以会触发 diversity_round_robin 或 forced_upgrade
-        # 取决于天数：8天 → 7天条件触发
-        assert r["strategy"] in ("diversity_round_robin", "weight_based")
+        assert r["strategy"] == "weight_based"
 
     # ── Day 10：60min 边界档位 ──
 
     def test_day10_60min(self):
-        r = _call(60, history=_h([9], 180))
+        r = _call(60, history=_h([9], 180, skills=("超脑阅读", "影像追忆", "超脑阅读")))
         assert r["strategy"] == "weight_based"
         assert len(r["slots"]) == 3
-        # [A, B, A] (60min=3槽，同120min)
         assert r["slots"] == ["超脑阅读", "影像追忆", "超脑阅读"]
 
 
 # ═══════════════════════════════════════════════════════════════
-# 旅程 2：连续 14 天短时 → 强制升级
+# 旅程 2：连续短时仍走主干（历史软惩罚，无旁路）
 # ═══════════════════════════════════════════════════════════════
 
-class Test14DayForceUpgrade:
-    """连续 14 天 ≤20min → 强制升级到 ≥40min"""
+class TestShortStreakOnTrunk:
+    """连续短时不再切换策略；多样性由 greedy 近史软惩罚承担"""
 
-    def test_day14_triggers_forced_upgrade(self):
-        """14 天短时 → forced_upgrade"""
+    def test_day14_still_weight_based(self):
         r = _call(20, history=_h(list(range(1, 15)), 20))
-        assert r["strategy"] == "forced_upgrade"
-        assert r["minutes"] >= 40
+        assert r["strategy"] == "weight_based"
+        assert r["minutes"] == 20
+        assert len(r["slots"]) == 1
 
-    def test_day15_still_upgraded(self):
-        """第 15 天仍在升级状态（前 14 天短时 + 第 14 天升级到 40min）"""
-        # 前 13 天 20min + 第 14 天 40min(forced)
+    def test_day15_after_longer_day(self):
         h = _h(list(range(1, 14)), 20) + _h([14], 40)
         r = _call(20, history=h)
-        # 最近14天：13×20 + 1×40 → 连续短时条件不成立(有1天40min)
         assert r["strategy"] == "weight_based"
 
-    def test_day15_still_20min_all_14(self):
-        """即使 14 天后，继续选 20min，history 中最近 14 天仍是 20min
-        （因为 upgraded 的 >=40min 不在 history 中时，history 全是 20min）"""
-        # 模拟：14天全是20min（用户没有真正升级，只是引擎每次都覆写）
-        # 实际上每天引擎返回>=40min，但history记录的是用户原始选择
+    def test_soft_penalty_after_long_short_streak(self):
         r = _call(20, history=_h(list(range(1, 15)), 20))
-        assert r["strategy"] == "forced_upgrade"
-        assert r["minutes"] >= 40
+        assert r["slots"][0] == "影像追忆"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -411,15 +396,15 @@ class TestEdgeCases:
     """边界条件"""
 
     def test_nonstandard_minutes_25(self):
-        """25min 不精确匹配 → fallback 到最近高档位"""
+        """25min 无精确档 → floor 到 20min = 1 槽"""
         r = _call(25)
-        assert len(r["slots"]) >= 1
-
-    def test_minimal_minutes_5(self):
-        """最小合法时长 5min"""
-        r = _call(5)
-        # 5min < 20min 最低档 → fallback 到 20min 档 = 1 槽
         assert len(r["slots"]) == 1
+
+    def test_minimal_minutes_20(self):
+        """最小合法时长 20min"""
+        r = _call(20)
+        assert len(r["slots"]) == 1
+        assert r["minutes"] == 20
 
     def test_large_minutes_600(self):
         """600min → 最高档 6+ 槽"""

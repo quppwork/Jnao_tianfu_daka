@@ -98,8 +98,29 @@ class TestFormulaEngine:
             assert key in result, f"Missing v3 key: {key}"
 
     def test_fallback_nonstandard_minutes(self):
+        """非表内精确点应向下取档，不得落到 ≥480 的 6 槽档。"""
         result = expand_formula(25, overall_tier=1, grade_band="primary_low")
-        assert len(result["slots"]) > 0
+        assert len(result["slots"]) == 1
+
+    def test_30min_maps_to_20min_band(self):
+        """前端可选 30min；槽位表无精确点 → floor 到 20min → 1 槽。"""
+        result = expand_formula(30, overall_tier=1, grade_band="primary_low")
+        assert len(result["slots"]) == 1
+        assert result["strategy"] == "weight_based"
+
+    def test_35min_still_one_slot(self):
+        result = expand_formula(35, overall_tier=1, grade_band="primary_low")
+        assert len(result["slots"]) == 1
+
+    def test_45min_maps_to_40min_band(self):
+        result = expand_formula(45, overall_tier=1, grade_band="primary_low")
+        assert len(result["slots"]) == 2
+
+    def test_350min_not_eight_hour_band(self):
+        """301–479 曾误落到 ≥480；现为 5 必修 + homework。"""
+        result = expand_formula(350, overall_tier=1, grade_band="primary_low")
+        assert len(result["slots"]) == 6  # 5 + 1 高效作业
+        assert "高效作业" in result["slots"]
 
     def test_primary_high_uses_same_weights(self):
         result = expand_formula(90, overall_tier=1, grade_band="primary_high")
@@ -153,7 +174,7 @@ class TestTier3Bundle:
 
 
 class TestDecisionTree:
-    """策略路由"""
+    """策略路由 — 仅主干"""
 
     def test_normal_tier1_uses_weight_based(self):
         result = expand_formula(120, overall_tier=1, grade_band="primary_low")
@@ -163,37 +184,39 @@ class TestDecisionTree:
         result = expand_formula(120, overall_tier=2, grade_band="primary_low")
         assert result["strategy"] == "weight_based"
 
-    def test_consecutive_short_triggers_diversity(self):
-        """连续 7 天 ≤20min → 轮换策略"""
+    def test_short_streak_stays_on_trunk(self):
+        """连续短时不再切旁路，仍走 weight_based"""
         from app.services.training_formula_engine import HistoryEntry
         from datetime import date
 
         history = tuple(
             HistoryEntry(plan_date=date(2026, 7, d), planned_minutes=20,
                          skills=("超脑阅读",))
-            for d in range(3, 10)  # 7 天
+            for d in range(1, 15)
         )
         result = expand_formula(20, overall_tier=1, grade_band="primary_low",
                                 history=history)
-        assert result["strategy"] == "diversity_round_robin"
+        assert result["strategy"] == "weight_based"
+        assert result["minutes"] == 20
+        assert len(result["slots"]) == 1
 
-    def test_consecutive_14_triggers_upgrade(self):
-        """连续 14 天 ≤20min → 强制升级"""
+    def test_history_soft_penalty_prefers_other_skill(self):
+        """近史练过超脑阅读 → 单槽日倾向影像追忆（主干内多样性）"""
         from app.services.training_formula_engine import HistoryEntry
         from datetime import date
 
         history = tuple(
             HistoryEntry(plan_date=date(2026, 7, d), planned_minutes=20,
                          skills=("超脑阅读",))
-            for d in range(1, 15)  # July 1-14
+            for d in range(1, 4)
         )
         result = expand_formula(20, overall_tier=1, grade_band="primary_low",
                                 history=history)
-        assert result["strategy"] == "forced_upgrade"
-        assert result["minutes"] >= 40
+        assert result["strategy"] == "weight_based"
+        assert result["slots"][0] == "影像追忆"
 
     def test_new_user_no_special_strategy(self):
-        """新人 history=() → 不触发特殊策略"""
+        """新人 history=() → weight_based"""
         result = expand_formula(20, overall_tier=1, grade_band="primary_low",
                                 history=())
         assert result["strategy"] == "weight_based"
