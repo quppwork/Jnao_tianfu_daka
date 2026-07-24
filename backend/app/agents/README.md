@@ -59,6 +59,7 @@ app/agents/
 | ~~设置「清除当前」与「清空全部」入口收敛~~ | ✅ 已做 |
 | ~~真豆包话术抽检 / E2E~~ | ✅ `DOUBAO_LIVE_TEST=1` → `test_guide_live_quality.py` |
 | ~~调试开关展示 tools_used~~ | ✅ 设置内开关 |
+| 话术「先答后导」+ 训练逻辑模糊化 | ✅ persona / 工具摘要 / 去掉 consecutive_pass 外泄 |
 | 原生 function-calling | 能力增强 |
 | QA Agent 打磨 | **另线** |
 | Orchestrator | **暂不做**（见 handoff 原则） |

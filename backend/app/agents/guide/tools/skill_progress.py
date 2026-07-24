@@ -25,9 +25,9 @@ def get_skill_progress(db: Session, child_user_id: int, args: dict) -> dict:
     for sk, sd in (state.get("skills") or {}).items():
         if not isinstance(sd, dict):
             continue
+        # 仅暴露 Tier 快照；不返回 consecutive_pass / part 等内部计数，避免话术泄露晋级逻辑
         skills_out[sk] = {
             "tier": int(sd.get("tier") or 1),
-            "consecutive_pass": int(sd.get("consecutive_pass") or 0),
         }
     return {
         "overall_tier": overall_tier(state),

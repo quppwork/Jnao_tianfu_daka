@@ -32,6 +32,16 @@ def test_plan_tools_heuristic_today():
     assert any(p["name"] == "get_today_plan" for p in picks)
 
 
+def test_plan_tools_heuristic_recommend_and_duration():
+    """「练什么 / 练多久」类追问应命中今日摘要，而非空调度。"""
+    for msg in (
+        "今日你推荐做什么训练项目",
+        "可以帮我推荐一下今天训练多久合适吗",
+    ):
+        picks = plan_tools_heuristic(msg)
+        assert any(p["name"] == "get_today_plan" for p in picks), msg
+
+
 def test_plan_tools_heuristic_empty_for_chitchat():
     assert plan_tools_heuristic("你好呀") == []
 
@@ -64,6 +74,9 @@ def test_tool_skill_and_suggest(db_session):
     skills = call_tool(db_session, user.id, "get_skill_progress", {})
     assert "overall_tier" in skills
     assert "skills" in skills
+    for sd in skills["skills"].values():
+        assert "tier" in sd
+        assert "consecutive_pass" not in sd
     nxt = call_tool(db_session, user.id, "suggest_next_action", {})
     assert nxt["situation"] == "need_assessment"
     assert nxt["next_action"] == "talent"

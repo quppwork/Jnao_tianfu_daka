@@ -440,15 +440,35 @@ def _item_is_video(item: TrainingItem) -> bool:
     return bool(item.video_url) or item_type == "video"
 
 
+def _item_meta_type(item: TrainingItem) -> str:
+    meta = parse_item_instruction(
+        item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
+    )
+    return str(meta.get("item_type") or item.ability_type or "")
+
+
+def item_requires_media_listen(item: TrainingItem) -> bool:
+    """有可播放音/视频且非多元感知/占位时，打卡前须听完/看完。"""
+    t = _item_meta_type(item)
+    if t in ("perception", "placeholder"):
+        return False
+    return bool(item.video_url or item.audio_url)
+
+
 def _watch_pct(item: TrainingItem) -> float:
     wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
     return float(wp.get("pct") or 0)
 
 
-def is_item_video_complete(item: TrainingItem) -> bool:
-    if not _item_is_video(item):
+def is_item_media_complete(item: TrainingItem) -> bool:
+    if not item_requires_media_listen(item):
         return True
     return _watch_pct(item) >= WATCH_COMPLETE_PCT
+
+
+def is_item_video_complete(item: TrainingItem) -> bool:
+    """兼容旧名：音视频统一完成度。"""
+    return is_item_media_complete(item)
 
 
 def _should_hide_media(plan: TrainingPlan) -> bool:
@@ -935,6 +955,12 @@ def submit_checkin(
         target_item = next((it for it in sorted_items if it.checkin_status != "done"), None)
     if not target_item or target_item.plan_id != plan.id:
         raise TrainingError("训练项不存在", 404)
+
+    if not is_item_media_complete(target_item):
+        raise TrainingError(
+            f"请先听完/看完本项音视频后再打卡（需达到 {int(WATCH_COMPLETE_PCT)}%）",
+            403,
+        )
 
     if cards:
         cards = [_sanitize_card(c) for c in cards]
