@@ -108,17 +108,14 @@ class TestHealthIntegration:
         assert "integrations" in data
 
 
-class TestChatIntegration:
-    """POST /api/chat"""
+class TestGuideChatIntegration:
+    """POST /api/guide/chat（旧 /api/chat 已废弃）"""
 
-    def test_chat_returns_response(self):
-        code, data = api_post("/chat", {
-            "message": "你好",
-            "user_id": "integration_test",
-        })
+    def test_guide_chat_returns_reply(self):
+        code, data = api_post("/guide/chat", {"message": "你好"})
         assert code == 200
-        assert "data" in data
-        assert "answer" in data["data"]
+        assert "reply" in data
+        assert data.get("session_id") is not None
 
 
 def test_backend_serves_openapi():

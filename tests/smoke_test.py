@@ -57,13 +57,11 @@ def _make_client(db_session):
         patch("app.api.talent.jnao_get_report", new_callable=AsyncMock) as m_rep,
         patch("app.services.doubao_client.chat_completion", new_callable=AsyncMock, return_value="【测试】OK"),
         patch("app.services.guide_service.chat_completion", new_callable=AsyncMock, return_value="【测试】OK"),
-        patch("app.api.chat.chat_completion", new_callable=AsyncMock, return_value="【测试】OK"),
         patch("app.services.qa_service.chat_completion", new_callable=AsyncMock, return_value="【测试】OK"),
         patch("app.services.qa_service.vision_chat_completion", new_callable=AsyncMock, return_value="【测试】识图"),
         patch("app.services.doubao_client.vision_chat_completion", new_callable=AsyncMock, return_value="【测试】识图"),
         patch("app.services.training_plan_generator.chat_completion", new_callable=AsyncMock, return_value="【测试】OK"),
         patch("app.services.doubao_client.is_configured", return_value=True),
-        patch("app.api.chat.is_configured", return_value=True),
     ):
         m_sub.return_value = "test-record-123"
         m_rep.return_value = {

@@ -22,6 +22,11 @@ class GuideChatRequest(BaseModel):
     session_id: int | None = Field(None, ge=1)
 
 
+class GuideBootstrapRequest(BaseModel):
+    force: bool = False
+    use_llm: bool = True
+
+
 @router.get("/debug")
 async def guide_debug():
     if not is_debug_routes_enabled():
@@ -43,6 +48,57 @@ def guide_session(
     db: Session = Depends(get_db),
 ):
     return guide_service.load_session_payload(db, child_user_id)
+
+
+@router.get("/sessions")
+def guide_sessions(
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    return {"items": guide_service.list_sessions(db, child_user_id)}
+
+
+@router.get("/sessions/{session_id}")
+def guide_session_detail(
+    session_id: int,
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    payload = guide_service.get_session_payload(db, child_user_id, session_id)
+    if payload is None:
+        raise HTTPException(404, "会话不存在")
+    return payload
+
+
+@router.delete("/sessions/{session_id}")
+def guide_session_delete(
+    session_id: int,
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    if not guide_service.delete_session(db, child_user_id, session_id):
+        raise HTTPException(404, "会话不存在")
+    return {"ok": True}
+
+
+@router.post("/bootstrap")
+async def guide_bootstrap(
+    req: GuideBootstrapRequest = GuideBootstrapRequest(),
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """进首页开场：按情境返回欢迎语（模板保底，可选 LLM）。"""
+    result = await guide_service.bootstrap(
+        db,
+        child_user_id,
+        force=req.force,
+        use_llm=req.use_llm,
+    )
+    logger.info(
+        f"Guide bootstrap uid={child_user_id} situation={result.get('situation')} "
+        f"source={result.get('source')}"
+    )
+    return result
 
 
 @router.post("/clear")

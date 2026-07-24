@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool, StaticPool
 
 from config.loader import load_settings
 from app.db.base import Base
@@ -31,20 +31,23 @@ def get_engine():
         url = get_database_url()
         _sqlite_path(url)
         if url.startswith("sqlite"):
+            # :memory: 必须 StaticPool（共享同一连接），否则每连接一份空库。
+            # 文件库用 NullPool：避免 StaticPool 单连接跨线程并发 → 503。
+            memory = ":memory:" in url or url.rstrip("/") == "sqlite://"
             _engine = create_engine(
                 url,
                 connect_args={
                     "check_same_thread": False,
-                    "timeout": 10,
+                    "timeout": 30,
                 },
-                poolclass=StaticPool,
+                poolclass=StaticPool if memory else NullPool,
             )
 
             @event.listens_for(_engine, "connect")
             def _set_sqlite_pragma(dbapi_conn, _):
                 cursor = dbapi_conn.cursor()
                 cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA busy_timeout=5000")
+                cursor.execute("PRAGMA busy_timeout=15000")
                 cursor.execute("PRAGMA foreign_keys=ON")
                 cursor.close()
         else:

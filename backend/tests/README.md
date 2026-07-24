@@ -19,6 +19,10 @@
 # 真实豆包联调（消耗 API，需 backend/.env 配好 Key）
 $env:DOUBAO_LIVE_TEST="1"
 .\.venv\Scripts\python.exe -m pytest backend\tests\test_doubao_live.py -v
+
+# Guide 真豆包话术抽检（五 situation + 工具探针，打印回复便于人工看文笔）
+$env:DOUBAO_LIVE_TEST="1"
+.\.venv\Scripts\python.exe -m pytest backend\tests\test_guide_live_quality.py -v -s
 ```
 
 ## 前端模块 ↔ API ↔ 测试文件
@@ -34,7 +38,6 @@ $env:DOUBAO_LIVE_TEST="1"
 | `pages/login/` 用户注册+引导 | `/api/auth/*`, `/api/user/profile` | `test_module_auth.py`, `test_workflow_onboarding.py`, `test_onboarding_returning.py`, `test_user_profile_merge.py` |
 | 资源库 | `/api/resources/*` | `test_training_api.py` |
 | 健康检查 | `GET /api/health` | `test_health_api.py` |
-| 通用对话 | `POST /api/chat` | `test_chat_api.py` |
 | 开发者工具 | `/api/dev/*` | `test_dev_api.py` |
 | 安全校验 | — | `test_security.py` |
 | 内容导入 | — | `test_catalog_import.py`, `test_single_file_skill_match.py` |
@@ -61,8 +64,8 @@ $env:DOUBAO_LIVE_TEST="1"
 
 | 功能 | 路径 | 提供商 |
 |------|------|--------|
-| 首页引导 | `/api/guide/chat` | 豆包 |
-| 通用对话 | `/api/chat` | 豆包 |
-| 流式对话 | `/api/chat/stream` | 豆包 SSE |
+| 首页引导 | `/api/guide/chat`、`/api/guide/chat/stream` | 豆包（情境 + 只读工具） |
 | 学科答疑 | `/api/qa/chat` | 豆包 + 天赋提示词 |
 | 训练日报 | `/api/training/report/today` | 豆包 |
+
+> 旧 `POST /api/chat` / `GET /api/chat/stream` 已废弃删除，勿再调用。

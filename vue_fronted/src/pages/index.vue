@@ -6,7 +6,7 @@
       <text class="nav-center" @click="onNavTap">张宇老师</text>
       <view class="nav-actions">
         <!-- 设置 -->
-        <view class="nav-icon-btn" @click="showSettings = true; settingsTab = 'profile'">
+        <view class="nav-icon-btn" @click="openSettings">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </view>
         <!-- 主题 -->
@@ -48,22 +48,79 @@
       </view>
     </view>
 
+    <!-- 今日轻状态（bootstrap.situation_label） -->
+    <view v-if="situationLabel" class="home-status-bar">
+      <text class="home-status-text">{{ situationLabel }}</text>
+    </view>
+
     <!-- Chat Area -->
     <view class="chat-section" id="chatScroll">
-      <!-- 首次欢迎 -->
-      <view v-if="showQuickActions" class="chat-welcome">
+      <!-- 开场欢迎（bootstrap；对话开始后仍保留，避免割裂） -->
+      <view v-if="welcomeText" class="chat-welcome">
         <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="welcome-card">
-          <text class="welcome-text">你好，我是张宇老师 👋</text>
-          <text class="welcome-sub">建议先从天赋测评开始，了解自己的潜能方向～</text>
-          <text class="welcome-desc">完成天赋测评后，点击下方「今日训练」即可开始打卡训练 💪</text>
+          <text class="welcome-sub">{{ welcomeText }}</text>
+          <view v-if="welcomeActions.length" class="chat-actions welcome-actions">
+            <view
+              v-for="(act, ai) in welcomeActions"
+              :key="ai"
+              class="welcome-action"
+              @click="runNavigateAction(act)"
+            >
+              <text>{{ act.label || actionLabel(act.target) }}</text>
+            </view>
+          </view>
         </view>
       </view>
       <!-- 聊天记录 -->
       <view v-for="(m,i) in messages" :key="i" class="chat-row" :class="{ user: m.role === 'user' }">
         <view class="chat-av me" v-if="m.role==='user'"><text>我</text></view>
         <view class="chat-av ai" v-else><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
-        <view class="chat-bbl" :class="{ me: m.role==='user', ai: m.role!=='user' }">{{ m.text }}</view>
+        <view class="chat-bbl-wrap" :class="{ me: m.role==='user' }">
+          <view
+            v-if="m.role==='ai' && loading && i === messages.length - 1 && !m.text"
+            class="chat-bbl ai thinking-bbl"
+          >
+            <view class="thinking-dots" aria-hidden="true">
+              <view class="thinking-dot"></view>
+              <view class="thinking-dot"></view>
+              <view class="thinking-dot"></view>
+            </view>
+            <text class="thinking-label">agent思考中</text>
+          </view>
+          <view
+            v-else-if="m.text"
+            class="chat-bbl"
+            :class="{ me: m.role==='user', ai: m.role!=='user' }"
+          >{{ m.text }}</view>
+          <view
+            v-if="m.role==='ai' && m.actions?.length"
+            class="chat-actions"
+          >
+            <view
+              v-for="(act, ai) in m.actions"
+              :key="ai"
+              class="welcome-action"
+              @click="runNavigateAction(act)"
+            >
+              <text>{{ act.label || actionLabel(act.target) }}</text>
+            </view>
+          </view>
+          <view
+            v-if="guideDebugTools && m.role==='ai' && m.tools_used?.length"
+            class="tools-debug"
+          >
+            <text class="tools-debug-label">tools</text>
+            <view
+              v-for="(t, ti) in m.tools_used"
+              :key="ti"
+              class="tools-debug-chip"
+              :class="{ fail: t.ok === false }"
+            >
+              <text>{{ t.name || 'tool' }}{{ t.ok === false ? ' ✕' : '' }}</text>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -83,72 +140,133 @@
     <!-- Settings Modal -->
     <view v-if="showSettings" class="picker-overlay" @click="showSettings = false">
       <view class="picker-card settings-card" @click.stop>
-        <text class="picker-title">⚙ 设置</text>
-
-        <!-- Tab 1: 个人信息 -->
-        <view class="set-block">
-          <view class="set-block-head" @click="settingsTab = 'profile'">
-            <text class="set-block-title">📋 个人信息</text>
-            <text class="set-block-arrow" :class="{ open: settingsTab === 'profile' }">▾</text>
-          </view>
-          <view v-if="settingsTab === 'profile'" class="set-block-body">
-            <view class="form-row">
-              <text class="form-label">孩子姓名</text>
-              <input class="form-input" v-model="profile.name" placeholder="孩子真实姓名" />
-            </view>
-            <view class="form-row">
-              <text class="form-label">年级</text>
-              <picker class="form-picker" mode="selector" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
-                <view class="form-input form-picker-val">{{ profile.grade || '请选择年级' }}</view>
-              </picker>
-            </view>
-            <view v-if="profile.talent" class="form-row">
-              <text class="form-label">天赋</text>
-              <view class="form-input talent-readonly">{{ profile.talent }}</view>
-            </view>
-            <view class="form-row">
-              <text class="form-label">家长手机</text>
-              <view class="form-input form-input-dim">{{ profile.phone || '暂无' }}</view>
-            </view>
-            <view class="form-row">
-              <text class="form-label">家长姓名</text>
-              <input class="form-input" v-model="profile.parentName" placeholder="家长姓名（选填）" />
-            </view>
-            <view class="btn-checkin" @click="saveProfile"><text>保存信息</text></view>
-          </view>
+        <view class="settings-header">
+          <text class="picker-title">设置</text>
+          <view class="settings-close-x" @click="showSettings = false"><text>×</text></view>
         </view>
 
-        <!-- Tab 2: 天赋测评历史 -->
-        <view class="set-block">
-          <view class="set-block-head" @click="settingsTab = 'history'">
-            <text class="set-block-title">📊 天赋测评历史</text>
-            <text class="set-block-arrow" :class="{ open: settingsTab === 'history' }">▾</text>
+        <view class="settings-sections">
+          <!-- 个人信息 -->
+          <view class="acc-item" :class="{ open: settingsOpen.profile }">
+            <view class="acc-head" @click="toggleSettingsSection('profile')">
+              <view class="acc-head-left">
+                <view class="acc-icon">👤</view>
+                <text class="acc-title">个人信息</text>
+              </view>
+              <text class="acc-chevron" :class="{ open: settingsOpen.profile }">›</text>
+            </view>
+            <view v-if="settingsOpen.profile" class="acc-body">
+              <view class="field">
+                <text class="field-label">孩子姓名</text>
+                <input
+                  class="field-input"
+                  type="text"
+                  :value="profile.name"
+                  placeholder="孩子真实姓名"
+                  placeholder-class="field-ph"
+                  @input="onProfileNameInput"
+                />
+              </view>
+              <view class="field">
+                <text class="field-label">年级</text>
+                <picker class="field-picker" mode="selector" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
+                  <view class="field-input field-select">{{ profile.grade || '请选择年级' }}</view>
+                </picker>
+              </view>
+              <view v-if="profile.talent" class="field">
+                <text class="field-label">天赋</text>
+                <view class="field-input field-readonly">{{ profile.talent }}</view>
+              </view>
+              <view class="field">
+                <text class="field-label">家长手机</text>
+                <view class="field-input field-readonly dim">{{ profile.phone || '暂无' }}</view>
+              </view>
+              <view class="field">
+                <text class="field-label">家长姓名</text>
+                <input
+                  class="field-input"
+                  type="text"
+                  :value="profile.parentName"
+                  placeholder="家长姓名（选填）"
+                  placeholder-class="field-ph"
+                  @input="onParentNameInput"
+                />
+              </view>
+              <view class="btn-primary" @click="saveProfile"><text>保存信息</text></view>
+            </view>
           </view>
-          <view v-if="settingsTab === 'history'" class="set-block-body">
-            <view v-if="historyList.length" class="history-mini">
-              <view v-for="(h, i) in historyList" :key="h.id || i" class="hm-item">
-                <view class="hm-left" @click="viewHistory(h)">
-                  <text class="hm-talent">{{ h.talent_primary || h.talent || '--' }}</text>
-                  <text class="hm-time">{{ h.create_time || h.assessed_at }}</text>
+
+          <!-- 首页对话 -->
+          <view class="acc-item" :class="{ open: settingsOpen.chat }">
+            <view class="acc-head" @click="toggleSettingsSection('chat')">
+              <view class="acc-head-left">
+                <view class="acc-icon">💬</view>
+                <text class="acc-title">首页对话</text>
+              </view>
+              <text class="acc-chevron" :class="{ open: settingsOpen.chat }">›</text>
+            </view>
+            <view v-if="settingsOpen.chat" class="acc-body">
+              <view class="btn-secondary" @click="startNewGuideChat">
+                <text>＋ 新建对话</text>
+              </view>
+              <text class="btn-hint">不删除当前内容，会留在下方历史里；下一句起新会话</text>
+
+              <view class="chat-actions-row">
+                <view class="btn-text-action" @click="clearCurrentGuideChat">
+                  <text>删除当前对话</text>
                 </view>
-                <text class="hm-del" @click.stop="confirmDeleteHistory(h)">✕</text>
-                <text class="hm-arrow">›</text>
+              </view>
+
+              <view class="list-section">
+                <view class="list-section-head">
+                  <text class="list-section-title">历史对话</text>
+                  <text
+                    v-if="guideSessionList.length"
+                    class="list-section-action"
+                    @click="confirmClearAllGuideSessions"
+                  >清空全部</text>
+                </view>
+                <view v-if="guideSessionsLoading" class="list-empty"><text>加载中…</text></view>
+                <view v-else-if="guideSessionList.length" class="session-list">
+                  <view
+                    v-for="s in guideSessionList"
+                    :key="s.id"
+                    class="session-item"
+                    :class="{ active: s.id === guideSessionId }"
+                  >
+                    <view class="session-main" @click="switchGuideSession(s.id)">
+                      <text class="session-title">{{ s.title || '首页对话' }}</text>
+                      <text class="session-time">{{ formatGuideSessionTime(s.updated_at || s.created_at) }}</text>
+                    </view>
+                    <view class="session-del" @click.stop="confirmDeleteGuideSession(s)">
+                      <text>×</text>
+                    </view>
+                  </view>
+                </view>
+                <view v-else class="list-empty"><text>暂无历史对话</text></view>
+              </view>
+
+              <view class="debug-row" @click="toggleGuideDebugTools">
+                <text class="debug-row-label">调试：显示工具调用</text>
+                <view class="debug-switch" :class="{ on: guideDebugTools }">
+                  <view class="debug-switch-knob"></view>
+                </view>
               </view>
             </view>
-            <text v-else class="history-empty">暂无历史测评记录</text>
-            <view class="btn-clear-chat" @click="clearGuideChat"><text>清空首页对话</text></view>
           </view>
         </view>
 
-        <view class="btn-logout" @click="doLogout"><text>登出账号</text></view>
-        <view class="picker-close" @click="showSettings = false"><text>关闭</text></view>
+        <view class="settings-footer">
+          <view class="btn-danger" @click="doLogout"><text>登出账号</text></view>
+          <view class="btn-text" @click="showSettings = false"><text>关闭</text></view>
+        </view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import {
   clearChildUserId,
   ensureChildUser,
@@ -158,13 +276,15 @@ import {
   markChildUserSessionValid,
   invalidateChildUserSession,
   fetchGuideSession,
+  fetchGuideSessions,
+  fetchGuideSessionById,
+  deleteGuideSession,
+  fetchGuideBootstrap,
   sendGuideMessageStream,
   clearGuideSession,
   fetchProfile,
   saveProfile as saveProfileToDb,
-  fetchAssessmentHistory,
   fetchLatestAssessment,
-  deleteAssessmentReport,
   updateLearnerProfile,
   gradeToSchoolStage,
 } from '@/utils/userApi.js'
@@ -179,12 +299,59 @@ let abortRequested = false
 const guideSessionId = ref(null)
 const messages = ref([])
 const showSettings = ref(false)
-const settingsTab = ref('profile')
+const settingsOpen = ref({ profile: true, chat: true })
+const guideSessionList = ref([])
+const guideSessionsLoading = ref(false)
+const GUIDE_DEBUG_KEY = 'jnao_guide_debug_tools'
+const guideDebugTools = ref(false)
+try {
+  guideDebugTools.value = localStorage.getItem(GUIDE_DEBUG_KEY) === '1'
+} catch (_) {}
+
+function toggleGuideDebugTools() {
+  guideDebugTools.value = !guideDebugTools.value
+  try {
+    localStorage.setItem(GUIDE_DEBUG_KEY, guideDebugTools.value ? '1' : '0')
+  } catch (_) {}
+  uni.showToast({
+    title: guideDebugTools.value ? '已开启工具调试' : '已关闭工具调试',
+    icon: 'none',
+  })
+}
 const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: '' })
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
-const historyList = ref([])
-const showQuickActions = computed(() => !messages.value.some(m => m.role === 'user'))
+const welcomeText = ref('正在了解你的训练状态…')
+const welcomeActions = ref([])
+const situationLabel = ref('')
+
+/** 与 backend handoff.ACTION_LABELS 对齐；优先用 API 返回的 act.label */
+const ACTION_LABEL_FALLBACK = {
+  talent: '去天赋测试 ›',
+  train: '去今日训练 ›',
+  qa: '去学科答疑 ›',
+  growth: '去成长里程碑 ›',
+}
+
+function actionLabel(target) {
+  return ACTION_LABEL_FALLBACK[target] || '前往 ›'
+}
+
+function normalizeNavigateActions(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter(a => a && a.type === 'navigate' && ACTION_LABEL_FALLBACK[a.target])
+    .map(a => ({
+      type: 'navigate',
+      target: a.target,
+      label: a.label || actionLabel(a.target),
+    }))
+}
+
+function runNavigateAction(act) {
+  const target = act?.target
+  if (target) openPage(target)
+}
 
 try {
   const saved = localStorage.getItem('jnao_theme')
@@ -214,7 +381,7 @@ async function sendMsg() {
   messages.value.push({ role: 'user', text })
   inputText.value = ''
   const aiIdx = messages.value.length
-  messages.value.push({ role: 'ai', text: '' })
+  messages.value.push({ role: 'ai', text: '', actions: [], tools_used: [] })
   loading.value = true
   abortRequested = false
   await nextTick()
@@ -233,6 +400,13 @@ async function sendMsg() {
       onDone(data) {
         guideSessionId.value = data.session_id
         if (data.reply) messages.value[aiIdx].text = data.reply
+        if (Array.isArray(data.actions)) {
+          messages.value[aiIdx].actions = normalizeNavigateActions(data.actions)
+        }
+        if (Array.isArray(data.tools_used)) {
+          messages.value[aiIdx].tools_used = data.tools_used
+        }
+        if (data.situation_label) situationLabel.value = data.situation_label
       },
     })
     streamAbort = abort
@@ -258,15 +432,19 @@ function stopStream() {
 }
 
 function applyProfileData(data, uid, { fetchLatest = true } = {}) {
-  if (data.nickname && data.nickname !== '学员') profile.value.name = data.nickname
+  if (data.nickname != null && String(data.nickname).trim()) {
+    profile.value.name = String(data.nickname).trim()
+  }
   if (data.parent_phone) profile.value.phone = data.parent_phone
-  if (data.parent_name) profile.value.parentName = data.parent_name
+  if (data.parent_name != null && String(data.parent_name).trim()) {
+    profile.value.parentName = String(data.parent_name).trim()
+  }
   let hasTalent = false
   if (data.profile_json) {
     const grade = data.profile_json.grade || data.profile_json.learner?.grade
     if (grade) profile.value.grade = grade
-    if (!data.parent_name && data.profile_json.parentName) {
-      profile.value.parentName = data.profile_json.parentName
+    if (!profile.value.parentName && data.profile_json.parentName) {
+      profile.value.parentName = String(data.profile_json.parentName).trim()
     }
     const td = data.profile_json.talent_display
     const tp = data.profile_json.talent_primary || data.profile_json.talent
@@ -300,46 +478,103 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   return Promise.resolve()
 }
 
+function _inputValue(e) {
+  if (e?.detail != null && e.detail.value != null) return String(e.detail.value)
+  if (e?.target != null && e.target.value != null) return String(e.target.value)
+  return ''
+}
+
+function onProfileNameInput(e) {
+  profile.value.name = _inputValue(e)
+}
+
+function onParentNameInput(e) {
+  profile.value.parentName = _inputValue(e)
+}
+
 async function initHome() {
   try {
     let uid = getChildUserId()
     if (!uid) uid = await ensureChildUser()
     let profileData
-    let history
     let guideData
+    let bootstrapData
     try {
-      ;[profileData, history, guideData] = await Promise.all([
+      const talentWarm = refreshTalentState(uid).catch(() => null)
+      ;[profileData, guideData, bootstrapData] = await Promise.all([
         fetchProfile(uid),
-        fetchAssessmentHistory(uid),
         fetchGuideSession(uid),
-        refreshTalentState(uid).catch(() => null),  // 并行，不阻塞
+        fetchGuideBootstrap(uid).catch(() => null),
       ])
+      await talentWarm
       markChildUserSessionValid(uid)
     } catch (e) {
       if (e.status === 404 && getChildUserId()) {
         invalidateChildUserSession()
         clearChildUserId()
         uid = await ensureChildUser()
-        ;[profileData, history, guideData] = await Promise.all([
+        ;[profileData, guideData, bootstrapData] = await Promise.all([
           fetchProfile(uid),
-          fetchAssessmentHistory(uid),
           fetchGuideSession(uid),
+          fetchGuideBootstrap(uid).catch(() => null),
         ])
         markChildUserSessionValid(uid)
       } else {
         throw e
       }
     }
-    historyList.value = history
-    guideSessionId.value = guideData.session_id
-    messages.value = (guideData.messages || []).map(m => ({
-      role: m.role === 'assistant' ? 'ai' : 'user',
-      text: m.content,
-    }))
+    applyGuideMessages(guideData)
+    applyBootstrap(bootstrapData)
     await applyProfileData(profileData, uid)
   } catch (e) {
     console.error('[home] initHome 失败:', e?.message || e, e?.status)
+    welcomeText.value = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
   }
+}
+
+function applyGuideMessages(guideData) {
+  if (!guideData) {
+    guideSessionId.value = null
+    messages.value = []
+    return
+  }
+  guideSessionId.value = guideData.session_id
+  const rawMsgs = guideData.messages || []
+  const hasUser = rawMsgs.some(m => m.role === 'user')
+  messages.value = (hasUser ? rawMsgs : [])
+    .map(m => {
+      const isAi = m.role === 'assistant' || m.role === 'ai'
+      return {
+        role: isAi ? 'ai' : 'user',
+        text: m.content || m.text || '',
+        actions: isAi ? normalizeNavigateActions(m.actions) : [],
+        tools_used: isAi && Array.isArray(m.tools_used) ? m.tools_used : [],
+      }
+    })
+}
+
+function applyBootstrap(data) {
+  if (!data || data.error) {
+    welcomeText.value = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
+    welcomeActions.value = []
+    situationLabel.value = ''
+    return
+  }
+  welcomeText.value = data.welcome || '你好！我是张宇老师。今天可以从上方入口开始训练或提问。'
+  const fromActions = normalizeNavigateActions(data.actions)
+  if (fromActions.length) {
+    welcomeActions.value = fromActions
+  } else if (ACTION_LABEL_FALLBACK[data.next_action]) {
+    // 兼容旧缓存仅有 next_action、无 actions 的情况
+    welcomeActions.value = [{
+      type: 'navigate',
+      target: data.next_action,
+      label: actionLabel(data.next_action),
+    }]
+  } else {
+    welcomeActions.value = []
+  }
+  situationLabel.value = data.situation_label || ''
 }
 
 async function loadProfile() {
@@ -376,45 +611,151 @@ async function saveProfile() {
   } catch (_) { uni.showToast({ title: '保存失败', icon: 'none' }) }
 }
 
-async function deleteHistory(assessmentId) {
-  try {
-    const uid = await ensureChildUser()
-    await deleteAssessmentReport(uid, assessmentId)
-    historyList.value = historyList.value.filter(h => h.id !== assessmentId)
-    await loadProfile()
-    uni.showToast({ title: '已删除', icon: 'none' })
-  } catch (e) {
-    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+async function openSettings() {
+  settingsOpen.value = { profile: true, chat: true }
+  showSettings.value = true
+  await Promise.all([loadProfile(), loadGuideSessionList()])
+}
+
+function toggleSettingsSection(key) {
+  settingsOpen.value = {
+    ...settingsOpen.value,
+    [key]: !settingsOpen.value[key],
+  }
+  if (key === 'chat' && settingsOpen.value.chat) {
+    loadGuideSessionList()
+  }
+  if (key === 'profile' && settingsOpen.value.profile) {
+    loadProfile()
   }
 }
 
-async function clearGuideChat() {
+async function loadGuideSessionList() {
+  guideSessionsLoading.value = true
   try {
     const uid = await ensureChildUser()
-    await clearGuideSession(uid)
+    guideSessionList.value = await fetchGuideSessions(uid)
+  } catch (e) {
+    console.error('[home] loadGuideSessionList 失败:', e?.message || e)
+    guideSessionList.value = []
+  } finally {
+    guideSessionsLoading.value = false
+  }
+}
+
+function formatGuideSessionTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+async function startNewGuideChat() {
+  if (loading.value) {
+    uni.showToast({ title: '请先停止当前回复', icon: 'none' })
+    return
+  }
+  try {
+    const uid = await ensureChildUser()
+    // 不删除当前会话：保留进历史，下一句消息会新建 session
     guideSessionId.value = null
     messages.value = []
-    uni.showToast({ title: '对话已清空', icon: 'none' })
-  } catch (_) {
-    uni.showToast({ title: '清空失败', icon: 'none' })
-  }
-}
-
-function viewHistory(h) {
-  if (h.id) {
+    const bootstrapData = await fetchGuideBootstrap(uid, { force: false }).catch(() => null)
+    applyBootstrap(bootstrapData)
+    await loadGuideSessionList()
     showSettings.value = false
-    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
+    await nextTick()
+    scrollChat()
+    uni.showToast({ title: '已开新对话', icon: 'none' })
+  } catch (_) {
+    uni.showToast({ title: '新建失败', icon: 'none' })
   }
 }
 
-function confirmDeleteHistory(h) {
-  if (!h?.id) return
+async function clearCurrentGuideChat() {
+  if (loading.value) {
+    uni.showToast({ title: '请先停止当前回复', icon: 'none' })
+    return
+  }
+  try {
+    const uid = await ensureChildUser()
+    if (guideSessionId.value) {
+      await deleteGuideSession(uid, guideSessionId.value)
+    }
+    guideSessionId.value = null
+    messages.value = []
+    const bootstrapData = await fetchGuideBootstrap(uid, { force: true }).catch(() => null)
+    applyBootstrap(bootstrapData)
+    await loadGuideSessionList()
+    uni.showToast({ title: '当前对话已删除', icon: 'none' })
+  } catch (_) {
+    uni.showToast({ title: '删除失败', icon: 'none' })
+  }
+}
+
+async function switchGuideSession(sessionId) {
+  if (!sessionId || loading.value) return
+  try {
+    const uid = await ensureChildUser()
+    const data = await fetchGuideSessionById(uid, sessionId)
+    applyGuideMessages(data)
+    showSettings.value = false
+    await nextTick()
+    scrollChat()
+  } catch (e) {
+    uni.showToast({ title: e?.message || '加载失败', icon: 'none' })
+  }
+}
+
+function confirmDeleteGuideSession(s) {
+  if (!s?.id) return
   uni.showModal({
-    title: '删除报告',
-    content: `确定删除「${h.talent_primary || h.talent || '测评'}」报告？`,
+    title: '删除对话',
+    content: `确定删除「${s.title || '首页对话'}」？删除后无法恢复。`,
     confirmText: '删除',
     confirmColor: '#ef4444',
-    success: (res) => { if (res.confirm) deleteHistory(h.id) },
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        const uid = await ensureChildUser()
+        await deleteGuideSession(uid, s.id)
+        if (guideSessionId.value === s.id) {
+          guideSessionId.value = null
+          messages.value = []
+          const bootstrapData = await fetchGuideBootstrap(uid, { force: true }).catch(() => null)
+          applyBootstrap(bootstrapData)
+        }
+        await loadGuideSessionList()
+        uni.showToast({ title: '已删除', icon: 'none' })
+      } catch (e) {
+        uni.showToast({ title: e?.message || '删除失败', icon: 'none' })
+      }
+    },
+  })
+}
+
+function confirmClearAllGuideSessions() {
+  uni.showModal({
+    title: '清空全部历史',
+    content: '将删除所有首页对话记录（含当前），且无法恢复。确定继续？',
+    confirmText: '全部清空',
+    confirmColor: '#ef4444',
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        const uid = await ensureChildUser()
+        await clearGuideSession(uid)
+        guideSessionId.value = null
+        messages.value = []
+        guideSessionList.value = []
+        const bootstrapData = await fetchGuideBootstrap(uid, { force: true }).catch(() => null)
+        applyBootstrap(bootstrapData)
+        uni.showToast({ title: '历史已清空', icon: 'none' })
+      } catch (_) {
+        uni.showToast({ title: '清空失败', icon: 'none' })
+      }
+    },
   })
 }
 
@@ -482,6 +823,12 @@ function onNavTap() {
 
 .hero-img { width:calc(100% - 28px); margin:0 14px; border-radius:16px; display:block; }
 
+.home-status-bar {
+  margin: 8px 14px 0; padding: 8px 12px; border-radius: 10px;
+  background: var(--accent-bg); border: 1px solid var(--border);
+}
+.home-status-text { color: var(--accent); font-size: 12px; font-weight: 600; }
+
 .func-grid { display:flex; gap:8px; padding:12px 14px; }
 .func-card { flex:1; background:var(--bg-card); border-radius:12px; padding:12px 6px 10px; display:flex; flex-direction:column; align-items:center; gap:6px; border:1.5px solid transparent; transition:all 0.15s; }
 .func-card:active { background:var(--accent-bg); border-color:var(--accent); transform:scale(0.95); }
@@ -495,19 +842,68 @@ function onNavTap() {
   border-bottom-left-radius:4px; padding:14px 16px;
 }
 .welcome-text { display:block; color:var(--text); font-size:14px; font-weight:600; margin-bottom:4px; }
-.welcome-sub { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; }
-.welcome-desc { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; margin-top:6px; }
+.welcome-sub { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; white-space:pre-wrap; }
+.welcome-actions { margin-top:10px; }
+.welcome-action {
+  display:inline-flex; padding:6px 12px; border-radius:8px;
+  background:var(--accent-bg); border:1px solid var(--accent); cursor:pointer;
+}
+.welcome-action text { color:var(--accent); font-size:12px; font-weight:600; }
+.welcome-action:active { opacity:0.85; }
 .chat-section::-webkit-scrollbar { display:none; }
-.chat-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-end; }
+.chat-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-start; }
 .chat-row.user { flex-direction:row-reverse; }
 .chat-av { width:32px; height:32px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .chat-av.ai { background:var(--chat-ai-bg); border:1px solid var(--border); }
 .chat-av.me { background:var(--chat-me-bg); border-radius:50%; color:var(--text-dim); font-size:12px; }
 .ai-avatar-img { width:100%; height:100%; border-radius:8px; object-fit:cover; }
 .chat-bbl { max-width:76%; padding:9px 13px; border-radius:14px; font-size:13px; line-height:1.55; word-break:break-word; white-space:pre-wrap; }
+.chat-bbl-wrap { max-width:76%; display:flex; flex-direction:column; gap:6px; }
+.chat-bbl-wrap .chat-bbl { max-width:100%; }
+.chat-bbl-wrap.me { align-items:flex-end; }
+.chat-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.tools-debug {
+  display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:2px;
+}
+.tools-debug-label {
+  color:var(--text-dim); font-size:10px; font-weight:600; margin-right:2px;
+}
+.tools-debug-chip {
+  padding:2px 7px; border-radius:999px;
+  background:rgba(88,166,255,0.12); border:1px solid rgba(88,166,255,0.35);
+}
+.tools-debug-chip text { color:var(--accent); font-size:10px; font-weight:600; }
+.tools-debug-chip.fail {
+  background:rgba(239,68,68,0.1); border-color:rgba(239,68,68,0.35);
+}
+.tools-debug-chip.fail text { color:#ef4444; }
 .chat-bbl.ai { background:var(--chat-ai-bg); color:var(--text); border-bottom-left-radius:4px; }
 .chat-bbl.me { background:var(--chat-me-bg); color:var(--text-sub); border-bottom-right-radius:4px; }
 [data-theme="white"] .chat-bbl.me { background:#eef2ff; color:#1e293b; border:1px solid #e0e7ff; }
+
+.thinking-bbl {
+  display:flex; align-items:center; gap:8px; min-height:20px;
+}
+.thinking-dots { display:flex; align-items:center; gap:4px; }
+.thinking-dot {
+  width:6px; height:6px; border-radius:50%;
+  background:var(--accent); opacity:0.35;
+  animation:thinkingBounce 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) { animation-delay:0.15s; }
+.thinking-dot:nth-child(3) { animation-delay:0.3s; }
+.thinking-label {
+  color:var(--text-dim); font-size:11px; font-weight:500;
+  animation:thinkingPulse 1.4s ease-in-out infinite;
+}
+@keyframes thinkingBounce {
+  0%, 80%, 100% { transform:translateY(0); opacity:0.3; }
+  40% { transform:translateY(-3px); opacity:1; }
+}
+@keyframes thinkingPulse {
+  0%, 100% { opacity:0.45; }
+  50% { opacity:0.9; }
+}
 
 .input-panel { margin:8px 14px 14px; }
 .input-wrap { position:relative; display:flex; align-items:center; background:rgba(255,255,255,0.1); border-radius:24px; padding:4px; border:1px solid rgba(255,255,255,0.15); }
@@ -522,43 +918,200 @@ function onNavTap() {
 .btn-disabled { opacity:0.45; pointer-events:none; }
 
 /* Settings modal */
-.picker-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:20px; }
-.picker-card { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:24px 20px; width:100%; max-width:340px; max-height:85vh; max-height:85dvh; overflow-y:auto; }
-.settings-card { animation:settingsIn 0.3s cubic-bezier(0.22,0.61,0.36,1); }
-@keyframes settingsIn { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
-.picker-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; display:block; margin-bottom:16px; }
-.set-block { margin-bottom:4px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-.set-block-head { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; cursor:pointer; background:rgba(255,255,255,0.02); }
-.set-block-title { color:var(--text); font-size:13px; font-weight:600; }
-.set-block-arrow { color:var(--text-dim); font-size:12px; transition:transform 0.2s; }
-.set-block-arrow.open { transform:rotate(180deg); }
-.set-block-body { padding:4px 14px 14px; }
-.talent-readonly { color:var(--accent); font-weight:600; }
-.form-input-dim { color:var(--text-dim); }
-.picker-close { text-align:center; margin-top:10px; cursor:pointer; }
-.picker-close text { color:var(--text-dim); font-size:14px; }
-.form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.form-row:last-child { margin-bottom:0; }
-.form-label { color:var(--text-dim); font-size:13px; width:56px; flex-shrink:0; }
-.form-input { flex:1; background:var(--bg-input); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--text); }
-.form-picker { flex:1; }
-.form-picker-val { color:var(--text); }
-.btn-checkin { background:linear-gradient(135deg,var(--accent),#3b8bff); border-radius:10px; padding:12px; text-align:center; cursor:pointer; margin-top:4px; }
-.btn-checkin text { color:#fff; font-size:15px; font-weight:600; }
-.btn-checkin:active { opacity:0.85; }
-.btn-logout { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:10px; padding:10px; text-align:center; cursor:pointer; margin-top:8px; }
-.btn-logout text { color:rgba(239,68,68,0.8); font-size:14px; font-weight:500; }
-.btn-logout:active { background:rgba(239,68,68,0.2); }
-.history-mini { max-height:160px; overflow-y:auto; }
-.hm-item { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
-.hm-del { color:#f85149; font-size:14px; padding:0 4px; cursor:pointer; flex-shrink:0; }
-.btn-clear-chat { margin-top:10px; padding:10px; text-align:center; border:1px dashed var(--border); border-radius:10px; cursor:pointer; }
-.btn-clear-chat text { color:var(--text-dim); font-size:12px; }
-.hm-item:last-child { border-bottom:none; }
-.hm-talent { flex:1; color:var(--text); font-size:12px; font-weight:600; }
-.hm-time { color:var(--text-dim); font-size:10px; }
-.hm-arrow { color:var(--text-dim); font-size:16px; }
-.hm-del { color:var(--text-dim); font-size:14px; padding:4px; cursor:pointer; }
-.hm-del:active { color:#ef4444; }
-.history-empty { color:var(--text-dim); font-size:12px; text-align:center; padding:8px 0; }
+.picker-overlay {
+  position:fixed; inset:0; z-index:500;
+  background:rgba(15,23,42,0.55); backdrop-filter:blur(6px);
+  display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.picker-card {
+  background:var(--bg-card); border:1px solid var(--border);
+  border-radius:20px; padding:0; width:100%; max-width:360px;
+  max-height:85vh; max-height:85dvh; overflow-y:auto;
+  box-shadow:0 20px 50px rgba(0,0,0,0.22);
+  scrollbar-width:none; -ms-overflow-style:none;
+}
+.picker-card::-webkit-scrollbar { display:none; }
+.settings-card { animation:settingsIn 0.28s cubic-bezier(0.22,0.61,0.36,1); }
+@keyframes settingsIn { from { opacity:0; transform:translateY(18px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+.settings-header {
+  display:flex; align-items:center; justify-content:center;
+  position:relative; padding:18px 20px 12px;
+  border-bottom:1px solid var(--border);
+}
+.picker-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; display:block; margin:0; }
+.settings-close-x {
+  position:absolute; right:14px; top:50%; transform:translateY(-50%);
+  width:28px; height:28px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--bg-input); cursor:pointer;
+}
+.settings-close-x text { color:var(--text-dim); font-size:18px; line-height:1; }
+.settings-close-x:active { opacity:0.7; }
+
+.settings-sections { padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+
+.acc-item {
+  border:1px solid var(--border); border-radius:14px;
+  background:var(--bg); overflow:hidden;
+  transition:border-color 0.15s, box-shadow 0.15s;
+}
+.acc-item.open { border-color:var(--accent); }
+.acc-head {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:13px 14px; cursor:pointer; user-select:none;
+}
+.acc-head:active { background:rgba(127,127,127,0.06); }
+.acc-head-left { display:flex; align-items:center; gap:10px; }
+.acc-icon {
+  width:28px; height:28px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--accent-bg); font-size:14px;
+}
+.acc-title { color:var(--text); font-size:14px; font-weight:600; }
+.acc-chevron {
+  color:var(--text-dim); font-size:18px; font-weight:400;
+  transform:rotate(90deg); transition:transform 0.2s ease; line-height:1;
+}
+.acc-chevron.open { transform:rotate(-90deg); }
+.acc-body {
+  padding:4px 14px 14px;
+  border-top:1px solid var(--border);
+}
+
+.field { margin-bottom:10px; }
+.field:last-of-type { margin-bottom:12px; }
+.field-label {
+  display:block; color:var(--text-dim); font-size:11px; font-weight:600;
+  letter-spacing:0.02em; margin-bottom:5px;
+}
+.field-input {
+  display:block; width:100%; box-sizing:border-box;
+  min-height:40px; line-height:20px;
+  background:var(--bg-input, #f3f4f6); border:1px solid var(--border);
+  border-radius:10px; padding:10px 12px; font-size:13px;
+  color:var(--text); -webkit-text-fill-color:var(--text);
+}
+.field-ph { color:var(--text-dim); }
+.field-picker { display:block; width:100%; }
+.field-select { color:var(--text); -webkit-text-fill-color:var(--text); }
+.field-readonly { color:var(--accent); -webkit-text-fill-color:var(--accent); font-weight:600; }
+.field-readonly.dim { color:var(--text-dim); -webkit-text-fill-color:var(--text-dim); font-weight:500; }
+[data-theme="white"] .field-input {
+  background:#f3f4f6; border-color:#e5e7eb; color:#1f2937; -webkit-text-fill-color:#1f2937;
+}
+[data-theme="dark"] .field-input {
+  background:rgba(255,255,255,0.06); color:#e5e7eb; -webkit-text-fill-color:#e5e7eb;
+}
+
+.btn-primary {
+  background:var(--accent); border-radius:10px; padding:11px;
+  text-align:center; cursor:pointer; margin-top:2px;
+}
+.btn-primary text { color:#fff; font-size:14px; font-weight:600; }
+.btn-primary:active { opacity:0.88; }
+
+.btn-secondary {
+  background:var(--bg-card); border:1px solid var(--border);
+  border-radius:10px; padding:10px; text-align:center; cursor:pointer;
+}
+.btn-secondary text { color:var(--text); font-size:13px; font-weight:500; }
+.btn-secondary:active { background:var(--accent-bg); }
+.btn-hint {
+  display:block; margin-top:6px; color:var(--text-dim);
+  font-size:11px; line-height:1.4; text-align:center;
+}
+.chat-actions-row {
+  display:flex; justify-content:center; margin-top:8px;
+}
+.btn-text-action { padding:4px 8px; cursor:pointer; }
+.btn-text-action text {
+  color:var(--text-dim); font-size:11px;
+  text-decoration:underline; text-underline-offset:2px;
+}
+.btn-text-action:active text { color:#ef4444; }
+
+.debug-row {
+  margin-top:14px; padding:10px 12px; border-radius:10px;
+  border:1px dashed var(--border);
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  cursor:pointer;
+}
+.debug-row-label { color:var(--text-dim); font-size:12px; font-weight:500; }
+.debug-switch {
+  width:40px; height:22px; border-radius:999px; flex-shrink:0;
+  background:rgba(127,127,127,0.25); position:relative;
+  transition:background 0.2s;
+}
+.debug-switch.on { background:var(--accent); }
+.debug-switch-knob {
+  position:absolute; top:2px; left:2px;
+  width:18px; height:18px; border-radius:50%; background:#fff;
+  transition:transform 0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.2);
+}
+.debug-switch.on .debug-switch-knob { transform:translateX(18px); }
+
+.list-section { margin-top:14px; }
+.list-section-head {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:8px; gap:8px;
+}
+.list-section-title {
+  color:var(--text-dim); font-size:11px; font-weight:600;
+  letter-spacing:0.02em;
+}
+.list-section-action {
+  color:var(--text-dim); font-size:11px; cursor:pointer;
+  text-decoration:underline; text-underline-offset:2px;
+}
+.list-section-action:active { color:#ef4444; }
+.session-list {
+  display:flex; flex-direction:column; gap:6px;
+  max-height:168px; overflow-y:auto;
+  scrollbar-width:none; -ms-overflow-style:none;
+}
+.session-list::-webkit-scrollbar { display:none; }
+.session-item {
+  display:flex; align-items:center; gap:8px;
+  padding:10px 10px; border-radius:10px;
+  background:var(--bg-card); border:1px solid var(--border);
+  cursor:pointer; transition:border-color 0.15s, background 0.15s;
+}
+.session-item.active {
+  border-color:var(--accent); background:var(--accent-bg);
+}
+.session-item:active { opacity:0.9; }
+.session-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.session-title {
+  color:var(--text); font-size:13px; font-weight:600;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.session-time { color:var(--text-dim); font-size:10px; }
+.session-del {
+  width:26px; height:26px; border-radius:8px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(127,127,127,0.08); cursor:pointer;
+}
+.session-del text { color:var(--text-dim); font-size:15px; line-height:1; }
+.session-del:active { background:rgba(239,68,68,0.12); }
+.session-del:active text { color:#ef4444; }
+.list-empty {
+  padding:16px 8px; text-align:center; border-radius:10px;
+  background:var(--bg-card); border:1px dashed var(--border);
+}
+.list-empty text { color:var(--text-dim); font-size:12px; }
+
+.settings-footer {
+  padding:8px 16px 16px; display:flex; flex-direction:column; gap:8px;
+  border-top:1px solid var(--border);
+}
+.btn-danger {
+  background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2);
+  border-radius:10px; padding:11px; text-align:center; cursor:pointer;
+}
+.btn-danger text { color:#ef4444; font-size:14px; font-weight:600; }
+.btn-danger:active { background:rgba(239,68,68,0.14); }
+.btn-text { text-align:center; padding:8px; cursor:pointer; }
+.btn-text text { color:var(--text-dim); font-size:13px; }
+.btn-text:active { opacity:0.7; }
 </style>

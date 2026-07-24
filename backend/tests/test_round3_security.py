@@ -23,9 +23,9 @@ class TestTalentReportAuth:
         assert res.status_code == 401
 
 
-class TestChatAuth:
-    def test_chat_requires_auth(self, client: TestClient):
-        res = client.post("/api/chat", json={"message": "你好"})
+class TestGuideChatAuth:
+    def test_guide_chat_requires_auth(self, client: TestClient):
+        res = client.post("/api/guide/chat", json={"message": "你好"})
         assert res.status_code == 401
 
 

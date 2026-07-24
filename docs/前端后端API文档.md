@@ -1,8 +1,8 @@
 # 前端-后端 API 文档
 
-> 最后更新：2026-07-10
-> 按前端页面编排，请求/响应格式 + 后端业务逻辑
-> **API 覆盖率：45/45 前端核心调用 + 家长端 9 个端点 + 训练 v3.0**
+> 最后更新：2026-07-23  
+> 按前端页面编排，请求/响应格式 + 后端业务逻辑  
+> 运维/发版见 [运维与发版.md](运维与发版.md)；首页引导现状见 [首页引导深化方案-2026-07-22.md](首页引导深化方案-2026-07-22.md)
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | 后端地址 | `http://127.0.0.1:8012` |
 | 用户标识 | Query `?user_id=` 或 Header `X-Child-User-Id` |
-| 认证 | Query `?session_token=` 或 Header `X-Session-Token`（单设备登录） |
-| 数据库 | SQLite（开发）/ MySQL（生产） |
-| 缓存 | Redis（可选，`REDIS_URL` 环境变量配置；无则直读 DB） |
-| AI 模型 | 火山引擎豆包 `doubao-seed-1-6-250615` |
-| 内容目录 | `docs/data/xet_*.json` → 启动时自动灌入 `content_item` 表（700+ 条） |
+| 认证 | **优先 Header** `X-Session-Token` + `X-Child-User-Id`；Query `user_id` 仍可用。session_token 走 Query 仅少数路径（如答疑图片） |
+| 数据库 | SQLite（开发，`NullPool`）/ MySQL（生产） |
+| 缓存 | Redis（可选，`REDIS_URL`；无则进程内/直读 DB） |
+| AI 模型 | 火山引擎豆包（guide / qa / 训练报告） |
+| 存活 / 发版 | `GET /api/ping`、`GET /api/meta/version`（含 `boot_id` / 维护 / `force_logout`） |
 
 ---
 
@@ -208,25 +208,59 @@ PUT /api/user/learner-profile
 
 ## 首页引导对话
 
-**前端**: `vue_fronted/src/pages/index.vue`
-**后端**: `app/api/guide.py`、`app/api/chat.py`
+**前端**: `vue_fronted/src/pages/index.vue`  
+**后端**: `app/api/guide.py` → `guide_service` → `agents/guide/`（bootstrap / runner / tools）
 
 ```
-POST /api/guide/chat?user_id={uid}
-{ "message": "你好" }
-→ { "reply": "你好！我是张宇老师..." }
+POST /api/guide/bootstrap?user_id={uid}
+{ "force": false, "use_llm": true }
+→ {
+    "welcome": "…",
+    "situation": "ready_to_train",
+    "next_action": "train",
+    "situation_label": "今日：可以开始训练",
+    "actions": [{ "type": "navigate", "target": "train", "label": "去今日训练 ›" }],
+    "snapshot": { "has_assessment": true, "situation": "…", "long_term": { "…可选…" } },
+    "source": "template|llm|cache"
+  }
 
 GET  /api/guide/session?user_id={uid}
-→ { "messages": [...] }
+→ { "session_id": null|int, "messages": [
+    { "role": "user|assistant", "content": "…" },
+    # assistant 另含 actions / tools_used（写入 meta_json，历史回放用）
+    { "role": "assistant", "content": "…", "actions": […], "tools_used": […] }
+  ] }   # 空会话不再注入静态 GREETING；开场看 bootstrap
 
-GET  /api/guide/debug
-→ 显示豆包原始回复（仅开发环境）
+GET  /api/guide/sessions
+→ { "items": [{ "id", "title", "message_count", "updated_at", "created_at" }] }
 
-POST /api/chat       # 通用对话（不含引导人设）
-POST /api/chat/stream # SSE 流式对话
+GET  /api/guide/sessions/{id}
+→ { "session_id", "title", "messages": [...] }  # 同上，assistant 含 actions / tools_used
+
+DELETE /api/guide/sessions/{id}
+→ { "ok": true }
+
+POST /api/guide/chat?user_id={uid}
+{ "message": "今天练了吗", "session_id": null }
+→ {
+    "reply": "…",
+    "session_id": 1,
+    "situation": "…",
+    "next_action": "train",
+    "situation_label": "…",
+    "actions": […],
+    "tools_used": [{ "name": "get_today_plan", "ok": true }]
+  }
+
+POST /api/guide/chat/stream   # SSE；done 事件含同上元数据
+POST /api/guide/clear
+GET  /api/guide/debug         # 仅调试环境
 ```
 
-**后端工作**: 调用豆包 LLM → 引导人设注入（张宇老师） → 返回回复。**当前为静态人设**；读用户画像做个性化引导为预留能力（见 [数据闭环与预留说明.md](数据闭环与预留说明.md)）。
+**后端工作**:  
+- 开场：`sense → decide → speak`（情境模板保底，可选 LLM）  
+- 对话：注入情境卡片；追问细节走只读 tool-loop（`get_profile` / `get_today_plan` / `get_checkin_timeline` / `get_skill_progress` / `suggest_next_action`）  
+- 详案：[首页引导深化方案-2026-07-22.md](首页引导深化方案-2026-07-22.md)（A0～C 已落地；旧 `POST /api/chat` 已废弃）
 
 ---
 
@@ -810,8 +844,10 @@ onboarding:
 | `fetchTalentTrainingVideo` | GET | `/api/training/video/talent` | ✅ |
 | `postTrainingWatchProgress` | POST | `/api/training/items/{id}/watch-progress` | ✅ |
 | `sendGuideMessage` | POST | `/api/guide/chat` | ✅ |
+| `fetchGuideBootstrap` | POST | `/api/guide/bootstrap` | ✅ |
 | `fetchGuideSession` | GET | `/api/guide/session` | ✅ |
 | `clearGuideSession` | POST | `/api/guide/clear` | ✅ |
+| `sendGuideMessageStream` | POST | `/api/guide/chat/stream` | ✅ |
 | `sendQaMessage` | POST | `/api/qa/chat` | ✅ |
 | `fetchQaSessions` | GET | `/api/qa/sessions` | ✅ |
 | `createQaSession` | POST | `/api/qa/sessions` | ✅ |
@@ -836,4 +872,4 @@ onboarding:
 
 以下端点存在但在组件中内联调用或暂未使用，**不是缺口**：
 
-`GET /api/training/checkin/{id}` `POST /api/training/schedule/optional` `POST /api/training/window` `GET /api/training/window` `GET /api/training/window/status` `POST /api/training/plan/media-exhausted` `GET /api/training/report/{date}` `POST /api/talent/jnao/submit` `GET /api/talent/jnao/report/{id}` `POST /api/talent/assessment` `POST /api/chat` `GET /api/chat/stream` `POST /api/voice/tts` `GET /api/resources/oss/list` `GET /api/resources/list` `GET /api/resources/{id}` `GET /api/guide/debug` `GET /api/health`
+`GET /api/ping` `GET /api/meta/version` `GET /api/training/checkin/{id}` `POST /api/training/schedule/optional` `POST /api/training/window` `GET /api/training/window` `GET /api/training/window/status` `POST /api/training/plan/media-exhausted` `GET /api/training/report/{date}` `POST /api/talent/jnao/submit` `GET /api/talent/jnao/report/{id}` `POST /api/talent/assessment` `POST /api/voice/tts` `GET /api/resources/oss/list` `GET /api/resources/list` `GET /api/resources/{id}` `GET /api/guide/debug` `GET /api/health`

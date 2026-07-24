@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from app.api import ai_proxy
+from app.core.runtime import ping_payload
 from app.db.session import get_session_factory
 from config import load_integration, load_settings
 
@@ -12,8 +13,8 @@ router = APIRouter(tags=["health"])
 
 @router.get("/api/ping")
 def ping():
-    """轻量存活探测 — 供启动脚本使用，不探测上游"""
-    return {"ok": True}
+    """轻量存活探测 — 含 boot_id（开发态强制重登用）"""
+    return ping_payload()
 
 
 def _check_database() -> dict:

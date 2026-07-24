@@ -23,6 +23,7 @@
 
 import { getQaImageLocal, parseQaImageId } from './qaMedia.js'
 import { authHeaders, getDeviceId } from './loginGuard.js'
+import { applyDevBootReloginIfNeeded } from './devBootAuth.js'
 import {
   inferAuthKindFromPath,
   readAuthSnapshot,
@@ -193,14 +194,21 @@ export async function requirePageAuth(kind) {
   }
 }
 
-/** App 启动：迁移 storage + 记录路由 + 静默校验当前页 session */
+/** App 启动：开发态对齐 boot_id → 迁移 storage → 静默校验当前页 session */
 export async function bootstrapAppSession() {
+  const boot = await applyDevBootReloginIfNeeded()
+  if (boot.cleared) {
+    invalidatePageAuthCache()
+    invalidateChildUserSession()
+    resetSessionExpiryGuard()
+  }
   migrateAuthStorage()
   rememberCurrentRoute()
   const { route } = getCurrentAppPath()
   const kind = inferAuthKindFromPath(route)
-  if (!kind) return { ok: true, skipped: true }
-  return requirePageAuth(kind)
+  if (!kind) return { ok: true, skipped: true, bootCleared: !!boot.cleared }
+  const auth = await requirePageAuth(kind)
+  return { ...auth, bootCleared: !!boot.cleared }
 }
 
 /** 登录异常时一键清除本机全部登录缓存（无需清整个站点数据） */
@@ -1136,6 +1144,28 @@ export async function toggleElectiveItem(userId, planId, skill, action) {
 
 export async function fetchGuideSession(userId) {
   return apiJson(withUser('/api/guide/session', userId))
+}
+
+export async function fetchGuideSessions(userId) {
+  const data = await apiJson(withUser('/api/guide/sessions', userId))
+  return data.items || []
+}
+
+export async function fetchGuideSessionById(userId, sessionId) {
+  return apiJson(withUser(`/api/guide/sessions/${sessionId}`, userId))
+}
+
+export async function deleteGuideSession(userId, sessionId) {
+  return apiJson(withUser(`/api/guide/sessions/${sessionId}`, userId), { method: 'DELETE' })
+}
+
+/** 进首页开场 Agent：按情境返回欢迎语 */
+export async function fetchGuideBootstrap(userId, { force = false, use_llm = true } = {}) {
+  return apiJson(withUser('/api/guide/bootstrap', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force, use_llm }),
+  })
 }
 
 export async function clearGuideSession(userId) {

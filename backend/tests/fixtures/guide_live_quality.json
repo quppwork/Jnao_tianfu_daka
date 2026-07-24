@@ -1,0 +1,64 @@
+{
+  "chat_cases": [
+    {
+      "id": "need_assessment_guide",
+      "seed": "need_assessment",
+      "message": "我接下来该做什么？",
+      "expect_keywords_any": ["天赋", "测评", "测试", "评估"],
+      "expect_next_action": "talent",
+      "expect_situation": "need_assessment"
+    },
+    {
+      "id": "ready_to_train_guide",
+      "seed": "ready_to_train",
+      "message": "今天适合练吗？",
+      "expect_keywords_any": ["训练", "今日", "打卡", "开始", "可以", "练"],
+      "expect_next_action": "train",
+      "expect_situation": "ready_to_train"
+    },
+    {
+      "id": "training_in_progress_guide",
+      "seed": "training_in_progress",
+      "message": "我训练做到哪了？",
+      "expect_keywords_any": ["继续", "剩余", "进行", "今天", "训练", "还", "进度"],
+      "expect_next_action": "train",
+      "expect_situation": "training_in_progress"
+    },
+    {
+      "id": "training_done_guide",
+      "seed": "training_done",
+      "message": "今天练完了，还能干点什么？",
+      "expect_keywords_any": ["答疑", "成长", "完成", "功课", "作业", "休息", "看看", "可以", "练完"],
+      "expect_next_action": "qa",
+      "expect_situation": "training_done"
+    },
+    {
+      "id": "sparse_return_guide",
+      "seed": "sparse_return",
+      "message": "好久没来了，怎么重新开始？",
+      "expect_keywords_any": ["回来", "欢迎", "训练", "节奏", "重新", "开始", "慢慢", "打卡"],
+      "expect_next_action": "train",
+      "expect_situation": "sparse_return"
+    }
+  ],
+  "tool_cases": [
+    {
+      "id": "tool_today_plan",
+      "seed": "ready_to_train",
+      "message": "今天练了吗？今日训练安排怎么样？",
+      "expect_tools_any": ["get_today_plan", "suggest_next_action"]
+    },
+    {
+      "id": "tool_checkin_timeline",
+      "seed": "ready_to_train",
+      "message": "我最近打卡记录怎么样？",
+      "expect_tools_any": ["get_checkin_timeline"]
+    },
+    {
+      "id": "tool_skill_progress",
+      "seed": "ready_to_train",
+      "message": "我的技能进度和 Tier 怎么样？",
+      "expect_tools_any": ["get_skill_progress"]
+    }
+  ]
+}

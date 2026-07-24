@@ -82,12 +82,6 @@ def mock_doubao():
             new_callable=AsyncMock,
             return_value=reply,
         ) as mock_chat,
-        patch("app.services.guide_service.chat_completion", new_callable=AsyncMock, return_value=reply),
-        patch("app.api.chat.chat_completion", new_callable=AsyncMock, return_value=reply),
-        patch(
-            "app.api.chat.chat_completion_stream",
-            side_effect=lambda **kwargs: _fake_stream(),
-        ),
         patch(
             "app.services.qa_service.chat_completion",
             new_callable=AsyncMock,
@@ -113,7 +107,6 @@ def mock_doubao():
             side_effect=lambda **kwargs: _fake_stream(),
         ),
         patch("app.services.doubao_client.is_configured", return_value=True),
-        patch("app.api.chat.is_configured", return_value=True),
     ):
         yield {"chat": mock_chat, "stream": _fake_stream}
 
