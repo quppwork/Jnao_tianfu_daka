@@ -59,9 +59,10 @@ app/agents/
 | ~~设置「清除当前」与「清空全部」入口收敛~~ | ✅ 已做 |
 | ~~真豆包话术抽检 / E2E~~ | ✅ `DOUBAO_LIVE_TEST=1` → `test_guide_live_quality.py` |
 | ~~调试开关展示 tools_used~~ | ✅ 设置内开关 |
-| 话术「先答后导」+ 训练逻辑模糊化 | ✅ persona / 工具摘要 / 去掉 consecutive_pass 外泄 |
-| 原生 function-calling | 能力增强 |
+| ~~话术「先答后导」+ 训练逻辑模糊化~~ | ✅ persona / 工具摘要 / 去掉 consecutive_pass 外泄 |
+| ~~天赋报告摘要工具 + 意图按钮~~ | ✅ `get_talent_report_summary`；问天赋 → 报告/测评 |
+| ~~原生 function-calling~~ | ✅ `chat_completion_message` + `plan_tools_native_fc`；失败/空则启发式 |
 | QA Agent 打磨 | **另线** |
 | Orchestrator | **暂不做**（见 handoff 原则） |
 
-详见 `docs/首页引导深化方案-2026-07-22.md` 文首「〇、状态总览」。
+Guide 主线已收口。实现记录仅本地 `docs/过期文件/`（不入库）；现行约定见 `docs/前端后端API文档.md`（首页引导）与 `docs/数据闭环与预留说明.md` §1.6。

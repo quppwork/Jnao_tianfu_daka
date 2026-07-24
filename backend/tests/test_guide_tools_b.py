@@ -7,6 +7,9 @@ from app.agents.guide.tools import call_tool, list_tools
 from app.agents.guide.tools.planner import (
     _parse_tools_json,
     execute_tools,
+    openai_tool_schemas,
+    parse_native_tool_calls,
+    plan_tools,
     plan_tools_heuristic,
 )
 from app.agents.guide.runner import run_chat
@@ -16,10 +19,93 @@ from app.services.auth_service import register_child
 def test_list_tools_includes_builtins():
     names = list_tools()
     assert "get_profile" in names
+    assert "get_talent_report_summary" in names
     assert "get_today_plan" in names
     assert "get_checkin_timeline" in names
     assert "get_skill_progress" in names
     assert "suggest_next_action" in names
+
+
+def test_openai_tool_schemas_cover_catalog():
+    schemas = openai_tool_schemas()
+    names = {s["function"]["name"] for s in schemas}
+    assert names == set(list_tools())
+    checkin = next(s for s in schemas if s["function"]["name"] == "get_checkin_timeline")
+    assert "limit" in checkin["function"]["parameters"]["properties"]
+
+
+def test_parse_native_tool_calls():
+    msg = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "get_today_plan",
+                    "arguments": "{}",
+                },
+            },
+            {
+                "id": "call_2",
+                "type": "function",
+                "function": {
+                    "name": "get_checkin_timeline",
+                    "arguments": '{"limit": 7}',
+                },
+            },
+            {
+                "id": "call_hack",
+                "type": "function",
+                "function": {"name": "hack", "arguments": "{}"},
+            },
+        ],
+    }
+    picks = parse_native_tool_calls(msg)
+    assert picks == [
+        {"name": "get_today_plan", "args": {}},
+        {"name": "get_checkin_timeline", "args": {"limit": 7}},
+    ]
+    assert parse_native_tool_calls(None) == []
+    assert parse_native_tool_calls({"role": "assistant", "content": "hi"}) == []
+
+
+@pytest.mark.asyncio
+async def test_plan_tools_prefers_native_fc(mock_doubao):
+    mock_doubao["fc"].return_value = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {
+                    "name": "get_profile",
+                    "arguments": "{}",
+                },
+            }
+        ],
+    }
+    # 无关键词命中启发式；应走 FC
+    picks = await plan_tools("帮我看看学生基本信息", prefer_native_fc=True)
+    assert picks == [{"name": "get_profile", "args": {}}]
+    mock_doubao["fc"].assert_awaited()
+    call_kw = mock_doubao["fc"].await_args.kwargs
+    assert call_kw.get("tools")
+    assert call_kw.get("tool_choice") == "auto"
+
+
+@pytest.mark.asyncio
+async def test_plan_tools_fc_empty_falls_to_heuristic(mock_doubao):
+    mock_doubao["fc"].return_value = {"role": "assistant", "content": ""}
+    picks = await plan_tools("今天练了吗", prefer_native_fc=True)
+    assert any(p["name"] == "get_today_plan" for p in picks)
+
+
+def test_plan_tools_heuristic_talent_report():
+    picks = plan_tools_heuristic("我这个天赋如何")
+    assert any(p["name"] == "get_talent_report_summary" for p in picks)
 
 
 def test_plan_tools_heuristic_timeline():
@@ -59,6 +145,39 @@ def test_tool_get_profile(db_session):
     out = call_tool(db_session, user.id, "get_profile", {})
     assert out["nickname"] == "工具画像"
     assert "has_assessment" in out
+
+
+def test_tool_talent_report_summary(db_session):
+    from app.services.assessment_service import save_assessment
+
+    user = register_child(db_session, parent_phone="1390000b110", nickname="工具报告")
+    empty = call_tool(db_session, user.id, "get_talent_report_summary", {})
+    assert empty.get("has_assessment") is False
+
+    save_assessment(
+        db_session,
+        child_user_id=user.id,
+        jnao_record_id=f"tool-talent-{user.id}",
+        answer_bitstring="1" * 35,
+        test_type=1,
+        report={
+            "talent": "赢者",
+            "check_talent": ["赢者", "行者"],
+            "results": {
+                "Talent": {
+                    "desp": "<p><strong>【天赋能力解读】</strong></p><p>赢者擅长目标与节奏。</p>"
+                    "<p><strong>想对你说的话</strong></p><p>保持闯关感。</p>"
+                    "<p><strong>三条黄金建议</strong></p><p>1. 设小目标 2. 及时反馈 3. 适度竞赛</p>"
+                },
+                "State": {"name": "相生", "desp": "<p>状态良好，适合推进训练。</p>"},
+            },
+            "create_time": "2026-06-18",
+        },
+    )
+    out = call_tool(db_session, user.id, "get_talent_report_summary", {})
+    assert out["has_assessment"] is True
+    assert out["talent_primary"] == "赢者"
+    assert "赢者" in (out.get("ability_desc") or out.get("coach_hint") or "")
 
 
 def test_tool_get_today_plan(db_session):
@@ -108,4 +227,6 @@ async def test_run_chat_uses_tools(db_session, mock_doubao):
         db_session, user.id, "我的天赋测评过了吗", history=[]
     )
     assert result["reply"]
-    assert any(t["name"] == "get_profile" for t in result["tools_used"])
+    used = {t["name"] for t in result["tools_used"]}
+    assert used & {"get_profile", "get_talent_report_summary"}
+    assert result["actions"] and result["actions"][0]["target"] in ("talent", "report")

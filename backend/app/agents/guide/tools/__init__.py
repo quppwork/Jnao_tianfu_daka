@@ -30,6 +30,7 @@ def list_tools() -> list[str]:
     from app.agents.guide.tools import checkin_timeline as _c  # noqa: F401
     from app.agents.guide.tools import skill_progress as _s  # noqa: F401
     from app.agents.guide.tools import suggest_next as _n  # noqa: F401
+    from app.agents.guide.tools import talent_report as _tr  # noqa: F401
 
     return sorted(TOOL_REGISTRY.keys())
 

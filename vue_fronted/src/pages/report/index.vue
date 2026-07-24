@@ -219,7 +219,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ensureChildUser, fetchAssessmentReport, fetchProfile, getSessionToken, saveProfile } from '@/utils/userApi.js'
+import { ensureChildUser, fetchAssessmentReport, fetchLatestAssessment, fetchProfile, getSessionToken, saveProfile } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
@@ -250,7 +250,7 @@ onMounted(async () => {
   try {
     const pages = getCurrentPages()
     const page = pages[pages.length - 1]
-    const assessmentId = page?.options?.assessment_id
+    let assessmentId = page?.options?.assessment_id
     fromOnboarding.value = page?.options?.from === 'onboarding'
     studentTypeFromOb.value = page?.options?.student_type || 'new'
     const uid = await ensureChildUser()
@@ -270,8 +270,17 @@ onMounted(async () => {
       lastChanceNewTalent.value = decodeURIComponent(page?.options?.new_talent || '')
     }
 
+    // 首页等入口可能未带 ID：回退最新正式测评
     if (!assessmentId) {
-      loadError.value = '缺少测评记录 ID'
+      try {
+        const latest = await fetchLatestAssessment(uid)
+        if (latest?.id && Number(latest.id) > 0) {
+          assessmentId = String(latest.id)
+        }
+      } catch (_) { /* ignore */ }
+    }
+    if (!assessmentId || Number(assessmentId) <= 0) {
+      loadError.value = '暂无正式测评报告，请先完成天赋测试'
       return
     }
     const json = await fetchAssessmentReport(uid, assessmentId)

@@ -74,7 +74,10 @@
       </view>
       <!-- 聊天记录 -->
       <view v-for="(m,i) in messages" :key="i" class="chat-row" :class="{ user: m.role === 'user' }">
-        <view class="chat-av me" v-if="m.role==='user'"><text>我</text></view>
+        <view class="chat-av me" v-if="m.role==='user'">
+          <image v-if="userTalentAvatar" class="user-avatar-img" :src="userTalentAvatar" mode="aspectFill"></image>
+          <text v-else>我</text>
+        </view>
         <view class="chat-av ai" v-else><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="chat-bbl-wrap" :class="{ me: m.role==='user' }">
           <view
@@ -266,7 +269,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import {
   clearChildUserId,
   ensureChildUser,
@@ -318,7 +321,7 @@ function toggleGuideDebugTools() {
     icon: 'none',
   })
 }
-const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: '' })
+const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: '', assessmentId: null })
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
 const welcomeText = ref('正在了解你的训练状态…')
@@ -328,10 +331,35 @@ const situationLabel = ref('')
 /** 与 backend handoff.ACTION_LABELS 对齐；优先用 API 返回的 act.label */
 const ACTION_LABEL_FALLBACK = {
   talent: '去天赋测试 ›',
+  report: '去天赋报告 ›',
   train: '去今日训练 ›',
   qa: '去学科答疑 ›',
   growth: '去成长里程碑 ›',
 }
+
+/** 与报告页 TALENT_LOGOS 一致 */
+const TALENT_LOGOS = {
+  学者: '/static/xue.jpg',
+  思者: '/static/si.jpg',
+  赢者: '/static/ying.jpg',
+  德者: '/static/de.jpg',
+  行者: '/static/xing.jpg',
+}
+
+function resolveTalentLogoKey(raw) {
+  if (!raw) return ''
+  const s = String(raw).trim()
+  for (const name of Object.keys(TALENT_LOGOS)) {
+    if (s === name || s.includes(name)) return name
+  }
+  const tagMap = { 学: '学者', 思: '思者', 赢: '赢者', 德: '德者', 行: '行者' }
+  return tagMap[s[0]] || ''
+}
+
+const userTalentAvatar = computed(() => {
+  const key = resolveTalentLogoKey(profile.value.talent)
+  return key ? TALENT_LOGOS[key] : ''
+})
 
 function actionLabel(target) {
   return ACTION_LABEL_FALLBACK[target] || '前往 ›'
@@ -446,6 +474,8 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
     if (!profile.value.parentName && data.profile_json.parentName) {
       profile.value.parentName = String(data.profile_json.parentName).trim()
     }
+    const aid = data.profile_json.latest_assessment_id
+    if (aid && Number(aid) > 0) profile.value.assessmentId = Number(aid)
     const td = data.profile_json.talent_display
     const tp = data.profile_json.talent_primary || data.profile_json.talent
     const obName = data.profile_json.onboarding?.self_reported_talent
@@ -468,9 +498,12 @@ function applyProfileData(data, uid, { fetchLatest = true } = {}) {
   }
   const idx = gradeOptions.indexOf(profile.value.grade)
   if (idx >= 0) gradeIndex.value = idx
-  if (fetchLatest && !hasTalent && uid) {
+  if (fetchLatest && uid) {
     return fetchLatestAssessment(uid).then((latest) => {
-      if (latest?.talent_primary) {
+      if (latest?.id && Number(latest.id) > 0) {
+        profile.value.assessmentId = Number(latest.id)
+      }
+      if (!hasTalent && latest?.talent_primary) {
         profile.value.talent = latest.talent_primary
       }
     }).catch(() => {})
@@ -777,12 +810,32 @@ function scrollChat() {
 
 
 
-function openPage(name) {
+async function openPage(name) {
   const routes = {
     talent: '/pages/talent/index',
     train: '/pages/training/index',
     qa: '/pages/qa/index',
     growth: '/pages/growth/index',
+  }
+  if (name === 'report') {
+    try {
+      const uid = await ensureChildUser()
+      let aid = profile.value.assessmentId
+      if (!aid || Number(aid) <= 0) {
+        const latest = await fetchLatestAssessment(uid)
+        aid = latest?.id
+        if (aid && Number(aid) > 0) profile.value.assessmentId = Number(aid)
+      }
+      if (aid && Number(aid) > 0) {
+        uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
+        return
+      }
+      uni.showToast({ title: '暂无正式报告，请先测评', icon: 'none' })
+      uni.navigateTo({ url: '/pages/talent/index' })
+    } catch (e) {
+      uni.showToast({ title: e?.message || '无法打开报告', icon: 'none' })
+    }
+    return
   }
   const url = routes[name]
   if (url) uni.navigateTo({ url })
@@ -857,6 +910,7 @@ function onNavTap() {
 .chat-av.ai { background:var(--chat-ai-bg); border:1px solid var(--border); }
 .chat-av.me { background:var(--chat-me-bg); border-radius:50%; color:var(--text-dim); font-size:12px; }
 .ai-avatar-img { width:100%; height:100%; border-radius:8px; object-fit:cover; }
+.user-avatar-img { width:100%; height:100%; border-radius:50%; object-fit:cover; }
 .chat-bbl { max-width:76%; padding:9px 13px; border-radius:14px; font-size:13px; line-height:1.55; word-break:break-word; white-space:pre-wrap; }
 .chat-bbl-wrap { max-width:76%; display:flex; flex-direction:column; gap:6px; }
 .chat-bbl-wrap .chat-bbl { max-width:100%; }

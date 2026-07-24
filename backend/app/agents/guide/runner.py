@@ -16,7 +16,7 @@ from app.agents.guide.memory import truncate_history
 from app.agents.guide.persona import SYSTEM_PROMPT
 from app.agents.guide.situations import apply_situation
 from app.agents.guide.tools.planner import execute_tools, plan_tools
-from app.agents.shared.handoff import actions_for_next, situation_label
+from app.agents.shared.handoff import resolve_reply_actions, situation_label
 from app.core.logger import get_logger
 
 logger = get_logger("guide.runner")
@@ -72,14 +72,21 @@ def prepare_history(history: list[dict] | None) -> list[dict]:
 def _meta_from_ctx(
     ctx: GuideContext,
     *,
+    message: str = "",
     tools_used: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    tools = tools_used or []
     return {
         "situation": ctx.situation,
         "next_action": ctx.next_action,
         "situation_label": situation_label(ctx.situation),
-        "actions": actions_for_next(ctx.next_action),
-        "tools_used": tools_used or [],
+        "actions": resolve_reply_actions(
+            situation_next=ctx.next_action,
+            message=message,
+            tools_used=tools,
+            has_assessment=bool(ctx.has_assessment),
+        ),
+        "tools_used": tools,
     }
 
 
@@ -88,11 +95,17 @@ async def _gather_tools(
     child_user_id: int,
     message: str,
     *,
+    history: list[dict] | None = None,
     use_tools: bool = True,
 ) -> tuple[list[dict[str, Any]], str]:
     if not use_tools:
         return [], ""
-    picks = await plan_tools(message, use_llm_fallback=True)
+    picks = await plan_tools(
+        message,
+        history=prepare_history(history),
+        use_llm_fallback=True,
+        prefer_native_fc=True,
+    )
     if not picks:
         return [], ""
     audit, block = execute_tools(db, child_user_id, picks)
@@ -115,8 +128,9 @@ async def run_chat(
     from app.services.doubao_client import chat_completion
 
     ctx = _prepare_context(db, child_user_id)
+    hist = prepare_history(history)
     tools_used, tool_block = await _gather_tools(
-        db, child_user_id, message, use_tools=use_tools
+        db, child_user_id, message, history=hist, use_tools=use_tools
     )
     system = build_chat_system_prompt(
         db, child_user_id, tool_block=tool_block
@@ -124,11 +138,14 @@ async def run_chat(
     reply = await chat_completion(
         system_prompt=system,
         user_message=message,
-        history=prepare_history(history),
+        history=hist,
         max_tokens=500,
     )
     text = (reply or "").strip() or "抱歉，AI 暂时无法响应，请稍后再试。"
-    return {"reply": text, **_meta_from_ctx(ctx, tools_used=tools_used)}
+    return {
+        "reply": text,
+        **_meta_from_ctx(ctx, message=message, tools_used=tools_used),
+    }
 
 
 async def run_chat_stream(
@@ -139,17 +156,18 @@ async def run_chat_stream(
     history: list[dict] | None = None,
     use_tools: bool = True,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """流式：先 tool-loop，再 yield meta / token。
+    """流式：先 tool-loop（含原生 FC），再 yield meta / token。
 
     yield ('meta', dict) | ('token', str) | ('error', str)
     """
     from app.services.doubao_client import chat_completion_stream
 
     ctx = _prepare_context(db, child_user_id)
+    hist = prepare_history(history)
     tools_used, tool_block = await _gather_tools(
-        db, child_user_id, message, use_tools=use_tools
+        db, child_user_id, message, history=hist, use_tools=use_tools
     )
-    yield ("meta", _meta_from_ctx(ctx, tools_used=tools_used))
+    yield ("meta", _meta_from_ctx(ctx, message=message, tools_used=tools_used))
 
     system = build_chat_system_prompt(
         db, child_user_id, tool_block=tool_block
@@ -157,7 +175,7 @@ async def run_chat_stream(
     async for token in chat_completion_stream(
         system_prompt=system,
         user_message=message,
-        history=prepare_history(history),
+        history=hist,
         max_tokens=800,
     ):
         if token.startswith("[ERROR]"):

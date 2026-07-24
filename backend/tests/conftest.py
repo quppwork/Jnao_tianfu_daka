@@ -106,9 +106,15 @@ def mock_doubao():
             "app.services.doubao_client.chat_completion_stream",
             side_effect=lambda **kwargs: _fake_stream(),
         ),
+        patch(
+            "app.services.doubao_client.chat_completion_message",
+            new_callable=AsyncMock,
+            # 默认无 tool_calls → planner 走启发式兜底，现有用例不依赖真 FC
+            return_value={"role": "assistant", "content": ""},
+        ) as mock_fc,
         patch("app.services.doubao_client.is_configured", return_value=True),
     ):
-        yield {"chat": mock_chat, "stream": _fake_stream}
+        yield {"chat": mock_chat, "stream": _fake_stream, "fc": mock_fc}
 
 
 @pytest.fixture

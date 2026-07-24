@@ -2,7 +2,7 @@
 
 > 最后更新：2026-07-23  
 > 按前端页面编排，请求/响应格式 + 后端业务逻辑  
-> 运维/发版见 [运维与发版.md](运维与发版.md)；首页引导现状见 [首页引导深化方案-2026-07-22.md](首页引导深化方案-2026-07-22.md)
+> 运维/发版见 [运维与发版.md](运维与发版.md)；Guide A0～C 已收口（实现记录仅本地 `docs/过期文件/`）
 
 ---
 
@@ -260,7 +260,8 @@ GET  /api/guide/debug         # 仅调试环境
 **后端工作**:  
 - 开场：`sense → decide → speak`（情境模板保底，可选 LLM）  
 - 对话：注入情境卡片；追问细节走只读 tool-loop（`get_profile` / `get_today_plan` / `get_checkin_timeline` / `get_skill_progress` / `suggest_next_action`）  
-- 详案：[首页引导深化方案-2026-07-22.md](首页引导深化方案-2026-07-22.md)（A0～C 已落地；旧 `POST /api/chat` 已废弃）
+- 实现记录已本地归档（`docs/过期文件/`，不入库）；旧 `POST /api/chat` 已废弃
+- 现行约定以本节 + `agents/guide/` + [数据闭环与预留说明.md](数据闭环与预留说明.md) §1.6 为准
 
 ---
 
@@ -534,6 +535,8 @@ POST /api/training/checkin { cards }
 ```
 
 **核心引擎**: `training_formula_engine.py` (Decision Tree + Strategy Pipeline) + `training_mastery.py` + `child_training_state.py` + `training_day.py`
+
+**详规**：[权重排课方案.md](权重排课方案.md)。旧「一图流」ASCII 已本地归档（`docs/过期文件/`）；排课以本节 v3.0 Decision Tree 为准。
 
 ### 打卡校验（v2.0）
 
