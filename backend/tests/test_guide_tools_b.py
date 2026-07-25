@@ -108,6 +108,72 @@ def test_plan_tools_heuristic_talent_report():
     assert any(p["name"] == "get_talent_report_summary" for p in picks)
 
 
+def test_enrich_picks_cross_topic_after_training():
+    """先问训练再问天赋 → 补今日摘要，便于关联回答。"""
+    from app.agents.guide.tools.planner import enrich_picks_cross_topic
+
+    hist = [
+        {"role": "user", "content": "今日训练如何"},
+        {
+            "role": "assistant",
+            "content": "今天的20分钟训练已经完成啦，1项任务都打卡成功～",
+        },
+    ]
+    base = plan_tools_heuristic("我这个天赋如何")
+    picks = enrich_picks_cross_topic("我这个天赋如何", base, history=hist)
+    names = {p["name"] for p in picks}
+    assert "get_talent_report_summary" in names
+    assert "get_today_plan" in names
+
+
+def test_enrich_picks_cross_topic_after_talent():
+    """先问天赋再问训练 → 补天赋摘要。"""
+    from app.agents.guide.tools.planner import enrich_picks_cross_topic
+
+    hist = [
+        {"role": "user", "content": "我这个天赋如何"},
+        {"role": "assistant", "content": "你是天生的赢者，完整报告可以去天赋报告页看。"},
+    ]
+    base = plan_tools_heuristic("今日训练如何")
+    picks = enrich_picks_cross_topic("今日训练如何", base, history=hist)
+    names = {p["name"] for p in picks}
+    assert "get_today_plan" in names
+    assert "get_talent_report_summary" in names
+
+
+def test_clamp_disallowed_tool_pair():
+    from app.agents.guide.tools.planner import clamp_to_allowed_pairs
+
+    picks = [
+        {"name": "get_checkin_timeline", "args": {"limit": 14}},
+        {"name": "get_talent_report_summary", "args": {}},
+    ]
+    clamped = clamp_to_allowed_pairs(picks)
+    assert clamped == [{"name": "get_checkin_timeline", "args": {"limit": 14}}]
+
+
+def test_enrich_ignores_old_history_beyond_cross_window():
+    """超过 CROSS_HISTORY_TURNS 的旧训练话题不应再触发交叉补工具。"""
+    from app.agents.guide.tools.planner import (
+        CROSS_HISTORY_TURNS,
+        enrich_picks_cross_topic,
+    )
+
+    hist = [
+        {"role": "user", "content": "今日训练如何"},
+        {"role": "assistant", "content": "训练已完成。"},
+    ]
+    # 中间塞满无关轮次，把训练推到窗口外
+    for i in range(CROSS_HISTORY_TURNS):
+        hist.append({"role": "user", "content": f"闲聊{i}"})
+        hist.append({"role": "assistant", "content": f"嗯{i}"})
+    base = plan_tools_heuristic("我这个天赋如何")
+    picks = enrich_picks_cross_topic("我这个天赋如何", base, history=hist)
+    names = {p["name"] for p in picks}
+    assert "get_talent_report_summary" in names
+    assert "get_today_plan" not in names
+
+
 def test_plan_tools_heuristic_timeline():
     picks = plan_tools_heuristic("我最近打卡了几次？")
     assert any(p["name"] == "get_checkin_timeline" for p in picks)

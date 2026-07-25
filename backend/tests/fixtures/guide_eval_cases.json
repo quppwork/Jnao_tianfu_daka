@@ -21,7 +21,7 @@
     {
       "id": "training_done",
       "situation": "training_done",
-      "next_action": "qa",
+      "next_action": "growth",
       "welcome_keywords": ["完成"]
     },
     {

@@ -34,7 +34,7 @@ class TestResolveSituation:
         ctx.today = TodayPlanSnapshot(
             exists=True, item_count=2, done_count=2, has_started=True, status="completed"
         )
-        assert resolve_situation(ctx) == ("training_done", "qa")
+        assert resolve_situation(ctx) == ("training_done", "growth")
 
 
 class TestTemplateWelcome:

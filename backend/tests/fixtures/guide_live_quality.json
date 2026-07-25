@@ -28,8 +28,8 @@
       "id": "training_done_guide",
       "seed": "training_done",
       "message": "今天练完了，还能干点什么？",
-      "expect_keywords_any": ["答疑", "成长", "完成", "功课", "作业", "休息", "看看", "可以", "练完"],
-      "expect_next_action": "qa",
+      "expect_keywords_any": ["成长", "完成", "里程碑", "休息", "看看", "可以", "练完", "详情"],
+      "expect_next_action": "growth",
       "expect_situation": "training_done"
     },
     {

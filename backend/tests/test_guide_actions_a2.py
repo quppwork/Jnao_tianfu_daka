@@ -40,6 +40,26 @@ def test_resolve_reply_actions_talent_intent():
     assert acts2 and acts2[0]["target"] == "talent"
 
 
+def test_resolve_reply_actions_train_progress_intent():
+    """问今日训练进度时应导训练，即使情境默认是 growth。"""
+    acts = resolve_reply_actions(
+        situation_next="growth",
+        message="我今日训练如何",
+        has_assessment=True,
+    )
+    assert acts and acts[0]["target"] == "train"
+
+
+def test_resolve_reply_actions_what_next_after_done():
+    """练完后问还能干嘛 → 成长（或情境 next）。"""
+    acts = resolve_reply_actions(
+        situation_next="growth",
+        message="今天练完了，还能干点什么？",
+        has_assessment=True,
+    )
+    assert acts and acts[0]["target"] == "growth"
+
+
 def test_situation_label():
     assert "测评" in situation_label("need_assessment")
     assert situation_label("unknown") == ""

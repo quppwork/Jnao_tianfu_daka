@@ -417,6 +417,7 @@
               </view>
             </template>
             <template v-else-if="card.name === '扫描速记'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">材料类型</text>
                 <view class="form-tags">
@@ -432,9 +433,9 @@
               <view class="form-row">
                 <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
-                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际用时约几分钟" type="number" />
                   <text class="form-unit">分钟</text>
-                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="记住" type="number" />
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="大约记住多少字" type="number" />
                   <text class="form-unit">字</text>
                 </view>
               </view>
@@ -479,10 +480,11 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+                <textarea class="form-textarea" v-model="card.note" placeholder="可选：卡在哪、感觉如何" style="height:50px;" />
               </view>
             </template>
             <template v-else-if="card.name === '影像追忆'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">使用工具</text>
                 <view class="form-tags">
@@ -495,11 +497,11 @@
                 <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际用时约几分钟" type="number" />
                     <text class="form-unit" style="width:32px;">分钟</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="看完" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="大约看完多少字" type="number" />
                     <text class="form-unit" style="width:32px;">字</text>
                   </view>
                 </view>
@@ -530,19 +532,20 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+                <textarea class="form-textarea" v-model="card.note" placeholder="可选：卡在哪、感觉如何" style="height:50px;" />
               </view>
             </template>
             <template v-else-if="card.name === '超脑阅读'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际阅读约几分钟" type="number" />
                     <text class="form-unit" style="width:32px;">分钟</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="完成" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="本次大约阅读多少字" type="number" />
                     <text class="form-unit" style="width:32px;">字</text>
                   </view>
                 </view>
@@ -566,21 +569,21 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea form-textarea-sm" v-model="card.note" placeholder="补充说明..." />
+                <textarea class="form-textarea form-textarea-sm" v-model="card.note" placeholder="可选：卡在哪、感觉如何" />
               </view>
             </template>
             <template v-else>
               <view class="form-row">
                 <text class="form-label">时长<text class="req-star">*</text></text>
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
-                  <input class="form-input" v-model="card.time" placeholder="0" type="number" />
+                  <input class="form-input" v-model="card.time" placeholder="实际用时约几分钟" type="number" />
                   <text class="form-unit">分</text>
                 </view>
               </view>
               <view class="form-row">
                 <text class="form-label">字数<text class="req-star">*</text></text>
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
-                  <input class="form-input" v-model="card.wordCount" placeholder="0" type="number" />
+                  <input class="form-input" v-model="card.wordCount" placeholder="本次大约多少字" type="number" />
                   <text class="form-unit">字</text>
                 </view>
               </view>
@@ -590,7 +593,7 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <input class="form-input" v-model="card.note" placeholder="补充说明" />
+                <input class="form-input" v-model="card.note" placeholder="可选补充说明" />
               </view>
             </template>
           </view>
@@ -2664,6 +2667,22 @@ const CARD_REQUIRED = {
   '扫描速记': { time: '训练用时', wordCount: '记住字数', materialName: '材料名称' },
   '极速运算': { time: '训练时长', count: '完成题数', accuracy: '正确率' },
 }
+/** 字/分钟软上限：仅提醒，不改达标算法 */
+const WORD_SPEED_SOFT_LIMIT = 800
+const WORD_SPEED_SKILLS = new Set(['超脑阅读', '影像追忆', '扫描速记'])
+
+function findAbnormalWordSpeedCards(cards) {
+  const names = []
+  for (const c of cards || []) {
+    if (!WORD_SPEED_SKILLS.has(c.name)) continue
+    const t = Number(c.time)
+    const w = Number(c.wordCount)
+    if (!(t > 0) || !(w > 0)) continue
+    if (w / t > WORD_SPEED_SOFT_LIMIT) names.push(c.name)
+  }
+  return names
+}
+
 function getRequired(cardName) { return CARD_REQUIRED[cardName] || { time: '训练时长', wordCount: '完成字数' } }
 function isRequired(cardName, field) { return field in (CARD_REQUIRED[cardName] || { time: 1, wordCount: 1 }) }
 function missingFields(card) {
@@ -2990,6 +3009,23 @@ async function submitForm() {
     return
   }
 
+  const speedNames = findAbnormalWordSpeedCards(pickerCards.value)
+  if (speedNames.length) {
+    uni.showModal({
+      title: '确认训练数据',
+      content: speedNames.join('、') + ' 填写的字数相对用时偏高，确认是本次真实练习量吗？',
+      confirmText: '确认提交',
+      cancelText: '再改改',
+      success: (res) => {
+        if (res.confirm) {
+          pendingSubmitBlock.value = block
+          showSubmitConfirm.value = true
+        }
+      },
+    })
+    return
+  }
+
   // 提交前确认
   pendingSubmitBlock.value = block
   showSubmitConfirm.value = true
@@ -3111,16 +3147,19 @@ async function saveDetailEdit() {
 function cardDetailFields(c) {
   const map = {}
   if (!c) return map
-  if (c.time) map['时长'] = c.time + ' 分钟'
+  if (c.time) map['训练时长'] = c.time + ' 分钟'
   if (c.content) map['内容'] = c.content
   if (c.result) map['结果'] = c.result
   if (c.tag) map['类型'] = c.tag
   if (c.count) map['题数'] = c.count + ' 题'
-  if (c.accuracy) map['正确率'] = c.accuracy + '%'
+  if (c.accuracy) map[c.name === '影像追忆' ? '追忆率' : '正确率'] = c.accuracy + '%'
   if (c.tool) map['工具'] = c.tool
   if (c.materialType) map['材料类型'] = c.materialType
   if (c.materialName) map['材料名称'] = c.materialName
-  if (c.wordCount) map['字数'] = c.wordCount + ' 字'
+  if (c.wordCount) {
+    const wcLabel = c.name === '扫描速记' ? '记住字数' : '完成字数'
+    map[wcLabel] = c.wordCount + ' 字'
+  }
   if (c.forwardTime || c.forwardAcc) map['正背'] = (c.forwardTime || '?') + '/' + (c.forwardAcc || '?')
   if (c.backwardTime || c.backwardAcc) map['倒背'] = (c.backwardTime || '?') + '/' + (c.backwardAcc || '?')
   if (c.note) map['备注'] = c.note
@@ -4039,6 +4078,15 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .form-del:active { color:#ff6b6b; }
 .form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
 .form-label { color:rgba(255,255,255,0.5); font-size:13px; width:auto; min-width:56px; flex-shrink:0; }
+.form-soft-tip {
+  display: block;
+  margin: 0 0 10px;
+  padding: 0 2px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  line-height: 1.4;
+}
+[data-theme="white"] .form-soft-tip { color: #6b7280; }
 .form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; }
 .form-input-err { border-color:#ef4444 !important; animation: flash-red 0.5s ease-in-out 3; }
 @keyframes flash-red { 0%,100% { background:#fff; } 50% { background:rgba(239,68,68,0.2); } }

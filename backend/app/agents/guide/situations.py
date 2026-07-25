@@ -34,8 +34,8 @@ WELCOME_TEMPLATES: dict[str, str] = {
         "欢迎回来。今天的训练已经开始了，继续完成剩余项目就好。"
     ),
     "training_done": (
-        "今天的训练很棒，已经完成啦。有功课问题可以去「学科答疑」，"
-        "也可以看看「成长里程碑」。"
+        "今天的训练很棒，已经完成啦。可以去「今日训练」看看完成详情，"
+        "或打开「成长里程碑」回顾收获。"
     ),
     "sparse_return": (
         "好久不见！欢迎回来。有空的话先打开「今日训练」热热身，"
@@ -54,9 +54,9 @@ def resolve_situation(ctx: GuideContext) -> tuple[str, str]:
 
     if ctx.today.exists and ctx.today.has_started:
         if ctx.today.status == "completed":
-            return "training_done", "qa"
+            return "training_done", "growth"
         if ctx.today.item_count > 0 and ctx.today.done_count >= ctx.today.item_count:
-            return "training_done", "qa"
+            return "training_done", "growth"
         return "training_in_progress", "train"
 
     days = ctx.days_since_last_checkin
