@@ -304,6 +304,7 @@ import {
   logoutAndGoLogin,
   getChildUserId,
   markChildUserSessionValid,
+  invalidatePageAuthCache,
   setSessionToken,
   setChildUserId,
   invalidateChildUserSession,
@@ -321,6 +322,8 @@ import {
   fetchLatestAssessment,
   updateLearnerProfile,
   gradeToSchoolStage,
+  apiJson,
+  withUser,
 } from '@/utils/userApi.js'
 import { refreshTalentState } from '@/utils/talentState.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
@@ -377,6 +380,18 @@ async function switchToChild(targetId) {
   try {
     const uid = getChildUserId()
     if (!uid) return
+    // 先验证当前 session 有效，避免过期 token 触发 401 → 踢回登录
+    try {
+      await apiJson(withUser('/api/user/profile', uid))
+    } catch (e) {
+      if (e.status === 401) {
+        uni.showToast({ title: '当前登录已过期，请重新登录后再切换', icon: 'none', duration: 2500 })
+      } else {
+        uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
+      }
+      showAccountSwitcher.value = false
+      return
+    }
     const data = await switchChildAccount(uid, targetId)
     showAccountSwitcher.value = false
     // 存储新 session 并重载
@@ -398,9 +413,11 @@ async function switchToChild(targetId) {
         }))
       } catch (_) {}
       markChildUserSessionValid(data.child_user_id)
-      // 清掉内存中的 auth 缓存，强制 reLaunch 后重新验证
+      invalidatePageAuthCache('student')
+      invalidatePageAuthCache('parent')
+      invalidatePageAuthCache('admin')
       try { invalidateChildUserSession() } catch (_) {}
-      setTimeout(() => { uni.reLaunch({ url: '/pages/index' }) }, 500)
+      setTimeout(() => { location.reload() }, 500)
     }
   } catch (e) {
     uni.showToast({ title: e.message || '切换失败', icon: 'none' })
@@ -613,8 +630,9 @@ function onParentNameInput(e) {
 
 async function initHome() {
   try {
-    let uid = getChildUserId()
-    if (!uid) uid = await ensureChildUser()
+    // 不用 getChildUserId() 避免切换账户后读到旧缓存
+    let uid = null
+    try { uid = await ensureChildUser() } catch (_) { uid = getChildUserId() }
     let profileData
     let guideData
     let bootstrapData

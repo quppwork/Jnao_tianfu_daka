@@ -323,7 +323,7 @@ function formatApiError(data, status) {
   return `HTTP ${status}`
 }
 
-async function apiJson(url, options = {}) {
+export async function apiJson(url, options = {}) {
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders({ ...options, _url: url }, userId)
   let res
@@ -455,7 +455,7 @@ function mergeAuthHeaders(options = {}, userId = null) {
   return headers
 }
 
-function withUser(url, userId) {
+export function withUser(url, userId) {
   return ensureAuthQuery(url, userId)
 }
 
