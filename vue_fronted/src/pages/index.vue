@@ -3,7 +3,34 @@
     <!-- Nav Bar -->
     <view class="nav-bar">
       <view class="nav-spacer"></view>
-      <text class="nav-center" @click="onNavTap">张宇老师</text>
+      <!-- 账户切换 -->
+      <view class="nav-center" @click="toggleAccountSwitcher">
+        <text class="nav-user-name">{{ currentUserDisplay }}</text>
+        <text class="nav-switch-arrow">▾</text>
+      </view>
+      <view v-if="showAccountSwitcher" class="account-switcher-drop">
+        <view class="asd-current">
+          <text class="asd-label">当前账户</text>
+          <text class="asd-name">{{ currentUserDisplay }}</text>
+        </view>
+        <view v-if="siblings.length" class="asd-list">
+          <text class="asd-label" style="margin-top:8px;">切换至</text>
+          <view
+            v-for="sib in siblings"
+            :key="sib.id"
+            class="asd-item"
+            @click="switchToChild(sib.id)"
+          >
+            <text class="asd-name">{{ sib.nickname }}</text>
+            <text v-if="sib.talent" class="asd-talent">{{ sib.talent }}</text>
+          </view>
+        </view>
+        <view v-else class="asd-empty">
+          <text>暂无其他账户</text>
+        </view>
+      </view>
+      <!-- 遮罩 -->
+      <view v-if="showAccountSwitcher" class="asd-mask" @click="showAccountSwitcher = false"></view>
       <view class="nav-actions">
         <!-- 设置 -->
         <view class="nav-icon-btn" @click="openSettings">
@@ -277,12 +304,16 @@ import {
   logoutAndGoLogin,
   getChildUserId,
   markChildUserSessionValid,
+  setSessionToken,
+  setChildUserId,
   invalidateChildUserSession,
   fetchGuideSession,
   fetchGuideSessions,
   fetchGuideSessionById,
   deleteGuideSession,
   fetchGuideBootstrap,
+  fetchSiblings,
+  switchChildAccount,
   sendGuideMessageStream,
   clearGuideSession,
   fetchProfile,
@@ -321,6 +352,61 @@ function toggleGuideDebugTools() {
     icon: 'none',
   })
 }
+const showAccountSwitcher = ref(false)
+const siblings = ref([])
+const currentUserDisplay = ref('张宇老师')
+
+function toggleAccountSwitcher() {
+  showAccountSwitcher.value = !showAccountSwitcher.value
+  if (showAccountSwitcher.value) loadSiblings()
+}
+
+async function loadSiblings() {
+  try {
+    const uid = getChildUserId()
+    if (!uid) return
+    const data = await fetchSiblings(uid)
+    siblings.value = data.siblings || []
+    if (data.current?.nickname) {
+      currentUserDisplay.value = data.current.nickname
+    }
+  } catch (_) { /* ignore */ }
+}
+
+async function switchToChild(targetId) {
+  try {
+    const uid = getChildUserId()
+    if (!uid) return
+    const data = await switchChildAccount(uid, targetId)
+    showAccountSwitcher.value = false
+    // 存储新 session 并重载
+    if (data?.session_token) {
+      setSessionToken(data.session_token)
+      setChildUserId(data.child_user_id)
+      try {
+        localStorage.setItem('jnao_logged_in', '1')
+        localStorage.setItem('jnao_student_user_id', String(data.child_user_id))
+        // 彻底替换 jnao_user（清掉旧身份缓存，避免 auth snapshot 用旧 id）
+        localStorage.removeItem('jnao_parent_user_id')
+        localStorage.removeItem('jnao_admin_user')
+        localStorage.removeItem('jnao_admin_token')
+        localStorage.setItem('jnao_user', JSON.stringify({
+          id: data.child_user_id,
+          name: data.nickname,
+          phone: data.parent_phone,
+          role: 'student',
+        }))
+      } catch (_) {}
+      markChildUserSessionValid(data.child_user_id)
+      // 清掉内存中的 auth 缓存，强制 reLaunch 后重新验证
+      try { invalidateChildUserSession() } catch (_) {}
+      setTimeout(() => { uni.reLaunch({ url: '/pages/index' }) }, 500)
+    }
+  } catch (e) {
+    uni.showToast({ title: e.message || '切换失败', icon: 'none' })
+  }
+}
+
 const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: '', assessmentId: null })
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
@@ -563,6 +649,7 @@ async function initHome() {
     console.error('[home] initHome 失败:', e?.message || e, e?.status)
     welcomeText.value = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
   }
+  loadSiblings()
 }
 
 function applyGuideMessages(guideData) {
@@ -868,7 +955,19 @@ function onNavTap() {
 
 .nav-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 8px; }
 .nav-spacer { width:78px; flex-shrink:0; }
-.nav-center { color:var(--text); font-size:15px; font-weight:500; text-align:center; }
+.nav-center { color:var(--text); font-size:15px; font-weight:500; text-align:center; cursor:pointer; display:flex; align-items:center; gap:4px; }
+.nav-user-name { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nav-switch-arrow { font-size:10px; color:var(--text-dim); }
+.asd-mask { position:fixed; inset:0; z-index:400; }
+.account-switcher-drop { position:fixed; top:50px; left:50%; transform:translateX(-50%); z-index:500; background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:14px; width:220px; box-shadow:0 8px 30px rgba(0,0,0,0.3); }
+.asd-label { color:var(--text-dim); font-size:11px; display:block; margin-bottom:4px; }
+.asd-name { color:var(--text); font-size:14px; font-weight:600; display:block; }
+.asd-talent { color:var(--accent); font-size:11px; }
+.asd-item { display:flex; align-items:center; justify-content:space-between; padding:10px 8px; border-radius:8px; cursor:pointer; margin-top:4px; transition:background 0.15s; }
+.asd-item:active { background:var(--accent-bg); }
+.asd-empty { padding:12px 0; text-align:center; }
+.asd-empty text { color:var(--text-dim); font-size:12px; }
+[data-theme="white"] .account-switcher-drop { box-shadow:0 4px 20px rgba(0,0,0,0.08); }
 .nav-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .nav-icon-btn { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; opacity:0.55; transition:opacity 0.15s; }
 .nav-icon-btn:active { opacity:1; background:rgba(255,255,255,0.06); }

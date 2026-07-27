@@ -725,60 +725,64 @@
       </view>
     </view>
 
-<!-- Media Player Overlay -->
+<!-- Media Player Overlay — 方案C 封面风 -->
     <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
-      <view class="player-card" @click.stop>
+      <view class="player-card player-card-c" @click.stop>
+        <view class="player-cover">
+          <view v-if="mediaPlayer.type === 'video'" class="player-cover-video">
+            <video
+              v-if="videoSrc"
+              ref="trainingVideoEl"
+              class="training-video"
+              :src="videoSrc"
+              controls
+              controlsList="nodownload noplaybackrate"
+              disablePictureInPicture
+              autoplay
+              @timeupdate="onMediaTimeUpdate"
+              @loadedmetadata="onMediaLoadedMetadata"
+              @seeking="onMediaSeeking"
+              @ratechange="lockMediaPlaybackRate"
+              @pause="flushWatchProgress"
+              @ended="onMediaEnded"
+            />
+            <view v-else class="player-cover-placeholder">
+              <text class="player-cover-icon">🎬</text>
+              <text class="player-cover-hint">视频加载中…</text>
+            </view>
+          </view>
+          <view v-else class="player-cover-audio">
+            <text class="player-cover-icon">{{ playerCoverEmoji }}</text>
+            <text class="player-cover-label">{{ audioTitle || mediaPlayerTitle }}</text>
+          </view>
+          <view class="player-cover-progress">
+            <view class="player-cover-progress-fill" :style="{ width: (mediaPlayer.type === 'video' ? videoProgressPct : audioProgressPct) + '%' }"></view>
+          </view>
+        </view>
         <view class="player-header">
           <text class="player-title">{{ mediaPlayerTitle }}</text>
           <view class="player-close" @click="closeMedia">✕</view>
         </view>
-        <view v-if="mediaPlayer.type === 'video'" class="player-body">
-          <video
-            v-if="videoSrc"
-            ref="trainingVideoEl"
-            class="training-video"
-            :src="videoSrc"
-            controls
-            controlsList="nodownload noplaybackrate"
-            disablePictureInPicture
-            autoplay
-            @timeupdate="onMediaTimeUpdate"
-            @loadedmetadata="onMediaLoadedMetadata"
-            @seeking="onMediaSeeking"
-            @ratechange="lockMediaPlaybackRate"
-            @pause="flushWatchProgress"
-            @ended="onMediaEnded"
-          />
-          <text v-else>暂无视频资源</text>
-          <text class="media-listen-hint">不可快进；看满约 {{ WATCH_DONE_PCT }}% 后可打卡</text>
-        </view>
-        <view v-if="mediaPlayer.type === 'audio'" class="player-body">
-          <text class="pa-icon" style="font-size:48px;display:block;text-align:center;margin-bottom:8px;">🎧</text>
-          <text v-if="audioTitle" class="player-audio-name">{{ audioTitle }}</text>
-          <!-- 不用模板 <audio>：uni-app 会编译成组件并依赖缺失的 audio.css -->
-          <view class="audio-controls">
-            <view class="audio-btn-row">
-              <view class="audio-play-btn secondary" @click="rewindAudioTen">
-                <text>回退 10 秒</text>
-              </view>
-              <view class="audio-play-btn" @click="toggleAudioPlay">
-                <text>{{ audioPlaying ? '暂停' : '播放' }}</text>
-              </view>
+        <view class="player-controls">
+          <view class="player-ctrl-left">
+            <text class="player-time-label">{{ mediaPlayer.type === 'video' ? videoTimeLabel : audioTimeLabel }}</text>
+          </view>
+          <view class="player-ctrl-center">
+            <view v-if="mediaPlayer.type === 'audio'" class="player-ctrl-btn sm" @click="rewindAudioTen">
+              <text>⏪</text>
             </view>
-            <view class="audio-progress-wrap">
-              <view class="audio-progress-track">
-                <view class="audio-progress-fill" :style="{ width: audioProgressPct + '%' }"></view>
-              </view>
-              <text class="audio-progress-text">{{ audioTimeLabel }}</text>
+            <view class="player-ctrl-btn" @click="mediaPlayer.type === 'audio' ? toggleAudioPlay() : null">
+              <text>{{ audioPlaying ? '⏸' : '▶' }}</text>
             </view>
           </view>
-          <text class="media-listen-hint">不可跳过、不可快进；可暂停与回退。听满约 {{ WATCH_DONE_PCT }}% 后可打卡</text>
+          <view class="player-ctrl-right">
+            <text class="player-time-label">{{ mediaPlayer.type === 'video' ? videoDurationLabel : audioDurationLabel }}</text>
+          </view>
         </view>
+        <text class="media-listen-hint">听满约 {{ WATCH_DONE_PCT }}% 后可解锁打卡</text>
       </view>
     </view>
-  </view>
-
-  <!-- 已打卡卡片详情 / 页内编辑 -->
+<!-- 已打卡卡片详情 / 页内编辑 -->
   <view v-if="showCardDetail" class="detail-overlay" @click="closeCardDetail">
     <view class="detail-test-card" @click.stop>
       <text class="detail-slide-name">{{ activeDetailCard?.name }}</text>
@@ -949,6 +953,7 @@
         </template>
       </view>
     </view>
+  </view>
   </view>
 </template>
 
@@ -2356,6 +2361,32 @@ const audioTimeLabel = computed(() => {
   return `${fmt(audioUiSec.value)} / ${fmt(audioUiDuration.value)} · 已听 ${Math.round(audioProgressPct.value)}%`
 })
 
+const audioDurationLabel = computed(() => {
+  const d = audioUiDuration.value
+  return d ? `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}` : '--:--'
+})
+
+const videoProgressPct = ref(0)
+const videoTimeLabel = ref('0:00')
+const videoDurationLabel = ref('--:--')
+
+const playerCoverEmoji = computed(() => {
+  const t = (audioTitle.value || mediaPlayerTitle.value || '').toLowerCase()
+  if (t.includes('超脑') || t.includes('阅读')) return '🧠'
+  if (t.includes('影像') || t.includes('追忆')) return '🎬'
+  if (t.includes('扫描') || t.includes('速记')) return '📝'
+  if (t.includes('运算')) return '⚡'
+  if (t.includes('学习')) return '🚀'
+  if (t.includes('作业')) return '✅'
+  if (t.includes('绘画')) return '🎨'
+  if (t.includes('音乐')) return '🎵'
+  if (t.includes('棋')) return '♟️'
+  if (t.includes('感知')) return '🔮'
+  if (t.includes('精力') || t.includes('恢复')) return '💆'
+  if (t.includes('开口')) return '🗣️'
+  return '🎧'
+})
+
 function activeMediaEl() {
   if (mediaPlayer.value.type === 'audio') return trainingAudio
   return trainingVideoEl.value
@@ -2486,6 +2517,12 @@ function onMediaTimeUpdate(e) {
     audioUiDuration.value = durationSec
     audioUiSec.value = el.currentTime || 0
     audioPlaying.value = !el.paused
+  }
+  if (mediaPlayer.value.type === 'video') {
+    const cur = el.currentTime || 0
+    videoProgressPct.value = durationSec > 0 ? Math.round(cur / durationSec * 100) : 0
+    videoTimeLabel.value = `${Math.floor(cur / 60)}:${String(Math.floor(cur % 60)).padStart(2, '0')}`
+    videoDurationLabel.value = `${Math.floor(durationSec / 60)}:${String(Math.floor(durationSec % 60)).padStart(2, '0')}`
   }
   if (durationSec <= 0) return
   const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
@@ -4224,15 +4261,45 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 }
 .player-overlay { position:fixed; inset:0; z-index:600; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; padding:16px; }
 .player-card { background:var(--bg-card,#1a2840); border:1px solid rgba(0,210,255,0.2); border-radius:16px; padding:16px; width:100%; max-width:420px; }
-.player-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-.player-title { color:#fff; font-size:15px; font-weight:600; }
+/* 方案C：封面风 */
+.player-card-c { background:var(--bg-card,#1a2840); border:1px solid rgba(0,210,255,0.2); border-radius:16px; width:100%; max-width:380px; overflow:hidden; padding:0; }
+.player-cover { position:relative; height:180px; background:linear-gradient(135deg,rgba(0,210,255,0.08),rgba(139,92,246,0.08)); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.player-cover::before { content:''; position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(255,255,255,0.015) 30px,rgba(255,255,255,0.015) 31px); pointer-events:none; }
+.player-cover-video { width:100%; height:100%; }
+.player-cover-video .training-video { width:100%; height:100%; object-fit:cover; }
+.player-cover-placeholder { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.player-cover-icon { font-size:48px; }
+.player-cover-hint { color:rgba(255,255,255,0.4); font-size:12px; }
+.player-cover-audio { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.player-cover-label { color:rgba(255,255,255,0.7); font-size:13px; font-weight:500; text-align:center; padding:0 16px; }
+.player-cover-progress { position:absolute; bottom:0; left:0; right:0; height:3px; background:rgba(255,255,255,0.1); }
+.player-cover-progress-fill { height:100%; background:linear-gradient(90deg,#22d3ee,#34d399); transition:width 0.3s; }
+.player-header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 4px; margin-bottom:0; }
+.player-title { color:#fff; font-size:14px; font-weight:600; }
 .player-audio-name { display:block; text-align:center; color:rgba(255,255,255,0.85); font-size:13px; margin-bottom:12px; line-height:1.4; }
-.player-close { color:rgba(255,255,255,0.5); font-size:20px; cursor:pointer; padding:4px 8px; }
+.player-close { color:rgba(255,255,255,0.4); font-size:18px; cursor:pointer; padding:4px 6px; }
 .player-body { }
+.player-controls { display:flex; align-items:center; justify-content:space-between; padding:8px 14px 14px; }
+.player-ctrl-center { display:flex; align-items:center; gap:12px; }
+.player-ctrl-btn { width:44px; height:44px; border-radius:50%; background:rgba(0,210,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.15s; }
+.player-ctrl-btn text { font-size:18px; }
+.player-ctrl-btn:active { background:rgba(0,210,255,0.25); transform:scale(0.95); }
+.player-ctrl-btn.sm { width:32px; height:32px; }
+.player-ctrl-btn.sm text { font-size:14px; }
+.player-time-label { color:rgba(255,255,255,0.5); font-size:12px; font-variant-numeric:tabular-nums; }
+.player-ctrl-left .player-time-label { text-align:left; }
+.player-ctrl-right .player-time-label { text-align:right; }
+.media-listen-hint { display:block; padding:0 14px 10px; text-align:center; color:rgba(255,255,255,0.4); font-size:10px; }
 [data-theme="white"] .player-overlay { background:rgba(0,0,0,0.6); }
 [data-theme="white"] .player-card { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .player-card-c { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .player-cover { background:linear-gradient(135deg,rgba(37,99,235,0.03),rgba(139,92,246,0.03)); }
 [data-theme="white"] .player-title { color:#1a1a2e; }
 [data-theme="white"] .player-audio-name { color:#374151; }
+[data-theme="white"] .player-cover-label { color:rgba(0,0,0,0.6); }
+[data-theme="white"] .player-time-label { color:rgba(0,0,0,0.4); }
+[data-theme="white"] .player-ctrl-btn { background:rgba(37,99,235,0.08); }
+[data-theme="white"] .media-listen-hint { color:#9ca3af; }
 [data-theme="white"] .player-close { color:#9ca3af; }
 
 .pulse-out { animation:pulseRing 0.5s ease-out; }

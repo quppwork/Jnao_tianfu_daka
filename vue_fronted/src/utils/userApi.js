@@ -1556,3 +1556,14 @@ export async function batchUpdateTalentQuota(adminId, { childIds, add } = {}) {
 export async function fetchAdminChildAssessments(adminId, childId) {
   return apiJson(withAdmin(`/api/admin/children/${childId}/talent-assessments`, adminId))
 }
+
+// ── 切换账户 ──
+export async function fetchSiblings(userId) {
+  return apiJson(withUser('/api/auth/siblings', userId))
+}
+
+export async function switchChildAccount(userId, targetChildId) {
+  return apiJson(withUser(`/api/auth/switch-child?target_child_id=${targetChildId}`, userId), {
+    method: 'POST',
+  })
+}
