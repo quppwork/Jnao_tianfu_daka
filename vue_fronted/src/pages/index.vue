@@ -130,11 +130,20 @@
     <!-- Bottom Input -->
     <view class="input-panel">
       <view class="input-wrap">
-        <textarea class="chat-input" v-model="inputText" placeholder="输入问题..." :disabled="loading" @keydown="onKeyDown" :rows="1" />
+        <input
+          class="chat-input"
+          v-model="inputText"
+          placeholder="输入问题..."
+          :disabled="loading"
+          confirm-type="send"
+          :adjust-position="true"
+          @confirm="sendMsg"
+          @keydown="onKeyDown"
+        />
         <view class="input-btns">
           <view class="btn-send" :class="{ 'btn-stop': loading }" @click="loading ? stopStream() : sendMsg()">
-            <text v-if="loading" style="color:#fff;font-size:12px;font-weight:700;">■</text>
-            <text v-else style="color:#fff;font-size:14px;">➤</text>
+            <text v-if="loading" class="btn-send-icon">■</text>
+            <text v-else class="btn-send-icon">➤</text>
           </view>
         </view>
       </view>
@@ -959,17 +968,70 @@ function onNavTap() {
   50% { opacity:0.9; }
 }
 
-.input-panel { margin:8px 14px 14px; }
-.input-wrap { position:relative; display:flex; align-items:center; background:rgba(255,255,255,0.1); border-radius:24px; padding:4px; border:1px solid rgba(255,255,255,0.15); }
-[data-theme="white"] .input-wrap { background:#f3f4f6; border-color:#d1d5db; }
-.chat-input { flex:1; background:transparent; border-radius:20px; padding:8px 8px 8px 14px; font-size:13px; color:var(--text); border:none; outline:none; resize:none; height:36px; line-height:20px; overflow-y:auto; }
-.input-btns { display:flex; align-items:center; gap:6px; flex-shrink:0; padding-right:4px; }
-.loading-dots { animation:dotPulse 1.4s infinite; }
-@keyframes dotPulse { 0%,80%,100% { opacity:0.2 } 40% { opacity:1 } }
-.btn-send { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex !important; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
-.btn-send.btn-stop { background:#ef4444; }
-.btn-send:active { opacity:0.8; }
-.btn-disabled { opacity:0.45; pointer-events:none; }
+.input-panel {
+  flex-shrink: 0;
+  margin: 8px 14px 0;
+  padding: 0 0 calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 4px 4px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-sizing: border-box;
+}
+[data-theme="white"] .input-wrap {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+.chat-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 36px;
+  line-height: 36px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text);
+  box-sizing: border-box;
+}
+.chat-input::placeholder { color: var(--text-hint, rgba(148, 163, 184, 0.9)); }
+[data-theme="white"] .chat-input::placeholder { color: #9ca3af; }
+.input-btns {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.btn-send {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn-send.btn-stop { background: #ef4444; }
+.btn-send:active { opacity: 0.8; }
+.btn-send-icon {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+.btn-send.btn-stop .btn-send-icon { font-size: 12px; }
+.btn-disabled { opacity: 0.45; pointer-events: none; }
 
 /* Settings modal */
 .picker-overlay {
