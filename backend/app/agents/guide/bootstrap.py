@@ -87,7 +87,7 @@ async def _speak(
     long_term,
     use_llm: bool,
 ) -> tuple[str, Source]:
-    base = template_welcome(ctx.situation or "ready_to_train", nickname=ctx.nickname)
+    base = template_welcome(ctx.situation or "ready_to_train", nickname=ctx.nickname, talent=ctx.talent)
     if not use_llm:
         return base, "template"
 

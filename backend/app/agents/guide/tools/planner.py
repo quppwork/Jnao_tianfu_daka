@@ -72,6 +72,10 @@ TOOL_SPECS: dict[str, tuple[str, tuple[str, ...]]] = {
         "建议下一步入口（talent/train/qa/growth）",
         ("接下来", "下一步", "该做什么", "建议去", "做什么好"),
     ),
+    "get_training_courses": (
+        "平台可训练能力目录（必修/选修名称，只读）",
+        ("有哪些课", "训练能力", "能练什么", "课程列表", "必修选修"),
+    ),
 }
 
 _TOOL_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {

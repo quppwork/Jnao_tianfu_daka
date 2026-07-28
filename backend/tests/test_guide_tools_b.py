@@ -24,6 +24,7 @@ def test_list_tools_includes_builtins():
     assert "get_checkin_timeline" in names
     assert "get_skill_progress" in names
     assert "suggest_next_action" in names
+    assert "get_training_courses" in names
 
 
 def test_openai_tool_schemas_cover_catalog():

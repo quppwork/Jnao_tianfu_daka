@@ -323,7 +323,7 @@ function formatApiError(data, status) {
   return `HTTP ${status}`
 }
 
-async function apiJson(url, options = {}) {
+export async function apiJson(url, options = {}) {
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders({ ...options, _url: url }, userId)
   let res
@@ -455,7 +455,7 @@ function mergeAuthHeaders(options = {}, userId = null) {
   return headers
 }
 
-function withUser(url, userId) {
+export function withUser(url, userId) {
   return ensureAuthQuery(url, userId)
 }
 
@@ -1555,4 +1555,15 @@ export async function batchUpdateTalentQuota(adminId, { childIds, add } = {}) {
 
 export async function fetchAdminChildAssessments(adminId, childId) {
   return apiJson(withAdmin(`/api/admin/children/${childId}/talent-assessments`, adminId))
+}
+
+// ── 切换账户 ──
+export async function fetchSiblings(userId) {
+  return apiJson(withUser('/api/auth/siblings', userId))
+}
+
+export async function switchChildAccount(userId, targetChildId) {
+  return apiJson(withUser(`/api/auth/switch-child?target_child_id=${targetChildId}`, userId), {
+    method: 'POST',
+  })
 }
