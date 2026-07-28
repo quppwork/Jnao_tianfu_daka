@@ -316,9 +316,9 @@
             <text class="lock-tip">{{ phaseTip(phase) }}</text>
 
             <template v-if="!isPerceptionPhase(phase) && !phase.isElective">
-            <view class="checkin-block" :class="{ locked: !phaseClicked[phase.block] }">
-              <view v-if="!phaseClicked[phase.block]" class="checkin-lock-overlay">
-                <text class="checkin-lock-text">🔒 请先观看音频/视频</text>
+            <view class="checkin-block" :class="{ locked: !isPhaseListenDone(phase) }">
+              <view v-if="!isPhaseListenDone(phase)" class="checkin-lock-overlay">
+                <text class="checkin-lock-text">🔒 请先听完/看完音视频（{{ WATCH_DONE_PCT }}%）</text>
               </view>
               <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
@@ -417,6 +417,7 @@
               </view>
             </template>
             <template v-else-if="card.name === '扫描速记'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">材料类型</text>
                 <view class="form-tags">
@@ -432,9 +433,9 @@
               <view class="form-row">
                 <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
-                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际用时约几分钟" type="number" />
                   <text class="form-unit">分钟</text>
-                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="记住" type="number" />
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="大约记住多少字" type="number" />
                   <text class="form-unit">字</text>
                 </view>
               </view>
@@ -479,10 +480,11 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+                <textarea class="form-textarea" v-model="card.note" placeholder="可选：卡在哪、感觉如何" style="height:50px;" />
               </view>
             </template>
             <template v-else-if="card.name === '影像追忆'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">使用工具</text>
                 <view class="form-tags">
@@ -495,11 +497,11 @@
                 <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际用时约几分钟" type="number" />
                     <text class="form-unit" style="width:32px;">分钟</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="看完" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="大约看完多少字" type="number" />
                     <text class="form-unit" style="width:32px;">字</text>
                   </view>
                 </view>
@@ -530,19 +532,20 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+                <textarea class="form-textarea" v-model="card.note" placeholder="可选：卡在哪、感觉如何" style="height:50px;" />
               </view>
             </template>
             <template v-else-if="card.name === '超脑阅读'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际阅读约几分钟" type="number" />
                     <text class="form-unit" style="width:32px;">分钟</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="完成" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="本次大约阅读多少字" type="number" />
                     <text class="form-unit" style="width:32px;">字</text>
                   </view>
                 </view>
@@ -566,21 +569,21 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea form-textarea-sm" v-model="card.note" placeholder="补充说明..." />
+                <textarea class="form-textarea form-textarea-sm" v-model="card.note" placeholder="可选：卡在哪、感觉如何" />
               </view>
             </template>
             <template v-else>
               <view class="form-row">
                 <text class="form-label">时长<text class="req-star">*</text></text>
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
-                  <input class="form-input" v-model="card.time" placeholder="0" type="number" />
+                  <input class="form-input" v-model="card.time" placeholder="实际用时约几分钟" type="number" />
                   <text class="form-unit">分</text>
                 </view>
               </view>
               <view class="form-row">
                 <text class="form-label">字数<text class="req-star">*</text></text>
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
-                  <input class="form-input" v-model="card.wordCount" placeholder="0" type="number" />
+                  <input class="form-input" v-model="card.wordCount" placeholder="本次大约多少字" type="number" />
                   <text class="form-unit">字</text>
                 </view>
               </view>
@@ -590,7 +593,7 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <input class="form-input" v-model="card.note" placeholder="补充说明" />
+                <input class="form-input" v-model="card.note" placeholder="可选补充说明" />
               </view>
             </template>
           </view>
@@ -739,17 +742,40 @@
             class="training-video"
             :src="videoSrc"
             controls
+            controlsList="nodownload noplaybackrate"
+            disablePictureInPicture
             autoplay
-            @timeupdate="onVideoTimeUpdate"
-            @loadedmetadata="onVideoLoadedMetadata"
+            @timeupdate="onMediaTimeUpdate"
+            @loadedmetadata="onMediaLoadedMetadata"
+            @seeking="onMediaSeeking"
+            @ratechange="lockMediaPlaybackRate"
             @pause="flushWatchProgress"
+            @ended="onMediaEnded"
           />
           <text v-else>暂无视频资源</text>
+          <text class="media-listen-hint">不可快进；看满约 {{ WATCH_DONE_PCT }}% 后可打卡</text>
         </view>
         <view v-if="mediaPlayer.type === 'audio'" class="player-body">
           <text class="pa-icon" style="font-size:48px;display:block;text-align:center;margin-bottom:8px;">🎧</text>
           <text v-if="audioTitle" class="player-audio-name">{{ audioTitle }}</text>
-          <view v-html="audioHtml"></view>
+          <!-- 不用模板 <audio>：uni-app 会编译成组件并依赖缺失的 audio.css -->
+          <view class="audio-controls">
+            <view class="audio-btn-row">
+              <view class="audio-play-btn secondary" @click="rewindAudioTen">
+                <text>回退 10 秒</text>
+              </view>
+              <view class="audio-play-btn" @click="toggleAudioPlay">
+                <text>{{ audioPlaying ? '暂停' : '播放' }}</text>
+              </view>
+            </view>
+            <view class="audio-progress-wrap">
+              <view class="audio-progress-track">
+                <view class="audio-progress-fill" :style="{ width: audioProgressPct + '%' }"></view>
+              </view>
+              <text class="audio-progress-text">{{ audioTimeLabel }}</text>
+            </view>
+          </view>
+          <text class="media-listen-hint">不可跳过、不可快进；可暂停与回退。听满约 {{ WATCH_DONE_PCT }}% 后可打卡</text>
         </view>
       </view>
     </view>
@@ -1300,6 +1326,28 @@ function syncPickersAfterTimerRestore(planMinutes) {
   }
   const mins = planMinutes || Math.round((plannedDurationSec.value || 0) / 60)
   syncPickersFromPlannedMinutes(mins)
+}
+
+/**
+ * 训练卡显隐是前端状态（confirmPlan），离页再进会丢。
+ * 已有方案且计时已开始/结束（或已有进度）时自动恢复展示，避免「方案在、卡片没了」。
+ */
+function restoreTrainingVisibility(data) {
+  if (showTraining.value) return
+  const plan = data || todayPlan.value
+  if (!plan?.plan_id) return
+  const items = plan.items || []
+  if (!items.length) return
+  const phase = plan.timer_phase || timerPhase.value
+  if (phase === 'running' || phase === 'expired') {
+    showTraining.value = true
+    planJustGenerated.value = false
+    return
+  }
+  if (items.some(i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0)) {
+    showTraining.value = true
+    planJustGenerated.value = false
+  }
 }
 
 function syncPlanMetaFromApi(data) {
@@ -1998,8 +2046,20 @@ const mediaPlayer = ref({ show: false, type: 'video', title: '' })
 const watchedItemIds = ref(new Set())
 const watchProgressMap = ref({})
 const trainingVideoEl = ref(null)
+let trainingAudio = null
 let watchProgressSaveTimer = null
 const lastOpenedItem = ref(null)
+const mediaMaxHeardSec = ref(0)
+const audioPlaying = ref(false)
+const audioUiSec = ref(0)
+const audioUiDuration = ref(0)
+const WATCH_DONE_PCT = 90
+const MEDIA_SEEK_EPS = 1.2
+const phaseClicked = ref({})
+const primaryCheckinRecordId = ref(null)
+const planJustGenerated = ref(false)
+const showTraining = ref(false)
+const showDoneConfirm = ref(false)
 const videoSrc = ref('')
 const audioSrc = ref('')
 const audioTitle = ref('🎧 训练用音频')
@@ -2032,11 +2092,6 @@ const needAssessment = ref(false)
 const showAssessmentModal = ref(false)
 const todayPlan = ref(null)
 const phaseRecordIds = ref({})
-const phaseClicked = ref({})
-const primaryCheckinRecordId = ref(null)
-const planJustGenerated = ref(false)
-const showTraining = ref(false)
-const showDoneConfirm = ref(false)
 
 async function confirmPlan() {
   // 仅解锁训练块展示；勿再调 customizePlan。
@@ -2259,10 +2314,89 @@ function videoTitle(item) {
   }
 }
 
+function itemNeedsListen(item) {
+  if (!item) return false
+  if (item.item_type === 'perception' || item.item_type === 'placeholder') return false
+  return !!(item.audio_url || item.video_url)
+}
+
+function getItemWatchPct(item) {
+  if (!item?.id) return 0
+  const wp = watchProgressMap.value[item.id] || item.watch_progress || {}
+  return Number(wp.pct || 0)
+}
+
+function isItemListenDone(item) {
+  if (!itemNeedsListen(item)) return true
+  if (item.checkin_status === 'done') return true
+  if (item.video_complete) return true
+  return getItemWatchPct(item) >= WATCH_DONE_PCT
+}
+
+function isPhaseListenDone(phase) {
+  if (devMode.value) return true
+  if (isPerceptionPhase(phase)) return true
+  const items = phase?.items || []
+  if (!items.length) return true
+  return items.every(isItemListenDone)
+}
+
 function isItemWatched(item) {
   if (!item?.id) return false
-  if (isVideoItem(item)) return false
-  return watchedItemIds.value.has(item.id)
+  return isItemListenDone(item) || watchedItemIds.value.has(item.id)
+}
+
+const audioProgressPct = computed(() => {
+  const d = audioUiDuration.value
+  if (!d || d <= 0) return 0
+  return Math.min(100, Math.round((audioUiSec.value / d) * 1000) / 10)
+})
+
+const audioTimeLabel = computed(() => {
+  const fmt = (s) => {
+    const n = Math.max(0, Math.floor(s || 0))
+    const m = Math.floor(n / 60)
+    const r = n % 60
+    return `${m}:${String(r).padStart(2, '0')}`
+  }
+  return `${fmt(audioUiSec.value)} / ${fmt(audioUiDuration.value)} · 已听 ${Math.round(audioProgressPct.value)}%`
+})
+
+function activeMediaEl() {
+  if (mediaPlayer.value.type === 'audio') return trainingAudio
+  return trainingVideoEl.value
+}
+
+function destroyTrainingAudio() {
+  if (!trainingAudio) return
+  try {
+    trainingAudio.pause()
+    trainingAudio.removeAttribute('src')
+    trainingAudio.load()
+  } catch (_) { /* ignore */ }
+  trainingAudio = null
+}
+
+function ensureTrainingAudio(src) {
+  destroyTrainingAudio()
+  if (typeof Audio === 'undefined' || !src) return null
+  const el = new Audio(src)
+  el.preload = 'auto'
+  el.playbackRate = 1
+  const onTime = () => onMediaTimeUpdate({ target: el })
+  const onMeta = () => onMediaLoadedMetadata({ target: el })
+  const onSeek = () => onMediaSeeking({ target: el })
+  const onRate = () => lockMediaPlaybackRate({ target: el })
+  const onPause = () => flushWatchProgress()
+  const onEnd = () => onMediaEnded({ target: el })
+  el.addEventListener('timeupdate', onTime)
+  el.addEventListener('loadedmetadata', onMeta)
+  el.addEventListener('seeking', onSeek)
+  el.addEventListener('ratechange', onRate)
+  el.addEventListener('pause', onPause)
+  el.addEventListener('ended', onEnd)
+  trainingAudio = el
+  return el
 }
 
 function hydrateWatchProgressFromPlan(plan) {
@@ -2274,17 +2408,42 @@ function hydrateWatchProgressFromPlan(plan) {
   watchProgressMap.value = map
 }
 
+function lockMediaPlaybackRate(e) {
+  const el = e?.target || activeMediaEl()
+  if (el && el.playbackRate !== 1) el.playbackRate = 1
+}
+
+function clampMediaForward(el) {
+  if (!el) return false
+  const t = el.currentTime || 0
+  const max = mediaMaxHeardSec.value
+  if (t > max + MEDIA_SEEK_EPS) {
+    el.currentTime = max
+    uni.showToast({ title: '训练音视频不可快进', icon: 'none' })
+    return true
+  }
+  if (t > max) mediaMaxHeardSec.value = t
+  return false
+}
+
+function onMediaSeeking(e) {
+  clampMediaForward(e?.target || activeMediaEl())
+}
+
 async function flushWatchProgress() {
   const item = lastOpenedItem.value
-  const el = trainingVideoEl.value
-  if (!item?.id || !isVideoItem(item) || !el) return
-  const watchedSec = el.currentTime || 0
-  const durationSec = el.duration || 0
+  const el = activeMediaEl()
+  if (!item?.id || !el || !itemNeedsListen(item)) return
+  const durationSec = el.duration || audioUiDuration.value || 0
   if (durationSec <= 0) return
+  const watchedSec = Math.min(mediaMaxHeardSec.value || el.currentTime || 0, durationSec)
   const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
   watchProgressMap.value = {
     ...watchProgressMap.value,
     [item.id]: { watched_sec: watchedSec, duration_sec: durationSec, pct },
+  }
+  if (item.video_complete !== undefined) {
+    item.video_complete = pct >= WATCH_DONE_PCT
   }
   try {
     const uid = await ensureChildUser()
@@ -2295,22 +2454,46 @@ async function flushWatchProgress() {
     if (res?.watch_progress) {
       watchProgressMap.value = { ...watchProgressMap.value, [item.id]: res.watch_progress }
     }
+    if (res?.video_complete != null && lastOpenedItem.value?.id === item.id) {
+      lastOpenedItem.value = { ...lastOpenedItem.value, video_complete: res.video_complete }
+      // 同步到 todayPlan items
+      const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
+      if (planItem) planItem.video_complete = res.video_complete
+    }
   } catch (_) { /* ignore */ }
 }
 
-function onVideoLoadedMetadata(e) {
-  const el = e?.target || trainingVideoEl.value
+function onMediaLoadedMetadata(e) {
+  const el = e?.target || activeMediaEl()
   if (!el || !lastOpenedItem.value?.id) return
+  lockMediaPlaybackRate({ target: el })
+  const prev = watchProgressMap.value[lastOpenedItem.value.id]
+  const resume = Number(prev?.watched_sec || 0)
+  mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
+  if (resume > 0 && resume < (el.duration || Infinity) && (el.currentTime || 0) < resume) {
+    try { el.currentTime = resume } catch (_) { /* ignore */ }
+  }
+  if (mediaPlayer.value.type === 'audio') {
+    audioUiDuration.value = el.duration || 0
+    audioUiSec.value = el.currentTime || resume || 0
+  }
   flushWatchProgress()
 }
 
-function onVideoTimeUpdate(e) {
-  const el = e?.target || trainingVideoEl.value
+function onMediaTimeUpdate(e) {
+  const el = e?.target || activeMediaEl()
   const item = lastOpenedItem.value
   if (!el || !item?.id) return
+  if (clampMediaForward(el)) return
+  lockMediaPlaybackRate({ target: el })
   const durationSec = el.duration || 0
+  const watchedSec = mediaMaxHeardSec.value
+  if (mediaPlayer.value.type === 'audio') {
+    audioUiDuration.value = durationSec
+    audioUiSec.value = el.currentTime || 0
+    audioPlaying.value = !el.paused
+  }
   if (durationSec <= 0) return
-  const watchedSec = el.currentTime || 0
   const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
   watchProgressMap.value = {
     ...watchProgressMap.value,
@@ -2323,6 +2506,40 @@ function onVideoTimeUpdate(e) {
   }, 4000)
 }
 
+function onMediaEnded(e) {
+  const el = e?.target || activeMediaEl()
+  if (el?.duration) mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, el.duration)
+  audioPlaying.value = false
+  flushWatchProgress()
+}
+
+async function toggleAudioPlay() {
+  const el = trainingAudio
+  if (!el) return
+  lockMediaPlaybackRate({ target: el })
+  try {
+    if (el.paused) {
+      await el.play()
+      audioPlaying.value = true
+    } else {
+      el.pause()
+      audioPlaying.value = false
+      flushWatchProgress()
+    }
+  } catch (_) {
+    uni.showToast({ title: '音频播放失败', icon: 'none' })
+  }
+}
+
+function rewindAudioTen() {
+  const el = trainingAudio
+  if (!el) return
+  const next = Math.max(0, (el.currentTime || 0) - 10)
+  el.currentTime = next
+  audioUiSec.value = next
+  // 不降低 mediaMaxHeardSec，避免用回退刷进度
+}
+
 function canPhaseCheckin(phase) {
   if (!phase.unlocked) return false
   if (devMode.value) return true
@@ -2330,6 +2547,7 @@ function canPhaseCheckin(phase) {
   if (isGlobalCutoff.value) return false
   if (phase.allDone || phaseRecordIds.value[phase.block]) return true
   if (timerPhase.value === 'setup') return false
+  if (!isPhaseListenDone(phase)) return false
   return true
 }
 
@@ -2411,10 +2629,10 @@ async function openPhaseMediaItem(item, phase, forceType) {
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
-  phaseClicked.value = { ...phaseClicked.value, [phase.block]: true }
 
   // 多元感知：首次点击自动完成，完成后可回听不重复提交
   if (isPerceptionPhase(phase)) {
+    phaseClicked.value = { ...phaseClicked.value, [phase.block]: true }
     if (!phase.allDone) {
       await autoCompletePerception(phase)
     }
@@ -2424,8 +2642,6 @@ async function openPhaseMediaItem(item, phase, forceType) {
 
   openMediaItem(item, forceType)
 }
-
-const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
 const pickerCards = ref([])
 const allowedAbility = ref('')
 const sparkAbi = ref(-1)
@@ -2454,6 +2670,22 @@ const CARD_REQUIRED = {
   '扫描速记': { time: '训练用时', wordCount: '记住字数', materialName: '材料名称' },
   '极速运算': { time: '训练时长', count: '完成题数', accuracy: '正确率' },
 }
+/** 字/分钟软上限：仅提醒，不改达标算法 */
+const WORD_SPEED_SOFT_LIMIT = 800
+const WORD_SPEED_SKILLS = new Set(['超脑阅读', '影像追忆', '扫描速记'])
+
+function findAbnormalWordSpeedCards(cards) {
+  const names = []
+  for (const c of cards || []) {
+    if (!WORD_SPEED_SKILLS.has(c.name)) continue
+    const t = Number(c.time)
+    const w = Number(c.wordCount)
+    if (!(t > 0) || !(w > 0)) continue
+    if (w / t > WORD_SPEED_SOFT_LIMIT) names.push(c.name)
+  }
+  return names
+}
+
 function getRequired(cardName) { return CARD_REQUIRED[cardName] || { time: '训练时长', wordCount: '完成字数' } }
 function isRequired(cardName, field) { return field in (CARD_REQUIRED[cardName] || { time: 1, wordCount: 1 }) }
 function missingFields(card) {
@@ -2699,6 +2931,10 @@ function openPicker(block) {
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
+  if (!isPhaseListenDone(phase)) {
+    uni.showToast({ title: `请先听完/看完音视频（约 ${WATCH_DONE_PCT}%）`, icon: 'none' })
+    return
+  }
   allowedAbility.value = phase.skillName || ''
   activePickerBlock.value = block
   const isEdit = phase.allDone && phaseRecordIds.value[block]
@@ -2773,6 +3009,23 @@ async function submitForm() {
   const hasContent = pickerCards.value.some(c => c.time || c.content || c.result || c.count || c.tag || c.wordCount || c.materialName)
   if (!hasContent) {
     uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 })
+    return
+  }
+
+  const speedNames = findAbnormalWordSpeedCards(pickerCards.value)
+  if (speedNames.length) {
+    uni.showModal({
+      title: '确认训练数据',
+      content: speedNames.join('、') + ' 填写的字数相对用时偏高，确认是本次真实练习量吗？',
+      confirmText: '确认提交',
+      cancelText: '再改改',
+      success: (res) => {
+        if (res.confirm) {
+          pendingSubmitBlock.value = block
+          showSubmitConfirm.value = true
+        }
+      },
+    })
     return
   }
 
@@ -2897,16 +3150,19 @@ async function saveDetailEdit() {
 function cardDetailFields(c) {
   const map = {}
   if (!c) return map
-  if (c.time) map['时长'] = c.time + ' 分钟'
+  if (c.time) map['训练时长'] = c.time + ' 分钟'
   if (c.content) map['内容'] = c.content
   if (c.result) map['结果'] = c.result
   if (c.tag) map['类型'] = c.tag
   if (c.count) map['题数'] = c.count + ' 题'
-  if (c.accuracy) map['正确率'] = c.accuracy + '%'
+  if (c.accuracy) map[c.name === '影像追忆' ? '追忆率' : '正确率'] = c.accuracy + '%'
   if (c.tool) map['工具'] = c.tool
   if (c.materialType) map['材料类型'] = c.materialType
   if (c.materialName) map['材料名称'] = c.materialName
-  if (c.wordCount) map['字数'] = c.wordCount + ' 字'
+  if (c.wordCount) {
+    const wcLabel = c.name === '扫描速记' ? '记住字数' : '完成字数'
+    map[wcLabel] = c.wordCount + ' 字'
+  }
   if (c.forwardTime || c.forwardAcc) map['正背'] = (c.forwardTime || '?') + '/' + (c.forwardAcc || '?')
   if (c.backwardTime || c.backwardAcc) map['倒背'] = (c.backwardTime || '?') + '/' + (c.backwardAcc || '?')
   if (c.note) map['备注'] = c.note
@@ -2995,28 +3251,37 @@ async function openMediaItem(item, forceType) {
   if (!guardMedia()) return
   lastOpenedItem.value = item
   const uid = await ensureChildUser()
-  if (forceType === 'video' && item.video_url) {
+  const prev = watchProgressMap.value[item.id]
+  mediaMaxHeardSec.value = Number(prev?.watched_sec || 0)
+  audioPlaying.value = false
+  audioUiSec.value = mediaMaxHeardSec.value
+  audioUiDuration.value = Number(prev?.duration_sec || 0)
+
+  const openVideo = () => {
     videoSrc.value = resolveTrainingStreamUrl(item.video_url, uid)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
-    return
   }
-  if (forceType === 'audio' && item.audio_url) {
-    audioSrc.value = resolveTrainingStreamUrl(item.audio_url, uid)
-    audioTitle.value = item.title || ''
-    mediaPlayer.value = { show: true, type: 'audio', title: audioTitle.value }
-    return
-  }
-  if (item.video_url) {
-    videoSrc.value = resolveTrainingStreamUrl(item.video_url, uid)
-    mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
-    return
-  }
-  if (item.audio_url) {
-    audioSrc.value = resolveTrainingStreamUrl(item.audio_url, uid)
+  const openAudio = () => {
+    const streamUrl = resolveTrainingStreamUrl(item.audio_url, uid)
+    audioSrc.value = streamUrl
     audioTitle.value = item.title || '训练音频'
-    mediaPlayer.value = { show: true, type: 'audio', title: item.title || '训练音频' }
-    return
+    mediaPlayer.value = { show: true, type: 'audio', title: audioTitle.value }
+    const el = ensureTrainingAudio(streamUrl)
+    if (!el) {
+      uni.showToast({ title: '当前环境无法播放音频', icon: 'none' })
+      return
+    }
+    try {
+      if (mediaMaxHeardSec.value > 0) el.currentTime = mediaMaxHeardSec.value
+      el.playbackRate = 1
+      el.play().then(() => { audioPlaying.value = true }).catch(() => {})
+    } catch (_) { /* ignore */ }
   }
+
+  if (forceType === 'video' && item.video_url) return openVideo()
+  if (forceType === 'audio' && item.audio_url) return openAudio()
+  if (item.video_url) return openVideo()
+  if (item.audio_url) return openAudio()
   if (needAssessment.value) {
     showAssessmentModal.value = true
     return
@@ -3042,12 +3307,17 @@ function closeMedia() {
     clearTimeout(watchProgressSaveTimer)
     watchProgressSaveTimer = null
   }
-  if (lastOpenedItem.value?.id && isVideoItem(lastOpenedItem.value)) {
+  const item = lastOpenedItem.value
+  if (item?.id && itemNeedsListen(item)) {
     flushWatchProgress()
-  } else if (lastOpenedItem.value?.id) {
-    watchedItemIds.value.add(lastOpenedItem.value.id)
-    watchedItemIds.value = new Set(watchedItemIds.value)
+    if (isItemListenDone(item)) {
+      watchedItemIds.value.add(item.id)
+      watchedItemIds.value = new Set(watchedItemIds.value)
+    }
   }
+  try { trainingAudio?.pause() } catch (_) { /* ignore */ }
+  destroyTrainingAudio()
+  audioPlaying.value = false
   mediaPlayer.value.show = false
 }
 
@@ -3179,6 +3449,7 @@ async function loadTodayPlan(silent = true) {
     todayPlan.value = result.data
     applyServerTimeMeta(result.data)
     applyTimerFromServer(result.data)
+    restoreTrainingVisibility(result.data)
 
     if (result.data.status === 'transition' || !result.data.plan_id) {
       resetAllLocalState()
@@ -3280,12 +3551,14 @@ onShow(async () => {
     }
   }
 
-  // 方案已存在且计时运行中 → 无需重载（避免 3-4 次 API 调用造成卡顿）
+  // 方案已存在且计时运行中 → 补回训练卡显隐后即可返回（避免重复重载）
   if (todayPlan.value?.plan_id && timerPhase.value === 'running') {
+    restoreTrainingVisibility(todayPlan.value)
     return
   }
-  // 方案存在但不在运行中 → 只刷新打卡记录（轻量）
+  // 方案存在但不在运行中 → 恢复显隐 + 只刷新打卡记录（轻量）
   if (todayPlan.value?.plan_id) {
+    restoreTrainingVisibility(todayPlan.value)
     try {
       const uid = await ensureChildUser()
       await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
@@ -3299,6 +3572,7 @@ onUnmounted(() => {
   clearTimerTick()
   clearDayUnlockWatch()
   if (idleGuideTimer) clearTimeout(idleGuideTimer)
+  destroyTrainingAudio()
 })
 function goBack() {
   uni.navigateBack({ delta: 1 })
@@ -3395,6 +3669,24 @@ function triggerGlitch() {
 .plan-transition-title { color:#e6edf3; font-size:15px; font-weight:600; display:block; }
 .plan-transition-sub { color:rgba(255,255,255,0.5); font-size:12px; margin-top:6px; display:block; }
 .training-video { width:100%; border-radius:10px; background:#000; }
+.audio-controls { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
+.audio-btn-row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.audio-play-btn {
+  min-width:112px; text-align:center; padding:10px 18px; border-radius:999px;
+  background:rgba(0,210,255,0.15); border:1px solid rgba(0,210,255,0.45); color:#00d2ff; font-weight:700; cursor:pointer;
+}
+.audio-play-btn.secondary {
+  background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.18); color:rgba(255,255,255,0.85); font-weight:600;
+}
+.audio-progress-wrap { display:flex; flex-direction:column; gap:6px; }
+.audio-progress-track { height:8px; border-radius:999px; background:rgba(255,255,255,0.12); overflow:hidden; }
+.audio-progress-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#22d3ee,#2563eb); }
+.audio-progress-text { color:rgba(255,255,255,0.7); font-size:12px; text-align:center; }
+.media-listen-hint { display:block; margin-top:10px; text-align:center; color:rgba(255,255,255,0.55); font-size:11px; line-height:1.4; }
+[data-theme="white"] .audio-play-btn { background:#eff6ff; border-color:#93c5fd; color:#2563eb; }
+[data-theme="white"] .audio-progress-track { background:#e5e7eb; }
+[data-theme="white"] .audio-progress-text,
+[data-theme="white"] .media-listen-hint { color:#6b7280; }
 .video-progress-hint { display:block; margin-top:8px; font-size:12px; color:rgba(255,255,255,0.65); text-align:center; }
 .plan-timeline { margin-top:2px; }
 .tl-phase { display:flex; gap:10px; align-items:stretch; }
@@ -3791,6 +4083,15 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .form-del:active { color:#ff6b6b; }
 .form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
 .form-label { color:rgba(255,255,255,0.5); font-size:13px; width:auto; min-width:56px; flex-shrink:0; }
+.form-soft-tip {
+  display: block;
+  margin: 0 0 10px;
+  padding: 0 2px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  line-height: 1.4;
+}
+[data-theme="white"] .form-soft-tip { color: #6b7280; }
 .form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; }
 .form-input-err { border-color:#ef4444 !important; animation: flash-red 0.5s ease-in-out 3; }
 @keyframes flash-red { 0%,100% { background:#fff; } 50% { background:rgba(239,68,68,0.2); } }

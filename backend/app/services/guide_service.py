@@ -1,4 +1,4 @@
-"""首页引导对话 — 会话持久化"""
+"""首页引导对话 — 会话持久化 + 开场 bootstrap 入口"""
 
 from collections.abc import AsyncIterator
 from typing import Any
@@ -7,20 +7,40 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import GuideMessage, GuideSession
-from app.agents.guide.persona import GREETING, SYSTEM_PROMPT
-from app.services.ai_output_guard import (
-    is_prompt_injection_attempt,
-    refusal_message,
-    sanitize_ai_reply,
-)
-from app.services.doubao_client import chat_completion
 
 
-def _session_messages(session: GuideSession) -> list[dict]:
-    return [
-        {"role": m.role, "content": m.content}
-        for m in session.messages
-    ]
+def _history_for_llm(session: GuideSession) -> list[dict]:
+    """仅 role/content，供模型上下文（不含 actions/tools）。"""
+    return [{"role": m.role, "content": m.content} for m in session.messages]
+
+
+def _meta_from_message(m: GuideMessage) -> dict:
+    raw = m.meta_json if isinstance(m.meta_json, dict) else {}
+    return {
+        "actions": list(raw.get("actions") or []),
+        "tools_used": list(raw.get("tools_used") or []),
+    }
+
+
+def _payload_messages(session: GuideSession) -> list[dict]:
+    """API 回放：content + actions / tools_used。"""
+    out: list[dict] = []
+    for m in session.messages:
+        row = {"role": m.role, "content": m.content}
+        if m.role == "assistant":
+            meta = _meta_from_message(m)
+            row["actions"] = meta["actions"]
+            row["tools_used"] = meta["tools_used"]
+        out.append(row)
+    return out
+
+
+def _assistant_meta(result_or_meta: dict) -> dict | None:
+    actions = list(result_or_meta.get("actions") or [])
+    tools_used = list(result_or_meta.get("tools_used") or [])
+    if not actions and not tools_used:
+        return None
+    return {"actions": actions, "tools_used": tools_used}
 
 
 def get_active_session(db: Session, child_user_id: int) -> GuideSession | None:
@@ -33,16 +53,61 @@ def get_active_session(db: Session, child_user_id: int) -> GuideSession | None:
 
 
 def load_session_payload(db: Session, child_user_id: int) -> dict:
+    """加载会话历史。开场欢迎改由 bootstrap 负责，此处不再注入静态 GREETING。"""
     session = get_active_session(db, child_user_id)
     if not session:
-        return {"session_id": None, "messages": [{"role": "assistant", "content": GREETING}]}
-    msgs = _session_messages(session)
-    if not msgs:
-        msgs = [{"role": "assistant", "content": GREETING}]
+        return {"session_id": None, "messages": []}
     return {
         "session_id": session.id,
-        "messages": [{"role": m["role"], "content": m["content"]} for m in msgs],
+        "messages": _payload_messages(session),
     }
+
+
+def list_sessions(db: Session, child_user_id: int, limit: int = 30) -> list[dict]:
+    """历史会话列表（仅含至少一条用户消息的会话）。"""
+    rows = db.scalars(
+        select(GuideSession)
+        .where(GuideSession.child_user_id == child_user_id)
+        .order_by(GuideSession.id.desc())
+        .limit(limit * 2)
+    ).all()
+    items: list[dict] = []
+    for s in rows:
+        msgs = list(s.messages or [])
+        if not any(m.role == "user" for m in msgs):
+            continue
+        items.append({
+            "id": s.id,
+            "title": (s.title or "首页对话").strip() or "首页对话",
+            "message_count": len(msgs),
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        })
+        if len(items) >= limit:
+            break
+    return items
+
+
+def get_session_payload(
+    db: Session, child_user_id: int, session_id: int
+) -> dict | None:
+    session = db.get(GuideSession, session_id)
+    if not session or session.child_user_id != child_user_id:
+        return None
+    return {
+        "session_id": session.id,
+        "title": session.title,
+        "messages": _payload_messages(session),
+    }
+
+
+def delete_session(db: Session, child_user_id: int, session_id: int) -> bool:
+    session = db.get(GuideSession, session_id)
+    if not session or session.child_user_id != child_user_id:
+        return False
+    db.delete(session)
+    db.commit()
+    return True
 
 
 def _get_or_create_session(db: Session, child_user_id: int, session_id: int | None) -> GuideSession:
@@ -57,6 +122,19 @@ def _get_or_create_session(db: Session, child_user_id: int, session_id: int | No
     return session
 
 
+async def bootstrap(
+    db: Session,
+    child_user_id: int,
+    *,
+    force: bool = False,
+    use_llm: bool = True,
+) -> dict:
+    """进首页开场 Agent：sense → decide → speak。欢迎语默认不写入会话。"""
+    from app.agents.guide.bootstrap import run_bootstrap
+
+    return await run_bootstrap(db, child_user_id, force=force, use_llm=use_llm)
+
+
 async def chat(
     db: Session,
     child_user_id: int,
@@ -64,30 +142,38 @@ async def chat(
     *,
     session_id: int | None = None,
 ) -> dict:
+    from app.agents.guide.runner import run_chat
+
     session = _get_or_create_session(db, child_user_id, session_id)
-    history = _session_messages(session)
+    history = _history_for_llm(session)
 
     db.add(GuideMessage(session_id=session.id, role="user", content=message))
     if not session.title or session.title == "首页助手":
         session.title = message[:30]
     db.commit()
 
-    if is_prompt_injection_attempt(message):
-        reply = refusal_message()
-    else:
-        reply = await chat_completion(
-            system_prompt=SYSTEM_PROMPT,
-            user_message=message,
-            history=history,
-        )
-        if not reply:
-            reply = "抱歉，AI 暂时无法响应，请稍后再试。"
-        reply = sanitize_ai_reply(reply)
+    result = await run_chat(db, child_user_id, message, history=history)
+    reply = result["reply"]
 
-    db.add(GuideMessage(session_id=session.id, role="assistant", content=reply))
+    db.add(
+        GuideMessage(
+            session_id=session.id,
+            role="assistant",
+            content=reply,
+            meta_json=_assistant_meta(result),
+        )
+    )
     db.commit()
 
-    return {"session_id": session.id, "reply": reply}
+    return {
+        "session_id": session.id,
+        "reply": reply,
+        "actions": result.get("actions") or [],
+        "situation": result.get("situation"),
+        "next_action": result.get("next_action"),
+        "situation_label": result.get("situation_label"),
+        "tools_used": result.get("tools_used") or [],
+    }
 
 
 async def chat_stream(
@@ -98,46 +184,62 @@ async def chat_stream(
     session_id: int | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
     """流式对话：yield ('token', str) 后 yield ('done', dict)。"""
+    from app.agents.guide.runner import run_chat_stream
+
     session = _get_or_create_session(db, child_user_id, session_id)
-    history = _session_messages(session)
+    history = _history_for_llm(session)
 
     db.add(GuideMessage(session_id=session.id, role="user", content=message))
     if not session.title or session.title == "首页助手":
         session.title = message[:30]
     db.commit()
 
-    if is_prompt_injection_attempt(message):
-        reply = refusal_message()
-        yield ("token", reply)
-    else:
-        from app.services.doubao_client import chat_completion_stream
+    parts: list[str] = []
+    meta: dict = {}
+    async for kind, payload in run_chat_stream(
+        db, child_user_id, message, history=history
+    ):
+        if kind == "meta":
+            meta = payload if isinstance(payload, dict) else {}
+            continue
+        if kind == "error":
+            yield ("error", payload)
+            return
+        parts.append(payload)
+        yield ("token", payload)
 
-        parts: list[str] = []
-        async for token in chat_completion_stream(
-            system_prompt=SYSTEM_PROMPT,
-            user_message=message,
-            history=history,
-            max_tokens=800,
-        ):
-            if token.startswith("[ERROR]"):
-                yield ("error", token)
-                return
-            parts.append(token)
-            yield ("token", token)
-
-        reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
-        reply = sanitize_ai_reply(reply)
-
-    db.add(GuideMessage(session_id=session.id, role="assistant", content=reply))
+    reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+    db.add(
+        GuideMessage(
+            session_id=session.id,
+            role="assistant",
+            content=reply,
+            meta_json=_assistant_meta(meta),
+        )
+    )
     db.commit()
-    yield ("done", {"session_id": session.id, "reply": reply})
+    yield (
+        "done",
+        {
+            "session_id": session.id,
+            "reply": reply,
+            "actions": meta.get("actions") or [],
+            "situation": meta.get("situation"),
+            "next_action": meta.get("next_action"),
+            "situation_label": meta.get("situation_label"),
+            "tools_used": meta.get("tools_used") or [],
+        },
+    )
 
 
 def clear_sessions(db: Session, child_user_id: int) -> int:
+    from app.agents.guide.memory import clear_bootstrap_cache
+
     sessions = list(
         db.scalars(select(GuideSession).where(GuideSession.child_user_id == child_user_id)).all()
     )
     for s in sessions:
         db.delete(s)
     db.commit()
+    clear_bootstrap_cache(child_user_id)
     return len(sessions)

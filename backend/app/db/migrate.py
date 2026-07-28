@@ -56,6 +56,11 @@ def apply_schema_patches(engine: Engine) -> None:
             "company_verified_at",
             "ALTER TABLE daka_member ADD COLUMN company_verified_at DATETIME",
         ),
+        (
+            "guide_message",
+            "meta_json",
+            "ALTER TABLE guide_message ADD COLUMN meta_json JSON",
+        ),
     ]
     dialect = engine.dialect.name
     for table, column, ddl in patches:

@@ -303,6 +303,8 @@ class GuideMessage(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("guide_session.id"), nullable=False)
     role: Mapped[str] = mapped_column(String(10), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # assistant：actions / tools_used（历史回放用）；user 一般为 null
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     session: Mapped["GuideSession"] = relationship(back_populates="messages")

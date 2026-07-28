@@ -143,6 +143,12 @@ def _issue_and_respond(
     db.refresh(user)
     role = user.role or auth_service.ROLE_STUDENT
     set_session_cookie(response, user.session_token or "", role=role)
+    logger.info(
+        "auth login ok uid=%s role=%s login_name=%s",
+        user.id,
+        role,
+        user.login_name or "-",
+    )
     return _to_response(
         user,
         bind_ticket=bind_ticket,
@@ -308,11 +314,13 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
         user = find_login_parent_user(db, phone)
         if not user:
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
+            logger.warning("auth login fail parent phone=%s ip=%s", phone[-4:], ip)
             raise HTTPException(404, "该手机号尚未注册，请先注册")
         from app.core.password import verify_password
 
         if not verify_password(req.password, user.password_hash):
             record_auth_failure(db, client_ip=ip, phone=phone, device_id=did)
+            logger.warning("auth login fail parent phone=%s ip=%s", phone[-4:], ip)
             raise HTTPException(401, "密码错误")
         clear_auth_failures(client_ip=ip, phone=phone, device_id=did)
         return _issue_and_respond(db, user, response)
@@ -325,12 +333,23 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
         user = auth_service.find_student_for_login(db, login_name)
         if not user or not verify_password(req.password, user.password_hash):
             record_auth_failure(db, client_ip=ip, device_id=did, login_name=login_name)
+            logger.warning(
+                "auth login fail student login_name=%s ip=%s",
+                login_name,
+                ip,
+            )
             raise HTTPException(401, "账号或密码错误")
         if not auth_service.has_active_parent_bind(db, user.id):
+            logger.warning(
+                "auth login reject unbound student uid=%s login_name=%s",
+                user.id,
+                login_name,
+            )
             raise HTTPException(403, "账号未绑定家长，请联系管理员")
         clear_auth_failures(client_ip=ip, device_id=did, login_name=login_name)
         return _issue_and_respond(db, user, response)
 
+    logger.warning("auth login bad request ip=%s", ip)
     raise HTTPException(400, "请提供有效的登录信息")
 
 

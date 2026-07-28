@@ -88,6 +88,11 @@ def get_authenticated_user(
         raise HTTPException(401, "需要有效的 session_token（请重新登录）")
 
     if not validate_session(db, uid, token):
+        logger.warning(
+            "auth reject: invalid session uid=%s path=%s",
+            uid,
+            request.url.path,
+        )
         raise HTTPException(401, "已在其他设备登录或会话已失效，请重新登录")
 
     return uid
@@ -135,6 +140,11 @@ def get_admin_user(
     if not user or not is_account_active(user):
         raise HTTPException(401, "管理员会话无效，请重新登录")
     if not validate_session(db, uid, token):
+        logger.warning(
+            "auth reject: invalid admin session uid=%s path=%s",
+            uid,
+            request.url.path,
+        )
         raise HTTPException(401, "管理员会话无效或已在其他设备登录，请重新登录")
     if user.role != auth_service.ROLE_ADMIN:
         raise HTTPException(401, "管理员会话无效，请重新登录")

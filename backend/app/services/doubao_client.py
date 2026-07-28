@@ -113,6 +113,60 @@ async def chat_completion(
         return None
 
 
+async def chat_completion_message(
+    *,
+    messages: list[dict],
+    tools: list[dict] | None = None,
+    tool_choice: str | dict | None = "auto",
+    max_tokens: int = 400,
+    timeout: float = 30,
+) -> dict | None:
+    """Ark /chat/completions：返回 assistant message（可含 tool_calls）。
+
+    OpenAI 兼容：tools + tool_choice；用于 Guide 原生 function-calling 选工具。
+    """
+    cfg = _cfg()
+    if not cfg["api_key"]:
+        return None
+    if not messages:
+        return None
+
+    payload: dict = {
+        "model": cfg["model"],
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
+    if tools:
+        payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+
+    try:
+        client = _get_client(timeout)
+        resp = await client.post(
+            f"{cfg['api_base']}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {cfg['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+        if resp.status_code != 200:
+            logger.error(
+                f"Doubao tools error {resp.status_code}: {resp.text[:300]}"
+            )
+            return None
+        data = resp.json()
+        msg = data["choices"][0]["message"]
+        return msg if isinstance(msg, dict) else None
+    except httpx.HTTPError as e:
+        logger.warning(f"Doubao tools request failed: {e}")
+        return None
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        logger.warning(f"Doubao tools parse failed: {e}")
+        return None
+
+
 async def vision_chat_completion(
     *,
     system_prompt: str,

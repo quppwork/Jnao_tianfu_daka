@@ -1,6 +1,6 @@
 """Pydantic 请求/响应模型"""
 
-from datetime import date, time
+from datetime import date
 
 from pydantic import BaseModel, Field
 
@@ -39,12 +39,15 @@ class WatchProgressResponse(BaseModel):
 
 
 class OptionalOfferOut(BaseModel):
+    """与 training_elective_service.get_elective_offers 对齐。"""
+
     skill: str
-    weight: float = 0
-    suggested: bool = False
-    content_type: str = "audio"
-    requires_confirm: bool = True
-    status: str = "pending"  # pending | accepted | declined
+    available: bool = False
+    reason: str = ""
+    has_checkin: bool = False
+    blocks_next: bool = True
+    checkin_fields: list = Field(default_factory=list)
+    display_order: str = "after_required"
 
 
 class TrainingTodayResponse(BaseModel):
@@ -63,8 +66,7 @@ class TrainingTodayResponse(BaseModel):
     can_customize_plan: bool = False
     has_checkin: bool = False
     items: list[TrainingItemOut]
-    overall_tier: int | None = None          # 🆕 v2.0
-    optional_offers: list[dict] | None = None
+    overall_tier: int | None = None
     day_locked: bool = False
     globally_cutoff: bool = False
     training_day: str | None = None
@@ -88,7 +90,12 @@ class TrainingTodayResponse(BaseModel):
 
 
 class ScheduleRequest(BaseModel):
-    planned_minutes: int = Field(..., ge=20, le=480, description="今日计划训练总时长（分钟）")
+    planned_minutes: int = Field(
+        ...,
+        ge=20,
+        le=480,
+        description="今日计划训练总时长（分钟）",
+    )
 
 
 class TalentVideoResponse(BaseModel):
@@ -128,8 +135,9 @@ class CheckinAdvanceDetail(BaseModel):
 
 class CheckinTrainingProgress(BaseModel):
     # ── v2.0 新字段 ──
-    overall_tier: int | None = None               # 🆕 整体 Tier
-    skill_results: dict | None = None             # 🆕 { skill: { tier_before, tier_after, passed, tier_advanced, ... } }
+    overall_tier: int | None = None  # 整体 Tier
+    # { skill: { tier_before, tier_after, passed, ... } }
+    skill_results: dict | None = None
     # ── v1.0 兼容（保留）──
     main_line: str | None = None
     main_line_from: str | None = None
@@ -274,4 +282,9 @@ class AssessmentOut(BaseModel):
 class PlanCustomizeRequest(BaseModel):
     """整体替换训练方案中的项目"""
     plan_id: int = Field(..., ge=1)
-    skills: list[str] = Field(..., min_length=1, max_length=10, description="按 sort_order 顺序的技能名列表，长度需与方案 items 一致")
+    skills: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=10,
+        description="按 sort_order 顺序的技能名列表，长度需与方案 items 一致",
+    )

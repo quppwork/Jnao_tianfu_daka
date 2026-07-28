@@ -7,6 +7,19 @@ def _auth(uid: int) -> dict:
     return {"headers": {"X-Child-User-Id": str(uid)}}
 
 
+def _finish_media_if_needed(client, uid: int, item: dict) -> None:
+    """有音/视频 URL 时打卡前须上报听完进度。"""
+    if not (item.get("audio_url") or item.get("video_url")):
+        return
+    res = client.post(
+        f"/api/training/items/{item['id']}/watch-progress",
+        json={"watched_sec": 95, "duration_sec": 100},
+        **_auth(uid),
+    )
+    assert res.status_code == 200, res.text
+    assert res.json().get("video_complete") is True
+
+
 class TestScheduleV2:
     """POST /api/training/schedule — 公式引擎排课"""
 
@@ -120,11 +133,43 @@ class TestScheduleV2:
 class TestCheckinV2:
     """POST /api/training/checkin — 打卡 + Tier 晋级判定"""
 
+    def test_checkin_requires_media_complete(self, client, user_ready_for_training, db_session):
+        """有音频的项未听完不可打卡。"""
+        from app.db.models import TrainingItem
+
+        uid = user_ready_for_training
+        sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
+        plan = sched.json()
+        item = plan["items"][0]
+        row = db_session.get(TrainingItem, item["id"])
+        row.audio_url = "https://example.com/a.mp3"
+        db_session.commit()
+
+        blocked = client.post("/api/training/checkin", json={
+            "plan_id": plan["plan_id"], "item_id": item["id"],
+            "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
+        }, **_auth(uid))
+        assert blocked.status_code == 403
+        assert "听完" in blocked.json().get("detail", "")
+
+        ok_watch = client.post(
+            f"/api/training/items/{item['id']}/watch-progress",
+            json={"watched_sec": 95, "duration_sec": 100},
+            **_auth(uid),
+        )
+        assert ok_watch.status_code == 200
+        res = client.post("/api/training/checkin", json={
+            "plan_id": plan["plan_id"], "item_id": item["id"],
+            "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
+        }, **_auth(uid))
+        assert res.status_code == 200
+
     def test_checkin_pass(self, client, user_ready_for_training):
         uid = user_ready_for_training
         sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
         plan = sched.json()
         item = plan["items"][0]
+        _finish_media_if_needed(client, uid, item)
         res = client.post("/api/training/checkin", json={
             "plan_id": plan["plan_id"], "item_id": item["id"],
             "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
@@ -136,6 +181,7 @@ class TestCheckinV2:
         uid = user_ready_for_training
         sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
         plan = sched.json()
+        _finish_media_if_needed(client, uid, plan["items"][0])
         res = client.post("/api/training/checkin", json={
             "plan_id": plan["plan_id"], "item_id": plan["items"][0]["id"],
             "cards": [{"name": "超脑阅读", "time": "10", "wordCount": "100"}],
@@ -147,6 +193,7 @@ class TestCheckinV2:
         sched = client.post("/api/training/schedule", json={"planned_minutes": 120}, **_auth(uid))
         plan = sched.json()
         if len(plan["items"]) >= 2:
+            _finish_media_if_needed(client, uid, plan["items"][1])
             res = client.post("/api/training/checkin", json={
                 "plan_id": plan["plan_id"], "item_id": plan["items"][1]["id"],
                 "cards": [{"name": "影像追忆", "wordCount": "2000", "accuracy": "80"}],
@@ -157,6 +204,7 @@ class TestCheckinV2:
         uid = user_ready_for_training
         sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
         plan = sched.json()
+        _finish_media_if_needed(client, uid, plan["items"][0])
         client.post("/api/training/checkin", json={
             "plan_id": plan["plan_id"], "item_id": plan["items"][0]["id"],
             "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
@@ -170,6 +218,7 @@ class TestCheckinV2:
         uid = user_ready_for_training
         sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
         plan = sched.json()
+        _finish_media_if_needed(client, uid, plan["items"][0])
         created = client.post("/api/training/checkin", json={
             "plan_id": plan["plan_id"], "item_id": plan["items"][0]["id"],
             "cards": [{"name": "超脑阅读", "time": "1", "wordCount": "1000"}],
@@ -244,6 +293,7 @@ class TestHistoryV2:
         uid = user_ready_for_training
         sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
         plan = sched.json()
+        _finish_media_if_needed(client, uid, plan["items"][0])
         client.post("/api/training/checkin", json={
             "plan_id": plan["plan_id"], "item_id": plan["items"][0]["id"],
             "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
@@ -261,6 +311,7 @@ class TestConsecutivePassFlowV2:
         sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
         plan = sched.json()
         item = plan["items"][0]
+        _finish_media_if_needed(client, uid, item)
         res = client.post("/api/training/checkin", json={
             "plan_id": plan["plan_id"], "item_id": item["id"],
             "cards": [{"name": "超脑阅读", "time": "2", "wordCount": "900"}],
@@ -274,6 +325,7 @@ class TestConsecutivePassFlowV2:
         uid = user_ready_for_training
         sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
         plan = sched.json()
+        _finish_media_if_needed(client, uid, plan["items"][0])
         res = client.post("/api/training/checkin", json={
             "plan_id": plan["plan_id"], "item_id": plan["items"][0]["id"],
             "cards": [{"name": "超脑阅读", "time": "10", "wordCount": "100"}],

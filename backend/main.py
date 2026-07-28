@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import admin, auth, chat, dev, growth, guide, health, meta, parent, qa, resources, talent, training, user, voice
+from app.api import admin, auth, dev, growth, guide, health, meta, parent, qa, resources, talent, training, user, voice
 from app.core.logger import setup_logging
 from app.core.security import get_cors_origins, is_debug_routes_enabled
 from app.db.models import ContentItem
@@ -50,11 +50,17 @@ def _seed_catalog_if_empty() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.core.runtime import init_runtime, should_force_relogin_on_boot, warn_redis_once
     from app.core.security import assert_production_auth_config
 
     assert_production_auth_config()
-    if not os.getenv("REDIS_URL", "").strip() and os.getenv("JNAO_SKIP_ADMIN_SEED") != "1":
-        logger.warning("未配置 REDIS_URL：多 worker 下限流/OAuth 状态不共享（B16）")
+    boot_id = init_runtime()
+    warn_redis_once(logger)
+    logger.info(
+        "runtime ready boot_id=%s force_relogin_on_boot=%s",
+        boot_id[:8],
+        should_force_relogin_on_boot(),
+    )
     init_db()
     _seed_catalog_if_empty()
     yield
@@ -87,9 +93,16 @@ def root():
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    logger.info(f"--> {request.method} {request.url.path}")
+    path = request.url.path
+    # 启动脚本会密集 ping，降噪
+    quiet = path == "/api/ping"
+    if not quiet:
+        logger.info(f"--> {request.method} {path}")
     response = await call_next(request)
-    logger.info(f"<-- {request.method} {request.url.path} {response.status_code}")
+    if not quiet:
+        logger.info(f"<-- {request.method} {path} {response.status_code}")
+    elif response.status_code >= 400:
+        logger.warning(f"<-- {request.method} {path} {response.status_code}")
     return response
 
 
@@ -104,7 +117,6 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(meta.router)
 app.include_router(talent.router)
-app.include_router(chat.router)
 app.include_router(guide.router)
 app.include_router(voice.router)
 app.include_router(auth.router)

@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_student, get_authenticated_user, get_db
+from app.core.deps import (
+    get_authenticated_student,
+    get_authenticated_user,
+    get_db,
+)
 from app.core.cache import (
     cache_get_json,
     cache_set_json,
@@ -33,10 +37,14 @@ from app.schemas.training import (
     WindowStatusResponse,
 )
 from app.services import training_service
-from app.services.assessment_service import effective_talent_code, get_latest_assessment, has_valid_talent
-from app.services.training_elective_service import get_elective_offers, submit_elective_checkin
+from app.services.training_elective_service import (
+    get_elective_offers,
+    submit_elective_checkin,
+)
 from app.services.training_plan_generator import ensure_plan_report
-from app.services.training_schedule_service import schedule_training_by_duration
+from app.services.training_schedule_service import (
+    schedule_training_by_duration,
+)
 from app.services.training_service import TrainingError
 from app.services.video_push_service import get_talent_training_video, get_talent_video_raw_url
 
@@ -116,7 +124,10 @@ def training_item_media_stream(
     return stream_oss_media(stored, range_header=request.headers.get("range"))
 
 
-@router.post("/items/{item_id}/watch-progress", response_model=WatchProgressResponse)
+@router.post(
+    "/items/{item_id}/watch-progress",
+    response_model=WatchProgressResponse,
+)
 def report_watch_progress(
     item_id: int,
     req: WatchProgressRequest,
@@ -141,7 +152,10 @@ def training_entry(
     db: Session = Depends(get_db),
 ):
     """训练页入口：优先检查最新天赋并同步今日方案状态"""
-    return training_service.get_training_entry(db, child_user_id)
+    try:
+        return training_service.get_training_entry(db, child_user_id)
+    except TrainingError as e:
+        raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/today", response_model=TrainingTodayResponse)
@@ -153,7 +167,9 @@ async def training_today(
 ):
     """今日训练方案：按天赋推送音频 + AI 生成今日指令（参考昨日打卡）"""
     try:
-        return await ensure_plan_report(db, child_user_id, plan_date, skip_ai=skip_ai)
+        return await ensure_plan_report(
+            db, child_user_id, plan_date, skip_ai=skip_ai
+        )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
 
@@ -198,7 +214,9 @@ def get_checkin(
     db: Session = Depends(get_db),
 ):
     try:
-        return training_service.get_checkin_record(db, child_user_id, record_id)
+        return training_service.get_checkin_record(
+            db, child_user_id, record_id
+        )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
 
@@ -234,7 +252,9 @@ def delete_checkin(
     db: Session = Depends(get_db),
 ):
     try:
-        return training_service.delete_checkin_record(db, child_user_id, record_id)
+        return training_service.delete_checkin_record(
+            db, child_user_id, record_id
+        )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
 
@@ -368,7 +388,9 @@ def mark_plan_media_exhausted(
 ):
     """设定时长用尽：隐藏音视频，打卡仍开放至训练日截止"""
     try:
-        return training_service.mark_today_media_exhausted(db, child_user_id, plan_date)
+        return training_service.mark_today_media_exhausted(
+            db, child_user_id, plan_date
+        )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
 
@@ -381,7 +403,9 @@ async def training_report_today(
     skip_ai: bool = Query(False),
 ):
     try:
-        return await ensure_plan_report(db, child_user_id, force=force, skip_ai=skip_ai)
+        return await ensure_plan_report(
+            db, child_user_id, force=force, skip_ai=skip_ai
+        )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e
 
@@ -409,5 +433,8 @@ def training_history(
     items = training_service.get_checkin_history(
         db, child_user_id, limit, exclude_today=exclude_today
     )
-    days = training_service.group_checkin_history_by_day(items) if group_by_day else []
+    if group_by_day:
+        days = training_service.group_checkin_history_by_day(items)
+    else:
+        days = []
     return {"items": items, "days": days}
