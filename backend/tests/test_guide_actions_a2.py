@@ -60,6 +60,23 @@ def test_resolve_reply_actions_what_next_after_done():
     assert acts and acts[0]["target"] == "growth"
 
 
+def test_resolve_reply_actions_latest_checkin_to_history():
+    """问最近一次打卡内容 → 按钮应导向历史记录（可带 date），而非今日训练。"""
+    acts = resolve_reply_actions(
+        situation_next="train",
+        message="给出最近一次的打卡内容",
+        tools_used=[{
+            "name": "get_day_checkin_detail",
+            "ok": True,
+            "query_date": "2026-07-25",
+        }],
+        has_assessment=True,
+    )
+    assert acts and acts[0]["target"] == "history"
+    assert "历史" in acts[0]["label"]
+    assert acts[0].get("query", {}).get("date") == "2026-07-25"
+
+
 def test_situation_label():
     assert "测评" in situation_label("need_assessment")
     assert situation_label("unknown") == ""

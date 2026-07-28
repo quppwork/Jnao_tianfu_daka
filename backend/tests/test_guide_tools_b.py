@@ -22,8 +22,80 @@ def test_list_tools_includes_builtins():
     assert "get_talent_report_summary" in names
     assert "get_today_plan" in names
     assert "get_checkin_timeline" in names
+    assert "get_day_checkin_detail" in names
     assert "get_skill_progress" in names
     assert "suggest_next_action" in names
+    assert "get_training_courses" in names
+
+
+def test_plan_tools_heuristic_day_checkin_detail():
+    picks = plan_tools_heuristic("今天打卡内容是什么")
+    assert any(p["name"] == "get_day_checkin_detail" for p in picks)
+
+
+def test_tool_day_checkin_detail(db_session):
+    from app.db.models import TrainingRecord
+    from app.services.dev_clock import resolve_training_now
+    from app.services.training_day import get_training_day
+
+    user = register_child(db_session, parent_phone="1390000b120", nickname="打卡明细")
+    day = get_training_day(resolve_training_now(db_session, user.id))
+    empty = call_tool(db_session, user.id, "get_day_checkin_detail", {})
+    assert empty["query_date"] == day.isoformat()
+    assert empty["record_count"] == 0
+
+    past = day.fromordinal(day.toordinal() - 2)
+    db_session.add(
+        TrainingRecord(
+            child_user_id=user.id,
+            train_date=past,
+            ability_type="超脑阅读",
+            time_spent="1分钟",
+            result="还行",
+            note="备注A",
+            files_json=[
+                {
+                    "name": "超脑阅读",
+                    "time": 1,
+                    "wordCount": 1111,
+                    "result": "1",
+                    "note": "1",
+                    "files": [{"url": "http://x/y.jpg"}],
+                }
+            ],
+        )
+    )
+    db_session.commit()
+
+    # 未指定日期：今日无记录 → 回退最近一次
+    fallback = call_tool(db_session, user.id, "get_day_checkin_detail", {})
+    assert fallback["record_count"] == 1
+    assert fallback["query_date"] == past.isoformat()
+    assert fallback["mode"] == "latest_fallback"
+    assert "超脑阅读" in fallback["skills"]
+
+    latest = call_tool(
+        db_session, user.id, "get_day_checkin_detail", {"date": "latest"}
+    )
+    assert latest["query_date"] == past.isoformat()
+    assert latest["mode"] == "latest"
+    card = latest["records"][0]["cards"][0]
+    assert card["name"] == "超脑阅读"
+    assert card["wordCount"] == 1111
+    assert "files" not in card
+
+    # 显式今日且无记录 → 不回退
+    today_only = call_tool(
+        db_session, user.id, "get_day_checkin_detail", {"date": "today"}
+    )
+    assert today_only["record_count"] == 0
+    assert today_only["mode"] == "today"
+
+
+def test_plan_tools_heuristic_latest_checkin_args():
+    picks = plan_tools_heuristic("给出最近一次的打卡内容")
+    detail = next(p for p in picks if p["name"] == "get_day_checkin_detail")
+    assert detail["args"].get("date") == "latest"
 
 
 def test_openai_tool_schemas_cover_catalog():

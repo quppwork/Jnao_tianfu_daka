@@ -4,9 +4,10 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_user, get_db
+from app.core.deps import get_authenticated_user, get_authenticated_student, get_db
 from app.core.security import is_legacy_register_enabled
 from app.schemas.auth import (
     AuthResponse,
@@ -385,6 +386,103 @@ def change_password(
         new_password=req.new_password,
     )
     return _attach_cookie_for_user(response, user, db=db)
+
+
+@router.post("/switch-child", response_model=AuthResponse)
+def switch_child(
+    response: Response,
+    target_child_id: int = Query(..., ge=1, description="要切换到的孩子 ID"),
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """同家长下切换孩子账户：验证归属后签发新 session。"""
+    from app.db.models import ChildUser, ParentChildBind
+
+    current = db.get(ChildUser, child_user_id)
+    target = db.get(ChildUser, target_child_id)
+    if not current or not target:
+        raise HTTPException(404, "用户不存在")
+    if target.role == "parent":
+        raise HTTPException(400, "不能切换到家长账户")
+
+    # 验证同一家长
+    current_parent = (
+        db.scalar(select(ParentChildBind.parent_id).where(ParentChildBind.child_id == child_user_id))
+        or current.parent_phone
+    )
+    target_parent = (
+        db.scalar(select(ParentChildBind.parent_id).where(ParentChildBind.child_id == target_child_id))
+        or target.parent_phone
+    )
+    if not current_parent or not target_parent:
+        raise HTTPException(403, "账户未绑定家长")
+    if str(current_parent) != str(target_parent):
+        raise HTTPException(403, "不能切换到其他家长的孩子")
+
+    return _issue_and_respond(db, target, response)
+
+
+@router.get("/siblings")
+def list_siblings(
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """获取当前孩子的兄弟姐妹列表（同家长下）。"""
+    from app.db.models import ChildUser, ParentChildBind
+    from app.services.assessment_service import effective_talent_code
+
+    current = db.get(ChildUser, child_user_id)
+    if not current:
+        raise HTTPException(404, "用户不存在")
+
+    # 找所有同家长的孩子
+    bind = db.scalar(select(ParentChildBind).where(ParentChildBind.child_id == child_user_id))
+    if bind:
+        siblings = db.scalars(
+            select(ParentChildBind.child_id).where(
+                ParentChildBind.parent_id == bind.parent_id,
+                ParentChildBind.child_id != child_user_id,
+            )
+        ).all()
+    elif current.parent_phone:
+        siblings_rows = db.scalars(
+            select(ChildUser).where(
+                ChildUser.parent_phone == current.parent_phone,
+                ChildUser.id != child_user_id,
+                ChildUser.role != "parent",
+            )
+        ).all()
+        siblings = [s.id for s in siblings_rows]
+    else:
+        siblings = []
+
+    items = []
+    for sid in (siblings or []):
+        child = db.get(ChildUser, sid)
+        if not child:
+            continue
+        talent = ""
+        try:
+            talent = effective_talent_code(db, sid) or ""
+        except Exception:
+            pass
+        items.append({
+            "id": child.id,
+            "nickname": child.nickname or f"学员{sid}",
+            "login_name": child.login_name or "",
+            "talent": _talent_name(talent) if talent else "",
+        })
+
+    return {"siblings": items, "current": {
+        "id": current.id,
+        "nickname": current.nickname or "学员",
+        "login_name": current.login_name or "",
+    }}
+
+
+def _talent_name(code) -> str:
+    m = {"1": "学者", "2": "思者", "3": "赢者", "4": "德者", "5": "行者"}
+    return m.get(str(code), str(code))
 
 
 @router.get("/wechat/config", response_model=WechatConfigResponse)
