@@ -21,7 +21,13 @@
       </view>
 
       <template v-else-if="historyDays.length">
-        <view v-for="(day, di) in historyDays" :key="day.date || di" class="day-section">
+        <view
+          v-for="(day, di) in historyDays"
+          :key="day.date || di"
+          class="day-section"
+          :id="daySectionId(day.date)"
+          :data-date="day.date"
+        >
           <view class="card day-card">
             <text class="day-card-title">{{ formatDayLabel(day.date) }}</text>
             <view v-for="(rec, ri) in day.records" :key="rec.id || `${di}-${ri}`" class="day-card-body">
@@ -82,8 +88,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { ref, nextTick, onMounted } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { requirePageAuth, ensureChildUser, fetchTrainingHistory } from '@/utils/userApi.js'
 import { miniCardSummary, cardsFromRecord, attitudeEmoji } from '@/utils/trainingCardDisplay.js'
 
@@ -101,6 +107,12 @@ function miniCardDetail(c) {
 const loading = ref(false)
 const errorText = ref('')
 const historyDays = ref([])
+const focusDate = ref('')
+
+function daySectionId(dateStr) {
+  const d = String(dateStr || '').slice(0, 10)
+  return d ? `hist-day-${d}` : ''
+}
 
 function formatDayLabel(dateStr) {
   if (!dateStr || dateStr === 'unknown') return '未知日期'
@@ -108,6 +120,23 @@ function formatDayLabel(dateStr) {
   if (Number.isNaN(d.getTime())) return dateStr
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function scrollToFocusDate() {
+  const date = String(focusDate.value || '').slice(0, 10)
+  if (!date) return
+  nextTick(() => {
+    const el = typeof document !== 'undefined'
+      ? document.getElementById(`hist-day-${date}`)
+      : null
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    try {
+      uni.pageScrollTo({ selector: `#hist-day-${date}`, duration: 280 })
+    } catch (_) { /* H5 / 非页面滚动时忽略 */ }
+  })
 }
 
 async function loadHistory(force = false) {
@@ -118,6 +147,7 @@ async function loadHistory(force = false) {
     const uid = await ensureChildUser()
     const data = await fetchTrainingHistory(uid, 100, { excludeToday: true })
     historyDays.value = data.days || []
+    if (focusDate.value) scrollToFocusDate()
   } catch (e) {
     historyDays.value = []
     errorText.value = e.message || '加载失败，请检查网络或稍后重试'
@@ -140,6 +170,11 @@ function closeDetail() {
   showDetail.value = false
   detailCards.value = []
 }
+
+onLoad((opts) => {
+  const d = String(opts?.date || '').trim().slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) focusDate.value = d
+})
 
 onMounted(async () => {
   const auth = await requirePageAuth('student')
@@ -213,6 +248,13 @@ onShow(() => loadHistory(true))
   overflow-y: auto;
   padding: 0 14px 24px;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .day-section {
   width: 100%;

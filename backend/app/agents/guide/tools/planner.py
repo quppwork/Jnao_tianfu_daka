@@ -64,6 +64,29 @@ TOOL_SPECS: dict[str, tuple[str, tuple[str, ...]]] = {
         "近期打卡时间线摘要",
         ("打卡", "上周", "最近几天", "练了几次", "多久没", "历史", "时间线"),
     ),
+    "get_day_checkin_detail": (
+        "某一训练日的打卡内容摘要（技能/用时/字数/结果/备注等，不含课件文件）",
+        (
+            "打卡内容",
+            "打卡详情",
+            "打卡了什么",
+            "练了什么",
+            "填了什么",
+            "用时多少",
+            "多少字",
+            "备注写了",
+            "今天打了",
+            "昨日打卡",
+            "那天练",
+            "最近一次",
+            "上次打卡",
+            "上一次打卡",
+            "最近一笔",
+            "打卡数值",
+            "具体数值",
+            "历史记录",
+        ),
+    ),
     "get_skill_progress": (
         "分技能 Tier 进度快照（勿用于解释晋级规则）",
         ("进度", "tier", "Tier", "技能", "哪项弱", "哪项强", "等级"),
@@ -91,13 +114,27 @@ _TOOL_PARAM_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "additionalProperties": False,
     },
+    "get_day_checkin_detail": {
+        "type": "object",
+        "properties": {
+            "date": {
+                "type": "string",
+                "description": (
+                    "训练日 YYYY-MM-DD；today/今日=当天；"
+                    "latest/最近一次=最近有打卡的一天；省略则今日，今日无记录则回退最近一次"
+                ),
+            },
+        },
+        "additionalProperties": False,
+    },
 }
 
 FC_PLANNER_SYSTEM = (
     "你是首页引导的工具调度器。根据用户问题决定是否调用只读工具。"
-    "需要查画像、天赋报告摘要、今日训练、打卡时间线、技能进度或下一步建议时再调用；"
+    "需要查画像、天赋报告摘要、今日训练、某日打卡内容、打卡时间线、技能进度或下一步建议时再调用；"
+    "问「打卡了什么/用时/字数/备注」等明细时用 get_day_checkin_detail；"
     "若近几轮对话已谈今日训练、本轮又问天赋（或反过来），优先同时取 get_talent_report_summary 与 get_today_plan。"
-    "最多调用 2 个工具；双工具仅限合理组合（如天赋+今日、今日+进度、今日+打卡时间线）。"
+    "最多调用 2 个工具；双工具仅限合理组合（如天赋+今日、今日+打卡明细、今日+进度）。"
     "纯闲聊不必调用。不要编造工具结果。"
 )
 
@@ -184,7 +221,23 @@ def plan_tools_heuristic(message: str) -> list[dict[str, Any]]:
     picks: list[dict[str, Any]] = []
     for name, (_desc, keys) in TOOL_SPECS.items():
         if any(k.lower() in text for k in keys):
-            picks.append(_normalize_pick(name, {}))
+            args: dict[str, Any] = {}
+            if name == "get_checkin_timeline":
+                args["limit"] = 14
+            if name == "get_day_checkin_detail" and any(
+                k in (message or "")
+                for k in (
+                    "最近一次",
+                    "上次打卡",
+                    "上一次",
+                    "最近一笔",
+                    "历史记录",
+                    "打卡数值",
+                    "具体数值",
+                )
+            ):
+                args["date"] = "latest"
+            picks.append(_normalize_pick(name, args))
         if len(picks) >= MAX_TOOLS_PER_TURN:
             break
     return picks
@@ -219,6 +272,9 @@ ALLOWED_TOOL_PAIRS: frozenset[frozenset[str]] = frozenset({
     frozenset({"get_talent_report_summary", "get_today_plan"}),
     frozenset({"get_today_plan", "get_skill_progress"}),
     frozenset({"get_today_plan", "get_checkin_timeline"}),
+    frozenset({"get_today_plan", "get_day_checkin_detail"}),
+    frozenset({"get_day_checkin_detail", "get_talent_report_summary"}),
+    frozenset({"get_day_checkin_detail", "get_checkin_timeline"}),
     frozenset({"get_profile", "get_talent_report_summary"}),
     frozenset({"get_profile", "get_today_plan"}),
 })
@@ -438,13 +494,22 @@ def execute_tools(
             result = {"error": str(e)}
             ok = False
             err = str(e)
-        audit.append({
+        entry: dict[str, Any] = {
             "name": name,
             "args": args,
             "ok": ok,
             "error": err,
             "source": pick.get("source"),
-        })
+        }
+        if (
+            ok
+            and name == "get_day_checkin_detail"
+            and isinstance(result, dict)
+        ):
+            qd = str(result.get("query_date") or "").strip()[:10]
+            if len(qd) == 10:
+                entry["query_date"] = qd
+        audit.append(entry)
         payload = json.dumps(result, ensure_ascii=False, default=str)
         if len(payload) > MAX_TOOL_RESULT_CHARS:
             payload = payload[:MAX_TOOL_RESULT_CHARS] + "…"

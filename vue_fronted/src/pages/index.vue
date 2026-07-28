@@ -447,6 +447,7 @@ const ACTION_LABEL_FALLBACK = {
   train: '去今日训练 ›',
   qa: '去学科答疑 ›',
   growth: '去成长里程碑 ›',
+  history: '去历史记录 ›',
 }
 
 /** 与报告页 TALENT_LOGOS 一致 */
@@ -485,12 +486,13 @@ function normalizeNavigateActions(raw) {
       type: 'navigate',
       target: a.target,
       label: a.label || actionLabel(a.target),
+      query: (a.query && typeof a.query === 'object') ? a.query : undefined,
     }))
 }
 
 function runNavigateAction(act) {
   const target = act?.target
-  if (target) openPage(target)
+  if (target) openPage(target, act?.query)
 }
 
 try {
@@ -924,12 +926,13 @@ function scrollChat() {
 
 
 
-async function openPage(name) {
+async function openPage(name, query) {
   const routes = {
     talent: '/pages/talent/index',
     train: '/pages/training/index',
     qa: '/pages/qa/index',
     growth: '/pages/growth/index',
+    history: '/pages/training/history',
   }
   if (name === 'report') {
     try {
@@ -952,8 +955,19 @@ async function openPage(name) {
     return
   }
   const url = routes[name]
-  if (url) uni.navigateTo({ url })
-  else uni.showToast({ title: '进入: ' + name, icon: 'none' })
+  if (!url) {
+    uni.showToast({ title: '进入: ' + name, icon: 'none' })
+    return
+  }
+  let full = url
+  if (query && typeof query === 'object') {
+    const qs = Object.entries(query)
+      .filter(([, v]) => v != null && String(v).trim())
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v).trim())}`)
+      .join('&')
+    if (qs) full = `${url}?${qs}`
+  }
+  uni.navigateTo({ url: full })
 }
 
 let navTapCount = 0
