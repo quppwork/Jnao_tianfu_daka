@@ -19,11 +19,12 @@ def _meta_from_message(m: GuideMessage) -> dict:
     return {
         "actions": list(raw.get("actions") or []),
         "tools_used": list(raw.get("tools_used") or []),
+        "blocks": list(raw.get("blocks") or []),
     }
 
 
 def _payload_messages(session: GuideSession) -> list[dict]:
-    """API 回放：content + actions / tools_used。"""
+    """API 回放：content + actions / tools_used / blocks。"""
     out: list[dict] = []
     for m in session.messages:
         row = {"role": m.role, "content": m.content}
@@ -31,6 +32,7 @@ def _payload_messages(session: GuideSession) -> list[dict]:
             meta = _meta_from_message(m)
             row["actions"] = meta["actions"]
             row["tools_used"] = meta["tools_used"]
+            row["blocks"] = meta["blocks"]
         out.append(row)
     return out
 
@@ -38,9 +40,10 @@ def _payload_messages(session: GuideSession) -> list[dict]:
 def _assistant_meta(result_or_meta: dict) -> dict | None:
     actions = list(result_or_meta.get("actions") or [])
     tools_used = list(result_or_meta.get("tools_used") or [])
-    if not actions and not tools_used:
+    blocks = list(result_or_meta.get("blocks") or [])
+    if not actions and not tools_used and not blocks:
         return None
-    return {"actions": actions, "tools_used": tools_used}
+    return {"actions": actions, "tools_used": tools_used, "blocks": blocks}
 
 
 def get_active_session(db: Session, child_user_id: int) -> GuideSession | None:
@@ -173,6 +176,7 @@ async def chat(
         "next_action": result.get("next_action"),
         "situation_label": result.get("situation_label"),
         "tools_used": result.get("tools_used") or [],
+        "blocks": result.get("blocks") or [],
     }
 
 
@@ -228,12 +232,14 @@ async def chat_stream(
             "next_action": meta.get("next_action"),
             "situation_label": meta.get("situation_label"),
             "tools_used": meta.get("tools_used") or [],
+            "blocks": meta.get("blocks") or [],
         },
     )
 
 
 def clear_sessions(db: Session, child_user_id: int) -> int:
     from app.agents.guide.memory import clear_bootstrap_cache
+    from app.agents.guide.student_memory import clear_guide_memory
 
     sessions = list(
         db.scalars(select(GuideSession).where(GuideSession.child_user_id == child_user_id)).all()
@@ -242,4 +248,5 @@ def clear_sessions(db: Session, child_user_id: int) -> int:
         db.delete(s)
     db.commit()
     clear_bootstrap_cache(child_user_id)
+    clear_guide_memory(db, child_user_id)
     return len(sessions)

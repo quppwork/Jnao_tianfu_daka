@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_db
 from app.core.logger import get_logger
+from app.core.rate_limit import check_guide_chat_limits
 from app.core.security import is_debug_routes_enabled
 from app.core.sse import SSE_HEADERS, emit_event_stream, sse_done, sse_json
 from app.services import guide_service
@@ -116,6 +117,7 @@ async def guide_chat(
     child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
+    check_guide_chat_limits(child_user_id)
     if not is_configured():
         return {"reply": "AI 服务未配置，请先设置豆包 API Key。", "session_id": req.session_id}
 
@@ -133,6 +135,7 @@ async def guide_chat_stream(
     db: Session = Depends(get_db),
 ):
     """SSE 流式引导对话"""
+    check_guide_chat_limits(child_user_id)
 
     async def events():
         if not is_configured():

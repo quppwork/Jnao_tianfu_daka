@@ -37,14 +37,17 @@ async def run_bootstrap(
         db, child_user_id, training_day=ctx.training_day
     )
 
+    from app.agents.guide.proactive import resolve_proactive
+    from app.agents.shared.handoff import actions_for_next, situation_label
+
     if not force:
         cached = get_cached_welcome(db, child_user_id, ctx.training_day)
         if cached and cached.get("welcome"):
-            from app.agents.shared.handoff import actions_for_next, situation_label
-
             sit = cached.get("situation") or ctx.situation
             nxt = cached.get("next_action") or ctx.next_action
-            return {
+            # 情境以当日实时为准，便于主动句判定；欢迎文案仍用缓存
+            proactive = resolve_proactive(db, child_user_id, ctx, long_term)
+            out = {
                 "training_day": ctx.training_day,
                 "situation": sit,
                 "next_action": nxt,
@@ -55,11 +58,14 @@ async def run_bootstrap(
                 "snapshot": cached.get("snapshot") or {},
                 "source": "cache",
             }
+            if proactive:
+                out["proactive"] = proactive
+            return out
 
     welcome, source = await _speak(ctx, long_term=long_term, use_llm=use_llm)
-    from app.agents.shared.handoff import actions_for_next, situation_label
 
     snapshot = build_daily_snapshot(ctx, long_term)
+    proactive = resolve_proactive(db, child_user_id, ctx, long_term)
     payload = {
         "training_day": ctx.training_day,
         "situation": ctx.situation,
@@ -71,6 +77,8 @@ async def run_bootstrap(
         "snapshot": snapshot,
         "source": source,
     }
+    if proactive:
+        payload["proactive"] = proactive
     set_cached_welcome(db, child_user_id, ctx.training_day, {
         "situation": ctx.situation,
         "next_action": ctx.next_action,

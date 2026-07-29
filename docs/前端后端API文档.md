@@ -220,6 +220,7 @@ POST /api/guide/bootstrap?user_id={uid}
     "next_action": "train",
     "situation_label": "今日：可以开始训练",
     "actions": [{ "type": "navigate", "target": "train", "label": "去今日训练 ›" }],
+    "proactive": { "kind": "streak|comeback|weekly", "text": "…" },  # 可选；进页主动一句
     "snapshot": { "has_assessment": true, "situation": "…", "long_term": { "…可选…" } },
     "source": "template|llm|cache"
   }
@@ -227,15 +228,15 @@ POST /api/guide/bootstrap?user_id={uid}
 GET  /api/guide/session?user_id={uid}
 → { "session_id": null|int, "messages": [
     { "role": "user|assistant", "content": "…" },
-    # assistant 另含 actions / tools_used（写入 meta_json，历史回放用）
-    { "role": "assistant", "content": "…", "actions": […], "tools_used": […] }
+    # assistant 另含 actions / tools_used / blocks（写入 meta_json，历史回放用）
+    { "role": "assistant", "content": "…", "actions": […], "tools_used": […], "blocks": […] }
   ] }   # 空会话不再注入静态 GREETING；开场看 bootstrap
 
 GET  /api/guide/sessions
 → { "items": [{ "id", "title", "message_count", "updated_at", "created_at" }] }
 
 GET  /api/guide/sessions/{id}
-→ { "session_id", "title", "messages": [...] }  # 同上，assistant 含 actions / tools_used
+→ { "session_id", "title", "messages": [...] }  # 同上，assistant 含 actions / tools_used / blocks
 
 DELETE /api/guide/sessions/{id}
 → { "ok": true }
@@ -248,18 +249,25 @@ POST /api/guide/chat?user_id={uid}
     "situation": "…",
     "next_action": "train",
     "situation_label": "…",
-    "actions": […],
-    "tools_used": [{ "name": "get_today_plan", "ok": true }]
+    "actions": [{
+      "type": "navigate", "target": "train", "label": "去今日训练 ›",
+      "query": { "from": "guide", "hint": "今天练了吗", "focus": "超脑阅读" }
+    }],
+    "tools_used": [{ "name": "get_today_plan", "ok": true, "result_brief": {…} }],
+    "blocks": [{ "type": "today_summary", "title": "今日训练", "items": […] }]
   }
 
-POST /api/guide/chat/stream   # SSE；done 事件含同上元数据
+POST /api/guide/chat/stream   # SSE；done 事件含同上元数据（含 blocks）
 POST /api/guide/clear
 GET  /api/guide/debug         # 仅调试环境
 ```
 
 **后端工作**:  
 - 开场：`sense → decide → speak`（情境模板保底，可选 LLM）  
-- 对话：注入情境卡片；追问细节走只读 tool-loop（`get_profile` / `get_today_plan` / `get_checkin_timeline` / `get_skill_progress` / `suggest_next_action`）  
+- 对话：注入情境卡片；追问细节走只读 tool-loop（`get_profile` / `get_today_plan` / `get_checkin_timeline` / `get_skill_progress` / `suggest_next_action` 等）  
+- `blocks`：从工具 `result_brief` 组装（今日摘要 / 档位快照 / 打卡日）；首页按类型渲染  
+- `actions.query` 深交接：`from=guide` + `hint`；历史可带 `date`；训练可带 `focus`；答疑可带 `subject`（目标页可读可忽略）  
+- `proactive`：进页主动一句（掉队召回 / 连打里程碑 / 周简报）；每日至多一条；`GUIDE_PROACTIVE_ENABLED=0` 或 `profile_json.guide_proactive.enabled=false` 可关  
 - 实现记录已本地归档（`docs/过期文件/`，不入库）；旧 `POST /api/chat` 已废弃
 - 现行约定以本节 + `agents/guide/` + [数据闭环与预留说明.md](数据闭环与预留说明.md) §1.6 为准
 

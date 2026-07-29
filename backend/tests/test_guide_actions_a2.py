@@ -75,6 +75,23 @@ def test_resolve_reply_actions_latest_checkin_to_history():
     assert acts and acts[0]["target"] == "history"
     assert "历史" in acts[0]["label"]
     assert acts[0].get("query", {}).get("date") == "2026-07-25"
+    assert acts[0].get("query", {}).get("from") == "guide"
+
+
+def test_resolve_reply_actions_level_up_to_train():
+    """问下一等级 / 方案怎么排 → 导今日训练（规则掩饰，不展开算法）。"""
+    acts = resolve_reply_actions(
+        situation_next="growth",
+        message="我什么时候可以到下一等级",
+        has_assessment=True,
+    )
+    assert acts and acts[0]["target"] == "train"
+    acts2 = resolve_reply_actions(
+        situation_next="growth",
+        message="这个训练方案是怎么排的",
+        has_assessment=True,
+    )
+    assert acts2 and acts2[0]["target"] == "train"
 
 
 def test_situation_label():

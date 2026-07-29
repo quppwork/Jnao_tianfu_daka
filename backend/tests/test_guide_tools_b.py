@@ -11,8 +11,9 @@ from app.agents.guide.tools.planner import (
     parse_native_tool_calls,
     plan_tools,
     plan_tools_heuristic,
+    suggest_followup_picks,
 )
-from app.agents.guide.runner import run_chat
+from app.agents.guide.runner import _gather_tools, run_chat
 from app.services.auth_service import register_child
 
 
@@ -368,3 +369,67 @@ async def test_run_chat_uses_tools(db_session, mock_doubao):
     used = {t["name"] for t in result["tools_used"]}
     assert used & {"get_profile", "get_talent_report_summary"}
     assert result["actions"] and result["actions"][0]["target"] in ("talent", "report")
+
+
+def test_suggest_followup_adds_skill_progress_after_today_plan():
+    """问下一等级且首轮只有今日方案 → 补档位快照。"""
+    audit = [{"name": "get_today_plan", "args": {}, "ok": True}]
+    picks = suggest_followup_picks(
+        "我什么时候可以到下一等级",
+        used_audit=audit,
+    )
+    names = {p["name"] for p in picks}
+    assert "get_skill_progress" in names
+    assert all(p.get("source") == "followup" for p in picks)
+
+
+def test_suggest_followup_latest_after_empty_today():
+    """今日打卡明细为空 → 补 date=latest。"""
+    audit = [{
+        "name": "get_day_checkin_detail",
+        "args": {},
+        "ok": True,
+        "record_count": 0,
+        "mode": "today",
+    }]
+    picks = suggest_followup_picks("今天打卡内容呢", used_audit=audit)
+    assert picks
+    assert picks[0]["name"] == "get_day_checkin_detail"
+    assert picks[0]["args"].get("date") == "latest"
+
+
+def test_suggest_followup_noop_when_sufficient():
+    audit = [
+        {"name": "get_today_plan", "args": {}, "ok": True},
+        {"name": "get_skill_progress", "args": {}, "ok": True},
+    ]
+    assert suggest_followup_picks("我什么时候可以到下一等级", used_audit=audit) == []
+
+
+@pytest.mark.asyncio
+async def test_gather_tools_multi_round_level_question(db_session, monkeypatch):
+    """多步 loop：首轮只返回今日方案，第二轮补 skill_progress。"""
+    user = register_child(db_session, parent_phone="1390000b107", nickname="多轮工具")
+    calls = {"n": 0}
+
+    async def fake_plan(message, **kwargs):
+        calls["n"] += 1
+        return [{"name": "get_today_plan", "args": {}, "source": "test"}]
+
+    monkeypatch.setattr(
+        "app.agents.guide.runner.plan_tools",
+        fake_plan,
+    )
+    audit, block = await _gather_tools(
+        db_session,
+        user.id,
+        "我什么时候可以到下一等级",
+        history=[],
+        use_tools=True,
+    )
+    names = [a["name"] for a in audit]
+    assert "get_today_plan" in names
+    assert "get_skill_progress" in names
+    rounds = {a.get("round") for a in audit}
+    assert 0 in rounds and 1 in rounds
+    assert "get_today_plan" in block and "get_skill_progress" in block
