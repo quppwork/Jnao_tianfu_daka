@@ -597,6 +597,17 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
             "status": p.status,
             "planned_minutes": p.planned_minutes,
             "item_count": len(p.items),
+            "items": [
+                {
+                    "id": it.id,
+                    "sort_order": it.sort_order,
+                    "title": (it.title or "").strip() or "训练项",
+                    "duration_min": it.duration_min,
+                    "ability_type": it.ability_type,
+                    "checkin_status": it.checkin_status or "pending",
+                }
+                for it in (p.items or [])
+            ],
         }
         for p in plans
     ]
