@@ -92,6 +92,10 @@
         <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
         <view class="welcome-card">
           <text class="welcome-sub">{{ welcomeText }}</text>
+          <view v-if="proactiveText" class="welcome-proactive">
+            <text class="welcome-proactive-text">{{ proactiveText }}</text>
+            <view class="welcome-proactive-close" @click="proactiveText = ''"><text>×</text></view>
+          </view>
           <view v-if="welcomeActions.length" class="chat-actions welcome-actions">
             <view
               v-for="(act, ai) in welcomeActions"
@@ -129,17 +133,84 @@
             :class="{ me: m.role==='user', ai: m.role!=='user' }"
           >{{ m.text }}</view>
           <view
-            v-if="m.role==='ai' && m.actions?.length"
-            class="chat-actions"
+            v-if="m.role==='ai' && m.blocks?.length"
+            class="guide-blocks"
           >
             <view
-              v-for="(act, ai) in m.actions"
-              :key="ai"
-              class="welcome-action"
-              @click="runNavigateAction(act)"
+              v-for="(blk, bi) in m.blocks"
+              :key="bi"
+              class="guide-block"
             >
-              <text>{{ act.label || actionLabel(act.target) }}</text>
+              <text class="guide-block-title">{{ blk.title || blockTitleFallback(blk.type) }}</text>
+              <view v-if="blk.type === 'today_summary'" class="guide-block-rows">
+                <view
+                  v-for="(it, ii) in (blk.items || [])"
+                  :key="ii"
+                  class="guide-block-row"
+                >
+                  <text class="guide-block-k">{{ it.label }}</text>
+                  <text class="guide-block-v">{{ it.value }}</text>
+                </view>
+              </view>
+              <view v-else-if="blk.type === 'skill_snapshot'" class="guide-block-rows">
+                <view
+                  v-for="(it, ii) in (blk.items || []).slice(0, 6)"
+                  :key="ii"
+                  class="guide-block-row"
+                >
+                  <text class="guide-block-k">{{ it.name }}</text>
+                  <text class="guide-block-v">档 {{ it.tier }}</text>
+                </view>
+              </view>
+              <view v-else-if="blk.type === 'checkin_day'" class="guide-block-rows">
+                <view v-if="blk.date" class="guide-block-row">
+                  <text class="guide-block-k">日期</text>
+                  <text class="guide-block-v">{{ blk.date }}</text>
+                </view>
+                <view class="guide-block-row">
+                  <text class="guide-block-k">记录</text>
+                  <text class="guide-block-v">{{ blk.record_count ?? 0 }} 笔</text>
+                </view>
+                <view v-if="blk.skills?.length" class="guide-block-row">
+                  <text class="guide-block-k">技能</text>
+                  <text class="guide-block-v">{{ (blk.skills || []).join('、') }}</text>
+                </view>
+                <text v-if="blk.note" class="guide-block-note">{{ blk.note }}</text>
+              </view>
             </view>
+          </view>
+          <view
+            v-if="m.role==='ai' && m.actions?.length"
+            class="chat-actions-wrap"
+          >
+            <template v-for="(act, ai) in m.actions" :key="ai">
+              <view v-if="act.type === 'confirm'" class="guide-confirm">
+                <text v-if="act.preview" class="guide-confirm-preview">{{ act.preview }}</text>
+                <view class="chat-actions">
+                  <view
+                    class="welcome-action"
+                    :class="{ muted: act._done || act._dismissed }"
+                    @click="runConfirmAction(m, ai, act)"
+                  >
+                    <text>{{ act._done ? '已记下 ✓' : (act.label || '确认记下') }}</text>
+                  </view>
+                  <view
+                    v-if="!act._done && !act._dismissed"
+                    class="welcome-action ghost"
+                    @click="dismissConfirmAction(m, ai)"
+                  >
+                    <text>{{ act.cancel_label || '暂不' }}</text>
+                  </view>
+                </view>
+              </view>
+              <view
+                v-else-if="act.type === 'navigate'"
+                class="welcome-action"
+                @click="runNavigateAction(act)"
+              >
+                <text>{{ act.label || actionLabel(act.target) }}</text>
+              </view>
+            </template>
           </view>
           <view
             v-if="guideDebugTools && m.role==='ai' && m.tools_used?.length"
@@ -332,6 +403,7 @@ import {
   fetchSiblings,
   switchChildAccount,
   sendGuideMessageStream,
+  confirmGuideWrite,
   clearGuideSession,
   fetchProfile,
   saveProfile as saveProfileToDb,
@@ -447,6 +519,7 @@ const gradeIndex = ref(0)
 const welcomeText = ref('正在了解你的训练状态…')
 const welcomeActions = ref([])
 const situationLabel = ref('')
+const proactiveText = ref('')
 
 /** 与 backend handoff.ACTION_LABELS 对齐；优先用 API 返回的 act.label */
 const ACTION_LABEL_FALLBACK = {
@@ -486,21 +559,73 @@ function actionLabel(target) {
   return ACTION_LABEL_FALLBACK[target] || '前往 ›'
 }
 
-function normalizeNavigateActions(raw) {
+function blockTitleFallback(type) {
+  if (type === 'today_summary') return '今日训练'
+  if (type === 'skill_snapshot') return '技能档位'
+  if (type === 'checkin_day') return '打卡摘要'
+  return '摘要'
+}
+
+function normalizeGuideActions(raw) {
   if (!Array.isArray(raw)) return []
-  return raw
-    .filter(a => a && a.type === 'navigate' && ACTION_LABEL_FALLBACK[a.target])
-    .map(a => ({
-      type: 'navigate',
-      target: a.target,
-      label: a.label || actionLabel(a.target),
-      query: (a.query && typeof a.query === 'object') ? a.query : undefined,
-    }))
+  const out = []
+  for (const a of raw) {
+    if (!a || typeof a !== 'object') continue
+    if (a.type === 'confirm' && a.write_op) {
+      out.push({
+        type: 'confirm',
+        write_op: String(a.write_op),
+        args: (a.args && typeof a.args === 'object') ? a.args : {},
+        label: a.label || '确认记下',
+        preview: a.preview || '',
+        cancel_label: a.cancel_label || '暂不',
+        _done: false,
+        _dismissed: false,
+        _busy: false,
+      })
+      continue
+    }
+    if (a.type === 'navigate' && ACTION_LABEL_FALLBACK[a.target]) {
+      out.push({
+        type: 'navigate',
+        target: a.target,
+        label: a.label || actionLabel(a.target),
+        query: (a.query && typeof a.query === 'object') ? a.query : undefined,
+      })
+    }
+  }
+  return out
+}
+
+function normalizeNavigateActions(raw) {
+  return normalizeGuideActions(raw).filter(a => a.type === 'navigate')
 }
 
 function runNavigateAction(act) {
+  if (act?.type === 'confirm') return
   const target = act?.target
   if (target) openPage(target, act?.query)
+}
+
+async function runConfirmAction(msg, actIndex, act) {
+  if (!act || act.type !== 'confirm' || act._done || act._dismissed || act._busy) return
+  act._busy = true
+  try {
+    const uid = await ensureChildUser()
+    await confirmGuideWrite(uid, act.write_op, act.args || {})
+    act._done = true
+    uni.showToast({ title: '已记下', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e?.message || '记下失败', icon: 'none' })
+  } finally {
+    act._busy = false
+  }
+}
+
+function dismissConfirmAction(msg, actIndex) {
+  const act = msg?.actions?.[actIndex]
+  if (!act || act.type !== 'confirm') return
+  act._dismissed = true
 }
 
 try {
@@ -531,7 +656,7 @@ async function sendMsg() {
   messages.value.push({ role: 'user', text })
   inputText.value = ''
   const aiIdx = messages.value.length
-  messages.value.push({ role: 'ai', text: '', actions: [], tools_used: [] })
+  messages.value.push({ role: 'ai', text: '', actions: [], tools_used: [], blocks: [] })
   loading.value = true
   abortRequested = false
   await nextTick()
@@ -551,10 +676,13 @@ async function sendMsg() {
         guideSessionId.value = data.session_id
         if (data.reply) messages.value[aiIdx].text = data.reply
         if (Array.isArray(data.actions)) {
-          messages.value[aiIdx].actions = normalizeNavigateActions(data.actions)
+          messages.value[aiIdx].actions = normalizeGuideActions(data.actions)
         }
         if (Array.isArray(data.tools_used)) {
           messages.value[aiIdx].tools_used = data.tools_used
+        }
+        if (Array.isArray(data.blocks)) {
+          messages.value[aiIdx].blocks = data.blocks
         }
         if (data.situation_label) situationLabel.value = data.situation_label
       },
@@ -564,6 +692,10 @@ async function sendMsg() {
   } catch (e) {
     if (isStreamAborted(e)) {
       applyStreamStoppedHint(messages, aiIdx)
+    } else if (e?.status === 429) {
+      const tip = e?.message || '说太快了，稍等再问老师'
+      messages.value[aiIdx].text = tip
+      try { uni.showToast({ title: tip.slice(0, 40), icon: 'none' }) } catch (_) { /* ignore */ }
     } else if (!messages.value[aiIdx].text) {
       messages.value[aiIdx].text = e?.message || '网络错误，请稍后再试'
     }
@@ -689,6 +821,7 @@ async function initHome() {
   } catch (e) {
     console.error('[home] initHome 失败:', e?.message || e, e?.status)
     welcomeText.value = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
+    proactiveText.value = ''
   }
   loadSiblings()
 }
@@ -708,8 +841,9 @@ function applyGuideMessages(guideData) {
       return {
         role: isAi ? 'ai' : 'user',
         text: m.content || m.text || '',
-        actions: isAi ? normalizeNavigateActions(m.actions) : [],
+        actions: isAi ? normalizeGuideActions(m.actions) : [],
         tools_used: isAi && Array.isArray(m.tools_used) ? m.tools_used : [],
+        blocks: isAi && Array.isArray(m.blocks) ? m.blocks : [],
       }
     })
 }
@@ -719,6 +853,7 @@ function applyBootstrap(data) {
     welcomeText.value = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
     welcomeActions.value = []
     situationLabel.value = ''
+    proactiveText.value = ''
     return
   }
   welcomeText.value = data.welcome || '你好！我是张宇老师。今天可以从上方入口开始训练或提问。'
@@ -736,6 +871,8 @@ function applyBootstrap(data) {
     welcomeActions.value = []
   }
   situationLabel.value = data.situation_label || ''
+  const p = data.proactive
+  proactiveText.value = (p && typeof p === 'object' && p.text) ? String(p.text) : ''
 }
 
 async function loadProfile() {
@@ -1065,6 +1202,19 @@ function onNavTap() {
 }
 .welcome-text { display:block; color:var(--text); font-size:14px; font-weight:600; margin-bottom:4px; }
 .welcome-sub { display:block; color:var(--text-sub); font-size:12px; line-height:1.5; white-space:pre-wrap; }
+.welcome-proactive {
+  margin-top:8px; padding:8px 10px; border-radius:8px;
+  background:var(--accent-bg); border:1px solid var(--border);
+  display:flex; align-items:flex-start; gap:6px;
+}
+.welcome-proactive-text {
+  flex:1; color:var(--text); font-size:12px; line-height:1.45; white-space:pre-wrap;
+}
+.welcome-proactive-close {
+  flex-shrink:0; width:18px; height:18px;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--text-dim); font-size:14px; cursor:pointer;
+}
 .welcome-actions { margin-top:10px; }
 .welcome-action {
   display:inline-flex; padding:6px 12px; border-radius:8px;
@@ -1085,6 +1235,36 @@ function onNavTap() {
 .chat-bbl-wrap .chat-bbl { max-width:100%; }
 .chat-bbl-wrap.me { align-items:flex-end; }
 .chat-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.chat-actions-wrap { display:flex; flex-direction:column; gap:8px; width:100%; }
+.guide-confirm {
+  padding:8px 10px; border-radius:10px;
+  background:var(--accent-bg); border:1px solid var(--border);
+  display:flex; flex-direction:column; gap:8px;
+}
+.guide-confirm-preview {
+  color:var(--text-sub); font-size:11px; line-height:1.45;
+}
+.welcome-action.ghost {
+  background:transparent; border-style:dashed;
+}
+.welcome-action.muted { opacity:0.55; pointer-events:none; }
+.guide-blocks { display:flex; flex-direction:column; gap:6px; width:100%; }
+.guide-block {
+  padding:8px 10px; border-radius:10px;
+  background:var(--chat-ai-bg); border:1px solid var(--border);
+}
+.guide-block-title {
+  display:block; color:var(--text); font-size:12px; font-weight:700; margin-bottom:6px;
+}
+.guide-block-rows { display:flex; flex-direction:column; gap:4px; }
+.guide-block-row {
+  display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
+}
+.guide-block-k { color:var(--text-dim); font-size:11px; flex-shrink:0; }
+.guide-block-v { color:var(--text-sub); font-size:11px; text-align:right; word-break:break-word; }
+.guide-block-note {
+  display:block; margin-top:4px; color:var(--text-dim); font-size:11px; line-height:1.4;
+}
 .tools-debug {
   display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:2px;
 }

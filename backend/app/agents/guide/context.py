@@ -60,7 +60,8 @@ class GuideContext:
         if self.skill_tiers:
             items = list(self.skill_tiers.items())[:8]
             tier_s = ", ".join(f"{k}={v}" for k, v in items)
-            lines.append(f"技能Tier: {tier_s}")
+            # 对人设只给档位快照；话术侧勿展开晋级规则（见 persona 模糊化）
+            lines.append(f"技能档位(勿解释晋级规则): {tier_s}")
         if self.situation:
             lines.append(
                 f"判定情境: {self.situation} → 建议动作: {self.next_action}"

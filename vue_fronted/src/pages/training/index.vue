@@ -16,6 +16,18 @@
     </view>
 
     <view class="body">
+      <view v-if="guideHandoffBanner" class="guide-handoff-banner">
+        <view class="guide-handoff-main">
+          <text class="guide-handoff-title">张宇老师提醒</text>
+          <text v-if="guideHandoffBanner.focus" class="guide-handoff-text">
+            可关注：{{ guideHandoffBanner.focus }}
+          </text>
+          <text v-else-if="guideHandoffBanner.hint" class="guide-handoff-text">
+            {{ guideHandoffBanner.hint }}
+          </text>
+        </view>
+        <view class="guide-handoff-close" @click="guideHandoffBanner = null"><text>×</text></view>
+      </view>
       <!-- 今日训练时长 -->
       <view class="card time-card" :class="{ 'time-card-alert': redAlertActive }">
         <view class="time-header">
@@ -962,7 +974,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { requirePageAuth, ensureChildUser, getChildUserId, resolveTrainingStreamUrl, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
@@ -974,6 +986,25 @@ const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 const MINUTE_OPTIONS_WITH_HOUR = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 const MINUTE_OPTIONS_ZERO_HOUR = [20, 25, 30, 35, 40, 45, 50, 55]
 const MIN_TRAINING_MINUTES = 20
+
+/** Guide 深交接：仅展示提示，不改排课/计时逻辑 */
+const guideHandoffBanner = ref(null)
+
+onLoad((opts) => {
+  const from = String(opts?.from || '').trim()
+  const rawFocus = String(opts?.focus || '').trim()
+  const rawHint = String(opts?.hint || '').trim()
+  let focus = rawFocus
+  let hint = rawHint
+  try { if (rawFocus) focus = decodeURIComponent(rawFocus) } catch (_) { /* keep raw */ }
+  try { if (rawHint) hint = decodeURIComponent(rawHint) } catch (_) { /* keep raw */ }
+  if (from === 'guide' && (focus || hint)) {
+    guideHandoffBanner.value = {
+      focus: focus.slice(0, 40) || '',
+      hint: hint.slice(0, 60) || '',
+    }
+  }
+})
 
 const devToolsAvailable = isDevToolsAvailable()
 const devMode = ref(getDevMode())
@@ -3670,6 +3701,24 @@ function triggerGlitch() {
 .nav-dev.active { background:rgba(251,191,36,0.15); border-color:rgba(251,191,36,0.45); }
 .nav-dev.active text { color:#fbbf24; }
 .body { flex:1; overflow-y:auto; padding:24rpx 28rpx 0; scrollbar-width:none; -ms-overflow-style:none; }
+.guide-handoff-banner {
+  display:flex; align-items:flex-start; gap:12rpx;
+  margin-bottom:24rpx; padding:20rpx 24rpx;
+  background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.35);
+  border-radius:16rpx;
+}
+.guide-handoff-main { flex:1; min-width:0; }
+.guide-handoff-title {
+  display:block; color:#7dd3fc; font-size:22rpx; font-weight:700; margin-bottom:6rpx;
+}
+.guide-handoff-text {
+  display:block; color:#c9d1d9; font-size:24rpx; line-height:1.45; word-break:break-word;
+}
+.guide-handoff-close {
+  flex-shrink:0; width:44rpx; height:44rpx;
+  display:flex; align-items:center; justify-content:center;
+  color:#8b949e; font-size:32rpx;
+}
 .body::-webkit-scrollbar { display:none; }
 
 .card { background:#243046; border-radius:20rpx; padding:28rpx 32rpx; margin-bottom:24rpx; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }

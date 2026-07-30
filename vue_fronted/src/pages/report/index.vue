@@ -582,19 +582,20 @@ const moodSvgHtml = computed(() => {
   const px = moodPx(stateName.value)
   return `<svg width="180" height="44" viewBox="0 0 180 44" style="display:block;margin:0 auto;">
     <rect x="10" y="30" width="160" height="4" rx="2" fill="${trackBg}"/>
-    <rect x="10" y="30" width="50" height="4" rx="2" fill="#5c4030"/>
+    <rect x="10" y="30" width="50" height="4" rx="2" fill="#3a5c3a"/>
     <rect x="90" y="30" width="50" height="4" rx="2" fill="#3a4a5c"/>
-    <rect x="140" y="30" width="30" height="4" rx="2" fill="#3a5c3a"/>
+    <rect x="140" y="30" width="30" height="4" rx="2" fill="#5c4030"/>
     <circle cx="${px}" cy="32" r="6" fill="#a07050" stroke="${circleStroke}" stroke-width="2"/>
-    <text x="35" y="22" font-size="7" fill="${textFill}" text-anchor="middle">低迷</text>
+    <text x="35" y="22" font-size="7" fill="${textFill}" text-anchor="middle">高涨</text>
     <text x="90" y="14" font-size="7" fill="${textFill}" text-anchor="middle">平稳</text>
-    <text x="140" y="22" font-size="7" fill="${textFill}" text-anchor="middle">高涨</text>
+    <text x="140" y="22" font-size="7" fill="${textFill}" text-anchor="middle">低迷</text>
   </svg>`
 })
 
 function moodPx(name) {
   const idx = STATE_LABELS.indexOf(name)
-  return idx >= 0 ? 155 - idx * (110/7) : 100
+  // 左高涨 → 右低迷；与 STATE_LABELS（相争…无神）从左到右一致
+  return idx >= 0 ? 45 + idx * (110 / 7) : 100
 }
 
 onBeforeUnmount(() => {

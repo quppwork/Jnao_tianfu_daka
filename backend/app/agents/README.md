@@ -62,6 +62,19 @@ app/agents/
 | ~~话术「先答后导」+ 训练逻辑模糊化~~ | ✅ persona / 工具摘要 / 去掉 consecutive_pass 外泄 |
 | ~~天赋报告摘要工具 + 意图按钮~~ | ✅ `get_talent_report_summary`；问天赋 → 报告/测评 |
 | ~~原生 function-calling~~ | ✅ `chat_completion_message` + `plan_tools_native_fc`；失败/空则启发式 |
+| ~~多步只读 tool loop 骨架~~ | ✅ `runner` 多轮 + `suggest_followup_picks`；完整 ReAct/FC 补查仍可选 |
+| ~~Guide 对话 QPS/日限额~~ | ✅ `check_guide_chat_limits`（默认 10/60s、150/日）；多 worker Redis 可选 |
+| ~~R4 查询归一 + 二次规划~~ | ✅ `tools/query_normalize.py` + `plan_tools` |
+| ~~R3 澄清 / Grounding 提示~~ | ✅ persona + `build_grounding_hint` |
+| ~~R2 对话记忆~~ | ✅ `student_memory` + runner 注入；`clear` 时清除 |
+| **P0（R1～R4）** | ✅ 已收口（2026-07-29） |
+| ~~R6 Generative UI~~ | ✅ `ui_blocks` + 首页 `blocks` 渲染 |
+| ~~R7 深交接~~ | ✅ `handoff.query` 加深；训练/历史消费 |
+| ~~R8 主动节奏~~ | ✅ `proactive` 进页一句；频控 / 可关 |
+| ~~R9 评测与可观测~~ | ✅ `eval_safety` + `trace` + `guide_r9_regression` 四类回归 |
+| ~~R10 个性化策略~~ | ✅ `strategy.py` 天赋/弱项/情境短策略注入 |
+| ~~R5 受控写~~ | ✅ `writes.py` 习惯/意向白名单 + 确认卡 + `/confirm`；可扩白名单 |
+| ~~R11 多模态 / R12 语音~~ | ⏸ **暂不做**（产品确认不加传图/语音入口） |
 | QA Agent 打磨 | **另线** |
 | Orchestrator | **暂不做**（见 handoff 原则） |
 

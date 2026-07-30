@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_db
 from app.core.logger import get_logger
+from app.core.rate_limit import check_guide_chat_limits
 from app.core.security import is_debug_routes_enabled
 from app.core.sse import SSE_HEADERS, emit_event_stream, sse_done, sse_json
 from app.services import guide_service
@@ -27,11 +28,18 @@ class GuideBootstrapRequest(BaseModel):
     use_llm: bool = True
 
 
+class GuideConfirmRequest(BaseModel):
+    write_op: str = Field(..., min_length=1, max_length=64)
+    args: dict = Field(default_factory=dict)
+
+
 @router.get("/debug")
 async def guide_debug():
     if not is_debug_routes_enabled():
         raise HTTPException(404, "Not Found")
     from config.loader import load_settings
+    from app.agents.guide.trace import get_guide_trace_metrics
+    from app.agents.guide.writes import list_write_ops
 
     c = load_settings().get("doubao", {})
     return {
@@ -39,6 +47,8 @@ async def guide_debug():
         "model": c.get("model"),
         "key_ok": is_configured(),
         "base": c.get("api_base"),
+        "trace_metrics": get_guide_trace_metrics(),
+        "write_ops": list_write_ops(),
     }
 
 
@@ -110,12 +120,31 @@ def guide_clear(
     return {"cleared": cleared}
 
 
+@router.post("/confirm")
+def guide_confirm_write(
+    req: GuideConfirmRequest,
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """R5：确认卡二次确认后落库；白名单外写操作直接拒绝。"""
+    result = guide_service.confirm_write(
+        db,
+        child_user_id,
+        write_op=req.write_op,
+        args=req.args or {},
+    )
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error") or "写操作失败")
+    return result
+
+
 @router.post("/chat")
 async def guide_chat(
     req: GuideChatRequest,
     child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
+    check_guide_chat_limits(child_user_id)
     if not is_configured():
         return {"reply": "AI 服务未配置，请先设置豆包 API Key。", "session_id": req.session_id}
 
@@ -133,6 +162,7 @@ async def guide_chat_stream(
     db: Session = Depends(get_db),
 ):
     """SSE 流式引导对话"""
+    check_guide_chat_limits(child_user_id)
 
     async def events():
         if not is_configured():

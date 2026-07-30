@@ -77,6 +77,15 @@ _INTENT_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
             "做到哪",
             "练了吗",
             "练完了吗",
+            "下一等级",
+            "下一级",
+            "怎么晋级",
+            "如何晋级",
+            "方案怎么排",
+            "怎么排的",
+            "训练方案",
+            "能练什么",
+            "可以训练",
         ),
     ),
 ]
@@ -164,6 +173,78 @@ def infer_navigate_intent(
     return None
 
 
+_SKILL_FOCUS = (
+    "超脑阅读",
+    "影像追忆",
+    "扫描速记",
+    "极速运算",
+    "极速学习",
+    "多元感知",
+)
+
+_QA_SUBJECTS = (
+    ("数学", "数学"),
+    ("语文", "语文"),
+    ("英语", "英语"),
+    ("物理", "物理"),
+    ("化学", "化学"),
+    ("科学", "科学"),
+)
+
+
+def _focus_skill_from_message(message: str) -> str | None:
+    text = message or ""
+    for sk in _SKILL_FOCUS:
+        if sk in text:
+            return sk
+    return None
+
+
+def _qa_subject_from_message(message: str) -> str | None:
+    text = message or ""
+    for key, subj in _QA_SUBJECTS:
+        if key in text:
+            return subj
+    return None
+
+
+def _handoff_query(
+    *,
+    intent: str,
+    message: str,
+    tools_used: list[dict[str, Any]] | None,
+) -> dict[str, str] | None:
+    """组装跳转 query：date / focus / hint / from=guide。"""
+    q: dict[str, str] = {"from": "guide"}
+    text = (message or "").strip()
+    if text:
+        q["hint"] = text[:40]
+    if intent == "history":
+        qd = _query_date_from_tools(tools_used)
+        if qd:
+            q["date"] = qd
+    if intent == "train":
+        focus = _focus_skill_from_message(text)
+        if not focus:
+            # 从档位工具里取最低档技能作关注提示（非晋级规则）
+            for t in tools_used or []:
+                brief = t.get("result_brief") if isinstance(t, dict) else None
+                if not isinstance(brief, dict) or brief.get("type") != "skill_snapshot":
+                    continue
+                items = brief.get("items") or []
+                if items and isinstance(items[0], dict) and items[0].get("name"):
+                    focus = str(items[0]["name"])
+                    break
+        if focus:
+            q["focus"] = focus
+    if intent == "qa":
+        subj = _qa_subject_from_message(text)
+        if subj:
+            q["subject"] = subj
+    # 仅 from+空 hint 无意义时仍保留 from，便于对端识别来源
+    return q
+
+
 def resolve_reply_actions(
     *,
     situation_next: str | None,
@@ -171,14 +252,27 @@ def resolve_reply_actions(
     tools_used: list[dict[str, Any]] | None = None,
     has_assessment: bool = False,
 ) -> list[dict]:
-    """优先按本轮意图给按钮；天赋意图且已测评 → 报告页。"""
+    """优先按本轮意图给按钮；天赋意图且已测评 → 报告页；带深交接 query。"""
     intent = infer_navigate_intent(message, tools_used)
-    hist_date = _query_date_from_tools(tools_used)
-    hist_query = {"date": hist_date} if hist_date else None
     if intent == "talent":
-        return actions_for_next("report" if has_assessment else "talent")
-    if intent == "history":
-        return actions_for_next("history", query=hist_query)
+        target = "report" if has_assessment else "talent"
+        return actions_for_next(target, query=_handoff_query(
+            intent=target, message=message, tools_used=tools_used,
+        ))
     if intent:
-        return actions_for_next(intent)
-    return actions_for_next(situation_next)
+        return actions_for_next(
+            intent,
+            query=_handoff_query(
+                intent=intent, message=message, tools_used=tools_used,
+            ),
+        )
+    if situation_next:
+        return actions_for_next(
+            situation_next,
+            query=_handoff_query(
+                intent=situation_next,
+                message=message,
+                tools_used=tools_used,
+            ),
+        )
+    return []

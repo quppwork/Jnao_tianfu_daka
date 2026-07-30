@@ -13,8 +13,13 @@ from app.core.logger import get_logger
 
 logger = get_logger("guide.tools")
 
+# 单轮规划最多工具数；多轮累计上限见 runner
 MAX_TOOLS_PER_TURN = 2
 MAX_TOOL_RESULT_CHARS = 1800
+# 多步 tool loop：规划轮次（含首轮）
+MAX_TOOL_ROUNDS = 3
+# 整轮对话累计工具调用上限
+MAX_TOOLS_TOTAL = 4
 
 # name -> (说明, 关键词)
 TOOL_SPECS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -58,6 +63,15 @@ TOOL_SPECS: dict[str, tuple[str, tuple[str, ...]]] = {
             "多少分钟",
             "今日安排",
             "今天安排",
+            "方案怎么排",
+            "怎么排的",
+            "训练方案",
+            "可以训练",
+            "能练什么",
+            "下一等级",
+            "下一级",
+            "怎么晋级",
+            "如何晋级",
         ),
     ),
     "get_checkin_timeline": (
@@ -88,8 +102,8 @@ TOOL_SPECS: dict[str, tuple[str, tuple[str, ...]]] = {
         ),
     ),
     "get_skill_progress": (
-        "分技能 Tier 进度快照（勿用于解释晋级规则）",
-        ("进度", "tier", "Tier", "技能", "哪项弱", "哪项强", "等级"),
+        "分技能档位快照（仅供参考；禁止用其解释晋级条件/达标次数）",
+        ("进度", "tier", "Tier", "技能", "哪项弱", "哪项强", "等级", "档位"),
     ),
     "suggest_next_action": (
         "建议下一步入口（talent/train/qa/growth）",
@@ -133,6 +147,7 @@ FC_PLANNER_SYSTEM = (
     "你是首页引导的工具调度器。根据用户问题决定是否调用只读工具。"
     "需要查画像、天赋报告摘要、今日训练、某日打卡内容、打卡时间线、技能进度或下一步建议时再调用；"
     "问「打卡了什么/用时/字数/备注」等明细时用 get_day_checkin_detail；"
+    "问晋级/下一等级/方案怎么排时优先 get_today_plan（可附 get_skill_progress），结果仅作摘要，勿当规则说明书；"
     "若近几轮对话已谈今日训练、本轮又问天赋（或反过来），优先同时取 get_talent_report_summary 与 get_today_plan。"
     "最多调用 2 个工具；双工具仅限合理组合（如天赋+今日、今日+打卡明细、今日+进度）。"
     "纯闲聊不必调用。不要编造工具结果。"
@@ -456,20 +471,33 @@ async def plan_tools(
     use_llm_fallback: bool = True,
     prefer_native_fc: bool = True,
 ) -> list[dict[str, Any]]:
-    """调度顺序：原生 FC → 启发式；未走 FC 时才用 JSON 调度兜底；最后交叉补齐并钳制白名单对。"""
+    """调度：归一 → FC → 启发式；业务问句且仍空时可 JSON 二次规划；交叉补齐。"""
+    from app.agents.guide.tools.query_normalize import (
+        looks_like_business_query,
+        normalize_guide_query,
+    )
+
+    raw = (message or "").strip()
+    norm = normalize_guide_query(raw)
+    plan_msg = norm or raw
+
     fc_attempted = False
     picks: list[dict[str, Any]] = []
     if prefer_native_fc:
-        picks = await plan_tools_native_fc(message, history=history)
+        picks = await plan_tools_native_fc(plan_msg, history=history)
         fc_attempted = True
         if picks:
-            return enrich_picks_cross_topic(message, picks, history=history)
-    picks = plan_tools_heuristic(message)
+            return enrich_picks_cross_topic(plan_msg, picks, history=history)
+    picks = plan_tools_heuristic(plan_msg)
     if picks:
-        return enrich_picks_cross_topic(message, picks, history=history)
-    if use_llm_fallback and not fc_attempted:
-        picks = await plan_tools_llm(message)
-        return enrich_picks_cross_topic(message, picks, history=history)
+        return enrich_picks_cross_topic(plan_msg, picks, history=history)
+    # R4：FC 已试仍空，且像业务问句 → 允许 JSON 二次规划（原先仅未走 FC 才兜底）
+    if use_llm_fallback and (
+        not fc_attempted or looks_like_business_query(plan_msg)
+    ):
+        picks = await plan_tools_llm(plan_msg)
+        if picks:
+            return enrich_picks_cross_topic(plan_msg, picks, history=history)
     return []
 
 
@@ -509,6 +537,14 @@ def execute_tools(
             qd = str(result.get("query_date") or "").strip()[:10]
             if len(qd) == 10:
                 entry["query_date"] = qd
+            entry["record_count"] = int(result.get("record_count") or 0)
+            entry["mode"] = result.get("mode")
+        if ok:
+            from app.agents.guide.ui_blocks import result_brief_for_tool
+
+            brief = result_brief_for_tool(name, result)
+            if brief:
+                entry["result_brief"] = brief
         audit.append(entry)
         payload = json.dumps(result, ensure_ascii=False, default=str)
         if len(payload) > MAX_TOOL_RESULT_CHARS:
@@ -516,3 +552,160 @@ def execute_tools(
         blocks.append(f"[{name}] {payload}")
     text = "\n".join(blocks) if blocks else ""
     return audit, text
+
+
+def pick_key(pick: dict[str, Any]) -> str:
+    """工具去重键：name + 稳定序列化 args。"""
+    name = str(pick.get("name") or "")
+    args = pick.get("args") if isinstance(pick.get("args"), dict) else {}
+    return f"{name}:{json.dumps(args, ensure_ascii=False, sort_keys=True, default=str)}"
+
+
+def _used_names(audit: list[dict[str, Any]]) -> set[str]:
+    return {str(a.get("name") or "") for a in audit if a.get("name")}
+
+
+def _used_keys(audit: list[dict[str, Any]]) -> set[str]:
+    out: set[str] = set()
+    for a in audit:
+        out.add(pick_key({"name": a.get("name"), "args": a.get("args") or {}}))
+    return out
+
+
+def suggest_followup_picks(
+    message: str,
+    *,
+    used_audit: list[dict[str, Any]],
+    history: list[dict] | None = None,
+) -> list[dict[str, Any]]:
+    """根据首轮（及已有）工具结果决定是否补查；纯规则、可测、无 LLM。
+
+    典型：问晋级但只查了今日方案 → 补档位；今日打卡为空 → 补 latest。
+    """
+    _ = history
+    text = (message or "").strip()
+    if not text or not used_audit:
+        return []
+
+    names = _used_names(used_audit)
+    keys = _used_keys(used_audit)
+    candidates: list[dict[str, Any]] = []
+
+    def _offer(name: str, args: dict[str, Any] | None = None) -> None:
+        pick = _normalize_pick(name, args or {})
+        pick["source"] = "followup"
+        k = pick_key(pick)
+        if k in keys:
+            return
+        # 与已有工具组成的集合须为单工具或白名单对
+        trial_names = frozenset(names | {name})
+        if len(trial_names) > 2:
+            return
+        if len(trial_names) == 2 and trial_names not in ALLOWED_TOOL_PAIRS:
+            # 允许「仅补查同名工具不同 args」（如 day_checkin latest）
+            if name not in names:
+                return
+        candidates.append(pick)
+        keys.add(k)
+        names.add(name)
+
+    # 1) 今日/指定日打卡为空 → 再查最近一次
+    for a in used_audit:
+        if a.get("name") != "get_day_checkin_detail" or not a.get("ok"):
+            continue
+        if int(a.get("record_count") or 0) > 0:
+            continue
+        mode = a.get("mode")
+        if mode in ("today", "date", None) and mode != "latest":
+            args0 = a.get("args") if isinstance(a.get("args"), dict) else {}
+            if str(args0.get("date") or "").lower() not in (
+                "latest", "last", "最近", "最近一次", "上次", "最近一笔", "上一次",
+            ):
+                _offer("get_day_checkin_detail", {"date": "latest"})
+
+    # 2) 问等级/晋级/进度 → 需要档位快照
+    level_keys = (
+        "下一等级", "下一级", "怎么晋级", "如何晋级", "晋级", "等级", "档位", "进度",
+    )
+    if any(k in text for k in level_keys):
+        _offer("get_skill_progress")
+        _offer("get_today_plan")
+
+    # 3) 问方案/能练什么 → 今日摘要（课程目录首轮常已命中，此处补今日）
+    plan_keys = (
+        "方案怎么排", "怎么排的", "训练方案", "能练什么", "可以训练", "练什么",
+        "今日安排", "今天安排",
+    )
+    if any(k in text for k in plan_keys):
+        _offer("get_today_plan")
+
+    # 4) 问打卡数值/内容且尚未查明细
+    detail_keys = (
+        "打卡内容", "打卡详情", "打卡数值", "具体数值", "最近一次", "上次打卡",
+    )
+    if any(k in text for k in detail_keys) and "get_day_checkin_detail" not in _used_names(used_audit):
+        if any(k in text for k in ("最近一次", "上次", "上一次", "最近一笔")):
+            _offer("get_day_checkin_detail", {"date": "latest"})
+        else:
+            _offer("get_day_checkin_detail", {})
+
+    # 钳制：本轮最多补 MAX_TOOLS_PER_TURN 个，且累计名集合合法
+    out: list[dict[str, Any]] = []
+    acc_names = set(_used_names(used_audit))
+    for pick in candidates:
+        if len(out) >= MAX_TOOLS_PER_TURN:
+            break
+        n = pick["name"]
+        trial = frozenset(acc_names | {n})
+        if len(trial) > 2:
+            # 已有 2 个不同名时，只允许同名不同 args（已在 _offer 处理）
+            if n not in acc_names:
+                continue
+        elif len(trial) == 2 and trial not in ALLOWED_TOOL_PAIRS and n not in acc_names:
+            continue
+        out.append(pick)
+        acc_names.add(n)
+    return out
+
+
+def build_grounding_hint(
+    message: str,
+    *,
+    tools_used: list[dict[str, Any]],
+    tool_block: str,
+) -> str:
+    """R3：注入系统侧 grounding / 澄清提示（追加在工具块后）。"""
+    from app.agents.guide.tools.query_normalize import (
+        looks_like_business_query,
+        looks_like_needs_clarify,
+    )
+
+    lines: list[str] = []
+    if looks_like_needs_clarify(message):
+        lines.append(
+            "【澄清】用户问题缺关键信息（如哪一天/哪项技能）。"
+            "先用一句问清缺的槽位，再给建议；不要编造日期或数值。"
+        )
+    if not tools_used and looks_like_business_query(message):
+        lines.append(
+            "【调度】本轮未查到工具数据。"
+            "若用户在问进度/打卡/方案等具体事实，先澄清或引导去对应页面查看，禁止编造数字。"
+        )
+    if tools_used and tool_block:
+        empty_detail = any(
+            t.get("name") == "get_day_checkin_detail"
+            and t.get("ok")
+            and int(t.get("record_count") or 0) == 0
+            for t in tools_used
+        )
+        if empty_detail:
+            lines.append(
+                "【澄清】打卡明细查询结果为空。"
+                "如实说明没有记录或已回退最近一次的日期；不要说「有记录」却编造内容。"
+            )
+        else:
+            lines.append(
+                "【Grounding】回复中的日期、用时、字数、技能名、备注必须来自上方工具 JSON；"
+                "工具没有的字段不要编造。"
+            )
+    return "\n".join(lines)
