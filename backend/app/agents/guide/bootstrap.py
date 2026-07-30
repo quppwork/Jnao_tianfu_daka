@@ -110,6 +110,11 @@ async def _speak(
     )
     if lt_block:
         user_msg += f"{lt_block}\n\n"
+    from app.agents.guide.strategy import resolve_strategy, strategy_to_prompt_block
+
+    strat = strategy_to_prompt_block(resolve_strategy(ctx, long_term))
+    if strat:
+        user_msg += f"{strat}\n\n"
     user_msg += f"请写首页欢迎开场。建议动作入口：{ctx.next_action}"
     try:
         reply = await asyncio.wait_for(

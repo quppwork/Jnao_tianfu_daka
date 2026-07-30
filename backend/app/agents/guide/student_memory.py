@@ -193,7 +193,13 @@ def to_prompt_block(mem: dict[str, Any] | None) -> str:
         lines.append(f"近期对话摘要: {digest}")
     prefs = mem.get("preferences") or {}
     if isinstance(prefs, dict) and prefs.get("preferred_minutes"):
-        lines.append(f"学员提到的意向时长: {prefs['preferred_minutes']} 分钟")
+        src = prefs.get("preferred_minutes_source") or "inferred"
+        tag = "已确认" if src == "confirmed" else "提到的"
+        lines.append(f"学员{tag}意向时长: {prefs['preferred_minutes']} 分钟")
+    if isinstance(prefs, dict):
+        remind = [str(s) for s in (prefs.get("remind_skills") or []) if s]
+        if remind:
+            lines.append(f"学员希望多留意的技能: {', '.join(remind[:5])}")
     focus = [str(x) for x in (mem.get("recent_focus") or []) if x]
     if focus:
         lines.append(f"近期关注: {', '.join(focus[:8])}")

@@ -71,7 +71,10 @@ app/agents/
 | ~~R6 Generative UI~~ | ✅ `ui_blocks` + 首页 `blocks` 渲染 |
 | ~~R7 深交接~~ | ✅ `handoff.query` 加深；训练/历史消费 |
 | ~~R8 主动节奏~~ | ✅ `proactive` 进页一句；频控 / 可关 |
-| R5 受控写 | **P1 余项**（待产品圈定） |
+| ~~R9 评测与可观测~~ | ✅ `eval_safety` + `trace` + `guide_r9_regression` 四类回归 |
+| ~~R10 个性化策略~~ | ✅ `strategy.py` 天赋/弱项/情境短策略注入 |
+| ~~R5 受控写~~ | ✅ `writes.py` 习惯/意向白名单 + 确认卡 + `/confirm`；可扩白名单 |
+| ~~R11 多模态 / R12 语音~~ | ⏸ **暂不做**（产品确认不加传图/语音入口） |
 | QA Agent 打磨 | **另线** |
 | Orchestrator | **暂不做**（见 handoff 原则） |
 

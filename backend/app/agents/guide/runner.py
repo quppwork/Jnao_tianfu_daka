@@ -15,6 +15,7 @@ from app.agents.guide.long_term import build_long_term_summary
 from app.agents.guide.memory import truncate_history
 from app.agents.guide.persona import SYSTEM_PROMPT
 from app.agents.guide.situations import apply_situation
+from app.agents.guide.strategy import resolve_strategy, strategy_to_prompt_block
 from app.agents.guide.student_memory import (
     extract_from_user_message,
     fold_overflow_history,
@@ -34,6 +35,9 @@ from app.agents.guide.tools.planner import (
 )
 from app.agents.guide.tools.query_normalize import normalize_guide_query
 from app.agents.guide.ui_blocks import build_ui_blocks
+from app.agents.guide.eval_safety import scan_guide_leaks
+from app.agents.guide.trace import TurnTimer, build_turn_trace, emit_guide_trace
+from app.agents.guide.writes import propose_write_confirms
 from app.agents.shared.handoff import resolve_reply_actions, situation_label
 from app.core.logger import get_logger
 
@@ -54,7 +58,7 @@ def build_chat_system_prompt(
     tool_block: str = "",
     memory_block: str = "",
 ) -> str:
-    """人设 + 当日情境 + 长期摘要 + 对话记忆 + 可选工具结果。"""
+    """人设 + 当日情境 + 策略 + 长期摘要 + 对话记忆 + 可选工具结果。"""
     ctx = _prepare_context(db, child_user_id)
     parts = [
         SYSTEM_PROMPT,
@@ -66,6 +70,14 @@ def build_chat_system_prompt(
     lt = build_long_term_summary(
         db, child_user_id, training_day=ctx.training_day
     )
+    strategy_block = strategy_to_prompt_block(resolve_strategy(ctx, lt))
+    if strategy_block:
+        parts.extend([
+            "",
+            "—— 个性化策略 ——",
+            strategy_block,
+            "—— 策略结束 ——",
+        ])
     lt_block = lt.to_prompt_block()
     if lt_block:
         parts.extend([
@@ -118,16 +130,21 @@ def _meta_from_ctx(
     tools_used: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     tools = tools_used or []
+    actions = resolve_reply_actions(
+        situation_next=ctx.next_action,
+        message=message,
+        tools_used=tools,
+        has_assessment=bool(ctx.has_assessment),
+    )
+    # R5：显式「记下」意图 → 确认卡置顶（确认前不落库）
+    confirms = propose_write_confirms(message)
+    if confirms:
+        actions = list(confirms) + list(actions)
     return {
         "situation": ctx.situation,
         "next_action": ctx.next_action,
         "situation_label": situation_label(ctx.situation),
-        "actions": resolve_reply_actions(
-            situation_next=ctx.next_action,
-            message=message,
-            tools_used=tools,
-            has_assessment=bool(ctx.has_assessment),
-        ),
+        "actions": actions,
         "tools_used": tools,
         "blocks": build_ui_blocks(tools),
     }
@@ -226,6 +243,7 @@ async def run_chat(
     """单轮回复。返回 reply + actions + tools_used。"""
     from app.services.doubao_client import chat_completion
 
+    timer = TurnTimer()
     ctx = _prepare_context(db, child_user_id)
     hist, memory_block = _prepare_memory_and_history(
         db, child_user_id, message, history
@@ -246,9 +264,28 @@ async def run_chat(
         max_tokens=500,
     )
     text = (reply or "").strip() or "抱歉，AI 暂时无法响应，请稍后再试。"
+    leak_hits = scan_guide_leaks(text)
+    if leak_hits:
+        logger.warning(
+            f"guide leak_suspect uid={child_user_id} hits={leak_hits}"
+        )
+    meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
+    emit_guide_trace(
+        build_turn_trace(
+            child_user_id=child_user_id,
+            message=message,
+            tools_used=tools_used,
+            duration_ms=timer.ms(),
+            situation=meta.get("situation"),
+            next_action=meta.get("next_action"),
+            reply=text,
+            leak_hits=leak_hits,
+            stream=False,
+        )
+    )
     return {
         "reply": text,
-        **_meta_from_ctx(ctx, message=message, tools_used=tools_used),
+        **meta,
     }
 
 
@@ -266,6 +303,7 @@ async def run_chat_stream(
     """
     from app.services.doubao_client import chat_completion_stream
 
+    timer = TurnTimer()
     ctx = _prepare_context(db, child_user_id)
     hist, memory_block = _prepare_memory_and_history(
         db, child_user_id, message, history
@@ -273,7 +311,8 @@ async def run_chat_stream(
     tools_used, tool_block = await _gather_tools(
         db, child_user_id, message, history=hist, use_tools=use_tools
     )
-    yield ("meta", _meta_from_ctx(ctx, message=message, tools_used=tools_used))
+    meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
+    yield ("meta", meta)
 
     system = build_chat_system_prompt(
         db,
@@ -281,6 +320,7 @@ async def run_chat_stream(
         tool_block=tool_block,
         memory_block=memory_block,
     )
+    parts: list[str] = []
     async for token in chat_completion_stream(
         system_prompt=system,
         user_message=message,
@@ -288,6 +328,40 @@ async def run_chat_stream(
         max_tokens=800,
     ):
         if token.startswith("[ERROR]"):
+            emit_guide_trace(
+                build_turn_trace(
+                    child_user_id=child_user_id,
+                    message=message,
+                    tools_used=tools_used,
+                    duration_ms=timer.ms(),
+                    situation=meta.get("situation"),
+                    next_action=meta.get("next_action"),
+                    reply="".join(parts),
+                    leak_hits=[],
+                    stream=True,
+                )
+            )
             yield ("error", token)
             return
+        parts.append(token)
         yield ("token", token)
+
+    text = "".join(parts)
+    leak_hits = scan_guide_leaks(text)
+    if leak_hits:
+        logger.warning(
+            f"guide leak_suspect uid={child_user_id} hits={leak_hits}"
+        )
+    emit_guide_trace(
+        build_turn_trace(
+            child_user_id=child_user_id,
+            message=message,
+            tools_used=tools_used,
+            duration_ms=timer.ms(),
+            situation=meta.get("situation"),
+            next_action=meta.get("next_action"),
+            reply=text,
+            leak_hits=leak_hits,
+            stream=True,
+        )
+    )

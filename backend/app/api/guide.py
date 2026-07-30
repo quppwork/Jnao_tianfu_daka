@@ -28,11 +28,18 @@ class GuideBootstrapRequest(BaseModel):
     use_llm: bool = True
 
 
+class GuideConfirmRequest(BaseModel):
+    write_op: str = Field(..., min_length=1, max_length=64)
+    args: dict = Field(default_factory=dict)
+
+
 @router.get("/debug")
 async def guide_debug():
     if not is_debug_routes_enabled():
         raise HTTPException(404, "Not Found")
     from config.loader import load_settings
+    from app.agents.guide.trace import get_guide_trace_metrics
+    from app.agents.guide.writes import list_write_ops
 
     c = load_settings().get("doubao", {})
     return {
@@ -40,6 +47,8 @@ async def guide_debug():
         "model": c.get("model"),
         "key_ok": is_configured(),
         "base": c.get("api_base"),
+        "trace_metrics": get_guide_trace_metrics(),
+        "write_ops": list_write_ops(),
     }
 
 
@@ -109,6 +118,24 @@ def guide_clear(
 ):
     cleared = guide_service.clear_sessions(db, child_user_id)
     return {"cleared": cleared}
+
+
+@router.post("/confirm")
+def guide_confirm_write(
+    req: GuideConfirmRequest,
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """R5：确认卡二次确认后落库；白名单外写操作直接拒绝。"""
+    result = guide_service.confirm_write(
+        db,
+        child_user_id,
+        write_op=req.write_op,
+        args=req.args or {},
+    )
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error") or "写操作失败")
+    return result
 
 
 @router.post("/chat")

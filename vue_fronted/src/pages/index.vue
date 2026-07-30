@@ -176,16 +176,36 @@
           </view>
           <view
             v-if="m.role==='ai' && m.actions?.length"
-            class="chat-actions"
+            class="chat-actions-wrap"
           >
-            <view
-              v-for="(act, ai) in m.actions"
-              :key="ai"
-              class="welcome-action"
-              @click="runNavigateAction(act)"
-            >
-              <text>{{ act.label || actionLabel(act.target) }}</text>
-            </view>
+            <template v-for="(act, ai) in m.actions" :key="ai">
+              <view v-if="act.type === 'confirm'" class="guide-confirm">
+                <text v-if="act.preview" class="guide-confirm-preview">{{ act.preview }}</text>
+                <view class="chat-actions">
+                  <view
+                    class="welcome-action"
+                    :class="{ muted: act._done || act._dismissed }"
+                    @click="runConfirmAction(m, ai, act)"
+                  >
+                    <text>{{ act._done ? '已记下 ✓' : (act.label || '确认记下') }}</text>
+                  </view>
+                  <view
+                    v-if="!act._done && !act._dismissed"
+                    class="welcome-action ghost"
+                    @click="dismissConfirmAction(m, ai)"
+                  >
+                    <text>{{ act.cancel_label || '暂不' }}</text>
+                  </view>
+                </view>
+              </view>
+              <view
+                v-else-if="act.type === 'navigate'"
+                class="welcome-action"
+                @click="runNavigateAction(act)"
+              >
+                <text>{{ act.label || actionLabel(act.target) }}</text>
+              </view>
+            </template>
           </view>
           <view
             v-if="guideDebugTools && m.role==='ai' && m.tools_used?.length"
@@ -376,6 +396,7 @@ import {
   fetchSiblings,
   switchChildAccount,
   sendGuideMessageStream,
+  confirmGuideWrite,
   clearGuideSession,
   fetchProfile,
   saveProfile as saveProfileToDb,
@@ -537,21 +558,66 @@ function blockTitleFallback(type) {
   return '摘要'
 }
 
-function normalizeNavigateActions(raw) {
+function normalizeGuideActions(raw) {
   if (!Array.isArray(raw)) return []
-  return raw
-    .filter(a => a && a.type === 'navigate' && ACTION_LABEL_FALLBACK[a.target])
-    .map(a => ({
-      type: 'navigate',
-      target: a.target,
-      label: a.label || actionLabel(a.target),
-      query: (a.query && typeof a.query === 'object') ? a.query : undefined,
-    }))
+  const out = []
+  for (const a of raw) {
+    if (!a || typeof a !== 'object') continue
+    if (a.type === 'confirm' && a.write_op) {
+      out.push({
+        type: 'confirm',
+        write_op: String(a.write_op),
+        args: (a.args && typeof a.args === 'object') ? a.args : {},
+        label: a.label || '确认记下',
+        preview: a.preview || '',
+        cancel_label: a.cancel_label || '暂不',
+        _done: false,
+        _dismissed: false,
+        _busy: false,
+      })
+      continue
+    }
+    if (a.type === 'navigate' && ACTION_LABEL_FALLBACK[a.target]) {
+      out.push({
+        type: 'navigate',
+        target: a.target,
+        label: a.label || actionLabel(a.target),
+        query: (a.query && typeof a.query === 'object') ? a.query : undefined,
+      })
+    }
+  }
+  return out
+}
+
+function normalizeNavigateActions(raw) {
+  return normalizeGuideActions(raw).filter(a => a.type === 'navigate')
 }
 
 function runNavigateAction(act) {
+  if (act?.type === 'confirm') return
   const target = act?.target
   if (target) openPage(target, act?.query)
+}
+
+async function runConfirmAction(msg, actIndex, act) {
+  if (!act || act.type !== 'confirm' || act._done || act._dismissed || act._busy) return
+  act._busy = true
+  try {
+    const uid = await ensureChildUser()
+    await confirmGuideWrite(uid, act.write_op, act.args || {})
+    act._done = true
+    uni.showToast({ title: '已记下', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e?.message || '记下失败', icon: 'none' })
+  } finally {
+    act._busy = false
+  }
+}
+
+function dismissConfirmAction(msg, actIndex) {
+  const act = msg?.actions?.[actIndex]
+  if (!act || act.type !== 'confirm') return
+  act._dismissed = true
 }
 
 try {
@@ -602,7 +668,7 @@ async function sendMsg() {
         guideSessionId.value = data.session_id
         if (data.reply) messages.value[aiIdx].text = data.reply
         if (Array.isArray(data.actions)) {
-          messages.value[aiIdx].actions = normalizeNavigateActions(data.actions)
+          messages.value[aiIdx].actions = normalizeGuideActions(data.actions)
         }
         if (Array.isArray(data.tools_used)) {
           messages.value[aiIdx].tools_used = data.tools_used
@@ -763,7 +829,7 @@ function applyGuideMessages(guideData) {
       return {
         role: isAi ? 'ai' : 'user',
         text: m.content || m.text || '',
-        actions: isAi ? normalizeNavigateActions(m.actions) : [],
+        actions: isAi ? normalizeGuideActions(m.actions) : [],
         tools_used: isAi && Array.isArray(m.tools_used) ? m.tools_used : [],
         blocks: isAi && Array.isArray(m.blocks) ? m.blocks : [],
       }
@@ -1140,6 +1206,19 @@ function onNavTap() {
 .chat-bbl-wrap .chat-bbl { max-width:100%; }
 .chat-bbl-wrap.me { align-items:flex-end; }
 .chat-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.chat-actions-wrap { display:flex; flex-direction:column; gap:8px; width:100%; }
+.guide-confirm {
+  padding:8px 10px; border-radius:10px;
+  background:var(--accent-bg); border:1px solid var(--border);
+  display:flex; flex-direction:column; gap:8px;
+}
+.guide-confirm-preview {
+  color:var(--text-sub); font-size:11px; line-height:1.45;
+}
+.welcome-action.ghost {
+  background:transparent; border-style:dashed;
+}
+.welcome-action.muted { opacity:0.55; pointer-events:none; }
 .guide-blocks { display:flex; flex-direction:column; gap:6px; width:100%; }
 .guide-block {
   padding:8px 10px; border-radius:10px;

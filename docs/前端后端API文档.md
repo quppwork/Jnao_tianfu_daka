@@ -259,7 +259,11 @@ POST /api/guide/chat?user_id={uid}
 
 POST /api/guide/chat/stream   # SSE；done 事件含同上元数据（含 blocks）
 POST /api/guide/clear
-GET  /api/guide/debug         # 仅调试环境
+POST /api/guide/confirm
+{ "write_op": "save_preferred_minutes", "args": { "minutes": 40 } }
+→ { "ok": true, "preferred_minutes": 40, "write_op": "…" }
+  # 白名单：save_preferred_minutes | save_remind_skill；确认前不落库；越权 400
+GET  /api/guide/debug         # 仅调试环境；含 doubao 配置 + trace_metrics + write_ops
 ```
 
 **后端工作**:  
@@ -268,6 +272,9 @@ GET  /api/guide/debug         # 仅调试环境
 - `blocks`：从工具 `result_brief` 组装（今日摘要 / 档位快照 / 打卡日）；首页按类型渲染  
 - `actions.query` 深交接：`from=guide` + `hint`；历史可带 `date`；训练可带 `focus`；答疑可带 `subject`（目标页可读可忽略）  
 - `proactive`：进页主动一句（掉队召回 / 连打里程碑 / 周简报）；每日至多一条；`GUIDE_PROACTIVE_ENABLED=0` 或 `profile_json.guide_proactive.enabled=false` 可关  
+- R9 可观测：每轮写 `guide_trace` 结构化日志（工具链/耗时/空工具/泄密命中）；进程内指标见 `/api/guide/debug`；回归集 `tests/fixtures/guide_r9_regression.json`  
+- R10 策略：`strategy.py` 按天赋/弱项/situation 注入短策略块（对话 system + bootstrap）；`GUIDE_STRATEGY_ENABLED=0` 可关  
+- R5 受控写：用户说「帮我记下…」时 `actions` 可含 `type=confirm`；点确认后调 `/confirm` 写入 `guide_memory`（意向时长/弱项提醒）；审计 `guide_write_audit`；扩能力只加 `WRITE_SPECS`  
 - 实现记录已本地归档（`docs/过期文件/`，不入库）；旧 `POST /api/chat` 已废弃
 - 现行约定以本节 + `agents/guide/` + [数据闭环与预留说明.md](数据闭环与预留说明.md) §1.6 为准
 

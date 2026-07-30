@@ -1172,6 +1172,15 @@ export async function clearGuideSession(userId) {
   return apiJson(withUser('/api/guide/clear', userId), { method: 'POST' })
 }
 
+/** R5：确认卡二次确认后的受控写 */
+export async function confirmGuideWrite(userId, writeOp, args = {}) {
+  return apiJson(withUser('/api/guide/confirm', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ write_op: writeOp, args: args || {} }),
+  })
+}
+
 export async function sendGuideMessage(userId, message, sessionId = null) {
   return apiJson(withUser('/api/guide/chat', userId), {
     method: 'POST',

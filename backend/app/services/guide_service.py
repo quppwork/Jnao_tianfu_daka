@@ -250,3 +250,16 @@ def clear_sessions(db: Session, child_user_id: int) -> int:
     clear_bootstrap_cache(child_user_id)
     clear_guide_memory(db, child_user_id)
     return len(sessions)
+
+
+def confirm_write(
+    db: Session,
+    child_user_id: int,
+    *,
+    write_op: str,
+    args: dict | None = None,
+) -> dict:
+    """R5：用户确认后执行白名单写操作。"""
+    from app.agents.guide.writes import execute_write
+
+    return execute_write(db, child_user_id, write_op, args or {})
