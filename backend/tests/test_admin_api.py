@@ -212,9 +212,9 @@ class TestAdminApi:
 
         recreated = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_hard", "nickname": "新童", "password": "222222"},
+            json={"login_name": "kid_hard", "nickname": "新童", "password": "XiaoMing2"},
         )
-        assert recreated.status_code == 409
+        assert recreated.status_code == 409, recreated.text
 
     def test_admin_update_quota(self, client: TestClient, db_session):
         admin = _admin_login(client)

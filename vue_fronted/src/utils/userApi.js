@@ -522,7 +522,7 @@ export function resolveTrainingStreamUrl(url, userId) {
   return ensureAuthQuery(url, userId)
 }
 
-/** 答疑图片需带 user_id + session_token 鉴权；补全绝对路径供 <image> 加载 */
+/** 答疑图片需带 user_id 鉴权（session 走 Cookie）；补全绝对路径供 <image> 加载 */
 export function resolveQaImageUrl(url, userId) {
   if (!url || !userId) return url
   if (url.startsWith('blob:') || url.startsWith('data:')) return url

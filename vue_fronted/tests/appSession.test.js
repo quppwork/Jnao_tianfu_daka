@@ -46,43 +46,44 @@ describe('readAuthSnapshot — 三端 session 槽位互不干扰', () => {
     Object.keys(store).forEach((k) => delete store[k])
   })
 
-  it('学生：child_user_id + token', () => {
+  it('学生：child_user_id + logged_in（Cookie 模式无 token 字段）', () => {
     store.jnao_child_user_id = '10'
-    store.jnao_session_token = 'stu-tok'
+    store.jnao_student_user_id = '10'
     store.jnao_user = JSON.stringify({ id: 10, role: 'student' })
     store.jnao_logged_in = '1'
     const snap = readAuthSnapshot(getItem)
-    expect(snap.student).toEqual({ userId: 10, token: 'stu-tok' })
+    expect(snap.student).toEqual({ userId: 10, active: true })
     expect(snap.parent).toBeNull()
     expect(snap.admin).toBeNull()
   })
 
-  it('家长：jnao_user role=parent + token', () => {
+  it('家长：jnao_user role=parent + logged_in', () => {
     store.jnao_child_user_id = '20'
-    store.jnao_session_token = 'par-tok'
+    store.jnao_parent_user_id = '20'
     store.jnao_user = JSON.stringify({ id: 20, role: 'parent' })
     store.jnao_logged_in = '1'
     const snap = readAuthSnapshot(getItem)
-    expect(snap.parent).toEqual({ userId: 20, token: 'par-tok' })
+    expect(snap.parent).toEqual({ userId: 20, active: true })
     expect(snap.student).toBeNull()
   })
 
-  it('管理员：独立 admin token，不影响学生槽', () => {
+  it('管理员：独立 admin 槽，不影响学生槽', () => {
     store.jnao_admin_user = JSON.stringify({ id: 1, name: 'admin' })
-    store.jnao_admin_token = 'adm-tok'
+    store.jnao_admin_logged_in = '1'
     store.jnao_child_user_id = '10'
-    store.jnao_session_token = 'stu-tok'
+    store.jnao_student_user_id = '10'
     store.jnao_user = JSON.stringify({ id: 10, role: 'student' })
+    store.jnao_logged_in = '1'
     const snap = readAuthSnapshot(getItem)
-    expect(snap.admin).toEqual({ userId: 1, token: 'adm-tok' })
-    expect(snap.student).toEqual({ userId: 10, token: 'stu-tok' })
+    expect(snap.admin).toEqual({ userId: 1, active: true })
+    expect(snap.student).toEqual({ userId: 10, active: true })
   })
 
-  it('仅有 logged_in 无 token → 各槽为空', () => {
-    store.jnao_logged_in = '1'
+  it('无 logged_in → parent/student 槽为空', () => {
     store.jnao_user = JSON.stringify({ id: 5, role: 'parent' })
     const snap = readAuthSnapshot(getItem)
     expect(snap.parent).toBeNull()
+    expect(snap.student).toBeNull()
   })
 })
 
@@ -153,6 +154,7 @@ describe('repairAuthStorage / sanitizeAuthForLoginEntry', () => {
   it('用户登录页进入时清除管理员残留', async () => {
     const { sanitizeAuthForLoginEntry, readAuthSnapshot } = await import('../src/utils/appSession.js')
     store.jnao_admin_user = JSON.stringify({ id: 1 })
+    store.jnao_admin_logged_in = '1'
     store.jnao_admin_token = 'adm'
     sanitizeAuthForLoginEntry('/pages/login/index')
     const snap = readAuthSnapshot((k) => store[k])

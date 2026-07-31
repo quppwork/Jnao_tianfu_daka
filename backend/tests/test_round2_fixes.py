@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, TrainingItem, TrainingPlan, TrainingRecord
 from app.services import auth_service
+from app.services.training_day import get_training_day
 from app.services.training_formula_engine import duration_slot, max_formula_item_count
 from app.services.training_schedule_service import _plan_structure_invalid
 from app.services.training_service import append_elective_item, customize_plan_items, remove_plan_item
@@ -66,7 +67,7 @@ class TestElectiveDedup:
         )
         plan = TrainingPlan(
             child_user_id=user.id,
-            plan_date=date(2026, 7, 6),
+            plan_date=get_training_day(),
             level="视觉",
             report_text="",
             status="pending",
@@ -109,7 +110,7 @@ class TestRemovePlanItem:
         )
         plan = TrainingPlan(
             child_user_id=user.id,
-            plan_date=date(2026, 7, 6),
+            plan_date=get_training_day(),
             level="视觉",
             report_text="",
             status="pending",
@@ -154,7 +155,7 @@ class TestCustomizePlan:
         )
         plan = TrainingPlan(
             child_user_id=user.id,
-            plan_date=date(2026, 7, 6),
+            plan_date=get_training_day(),
             level="视觉",
             report_text="",
             status="pending",

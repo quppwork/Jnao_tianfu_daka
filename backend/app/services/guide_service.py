@@ -46,6 +46,20 @@ def _assistant_meta(result_or_meta: dict) -> dict | None:
     return {"actions": actions, "tools_used": tools_used, "blocks": blocks}
 
 
+def _injection_refusal_result() -> dict:
+    from app.services.ai_output_guard import refusal_message
+
+    return {
+        "reply": refusal_message(),
+        "actions": [],
+        "situation": None,
+        "next_action": None,
+        "situation_label": None,
+        "tools_used": [],
+        "blocks": [],
+    }
+
+
 def get_active_session(db: Session, child_user_id: int) -> GuideSession | None:
     return db.scalar(
         select(GuideSession)
@@ -146,6 +160,7 @@ async def chat(
     session_id: int | None = None,
 ) -> dict:
     from app.agents.guide.runner import run_chat
+    from app.services.ai_output_guard import is_prompt_injection_attempt
 
     session = _get_or_create_session(db, child_user_id, session_id)
     history = _history_for_llm(session)
@@ -155,7 +170,10 @@ async def chat(
         session.title = message[:30]
     db.commit()
 
-    result = await run_chat(db, child_user_id, message, history=history)
+    if is_prompt_injection_attempt(message):
+        result = _injection_refusal_result()
+    else:
+        result = await run_chat(db, child_user_id, message, history=history)
     reply = result["reply"]
 
     db.add(
@@ -189,6 +207,7 @@ async def chat_stream(
 ) -> AsyncIterator[tuple[str, Any]]:
     """流式对话：yield ('token', str) 后 yield ('done', dict)。"""
     from app.agents.guide.runner import run_chat_stream
+    from app.services.ai_output_guard import is_prompt_injection_attempt
 
     session = _get_or_create_session(db, child_user_id, session_id)
     history = _history_for_llm(session)
@@ -197,6 +216,22 @@ async def chat_stream(
     if not session.title or session.title == "首页助手":
         session.title = message[:30]
     db.commit()
+
+    if is_prompt_injection_attempt(message):
+        result = _injection_refusal_result()
+        reply = result["reply"]
+        yield ("token", reply)
+        db.add(
+            GuideMessage(
+                session_id=session.id,
+                role="assistant",
+                content=reply,
+                meta_json=_assistant_meta(result),
+            )
+        )
+        db.commit()
+        yield ("done", {"session_id": session.id, **result})
+        return
 
     parts: list[str] = []
     meta: dict = {}
