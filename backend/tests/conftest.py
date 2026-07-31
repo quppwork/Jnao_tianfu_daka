@@ -20,6 +20,7 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_authenticated_user, get_child_user_id, get_db
+from app.core.rate_limit import reset_rate_limit_buckets
 from app.db.base import Base
 from app.db.session import get_session_factory, init_db
 from app.services.assessment_service import save_assessment
@@ -27,6 +28,14 @@ from app.services.auth_service import register_child
 from app.services.catalog_import import import_all_xet_catalogs
 
 # 前端模块 ↔ API 映射见 backend/tests/README.md
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """内存限流桶跨测试不串扰（同 uid 复用时尤甚）。"""
+    reset_rate_limit_buckets()
+    yield
+    reset_rate_limit_buckets()
 
 
 @pytest.fixture
@@ -83,12 +92,12 @@ def mock_doubao():
             return_value=reply,
         ) as mock_chat,
         patch(
-            "app.services.qa_service.chat_completion",
+            "app.agents.qa.runner.chat_completion",
             new_callable=AsyncMock,
             return_value=reply,
         ),
         patch(
-            "app.services.qa_service.vision_chat_completion",
+            "app.agents.qa.runner.vision_chat_completion",
             new_callable=AsyncMock,
             return_value="【测试】识题预览",
         ),
@@ -104,6 +113,10 @@ def mock_doubao():
         ),
         patch(
             "app.services.doubao_client.chat_completion_stream",
+            side_effect=lambda **kwargs: _fake_stream(),
+        ),
+        patch(
+            "app.services.doubao_client.vision_chat_completion_stream",
             side_effect=lambda **kwargs: _fake_stream(),
         ),
         patch(

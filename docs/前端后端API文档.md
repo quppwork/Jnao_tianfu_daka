@@ -592,23 +592,28 @@ child_training_state (profile_json.training_progress)
 **后端**: `app/api/qa.py`
 
 ```
-POST /api/qa/chat               # { message, subject?, image_id? }
+POST /api/qa/chat               # { message, subject?, image_id? }；超限 429
+POST /api/qa/chat/stream        # 同上，SSE；超限 429
 GET  /api/qa/sessions           # 列出所有会话
 POST /api/qa/sessions           # 新建会话
 GET  /api/qa/sessions/{id}      # 会话详情 + 消息列表
-DELETE /api/qa/sessions/{id}    # 删除会话（级联删除消息）
+DELETE /api/qa/sessions/{id}    # 删除会话（级联删除消息 + 会话摘要）
 POST /api/qa/upload-image       # 拍照上传（multipart）
 GET  /api/qa/images/{id}        # 获取已上传图片
-POST /api/qa/clear              # 清空当前会话
+GET  /api/qa/debug              # 调试：豆包配置 + qa_trace 指标（需开 debug 路由）
 ```
 
+> 说明：无 `POST /api/qa/clear`；清空请删会话或「新建对话」。限流 env：`QA_CHAT_RATE_LIMIT` / `QA_CHAT_QPS_*` / `QA_CHAT_DAY_MAX`（默认对齐 Guide：10/60s、150/日）。
+
 **后端工作（POST /api/qa/chat）**:
-1. `detect_subject()` → 自动识别学科（数学/语文/英语）
-2. 错频道检测：数学标签问英语题 → 提醒切换学科
-3. `fetch_recent_coach_context_for_prompt()` → 读取近期 `meta_json` 中的 `mistake_pattern` / `coach_hint` 注入系统提示
-4. `build_qa_system_prompt()` → 天赋 + 学科 + 学段 + 教练上下文
-5. RAG 可选；调用豆包 LLM
-6. `build_coach_metadata()` → 本轮 `coach_hint` / `mistake_pattern` 写入 assistant 消息的 `meta_json`
+1. 错频道检测（`check_subject_mismatch`）：当前 chip/会话学科与题目语义不符 → 返回提醒，并带 `subject_mismatch` / `suggested_subject`（**不**自动改 `session.subject`）
+2. 弱澄清（`needs_stem_clarification`）：首轮无图且寒暄/空求助 → 追问题干，带 `clarified`（不调 LLM）
+3. 会话滚动摘要：超出近 10 轮压入 `qa_session.meta_json.rolling_summary`，注入 system
+4. `fetch_recent_coach_context_for_prompt()` → 读取近期 `meta_json` 中的 `mistake_pattern` 注入系统提示
+5. `build_qa_system_prompt()` → 天赋 + 学科 + 学段 + 摘要 + 教练上下文
+6. RAG 可选；调用豆包 LLM
+7. `build_coach_metadata()` 本轮可算 `coach_hint`；落库经 `_assistant_meta_for_storage` **只写** `mistake_pattern`（及可选 RAG 标记）
+8. `qa_trace` 结构化日志（学科 / OCR / RAG / mismatch / clarify / 耗时）
 
 `qa_message.voice_url`：预留，当前未使用。
 

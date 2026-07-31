@@ -29,6 +29,7 @@ class TestBuildPromptBySubject:
         assert "数学" in prompt
         assert "学者" in prompt
         assert "初中" in prompt
+        assert "澄清" in prompt or "题干" in prompt
 
     def test_chinese_prompt_includes_evidence_rule(self):
         prompt = build_qa_system_prompt(subject="语文", school_stage="primary_high")

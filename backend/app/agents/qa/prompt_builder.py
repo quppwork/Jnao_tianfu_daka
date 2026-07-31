@@ -21,6 +21,8 @@ def build_qa_system_prompt(
     rag_context: str | None = None,
     ocr_preview: str | None = None,
     coach_context: str | None = None,
+    memory_digest: str | None = None,
+    strategy_block: str | None = None,
 ) -> str:
     lines = [BASE_PERSONA, STAGE_RULES.get(school_stage, STAGE_RULES["primary_high"])]
 
@@ -37,6 +39,10 @@ def build_qa_system_prompt(
     if age:
         lines.append(f"年龄：{age} 岁。")
     lines.append(talent_coaching_hint(talent_primary, report_json))
+    if strategy_block:
+        lines.append(strategy_block)
+    if memory_digest:
+        lines.append(memory_digest)
     if coach_context:
         lines.append(coach_context)
     if ocr_preview:

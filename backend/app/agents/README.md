@@ -8,19 +8,18 @@ app/agents/
 ├── shared/                 # 跨 Agent 共用（无业务决策）
 │   ├── stage.py / talent.py
 │   └── handoff.py          # navigate 白名单 / situation 文案（Agent 间只交接动作）
-├── qa/                     # 学科答疑 Agent（已有）
-│   ├── persona.py
-│   ├── subjects/
-│   ├── router.py
-│   ├── prompt_builder.py
-│   └── memory.py
+├── qa/                     # 学科答疑 Agent
+│   ├── persona.py / subjects / router.py / prompt_builder.py
+│   ├── memory.py / clarify.py / clarify_guide.py
+│   ├── strategy.py         # P2 短策略
+│   ├── trace.py / eval_safety.py
+│   └── runner.py           # P2 编排（禁止调 Guide runner）
 └── guide/                  # 首页引导 Agent
     ├── persona.py
     ├── context.py / situations.py / bootstrap.py
-    ├── long_term.py        # 阶段 C：DB 长期摘要
-    ├── runner.py           # 对话 + actions + 摘要注入
-    ├── memory.py           # 会话截断 + bootstrap 日缓存/快照
-    └── tools/              # 阶段 B 只读工具
+    ├── long_term.py / student_memory.py / strategy.py
+    ├── runner.py
+    └── tools/
 ```
 
 ## 多 Agent 边界（勿耦合）
@@ -75,7 +74,7 @@ app/agents/
 | ~~R10 个性化策略~~ | ✅ `strategy.py` 天赋/弱项/情境短策略注入 |
 | ~~R5 受控写~~ | ✅ `writes.py` 习惯/意向白名单 + 确认卡 + `/confirm`；可扩白名单 |
 | ~~R11 多模态 / R12 语音~~ | ⏸ **暂不做**（产品确认不加传图/语音入口） |
-| QA Agent 打磨 | **另线** |
+| QA Agent 打磨 | **另线** ✅ P0/P1/P2 已收口（语音明确不做） |
 | Orchestrator | **暂不做**（见 handoff 原则） |
 
 Guide 主线已收口。实现记录仅本地 `docs/过期文件/`（不入库）；现行约定见 `docs/前端后端API文档.md`（首页引导）与 `docs/数据闭环与预留说明.md` §1.6。

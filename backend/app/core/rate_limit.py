@@ -76,3 +76,33 @@ def check_guide_chat_limits(child_user_id: int) -> None:
         window_sec=86400 * 2,
         detail="今天问得有点多了，明天再来找老师聊吧",
     )
+
+
+def check_qa_chat_limits(child_user_id: int) -> None:
+    """每用户学科答疑对话：短窗 QPS + 自然日配额（与 Guide 分桶，互不影响）。
+
+    env:
+      QA_CHAT_RATE_LIMIT=0 关闭
+      QA_CHAT_QPS_MAX / QA_CHAT_QPS_WINDOW_SEC
+      QA_CHAT_DAY_MAX
+    """
+    if os.getenv("QA_CHAT_RATE_LIMIT", "1").strip() != "1":
+        return
+    uid = int(child_user_id)
+    qps_max = _env_int("QA_CHAT_QPS_MAX", 10)
+    qps_win = _env_int("QA_CHAT_QPS_WINDOW_SEC", 60)
+    day_max = _env_int("QA_CHAT_DAY_MAX", 150)
+
+    check_rate_limit(
+        f"qa:chat:{uid}",
+        max_calls=qps_max,
+        window_sec=max(1, qps_win),
+        detail="问得太快了，稍等再问张宇老师",
+    )
+    day = date.today().isoformat()
+    check_rate_limit(
+        f"qa:chat:day:{uid}:{day}",
+        max_calls=day_max,
+        window_sec=86400 * 2,
+        detail="今天答疑问得有点多了，明天再来吧",
+    )
