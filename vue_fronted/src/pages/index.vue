@@ -391,8 +391,6 @@ import {
   getChildUserId,
   markChildUserSessionValid,
   invalidatePageAuthCache,
-  setSessionToken,
-  setChildUserId,
   invalidateChildUserSession,
   isFreshLogin,
   fetchGuideSession,
@@ -402,6 +400,7 @@ import {
   fetchGuideBootstrap,
   fetchSiblings,
   switchChildAccount,
+  applySwitchChildSession,
   sendGuideMessageStream,
   confirmGuideWrite,
   clearGuideSession,
@@ -483,31 +482,8 @@ async function switchToChild(targetId) {
     }
     const data = await switchChildAccount(uid, targetId)
     showAccountSwitcher.value = false
-    // 存储新 session 并重载
-    if (data?.session_token) {
-      setSessionToken(data.session_token)
-      setChildUserId(data.child_user_id)
-      try {
-        localStorage.setItem('jnao_logged_in', '1')
-        localStorage.setItem('jnao_student_user_id', String(data.child_user_id))
-        // 彻底替换 jnao_user（清掉旧身份缓存，避免 auth snapshot 用旧 id）
-        localStorage.removeItem('jnao_parent_user_id')
-        localStorage.removeItem('jnao_admin_user')
-        localStorage.removeItem('jnao_admin_token')
-        localStorage.setItem('jnao_user', JSON.stringify({
-          id: data.child_user_id,
-          name: data.nickname,
-          phone: data.parent_phone,
-          role: 'student',
-        }))
-      } catch (_) {}
-      markChildUserSessionValid(data.child_user_id)
-      invalidatePageAuthCache('student')
-      invalidatePageAuthCache('parent')
-      invalidatePageAuthCache('admin')
-      try { invalidateChildUserSession() } catch (_) {}
-      setTimeout(() => { location.reload() }, 500)
-    }
+    applySwitchChildSession(data)
+    setTimeout(() => { location.reload() }, 500)
   } catch (e) {
     uni.showToast({ title: e.message || '切换失败', icon: 'none' })
   }

@@ -48,6 +48,13 @@
       <view class="qa-handoff-close" @tap="guideHandoffBanner = null"><text>×</text></view>
     </view>
 
+    <view v-if="needsGradeSetup" class="qa-grade-banner">
+      <text class="qa-grade-banner-text">请先选择年级，以便按学段辅导</text>
+      <picker mode="selector" :range="gradeOptions" @change="onQaGradePick">
+        <view class="qa-grade-picker"><text>{{ learnerGrade || '选择年级' }}</text></view>
+      </picker>
+    </view>
+
     <view v-if="mismatchSuggest" class="qa-mismatch-banner">
       <view class="qa-handoff-main">
         <text class="qa-handoff-text">这道题更像「{{ mismatchSuggest }}」，点切换将自动重发上一问</text>
@@ -341,13 +348,11 @@ import {
   probeMicrophoneAccess,
 } from '@/utils/qaVoice.js'
 
-/** 语音暂搁置（H5 需 HTTPS + 手机证书，影响开发）；恢复时改为 true */
+/** 语音答疑暂不使用（TTS/ASR 未启用）；恢复时改为 true */
 const QA_VOICE_ENABLED = false
 
-
-
+const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const subjects = ['数学', '语文', '英语', '科学']
-const subjectEmoji = { 数学: '📐', 语文: '📖', 英语: '🔤', 科学: '🔬' }
 const subjectIcon = {
   数学: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><path d="M6 4l6 14"/><path d="M18 4l-6 14"/></svg>',
   语文: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
@@ -427,6 +432,8 @@ const messages = ref([
 ])
 
 let qaLearnerDefaultApplied = false
+const needsGradeSetup = ref(false)
+const learnerGrade = ref('')
 
 
 
@@ -776,35 +783,39 @@ function initBrowserSpeech() {
 
 
 async function ensureLearnerProfile(uid, profileData = null) {
-
   try {
-
     const profile = profileData || await fetchProfile(uid)
-
     const grade = profile.profile_json?.grade || profile.profile_json?.learner?.grade
-
     if (grade) {
-
+      learnerGrade.value = grade
+      needsGradeSetup.value = false
       await updateLearnerProfile(uid, {
-
         grade,
-
         school_stage: gradeToSchoolStage(grade),
-
       })
-
       return
-
     }
-
     if (qaLearnerDefaultApplied) return
-
-    await updateLearnerProfile(uid, { grade: '四年级', age: 10, school_stage: 'primary_high' })
-
+    needsGradeSetup.value = true
     qaLearnerDefaultApplied = true
-
   } catch (e) { /* ignore */ }
+}
 
+async function onQaGradePick(e) {
+  const grade = gradeOptions[e.detail.value]
+  if (!grade) return
+  try {
+    const uid = await ensureChildUser()
+    await updateLearnerProfile(uid, {
+      grade,
+      school_stage: gradeToSchoolStage(grade),
+    })
+    learnerGrade.value = grade
+    needsGradeSetup.value = false
+    uni.showToast({ title: '年级已保存', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: err.message || '保存失败', icon: 'none' })
+  }
 }
 
 
@@ -1462,6 +1473,11 @@ function stopVoice() {
 
 async function sendMsg() {
 
+  if (needsGradeSetup.value) {
+    uni.showToast({ title: '请先选择年级', icon: 'none' })
+    return
+  }
+
   const text = inputText.value.trim() || (pendingImage.value ? '请帮我看这道题' : '')
 
   if (!text || loading.value) return
@@ -1718,7 +1734,8 @@ onBeforeUnmount(() => {
 }
 
 .qa-handoff-banner,
-.qa-mismatch-banner {
+.qa-mismatch-banner,
+.qa-grade-banner {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1728,6 +1745,23 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(88, 166, 255, 0.28);
   border-radius: 10px;
   flex-shrink: 0;
+}
+.qa-grade-banner {
+  align-items: center;
+  justify-content: space-between;
+}
+.qa-grade-banner-text {
+  flex: 1;
+  color: var(--text);
+  font-size: 13px;
+}
+.qa-grade-picker {
+  padding: 4px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--accent);
 }
 .qa-mismatch-banner {
   background: rgba(251, 191, 36, 0.08);

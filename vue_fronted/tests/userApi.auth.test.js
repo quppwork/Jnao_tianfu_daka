@@ -1,5 +1,6 @@
 /** requirePageAuth — Cookie 会话模式集成测试 */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { resolveParentAuthTarget } from '../src/utils/userApi.js'
 
 const store = {}
 beforeEach(() => {
@@ -60,6 +61,17 @@ function mock401() {
 function mockNetworkFail() {
   global.fetch.mockRejectedValue(new Error('Failed to fetch'))
 }
+
+describe('resolveParentAuthTarget', () => {
+  it('bind-phone 返回 __bind_phone__', () => {
+    expect(resolveParentAuthTarget({ role: 'parent', next_step: 'bind-phone' })).toBe('__bind_phone__')
+  })
+
+  it('账户就绪时进家长中心', () => {
+    expect(resolveParentAuthTarget({ role: 'parent', account_ready: true, profile_complete: true }))
+      .toBe('/pages/parent/index')
+  })
+})
 
 describe('requirePageAuth', () => {
   it('有效会话刷新后校验通过', async () => {

@@ -66,6 +66,7 @@ import {
   saveAuthSession,
   parentNeedsProfileComplete,
   parentNeedsAccountReady,
+  resolveParentAuthTarget,
 } from '@/utils/userApi.js'
 import { clearLoginGuard } from '@/utils/loginGuard.js'
 import { useLoginFlow, hasValidSession, inferHomeFromSession } from '@/utils/useLoginFlow.js'
@@ -166,11 +167,9 @@ async function confirmSendSms() {
 }
 
 function resolveParentTarget(data) {
-  let target = '/pages/parent/index'
-  if (parentNeedsAccountReady(data)) {
-    target = '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
-  } else if (parentNeedsProfileComplete(data)) {
-    target = '/pages/login/complete-parent'
+  const target = resolveParentAuthTarget(data)
+  if (target === '__bind_phone__') {
+    return '/pages/login/register-parent'
   }
   return target
 }

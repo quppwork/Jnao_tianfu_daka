@@ -1,12 +1,12 @@
 import pytest
 """学科答疑 Prompt 构建 — 学段 + 天赋画像"""
 
-from app.services.qa_prompt_builder import (
+from app.agents.qa.prompt_builder import (
     build_learner_context_block,
     build_qa_system_prompt,
-    infer_school_stage,
-    talent_coaching_hint,
 )
+from app.agents.shared.stage import infer_school_stage
+from app.agents.shared.talent import talent_coaching_hint
 
 
 class TestSchoolStage:

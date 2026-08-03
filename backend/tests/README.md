@@ -2,7 +2,7 @@
 
 > 测试先行：每个前端页面都有对应的后端契约测试  
 > AI 统一走 **豆包 Ark**（单元测试默认 mock，不消耗额度）
-> **当前：290+ 用例 / 52 文件 / 0 跳过（v2.0 多技能并行 Tier 晋级）**
+> **当前：600+ 用例 / 70+ 文件**（以 `pytest backend/tests --collect-only -q` 为准）
 
 ## 运行
 
@@ -30,16 +30,15 @@ $env:DOUBAO_LIVE_TEST="1"
 | 前端页面 | 主要 API | 测试文件 |
 |----------|----------|----------|
 | `pages/index.vue` 首页 | `POST /api/guide/chat` | `test_module_home.py` |
-| `pages/talent/index.vue` 天赋测试 | `POST /api/talent/report` | `test_module_talent.py`, `test_talent_api.py` |
-| `pages/report/index.vue` 报告 | 测评结果来自 talent API | `test_module_talent.py` |
-| `pages/training/index.vue` 今日训练 | `/api/training/*` | `test_module_training.py`, `test_training_api.py`, `test_training_api_v2.py`, `test_training_child_guide.py`, `test_training_closed_loop.py`, `test_training_day.py`, `test_talent_content_pool.py`, `test_training_carryover.py`, `test_training_day_settlement.py`, `test_training_yesterday_context.py`, `test_training_formula_engine.py`, `test_training_mastery.py`, `test_training_schedule.py`, `test_training_state_v2.py` |
-| `pages/qa/index.vue` 学科答疑 | `POST /api/qa/chat` | `test_module_qa.py`, `test_qa_agent_prompts.py`, `test_qa_agent_router.py`, `test_qa_coach.py`, `test_qa_enhanced.py`, `test_qa_prompt_builder.py`, `test_qa_rag_router.py`, `test_qa_coach_context.py` |
-| `pages/growth/index.vue` 成长里程碑 | `/api/growth/*` | `test_module_growth.py` |
-| `pages/login/` 用户注册+引导 | `/api/auth/*`, `/api/user/profile` | `test_module_auth.py`, `test_workflow_onboarding.py`, `test_onboarding_returning.py`, `test_user_profile_merge.py` |
-| 资源库 | `/api/resources/*` | `test_training_api.py` |
+| `pages/talent/index.vue` 天赋测试 | `POST /api/talent/report` | `test_talent_api.py`, `test_e2e_flows.py` |
+| `pages/report/index.vue` 报告 | 测评结果来自 talent API | `test_talent_api.py` |
+| `pages/training/index.vue` 今日训练 | `/api/training/*` | `test_training_api_v2.py`, `test_training_*`, `test_round2_fixes.py` |
+| `pages/qa/index.vue` 学科答疑 | `POST /api/qa/chat` | `test_module_qa.py`, `test_qa_*.py`, `test_qa_p1_eval.py`, `test_qa_p2.py` |
+| `pages/growth/index.vue` 成长里程碑 | `/api/growth/*` | 根目录 `tests/smoke_test.py`（模块单测待补） |
+| `pages/login/` 用户注册+引导 | `/api/auth/*`, `/api/user/profile` | `test_module_auth.py`, `test_auth_siblings.py`, `test_parent_auth.py`, `test_workflow_onboarding.py` |
+| 账户切换 | `/api/auth/siblings`, `/api/auth/switch-child` | `test_auth_siblings.py` |
 | 健康检查 | `GET /api/health` | `test_health_api.py` |
-| 开发者工具 | `/api/dev/*` | `test_dev_api.py` |
-| 安全校验 | — | `test_security.py` |
+| 安全校验 | — | `test_security_hardening.py`, `test_security.py` |
 | 内容导入 | — | `test_catalog_import.py`, `test_single_file_skill_match.py` |
 | 豆包客户端 | — | `test_doubao_client.py`, `test_doubao_live.py` |
 | 端到端 | 全链路 | `test_e2e_flows.py` |

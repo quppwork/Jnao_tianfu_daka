@@ -163,6 +163,7 @@ import {
   fetchCaptcha,
   parentNeedsProfileComplete,
   parentNeedsAccountReady,
+  resolveParentAuthTarget,
   saveAuthSession,
   exchangeWechatLogin,
   completeWechatExternalBind,
@@ -636,16 +637,7 @@ async function confirmLoginSms() {
 }
 
 function resolveParentTarget(data) {
-  let target = '/pages/parent/index'
-  if (parentNeedsAccountReady(data)) {
-    if (data.next_step === 'bind-phone') {
-      return '__register__'
-    }
-    target = '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
-  } else if (parentNeedsProfileComplete(data)) {
-    target = '/pages/login/complete-parent'
-  }
-  return target
+  return resolveParentAuthTarget(data)
 }
 
 async function routeParentHome(data) {
@@ -654,7 +646,7 @@ async function routeParentHome(data) {
   try { sessionStorage.removeItem('jnao_browser_login') } catch (_) { /* ignore */ }
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
   let target = resolveParentTarget(data)
-  if (target === '__register__') {
+  if (target === '__bind_phone__') {
     goRegister(form.value.phone.trim(), data.bind_ticket || pendingBindTicket.value)
     return
   }

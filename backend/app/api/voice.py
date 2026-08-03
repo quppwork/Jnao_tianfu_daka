@@ -27,27 +27,9 @@ async def text_to_speech(
     data: dict,
     auth_user_id: int = Depends(get_authenticated_student),
 ):
-    check_rate_limit(f"tts:{auth_user_id}", max_calls=60, window_sec=60)
-    text = data.get("text", "")
-    if not text:
-        return Response(status_code=400)
-    if not SPEECH_TOKEN:
-        return {"error": "语音服务未配置"}
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            TTS_URL,
-            headers={"Authorization": f"Bearer;{SPEECH_TOKEN}", "Content-Type": "application/json"},
-            json={
-                "app": {"appid": SPEECH_TOKEN, "token": SPEECH_TOKEN, "cluster": "volcano_tts"},
-                "user": {"uid": "jnao_user"},
-                "audio": {"voice_type": "zh_male_qingrun", "encoding": "mp3", "speed_ratio": 1.0},
-                "request": {"reqid": "jnao_tts_" + str(hash(text))[:8], "text": text, "text_type": "plain", "operation": "query"},
-            },
-        )
-    if resp.status_code != 200:
-        return {"error": f"TTS 请求失败: {resp.status_code}"}
-    return Response(content=resp.content, media_type="audio/mpeg")
+    """TTS 暂不使用 — 前端未接入，保留路由供后续启用。"""
+    from fastapi import HTTPException
+    raise HTTPException(status_code=501, detail="TTS 功能暂未启用")
 
 
 # ── ASR（本地 Whisper）──

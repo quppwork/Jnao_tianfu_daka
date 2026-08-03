@@ -1,38 +1,68 @@
-# JNAO 集中平台 — 接入状态
-# status: live=已接入, mock=占位数据, pending=等待后端开发
+# JNAO 集中平台 — 接入状态（与 backend/app/main.py 对齐）
+# status: live=已接入, mock=占位, deprecated=已废弃
 
 endpoints:
-  talent_submit:
+  auth_login:
     status: live
-    description: "天赋测试答案提交与评分"
-    endpoint: "POST /api/talent/submit"
-
-  talent_result:
-    status: live
-    description: "天赋报告查询"
-    endpoint: "GET /api/talent/result/{session_id}"
-
-  jnao_submit:
-    status: live
-    description: "代理提交答案到 JNAO (m.jnao.com)"
-    endpoint: "POST /api/talent/jnao/submit"
-
-  jnao_report:
-    status: live
-    description: "代理获取 JNAO 报告"
-    endpoint: "GET /api/talent/jnao/report/{record_id}"
-
-  talent_stream:
-    status: mock
-    description: "AI 对话式答题（依赖 tianfu_rag，未接入时前端使用本地静态题目）"
-    endpoint: "GET /api/chat/stream"
-
-  user_auth:
-    status: pending
-    description: "用户注册/登录（后端团队规划中）"
+    description: "账号密码 / 手机号登录"
     endpoint: "POST /api/auth/login"
 
-  history:
-    status: pending
-    description: "历史测试记录查询"
-    endpoint: "GET /api/talent/history"
+  auth_sms:
+    status: live
+    description: "短信验证码注册/登录"
+    endpoint: "POST /api/auth/sms/*"
+
+  auth_wechat:
+    status: live
+    description: "微信 OAuth 一键登录"
+    endpoint: "POST /api/auth/wechat/*"
+
+  auth_switch_child:
+    status: live
+    description: "同家长下切换孩子账户"
+    endpoint: "POST /api/auth/switch-child"
+
+  talent_report:
+    status: live
+    description: "天赋测评提交与报告（一步完成）"
+    endpoint: "POST /api/talent/report"
+
+  guide_chat:
+    status: live
+    description: "首页引导对话（豆包 Agent）"
+    endpoint: "POST /api/guide/chat"
+
+  qa_chat:
+    status: live
+    description: "学科答疑（豆包 Agent + RAG）"
+    endpoint: "POST /api/qa/chat"
+
+  training_today:
+    status: live
+    description: "今日训练方案与打卡"
+    endpoint: "GET /api/training/today"
+
+  growth:
+    status: live
+    description: "成长里程碑"
+    endpoint: "GET /api/growth/*"
+
+  voice_asr:
+    status: live
+    description: "语音转文字（ASR）"
+    endpoint: "POST /api/voice/asr"
+
+  voice_tts:
+    status: deprecated
+    description: "TTS 暂不使用，前端未接入"
+    endpoint: "POST /api/voice/tts"
+
+  legacy_chat:
+    status: deprecated
+    description: "旧 /api/chat 已删除，统一走 /api/guide/*"
+    endpoint: "POST /api/chat"
+
+  tianfu_rag_health:
+    status: live
+    description: "上游 RAG 健康检查（/api/health 引用）"
+    endpoint: "GET {TIANFU_RAG_URL}/health"

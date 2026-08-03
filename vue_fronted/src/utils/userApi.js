@@ -35,8 +35,6 @@ import {
   getCurrentAppPath,
   clearSessionsExcept,
   migrateAuthStorage,
-  sanitizeAuthForLoginEntry,
-  installAuthStorageSync,
   clearAllAuthSessions,
   prepareRoleLoginEntry,
 } from './appSession.js'
@@ -556,18 +554,6 @@ export function resolveMessageImageDisplay(imageUrl, userId) {
   return imageUrl ? resolveQaImageUrl(imageUrl, userId) : null
 }
 
-function getOrCreateGuestPhone() {
-  try {
-    const saved = localStorage.getItem(GUEST_PHONE_KEY)
-    if (saved) return saved
-    const phone = `13${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`
-    localStorage.setItem(GUEST_PHONE_KEY, phone)
-    return phone
-  } catch (e) {
-    return `13${String(Date.now()).slice(-9)}`
-  }
-}
-
 /** 登录后存储 session；家长/学生分槽，避免 role 混用 */
 export function saveAuthSession(data) {
   _storeAuth(data)
@@ -633,12 +619,6 @@ function _readStoredRole() {
   } catch (e) {
     return null
   }
-}
-
-function _redirectToLogin() {
-  try {
-    uni.reLaunch({ url: '/pages/login/index' })
-  } catch (e) { /* ignore */ }
 }
 
 /** 家长登录：手机号 + 密码 */
@@ -726,6 +706,28 @@ export function parentNeedsAccountReady(data) {
   if (data?.account_ready === false) return true
   if (data?.next_step === 'bind-phone') return true
   return data?.profile_complete === false
+}
+
+/** 家长登录/注册后统一跳转目标；`__bind_phone__` 表示需走绑手机注册流 */
+export function resolveParentAuthTarget(data) {
+  if (data?.role !== 'parent') return '/pages/parent/index'
+  if (parentNeedsAccountReady(data)) {
+    if (data.next_step === 'bind-phone') return '__bind_phone__'
+    return '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
+  }
+  if (parentNeedsProfileComplete(data)) {
+    return '/pages/login/complete-parent'
+  }
+  return '/pages/parent/index'
+}
+
+/** 同家长下切换孩子账户后写入 session（Cookie 模式） */
+export function applySwitchChildSession(data) {
+  saveAuthSession({ ...data, role: 'student' })
+  invalidatePageAuthCache('student')
+  invalidatePageAuthCache('parent')
+  invalidatePageAuthCache('admin')
+  try { invalidateChildUserSession() } catch (_) { /* ignore */ }
 }
 
 const PARENT_GATE_KEY = 'jnao_parent_gate'
@@ -944,46 +946,6 @@ export async function deleteParentChild(parentId, childId) {
   return apiJson(withUser(`/api/parent/children/${childId}`, parentId), {
     method: 'DELETE',
   })
-}
-
-function getOrCreateGuestNickname(fallback = '学员') {
-  try {
-    const saved = localStorage.getItem(GUEST_NICKNAME_KEY)
-    if (saved) return saved
-    localStorage.setItem(GUEST_NICKNAME_KEY, fallback)
-    return fallback
-  } catch (e) {
-    return fallback
-  }
-}
-
-function readLoginProfile() {
-  try {
-    const raw = localStorage.getItem('jnao_user')
-    if (!raw) return null
-    const user = JSON.parse(raw)
-    if (!user?.name) return null
-    return {
-      nickname: String(user.name).trim(),
-      phone: String(user.phone || '').trim(),
-    }
-  } catch (e) {
-    return null
-  }
-}
-
-async function registerChildUser(parentPhone, nickname) {
-  const data = await apiJson('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parent_phone: parentPhone, nickname }),
-  })
-  _storeAuth(data)
-  try {
-    localStorage.setItem(GUEST_PHONE_KEY, parentPhone)
-    localStorage.setItem(GUEST_NICKNAME_KEY, nickname)
-  } catch (e) { /* ignore */ }
-  return data.child_user_id
 }
 
 /**

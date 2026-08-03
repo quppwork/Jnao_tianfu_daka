@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.qa_prompt_builder import RAG_KEYWORDS
+from app.agents.qa.prompt_builder import RAG_KEYWORDS
 
 TEACHING_PATTERNS = (
     "怎么教",

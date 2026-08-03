@@ -21,10 +21,6 @@ def invalidate_qa_caches(child_user_id: int) -> None:
     invalidate_user_growth(child_user_id)
 
 
-# 兼容旧名
-_invalidate_qa_caches = invalidate_qa_caches
-
-
 def emit_turn(
     *,
     timer: TurnTimer,
@@ -62,16 +58,10 @@ def emit_turn(
     )
 
 
-_emit_turn = emit_turn
-
-
 def learner_profile(user: ChildUser | None) -> dict:
     if not user:
         return {}
     return dict(user.profile_json or {})
-
-
-_learner_profile = learner_profile
 
 
 def assistant_meta_for_storage(
@@ -92,9 +82,6 @@ def assistant_meta_for_storage(
     return meta or None
 
 
-_assistant_meta_for_storage = assistant_meta_for_storage
-
-
 def public_chat_payload(
     *,
     session_id: int,
@@ -111,9 +98,6 @@ def public_chat_payload(
         "school_stage": school_stage,
         **extra,
     }
-
-
-_public_chat_payload = public_chat_payload
 
 
 def list_sessions(db: Session, child_user_id: int, limit: int = 20) -> list[dict]:
