@@ -59,6 +59,8 @@ def build_qa_system_prompt(
     rag_context: str | None = None,
     ocr_preview: str | None = None,
     coach_context: str | None = None,
+    memory_digest: str | None = None,
+    strategy_block: str | None = None,
 ) -> str:
     """公开系统提示 — 不含学员 PII；grade/age/talent 等请用 build_learner_context_block。"""
     del grade, age, talent_primary, report_json, ocr_preview, coach_context
@@ -73,6 +75,10 @@ def build_qa_system_prompt(
     else:
         lines.append("学科范围：数学、语文、英语、科学。请根据学员问题判断学科并作答。")
 
+    if strategy_block:
+        lines.append(strategy_block)
+    if memory_digest:
+        lines.append(memory_digest)
     if rag_context:
         lines.append("以下参考资料供你核对后，用适合学员学段的语言改写回答（不要照抄）：")
         lines.append(rag_context)

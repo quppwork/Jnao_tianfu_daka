@@ -9,7 +9,7 @@ class TestAiOutputGuard:
     def test_qa_prompt_injection_blocked(self, client: TestClient, child_with_assessment, mock_doubao):
         uid = child_with_assessment
         with patch(
-            "app.services.qa_service.chat_completion",
+            "app.agents.qa.runner.chat_completion",
             new_callable=AsyncMock,
         ) as mock_chat:
             res = client.post(

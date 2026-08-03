@@ -254,6 +254,8 @@ class QaSession(Base):
     child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(200))
     subject: Mapped[str | None] = mapped_column(String(20))
+    # 会话级轻量记忆：rolling_summary 等（删会话即清空）
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     messages: Mapped[list["QaMessage"]] = relationship(

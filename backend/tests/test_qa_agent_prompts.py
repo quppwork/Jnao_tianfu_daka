@@ -28,6 +28,7 @@ class TestBuildPromptBySubject:
         assert "张宇老师" in prompt
         assert "数学" in prompt
         assert "初中" in prompt
+        assert "澄清" in prompt or "题干" in prompt
         learner = build_learner_context_block(talent_primary="学者")
         assert "学者" in learner
 

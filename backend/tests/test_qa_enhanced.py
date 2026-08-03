@@ -80,7 +80,7 @@ class TestQaChatEnhanced:
             files={"file": ("q.png", io.BytesIO(png), "image/png")},
         ).json()
         with patch(
-            "app.services.qa_service.vision_chat_completion",
+            "app.agents.qa.runner.vision_chat_completion",
             new_callable=AsyncMock,
             return_value="【测试】识题：1+1=?",
         ) as vision_mock:
@@ -104,7 +104,7 @@ class TestQaChatEnhanced:
             "source_refs": [],
         }
         with patch(
-            "app.services.qa_service.rag_chat",
+            "app.agents.qa.runner.rag_chat",
             new_callable=AsyncMock,
             return_value=rag_reply,
         ):

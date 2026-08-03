@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_db
+from app.core.rate_limit import check_qa_chat_limits
+from app.core.security import is_debug_routes_enabled
 from app.core.sse import SSE_HEADERS, emit_event_stream, sse_done, sse_json
 from app.services import qa_service
 from app.services.qa_image_store import get_qa_image, save_qa_image
@@ -19,6 +21,23 @@ _IMAGE_RESPONSE_HEADERS = {
     "Content-Disposition": "inline",
     "Cache-Control": "private, max-age=3600",
 }
+
+
+@router.get("/debug")
+async def qa_debug():
+    if not is_debug_routes_enabled():
+        raise HTTPException(404, "Not Found")
+    from app.agents.qa.trace import get_qa_trace_metrics
+    from app.services.doubao_client import is_configured
+    from config.loader import load_settings
+
+    c = load_settings().get("doubao", {})
+    return {
+        "provider": "doubao",
+        "model": c.get("model"),
+        "key_ok": is_configured(),
+        "trace_metrics": get_qa_trace_metrics(),
+    }
 
 
 class QaChatRequest(BaseModel):
@@ -39,6 +58,7 @@ async def qa_chat(
     child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
+    check_qa_chat_limits(child_user_id)
     try:
         return await qa_service.chat(
             db,
@@ -60,6 +80,7 @@ async def qa_chat_stream(
     db: Session = Depends(get_db),
 ):
     """SSE 流式学科答疑"""
+    check_qa_chat_limits(child_user_id)
 
     async def events():
         try:

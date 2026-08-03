@@ -30,7 +30,7 @@
 
         :class="{ active: subject === s }"
 
-        @tap="subject = s"
+        @tap="onSubjectTap(s)"
 
       >
 
@@ -40,7 +40,21 @@
 
     </view>
 
+    <view v-if="guideHandoffBanner" class="qa-handoff-banner">
+      <view class="qa-handoff-main">
+        <text class="qa-handoff-title">来自首页引导</text>
+        <text class="qa-handoff-text">{{ guideHandoffBanner.hint || ('已切换到' + (guideHandoffBanner.subject || subject)) }}</text>
+      </view>
+      <view class="qa-handoff-close" @tap="guideHandoffBanner = null"><text>×</text></view>
+    </view>
 
+    <view v-if="mismatchSuggest" class="qa-mismatch-banner">
+      <view class="qa-handoff-main">
+        <text class="qa-handoff-text">这道题更像「{{ mismatchSuggest }}」，点切换将自动重发上一问</text>
+      </view>
+      <view class="qa-mismatch-action" @tap="applySuggestedSubject"><text>切换并重发</text></view>
+      <view class="qa-handoff-close" @tap="dismissMismatchBanner"><text>×</text></view>
+    </view>
 
     <view class="chat-scroll" id="chatScroll">
 
@@ -80,7 +94,23 @@
 
             <text class="bubble-sender">张宇老师</text>
 
-            <text class="bubble-text">{{ m.text }}</text>
+            <view
+              v-if="loading && i === messages.length - 1 && !m.text"
+              class="thinking-bbl"
+            >
+              <view class="thinking-dots" aria-hidden="true">
+                <view class="thinking-dot"></view>
+                <view class="thinking-dot"></view>
+                <view class="thinking-dot"></view>
+              </view>
+              <text class="thinking-label">老师思考中</text>
+            </view>
+
+            <view
+              v-else-if="m.text"
+              class="bubble-rich"
+              v-html="formatQaRichHtml(m.text)"
+            ></view>
 
           </view>
 
@@ -95,21 +125,6 @@
       </view>
 
 
-
-      <view v-if="showTypingIndicator" class="msg-row msg-ai">
-
-
-        <view class="msg-body">
-
-          <view class="bubble-ai bubble-ai-tail typing-wrap">
-
-            <text class="typing-dots">思考中</text>
-
-          </view>
-
-        </view>
-
-      </view>
 
     </view>
 
@@ -265,6 +280,7 @@
 <script setup>
 
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 
 import {
 
@@ -341,6 +357,13 @@ const subjectIcon = {
 
 const subject = ref('数学')
 
+/** Guide 深交接：学科 chip + 可选预填 */
+const guideHandoffBanner = ref(null)
+const pendingGuideHandoff = ref(false)
+/** 错频道：一键切到建议学科并重发上一问 */
+const mismatchSuggest = ref(null)
+const mismatchResendText = ref('')
+
 const userDisplayName = ref('我')
 
 const inputText = ref('')
@@ -409,13 +432,65 @@ let qaLearnerDefaultApplied = false
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
 
-const showTypingIndicator = computed(() => {
-  if (!loading.value) return false
-  const last = messages.value[messages.value.length - 1]
-  return last?.role !== 'assistant'
-})
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
 
-
+/** 轻量美化答疑回复：标题 / 映射行 / 语法标签 / 加粗（复用气泡，不新造组件） */
+function formatQaRichHtml(raw) {
+  if (!raw) return ''
+  const lines = String(raw).replace(/\r\n/g, '\n').split('\n')
+  const out = []
+  for (const line of lines) {
+    const trimmed = line.trimEnd()
+    if (!trimmed.trim()) {
+      out.push('<div class="qa-gap"></div>')
+      continue
+    }
+    const header = trimmed.match(/^\*\*(.+?)\*\*\s*[:：]?$/)
+    if (header) {
+      out.push(`<div class="qa-sec">${escapeHtml(header[1])}</div>`)
+      continue
+    }
+    const challenge = trimmed.match(/^[（(]\s*小挑战[：:]\s*(.+?)[）)]\s*$/)
+    if (challenge) {
+      out.push(
+        `<div class="qa-challenge"><span class="qa-challenge-label">小挑战</span>` +
+          `<span class="qa-challenge-text">${escapeHtml(challenge[1])}</span></div>`,
+      )
+      continue
+    }
+    const kv = trimmed.match(/^(.+?)\s*(?:->|→)\s*(.+)$/)
+    if (kv && !trimmed.includes('**') && trimmed.length <= 80) {
+      out.push(
+        `<div class="qa-kv"><span class="qa-k">${escapeHtml(kv[1].trim())}</span>` +
+          `<span class="qa-arrow">→</span>` +
+          `<span class="qa-v">${escapeHtml(kv[2].trim())}</span></div>`,
+      )
+      continue
+    }
+    let html = escapeHtml(trimmed)
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    html = html.replace(
+      /\((主语|谓语|宾语|定语|状语|补语|表语)\)/g,
+      '<span class="qa-tag">$1</span>',
+    )
+    html = html.replace(
+      /（(主语|谓语|宾语|定语|状语|补语|表语)）/g,
+      '<span class="qa-tag">$1</span>',
+    )
+    if (trimmed.includes(' + ') && /(主语|谓语|宾语|定语|状语)/.test(trimmed)) {
+      out.push(`<div class="qa-struct">${html}</div>`)
+      continue
+    }
+    out.push(`<div class="qa-line">${html}</div>`)
+  }
+  return out.join('')
+}
 
 function goBack() { uni.navigateBack({ delta: 1 }) }
 
@@ -832,6 +907,65 @@ function closeSessionSheet() {
 }
 
 
+
+function dismissMismatchBanner() {
+  mismatchSuggest.value = null
+  mismatchResendText.value = ''
+}
+
+function onSubjectTap(s) {
+  const shouldResend = mismatchSuggest.value === s && !!mismatchResendText.value
+  const resend = mismatchResendText.value
+  subject.value = s
+  if (!shouldResend || loading.value) return
+  mismatchSuggest.value = null
+  mismatchResendText.value = ''
+  inputText.value = resend
+  nextTick(() => {
+    sendMsg()
+  })
+}
+
+async function applySuggestedSubject() {
+  if (!mismatchSuggest.value || !subjects.includes(mismatchSuggest.value)) {
+    mismatchSuggest.value = null
+    mismatchResendText.value = ''
+    return
+  }
+  const next = mismatchSuggest.value
+  const resend = mismatchResendText.value
+  subject.value = next
+  mismatchSuggest.value = null
+  mismatchResendText.value = ''
+  if (resend && !loading.value) {
+    uni.showToast({ title: `已切换到${next}，正在重发`, icon: 'none' })
+    inputText.value = resend
+    await nextTick()
+    await sendMsg()
+    return
+  }
+  uni.showToast({ title: `已切换到${next}`, icon: 'none' })
+}
+
+onLoad((opts) => {
+  const from = String(opts?.from || '').trim()
+  let rawSubject = String(opts?.subject || '').trim()
+  let rawHint = String(opts?.hint || '').trim()
+  try { if (rawSubject) rawSubject = decodeURIComponent(rawSubject) } catch (_) { /* keep */ }
+  try { if (rawHint) rawHint = decodeURIComponent(rawHint) } catch (_) { /* keep */ }
+  const nextSubject = subjects.includes(rawSubject) ? rawSubject : ''
+  if (nextSubject) subject.value = nextSubject
+  if (from === 'guide' && (nextSubject || rawHint)) {
+    pendingGuideHandoff.value = true
+    guideHandoffBanner.value = {
+      subject: nextSubject || '',
+      hint: (rawHint || '').slice(0, 60),
+    }
+    if (rawHint && !inputText.value) {
+      inputText.value = rawHint.slice(0, 200)
+    }
+  }
+})
 
 async function startNewSession() {
 
@@ -1425,6 +1559,13 @@ async function sendMsg() {
       onDone(data) {
         qaSessionId.value = data.session_id
         if (data.reply) messages.value[aiIdx].text = data.reply
+        if (data.subject_mismatch && data.suggested_subject && subjects.includes(data.suggested_subject)) {
+          mismatchSuggest.value = data.suggested_subject
+          mismatchResendText.value = text
+        } else {
+          mismatchSuggest.value = null
+          mismatchResendText.value = ''
+        }
       },
     })
     streamAbort = abort
@@ -1507,7 +1648,12 @@ onMounted(async () => {
 
   }
 
-  loadSession()
+  if (pendingGuideHandoff.value) {
+    pendingGuideHandoff.value = false
+    await startNewSession()
+  } else {
+    loadSession()
+  }
 
 })
 
@@ -1569,6 +1715,57 @@ onBeforeUnmount(() => {
 
   flex-shrink: 0;
 
+}
+
+.qa-handoff-banner,
+.qa-mismatch-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 10px 12px;
+  background: var(--accent-bg);
+  border: 1px solid rgba(88, 166, 255, 0.28);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.qa-mismatch-banner {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.qa-handoff-main { flex: 1; min-width: 0; }
+.qa-handoff-title {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.qa-handoff-text {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.qa-mismatch-action {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.2);
+  cursor: pointer;
+}
+.qa-mismatch-action text { color: #b45309; font-size: 12px; font-weight: 700; }
+.qa-handoff-close {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
 }
 
 .nav-back {
@@ -1875,6 +2072,120 @@ onBeforeUnmount(() => {
 }
 .bubble-ai .bubble-text { white-space: pre-wrap; color: var(--text); }
 
+.thinking-bbl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 2px 0;
+}
+.thinking-dots { display: flex; align-items: center; gap: 4px; }
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: thinkingBounce 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.3s; }
+.thinking-label {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  animation: thinkingPulse 1.4s ease-in-out infinite;
+}
+@keyframes thinkingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes thinkingPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+.bubble-rich {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.bubble-rich .qa-gap { height: 8px; }
+.bubble-rich .qa-line { margin: 0 0 2px; white-space: pre-wrap; }
+.bubble-rich .qa-sec {
+  margin: 10px 0 6px;
+  padding: 2px 0 2px 8px;
+  border-left: 3px solid var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.bubble-rich .qa-sec:first-child { margin-top: 2px; }
+.bubble-rich .qa-struct {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.18);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+[data-theme="white"] .bubble-rich .qa-struct {
+  background: #f0f7ff;
+  border-color: #dbeafe;
+}
+.bubble-rich .qa-tag {
+  display: inline-block;
+  margin: 0 1px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(88, 166, 255, 0.16);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.bubble-rich .qa-kv {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+[data-theme="white"] .bubble-rich .qa-kv { background: #f8fafc; }
+.bubble-rich .qa-k { color: var(--text-dim); font-size: 12px; min-width: 3em; }
+.bubble-rich .qa-arrow { color: var(--accent); font-size: 12px; opacity: 0.8; }
+.bubble-rich .qa-v { color: var(--text); font-weight: 600; font-size: 13px; }
+.bubble-rich .qa-challenge {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px dashed rgba(251, 191, 36, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bubble-rich .qa-challenge-label {
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 700;
+}
+[data-theme="dark"] .bubble-rich .qa-challenge-label,
+:root:not([data-theme="white"]) .bubble-rich .qa-challenge-label {
+  color: #fbbf24;
+}
+.bubble-rich .qa-challenge-text {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.bubble-rich strong { font-weight: 700; color: var(--text); }
+
 
 
 .bubble-img {
@@ -1984,20 +2295,6 @@ onBeforeUnmount(() => {
 
 
 .typing-wrap { padding: 4px 0; }
-
-.typing-dots {
-
-  color: #9ca3af;
-
-  font-size: 14px;
-
-  animation: pulse 1.2s ease-in-out infinite;
-
-}
-
-@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-
-
 
 .composer {
   flex-shrink: 0;

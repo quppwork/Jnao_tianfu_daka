@@ -1,11 +1,88 @@
-"""QA Agent 记忆层 — 封装会话与消息的读写，后续可扩展摘要/长期记忆"""
+"""QA Agent 记忆层 — 会话消息 + 会话内滚动摘要（删会话即清空）。"""
 
 from __future__ import annotations
 
+from copy import deepcopy
+from datetime import datetime, timezone
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.models import QaMessage, QaSession
+
+MEMORY_VERSION = 1
+MAX_DIGEST_CHARS = 600
+HISTORY_KEEP_DEFAULT = 10
+HISTORY_LOAD_DEFAULT = 40
+
+
+def _empty_memory() -> dict[str, Any]:
+    return {
+        "version": MEMORY_VERSION,
+        "updated_at": None,
+        "rolling_summary": "",
+    }
+
+
+def load_session_memory(session: QaSession | None) -> dict[str, Any]:
+    mem = _empty_memory()
+    if not session or not isinstance(session.meta_json, dict):
+        return mem
+    raw = session.meta_json
+    mem["rolling_summary"] = str(raw.get("rolling_summary") or "")[:MAX_DIGEST_CHARS]
+    mem["updated_at"] = raw.get("updated_at")
+    mem["version"] = int(raw.get("version") or MEMORY_VERSION)
+    return mem
+
+
+def save_session_memory(db: Session, session: QaSession, mem: dict[str, Any]) -> None:
+    """写入会话 meta；由调用方统一 commit（删会话即清空摘要）。"""
+    del db  # 保持签名与 Guide 侧一致，便于测试注入
+    session.meta_json = {
+        "version": MEMORY_VERSION,
+        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "rolling_summary": str(mem.get("rolling_summary") or "")[:MAX_DIGEST_CHARS],
+    }
+    flag_modified(session, "meta_json")
+
+
+def fold_overflow_history(
+    messages: list[dict],
+    mem: dict[str, Any],
+    *,
+    keep: int = HISTORY_KEEP_DEFAULT,
+) -> tuple[list[dict], dict[str, Any]]:
+    """超出 keep 的旧轮次压进 rolling_summary，返回尾部历史 + 更新后的 mem。"""
+    msgs = list(messages or [])
+    out_mem = deepcopy(mem) if mem else _empty_memory()
+    if keep <= 0 or len(msgs) <= keep:
+        return msgs, out_mem
+    older = msgs[:-keep]
+    recent = msgs[-keep:]
+    lines: list[str] = []
+    for m in older:
+        role = "学员" if m.get("role") == "user" else "老师"
+        c = str(m.get("content") or "").strip().replace("\n", " ")
+        if c:
+            lines.append(f"{role}:{c[:80]}")
+    chunk = "；".join(lines)
+    prev = str(out_mem.get("rolling_summary") or "").strip()
+    merged = f"{prev}；{chunk}".strip("；") if prev else chunk
+    if len(merged) > MAX_DIGEST_CHARS:
+        merged = "…" + merged[-(MAX_DIGEST_CHARS - 1) :]
+    out_mem["rolling_summary"] = merged
+    return recent, out_mem
+
+
+def memory_to_prompt_block(mem: dict[str, Any] | None) -> str:
+    if not mem:
+        return ""
+    digest = str(mem.get("rolling_summary") or "").strip()
+    if not digest:
+        return ""
+    return f"近期本题对话摘要: {digest}"
 
 
 class QaMemory:
@@ -15,11 +92,31 @@ class QaMemory:
     def load_chat_history(
         session: QaSession,
         *,
-        limit: int = 10,
+        limit: int = HISTORY_KEEP_DEFAULT,
         roles: tuple[str, ...] = ("user", "assistant"),
     ) -> list[dict]:
         msgs = [m for m in session.messages if m.role in roles]
-        return [{"role": m.role, "content": m.content} for m in msgs[-limit:]]
+        if limit and limit > 0:
+            msgs = msgs[-limit:]
+        return [{"role": m.role, "content": m.content} for m in msgs]
+
+    @staticmethod
+    def prepare_history_and_digest(
+        db: Session,
+        session: QaSession,
+        *,
+        load_limit: int = HISTORY_LOAD_DEFAULT,
+        keep: int = HISTORY_KEEP_DEFAULT,
+    ) -> tuple[list[dict], str]:
+        """加载历史 → 折叠溢出进会话摘要 → 返回 (截断历史, prompt 块)。"""
+        full = QaMemory.load_chat_history(session, limit=load_limit)
+        mem = load_session_memory(session)
+        history, mem = fold_overflow_history(full, mem, keep=keep)
+        if str(mem.get("rolling_summary") or "") != str(
+            (session.meta_json or {}).get("rolling_summary") or ""
+        ):
+            save_session_memory(db, session, mem)
+        return history, memory_to_prompt_block(mem)
 
     @staticmethod
     def load_messages(db: Session, session_id: int, child_user_id: int) -> list[dict] | None:
