@@ -324,6 +324,8 @@ import {
 } from '@/utils/userApi.js'
 
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
+import { formatQaRichHtml } from '@/utils/chatRichText.js'
+import 'katex/dist/katex.min.css'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 import {
@@ -438,66 +440,6 @@ const learnerGrade = ref('')
 
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-/** 轻量美化答疑回复：标题 / 映射行 / 语法标签 / 加粗（复用气泡，不新造组件） */
-function formatQaRichHtml(raw) {
-  if (!raw) return ''
-  const lines = String(raw).replace(/\r\n/g, '\n').split('\n')
-  const out = []
-  for (const line of lines) {
-    const trimmed = line.trimEnd()
-    if (!trimmed.trim()) {
-      out.push('<div class="qa-gap"></div>')
-      continue
-    }
-    const header = trimmed.match(/^\*\*(.+?)\*\*\s*[:：]?$/)
-    if (header) {
-      out.push(`<div class="qa-sec">${escapeHtml(header[1])}</div>`)
-      continue
-    }
-    const challenge = trimmed.match(/^[（(]\s*小挑战[：:]\s*(.+?)[）)]\s*$/)
-    if (challenge) {
-      out.push(
-        `<div class="qa-challenge"><span class="qa-challenge-label">小挑战</span>` +
-          `<span class="qa-challenge-text">${escapeHtml(challenge[1])}</span></div>`,
-      )
-      continue
-    }
-    const kv = trimmed.match(/^(.+?)\s*(?:->|→)\s*(.+)$/)
-    if (kv && !trimmed.includes('**') && trimmed.length <= 80) {
-      out.push(
-        `<div class="qa-kv"><span class="qa-k">${escapeHtml(kv[1].trim())}</span>` +
-          `<span class="qa-arrow">→</span>` +
-          `<span class="qa-v">${escapeHtml(kv[2].trim())}</span></div>`,
-      )
-      continue
-    }
-    let html = escapeHtml(trimmed)
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    html = html.replace(
-      /\((主语|谓语|宾语|定语|状语|补语|表语)\)/g,
-      '<span class="qa-tag">$1</span>',
-    )
-    html = html.replace(
-      /（(主语|谓语|宾语|定语|状语|补语|表语)）/g,
-      '<span class="qa-tag">$1</span>',
-    )
-    if (trimmed.includes(' + ') && /(主语|谓语|宾语|定语|状语)/.test(trimmed)) {
-      out.push(`<div class="qa-struct">${html}</div>`)
-      continue
-    }
-    out.push(`<div class="qa-line">${html}</div>`)
-  }
-  return out.join('')
-}
 
 function goBack() { uni.navigateBack({ delta: 1 }) }
 
@@ -2144,6 +2086,13 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.6;
   word-break: break-word;
+}
+.bubble-rich .katex {
+  font-size: 1.05em;
+}
+.bubble-rich .katex-display {
+  margin: 8px 0;
+  overflow-x: auto;
 }
 .bubble-rich .qa-gap { height: 8px; }
 .bubble-rich .qa-line { margin: 0 0 2px; white-space: pre-wrap; }
