@@ -19,12 +19,12 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
 
-BACKEND = Path(__file__).resolve().parents[1]
-ROOT = BACKEND.parent
-load_dotenv(BACKEND / ".env", override=False)
-load_dotenv(ROOT / ".env", override=False)
+from _wework_paths import export_dir, load_env, project_roots
+
+BACKEND, ROOT = project_roots(__file__)
+load_env(BACKEND, ROOT)
+EXPORT = export_dir(BACKEND, ROOT)
 
 QYAPI = "https://qyapi.weixin.qq.com/cgi-bin"
 TABLE = "qywx_externalpay_bill"
@@ -238,7 +238,7 @@ def main() -> int:
     flats = [flatten(b) for b in bills]
 
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    out_dir = ROOT / "docs" / "export"
+    out_dir = EXPORT
     out_dir.mkdir(parents=True, exist_ok=True)
     out_json = out_dir / f"qywx_externalpay_{args.days}d_{stamp}.json"
     out_sql = out_dir / f"qywx_externalpay_{args.days}d_{stamp}.sql"

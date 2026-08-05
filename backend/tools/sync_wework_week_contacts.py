@@ -31,15 +31,14 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
 
-BACKEND = Path(__file__).resolve().parents[1]
-ROOT = BACKEND.parent
-load_dotenv(BACKEND / ".env", override=False)
-load_dotenv(ROOT / ".env", override=False)
+from _wework_paths import export_dir, load_env, project_roots
+
+BACKEND, ROOT = project_roots(__file__)
+load_env(BACKEND, ROOT)
+EXPORT = export_dir(BACKEND, ROOT)
 
 QYAPI = "https://qyapi.weixin.qq.com/cgi-bin"
-EXPORT = ROOT / "docs" / "export"
 
 
 def _env(name: str) -> str:

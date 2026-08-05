@@ -37,21 +37,21 @@ from typing import Any
 from urllib.parse import unquote
 
 import requests
-from dotenv import load_dotenv
 
-BACKEND = Path(__file__).resolve().parents[1]
-ROOT = BACKEND.parent
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
-load_dotenv(BACKEND / ".env", override=False)
-load_dotenv(ROOT / ".env", override=False)
+from _wework_paths import export_dir, load_env, project_roots  # noqa: E402
+
+BACKEND, ROOT = project_roots(__file__)
+load_env(BACKEND, ROOT)
+EXPORT = export_dir(BACKEND, ROOT)
+EXPORT.mkdir(parents=True, exist_ok=True)
 
 import sync_wework_week_contacts as week  # noqa: E402
 import fetch_wework_externalpay_bills as pay  # noqa: E402
 
 QYAPI = "https://qyapi.weixin.qq.com/cgi-bin"
-EXPORT = ROOT / "docs" / "export"
 STATE_PATH = EXPORT / ".qywx_pipeline_state.json"
 PAY_TABLE = "qywx_pay_bill"
 

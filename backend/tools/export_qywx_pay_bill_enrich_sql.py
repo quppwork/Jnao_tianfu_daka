@@ -29,12 +29,12 @@ from typing import Any
 from urllib.parse import unquote
 
 import pymysql
-from dotenv import load_dotenv
 
-BACKEND = Path(__file__).resolve().parents[1]
-ROOT = BACKEND.parent
-load_dotenv(BACKEND / ".env", override=False)
-load_dotenv(ROOT / ".env", override=False)
+from _wework_paths import export_dir, load_env, project_roots
+
+BACKEND, ROOT = project_roots(__file__)
+load_env(BACKEND, ROOT)
+EXPORT = export_dir(BACKEND, ROOT)
 
 
 def parse_url(url: str) -> dict[str, Any]:
@@ -247,7 +247,7 @@ def main() -> int:
         )
 
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    out_dir = ROOT / "docs" / "export"
+    out_dir = EXPORT
     out_dir.mkdir(parents=True, exist_ok=True)
     out_sql = out_dir / f"qywx_pay_bill_enrich_update_{stamp}.sql"
     out_json = out_dir / f"qywx_pay_bill_enrich_update_{stamp}.json"
