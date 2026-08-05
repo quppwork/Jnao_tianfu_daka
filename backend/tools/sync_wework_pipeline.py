@@ -702,14 +702,13 @@ def apply_sql_files(files: list[Path], db_host: str) -> None:
     for p in files:
         _log(f"APPLY {p.name} ...")
         sql = p.read_text(encoding="utf-8")
-        # 按分号切分；去掉整行 -- 注释，避免注释里的分号把语句截断
-        for stmt in sql.split(";"):
-            lines = [
-                ln
-                for ln in stmt.splitlines()
-                if ln.strip() and not ln.strip().startswith("--")
-            ]
-            s = "\n".join(lines).strip()
+        # 必须先去掉整行 -- 注释，再按分号切分
+        # （注释里若含 ';'，切分后会变成无 -- 的残片，例如 "safe for incremental import"）
+        cleaned = "\n".join(
+            ln for ln in sql.splitlines() if not ln.strip().startswith("--")
+        )
+        for stmt in cleaned.split(";"):
+            s = stmt.strip()
             if not s:
                 continue
             try:
