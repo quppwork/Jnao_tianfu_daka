@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, ContentItem, QaSession, TalentAssessment, TrainingItem, TrainingPlan, TrainingRecord
-from app.services.assessment_service import get_latest_assessment
+from app.services.assessment_service import get_latest_assessment, resolve_effective_talent
 from app.services.content_meta import parse_item_meta, skill_from_title
 from app.services.qa_service import count_user_messages
 
@@ -383,10 +383,18 @@ def get_summary(db: Session, child_user_id: int, stats: dict | None = None) -> d
                 break
 
     user = stats["user"]
-    assessment = stats["assessment"]
+    # 主导天赋：只用用户已确认写入 profile 的天赋，不用最新测评记录
+    talent_primary = None
+    if user and isinstance(user.profile_json, dict):
+        pj = user.profile_json
+        if pj.get("talent_code") or pj.get("talent_primary"):
+            talent_primary = pj.get("talent_primary")
+    if not talent_primary:
+        eff = resolve_effective_talent(db, child_user_id)
+        talent_primary = (eff or {}).get("talent_primary")
     return {
         "nickname": user.nickname if user else "",
-        "talent_primary": assessment.talent_primary if assessment else None,
+        "talent_primary": talent_primary,
         "overall_tier": overall_tier,        # 🆕 v2.0
         "honor_level": honor,
         "total_checkins": stats["checkins"],

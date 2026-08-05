@@ -79,7 +79,7 @@ def get_talent_report_summary(db: Session, child_user_id: int, args: dict) -> di
     from app.core.talent_mapping import parse_check_talent
     from app.services.assessment_service import (
         get_assessment_by_id,
-        get_latest_assessment,
+        get_first_valid_assessment,
         resolve_effective_talent,
     )
 
@@ -96,7 +96,8 @@ def get_talent_report_summary(db: Session, child_user_id: int, args: dict) -> di
     if assessment_id:
         row = get_assessment_by_id(db, int(assessment_id), child_user_id)
     if row is None and eff.get("talent_source") == "assessment":
-        row = get_latest_assessment(db, child_user_id)
+        # 无 profile 关联 id 时：用首条有效测评，不用最新一条
+        row = get_first_valid_assessment(db, child_user_id)
     if row is not None:
         report = row.report_json if isinstance(row.report_json, dict) else {}
         assessment_id = row.id
