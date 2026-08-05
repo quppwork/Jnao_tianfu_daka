@@ -98,11 +98,16 @@ def fetch_contact_list(token: str) -> list[dict[str, Any]]:
         ).json()
         if d.get("errcode", 0) != 0:
             raise RuntimeError(f"contact_list 失败 page={page}: {d}")
-        chunk = d.get("contact_list") or []
+        # 官方字段为 info_list（旧代码误写成 contact_list 会导致每页 +0）
+        chunk = d.get("info_list") or d.get("contact_list") or []
         rows.extend(chunk)
         _log(f"  contact_list page {page}: +{len(chunk)} 累计 {len(rows)}")
         cursor = (d.get("next_cursor") or "").strip()
         if not cursor:
+            break
+        # 防御空页却一直有 cursor 的异常分页
+        if not chunk and page >= 3:
+            _log(f"  [warn] 连续空页，提前结束（请检查响应字段是否为 info_list）")
             break
         time.sleep(0.05)
     return rows
