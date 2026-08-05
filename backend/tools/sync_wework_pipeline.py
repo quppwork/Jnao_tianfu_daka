@@ -251,7 +251,7 @@ def write_upsert_sql(
     """增量友好：建表 IF NOT EXISTS + INSERT ON DUPLICATE KEY UPDATE。"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with path.open("w", encoding="utf-8") as f:
-        f.write("-- pipeline upsert; safe for incremental import\n")
+        f.write("-- pipeline upsert - safe for incremental import\n")
         f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n")
         f.write(
             """
@@ -702,10 +702,15 @@ def apply_sql_files(files: list[Path], db_host: str) -> None:
     for p in files:
         _log(f"APPLY {p.name} ...")
         sql = p.read_text(encoding="utf-8")
-        # 简单按分号执行（够用）
+        # 按分号切分；去掉整行 -- 注释，避免注释里的分号把语句截断
         for stmt in sql.split(";"):
-            s = stmt.strip()
-            if not s or s.startswith("--"):
+            lines = [
+                ln
+                for ln in stmt.splitlines()
+                if ln.strip() and not ln.strip().startswith("--")
+            ]
+            s = "\n".join(lines).strip()
+            if not s:
                 continue
             try:
                 cur.execute(s)
