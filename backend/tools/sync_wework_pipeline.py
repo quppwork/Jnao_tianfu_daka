@@ -549,10 +549,82 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
         f.write("SET FOREIGN_KEY_CHECKS=1;\n")
 
 
+def _unix_to_dt(ts: Any) -> str | None:
+    """企微时间戳 → 'YYYY-MM-DD HH:MM:SS'。"""
+    if ts is None or ts == "":
+        return None
+    if isinstance(ts, datetime):
+        return ts.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        return datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def _fen_to_yuan(v: Any) -> str | None:
+    """企微金额（分）→ 元，两位小数。"""
+    if v is None or v == "":
+        return None
+    try:
+        return f"{int(v) / 100:.2f}"
+    except (TypeError, ValueError):
+        return None
+
+
+def ensure_pay_bill_human_schema(cur: Any) -> None:
+    """幂等：pay_time/range_* 转 DATETIME，金额分转元(DECIMAL)。"""
+
+    def data_type(col: str) -> str:
+        cur.execute(
+            "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND COLUMN_NAME=%s",
+            (PAY_TABLE, col),
+        )
+        row = cur.fetchone()
+        if not row:
+            return ""
+        return (row[0] if not isinstance(row, dict) else row.get("DATA_TYPE") or "").lower()
+
+    cur.execute(f"SHOW TABLES LIKE '{PAY_TABLE}'")
+    if not cur.fetchone():
+        return
+
+    for col in ("pay_time", "range_begin", "range_end"):
+        dt = data_type(col)
+        if dt in ("int", "integer", "bigint", "mediumint", "smallint", "tinyint"):
+            tmp = f"{col}_dt"
+            cur.execute(f"ALTER TABLE `{PAY_TABLE}` ADD COLUMN `{tmp}` DATETIME NULL")
+            cur.execute(
+                f"UPDATE `{PAY_TABLE}` SET `{tmp}`=FROM_UNIXTIME(`{col}`) WHERE `{col}` IS NOT NULL"
+            )
+            cur.execute(f"ALTER TABLE `{PAY_TABLE}` DROP COLUMN `{col}`")
+            cur.execute(
+                f"ALTER TABLE `{PAY_TABLE}` CHANGE COLUMN `{tmp}` `{col}` DATETIME NULL"
+            )
+            _log(f"  schema: {col} INT -> DATETIME")
+
+    for col, comment in (
+        ("total_fee", "收款金额(元)"),
+        ("total_refund_fee", "退款金额(元)"),
+    ):
+        dt = data_type(col)
+        if dt in ("int", "integer", "bigint", "mediumint", "smallint", "tinyint"):
+            cur.execute(
+                f"ALTER TABLE `{PAY_TABLE}` MODIFY COLUMN `{col}` DECIMAL(14,2) NULL "
+                f"COMMENT '{comment}'"
+            )
+            cur.execute(
+                f"UPDATE `{PAY_TABLE}` SET `{col}`=ROUND(`{col}`/100, 2) WHERE `{col}` IS NOT NULL"
+            )
+            _log(f"  schema: {col} 分 -> 元")
+
+
 def write_pay_upsert_sql(path: Path, flats: list[dict[str, Any]], begin_time: int, end_time: int) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    begin_dt = _unix_to_dt(begin_time)
+    end_dt = _unix_to_dt(end_time)
     with path.open("w", encoding="utf-8") as f:
-        f.write(f"-- pay upsert range {begin_time}~{end_time}\n")
+        f.write(f"-- pay upsert range {begin_dt} ~ {end_dt} (human datetime / yuan)\n")
         f.write("SET NAMES utf8mb4;\n")
         f.write(
             f"""
@@ -561,12 +633,12 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
   transaction_id VARCHAR(64) NULL,
   out_trade_no VARCHAR(64) NULL,
   out_refund_no VARCHAR(64) NULL,
-  pay_time INT UNSIGNED NULL,
+  pay_time DATETIME NULL COMMENT '支付时间',
   payment_type INT NULL,
   trade_state INT NULL,
   bill_type INT NULL,
-  total_fee BIGINT NULL,
-  total_refund_fee BIGINT NULL,
+  total_fee DECIMAL(14,2) NULL COMMENT '收款金额(元)',
+  total_refund_fee DECIMAL(14,2) NULL COMMENT '退款金额(元)',
   commodity VARCHAR(512) NULL,
   remark VARCHAR(512) NULL,
   payee_userid VARCHAR(64) NULL,
@@ -579,8 +651,8 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
   xet_user_id VARCHAR(64) NULL,
   bind_phone VARCHAR(32) NULL,
   raw_json MEDIUMTEXT NULL,
-  range_begin INT UNSIGNED NULL,
-  range_end INT UNSIGNED NULL,
+  range_begin DATETIME NULL,
+  range_end DATETIME NULL,
   fetched_at DATETIME NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_tx_bill (transaction_id, bill_type, out_refund_no),
@@ -606,7 +678,8 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
             )
 
         f.write(
-            f"DELETE FROM {PAY_TABLE} WHERE pay_time >= {begin_time} AND pay_time <= {end_time};\n"
+            f"DELETE FROM {PAY_TABLE} WHERE pay_time >= {week._esc(begin_dt)} "
+            f"AND pay_time <= {week._esc(end_dt)};\n"
         )
         cols = (
             "transaction_id,out_trade_no,out_refund_no,pay_time,payment_type,trade_state,bill_type,"
@@ -623,12 +696,12 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
                             week._esc(r.get("transaction_id")),
                             week._esc(r.get("out_trade_no")),
                             week._esc(r.get("out_refund_no")),
-                            week._esc(r.get("pay_time")),
+                            week._esc(_unix_to_dt(r.get("pay_time"))),
                             week._esc(r.get("payment_type")),
                             week._esc(r.get("trade_state")),
                             week._esc(r.get("bill_type")),
-                            week._esc(r.get("total_fee")),
-                            week._esc(r.get("total_refund_fee")),
+                            week._esc(_fen_to_yuan(r.get("total_fee"))),
+                            week._esc(_fen_to_yuan(r.get("total_refund_fee"))),
                             week._esc(r.get("commodity")),
                             week._esc(r.get("remark")),
                             week._esc(r.get("payee_userid")),
@@ -637,8 +710,8 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
                             week._esc(r.get("contact_name")),
                             week._esc(r.get("contact_phone")),
                             week._esc(r.get("raw_json")),
-                            week._esc(begin_time),
-                            week._esc(end_time),
+                            week._esc(begin_dt),
+                            week._esc(end_dt),
                             week._esc(now),
                         ]
                     )
@@ -699,6 +772,12 @@ def apply_sql_files(files: list[Path], db_host: str) -> None:
         autocommit=True,
     )
     cur = conn.cursor()
+    # 收款表：若仍是 unix/分，先转成人读的 DATETIME/元，避免新 SQL 写入类型冲突
+    if any("pay" in p.name or "enrich" in p.name for p in files):
+        try:
+            ensure_pay_bill_human_schema(cur)
+        except Exception as e:  # noqa: BLE001
+            _log(f"[warn] pay_bill schema migrate: {e}")
     for p in files:
         _log(f"APPLY {p.name} ...")
         sql = p.read_text(encoding="utf-8")
