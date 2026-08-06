@@ -1,5 +1,15 @@
 qywx_pay_bill（企微对外收款账单）字段说明
 ========================================
+用途：企业微信「对外收款」流水入库后，再关联客户 / 收款员工。
+区分原则：无前缀 = 付钱的客户；payee_* = 收钱的员工。
+
+示例行（截图中 id=85，带退款单号）：
+  id              = 85
+  transaction_id  = 50300907962026072884243966786
+  out_trade_no    = 178445127154000015f1146adcZv
+  out_refund_no   = 178445127154000015f1146adcZv_1785228609_fRt...
+  （同屏 id=79 且 out_refund_no 为空 → 正常收款，不是退款）
+
 
 一、订单本体（企微收款接口）
 --------------------------
@@ -48,3 +58,31 @@ range_end         本次拉取时间窗口终点
 fetched_at        本条写入/拉取时间
 
 
+五、员工信息存在哪 / 会不会自动补
+--------------------------------
+员工主数据表：qywx_follow_user（姓名、手机、unionid、third、xet）
+账单回填：每次同步 --apply 后，用员工表 JOIN 写 payee_*
+
+通讯录手机号文件（服务器持久卷，有则自动读入员工表）：
+  容器内：/app/data/qywx_export/qywx_follow_mobile.csv
+  仓库：docs/export/qywx_follow_mobile.csv（pull 后 docker cp 进容器）
+
+已在 qywx_follow_user 且有手机号的员工：
+  → 新收款单出现同一 payee_userid 时，会自动补全 payee_*（无需再导 Excel）
+通讯录换号后：更新上述 CSV，下次收款同步会覆盖员工表手机并回填账单。
+
+
+六、相关定时任务（宝塔）
+----------------------
+定时脚本不用单独加「员工同步」；--apply 已含员工+payee 回填。
+
+每 30 分钟（收款最新）：
+  docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py \
+    --recent-only --recent-days 1 --skip-served --skip-detail --apply
+
+每天 04:00（刷新名单 + 近1天详情 + 历史增量一批）：
+  docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py \
+    --recent-days 1 --history-batch 800 --pay-history-days 0 --apply
+
+进度文件（容器内，勿删）：
+  /app/data/qywx_export/.qywx_pipeline_state.json
