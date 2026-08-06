@@ -191,13 +191,20 @@ def load_mobile_csv(path: str) -> dict[str, str]:
     return out
 
 
-def collect_userids(cur: Any) -> list[str]:
+def collect_userids(cur: Any, only_table: bool = True) -> list[str]:
+    """默认只处理 qywx_follow_user 已有员工。"""
     ids: set[str] = set()
-    for sql in (
-        f"SELECT follow_userid AS u FROM `{TABLE}`",
-        "SELECT DISTINCT payee_userid AS u FROM qywx_pay_bill WHERE payee_userid IS NOT NULL AND payee_userid<>''",
-        "SELECT DISTINCT follow_userid AS u FROM qywx_external_contact_full WHERE follow_userid IS NOT NULL AND follow_userid<>''",
-    ):
+    sqls = [f"SELECT follow_userid AS u FROM `{TABLE}`"]
+    if not only_table:
+        sqls.extend(
+            [
+                "SELECT DISTINCT payee_userid AS u FROM qywx_pay_bill "
+                "WHERE payee_userid IS NOT NULL AND payee_userid<>''",
+                "SELECT DISTINCT follow_userid AS u FROM qywx_external_contact_full "
+                "WHERE follow_userid IS NOT NULL AND follow_userid<>''",
+            ]
+        )
+    for sql in sqls:
         try:
             cur.execute(sql)
             for r in cur.fetchall():
@@ -235,41 +242,54 @@ def pick_mobile_from_api(d: dict[str, Any]) -> str | None:
     return None
 
 
-def build_mobile_maps(cur: Any) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """mobile -> third row / xet row（同号多条时取最新一条粗略处理）。"""
-    third: dict[str, dict[str, Any]] = {}
+def build_mobile_maps(
+    cur: Any,
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    """mobile -> third/xet 候选列表（同号可能多条）。"""
+    third: dict[str, list[dict[str, Any]]] = {}
     cur.execute(
         "SELECT uid, mobile, unionid, openid, nickname FROM ys_third_party_user "
         "WHERE mobile IS NOT NULL AND mobile<>''"
     )
     for r in cur.fetchall():
         m = norm_mobile(r["mobile"])
-        if not m:
-            continue
-        # 优先有 unionid 的
-        old = third.get(m)
-        if not old or (r.get("unionid") and not old.get("unionid")):
-            third[m] = r
+        if m:
+            third.setdefault(m, []).append(r)
 
-    xet: dict[str, dict[str, Any]] = {}
+    xet: dict[str, list[dict[str, Any]]] = {}
     cur.execute(
         "SELECT user_id, bind_phone, wx_union_id, user_nickname FROM ys_xet_user_lists "
         "WHERE bind_phone IS NOT NULL AND bind_phone<>''"
     )
     for r in cur.fetchall():
         m = norm_mobile(r["bind_phone"])
-        if not m:
-            continue
-        old = xet.get(m)
-        if not old or (r.get("wx_union_id") and not old.get("wx_union_id")):
-            xet[m] = r
+        if m:
+            xet.setdefault(m, []).append(r)
     return third, xet
+
+
+def _pick_xet(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not rows:
+        return None
+    with_u = [r for r in rows if (r.get("wx_union_id") or "").strip()]
+    return (with_u or rows)[0]
+
+
+def _pick_third(rows: list[dict[str, Any]], prefer_union: str | None) -> dict[str, Any] | None:
+    if not rows:
+        return None
+    if prefer_union:
+        for r in rows:
+            if (r.get("unionid") or "").strip() == prefer_union:
+                return r
+    with_u = [r for r in rows if (r.get("unionid") or "").strip()]
+    return (with_u or rows)[0]
 
 
 def resolve_links(
     mobile: str | None,
-    third_map: dict[str, dict[str, Any]],
-    xet_map: dict[str, dict[str, Any]],
+    third_map: dict[str, list[dict[str, Any]]],
+    xet_map: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
     if not mobile:
         return {
@@ -278,19 +298,19 @@ def resolve_links(
             "xet_user_id": None,
             "bind_phone": None,
         }
-    t = third_map.get(mobile)
-    x = xet_map.get(mobile)
-    t_uid = str(t["uid"]) if t and t.get("uid") is not None else None
-    t_union = (t.get("unionid") or "").strip() or None if t else None
+    x = _pick_xet(xet_map.get(mobile) or [])
     x_id = (x.get("user_id") or "").strip() or None if x else None
     x_union = (x.get("wx_union_id") or "").strip() or None if x else None
+    t = _pick_third(third_map.get(mobile) or [], x_union)
+    t_uid = str(t["uid"]) if t and t.get("uid") is not None else None
+    t_union = (t.get("unionid") or "").strip() or None if t else None
     union = None
     if t_union and x_union and t_union == x_union:
         union = t_union
-    elif t_union:
-        union = t_union
     elif x_union:
         union = x_union
+    elif t_union:
+        union = t_union
     return {
         "unionid": union,
         "third_uid": t_uid,
@@ -329,6 +349,16 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="写库（默认只预览统计）")
     ap.add_argument("--db-host", default="", help="覆盖 RDS 主机（本机外网）")
     ap.add_argument("--mobile-csv", default="", help="可选 CSV: follow_userid,mobile")
+    ap.add_argument(
+        "--expand",
+        action="store_true",
+        help="额外纳入 pay_bill/full 的员工（默认只处理本表已有）",
+    )
+    ap.add_argument(
+        "--skip-api",
+        action="store_true",
+        help="不调企微接口，仅用表内/CSV/userid 手机号做三端拼接",
+    )
     ap.add_argument("--sleep", type=float, default=0.03)
     args = ap.parse_args()
 
@@ -337,23 +367,25 @@ def main() -> int:
     if csv_map:
         _log(f"mobile csv 载入 {len(csv_map)} 条")
 
-    token = get_token()
-    contact_secret = (os.getenv("WEWORK_CONTACT_SECRET") or "").strip()
+    token = None
     contact_token = None
-    if contact_secret:
-        try:
-            contact_token = get_token(contact_secret)
-            _log("已加载 WEWORK_CONTACT_SECRET 备用 token")
-        except Exception as e:  # noqa: BLE001
-            _log(f"[warn] CONTACT_SECRET 不可用: {e}")
+    if not args.skip_api:
+        token = get_token()
+        contact_secret = (os.getenv("WEWORK_CONTACT_SECRET") or "").strip()
+        if contact_secret:
+            try:
+                contact_token = get_token(contact_secret)
+                _log("已加载 WEWORK_CONTACT_SECRET 备用 token")
+            except Exception as e:  # noqa: BLE001
+                _log(f"[warn] CONTACT_SECRET 不可用: {e}")
 
     conn = connect_db()
     cur = conn.cursor()
     ensure_schema(cur)
     conn.commit()
 
-    userids = collect_userids(cur)
-    _log(f"待同步员工 {len(userids)} 人")
+    userids = collect_userids(cur, only_table=not args.expand)
+    _log(f"待同步员工 {len(userids)} 人（only_table={not args.expand}）")
     third_map, xet_map = build_mobile_maps(cur)
     _log(f"手机号索引 third={len(third_map)} xet={len(xet_map)}")
 
@@ -361,10 +393,12 @@ def main() -> int:
     stats = {
         "total": 0,
         "api_ok": 0,
+        "api_fail": 0,
         "has_mobile": 0,
         "mobile_from_csv": 0,
         "mobile_from_api": 0,
         "mobile_from_userid": 0,
+        "mobile_from_db": 0,
         "hit_third": 0,
         "hit_xet": 0,
         "has_union": 0,
@@ -374,22 +408,26 @@ def main() -> int:
 
     for i, uid in enumerate(userids, 1):
         stats["total"] += 1
-        d = fetch_user(token, uid)
-        if (d.get("errcode") or 0) != 0 and contact_token:
-            d2 = fetch_user(contact_token, uid)
-            if (d2.get("errcode") or 0) == 0:
-                d = d2
-        api_ok = (d.get("errcode") or 0) == 0
-        if api_ok:
-            stats["api_ok"] += 1
-        name = (d.get("name") if api_ok else None) or None
-        # 库里已有姓名兜底
-        if not name:
-            cur.execute(
-                f"SELECT follow_name FROM `{TABLE}` WHERE follow_userid=%s", (uid,)
-            )
-            old = cur.fetchone()
-            name = (old or {}).get("follow_name")
+        cur.execute(f"SELECT * FROM `{TABLE}` WHERE follow_userid=%s", (uid,))
+        old = cur.fetchone() or {}
+
+        d: dict[str, Any] = {}
+        api_ok = False
+        if token:
+            d = fetch_user(token, uid)
+            if (d.get("errcode") or 0) != 0 and contact_token:
+                d2 = fetch_user(contact_token, uid)
+                if (d2.get("errcode") or 0) == 0:
+                    d = d2
+            api_ok = (d.get("errcode") or 0) == 0
+            if api_ok:
+                stats["api_ok"] += 1
+            else:
+                stats["api_fail"] += 1
+                if i == 1:
+                    _log(f"[warn] user/get 失败: {d.get('errcode')} {d.get('errmsg')}")
+
+        name = (d.get("name") if api_ok else None) or old.get("follow_name")
 
         mobile = None
         src = None
@@ -409,6 +447,12 @@ def main() -> int:
                 mobile = m_uid
                 src = "userid"
                 stats["mobile_from_userid"] += 1
+        if not mobile:
+            m_db = norm_mobile(old.get("mobile"))
+            if m_db:
+                mobile = m_db
+                src = "db"
+                stats["mobile_from_db"] += 1
 
         links = resolve_links(mobile, third_map, xet_map)
         if mobile:
@@ -419,8 +463,10 @@ def main() -> int:
             stats["hit_xet"] += 1
         if links["unionid"]:
             stats["has_union"] += 1
-        t = third_map.get(mobile or "")
-        x = xet_map.get(mobile or "")
+        t_list = third_map.get(mobile or "") or []
+        x_list = xet_map.get(mobile or "") or []
+        t = _pick_third(t_list, links["unionid"])
+        x = _pick_xet(x_list)
         if (
             t
             and x
@@ -429,6 +475,12 @@ def main() -> int:
         ):
             stats["both_union_same"] += 1
 
+        position = (d.get("position") if api_ok else None) or old.get("position")
+        if api_ok:
+            dept_json = json.dumps(d.get("department") or [], ensure_ascii=False)
+        else:
+            dept_json = old.get("department_json")
+
         row = {
             "follow_userid": uid,
             "follow_name": name,
@@ -436,11 +488,9 @@ def main() -> int:
             "unionid": links["unionid"],
             "third_uid": links["third_uid"],
             "xet_user_id": links["xet_user_id"],
-            "bind_phone": links["bind_phone"] if links["xet_user_id"] or links["third_uid"] else mobile,
-            "position": d.get("position") if api_ok else None,
-            "department_json": json.dumps(d.get("department") or [], ensure_ascii=False)
-            if api_ok
-            else None,
+            "bind_phone": mobile,
+            "position": position,
+            "department_json": dept_json,
             "fetched_at": now,
         }
         preview.append({**row, "_mobile_src": src})
@@ -453,7 +503,8 @@ def main() -> int:
             )
             if args.apply:
                 conn.commit()
-        time.sleep(args.sleep)
+        if token:
+            time.sleep(args.sleep)
 
     if args.apply:
         conn.commit()
