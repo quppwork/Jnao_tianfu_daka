@@ -620,12 +620,13 @@ def ensure_pay_bill_human_schema(cur: Any) -> None:
 
 
 # 员工侧字段（对接收款成员）；与客户侧 unionid/third_uid/xet_user_id/bind_phone 区分
+# 注意：动态 SQL SET @s:='ALTER ...' 不能带 COMMENT '中文'（单引号会截断字符串）
 PAYEE_COLS: list[tuple[str, str]] = [
-    ("payee_name", "ADD COLUMN payee_name VARCHAR(128) NULL COMMENT '收款员工姓名' AFTER payee_userid"),
-    ("payee_mobile", "ADD COLUMN payee_mobile VARCHAR(32) NULL COMMENT '收款员工手机号' AFTER payee_name"),
-    ("payee_unionid", "ADD COLUMN payee_unionid VARCHAR(64) NULL COMMENT '收款员工微信unionid' AFTER payee_mobile"),
-    ("payee_third_uid", "ADD COLUMN payee_third_uid VARCHAR(64) NULL COMMENT '收款员工 ys_third_party_user.uid' AFTER payee_unionid"),
-    ("payee_xet_user_id", "ADD COLUMN payee_xet_user_id VARCHAR(64) NULL COMMENT '收款员工 ys_xet_user_lists.user_id' AFTER payee_third_uid"),
+    ("payee_name", "ADD COLUMN payee_name VARCHAR(128) NULL AFTER payee_userid"),
+    ("payee_mobile", "ADD COLUMN payee_mobile VARCHAR(32) NULL AFTER payee_name"),
+    ("payee_unionid", "ADD COLUMN payee_unionid VARCHAR(64) NULL AFTER payee_mobile"),
+    ("payee_third_uid", "ADD COLUMN payee_third_uid VARCHAR(64) NULL AFTER payee_unionid"),
+    ("payee_xet_user_id", "ADD COLUMN payee_xet_user_id VARCHAR(64) NULL AFTER payee_third_uid"),
 ]
 
 
@@ -774,10 +775,10 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
         )
         # 兼容旧表缺列（客户 + 员工）
         alter_cols = [
-            ("unionid", "ADD COLUMN unionid VARCHAR(64) NULL COMMENT '客户微信unionid'"),
-            ("third_uid", "ADD COLUMN third_uid VARCHAR(64) NULL COMMENT '客户third_uid'"),
-            ("xet_user_id", "ADD COLUMN xet_user_id VARCHAR(64) NULL COMMENT '客户xet_user_id'"),
-            ("bind_phone", "ADD COLUMN bind_phone VARCHAR(32) NULL COMMENT '客户bind_phone'"),
+            ("unionid", "ADD COLUMN unionid VARCHAR(64) NULL"),
+            ("third_uid", "ADD COLUMN third_uid VARCHAR(64) NULL"),
+            ("xet_user_id", "ADD COLUMN xet_user_id VARCHAR(64) NULL"),
+            ("bind_phone", "ADD COLUMN bind_phone VARCHAR(32) NULL"),
         ] + [(c, d) for c, d in PAYEE_COLS]
         for col, ddl in alter_cols:
             f.write(
