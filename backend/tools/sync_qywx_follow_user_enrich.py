@@ -216,13 +216,20 @@ def collect_userids(cur: Any, only_table: bool = True) -> list[str]:
     return sorted(ids)
 
 
-def fetch_user(token: str, userid: str) -> dict[str, Any]:
-    d = requests.get(
-        f"{QYAPI}/user/get",
-        params={"access_token": token, "userid": userid},
-        timeout=30,
-    ).json()
-    return d
+def fetch_user(token: str, userid: str, retries: int = 3) -> dict[str, Any]:
+    last: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return requests.get(
+                f"{QYAPI}/user/get",
+                params={"access_token": token, "userid": userid},
+                timeout=30,
+            ).json()
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last = e
+            _log(f"  [retry {attempt}/{retries}] user/get {userid}: {type(e).__name__}")
+            time.sleep(1.5 * attempt)
+    raise RuntimeError(f"user/get {userid} 失败: {last}") from last
 
 
 def pick_mobile_from_api(d: dict[str, Any]) -> str | None:
