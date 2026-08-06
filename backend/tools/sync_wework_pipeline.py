@@ -5,22 +5,22 @@
   1) 拉已服务外部联系人 contact_list → 本地缓存
   2) 近 N 天：客户详情(unionid) + 标签库 + 跟进人关系 + 对外收款
   3) 增量历史：对尚未同步详情的客户分批补 get
-  4) 生成收款 enrich SQL（unionid → third_uid / xet_user_id / bind_phone）
+  4) 客户 enrich：unionid / third_uid / xet_user_id / bind_phone（付款客户）
+  5) 员工 enrich：payee_name / payee_mobile / payee_unionid / payee_third_uid / payee_xet_user_id
+     （来自 qywx_follow_user，与客户字段严格区分）
 
 默认只写 docs/export/*.sql，不改库。加 --apply 才写库。
 进度记在 docs/export/.qywx_pipeline_state.json，可断点续跑。
 
 用法:
-  # 近7天 + 历史每批200人（可多次跑直到补完）
-  python -u backend/tools/sync_wework_pipeline.py --recent-days 7 --history-batch 200
+  # 宝塔定时：近7天收款 + 客户/员工关联写库
+  python -u tools/sync_wework_pipeline.py --recent-only --apply
 
-  # 只用外网 RDS 主机（本机）
-  python -u backend/tools/sync_wework_pipeline.py --db-host rm-xxxno.mysql.rds.aliyuncs.com --apply
+  # 只补员工字段
+  python -u tools/sync_wework_pipeline.py --payee-enrich-only
 
-  # 只跑近7天 / 只补历史 / 只生成 enrich
-  python -u backend/tools/sync_wework_pipeline.py --recent-only
-  python -u backend/tools/sync_wework_pipeline.py --history-only --history-batch 300
-  python -u backend/tools/sync_wework_pipeline.py --enrich-only
+  # 客户+员工关联（不拉接口）
+  python -u tools/sync_wework_pipeline.py --enrich-only --apply
 """
 
 from __future__ import annotations
@@ -619,6 +619,109 @@ def ensure_pay_bill_human_schema(cur: Any) -> None:
             _log(f"  schema: {col} 分 -> 元")
 
 
+# 员工侧字段（对接收款成员）；与客户侧 unionid/third_uid/xet_user_id/bind_phone 区分
+PAYEE_COLS: list[tuple[str, str]] = [
+    ("payee_name", "ADD COLUMN payee_name VARCHAR(128) NULL COMMENT '收款员工姓名' AFTER payee_userid"),
+    ("payee_mobile", "ADD COLUMN payee_mobile VARCHAR(32) NULL COMMENT '收款员工手机号' AFTER payee_name"),
+    ("payee_unionid", "ADD COLUMN payee_unionid VARCHAR(64) NULL COMMENT '收款员工微信unionid' AFTER payee_mobile"),
+    ("payee_third_uid", "ADD COLUMN payee_third_uid VARCHAR(64) NULL COMMENT '收款员工 ys_third_party_user.uid' AFTER payee_unionid"),
+    ("payee_xet_user_id", "ADD COLUMN payee_xet_user_id VARCHAR(64) NULL COMMENT '收款员工 ys_xet_user_lists.user_id' AFTER payee_third_uid"),
+]
+
+
+def ensure_pay_bill_payee_columns(cur: Any) -> None:
+    cur.execute(f"SHOW TABLES LIKE '{PAY_TABLE}'")
+    if not cur.fetchone():
+        return
+    for col, ddl in PAYEE_COLS:
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND COLUMN_NAME=%s",
+            (PAY_TABLE, col),
+        )
+        row = cur.fetchone()
+        c = row[0] if not isinstance(row, dict) else row.get("c") or row.get("COUNT(*)")
+        if not c:
+            cur.execute(f"ALTER TABLE `{PAY_TABLE}` {ddl}")
+            _log(f"  schema: add {col}")
+
+
+def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
+    """按 payee_userid 从 qywx_follow_user 回填员工信息（不改客户字段）。"""
+    maybe_override_db_host(db_host)
+    import pymysql
+
+    url = (os.getenv("LEGACY_DATABASE_URL") or "").strip()
+    m = re.match(
+        r"(?:mysql(?:\+pymysql)?://)?([^:]+):([^@]+)@([^:/]+):?(\d+)?/([^?]+)",
+        url,
+    )
+    if not m:
+        raise RuntimeError("无法解析 LEGACY_DATABASE_URL")
+    conn = pymysql.connect(
+        host=m.group(3),
+        port=int(m.group(4) or 3306),
+        user=unquote(m.group(1)),
+        password=unquote(m.group(2)),
+        database=m.group(5),
+        charset="utf8mb4",
+        autocommit=True,
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+    cur = conn.cursor()
+    ensure_pay_bill_human_schema(cur)
+    ensure_pay_bill_payee_columns(cur)
+
+    # 跟进表若缺 third，用 unionid 再补一次（与员工 enrich 一致）
+    cur.execute("SHOW TABLES LIKE 'qywx_follow_user'")
+    if cur.fetchone():
+        cur.execute(
+            """
+            UPDATE qywx_follow_user f
+            JOIN (
+              SELECT unionid, MIN(uid) AS uid
+              FROM ys_third_party_user
+              WHERE unionid IS NOT NULL AND unionid<>''
+              GROUP BY unionid
+            ) t ON t.unionid=f.unionid
+            SET f.third_uid=CAST(t.uid AS CHAR)
+            WHERE f.unionid IS NOT NULL AND f.unionid<>''
+              AND (f.third_uid IS NULL OR f.third_uid='')
+            """
+        )
+
+    cur.execute(
+        f"""
+        UPDATE `{PAY_TABLE}` p
+        LEFT JOIN qywx_follow_user f ON f.follow_userid=p.payee_userid
+        SET
+          p.payee_name=f.follow_name,
+          p.payee_mobile=f.mobile,
+          p.payee_unionid=f.unionid,
+          p.payee_third_uid=f.third_uid,
+          p.payee_xet_user_id=f.xet_user_id
+        WHERE p.payee_userid IS NOT NULL AND p.payee_userid<>''
+        """
+    )
+    updated = cur.rowcount
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS total,
+          SUM(payee_userid IS NOT NULL AND payee_userid<>'') AS has_payee,
+          SUM(payee_name IS NOT NULL AND payee_name<>'') AS has_name,
+          SUM(payee_mobile IS NOT NULL AND payee_mobile<>'') AS has_mobile,
+          SUM(payee_unionid IS NOT NULL AND payee_unionid<>'') AS has_union,
+          SUM(payee_third_uid IS NOT NULL AND payee_third_uid<>'') AS has_third,
+          SUM(payee_xet_user_id IS NOT NULL AND payee_xet_user_id<>'') AS has_xet
+        FROM `{PAY_TABLE}`
+        """
+    )
+    stats = cur.fetchone() or {}
+    conn.close()
+    _log(f"payee enrich updated≈{updated} stats={dict(stats)}")
+    return {"updated": updated, "stats": dict(stats)}
+
+
 def write_pay_upsert_sql(path: Path, flats: list[dict[str, Any]], begin_time: int, end_time: int) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     begin_dt = _unix_to_dt(begin_time)
@@ -641,15 +744,20 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
   total_refund_fee DECIMAL(14,2) NULL COMMENT '退款金额(元)',
   commodity VARCHAR(512) NULL,
   remark VARCHAR(512) NULL,
-  payee_userid VARCHAR(64) NULL,
-  external_userid VARCHAR(64) NULL,
+  payee_userid VARCHAR(64) NULL COMMENT '收款员工企微userid',
+  payee_name VARCHAR(128) NULL COMMENT '收款员工姓名',
+  payee_mobile VARCHAR(32) NULL COMMENT '收款员工手机号',
+  payee_unionid VARCHAR(64) NULL COMMENT '收款员工微信unionid',
+  payee_third_uid VARCHAR(64) NULL COMMENT '收款员工 ys_third_party_user.uid',
+  payee_xet_user_id VARCHAR(64) NULL COMMENT '收款员工 ys_xet_user_lists.user_id',
+  external_userid VARCHAR(64) NULL COMMENT '付款客户企微external_userid',
   mch_id VARCHAR(64) NULL,
-  contact_name VARCHAR(128) NULL,
-  contact_phone VARCHAR(64) NULL,
-  unionid VARCHAR(64) NULL,
-  third_uid VARCHAR(64) NULL,
-  xet_user_id VARCHAR(64) NULL,
-  bind_phone VARCHAR(32) NULL,
+  contact_name VARCHAR(128) NULL COMMENT '客户备注名',
+  contact_phone VARCHAR(64) NULL COMMENT '客户备注手机',
+  unionid VARCHAR(64) NULL COMMENT '客户微信unionid',
+  third_uid VARCHAR(64) NULL COMMENT '客户 ys_third_party_user.uid',
+  xet_user_id VARCHAR(64) NULL COMMENT '客户 ys_xet_user_lists.user_id',
+  bind_phone VARCHAR(32) NULL COMMENT '客户小鹅通bind_phone',
   raw_json MEDIUMTEXT NULL,
   range_begin DATETIME NULL,
   range_end DATETIME NULL,
@@ -659,17 +767,19 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
   KEY idx_pay_time (pay_time),
   KEY idx_payee (payee_userid),
   KEY idx_external (external_userid),
-  KEY idx_unionid (unionid)
+  KEY idx_unionid (unionid),
+  KEY idx_payee_unionid (payee_unionid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
         )
-        # 兼容旧表缺列
-        for col, ddl in [
-            ("unionid", "ADD COLUMN unionid VARCHAR(64) NULL"),
-            ("third_uid", "ADD COLUMN third_uid VARCHAR(64) NULL"),
-            ("xet_user_id", "ADD COLUMN xet_user_id VARCHAR(64) NULL"),
-            ("bind_phone", "ADD COLUMN bind_phone VARCHAR(32) NULL"),
-        ]:
+        # 兼容旧表缺列（客户 + 员工）
+        alter_cols = [
+            ("unionid", "ADD COLUMN unionid VARCHAR(64) NULL COMMENT '客户微信unionid'"),
+            ("third_uid", "ADD COLUMN third_uid VARCHAR(64) NULL COMMENT '客户third_uid'"),
+            ("xet_user_id", "ADD COLUMN xet_user_id VARCHAR(64) NULL COMMENT '客户xet_user_id'"),
+            ("bind_phone", "ADD COLUMN bind_phone VARCHAR(32) NULL COMMENT '客户bind_phone'"),
+        ] + [(c, d) for c, d in PAYEE_COLS]
+        for col, ddl in alter_cols:
             f.write(
                 f"SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS "
                 f"WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{PAY_TABLE}' AND COLUMN_NAME='{col}');\n"
@@ -772,10 +882,11 @@ def apply_sql_files(files: list[Path], db_host: str) -> None:
         autocommit=True,
     )
     cur = conn.cursor()
-    # 收款表：若仍是 unix/分，先转成人读的 DATETIME/元，避免新 SQL 写入类型冲突
+    # 收款表：若仍是 unix/分，先转成人读的 DATETIME/元，并保证员工列存在
     if any("pay" in p.name or "enrich" in p.name for p in files):
         try:
             ensure_pay_bill_human_schema(cur)
+            ensure_pay_bill_payee_columns(cur)
         except Exception as e:  # noqa: BLE001
             _log(f"[warn] pay_bill schema migrate: {e}")
     for p in files:
@@ -818,9 +929,15 @@ def main() -> int:
     ap.add_argument("--skip-pay", action="store_true")
     ap.add_argument("--skip-detail", action="store_true")
     ap.add_argument("--skip-enrich", action="store_true")
+    ap.add_argument("--skip-payee-enrich", action="store_true", help="跳过收款员工字段回填")
     ap.add_argument("--recent-only", action="store_true")
     ap.add_argument("--history-only", action="store_true")
-    ap.add_argument("--enrich-only", action="store_true")
+    ap.add_argument("--enrich-only", action="store_true", help="只做客户+员工关联回填")
+    ap.add_argument(
+        "--payee-enrich-only",
+        action="store_true",
+        help="只从 qywx_follow_user 回填收款员工字段",
+    )
     ap.add_argument("--db-host", default="", help="本机连库用外网域名")
     ap.add_argument("--apply", action="store_true", help="直接执行生成的 SQL 写库")
     ap.add_argument("--limit", type=int, default=0, help="调试：限制详情拉取人数")
@@ -833,12 +950,19 @@ def main() -> int:
     out_files: list[Path] = []
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
+    if args.payee_enrich_only:
+        enrich_pay_bill_payee_from_follow(args.db_host)
+        return 0
+
     if args.enrich_only:
         p = run_enrich_sql(args.db_host)
         if p:
             _log(f"enrich SQL: {p}")
             if args.apply:
                 apply_sql_files([p], args.db_host)
+        if args.apply and not args.skip_payee_enrich:
+            _log("=== 回填收款员工字段（payee_*）===")
+            enrich_pay_bill_payee_from_follow(args.db_host)
         return 0
 
     token = get_token()
@@ -997,16 +1121,26 @@ def main() -> int:
         _log("=== APPLY 写库 ===")
         apply_sql_files(out_files, args.db_host)
 
+    # 写库后：客户 enrich SQL 已含客户字段；再拼员工字段（依赖 qywx_follow_user）
+    if args.apply and not args.skip_payee_enrich and not args.history_only:
+        try:
+            _log("=== 回填收款员工字段（payee_*，与客户 unionid/third 区分）===")
+            enrich_pay_bill_payee_from_follow(args.db_host)
+        except Exception as e:  # noqa: BLE001
+            _log(f"[warn] payee enrich 跳过: {e}")
+
     _log("")
     _log("完成。生成文件:")
     for p in out_files:
         _log(f"  {p} ({p.stat().st_size // 1024} KB)")
     _log(f"进度: {STATE_PATH}")
     _log(
-        "服务器导入示例:\n"
-        "  mysql -h内网地址 -ujingnao -p db_fz_jingnao < docs/export/qywx_pipeline_recent_7d_XXX.sql\n"
-        "历史未完则重复:\n"
-        "  python -u backend/tools/sync_wework_pipeline.py --history-only --history-batch 200"
+        "宝塔定时（近7天收款+客户关联+员工关联）:\n"
+        "  docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py "
+        "--recent-only --apply\n"
+        "只补员工字段:\n"
+        "  docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py "
+        "--payee-enrich-only"
     )
     return 0
 

@@ -251,17 +251,21 @@ def pick_mobile_from_api(d: dict[str, Any]) -> str | None:
 
 def build_mobile_maps(
     cur: Any,
-) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
-    """mobile -> third/xet 候选列表（同号可能多条）。"""
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]], dict[str, str]]:
+    """mobile -> third/xet 候选；另建 unionid -> third_uid。"""
     third: dict[str, list[dict[str, Any]]] = {}
+    third_by_union: dict[str, str] = {}
     cur.execute(
         "SELECT uid, mobile, unionid, openid, nickname FROM ys_third_party_user "
-        "WHERE mobile IS NOT NULL AND mobile<>''"
+        "WHERE (mobile IS NOT NULL AND mobile<>'') OR (unionid IS NOT NULL AND unionid<>'')"
     )
     for r in cur.fetchall():
         m = norm_mobile(r["mobile"])
         if m:
             third.setdefault(m, []).append(r)
+        u = (r.get("unionid") or "").strip()
+        if u and u not in third_by_union and r.get("uid") is not None:
+            third_by_union[u] = str(r["uid"])
 
     xet: dict[str, list[dict[str, Any]]] = {}
     cur.execute(
@@ -272,7 +276,7 @@ def build_mobile_maps(
         m = norm_mobile(r["bind_phone"])
         if m:
             xet.setdefault(m, []).append(r)
-    return third, xet
+    return third, xet, third_by_union
 
 
 def _pick_xet(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -297,6 +301,7 @@ def resolve_links(
     mobile: str | None,
     third_map: dict[str, list[dict[str, Any]]],
     xet_map: dict[str, list[dict[str, Any]]],
+    third_by_union: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     if not mobile:
         return {
@@ -318,6 +323,9 @@ def resolve_links(
         union = x_union
     elif t_union:
         union = t_union
+    # 手机号对不上 third 时，用 unionid 再补 third_uid
+    if not t_uid and union and third_by_union:
+        t_uid = third_by_union.get(union)
     return {
         "unionid": union,
         "third_uid": t_uid,
@@ -393,8 +401,11 @@ def main() -> int:
 
     userids = collect_userids(cur, only_table=not args.expand)
     _log(f"待同步员工 {len(userids)} 人（only_table={not args.expand}）")
-    third_map, xet_map = build_mobile_maps(cur)
-    _log(f"手机号索引 third={len(third_map)} xet={len(xet_map)}")
+    third_map, xet_map, third_by_union = build_mobile_maps(cur)
+    _log(
+        f"手机号索引 third={len(third_map)} xet={len(xet_map)} "
+        f"union→third={len(third_by_union)}"
+    )
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     stats = {
@@ -461,7 +472,7 @@ def main() -> int:
                 src = "db"
                 stats["mobile_from_db"] += 1
 
-        links = resolve_links(mobile, third_map, xet_map)
+        links = resolve_links(mobile, third_map, xet_map, third_by_union)
         if mobile:
             stats["has_mobile"] += 1
         if links["third_uid"]:
