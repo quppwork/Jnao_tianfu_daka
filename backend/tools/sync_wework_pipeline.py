@@ -691,16 +691,17 @@ def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
             """
         )
 
+    # INNER JOIN：只回填员工表已有的人，避免 LEFT JOIN 把已有 payee_* 刷成 NULL
     cur.execute(
         f"""
         UPDATE `{PAY_TABLE}` p
-        LEFT JOIN qywx_follow_user f ON f.follow_userid=p.payee_userid
+        INNER JOIN qywx_follow_user f ON f.follow_userid=p.payee_userid
         SET
-          p.payee_name=f.follow_name,
-          p.payee_mobile=f.mobile,
-          p.payee_unionid=f.unionid,
-          p.payee_third_uid=f.third_uid,
-          p.payee_xet_user_id=f.xet_user_id
+          p.payee_name=COALESCE(NULLIF(f.follow_name,''), p.payee_name),
+          p.payee_mobile=COALESCE(NULLIF(f.mobile,''), p.payee_mobile),
+          p.payee_unionid=COALESCE(NULLIF(f.unionid,''), p.payee_unionid),
+          p.payee_third_uid=COALESCE(NULLIF(f.third_uid,''), p.payee_third_uid),
+          p.payee_xet_user_id=COALESCE(NULLIF(f.xet_user_id,''), p.payee_xet_user_id)
         WHERE p.payee_userid IS NOT NULL AND p.payee_userid<>''
         """
     )
@@ -951,8 +952,23 @@ def main() -> int:
     out_files: list[Path] = []
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    if args.payee_enrich_only:
+    def _sync_staff_then_payee() -> None:
+        """通讯录 CSV/库内手机 → qywx_follow_user → 账单 payee_*。"""
+        import sync_qywx_follow_user_enrich as staff
+
+        _log("=== 同步员工主数据（qywx_follow_user，含通讯录 CSV）===")
+        staff.run_follow_user_enrich(
+            apply=True,
+            db_host=args.db_host,
+            expand=True,
+            skip_api=True,
+            write_result_csv=False,
+        )
+        _log("=== 回填收款员工字段（payee_*）===")
         enrich_pay_bill_payee_from_follow(args.db_host)
+
+    if args.payee_enrich_only:
+        _sync_staff_then_payee()
         return 0
 
     if args.enrich_only:
@@ -962,8 +978,7 @@ def main() -> int:
             if args.apply:
                 apply_sql_files([p], args.db_host)
         if args.apply and not args.skip_payee_enrich:
-            _log("=== 回填收款员工字段（payee_*）===")
-            enrich_pay_bill_payee_from_follow(args.db_host)
+            _sync_staff_then_payee()
         return 0
 
     token = get_token()
@@ -1122,13 +1137,12 @@ def main() -> int:
         _log("=== APPLY 写库 ===")
         apply_sql_files(out_files, args.db_host)
 
-    # 写库后：客户 enrich SQL 已含客户字段；再拼员工字段（依赖 qywx_follow_user）
+    # 写库后：客户 enrich + 员工主数据（CSV/库）+ 账单 payee_*
     if args.apply and not args.skip_payee_enrich and not args.history_only:
         try:
-            _log("=== 回填收款员工字段（payee_*，与客户 unionid/third 区分）===")
-            enrich_pay_bill_payee_from_follow(args.db_host)
+            _sync_staff_then_payee()
         except Exception as e:  # noqa: BLE001
-            _log(f"[warn] payee enrich 跳过: {e}")
+            _log(f"[warn] 员工/payee enrich 跳过: {e}")
 
     _log("")
     _log("完成。生成文件:")
@@ -1136,12 +1150,9 @@ def main() -> int:
         _log(f"  {p} ({p.stat().st_size // 1024} KB)")
     _log(f"进度: {STATE_PATH}")
     _log(
-        "宝塔定时（近7天收款+客户关联+员工关联）:\n"
-        "  docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py "
-        "--recent-only --apply\n"
-        "只补员工字段:\n"
-        "  docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py "
-        "--payee-enrich-only"
+        "员工手机号固定放（有则每次收款同步自动入库）:\n"
+        f"  {EXPORT / 'qywx_follow_mobile.csv'}\n"
+        "宝塔定时无需单独加员工任务；--apply 会同步员工并回填 payee_*。"
     )
     return 0
 

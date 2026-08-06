@@ -1,0 +1,50 @@
+qywx_pay_bill（企微对外收款账单）字段说明
+========================================
+
+一、订单本体（企微收款接口）
+--------------------------
+序号              管理界面行号，不是数据库字段
+id                本表自增主键
+transaction_id    微信支付交易号（微信侧）
+out_trade_no      商户订单号（业务/小鹅通侧下单号）
+out_refund_no     商户退款单号；收款单多为空，退款单才有值
+pay_time          支付/退款发生时间（DATETIME）
+bill_type         账单类型：0=收款，1=退款
+payment_type      支付方式（企微枚举）
+trade_state       交易状态（企微枚举）
+total_fee         收款金额（元，DECIMAL）
+total_refund_fee  退款金额（元）；退款单重点看此字段
+commodity         商品/项目说明
+remark            备注
+mch_id            商户号
+
+
+二、员工侧（收款人 / 跟进员工，payee_*）
+--------------------------------------
+payee_userid      收款员工的企微 userid
+payee_name        员工姓名（从 qywx_follow_user / 通讯录回填）
+payee_mobile      员工手机号
+payee_unionid     员工微信 UnionID
+payee_third_uid   员工在 ys_third_party_user 的 uid
+payee_xet_user_id 员工在 ys_xet_user_lists 的 user_id
+
+
+三、客户侧（付款人，无 payee_ 前缀）
+----------------------------------
+external_userid   付款客户的企微外部联系人 ID
+contact_name      企微备注的客户名
+contact_phone     企微备注的客户手机
+unionid           客户微信 UnionID（打通小程序/小鹅通）
+third_uid         客户在 ys_third_party_user 的 uid
+xet_user_id       客户在小鹅通的 user_id
+bind_phone        客户在小鹅通绑定的手机号
+
+
+四、同步元数据
+--------------
+raw_json          接口原始 JSON（排查用）
+range_begin       本次拉取时间窗口起点
+range_end         本次拉取时间窗口终点
+fetched_at        本条写入/拉取时间
+
+

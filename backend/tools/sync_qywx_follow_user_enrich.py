@@ -359,32 +359,43 @@ ON DUPLICATE KEY UPDATE
     )
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="员工手机号 + 三端关联写入 qywx_follow_user")
-    ap.add_argument("--apply", action="store_true", help="写库（默认只预览统计）")
-    ap.add_argument("--db-host", default="", help="覆盖 RDS 主机（本机外网）")
-    ap.add_argument("--mobile-csv", default="", help="可选 CSV: follow_userid,mobile")
-    ap.add_argument(
-        "--expand",
-        action="store_true",
-        help="额外纳入 pay_bill/full 的员工（默认只处理本表已有）",
-    )
-    ap.add_argument(
-        "--skip-api",
-        action="store_true",
-        help="不调企微接口，仅用表内/CSV/userid 手机号做三端拼接",
-    )
-    ap.add_argument("--sleep", type=float, default=0.03)
-    args = ap.parse_args()
+DEFAULT_MOBILE_CSV = EXPORT / "qywx_follow_mobile.csv"
 
-    maybe_override_db_host(args.db_host)
-    csv_map = load_mobile_csv(args.mobile_csv) if args.mobile_csv else {}
+
+def run_follow_user_enrich(
+    *,
+    apply: bool = True,
+    db_host: str = "",
+    mobile_csv: str | Path | None = None,
+    expand: bool = True,
+    skip_api: bool = True,
+    sleep: float = 0.03,
+    write_result_csv: bool = False,
+) -> dict[str, Any]:
+    """把通讯录手机号 + 三端关联写入 qywx_follow_user（供 pipeline 复用）。
+
+    mobile_csv 默认用 EXPORT/qywx_follow_mobile.csv（若存在）。
+    expand=True 时纳入收款单/客户关系里出现过的员工，并把 CSV 全员写入员工表。
+    """
+    maybe_override_db_host(db_host)
+
+    csv_path: Path | None = None
+    if mobile_csv:
+        csv_path = Path(mobile_csv)
+        if not csv_path.is_absolute():
+            csv_path = (EXPORT / csv_path).resolve()
+    elif DEFAULT_MOBILE_CSV.exists():
+        csv_path = DEFAULT_MOBILE_CSV
+
+    csv_map = load_mobile_csv(str(csv_path)) if csv_path else {}
     if csv_map:
-        _log(f"mobile csv 载入 {len(csv_map)} 条")
+        _log(f"mobile csv 载入 {len(csv_map)} 条 <- {csv_path}")
+    elif csv_path:
+        _log(f"[warn] mobile csv 为空或不存在: {csv_path}")
 
     token = None
     contact_token = None
-    if not args.skip_api:
+    if not skip_api:
         token = get_token()
         contact_secret = (os.getenv("WEWORK_CONTACT_SECRET") or "").strip()
         if contact_secret:
@@ -399,8 +410,11 @@ def main() -> int:
     ensure_schema(cur)
     conn.commit()
 
-    userids = collect_userids(cur, only_table=not args.expand)
-    _log(f"待同步员工 {len(userids)} 人（only_table={not args.expand}）")
+    userids = set(collect_userids(cur, only_table=not expand))
+    # 通讯录里有、库里还没有的员工也入库，避免「有号但表里没人」
+    userids |= set(csv_map.keys())
+    userids_list = sorted(userids)
+    _log(f"待同步员工 {len(userids_list)} 人（expand={expand} csv={len(csv_map)}）")
     third_map, xet_map, third_by_union = build_mobile_maps(cur)
     _log(
         f"手机号索引 third={len(third_map)} xet={len(xet_map)} "
@@ -408,7 +422,7 @@ def main() -> int:
     )
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    stats = {
+    stats: dict[str, Any] = {
         "total": 0,
         "api_ok": 0,
         "api_fail": 0,
@@ -421,10 +435,11 @@ def main() -> int:
         "hit_xet": 0,
         "has_union": 0,
         "both_union_same": 0,
+        "csv_path": str(csv_path) if csv_path else "",
     }
     preview: list[dict[str, Any]] = []
 
-    for i, uid in enumerate(userids, 1):
+    for i, uid in enumerate(userids_list, 1):
         stats["total"] += 1
         cur.execute(f"SELECT * FROM `{TABLE}` WHERE follow_userid=%s", (uid,))
         old = cur.fetchone() or {}
@@ -512,76 +527,101 @@ def main() -> int:
             "fetched_at": now,
         }
         preview.append({**row, "_mobile_src": src})
-        if args.apply:
+        if apply:
             upsert_row(cur, row)
-        if i % 20 == 0 or i == len(userids):
+        if i % 50 == 0 or i == len(userids_list):
             _log(
-                f"  {i}/{len(userids)} mobile={stats['has_mobile']} "
+                f"  {i}/{len(userids_list)} mobile={stats['has_mobile']} "
                 f"third={stats['hit_third']} xet={stats['hit_xet']} union={stats['has_union']}"
             )
-            if args.apply:
+            if apply:
                 conn.commit()
         if token:
-            time.sleep(args.sleep)
+            time.sleep(sleep)
 
-    if args.apply:
+    if apply:
         conn.commit()
-        _log("已写库 APPLY ok")
+        _log("员工表 qywx_follow_user 已更新")
     else:
         _log("预览模式未写库（加 --apply 写库）")
 
-    _log(f"统计: {stats}")
-    _log("样例（最多 12 条）:")
-    for r in preview[:12]:
-        _log(
-            f"  {r['follow_userid']}: name={r['follow_name']!r} mobile={r['mobile']} "
-            f"src={r.get('_mobile_src')} unionid={r['unionid']} "
-            f"third={r['third_uid']} xet={r['xet_user_id']}"
-        )
+    _log(f"统计: { {k: v for k, v in stats.items() if k != 'csv_path'} }")
+    if write_result_csv:
+        out = EXPORT / f"qywx_follow_user_enrich_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+        with out.open("w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "follow_userid",
+                    "follow_name",
+                    "mobile",
+                    "mobile_src",
+                    "unionid",
+                    "third_uid",
+                    "xet_user_id",
+                    "bind_phone",
+                    "position",
+                ],
+            )
+            w.writeheader()
+            for r in preview:
+                w.writerow(
+                    {
+                        "follow_userid": r["follow_userid"],
+                        "follow_name": r["follow_name"],
+                        "mobile": r["mobile"],
+                        "mobile_src": r.get("_mobile_src"),
+                        "unionid": r["unionid"],
+                        "third_uid": r["third_uid"],
+                        "xet_user_id": r["xet_user_id"],
+                        "bind_phone": r["bind_phone"],
+                        "position": r["position"],
+                    }
+                )
+        _log(f"结果 CSV: {out}")
+        stats["result_csv"] = str(out)
 
-    if stats["mobile_from_api"] == 0 and stats["has_mobile"] < stats["total"]:
+    conn.close()
+    return stats
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="员工手机号 + 三端关联写入 qywx_follow_user")
+    ap.add_argument("--apply", action="store_true", help="写库（默认只预览统计）")
+    ap.add_argument("--db-host", default="", help="覆盖 RDS 主机（本机外网）")
+    ap.add_argument(
+        "--mobile-csv",
+        default="",
+        help="可选 CSV: follow_userid,mobile；默认用 data/qywx_export/qywx_follow_mobile.csv",
+    )
+    ap.add_argument(
+        "--expand",
+        action="store_true",
+        help="额外纳入 pay_bill/full 的员工（默认只处理本表已有）",
+    )
+    ap.add_argument(
+        "--skip-api",
+        action="store_true",
+        help="不调企微接口，仅用表内/CSV/userid 手机号做三端拼接",
+    )
+    ap.add_argument("--sleep", type=float, default=0.03)
+    args = ap.parse_args()
+
+    stats = run_follow_user_enrich(
+        apply=args.apply,
+        db_host=args.db_host,
+        mobile_csv=args.mobile_csv or None,
+        expand=args.expand,
+        skip_api=args.skip_api,
+        sleep=args.sleep,
+        write_result_csv=True,
+    )
+    if stats.get("mobile_from_api", 0) == 0 and stats.get("has_mobile", 0) < stats.get("total", 0):
         _log("")
         _log(
-            "注意: 当前 WEWORK_CORPSECRET 对应应用的 user/get 未返回 mobile（企微敏感字段限制）。"
-            "仅 userid 本身是手机号的员工、或 --mobile-csv 可关联三端。"
-            "可从企微后台导出成员手机号 CSV 后："
-            "  --mobile-csv /app/data/qywx_export/follow_mobile.csv"
+            "注意: user/get 通常不返回 mobile。请把企微通讯录放到固定路径后随收款同步自动入库：\n"
+            f"  {DEFAULT_MOBILE_CSV}"
         )
-
-    # 导出一份结果便于核对
-    out = EXPORT / f"qywx_follow_user_enrich_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
-    with out.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(
-            f,
-            fieldnames=[
-                "follow_userid",
-                "follow_name",
-                "mobile",
-                "mobile_src",
-                "unionid",
-                "third_uid",
-                "xet_user_id",
-                "bind_phone",
-                "position",
-            ],
-        )
-        w.writeheader()
-        for r in preview:
-            w.writerow(
-                {
-                    "follow_userid": r["follow_userid"],
-                    "follow_name": r["follow_name"],
-                    "mobile": r["mobile"],
-                    "mobile_src": r.get("_mobile_src"),
-                    "unionid": r["unionid"],
-                    "third_uid": r["third_uid"],
-                    "xet_user_id": r["xet_user_id"],
-                    "bind_phone": r["bind_phone"],
-                    "position": r["position"],
-                }
-            )
-    _log(f"结果 CSV: {out}")
-    conn.close()
     return 0
 
 
