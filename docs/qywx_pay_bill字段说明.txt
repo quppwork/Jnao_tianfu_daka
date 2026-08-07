@@ -80,9 +80,11 @@ fetched_at        本条写入/拉取时间
   docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py \
     --recent-only --recent-days 1 --skip-served --skip-detail --apply
 
-每天 04:00（刷新名单 + 近1天详情 + 历史增量一批）：
+每天 04:00（近1天 + 收款往前补 + 历史详情连续补几小时）：
   docker exec jnao-daka-backend python -u tools/sync_wework_pipeline.py \
-    --recent-days 1 --history-batch 800 --pay-history-days 0 --apply
+    --recent-days 1 --history-batch 800 --history-rounds 0 \
+    --history-max-minutes 180 --pay-history-days 180 --apply
+  # history-rounds 0 = 一直补到没有待同步；180 分钟到点会停，第二天继续
 
 进度文件（容器内，勿删）：
   /app/data/qywx_export/.qywx_pipeline_state.json

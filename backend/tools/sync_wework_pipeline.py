@@ -920,6 +920,18 @@ def main() -> int:
     ap.add_argument("--recent-days", type=int, default=7)
     ap.add_argument("--history-batch", type=int, default=200, help="每轮历史补全客户数")
     ap.add_argument(
+        "--history-rounds",
+        type=int,
+        default=1,
+        help="历史详情连续跑几批；0=一直补到没有待同步（受 --history-max-minutes 限制）",
+    )
+    ap.add_argument(
+        "--history-max-minutes",
+        type=int,
+        default=0,
+        help="历史补全最长运行分钟数；0=不限制。建议凌晨任务设 180（约3小时）",
+    )
+    ap.add_argument(
         "--history-max-days",
         type=int,
         default=0,
@@ -1055,22 +1067,39 @@ def main() -> int:
             out_files.append(pay_sql)
             _log(f"收款 {len(flats)} 条 -> {pay_sql.name}")
 
-            # 收款历史窗口（近 N 天之前再补一段）
+            # 收款历史：按最多 31 天一段往前补（企微窗口不宜过大）
             if args.pay_history_days > 0 and not args.recent_only:
+                chunk = 31
+                remain = args.pay_history_days
                 end2 = begin
-                begin2 = end2 - timedelta(days=args.pay_history_days)
-                b2, e2 = int(begin2.timestamp()), int(end2.timestamp())
-                _log(f"补收款历史 {begin2} ~ {end2}")
-                bills2 = pay.fetch_bills(token, b2, e2)
-                flats2 = [pay.flatten(b) for b in bills2]
-                pay_sql2 = EXPORT / f"qywx_pipeline_pay_hist_{args.pay_history_days}d_{stamp}.sql"
-                write_pay_upsert_sql(pay_sql2, flats2, b2, e2)
-                out_files.append(pay_sql2)
-                _log(f"历史收款 {len(flats2)} 条 -> {pay_sql2.name}")
+                part = 0
+                while remain > 0:
+                    days = min(chunk, remain)
+                    begin2 = end2 - timedelta(days=days)
+                    b2, e2 = int(begin2.timestamp()), int(end2.timestamp())
+                    part += 1
+                    _log(f"补收款历史[{part}] {begin2} ~ {end2} ({days}d)")
+                    bills2 = pay.fetch_bills(token, b2, e2)
+                    flats2 = [pay.flatten(b) for b in bills2]
+                    pay_sql2 = EXPORT / f"qywx_pipeline_pay_hist_{days}d_p{part}_{stamp}.sql"
+                    write_pay_upsert_sql(pay_sql2, flats2, b2, e2)
+                    out_files.append(pay_sql2)
+                    _log(f"  历史收款 {len(flats2)} 条 -> {pay_sql2.name}")
+                    end2 = begin2
+                    remain -= days
 
-    # ---- 3) history detail batch ----
+    # ---- 3) history detail：可多批 / 限时，适合凌晨长跑 ----
     if not args.recent_only:
-        _log(f"=== 3/4 历史详情增量（每批 {args.history_batch}）===")
+        rounds = args.history_rounds
+        max_minutes = args.history_max_minutes
+        deadline = (
+            time.time() + max_minutes * 60 if max_minutes and max_minutes > 0 else None
+        )
+        _log(
+            f"=== 3/4 历史详情增量（每批 {args.history_batch}，"
+            f"rounds={'∞' if rounds <= 0 else rounds}"
+            f"{f'，最长 {max_minutes} 分钟' if deadline else ''}）==="
+        )
         all_ids = all_external_ids(rows)
         if args.history_max_days > 0:
             since_h = int((datetime.now() - timedelta(days=args.history_max_days)).timestamp())
@@ -1080,19 +1109,36 @@ def main() -> int:
                 if int(r.get("add_time") or 0) >= since_h and r.get("external_userid")
             }
             all_ids = [x for x in all_ids if x in allow]
-        pending = [x for x in all_ids if x not in synced]
-        _log(f"总客户 {len(all_ids)}，已同步 {len(synced)}，待补 {len(pending)}")
-        batch = pending[: args.history_batch]
-        if args.limit > 0:
-            batch = batch[: args.limit]
-        if batch and not args.skip_detail:
+
+        round_i = 0
+        while True:
+            if rounds > 0 and round_i >= rounds:
+                break
+            if deadline is not None and time.time() >= deadline:
+                _log(f"历史补全已达时限 {max_minutes} 分钟，本轮停止（下次凌晨继续）")
+                break
+
+            pending = [x for x in all_ids if x not in synced]
+            if round_i == 0:
+                _log(f"总客户 {len(all_ids)}，已同步 {len(synced)}，待补 {len(pending)}")
+            if not pending:
+                _log("历史已补完（无待同步客户）")
+                break
+            if args.skip_detail:
+                _log("已 --skip-detail，跳过历史详情")
+                break
+
+            batch = pending[: args.history_batch]
+            if args.limit > 0:
+                batch = batch[: args.limit]
+            round_i += 1
             if not tag_map:
                 tag_map = week.fetch_tag_map(token)
             details, fulls, links, follow_ids = process_details(
                 token, batch, pairs=None, since_ts=None, tag_map=tag_map, include_all_follows=True
             )
             follows = week.fetch_follow_names(token, sorted(follow_ids)) if follow_ids else {}
-            hist_sql = EXPORT / f"qywx_pipeline_history_{len(batch)}_{stamp}.sql"
+            hist_sql = EXPORT / f"qywx_pipeline_history_r{round_i}_{len(batch)}_{stamp}.sql"
             write_upsert_sql(
                 hist_sql,
                 details=details,
@@ -1102,7 +1148,6 @@ def main() -> int:
                 follows=follows,
                 recreate_tags=False,
             )
-            out_files.append(hist_sql)
             for d in details:
                 eid = d.get("external_userid")
                 if not eid:
@@ -1114,9 +1159,21 @@ def main() -> int:
                 else:
                     synced.add(eid)
                     failed.pop(eid, None)
-            _log(f"本批完成 {len(batch)}，剩余约 {max(0, len(pending) - len(batch))}；SQL={hist_sql.name}")
-        elif not batch:
-            _log("历史已补完（无待同步客户）")
+
+            state["synced_external_userids"] = sorted(synced)
+            state["failed_external_userids"] = failed
+            save_state(state)
+
+            left = max(0, len(pending) - len(batch))
+            _log(f"历史第 {round_i} 批完成 {len(batch)}，剩余约 {left}；SQL={hist_sql.name}")
+            if args.apply:
+                _log(f"  APPLY {hist_sql.name} ...")
+                apply_sql_files([hist_sql], args.db_host)
+            else:
+                out_files.append(hist_sql)
+
+            if args.limit > 0:
+                break
 
     # ---- 4) enrich ----
     if not args.skip_enrich and not args.history_only:
@@ -1134,7 +1191,7 @@ def main() -> int:
     save_state(state)
 
     if args.apply and out_files:
-        _log("=== APPLY 写库 ===")
+        _log("=== APPLY 写库（近期/收款/enrich）===")
         apply_sql_files(out_files, args.db_host)
 
     # 写库后：客户 enrich + 员工主数据（CSV/库）+ 账单 payee_*
