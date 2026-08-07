@@ -66,7 +66,8 @@ def load_state() -> dict[str, Any]:
     return {
         "synced_external_userids": [],
         "failed_external_userids": {},
-        "pay_synced_ranges": [],
+        # 收款历史已覆盖到的最早 unix 秒（读档用，避免每天重拉整段）
+        "pay_history_oldest_ts": None,
         "updated_at": None,
     }
 
@@ -938,6 +939,11 @@ def main() -> int:
         help="历史只补 add_time 在近 X 天内的；0=全部未同步客户",
     )
     ap.add_argument("--pay-history-days", type=int, default=30, help="收款再往前补多少天（不含近N天）")
+    ap.add_argument(
+        "--force-pay-history",
+        action="store_true",
+        help="忽略收款历史读档，强制按 --pay-history-days 重拉",
+    )
     ap.add_argument("--from-json", default="", help="跳过 contact_list，用本地缓存")
     ap.add_argument("--skip-served", action="store_true")
     ap.add_argument("--skip-pay", action="store_true")
@@ -1067,26 +1073,56 @@ def main() -> int:
             out_files.append(pay_sql)
             _log(f"收款 {len(flats)} 条 -> {pay_sql.name}")
 
-            # 收款历史：按最多 31 天一段往前补（企微窗口不宜过大）
+            # 收款历史：按最多 31 天一段往前补；用 state.pay_history_oldest_ts 读档，已覆盖的不再重拉
             if args.pay_history_days > 0 and not args.recent_only:
-                chunk = 31
-                remain = args.pay_history_days
-                end2 = begin
-                part = 0
-                while remain > 0:
-                    days = min(chunk, remain)
-                    begin2 = end2 - timedelta(days=days)
-                    b2, e2 = int(begin2.timestamp()), int(end2.timestamp())
-                    part += 1
-                    _log(f"补收款历史[{part}] {begin2} ~ {end2} ({days}d)")
-                    bills2 = pay.fetch_bills(token, b2, e2)
-                    flats2 = [pay.flatten(b) for b in bills2]
-                    pay_sql2 = EXPORT / f"qywx_pipeline_pay_hist_{days}d_p{part}_{stamp}.sql"
-                    write_pay_upsert_sql(pay_sql2, flats2, b2, e2)
-                    out_files.append(pay_sql2)
-                    _log(f"  历史收款 {len(flats2)} 条 -> {pay_sql2.name}")
-                    end2 = begin2
-                    remain -= days
+                target_begin = begin - timedelta(days=args.pay_history_days)
+                oldest_ts = state.get("pay_history_oldest_ts")
+                try:
+                    oldest_ts = int(oldest_ts) if oldest_ts is not None else None
+                except (TypeError, ValueError):
+                    oldest_ts = None
+
+                if (
+                    not args.force_pay_history
+                    and oldest_ts is not None
+                    and oldest_ts <= int(target_begin.timestamp())
+                ):
+                    _log(
+                        f"收款历史读档跳过：已覆盖至 "
+                        f"{datetime.fromtimestamp(oldest_ts)}，"
+                        f"目标起点 {target_begin}（加 --force-pay-history 可强制重拉）"
+                    )
+                else:
+                    # 只需补 [target_begin, end2)，end2 初始为「近期窗口起点」或「上次已覆盖最早点」
+                    end2 = begin
+                    if not args.force_pay_history and oldest_ts is not None:
+                        end2 = min(end2, datetime.fromtimestamp(oldest_ts))
+                    chunk = 31
+                    part = 0
+                    covered_oldest = oldest_ts
+                    while end2 > target_begin:
+                        begin2 = max(target_begin, end2 - timedelta(days=chunk))
+                        if begin2 >= end2:
+                            break
+                        b2, e2 = int(begin2.timestamp()), int(end2.timestamp())
+                        days = max(1, int((end2 - begin2).total_seconds() // 86400))
+                        part += 1
+                        _log(f"补收款历史[{part}] {begin2} ~ {end2} ({days}d)")
+                        bills2 = pay.fetch_bills(token, b2, e2)
+                        flats2 = [pay.flatten(b) for b in bills2]
+                        pay_sql2 = EXPORT / f"qywx_pipeline_pay_hist_{days}d_p{part}_{stamp}.sql"
+                        write_pay_upsert_sql(pay_sql2, flats2, b2, e2)
+                        out_files.append(pay_sql2)
+                        _log(f"  历史收款 {len(flats2)} 条 -> {pay_sql2.name}")
+                        covered_oldest = b2 if covered_oldest is None else min(covered_oldest, b2)
+                        end2 = begin2
+                    if covered_oldest is not None:
+                        state["pay_history_oldest_ts"] = covered_oldest
+                        save_state(state)
+                        _log(
+                            f"收款历史读档已更新：oldest="
+                            f"{datetime.fromtimestamp(covered_oldest)}"
+                        )
 
     # ---- 3) history detail：可多批 / 限时，适合凌晨长跑 ----
     if not args.recent_only:

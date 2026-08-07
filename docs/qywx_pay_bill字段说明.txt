@@ -86,5 +86,7 @@ fetched_at        本条写入/拉取时间
     --history-max-minutes 180 --pay-history-days 180 --apply
   # history-rounds 0 = 一直补到没有待同步；180 分钟到点会停，第二天继续
 
-进度文件（容器内，勿删）：
+进度文件（容器内，勿删；读档续跑）：
   /app/data/qywx_export/.qywx_pipeline_state.json
+  - synced_external_userids：客户详情已同步名单（历史只补未同步的）
+  - pay_history_oldest_ts：收款历史已覆盖到的最早时间（已覆盖不再重拉）
