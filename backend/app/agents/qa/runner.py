@@ -20,8 +20,8 @@ from app.agents.qa.router import check_subject_mismatch, mismatch_reply
 from app.agents.qa.strategy import resolve_qa_strategy, strategy_to_prompt_block
 from app.agents.qa.trace import TurnTimer
 from app.agents.shared.stage import infer_school_stage
-from app.db.models import ChildUser, QaMessage, QaSession
-from app.services.assessment_service import get_latest_assessment
+from app.db.models import ChildUser, QaMessage, QaSession, TalentAssessment
+from app.services.assessment_service import resolve_effective_talent
 from app.services.ai_output_guard import (
     is_prompt_injection_attempt,
     refusal_message,
@@ -33,6 +33,19 @@ from app.services.qa_image_store import image_data_url
 from app.services.qa_rag_client import rag_chat
 from app.services.qa_rag_router import should_use_rag
 from app.services.text_sanitize import sanitize_subject, sanitize_text, session_title_from_message
+
+
+def _confirmed_talent_bundle(db: Session, child_user_id: int) -> tuple[str | None, dict | None]:
+    """只用用户已确认天赋；报告取确认对应的 assessment_id，不用最新测评。"""
+    eff = resolve_effective_talent(db, child_user_id) or {}
+    talent = eff.get("talent_primary")
+    report_json = None
+    aid = eff.get("assessment_id")
+    if aid:
+        row = db.get(TalentAssessment, int(aid))
+        if row:
+            report_json = row.report_json
+    return talent, report_json
 
 
 def _patch_session_meta(session: QaSession, patch: dict[str, Any]) -> None:
@@ -69,8 +82,7 @@ async def run_chat(
             session = svc.create_session(db, child_user_id, subject)
         user = db.get(ChildUser, child_user_id)
         profile = svc.learner_profile(user)
-        assessment = get_latest_assessment(db, child_user_id)
-        talent = assessment.talent_primary if assessment else None
+        talent, _ = _confirmed_talent_bundle(db, child_user_id)
         school_stage = infer_school_stage(
             grade=profile.get("grade"),
             age=profile.get("age"),
@@ -90,9 +102,7 @@ async def run_chat(
 
     user = db.get(ChildUser, child_user_id)
     profile = svc.learner_profile(user)
-    assessment = get_latest_assessment(db, child_user_id)
-    talent = assessment.talent_primary if assessment else None
-    report_json = assessment.report_json if assessment else None
+    talent, report_json = _confirmed_talent_bundle(db, child_user_id)
 
     school_stage = infer_school_stage(
         grade=profile.get("grade"),
@@ -392,8 +402,7 @@ async def run_chat_stream(
             session = svc.create_session(db, child_user_id, subject)
         user = db.get(ChildUser, child_user_id)
         profile = svc.learner_profile(user)
-        assessment = get_latest_assessment(db, child_user_id)
-        talent = assessment.talent_primary if assessment else None
+        talent, _ = _confirmed_talent_bundle(db, child_user_id)
         school_stage = infer_school_stage(
             grade=profile.get("grade"),
             age=profile.get("age"),
@@ -418,9 +427,7 @@ async def run_chat_stream(
 
     user = db.get(ChildUser, child_user_id)
     profile = svc.learner_profile(user)
-    assessment = get_latest_assessment(db, child_user_id)
-    talent = assessment.talent_primary if assessment else None
-    report_json = assessment.report_json if assessment else None
+    talent, report_json = _confirmed_talent_bundle(db, child_user_id)
 
     school_stage = infer_school_stage(
         grade=profile.get("grade"),

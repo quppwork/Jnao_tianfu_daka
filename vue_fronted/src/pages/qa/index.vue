@@ -135,7 +135,10 @@
 
     </view>
 
-
+    <view v-if="showJumpLatest" class="jump-latest" @tap="scrollChat">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      <text>回到最新</text>
+    </view>
 
     <view class="composer">
 
@@ -287,7 +290,7 @@
 <script setup>
 
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 
 import {
 
@@ -396,6 +399,8 @@ const showWebcam = ref(false)
 const showSessionSheet = ref(false)
 
 const sessionList = ref([])
+
+const showJumpLatest = ref(false)
 
 const deleteTargetId = ref(null)
 
@@ -830,6 +835,9 @@ async function loadSession(sessionId = null) {
     qaSessionId.value = sid
     const data = await fetchQaSession(uid, sid)
     messages.value = mapSessionMessages(data, uid)
+    await nextTick()
+    bindChatScroll()
+    scrollChat()
 
   } catch (e) { /* 新用户 */ }
 
@@ -970,6 +978,7 @@ async function switchSession(sessionId) {
 
     await nextTick()
 
+    bindChatScroll()
     scrollChat()
 
   } catch (e) {
@@ -1566,14 +1575,55 @@ function stopStream() {
 
 
 function scrollChat() {
-
-  const el = document.getElementById('chatScroll')
-
-  if (el) el.scrollTop = el.scrollHeight
-
+  const run = () => {
+    const el = document.getElementById('chatScroll')
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    // 距底足够近时收起按钮
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (dist <= 80) showJumpLatest.value = false
+  }
+  nextTick(() => {
+    run()
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+    clearScrollChatTimers()
+    scrollChatTimers.push(setTimeout(run, 80))
+    scrollChatTimers.push(setTimeout(run, 320))
+  })
 }
 
+let chatScrollEl = null
+let scrollChatTimers = []
 
+function clearScrollChatTimers() {
+  scrollChatTimers.forEach((t) => clearTimeout(t))
+  scrollChatTimers = []
+}
+
+function onChatScroll() {
+  const el = chatScrollEl || document.getElementById('chatScroll')
+  if (!el) return
+  const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+  showJumpLatest.value = dist > 140
+}
+
+function bindChatScroll() {
+  const el = document.getElementById('chatScroll')
+  if (!el || el === chatScrollEl) return
+  chatScrollEl?.removeEventListener('scroll', onChatScroll)
+  chatScrollEl = el
+  chatScrollEl.addEventListener('scroll', onChatScroll, { passive: true })
+}
+
+onShow(() => {
+  // 从其他页返回时，若已有消息则滚到最新
+  if (messages.value.length > 1) {
+    nextTick(() => {
+      bindChatScroll()
+      scrollChat()
+    })
+  }
+})
 
 onMounted(async () => {
 
@@ -1610,8 +1660,10 @@ onMounted(async () => {
     pendingGuideHandoff.value = false
     await startNewSession()
   } else {
-    loadSession()
+    await loadSession()
   }
+  bindChatScroll()
+  scrollChat()
 
 })
 
@@ -1628,6 +1680,10 @@ onBeforeUnmount(() => {
   messageBlobUrls.forEach((url) => revokeBlobUrl(url))
 
   clearPendingImage()
+
+  clearScrollChatTimers()
+  chatScrollEl?.removeEventListener('scroll', onChatScroll)
+  chatScrollEl = null
 
 })
 
@@ -1652,6 +1708,8 @@ onBeforeUnmount(() => {
   display: flex;
 
   flex-direction: column;
+
+  position: relative;
 
   color: var(--text);
 
@@ -2285,6 +2343,27 @@ onBeforeUnmount(() => {
   background: var(--bg-card);
   border-top: 1px solid var(--border);
 }
+
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+}
+[data-theme="white"] .jump-latest { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+.jump-latest text { color: var(--accent); font-size: 12px; font-weight: 600; }
+.jump-latest:active { opacity: 0.85; }
 .input-panel { }
 .input-wrap {
   display: flex; align-items: center;

@@ -55,14 +55,7 @@ def enrich_profile_talent_fields(db: Session, child_user_id: int, data: dict) ->
         if profile.get("latest_assessment_id"):
             data["latest_assessment_id"] = profile.get("latest_assessment_id")
         return
-    latest = get_latest_assessment(db, child_user_id)
-    if latest and effective_talent_code(latest):
-        data["talent_code"] = latest.talent_code
-        data["talent_tag"] = latest.talent_tag
-        data["talent_primary"] = latest.talent_primary
-        data["talent_source"] = "assessment"
-        data["latest_assessment_id"] = latest.id
-        return
+    # 无确认天赋时：走 resolve（首条有效测评 / 引导自选），禁止直接用最新测评
     eff = resolve_effective_talent(db, child_user_id)
     if eff and eff.get("talent_code"):
         data["talent_code"] = eff.get("talent_code")
@@ -71,6 +64,7 @@ def enrich_profile_talent_fields(db: Session, child_user_id: int, data: dict) ->
         data["talent_source"] = eff.get("talent_source")
         if eff.get("assessment_id"):
             data["latest_assessment_id"] = eff.get("assessment_id")
+        return
 
 
 def get_self_reported_talent_name(db: Session, child_user_id: int) -> str | None:
@@ -164,37 +158,44 @@ def ensure_onboarding_completed_after_assessment(db: Session, child_user_id: int
 
 
 def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
-    """当前可用于训练的天赋：已锁定 > JNAO 测评 > 引导页自选 > 无"""
+    """当前系统唯一生效的天赋：用户已确认写入 profile 的那一个。
+
+    产品规则：
+    - 历史测评表可有多条不同结果，业务上基本无用
+    - 必须确认一个天赋后全系统只用这一份（默认=第一条有效测评同步进 profile）
+    - 有 profile.talent_code / talent_primary 时，禁止再回落到「最新测评」
+    """
     repair_onboarding_talent(db, child_user_id)
     user = db.get(ChildUser, child_user_id)
     profile = dict(user.profile_json or {}) if user else {}
 
-    # 已锁定：有训练记录时必须使用 profile 中的天赋，不能从最新 assessment 读取
-    locked_code = profile.get("talent_locked_code")
-    if locked_code and has_training_records(db, child_user_id):
-        if profile.get("talent_code") and profile.get("talent_source"):
-            return {
-                "has_assessment": True,
-                "needs_assessment": False,
-                "assessment_id": profile.get("latest_assessment_id"),
-                "talent_primary": profile.get("talent_primary"),
-                "talent_tag": profile.get("talent_tag"),
-                "talent_code": profile.get("talent_code"),
-                "talent_source": profile.get("talent_source"),
-                "talent_locked": True,
-            }
-
-    assessment = get_latest_assessment(db, child_user_id)
-    if has_valid_talent(assessment):
+    # 1) 已确认（含锁定）：profile 是唯一真相源
+    if profile.get("talent_code") and profile.get("talent_primary"):
         return {
             "has_assessment": True,
             "needs_assessment": False,
-            "assessment_id": assessment.id,
-            "talent_primary": assessment.talent_primary,
-            "talent_tag": assessment.talent_tag,
-            "talent_code": effective_talent_code(assessment),
+            "assessment_id": profile.get("latest_assessment_id"),
+            "talent_primary": profile.get("talent_primary"),
+            "talent_tag": profile.get("talent_tag"),
+            "talent_code": profile.get("talent_code"),
+            "talent_source": profile.get("talent_source") or "assessment",
+            "talent_locked": bool(profile.get("talent_locked_code")),
+        }
+
+    # 2) 尚无确认：取「第一条有效测评」作为默认确认候选（不是最新一条）
+    first_valid = get_first_valid_assessment(db, child_user_id)
+    if first_valid and has_valid_talent(first_valid):
+        return {
+            "has_assessment": True,
+            "needs_assessment": False,
+            "assessment_id": first_valid.id,
+            "talent_primary": first_valid.talent_primary,
+            "talent_tag": first_valid.talent_tag,
+            "talent_code": effective_talent_code(first_valid),
             "talent_source": "assessment",
         }
+
+    # 3) 引导页自选
     self_code = get_self_reported_talent_code(db, child_user_id)
     if self_code:
         from app.core.talent_mapping import resolve_talent_tag
@@ -209,16 +210,20 @@ def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
             "talent_code": self_code,
             "talent_source": "onboarding",
         }
-    if profile.get("talent_code") and profile.get("talent_source") in ("onboarding", "assessment"):
-        return {
-            "has_assessment": True,
-            "needs_assessment": False,
-            "assessment_id": profile.get("latest_assessment_id"),
-            "talent_primary": profile.get("talent_primary"),
-            "talent_tag": profile.get("talent_tag"),
-            "talent_code": profile.get("talent_code"),
-            "talent_source": profile.get("talent_source"),
-        }
+    return None
+
+
+def get_first_valid_assessment(db: Session, child_user_id: int) -> TalentAssessment | None:
+    """按 id 升序取第一条有效测评（非迷者），用作默认确认天赋。"""
+    rows = db.scalars(
+        select(TalentAssessment)
+        .where(TalentAssessment.child_user_id == child_user_id)
+        .order_by(TalentAssessment.id.asc())
+    ).all()
+    for row in rows:
+        filled = _backfill_talent_fields(db, row)
+        if has_valid_talent(filled):
+            return filled
     return None
 
 

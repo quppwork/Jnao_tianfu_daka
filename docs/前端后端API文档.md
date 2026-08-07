@@ -285,6 +285,19 @@ GET  /api/guide/debug         # 仅调试环境；含 doubao 配置 + trace_metr
 **前端**: `vue_fronted/src/pages/talent/index.vue`
 **后端**: `app/api/talent.py`
 
+### 核心产品规则（全系统必须遵守）
+
+> **只用用户确认的天赋；历史测评记录不当作业务依据。**
+
+| 概念 | 说明 |
+|------|------|
+| **确认天赋** | 写入 `child_user.profile_json` 的 `talent_primary` / `talent_code`（及可选 `talent_locked_code`） |
+| **默认确认** | 用户尚未手动抉择时，取**第一条有效测评**（非「迷者」，按 `talent_assessment.id` 升序）同步进 profile |
+| **历史测评表** | `talent_assessment` 可有大量不同结果，仅供报告页翻看/删除；**训练 / 答疑 / Guide / 成长里程碑等一律不得用「最新测评」覆盖确认天赋** |
+| **生效读取** | 统一走 `resolve_effective_talent()`：有 profile 确认 → 只用 profile；无确认 → 首条有效测评 / 引导自选 |
+
+冲突与锁定（重测与已确认不一致时）仍按下方流程：`talent_conflict` / `talent_locked` + `resolve-conflict`。
+
 ### 提交流程（一步完成）
 
 ```
@@ -631,6 +644,8 @@ GET /api/growth/milestones   # 里程碑进度（打卡7天等）
 GET /api/growth/summary      # 数据总结
 GET /api/growth/share        # 分享文案（标题+正文+亮点）
 ```
+
+**`summary.talent_primary` / 分享文案中的主导天赋**：必须取用户**已确认**天赋（`profile_json.talent_primary`，经 `resolve_effective_talent`），**禁止** `get_latest_assessment`。时间线里「首次测评」等历史事件可仍引用测评表，但不改变当前生效天赋。
 
 ---
 
