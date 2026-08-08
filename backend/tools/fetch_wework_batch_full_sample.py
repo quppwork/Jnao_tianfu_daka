@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """按官方 batch/get_by_user 完整字段，拉「今天活跃」的 N 个添加人客户详情。
 
-独立表 qywx_external_contact_full（不碰 served_* / qywx_external_contact_batch）。
+独立表 ys_qywx_external_contact_full（不碰 served_* / qywx_external_contact_batch）。
 
 用法:
   python -u backend/tools/fetch_wework_batch_full_sample.py --from-json docs/export/xxx_plan_a_7d_enriched.json --people 10
@@ -28,7 +28,7 @@ load_dotenv(BACKEND / ".env", override=False)
 load_dotenv(ROOT / ".env", override=False)
 
 QYAPI = "https://qyapi.weixin.qq.com/cgi-bin"
-TABLE = "qywx_external_contact_full"
+TABLE = "ys_qywx_external_contact_full"
 
 
 def _env(name: str) -> str:

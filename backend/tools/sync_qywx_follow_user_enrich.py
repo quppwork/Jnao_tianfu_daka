@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""同步员工到 qywx_follow_user：企微手机号 + 按手机号关联小程序/小鹅通。
+"""同步员工到 ys_qywx_follow_user：企微手机号 + 按手机号关联小程序/小鹅通。
 
 写入字段:
   follow_userid, follow_name, mobile,
@@ -52,7 +52,7 @@ EXPORT = export_dir(BACKEND, ROOT)
 EXPORT.mkdir(parents=True, exist_ok=True)
 
 QYAPI = "https://qyapi.weixin.qq.com/cgi-bin"
-TABLE = "qywx_follow_user"
+TABLE = "ys_qywx_follow_user"
 MOBILE_RE = re.compile(r"^1\d{10}$")
 
 
@@ -192,15 +192,15 @@ def load_mobile_csv(path: str) -> dict[str, str]:
 
 
 def collect_userids(cur: Any, only_table: bool = True) -> list[str]:
-    """默认只处理 qywx_follow_user 已有员工。"""
+    """默认只处理 ys_qywx_follow_user 已有员工。"""
     ids: set[str] = set()
     sqls = [f"SELECT follow_userid AS u FROM `{TABLE}`"]
     if not only_table:
         sqls.extend(
             [
-                "SELECT DISTINCT payee_userid AS u FROM qywx_pay_bill "
+                "SELECT DISTINCT payee_userid AS u FROM ys_qywx_pay_bill "
                 "WHERE payee_userid IS NOT NULL AND payee_userid<>''",
-                "SELECT DISTINCT follow_userid AS u FROM qywx_external_contact_full "
+                "SELECT DISTINCT follow_userid AS u FROM ys_qywx_external_contact_full "
                 "WHERE follow_userid IS NOT NULL AND follow_userid<>''",
             ]
         )
@@ -372,7 +372,7 @@ def run_follow_user_enrich(
     sleep: float = 0.03,
     write_result_csv: bool = False,
 ) -> dict[str, Any]:
-    """把通讯录手机号 + 三端关联写入 qywx_follow_user（供 pipeline 复用）。
+    """把通讯录手机号 + 三端关联写入 ys_qywx_follow_user（供 pipeline 复用）。
 
     mobile_csv 默认用 EXPORT/qywx_follow_mobile.csv（若存在）。
     expand=True 时纳入收款单/客户关系里出现过的员工，并把 CSV 全员写入员工表。
@@ -541,13 +541,13 @@ def run_follow_user_enrich(
 
     if apply:
         conn.commit()
-        _log("员工表 qywx_follow_user 已更新")
+        _log("员工表 ys_qywx_follow_user 已更新")
     else:
         _log("预览模式未写库（加 --apply 写库）")
 
     _log(f"统计: { {k: v for k, v in stats.items() if k != 'csv_path'} }")
     if write_result_csv:
-        out = EXPORT / f"qywx_follow_user_enrich_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+        out = EXPORT / f"ys_qywx_follow_user_enrich_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
         with out.open("w", encoding="utf-8-sig", newline="") as f:
             w = csv.DictWriter(
                 f,
@@ -586,7 +586,7 @@ def run_follow_user_enrich(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="员工手机号 + 三端关联写入 qywx_follow_user")
+    ap = argparse.ArgumentParser(description="员工手机号 + 三端关联写入 ys_qywx_follow_user")
     ap.add_argument("--apply", action="store_true", help="写库（默认只预览统计）")
     ap.add_argument("--db-host", default="", help="覆盖 RDS 主机（本机外网）")
     ap.add_argument(

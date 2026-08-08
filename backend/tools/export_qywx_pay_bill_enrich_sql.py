@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""只读数据库，生成 qywx_pay_bill 回填 SQL（不修改任何表数据）。
+"""只读数据库，生成 ys_qywx_pay_bill 回填 SQL（不修改任何表数据）。
 
 关联：
-  qywx_pay_bill.external_userid
-    -> qywx_external_contact_detail/full.unionid
+  ys_qywx_pay_bill.external_userid
+    -> ys_qywx_external_contact_detail/full.unionid
     -> ys_third_party_user.uid
     -> ys_xet_user_lists.user_id / bind_phone
 
@@ -14,7 +14,7 @@
   python -u backend/tools/export_qywx_pay_bill_enrich_sql.py
 
 产出:
-  docs/export/qywx_pay_bill_enrich_update_YYYYMMDDHHMMSS.sql
+  docs/export/ys_qywx_pay_bill_enrich_update_YYYYMMDDHHMMSS.sql
 把该文件拷到服务器用 mysql 执行即可。
 """
 
@@ -104,11 +104,11 @@ def main() -> int:
     conn = connect()
     cur = conn.cursor()
 
-    pay_table = "qywx_pay_bill" if table_exists(cur, "qywx_pay_bill") else None
+    pay_table = "ys_qywx_pay_bill" if table_exists(cur, "ys_qywx_pay_bill") else None
     if not pay_table and table_exists(cur, "qywx_externalpay_bill"):
         pay_table = "qywx_externalpay_bill"
     if not pay_table:
-        raise RuntimeError("找不到 qywx_pay_bill / qywx_externalpay_bill")
+        raise RuntimeError("找不到 ys_qywx_pay_bill / qywx_externalpay_bill")
 
     need = ["ys_third_party_user", "ys_xet_user_lists"]
     for t in need:
@@ -140,10 +140,10 @@ def main() -> int:
     if "id" not in pay_cols:
         raise RuntimeError(f"{pay_table} 无 id")
 
-    has_detail = table_exists(cur, "qywx_external_contact_detail")
-    has_full = table_exists(cur, "qywx_external_contact_full")
+    has_detail = table_exists(cur, "ys_qywx_external_contact_detail")
+    has_full = table_exists(cur, "ys_qywx_external_contact_full")
     if not has_detail and not has_full:
-        raise RuntimeError("需要 qywx_external_contact_detail 或 qywx_external_contact_full 提供 unionid")
+        raise RuntimeError("需要 ys_qywx_external_contact_detail 或 ys_qywx_external_contact_full 提供 unionid")
 
     # 客户ID -> unionid
     union_map: dict[str, str] = {}
@@ -151,7 +151,7 @@ def main() -> int:
         cur.execute(
             """
             SELECT external_userid, unionid
-            FROM qywx_external_contact_detail
+            FROM ys_qywx_external_contact_detail
             WHERE external_userid IS NOT NULL AND external_userid <> ''
               AND unionid IS NOT NULL AND unionid <> ''
             """
@@ -163,7 +163,7 @@ def main() -> int:
         cur.execute(
             """
             SELECT external_userid, MAX(unionid) AS unionid
-            FROM qywx_external_contact_full
+            FROM ys_qywx_external_contact_full
             WHERE external_userid IS NOT NULL AND external_userid <> ''
               AND unionid IS NOT NULL AND unionid <> ''
             GROUP BY external_userid
@@ -249,8 +249,8 @@ def main() -> int:
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
     out_dir = EXPORT
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_sql = out_dir / f"qywx_pay_bill_enrich_update_{stamp}.sql"
-    out_json = out_dir / f"qywx_pay_bill_enrich_update_{stamp}.json"
+    out_sql = out_dir / f"ys_qywx_pay_bill_enrich_update_{stamp}.sql"
+    out_json = out_dir / f"ys_qywx_pay_bill_enrich_update_{stamp}.json"
 
     need_add_unionid = "unionid" not in pay_cols
     need_add_third = "third_uid" not in pay_cols

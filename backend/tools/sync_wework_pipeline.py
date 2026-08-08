@@ -7,7 +7,7 @@
   3) 增量历史：对尚未同步详情的客户分批补 get
   4) 客户 enrich：unionid / third_uid / xet_user_id / bind_phone / wx_name（付款客户）
   5) 员工 enrich：payee_name / payee_mobile / payee_unionid / payee_third_uid / payee_xet_user_id
-     （来自 qywx_follow_user，与客户字段严格区分）
+     （来自 ys_qywx_follow_user，与客户字段严格区分）
      wx_name=客户微信昵称（来自客户详情 external_contact.name，区别于账单 contact_name）
 
 默认只写 docs/export/*.sql，不改库。加 --apply 才写库。
@@ -74,7 +74,7 @@ import fetch_wework_externalpay_bills as pay  # noqa: E402
 
 QYAPI = "https://qyapi.weixin.qq.com/cgi-bin"
 STATE_PATH = EXPORT / ".qywx_pipeline_state.json"
-PAY_TABLE = "qywx_pay_bill"
+PAY_TABLE = "ys_qywx_pay_bill"
 
 
 def _log(msg: str) -> None:
@@ -277,7 +277,7 @@ def write_upsert_sql(
         f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n")
         f.write(
             """
-CREATE TABLE IF NOT EXISTS qywx_external_contact_detail (
+CREATE TABLE IF NOT EXISTS ys_qywx_external_contact_detail (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   external_userid VARCHAR(64) NOT NULL,
   errcode INT NOT NULL DEFAULT 0,
@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS qywx_external_contact_detail (
   KEY idx_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS qywx_external_contact_full (
+CREATE TABLE IF NOT EXISTS ys_qywx_external_contact_full (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   follow_userid VARCHAR(64) NOT NULL,
   external_userid VARCHAR(64) NOT NULL,
@@ -338,7 +338,7 @@ CREATE TABLE IF NOT EXISTS qywx_external_contact_full (
   KEY idx_createtime (createtime)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS qywx_corp_tag (
+CREATE TABLE IF NOT EXISTS ys_qywx_corp_tag (
   tag_id VARCHAR(64) NOT NULL,
   tag_name VARCHAR(128) NULL,
   group_id VARCHAR(64) NULL,
@@ -348,7 +348,7 @@ CREATE TABLE IF NOT EXISTS qywx_corp_tag (
   PRIMARY KEY (tag_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS qywx_contact_tag_link (
+CREATE TABLE IF NOT EXISTS ys_qywx_contact_tag_link (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   follow_userid VARCHAR(64) NULL,
   external_userid VARCHAR(64) NULL,
@@ -368,7 +368,7 @@ CREATE TABLE IF NOT EXISTS qywx_contact_tag_link (
   KEY idx_follow_ext_tag (follow_userid, external_userid, tag_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS qywx_follow_user (
+CREATE TABLE IF NOT EXISTS ys_qywx_follow_user (
   follow_userid VARCHAR(64) NOT NULL,
   follow_name VARCHAR(128) NULL,
   fetched_at DATETIME NOT NULL,
@@ -378,7 +378,7 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
         )
 
         if recreate_tags and tag_map:
-            f.write("DELETE FROM qywx_corp_tag;\n")
+            f.write("DELETE FROM ys_qywx_corp_tag;\n")
             tag_vals = []
             for tid, info in tag_map.items():
                 tag_vals.append(
@@ -397,7 +397,7 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
                 )
             for i in range(0, len(tag_vals), 100):
                 f.write(
-                    "INSERT INTO qywx_corp_tag "
+                    "INSERT INTO ys_qywx_corp_tag "
                     "(tag_id,tag_name,group_id,group_name,tag_order,fetched_at) VALUES\n"
                 )
                 f.write(",\n".join(tag_vals[i : i + 100]) + ";\n")
@@ -439,7 +439,7 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
                     + ")"
                 )
             if vals:
-                f.write(f"INSERT INTO qywx_external_contact_detail ({cols_d}) VALUES\n")
+                f.write(f"INSERT INTO ys_qywx_external_contact_detail ({cols_d}) VALUES\n")
                 f.write(",\n".join(vals) + "\n")
                 f.write(
                     "ON DUPLICATE KEY UPDATE "
@@ -508,10 +508,10 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
                 # 先删本批关系，避免标签变化残留（按 follow+external）
                 for fid, eid in eids_chunk:
                     f.write(
-                        "DELETE FROM qywx_contact_tag_link WHERE "
+                        "DELETE FROM ys_qywx_contact_tag_link WHERE "
                         f"follow_userid={week._esc(fid)} AND external_userid={week._esc(eid)};\n"
                     )
-                f.write(f"INSERT INTO qywx_external_contact_full ({cols_f}) VALUES\n")
+                f.write(f"INSERT INTO ys_qywx_external_contact_full ({cols_f}) VALUES\n")
                 f.write(",\n".join(vals) + "\n")
                 f.write(
                     "ON DUPLICATE KEY UPDATE "
@@ -548,7 +548,7 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
                 )
             if vals:
                 f.write(
-                    "INSERT INTO qywx_contact_tag_link "
+                    "INSERT INTO ys_qywx_contact_tag_link "
                     "(follow_userid,external_userid,name,remark,createtime,add_way,state,"
                     "tag_id,tag_name,group_id,group_name,fetched_at) VALUES\n"
                 )
@@ -561,7 +561,7 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
             ]
             for i in range(0, len(fvals), 100):
                 f.write(
-                    "INSERT INTO qywx_follow_user (follow_userid,follow_name,fetched_at) VALUES\n"
+                    "INSERT INTO ys_qywx_follow_user (follow_userid,follow_name,fetched_at) VALUES\n"
                 )
                 f.write(",\n".join(fvals[i : i + 100]) + "\n")
                 f.write(
@@ -809,12 +809,12 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
     api_fail = 0
 
     # 快路径：详情表若已有则先抄（有则加速，无也不影响）
-    cur.execute("SHOW TABLES LIKE 'qywx_external_contact_detail'")
+    cur.execute("SHOW TABLES LIKE 'ys_qywx_external_contact_detail'")
     if cur.fetchone():
         cur.execute(
             f"""
             UPDATE `{PAY_TABLE}` p
-            INNER JOIN qywx_external_contact_detail d
+            INNER JOIN ys_qywx_external_contact_detail d
               ON d.external_userid=p.external_userid
             SET
               p.wx_name=COALESCE(NULLIF(p.wx_name,''), NULLIF(d.name,'')),
@@ -946,11 +946,11 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
 
         # 有详情表则顺带 upsert，便于其它模块，但账单回填不依赖它
         if name or unionid:
-            cur.execute("SHOW TABLES LIKE 'qywx_external_contact_detail'")
+            cur.execute("SHOW TABLES LIKE 'ys_qywx_external_contact_detail'")
             if cur.fetchone():
                 cur.execute(
                     """
-                    INSERT INTO qywx_external_contact_detail
+                    INSERT INTO ys_qywx_external_contact_detail
                       (external_userid, errcode, name, unionid, fetched_at)
                     VALUES (%s, 0, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE
@@ -1037,18 +1037,18 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
 
 
 def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
-    """按 payee_userid 从 qywx_follow_user 回填员工信息（不改客户字段）。"""
+    """按 payee_userid 从 ys_qywx_follow_user 回填员工信息（不改客户字段）。"""
     conn = _connect_legacy(db_host)
     cur = conn.cursor()
     ensure_pay_bill_human_schema(cur)
     ensure_pay_bill_payee_columns(cur)
 
     # 跟进表若缺 third，用 unionid 再补一次（与员工 enrich 一致）
-    cur.execute("SHOW TABLES LIKE 'qywx_follow_user'")
+    cur.execute("SHOW TABLES LIKE 'ys_qywx_follow_user'")
     if cur.fetchone():
         cur.execute(
             """
-            UPDATE qywx_follow_user f
+            UPDATE ys_qywx_follow_user f
             JOIN (
               SELECT unionid, MIN(uid) AS uid
               FROM ys_third_party_user
@@ -1065,7 +1065,7 @@ def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
     cur.execute(
         f"""
         UPDATE `{PAY_TABLE}` p
-        INNER JOIN qywx_follow_user f ON f.follow_userid=p.payee_userid
+        INNER JOIN ys_qywx_follow_user f ON f.follow_userid=p.payee_userid
         SET
           p.payee_name=COALESCE(NULLIF(f.follow_name,''), p.payee_name),
           p.payee_mobile=COALESCE(NULLIF(f.mobile,''), p.payee_mobile),
@@ -1230,7 +1230,7 @@ def run_enrich_sql(db_host: str) -> Path | None:
             raise RuntimeError("enrich 失败")
     finally:
         sys.argv = old
-    files = sorted(EXPORT.glob("qywx_pay_bill_enrich_update_*.sql"))
+    files = sorted(EXPORT.glob("ys_qywx_pay_bill_enrich_update_*.sql"))
     return files[-1] if files else None
 
 
@@ -1367,7 +1367,7 @@ def main() -> int:
     ap.add_argument(
         "--payee-enrich-only",
         action="store_true",
-        help="只从 qywx_follow_user 回填收款员工字段",
+        help="只从 ys_qywx_follow_user 回填收款员工字段",
     )
     ap.add_argument("--db-host", default="", help="本机连库用外网域名")
     ap.add_argument("--apply", action="store_true", help="直接执行生成的 SQL 写库")
@@ -1385,7 +1385,7 @@ def main() -> int:
         """通讯录 CSV/库内手机 → 员工表 → 账单 payee_*；并回填客户微信昵称 wx_name。"""
         import sync_qywx_follow_user_enrich as staff
 
-        _log("=== 同步员工主数据（qywx_follow_user，含通讯录 CSV）===")
+        _log("=== 同步员工主数据（ys_qywx_follow_user，含通讯录 CSV）===")
         staff.run_follow_user_enrich(
             apply=True,
             db_host=args.db_host,

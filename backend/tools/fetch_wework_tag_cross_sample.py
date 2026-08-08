@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """拉取企业标签库，并与今日样例表最近 10 条客户按 tag_id 交叉关联。
 
-新建表（不修改 qywx_external_contact_full / served_*）:
-  qywx_corp_tag                 标签库
+新建表（不修改 ys_qywx_external_contact_full / served_*）:
+  ys_qywx_corp_tag                 标签库
   qywx_contact_tag_link_sample  最近10条客户×标签
 
 用法:
@@ -160,11 +160,11 @@ def main() -> int:
     with out.open("w", encoding="utf-8") as f:
         f.write("-- get_corp_tag_list + cross recent 10; own tables only\n")
         f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n")
-        f.write("DROP TABLE IF EXISTS qywx_corp_tag;\n")
+        f.write("DROP TABLE IF EXISTS ys_qywx_corp_tag;\n")
         f.write("DROP TABLE IF EXISTS qywx_contact_tag_link_sample;\n")
         f.write(
             """
-CREATE TABLE qywx_corp_tag (
+CREATE TABLE ys_qywx_corp_tag (
   tag_id VARCHAR(64) NOT NULL,
   tag_name VARCHAR(128) NULL,
   group_id VARCHAR(64) NULL,
@@ -213,7 +213,7 @@ CREATE TABLE qywx_contact_tag_link_sample (
         ]
         for i in range(0, len(tag_vals), 100):
             f.write(
-                "INSERT INTO qywx_corp_tag "
+                "INSERT INTO ys_qywx_corp_tag "
                 "(tag_id,tag_name,group_id,group_name,tag_order,fetched_at) VALUES\n"
             )
             f.write(",\n".join(tag_vals[i : i + 100]) + ";\n")

@@ -147,8 +147,8 @@ def write_sql(path: Path, flats: list[dict[str, Any]]) -> None:
     ddl = r"""
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS=0;
-DROP TABLE IF EXISTS qywx_external_contact_detail;
-CREATE TABLE qywx_external_contact_detail (
+DROP TABLE IF EXISTS ys_qywx_external_contact_detail;
+CREATE TABLE ys_qywx_external_contact_detail (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   external_userid VARCHAR(64) NOT NULL,
   errcode INT NOT NULL DEFAULT 0,
@@ -211,7 +211,7 @@ CREATE TABLE qywx_external_contact_detail (
                     + ")"
                 )
             f.write(
-                "INSERT INTO qywx_external_contact_detail ("
+                "INSERT INTO ys_qywx_external_contact_detail ("
                 "external_userid,errcode,errmsg,name,avatar,type,gender,unionid,"
                 "position,corp_name,corp_full_name,external_profile_json,"
                 "follow_user_count,follow_userids,first_follow_time,"
@@ -273,7 +273,7 @@ def main() -> int:
         f"  mysql ... db_fz_jingnao < {out_sql.name}\n"
         "查询:\n"
         "  SELECT name, type, gender, follow_user_count, follow_userids\n"
-        "  FROM qywx_external_contact_detail WHERE errcode=0 LIMIT 20;",
+        "  FROM ys_qywx_external_contact_detail WHERE errcode=0 LIMIT 20;",
         flush=True,
     )
     return 0

@@ -8,11 +8,11 @@
   GET  /cgi-bin/user/get                            → 跟进人姓名（可选）
 
 产出表（一份 SQL，导入时会 DROP/重建下列表，不影响 served_*）：
-  qywx_external_contact_detail  客户主表（一人一行，含 unionid）
-  qywx_external_contact_full    跟进人×客户（一周关系明细）
-  qywx_corp_tag                 企业标签库
-  qywx_contact_tag_link         客户×标签交叉
-  qywx_follow_user              跟进人维度
+  ys_qywx_external_contact_detail  客户主表（一人一行，含 unionid）
+  ys_qywx_external_contact_full    跟进人×客户（一周关系明细）
+  ys_qywx_corp_tag                 企业标签库
+  ys_qywx_contact_tag_link         客户×标签交叉
+  ys_qywx_follow_user              跟进人维度
 
 用法:
   python -u backend/tools/sync_wework_week_contacts.py --days 7
@@ -289,13 +289,13 @@ def write_sql(
         f.write(
             """
 DROP TABLE IF EXISTS qywx_contact_tag_link_sample;
-DROP TABLE IF EXISTS qywx_contact_tag_link;
-DROP TABLE IF EXISTS qywx_corp_tag;
-DROP TABLE IF EXISTS qywx_external_contact_full;
-DROP TABLE IF EXISTS qywx_external_contact_detail;
-DROP TABLE IF EXISTS qywx_follow_user;
+DROP TABLE IF EXISTS ys_qywx_contact_tag_link;
+DROP TABLE IF EXISTS ys_qywx_corp_tag;
+DROP TABLE IF EXISTS ys_qywx_external_contact_full;
+DROP TABLE IF EXISTS ys_qywx_external_contact_detail;
+DROP TABLE IF EXISTS ys_qywx_follow_user;
 
-CREATE TABLE qywx_external_contact_detail (
+CREATE TABLE ys_qywx_external_contact_detail (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   external_userid VARCHAR(64) NOT NULL,
   errcode INT NOT NULL DEFAULT 0,
@@ -320,7 +320,7 @@ CREATE TABLE qywx_external_contact_detail (
   KEY idx_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='externalcontact/get 客户主表(一周)';
 
-CREATE TABLE qywx_external_contact_full (
+CREATE TABLE ys_qywx_external_contact_full (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   follow_userid VARCHAR(64) NOT NULL,
   external_userid VARCHAR(64) NOT NULL,
@@ -356,7 +356,7 @@ CREATE TABLE qywx_external_contact_full (
   KEY idx_createtime (createtime)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='一周内跟进人x客户明细';
 
-CREATE TABLE qywx_corp_tag (
+CREATE TABLE ys_qywx_corp_tag (
   tag_id VARCHAR(64) NOT NULL,
   tag_name VARCHAR(128) NULL,
   group_id VARCHAR(64) NULL,
@@ -368,7 +368,7 @@ CREATE TABLE qywx_corp_tag (
   KEY idx_name (tag_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业客户标签库';
 
-CREATE TABLE qywx_contact_tag_link (
+CREATE TABLE ys_qywx_contact_tag_link (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   follow_userid VARCHAR(64) NULL,
   external_userid VARCHAR(64) NULL,
@@ -388,7 +388,7 @@ CREATE TABLE qywx_contact_tag_link (
   KEY idx_follow (follow_userid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='一周客户与标签交叉';
 
-CREATE TABLE qywx_follow_user (
+CREATE TABLE ys_qywx_follow_user (
   follow_userid VARCHAR(64) NOT NULL,
   follow_name VARCHAR(128) NULL,
   fetched_at DATETIME NOT NULL,
@@ -434,7 +434,7 @@ CREATE TABLE qywx_follow_user (
                     + ")"
                 )
             if vals:
-                f.write(f"INSERT INTO qywx_external_contact_detail ({cols_d}) VALUES\n")
+                f.write(f"INSERT INTO ys_qywx_external_contact_detail ({cols_d}) VALUES\n")
                 f.write(",\n".join(vals) + ";\n")
 
         # full
@@ -486,7 +486,7 @@ CREATE TABLE qywx_follow_user (
                     + ")"
                 )
             if vals:
-                f.write(f"INSERT INTO qywx_external_contact_full ({cols_f}) VALUES\n")
+                f.write(f"INSERT INTO ys_qywx_external_contact_full ({cols_f}) VALUES\n")
                 f.write(",\n".join(vals) + ";\n")
 
         # tags
@@ -507,7 +507,7 @@ CREATE TABLE qywx_follow_user (
         ]
         for i in range(0, len(tag_vals), 100):
             f.write(
-                "INSERT INTO qywx_corp_tag "
+                "INSERT INTO ys_qywx_corp_tag "
                 "(tag_id,tag_name,group_id,group_name,tag_order,fetched_at) VALUES\n"
             )
             f.write(",\n".join(tag_vals[i : i + 100]) + ";\n")
@@ -538,7 +538,7 @@ CREATE TABLE qywx_follow_user (
                 )
             if vals:
                 f.write(
-                    "INSERT INTO qywx_contact_tag_link "
+                    "INSERT INTO ys_qywx_contact_tag_link "
                     "(follow_userid,external_userid,name,remark,createtime,add_way,state,"
                     "tag_id,tag_name,group_id,group_name,fetched_at) VALUES\n"
                 )
@@ -550,7 +550,7 @@ CREATE TABLE qywx_follow_user (
                 f"({_esc(uid)},{_esc(name)},{_esc(now)})" for uid, name in sorted(follows.items())
             ]
             for i in range(0, len(fvals), 100):
-                f.write("INSERT INTO qywx_follow_user (follow_userid,follow_name,fetched_at) VALUES\n")
+                f.write("INSERT INTO ys_qywx_follow_user (follow_userid,follow_name,fetched_at) VALUES\n")
                 f.write(",\n".join(fvals[i : i + 100]) + ";\n")
 
         f.write("SET FOREIGN_KEY_CHECKS=1;\n")
@@ -729,7 +729,7 @@ def main() -> int:
         f"  mysql -h ... -u jingnao -p db_fz_jingnao < {out_sql.name}\n"
         f"验证 unionid:\n"
         f"  SELECT COUNT(*) total, SUM(unionid IS NOT NULL) has_unionid "
-        f"FROM qywx_external_contact_detail;",
+        f"FROM ys_qywx_external_contact_detail;",
         flush=True,
     )
     return 0
