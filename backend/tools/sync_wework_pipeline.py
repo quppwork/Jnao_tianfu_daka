@@ -1080,6 +1080,48 @@ def run_enrich_sql(db_host: str) -> Path | None:
     return files[-1] if files else None
 
 
+def split_sql_statements(sql: str) -> list[str]:
+    """按分号切 SQL，但忽略字符串字面量内的 ';'（客户备注 JSON 常含分号）。"""
+    cleaned = "\n".join(
+        ln for ln in sql.splitlines() if not ln.strip().startswith("--")
+    )
+    stmts: list[str] = []
+    buf: list[str] = []
+    in_single = False
+    i = 0
+    n = len(cleaned)
+    while i < n:
+        ch = cleaned[i]
+        if in_single:
+            buf.append(ch)
+            if ch == "'" and i + 1 < n and cleaned[i + 1] == "'":
+                buf.append(cleaned[i + 1])
+                i += 2
+                continue
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ";":
+            s = "".join(buf).strip()
+            if s:
+                stmts.append(s)
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    s = "".join(buf).strip()
+    if s:
+        stmts.append(s)
+    return stmts
+
+
 def apply_sql_files(files: list[Path], db_host: str) -> None:
     maybe_override_db_host(db_host)
     import pymysql
@@ -1106,20 +1148,13 @@ def apply_sql_files(files: list[Path], db_host: str) -> None:
         try:
             ensure_pay_bill_human_schema(cur)
             ensure_pay_bill_payee_columns(cur)
+            ensure_pay_bill_wx_name_column(cur)
         except Exception as e:  # noqa: BLE001
             _log(f"[warn] pay_bill schema migrate: {e}")
     for p in files:
         _log(f"APPLY {p.name} ...")
         sql = p.read_text(encoding="utf-8")
-        # 必须先去掉整行 -- 注释，再按分号切分
-        # （注释里若含 ';'，切分后会变成无 -- 的残片，例如 "safe for incremental import"）
-        cleaned = "\n".join(
-            ln for ln in sql.splitlines() if not ln.strip().startswith("--")
-        )
-        for stmt in cleaned.split(";"):
-            s = stmt.strip()
-            if not s:
-                continue
+        for s in split_sql_statements(sql):
             try:
                 cur.execute(s)
             except Exception as e:
@@ -1288,8 +1323,12 @@ def main() -> int:
             flats = [pay.flatten(b) for b in bills]
             pay_sql = EXPORT / f"qywx_pipeline_pay_{args.recent_days}d_{stamp}.sql"
             write_pay_upsert_sql(pay_sql, flats, bts, ets)
-            out_files.append(pay_sql)
             _log(f"收款 {len(flats)} 条 -> {pay_sql.name}")
+            # 收款先于客户历史详情写库，避免详情 SQL 失败拖死 pay_bill
+            if args.apply:
+                apply_sql_files([pay_sql], args.db_host)
+            else:
+                out_files.append(pay_sql)
 
             # 收款历史：按最多 31 天一段往前补；用 state.pay_history_oldest_ts 读档，已覆盖的不再重拉
             if args.pay_history_days > 0 and not args.recent_only:
@@ -1330,13 +1369,24 @@ def main() -> int:
                         flats2 = [pay.flatten(b) for b in bills2]
                         pay_sql2 = EXPORT / f"qywx_pipeline_pay_hist_{days}d_p{part}_{stamp}.sql"
                         write_pay_upsert_sql(pay_sql2, flats2, b2, e2)
-                        out_files.append(pay_sql2)
                         _log(f"  历史收款 {len(flats2)} 条 -> {pay_sql2.name}")
-                        covered_oldest = b2 if covered_oldest is None else min(covered_oldest, b2)
+                        if args.apply:
+                            apply_sql_files([pay_sql2], args.db_host)
+                            covered_oldest = (
+                                b2 if covered_oldest is None else min(covered_oldest, b2)
+                            )
+                            state["pay_history_oldest_ts"] = covered_oldest
+                            save_state(state)
+                        else:
+                            out_files.append(pay_sql2)
+                            covered_oldest = (
+                                b2 if covered_oldest is None else min(covered_oldest, b2)
+                            )
                         end2 = begin2
-                    if covered_oldest is not None:
+                    if covered_oldest is not None and not args.apply:
                         state["pay_history_oldest_ts"] = covered_oldest
                         save_state(state)
+                    if covered_oldest is not None:
                         _log(
                             f"收款历史读档已更新：oldest="
                             f"{datetime.fromtimestamp(covered_oldest)}"
@@ -1402,6 +1452,7 @@ def main() -> int:
                 follows=follows,
                 recreate_tags=False,
             )
+            batch_ok: list[str] = []
             for d in details:
                 eid = d.get("external_userid")
                 if not eid:
@@ -1411,20 +1462,26 @@ def main() -> int:
                     # 失败也标记，避免死循环；可手动清 state 重试
                     synced.add(eid)
                 else:
+                    batch_ok.append(eid)
                     synced.add(eid)
                     failed.pop(eid, None)
-
-            state["synced_external_userids"] = sorted(synced)
-            state["failed_external_userids"] = failed
-            save_state(state)
 
             left = max(0, len(pending) - len(batch))
             _log(f"历史第 {round_i} 批完成 {len(batch)}，剩余约 {left}；SQL={hist_sql.name}")
             if args.apply:
-                _log(f"  APPLY {hist_sql.name} ...")
-                apply_sql_files([hist_sql], args.db_host)
+                try:
+                    apply_sql_files([hist_sql], args.db_host)
+                except Exception as e:  # noqa: BLE001
+                    # APPLY 失败不记进度，避免「已同步但未入库」
+                    for eid in batch_ok:
+                        synced.discard(eid)
+                    _log(f"[warn] APPLY 失败，本批回滚进度后续重试: {e}")
             else:
                 out_files.append(hist_sql)
+
+            state["synced_external_userids"] = sorted(synced)
+            state["failed_external_userids"] = failed
+            save_state(state)
 
             if args.limit > 0:
                 break

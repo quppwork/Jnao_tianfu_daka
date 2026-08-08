@@ -92,3 +92,7 @@ fetched_at        本条写入/拉取时间
   /app/data/qywx_export/.qywx_pipeline_state.json
   - synced_external_userids：客户详情已同步名单（历史只补未同步的）
   - pay_history_oldest_ts：收款历史已覆盖到的最早时间（已覆盖不再重拉）
+
+说明：日志里「历史第 N 批」是客户详情，不是 pay_bill。
+pay_bill 历史靠 --pay-history-days；若曾 APPLY 失败导致表空但读档已前进，
+可临时加 --force-pay-history 重拉收款历史。
