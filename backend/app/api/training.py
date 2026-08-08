@@ -73,7 +73,7 @@ def talent_training_video(
     db: Session = Depends(get_db),
 ):
     """天赋能力视频讲解 — 返回 OSS 五者天赋视频（家长/学生均可观看）"""
-    return get_talent_training_video(None)
+    return get_talent_training_video(None, db=db)
 
 
 @router.get("/video/talent/stream")

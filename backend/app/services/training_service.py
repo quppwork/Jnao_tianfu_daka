@@ -347,6 +347,12 @@ def sync_pending_plan_content(
             plan.report_text = f"今日音频：{content.lesson_title}"
         changed = True
 
+    if plan.items:
+        from app.services.training_video_attach import attach_videos_to_plan_items
+
+        if attach_videos_to_plan_items(db, plan, only_missing=True):
+            changed = True
+
     if changed:
         db.commit()
     return changed
@@ -922,6 +928,10 @@ def get_or_create_today_plan(db: Session, child_user_id: int, plan_date: date | 
         checkin_status="pending",
     )
     db.add(item)
+    db.flush()
+    from app.services.training_video_attach import attach_videos_to_plan_items
+
+    attach_videos_to_plan_items(db, plan, only_missing=False)
     db.commit()
     db.refresh(plan)
     plan = _get_plan_by_date(db, child_user_id, plan_date)
@@ -1304,7 +1314,8 @@ def append_elective_item(
     )
     from app.services.talent_content_pool import get_talent_content_pool
     from app.services.assessment_service import resolve_effective_talent
-    from app.services.training_catalog_sync import repair_plan_media_items
+    from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
+    from app.services.training_schedule_service import _attach_videos_to_items
     from app.services.training_child_guide import build_coach_text_for_plan
 
     plan = db.get(TrainingPlan, plan_id)
@@ -1384,7 +1395,10 @@ def append_elective_item(
         ))
 
     if talent_code:
+        ensure_supplementary_catalogs(db)
         repair_plan_media_items(db, plan, talent_code)
+    else:
+        _attach_videos_to_items(db, plan)
     plan.report_text = build_coach_text_for_plan(plan)
     db.commit()
     invalidate_plan_cache(child_user_id, plan.plan_date)

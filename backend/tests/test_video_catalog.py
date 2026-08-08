@@ -70,6 +70,81 @@ def test_attach_jisu_video_to_plan(db_session, child_with_assessment):
 
 def test_talent_video_from_oss(db_session):
     import_video_catalog(db_session)
-    result = get_talent_training_video(1)
+    result = get_talent_training_video(1, db=db_session)
     assert result.get("source") == "oss_content"
-    assert result.get("url")
+    assert result.get("url") == "/api/training/video/talent/stream"
+
+
+def test_attach_video_on_elective_append(db_session, child_with_assessment):
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.training_day import get_training_day
+    from app.services.training_service import append_elective_item
+
+    import_video_catalog(db_session)
+    uid = child_with_assessment
+    plan = TrainingPlan(
+        child_user_id=uid,
+        plan_date=get_training_day(),
+        content_index=1,
+        planned_minutes=45,
+        status="pending",
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(
+        TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            ability_type="audio",
+            title="超脑阅读",
+            duration_min=10,
+            audio_url="https://example.com/a.mp3",
+            instructions='{"skill":"超脑阅读","item_type":"required"}',
+            checkin_status="pending",
+        )
+    )
+    db_session.commit()
+
+    append_elective_item(db_session, uid, plan.id, "极速运算")
+    db_session.refresh(plan)
+    jisu = next(
+        i for i in plan.items
+        if '"skill": "极速运算"' in (i.instructions or "") or '"skill":"极速运算"' in (i.instructions or "")
+    )
+    assert jisu.video_url
+    assert "shipin" in jisu.video_url or "极速运算" in jisu.video_url
+
+
+def test_repair_plan_fills_missing_video(db_session, child_with_assessment):
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.training_day import get_training_day
+    from app.services.training_catalog_sync import repair_plan_media_items
+
+    import_video_catalog(db_session)
+    uid = child_with_assessment
+    plan = TrainingPlan(
+        child_user_id=uid,
+        plan_date=get_training_day(),
+        content_index=1,
+        planned_minutes=45,
+        status="pending",
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(
+        TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            ability_type="audio",
+            title="极速运算训练",
+            duration_min=10,
+            audio_url="https://example.com/a.mp3",
+            instructions='{"skill":"极速运算","item_type":"required"}',
+            checkin_status="pending",
+        )
+    )
+    db_session.commit()
+
+    n = repair_plan_media_items(db_session, plan, talent_code=1)
+    assert n >= 1
+    assert plan.items[0].video_url

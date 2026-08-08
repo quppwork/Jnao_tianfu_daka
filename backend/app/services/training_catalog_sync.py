@@ -13,6 +13,7 @@ from app.services.catalog_import import import_catalog
 from app.services.child_training_state import get_skill_oss_position, get_training_progress
 from app.services.content_meta import content_display_title, parse_item_instruction, parse_item_meta
 from app.services.talent_content_pool import get_talent_content_pool
+from app.services.training_video_attach import attach_videos_to_plan_items
 
 
 def _find_perception_item(pool: list) -> object | None:
@@ -123,6 +124,9 @@ def repair_plan_media_items(db: Session, plan: TrainingPlan, talent_code: int) -
             _attach_content_to_item(item, found, skill=skill)
             changed += 1
 
+    if changed:
+        db.flush()
+    changed += attach_videos_to_plan_items(db, plan, only_missing=True)
     if changed:
         db.flush()
     return changed

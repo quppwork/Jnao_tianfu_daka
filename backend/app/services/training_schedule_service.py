@@ -20,6 +20,7 @@ from app.services.child_training_state import (
 from app.services.content_meta import estimate_duration_min, item_instruction, parse_item_meta, content_display_title
 from app.services.talent_content_pool import get_talent_content_pool
 from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
+from app.services.training_video_attach import attach_videos_to_plan_items
 from app.services.training_child_guide import build_coach_text_for_plan
 from app.services.training_formula_engine import (
     duration_slot,
@@ -111,39 +112,7 @@ def _plan_structure_invalid(plan: TrainingPlan, planned_minutes: int) -> bool:
 
 def _attach_videos_to_items(db: Session, plan: TrainingPlan) -> None:
     """为训练项匹配对应技能的视频（如极速运算 → _1.5极速运算的原理及过程.mp4）"""
-    from app.services.content_meta import parse_item_instruction, skill_from_title
-
-    video_items = db.scalars(
-        select(ContentItem).where(
-            ContentItem.content_type == "video",
-            ContentItem.status == 1,
-        )
-    ).all()
-    if not video_items:
-        return
-
-    video_map: dict[str, ContentItem] = {}
-    sorted_videos = sorted(
-        video_items,
-        key=lambda v: (skill_from_title(v.lesson_title), v.lesson_sort or 0),
-    )
-    for v in sorted_videos:
-        skill = skill_from_title(v.lesson_title)
-        if skill and skill != "训练" and skill not in video_map:
-            video_map[skill] = v
-
-    if not video_map:
-        return
-
-    for item in plan.items:
-        inst = parse_item_instruction(
-            item.instructions
-            if item.instructions and item.instructions.strip().startswith("{")
-            else None
-        )
-        skill = inst.get("skill", "")
-        if skill in video_map:
-            item.video_url = video_map[skill].play_url
+    attach_videos_to_plan_items(db, plan, only_missing=False)
 
 
 async def populate_plan_items(
