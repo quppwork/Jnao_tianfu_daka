@@ -52,6 +52,13 @@ def now_sh() -> datetime:
 def dt_from_unix_sh(ts: int | float) -> datetime:
     return datetime.fromtimestamp(int(ts), tz=TZ_SH).replace(tzinfo=None)
 
+
+def naive_sh_to_ts(dt: datetime) -> int:
+    """上海墙钟 naive → unix 秒。Docker 默认 UTC 时切勿对 naive 直接 .timestamp()。"""
+    if dt.tzinfo is None:
+        return int(dt.replace(tzinfo=TZ_SH).timestamp())
+    return int(dt.astimezone(TZ_SH).timestamp())
+
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
@@ -1339,9 +1346,14 @@ def main() -> int:
     )
     ap.add_argument("--pay-history-days", type=int, default=30, help="收款再往前补多少天（不含近N天）")
     ap.add_argument(
+        "--pay-from",
+        default="",
+        help="收款历史最早日期 YYYY-MM-DD（优先于 --pay-history-days；如 2026-01-01）",
+    )
+    ap.add_argument(
         "--force-pay-history",
         action="store_true",
-        help="忽略收款历史读档，强制按 --pay-history-days 重拉",
+        help="忽略收款历史读档，强制按 --pay-from / --pay-history-days 重拉",
     )
     ap.add_argument("--from-json", default="", help="跳过 contact_list，用本地缓存")
     ap.add_argument("--skip-served", action="store_true")
@@ -1481,10 +1493,19 @@ def main() -> int:
             else:
                 out_files.append(pay_sql)
 
-            # 收款历史：按最多 31 天一段往前补；用 state.pay_history_oldest_ts 读档，已覆盖的不再重拉
-            if args.pay_history_days > 0 and not args.recent_only:
-                target_begin = begin - timedelta(days=args.pay_history_days)
-                target_begin_ts = int(target_begin.replace(tzinfo=TZ_SH).timestamp())
+            # 收款历史：按最多 31 天一段往前补；用 state.pay_history_oldest_ts 读档
+            # 注意：--recent-only 只跳过「客户详情历史」，不跳过收款历史
+            pay_from_s = (args.pay_from or "").strip()
+            if pay_from_s or args.pay_history_days > 0:
+                if pay_from_s:
+                    try:
+                        target_begin = datetime.strptime(pay_from_s, "%Y-%m-%d")
+                    except ValueError as e:
+                        raise SystemExit(f"--pay-from 需为 YYYY-MM-DD: {e}") from e
+                    _log(f"收款历史目标起点（--pay-from）{target_begin}")
+                else:
+                    target_begin = begin - timedelta(days=args.pay_history_days)
+                target_begin_ts = naive_sh_to_ts(target_begin)
                 oldest_ts = state.get("pay_history_oldest_ts")
                 try:
                     oldest_ts = int(oldest_ts) if oldest_ts is not None else None
@@ -1513,7 +1534,7 @@ def main() -> int:
                         begin2 = max(target_begin, end2 - timedelta(days=chunk))
                         if begin2 >= end2:
                             break
-                        b2, e2 = int(begin2.timestamp()), int(end2.timestamp())
+                        b2, e2 = naive_sh_to_ts(begin2), naive_sh_to_ts(end2)
                         days = max(1, int((end2 - begin2).total_seconds() // 86400))
                         part += 1
                         _log(f"补收款历史[{part}] {begin2} ~ {end2} ({days}d)")
