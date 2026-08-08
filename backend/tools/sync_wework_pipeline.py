@@ -726,14 +726,82 @@ def _connect_legacy(db_host: str = "") -> Any:
     )
 
 
+def _load_union_link_maps(cur: Any) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    """unionid -> third_uid / xet(user_id, bind_phone)。"""
+    third_map: dict[str, str] = {}
+    xet_map: dict[str, dict[str, Any]] = {}
+    try:
+        cur.execute(
+            """
+            SELECT unionid, MIN(uid) AS uid
+            FROM ys_third_party_user
+            WHERE unionid IS NOT NULL AND unionid<>''
+            GROUP BY unionid
+            """
+        )
+        for r in cur.fetchall() or []:
+            u = (r.get("unionid") or "").strip()
+            if u and r.get("uid") is not None:
+                third_map[u] = str(r["uid"])
+    except Exception as e:  # noqa: BLE001
+        _log(f"[warn] 加载 third_party 映射失败: {e}")
+    try:
+        cur.execute(
+            """
+            SELECT wx_union_id AS unionid, MAX(user_id) AS user_id, MAX(bind_phone) AS bind_phone
+            FROM ys_xet_user_lists
+            WHERE wx_union_id IS NOT NULL AND wx_union_id<>''
+            GROUP BY wx_union_id
+            """
+        )
+        for r in cur.fetchall() or []:
+            u = (r.get("unionid") or "").strip()
+            if u:
+                xet_map[u] = {
+                    "user_id": (str(r["user_id"]) if r.get("user_id") is not None else None),
+                    "bind_phone": (str(r["bind_phone"]).strip() if r.get("bind_phone") else None),
+                }
+    except Exception:
+        # 兼容字段名 unionid
+        try:
+            cur.execute(
+                """
+                SELECT unionid, MAX(user_id) AS user_id, MAX(bind_phone) AS bind_phone
+                FROM ys_xet_user_lists
+                WHERE unionid IS NOT NULL AND unionid<>''
+                GROUP BY unionid
+                """
+            )
+            for r in cur.fetchall() or []:
+                u = (r.get("unionid") or "").strip()
+                if u:
+                    xet_map[u] = {
+                        "user_id": (str(r["user_id"]) if r.get("user_id") is not None else None),
+                        "bind_phone": (
+                            str(r["bind_phone"]).strip() if r.get("bind_phone") else None
+                        ),
+                    }
+        except Exception as e:  # noqa: BLE001
+            _log(f"[warn] 加载 xet 映射失败: {e}")
+    return third_map, xet_map
+
+
 def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
-    """回填客户微信昵称 wx_name；退款单补 contact_name（接口常不返回 contact_info）。"""
+    """回填账单客户信息：优先企微 externalcontact/get，不依赖详情表是否已有数据。
+
+    写入：wx_name / unionid / third_uid / xet_user_id / bind_phone；
+    退款单空 contact_name 时用昵称展示。
+    """
     conn = _connect_legacy(db_host)
     cur = conn.cursor()
     ensure_pay_bill_human_schema(cur)
     ensure_pay_bill_wx_name_column(cur)
 
     updated = 0
+    api_hit = 0
+    api_fail = 0
+
+    # 快路径：详情表若已有则先抄（有则加速，无也不影响）
     cur.execute("SHOW TABLES LIKE 'qywx_external_contact_detail'")
     if cur.fetchone():
         cur.execute(
@@ -741,70 +809,156 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
             UPDATE `{PAY_TABLE}` p
             INNER JOIN qywx_external_contact_detail d
               ON d.external_userid=p.external_userid
-            SET p.wx_name=COALESCE(NULLIF(d.name,''), p.wx_name)
+            SET
+              p.wx_name=COALESCE(NULLIF(p.wx_name,''), NULLIF(d.name,'')),
+              p.unionid=COALESCE(NULLIF(p.unionid,''), NULLIF(d.unionid,''))
             WHERE p.external_userid IS NOT NULL AND p.external_userid<>''
-              AND d.name IS NOT NULL AND d.name<>''
             """
         )
         updated += cur.rowcount or 0
 
-    cur.execute("SHOW TABLES LIKE 'qywx_external_contact_full'")
-    if cur.fetchone():
-        cur.execute(
-            f"""
-            UPDATE `{PAY_TABLE}` p
-            INNER JOIN (
-              SELECT external_userid, MAX(name) AS name
-              FROM qywx_external_contact_full
-              WHERE external_userid IS NOT NULL AND external_userid<>''
-                AND name IS NOT NULL AND name<>''
-              GROUP BY external_userid
-            ) f ON f.external_userid=p.external_userid
-            SET p.wx_name=COALESCE(NULLIF(p.wx_name,''), NULLIF(f.name,''))
-            WHERE p.external_userid IS NOT NULL AND p.external_userid<>''
-              AND (p.wx_name IS NULL OR p.wx_name='')
-            """
-        )
-        updated += cur.rowcount or 0
-
-    # 同客户其它账单已有昵称 → 补空行（含退款）
+    # 同客户账单互抄
     cur.execute(
         f"""
         UPDATE `{PAY_TABLE}` p
         INNER JOIN (
-          SELECT external_userid, MAX(wx_name) AS wx_name
+          SELECT external_userid,
+            MAX(NULLIF(wx_name,'')) AS wx_name,
+            MAX(NULLIF(unionid,'')) AS unionid
           FROM `{PAY_TABLE}`
           WHERE external_userid IS NOT NULL AND external_userid<>''
-            AND wx_name IS NOT NULL AND wx_name<>''
           GROUP BY external_userid
         ) s ON s.external_userid=p.external_userid
-        SET p.wx_name=COALESCE(NULLIF(p.wx_name,''), NULLIF(s.wx_name,''))
-        WHERE p.wx_name IS NULL OR p.wx_name=''
+        SET
+          p.wx_name=COALESCE(NULLIF(p.wx_name,''), s.wx_name),
+          p.unionid=COALESCE(NULLIF(p.unionid,''), s.unionid)
+        WHERE (p.wx_name IS NULL OR p.wx_name='' OR p.unionid IS NULL OR p.unionid='')
         """
     )
     updated += cur.rowcount or 0
 
-    # 退款：按同商户订单号从原收款单抄昵称/联系人
+    # 缺昵称或缺 unionid：直接打企微详情接口（不依赖 detail 表）
     cur.execute(
         f"""
-        UPDATE `{PAY_TABLE}` r
-        INNER JOIN `{PAY_TABLE}` p
-          ON p.out_trade_no=r.out_trade_no AND p.bill_type=0 AND p.id<>r.id
-        SET
-          r.wx_name=COALESCE(NULLIF(r.wx_name,''), NULLIF(p.wx_name,''), NULLIF(p.contact_name,'')),
-          r.contact_name=COALESCE(
-            NULLIF(r.contact_name,''), NULLIF(p.contact_name,''), NULLIF(p.wx_name,''), NULLIF(r.wx_name,'')
-          )
-        WHERE r.bill_type=1
+        SELECT DISTINCT external_userid
+        FROM `{PAY_TABLE}`
+        WHERE external_userid IS NOT NULL AND external_userid<>''
           AND (
-            r.wx_name IS NULL OR r.wx_name=''
-            OR r.contact_name IS NULL OR r.contact_name=''
+            wx_name IS NULL OR wx_name=''
+            OR unionid IS NULL OR unionid=''
           )
+        ORDER BY external_userid
         """
     )
-    updated += cur.rowcount or 0
+    missing_eids = [
+        (r.get("external_userid") or "").strip()
+        for r in (cur.fetchall() or [])
+        if (r.get("external_userid") or "").strip()
+    ]
+    third_map, xet_map = _load_union_link_maps(cur)
+    _log(
+        f"账单客户待接口补全 {len(missing_eids)} 人"
+        f"（third映射 {len(third_map)} xet映射 {len(xet_map)}）"
+    )
 
-    # 退款仍无 contact_name：用已回填的 wx_name 填展示名（接口退款单通常不带 contact_info）
+    token = ""
+    if missing_eids:
+        try:
+            token = get_token()
+        except Exception as e:  # noqa: BLE001
+            _log(f"[warn] 无法 get_token，跳过详情接口补拉: {e}")
+
+    for i, eid in enumerate(missing_eids, 1):
+        if not token:
+            break
+        detail = week.fetch_one(token, eid)
+        err = int(detail.get("errcode") or 0)
+        if err != 0:
+            api_fail += 1
+            if api_fail <= 3:
+                _log(f"  [warn] get {eid}: {err} {detail.get('errmsg')}")
+            time.sleep(0.05)
+            continue
+
+        ec = detail.get("external_contact") or {}
+        name = (ec.get("name") or "").strip() or None
+        unionid = (ec.get("unionid") or "").strip() or None
+        if not name:
+            for fi in detail.get("follow_user") or []:
+                rem = (fi.get("remark") or "").strip()
+                if rem:
+                    name = rem
+                    break
+        if not name:
+            cur.execute(
+                f"""
+                SELECT remark FROM `{PAY_TABLE}`
+                WHERE external_userid=%s AND remark IS NOT NULL AND remark<>''
+                ORDER BY bill_type=1 DESC, id DESC LIMIT 1
+                """,
+                (eid,),
+            )
+            rr = cur.fetchone() or {}
+            rem = (rr.get("remark") or "").strip()
+            if rem:
+                for sep in ("，", ",", " ", "　"):
+                    if sep in rem:
+                        cand = rem.split(sep, 1)[0].strip()
+                        if 1 < len(cand) <= 32:
+                            name = cand
+                        break
+
+        third_uid = third_map.get(unionid) if unionid else None
+        xet = xet_map.get(unionid) if unionid else None
+        xet_uid = (xet or {}).get("user_id")
+        bind_phone = (xet or {}).get("bind_phone")
+
+        if name or unionid or third_uid or xet_uid or bind_phone:
+            cur.execute(
+                f"""
+                UPDATE `{PAY_TABLE}`
+                SET
+                  wx_name=COALESCE(NULLIF(%s,''), wx_name),
+                  unionid=COALESCE(NULLIF(%s,''), unionid),
+                  third_uid=COALESCE(NULLIF(%s,''), third_uid),
+                  xet_user_id=COALESCE(NULLIF(%s,''), xet_user_id),
+                  bind_phone=COALESCE(NULLIF(%s,''), bind_phone),
+                  contact_name=CASE
+                    WHEN bill_type=1 AND (contact_name IS NULL OR contact_name='')
+                    THEN COALESCE(NULLIF(%s,''), contact_name)
+                    ELSE contact_name
+                  END
+                WHERE external_userid=%s
+                """,
+                (name, unionid, third_uid, xet_uid, bind_phone, name, eid),
+            )
+            n = cur.rowcount or 0
+            updated += n
+            if n:
+                api_hit += 1
+
+        # 有详情表则顺带 upsert，便于其它模块，但账单回填不依赖它
+        if name or unionid:
+            cur.execute("SHOW TABLES LIKE 'qywx_external_contact_detail'")
+            if cur.fetchone():
+                cur.execute(
+                    """
+                    INSERT INTO qywx_external_contact_detail
+                      (external_userid, errcode, name, unionid, fetched_at)
+                    VALUES (%s, 0, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                      name=COALESCE(NULLIF(VALUES(name),''), name),
+                      unionid=COALESCE(NULLIF(VALUES(unionid),''), unionid),
+                      fetched_at=VALUES(fetched_at)
+                    """,
+                    (eid, name, unionid, now_sh().strftime("%Y-%m-%d %H:%M:%S")),
+                )
+
+        if i % 20 == 0 or i == len(missing_eids):
+            _log(f"  接口补全 {i}/{len(missing_eids)} hit={api_hit} fail={api_fail}")
+        time.sleep(0.05)
+
+    # 退款展示名
     cur.execute(
         f"""
         UPDATE `{PAY_TABLE}`
@@ -816,110 +970,62 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
     )
     updated += cur.rowcount or 0
 
-    # 仍缺昵称：像企微前端一样按 external_userid 再拉客户详情（账单接口本身不返回名称）
-    cur.execute(
-        f"""
-        SELECT DISTINCT external_userid
-        FROM `{PAY_TABLE}`
-        WHERE external_userid IS NOT NULL AND external_userid<>''
-          AND (wx_name IS NULL OR wx_name='')
-        ORDER BY external_userid
-        LIMIT 80
-        """
-    )
-    missing_eids = [
-        (r.get("external_userid") or "").strip()
-        for r in (cur.fetchall() or [])
-        if (r.get("external_userid") or "").strip()
-    ]
-    api_hit = 0
-    if missing_eids:
-        _log(f"缺昵称客户 {len(missing_eids)}，按详情接口补拉（与企微前端同源）...")
+    # 已有 unionid 再补 third/xet（接口未命中但库里后来有映射）
+    if third_map:
+        cur.execute(
+            f"""
+            UPDATE `{PAY_TABLE}` p
+            INNER JOIN (
+              SELECT unionid, MIN(uid) AS uid FROM ys_third_party_user
+              WHERE unionid IS NOT NULL AND unionid<>'' GROUP BY unionid
+            ) t ON t.unionid=p.unionid
+            SET p.third_uid=CAST(t.uid AS CHAR)
+            WHERE p.unionid IS NOT NULL AND p.unionid<>''
+              AND (p.third_uid IS NULL OR p.third_uid='')
+            """
+        )
+        updated += cur.rowcount or 0
+    if xet_map:
         try:
-            token = get_token()
-        except Exception as e:  # noqa: BLE001
-            _log(f"[warn] 无法 get_token，跳过详情补拉: {e}")
-            token = ""
-        for i, eid in enumerate(missing_eids, 1):
-            if not token:
-                break
-            detail = week.fetch_one(token, eid)
-            ec = detail.get("external_contact") or {}
-            name = (ec.get("name") or "").strip() or None
-            if not name:
-                # 前端有时展示跟进人备注
-                for fi in detail.get("follow_user") or []:
-                    rem = (fi.get("remark") or "").strip()
-                    if rem:
-                        name = rem
-                        break
-            if not name:
-                # 退款备注里偶发「姓名，xxx」
-                cur.execute(
-                    f"""
-                    SELECT remark FROM `{PAY_TABLE}`
-                    WHERE external_userid=%s AND remark IS NOT NULL AND remark<>''
-                    ORDER BY bill_type=1 DESC, id DESC LIMIT 1
-                    """,
-                    (eid,),
-                )
-                rr = cur.fetchone() or {}
-                rem = (rr.get("remark") or "").strip()
-                if rem:
-                    for sep in ("，", ",", " ", "　"):
-                        if sep in rem:
-                            cand = rem.split(sep, 1)[0].strip()
-                            if 1 < len(cand) <= 32:
-                                name = cand
-                            break
-                    if not name and 1 < len(rem) <= 32:
-                        name = rem
-            if name:
-                cur.execute(
-                    f"""
-                    UPDATE `{PAY_TABLE}`
-                    SET wx_name=%s,
-                        contact_name=CASE
-                          WHEN bill_type=1 AND (contact_name IS NULL OR contact_name='')
-                          THEN %s ELSE contact_name END
-                    WHERE external_userid=%s
-                      AND (wx_name IS NULL OR wx_name='')
-                    """,
-                    (name, name, eid),
-                )
-                updated += cur.rowcount or 0
-                api_hit += 1
-                # 顺手写回详情表，避免下次再空
-                cur.execute("SHOW TABLES LIKE 'qywx_external_contact_detail'")
-                if cur.fetchone():
-                    cur.execute(
-                        """
-                        UPDATE qywx_external_contact_detail
-                        SET name=COALESCE(NULLIF(name,''), %s)
-                        WHERE external_userid=%s
-                        """,
-                        (name, eid),
-                    )
-            if i % 10 == 0 or i == len(missing_eids):
-                _log(f"  详情补拉 {i}/{len(missing_eids)} hit={api_hit}")
-            time.sleep(0.05)
+            cur.execute(
+                f"""
+                UPDATE `{PAY_TABLE}` p
+                INNER JOIN (
+                  SELECT wx_union_id AS unionid, MAX(user_id) AS user_id, MAX(bind_phone) AS bind_phone
+                  FROM ys_xet_user_lists
+                  WHERE wx_union_id IS NOT NULL AND wx_union_id<>''
+                  GROUP BY wx_union_id
+                ) x ON x.unionid=p.unionid
+                SET
+                  p.xet_user_id=COALESCE(NULLIF(p.xet_user_id,''), CAST(x.user_id AS CHAR)),
+                  p.bind_phone=COALESCE(NULLIF(p.bind_phone,''), NULLIF(x.bind_phone,''))
+                WHERE p.unionid IS NOT NULL AND p.unionid<>''
+                """
+            )
+            updated += cur.rowcount or 0
+        except Exception:
+            pass
 
     cur.execute(
         f"""
         SELECT COUNT(*) AS total,
           SUM(external_userid IS NOT NULL AND external_userid<>'') AS has_external,
           SUM(wx_name IS NOT NULL AND wx_name<>'') AS has_wx_name,
+          SUM(unionid IS NOT NULL AND unionid<>'') AS has_unionid,
+          SUM(third_uid IS NOT NULL AND third_uid<>'') AS has_third,
+          SUM(xet_user_id IS NOT NULL AND xet_user_id<>'') AS has_xet,
           SUM(contact_name IS NOT NULL AND contact_name<>'') AS has_contact_name,
           SUM(bill_type=1) AS refunds,
-          SUM(bill_type=1 AND wx_name IS NOT NULL AND wx_name<>'') AS refund_has_wx,
-          SUM(bill_type=1 AND contact_name IS NOT NULL AND contact_name<>'') AS refund_has_contact
+          SUM(bill_type=1 AND wx_name IS NOT NULL AND wx_name<>'') AS refund_has_wx
         FROM `{PAY_TABLE}`
         """
     )
     stats = cur.fetchone() or {}
-    stats["api_name_hit"] = api_hit
+    stats["api_hit"] = api_hit
+    stats["api_fail"] = api_fail
+    stats["api_todo"] = len(missing_eids)
     conn.close()
-    _log(f"wx_name enrich updated≈{updated} stats={dict(stats)}")
+    _log(f"客户信息接口回填 updated≈{updated} stats={dict(stats)}")
     return {"updated": updated, "stats": dict(stats)}
 
 
@@ -1277,7 +1383,7 @@ def main() -> int:
         )
         _log("=== 回填收款员工字段（payee_*）===")
         enrich_pay_bill_payee_from_follow(args.db_host)
-        _log("=== 回填客户微信昵称（wx_name）===")
+        _log("=== 回填账单客户信息（接口 externalcontact/get → wx_name/unionid/...）===")
         enrich_pay_bill_wx_name_from_contact(args.db_host)
 
     if args.payee_enrich_only:
