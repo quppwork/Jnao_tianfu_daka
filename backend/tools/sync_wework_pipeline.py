@@ -775,6 +775,94 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
     )
     updated += cur.rowcount or 0
 
+    # 仍缺昵称：像企微前端一样按 external_userid 再拉客户详情（账单接口本身不返回名称）
+    cur.execute(
+        f"""
+        SELECT DISTINCT external_userid
+        FROM `{PAY_TABLE}`
+        WHERE external_userid IS NOT NULL AND external_userid<>''
+          AND (wx_name IS NULL OR wx_name='')
+        ORDER BY external_userid
+        LIMIT 80
+        """
+    )
+    missing_eids = [
+        (r.get("external_userid") or "").strip()
+        for r in (cur.fetchall() or [])
+        if (r.get("external_userid") or "").strip()
+    ]
+    api_hit = 0
+    if missing_eids:
+        _log(f"缺昵称客户 {len(missing_eids)}，按详情接口补拉（与企微前端同源）...")
+        try:
+            token = get_token()
+        except Exception as e:  # noqa: BLE001
+            _log(f"[warn] 无法 get_token，跳过详情补拉: {e}")
+            token = ""
+        for i, eid in enumerate(missing_eids, 1):
+            if not token:
+                break
+            detail = week.fetch_one(token, eid)
+            ec = detail.get("external_contact") or {}
+            name = (ec.get("name") or "").strip() or None
+            if not name:
+                # 前端有时展示跟进人备注
+                for fi in detail.get("follow_user") or []:
+                    rem = (fi.get("remark") or "").strip()
+                    if rem:
+                        name = rem
+                        break
+            if not name:
+                # 退款备注里偶发「姓名，xxx」
+                cur.execute(
+                    f"""
+                    SELECT remark FROM `{PAY_TABLE}`
+                    WHERE external_userid=%s AND remark IS NOT NULL AND remark<>''
+                    ORDER BY bill_type=1 DESC, id DESC LIMIT 1
+                    """,
+                    (eid,),
+                )
+                rr = cur.fetchone() or {}
+                rem = (rr.get("remark") or "").strip()
+                if rem:
+                    for sep in ("，", ",", " ", "　"):
+                        if sep in rem:
+                            cand = rem.split(sep, 1)[0].strip()
+                            if 1 < len(cand) <= 32:
+                                name = cand
+                            break
+                    if not name and 1 < len(rem) <= 32:
+                        name = rem
+            if name:
+                cur.execute(
+                    f"""
+                    UPDATE `{PAY_TABLE}`
+                    SET wx_name=%s,
+                        contact_name=CASE
+                          WHEN bill_type=1 AND (contact_name IS NULL OR contact_name='')
+                          THEN %s ELSE contact_name END
+                    WHERE external_userid=%s
+                      AND (wx_name IS NULL OR wx_name='')
+                    """,
+                    (name, name, eid),
+                )
+                updated += cur.rowcount or 0
+                api_hit += 1
+                # 顺手写回详情表，避免下次再空
+                cur.execute("SHOW TABLES LIKE 'qywx_external_contact_detail'")
+                if cur.fetchone():
+                    cur.execute(
+                        """
+                        UPDATE qywx_external_contact_detail
+                        SET name=COALESCE(NULLIF(name,''), %s)
+                        WHERE external_userid=%s
+                        """,
+                        (name, eid),
+                    )
+            if i % 10 == 0 or i == len(missing_eids):
+                _log(f"  详情补拉 {i}/{len(missing_eids)} hit={api_hit}")
+            time.sleep(0.05)
+
     cur.execute(
         f"""
         SELECT COUNT(*) AS total,
@@ -788,6 +876,7 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
         """
     )
     stats = cur.fetchone() or {}
+    stats["api_name_hit"] = api_hit
     conn.close()
     _log(f"wx_name enrich updated≈{updated} stats={dict(stats)}")
     return {"updated": updated, "stats": dict(stats)}
