@@ -42,8 +42,9 @@ payee_xet_user_id 员工在 ys_xet_user_lists 的 user_id
 三、客户侧（付款人，无 payee_ 前缀）
 ----------------------------------
 external_userid   付款客户的企微外部联系人 ID
-contact_name      企微备注的客户名
-contact_phone     企微备注的客户手机
+contact_name      账单自带联系人姓名（接口 contact_info.name，常为空）
+contact_phone     账单自带联系人手机（接口 contact_info.phone）
+wx_name           客户微信昵称（从客户详情 external_contact.name 回填）
 unionid           客户微信 UnionID（打通小程序/小鹅通）
 third_uid         客户在 ys_third_party_user 的 uid
 xet_user_id       客户在小鹅通的 user_id

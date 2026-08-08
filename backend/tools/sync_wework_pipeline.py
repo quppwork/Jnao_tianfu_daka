@@ -5,9 +5,10 @@
   1) 拉已服务外部联系人 contact_list → 本地缓存
   2) 近 N 天：客户详情(unionid) + 标签库 + 跟进人关系 + 对外收款
   3) 增量历史：对尚未同步详情的客户分批补 get
-  4) 客户 enrich：unionid / third_uid / xet_user_id / bind_phone（付款客户）
+  4) 客户 enrich：unionid / third_uid / xet_user_id / bind_phone / wx_name（付款客户）
   5) 员工 enrich：payee_name / payee_mobile / payee_unionid / payee_third_uid / payee_xet_user_id
      （来自 qywx_follow_user，与客户字段严格区分）
+     wx_name=客户微信昵称（来自客户详情 external_contact.name，区别于账单 contact_name）
 
 默认只写 docs/export/*.sql，不改库。加 --apply 才写库。
 进度记在 docs/export/.qywx_pipeline_state.json，可断点续跑。
@@ -630,12 +631,17 @@ PAYEE_COLS: list[tuple[str, str]] = [
     ("payee_xet_user_id", "ADD COLUMN payee_xet_user_id VARCHAR(64) NULL AFTER payee_third_uid"),
 ]
 
+# 客户微信昵称（非账单 contact_info.name）
+CUSTOMER_WX_COLS: list[tuple[str, str]] = [
+    ("wx_name", "ADD COLUMN wx_name VARCHAR(128) NULL AFTER contact_phone"),
+]
 
-def ensure_pay_bill_payee_columns(cur: Any) -> None:
+
+def _ensure_pay_bill_columns(cur: Any, cols: list[tuple[str, str]]) -> None:
     cur.execute(f"SHOW TABLES LIKE '{PAY_TABLE}'")
     if not cur.fetchone():
         return
-    for col, ddl in PAYEE_COLS:
+    for col, ddl in cols:
         cur.execute(
             "SELECT COUNT(*) AS c FROM information_schema.COLUMNS "
             "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND COLUMN_NAME=%s",
@@ -648,8 +654,15 @@ def ensure_pay_bill_payee_columns(cur: Any) -> None:
             _log(f"  schema: add {col}")
 
 
-def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
-    """按 payee_userid 从 qywx_follow_user 回填员工信息（不改客户字段）。"""
+def ensure_pay_bill_payee_columns(cur: Any) -> None:
+    _ensure_pay_bill_columns(cur, PAYEE_COLS)
+
+
+def ensure_pay_bill_wx_name_column(cur: Any) -> None:
+    _ensure_pay_bill_columns(cur, CUSTOMER_WX_COLS)
+
+
+def _connect_legacy(db_host: str = "") -> Any:
     maybe_override_db_host(db_host)
     import pymysql
 
@@ -660,7 +673,7 @@ def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
     )
     if not m:
         raise RuntimeError("无法解析 LEGACY_DATABASE_URL")
-    conn = pymysql.connect(
+    return pymysql.connect(
         host=m.group(3),
         port=int(m.group(4) or 3306),
         user=unquote(m.group(1)),
@@ -670,6 +683,67 @@ def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
         autocommit=True,
         cursorclass=pymysql.cursors.DictCursor,
     )
+
+
+def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
+    """按 external_userid 从客户详情回填微信昵称 wx_name。"""
+    conn = _connect_legacy(db_host)
+    cur = conn.cursor()
+    ensure_pay_bill_human_schema(cur)
+    ensure_pay_bill_wx_name_column(cur)
+
+    updated = 0
+    cur.execute("SHOW TABLES LIKE 'qywx_external_contact_detail'")
+    if cur.fetchone():
+        cur.execute(
+            f"""
+            UPDATE `{PAY_TABLE}` p
+            INNER JOIN qywx_external_contact_detail d
+              ON d.external_userid=p.external_userid
+            SET p.wx_name=COALESCE(NULLIF(d.name,''), p.wx_name)
+            WHERE p.external_userid IS NOT NULL AND p.external_userid<>''
+              AND d.name IS NOT NULL AND d.name<>''
+            """
+        )
+        updated += cur.rowcount or 0
+
+    cur.execute("SHOW TABLES LIKE 'qywx_external_contact_full'")
+    if cur.fetchone():
+        cur.execute(
+            f"""
+            UPDATE `{PAY_TABLE}` p
+            INNER JOIN (
+              SELECT external_userid, MAX(name) AS name
+              FROM qywx_external_contact_full
+              WHERE external_userid IS NOT NULL AND external_userid<>''
+                AND name IS NOT NULL AND name<>''
+              GROUP BY external_userid
+            ) f ON f.external_userid=p.external_userid
+            SET p.wx_name=COALESCE(NULLIF(p.wx_name,''), NULLIF(f.name,''))
+            WHERE p.external_userid IS NOT NULL AND p.external_userid<>''
+              AND (p.wx_name IS NULL OR p.wx_name='')
+            """
+        )
+        updated += cur.rowcount or 0
+
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS total,
+          SUM(external_userid IS NOT NULL AND external_userid<>'') AS has_external,
+          SUM(wx_name IS NOT NULL AND wx_name<>'') AS has_wx_name,
+          SUM(contact_name IS NOT NULL AND contact_name<>'') AS has_contact_name
+        FROM `{PAY_TABLE}`
+        """
+    )
+    stats = cur.fetchone() or {}
+    conn.close()
+    _log(f"wx_name enrich updated≈{updated} stats={dict(stats)}")
+    return {"updated": updated, "stats": dict(stats)}
+
+
+def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
+    """按 payee_userid 从 qywx_follow_user 回填员工信息（不改客户字段）。"""
+    conn = _connect_legacy(db_host)
     cur = conn.cursor()
     ensure_pay_bill_human_schema(cur)
     ensure_pay_bill_payee_columns(cur)
@@ -755,8 +829,9 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
   payee_xet_user_id VARCHAR(64) NULL COMMENT '收款员工 ys_xet_user_lists.user_id',
   external_userid VARCHAR(64) NULL COMMENT '付款客户企微external_userid',
   mch_id VARCHAR(64) NULL,
-  contact_name VARCHAR(128) NULL COMMENT '客户备注名',
-  contact_phone VARCHAR(64) NULL COMMENT '客户备注手机',
+  contact_name VARCHAR(128) NULL COMMENT '账单联系人姓名(contact_info)',
+  contact_phone VARCHAR(64) NULL COMMENT '账单联系人手机(contact_info)',
+  wx_name VARCHAR(128) NULL COMMENT '客户微信昵称',
   unionid VARCHAR(64) NULL COMMENT '客户微信unionid',
   third_uid VARCHAR(64) NULL COMMENT '客户 ys_third_party_user.uid',
   xet_user_id VARCHAR(64) NULL COMMENT '客户 ys_xet_user_lists.user_id',
@@ -775,13 +850,13 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
         )
-        # 兼容旧表缺列（客户 + 员工）
+        # 兼容旧表缺列（客户 + 员工）；动态 SQL 勿带中文 COMMENT
         alter_cols = [
             ("unionid", "ADD COLUMN unionid VARCHAR(64) NULL"),
             ("third_uid", "ADD COLUMN third_uid VARCHAR(64) NULL"),
             ("xet_user_id", "ADD COLUMN xet_user_id VARCHAR(64) NULL"),
             ("bind_phone", "ADD COLUMN bind_phone VARCHAR(32) NULL"),
-        ] + [(c, d) for c, d in PAYEE_COLS]
+        ] + [(c, d) for c, d in CUSTOMER_WX_COLS] + [(c, d) for c, d in PAYEE_COLS]
         for col, ddl in alter_cols:
             f.write(
                 f"SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS "
@@ -971,7 +1046,7 @@ def main() -> int:
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
     def _sync_staff_then_payee() -> None:
-        """通讯录 CSV/库内手机 → qywx_follow_user → 账单 payee_*。"""
+        """通讯录 CSV/库内手机 → 员工表 → 账单 payee_*；并回填客户微信昵称 wx_name。"""
         import sync_qywx_follow_user_enrich as staff
 
         _log("=== 同步员工主数据（qywx_follow_user，含通讯录 CSV）===")
@@ -984,6 +1059,8 @@ def main() -> int:
         )
         _log("=== 回填收款员工字段（payee_*）===")
         enrich_pay_bill_payee_from_follow(args.db_host)
+        _log("=== 回填客户微信昵称（wx_name）===")
+        enrich_pay_bill_wx_name_from_contact(args.db_host)
 
     if args.payee_enrich_only:
         _sync_staff_then_payee()
