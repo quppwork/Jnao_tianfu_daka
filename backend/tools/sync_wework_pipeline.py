@@ -686,7 +686,7 @@ def _connect_legacy(db_host: str = "") -> Any:
 
 
 def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
-    """按 external_userid 从客户详情回填微信昵称 wx_name。"""
+    """回填客户微信昵称 wx_name；退款单补 contact_name（接口常不返回 contact_info）。"""
     conn = _connect_legacy(db_host)
     cur = conn.cursor()
     ensure_pay_bill_human_schema(cur)
@@ -726,12 +726,64 @@ def enrich_pay_bill_wx_name_from_contact(db_host: str = "") -> dict[str, Any]:
         )
         updated += cur.rowcount or 0
 
+    # 同客户其它账单已有昵称 → 补空行（含退款）
+    cur.execute(
+        f"""
+        UPDATE `{PAY_TABLE}` p
+        INNER JOIN (
+          SELECT external_userid, MAX(wx_name) AS wx_name
+          FROM `{PAY_TABLE}`
+          WHERE external_userid IS NOT NULL AND external_userid<>''
+            AND wx_name IS NOT NULL AND wx_name<>''
+          GROUP BY external_userid
+        ) s ON s.external_userid=p.external_userid
+        SET p.wx_name=COALESCE(NULLIF(p.wx_name,''), NULLIF(s.wx_name,''))
+        WHERE p.wx_name IS NULL OR p.wx_name=''
+        """
+    )
+    updated += cur.rowcount or 0
+
+    # 退款：按同商户订单号从原收款单抄昵称/联系人
+    cur.execute(
+        f"""
+        UPDATE `{PAY_TABLE}` r
+        INNER JOIN `{PAY_TABLE}` p
+          ON p.out_trade_no=r.out_trade_no AND p.bill_type=0 AND p.id<>r.id
+        SET
+          r.wx_name=COALESCE(NULLIF(r.wx_name,''), NULLIF(p.wx_name,''), NULLIF(p.contact_name,'')),
+          r.contact_name=COALESCE(
+            NULLIF(r.contact_name,''), NULLIF(p.contact_name,''), NULLIF(p.wx_name,''), NULLIF(r.wx_name,'')
+          )
+        WHERE r.bill_type=1
+          AND (
+            r.wx_name IS NULL OR r.wx_name=''
+            OR r.contact_name IS NULL OR r.contact_name=''
+          )
+        """
+    )
+    updated += cur.rowcount or 0
+
+    # 退款仍无 contact_name：用已回填的 wx_name 填展示名（接口退款单通常不带 contact_info）
+    cur.execute(
+        f"""
+        UPDATE `{PAY_TABLE}`
+        SET contact_name=wx_name
+        WHERE bill_type=1
+          AND (contact_name IS NULL OR contact_name='')
+          AND wx_name IS NOT NULL AND wx_name<>''
+        """
+    )
+    updated += cur.rowcount or 0
+
     cur.execute(
         f"""
         SELECT COUNT(*) AS total,
           SUM(external_userid IS NOT NULL AND external_userid<>'') AS has_external,
           SUM(wx_name IS NOT NULL AND wx_name<>'') AS has_wx_name,
-          SUM(contact_name IS NOT NULL AND contact_name<>'') AS has_contact_name
+          SUM(contact_name IS NOT NULL AND contact_name<>'') AS has_contact_name,
+          SUM(bill_type=1) AS refunds,
+          SUM(bill_type=1 AND wx_name IS NOT NULL AND wx_name<>'') AS refund_has_wx,
+          SUM(bill_type=1 AND contact_name IS NOT NULL AND contact_name<>'') AS refund_has_contact
         FROM `{PAY_TABLE}`
         """
     )
