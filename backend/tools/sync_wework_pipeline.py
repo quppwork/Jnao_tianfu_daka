@@ -36,8 +36,21 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
+from zoneinfo import ZoneInfo
 
 import requests
+
+# 企微/业务统一按中国时区落库，避免 Docker 默认 UTC 导致 pay_time 少 8 小时
+TZ_SH = ZoneInfo("Asia/Shanghai")
+
+
+def now_sh() -> datetime:
+    """当前上海时间（naive，便于写入 MySQL DATETIME）。"""
+    return datetime.now(TZ_SH).replace(tzinfo=None)
+
+
+def dt_from_unix_sh(ts: int | float) -> datetime:
+    return datetime.fromtimestamp(int(ts), tz=TZ_SH).replace(tzinfo=None)
 
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
@@ -75,7 +88,7 @@ def load_state() -> dict[str, Any]:
 
 def save_state(state: dict[str, Any]) -> None:
     EXPORT.mkdir(parents=True, exist_ok=True)
-    state["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    state["updated_at"] = now_sh().strftime("%Y-%m-%d %H:%M:%S")
     STATE_PATH.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -116,7 +129,7 @@ def fetch_contact_list(token: str) -> list[dict[str, Any]]:
 
 
 def save_served_cache(rows: list[dict[str, Any]]) -> Path:
-    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    stamp = now_sh().strftime("%Y%m%d%H%M%S")
     path = EXPORT / f"qywx_served_contacts_{stamp}.json"
     path.write_text(
         json.dumps({"rows": rows, "count": len(rows), "fetched_at": stamp}, ensure_ascii=False),
@@ -140,7 +153,7 @@ def all_external_ids(rows: list[dict[str, Any]]) -> list[str]:
 def recent_scope(
     rows: list[dict[str, Any]], days: int
 ) -> tuple[list[str], set[tuple[str, str]], int]:
-    since_ts = int((datetime.now() - timedelta(days=days)).timestamp())
+    since_ts = int((datetime.now(TZ_SH) - timedelta(days=days)).timestamp())
     pairs: set[tuple[str, str]] = set()
     eids: list[str] = []
     seen: set[str] = set()
@@ -251,7 +264,7 @@ def write_upsert_sql(
     recreate_tags: bool,
 ) -> None:
     """增量友好：建表 IF NOT EXISTS + INSERT ON DUPLICATE KEY UPDATE。"""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_sh().strftime("%Y-%m-%d %H:%M:%S")
     with path.open("w", encoding="utf-8") as f:
         f.write("-- pipeline upsert - safe for incremental import\n")
         f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n")
@@ -552,15 +565,43 @@ CREATE TABLE IF NOT EXISTS qywx_follow_user (
 
 
 def _unix_to_dt(ts: Any) -> str | None:
-    """企微时间戳 → 'YYYY-MM-DD HH:MM:SS'。"""
+    """企微时间戳 → 中国时区 'YYYY-MM-DD HH:MM:SS'。"""
     if ts is None or ts == "":
         return None
     if isinstance(ts, datetime):
+        if ts.tzinfo is not None:
+            ts = ts.astimezone(TZ_SH).replace(tzinfo=None)
         return ts.strftime("%Y-%m-%d %H:%M:%S")
     try:
-        return datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d %H:%M:%S")
+        return dt_from_unix_sh(int(ts)).strftime("%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError, OSError, OverflowError):
         return None
+
+
+def repair_pay_bill_pay_time_timezone(cur: Any) -> int:
+    """用 raw_json.pay_time 按东八区重算 pay_time（修复容器 UTC 少写 8 小时）。"""
+    cur.execute("SET time_zone = '+08:00'")
+    cur.execute(
+        f"""
+        UPDATE `{PAY_TABLE}`
+        SET pay_time = FROM_UNIXTIME(
+          CAST(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.pay_time')) AS UNSIGNED)
+        )
+        WHERE raw_json IS NOT NULL
+          AND JSON_EXTRACT(raw_json, '$.pay_time') IS NOT NULL
+          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.pay_time')) REGEXP '^[0-9]+$'
+          AND (
+            pay_time IS NULL
+            OR pay_time <> FROM_UNIXTIME(
+              CAST(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.pay_time')) AS UNSIGNED)
+            )
+          )
+        """
+    )
+    n = cur.rowcount or 0
+    if n:
+        _log(f"  schema: 按东八区修复 pay_time {n} 行")
+    return n
 
 
 def _fen_to_yuan(v: Any) -> str | None:
@@ -941,7 +982,7 @@ def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
 
 
 def write_pay_upsert_sql(path: Path, flats: list[dict[str, Any]], begin_time: int, end_time: int) -> None:
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_sh().strftime("%Y-%m-%d %H:%M:%S")
     begin_dt = _unix_to_dt(begin_time)
     end_dt = _unix_to_dt(end_time)
     with path.open("w", encoding="utf-8") as f:
@@ -1149,6 +1190,7 @@ def apply_sql_files(files: list[Path], db_host: str) -> None:
             ensure_pay_bill_human_schema(cur)
             ensure_pay_bill_payee_columns(cur)
             ensure_pay_bill_wx_name_column(cur)
+            repair_pay_bill_pay_time_timezone(cur)
         except Exception as e:  # noqa: BLE001
             _log(f"[warn] pay_bill schema migrate: {e}")
     for p in files:
@@ -1219,7 +1261,7 @@ def main() -> int:
     synced: set[str] = set(state.get("synced_external_userids") or [])
     failed: dict[str, str] = dict(state.get("failed_external_userids") or {})
     out_files: list[Path] = []
-    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    stamp = now_sh().strftime("%Y%m%d%H%M%S")
 
     def _sync_staff_then_payee() -> None:
         """通讯录 CSV/库内手机 → 员工表 → 账单 payee_*；并回填客户微信昵称 wx_name。"""
@@ -1315,9 +1357,12 @@ def main() -> int:
             _log(f"已写 {sql_path.name}")
 
         if not args.skip_pay:
-            end = datetime.now()
+            end = datetime.now(TZ_SH)
             begin = end - timedelta(days=args.recent_days)
             bts, ets = int(begin.timestamp()), int(end.timestamp())
+            # 写入 MySQL 用 naive 上海时间
+            begin = begin.replace(tzinfo=None)
+            end = end.replace(tzinfo=None)
             _log(f"拉取收款 {begin} ~ {end}")
             bills = pay.fetch_bills(token, bts, ets)
             flats = [pay.flatten(b) for b in bills]
@@ -1333,6 +1378,7 @@ def main() -> int:
             # 收款历史：按最多 31 天一段往前补；用 state.pay_history_oldest_ts 读档，已覆盖的不再重拉
             if args.pay_history_days > 0 and not args.recent_only:
                 target_begin = begin - timedelta(days=args.pay_history_days)
+                target_begin_ts = int(target_begin.replace(tzinfo=TZ_SH).timestamp())
                 oldest_ts = state.get("pay_history_oldest_ts")
                 try:
                     oldest_ts = int(oldest_ts) if oldest_ts is not None else None
@@ -1342,18 +1388,18 @@ def main() -> int:
                 if (
                     not args.force_pay_history
                     and oldest_ts is not None
-                    and oldest_ts <= int(target_begin.timestamp())
+                    and oldest_ts <= target_begin_ts
                 ):
                     _log(
                         f"收款历史读档跳过：已覆盖至 "
-                        f"{datetime.fromtimestamp(oldest_ts)}，"
+                        f"{dt_from_unix_sh(oldest_ts)}，"
                         f"目标起点 {target_begin}（加 --force-pay-history 可强制重拉）"
                     )
                 else:
                     # 只需补 [target_begin, end2)，end2 初始为「近期窗口起点」或「上次已覆盖最早点」
                     end2 = begin
                     if not args.force_pay_history and oldest_ts is not None:
-                        end2 = min(end2, datetime.fromtimestamp(oldest_ts))
+                        end2 = min(end2, dt_from_unix_sh(oldest_ts))
                     chunk = 31
                     part = 0
                     covered_oldest = oldest_ts
@@ -1389,7 +1435,7 @@ def main() -> int:
                     if covered_oldest is not None:
                         _log(
                             f"收款历史读档已更新：oldest="
-                            f"{datetime.fromtimestamp(covered_oldest)}"
+                            f"{dt_from_unix_sh(covered_oldest)}"
                         )
 
     # ---- 3) history detail：可多批 / 限时，适合凌晨长跑 ----
@@ -1406,7 +1452,7 @@ def main() -> int:
         )
         all_ids = all_external_ids(rows)
         if args.history_max_days > 0:
-            since_h = int((datetime.now() - timedelta(days=args.history_max_days)).timestamp())
+            since_h = int((datetime.now(TZ_SH) - timedelta(days=args.history_max_days)).timestamp())
             allow = {
                 (r.get("external_userid") or "").strip()
                 for r in rows
