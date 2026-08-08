@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # 每天凌晨 4:00 从老库拉取 ys_wx_member → jnao_daka.wx_member_snapshot
 #
-# 宝塔「计划任务」示例:
-#   任务类型: Shell
-#   执行周期: 每天 04:00
-#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_wx_snapshot_daily.sh
+# ⚠️ 当前暂停：微信一键登录数据暂不更新，请勿配置宝塔计划任务。
+# 恢复同步后再启用。
 
 set -euo pipefail
 

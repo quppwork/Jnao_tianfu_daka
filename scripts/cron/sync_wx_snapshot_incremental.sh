@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # 每 15 分钟增量同步 wx_member_snapshot（B）
 #
-# 宝塔计划任务示例:
-#   任务类型: Shell
-#   执行周期: 每 15 分钟
-#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_wx_snapshot_incremental.sh
+# ⚠️ 当前暂停：微信一键登录数据暂不更新，请勿配置宝塔计划任务。
+# 恢复同步后再启用。
 
 set -euo pipefail
 
