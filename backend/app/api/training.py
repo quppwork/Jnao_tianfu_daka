@@ -181,6 +181,14 @@ def training_item_media_stream(
     stored = item.video_url if media == "video" else item.audio_url
     if not stored:
         raise HTTPException(404, f"该训练项无{media}资源")
+    from app.services.oss_client import sign_cdn_play_url, use_cdn_for_media
+
+    if use_cdn_for_media():
+        signed = sign_cdn_play_url(stored)
+        if signed:
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(signed, status_code=302)
     return stream_oss_media(stored, range_header=request.headers.get("range"))
 
 

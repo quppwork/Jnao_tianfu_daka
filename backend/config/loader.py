@@ -71,6 +71,7 @@ def load_settings() -> dict:
     signed = os.getenv("OSS_SIGNED_URL", str(oss.get("signed_url", True)))
     oss["signed_url"] = signed.lower() in ("1", "true", "yes")
     oss["sign_expires"] = int(os.getenv("OSS_SIGN_EXPIRES", oss.get("sign_expires", 7200)))
+    oss["cdn_domain"] = os.getenv("OSS_CDN_DOMAIN", oss.get("cdn_domain", "")).strip()
     raw["oss"] = oss
     return raw
 

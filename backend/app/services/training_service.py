@@ -513,23 +513,32 @@ def _item_to_dict(
     if hide_media:
         audio_url = None
         video_url = None
-    elif item.id and item.audio_url:
-        audio_url = training_item_stream_path(item.id, "audio")
     else:
-        audio_url = None
-    if hide_media:
-        video_url = None
-    elif item.id and item.video_url:
-        video_url = training_item_stream_path(item.id, "video")
-    else:
-        video_url = None
-    if child_user_id and item.id:
-        from app.core.media_stream_token import append_media_stream_token
+        from app.services.oss_client import sign_cdn_play_url, use_cdn_for_media
 
-        if audio_url:
-            audio_url = append_media_stream_token(audio_url, item.id, child_user_id, "audio")
-        if video_url:
-            video_url = append_media_stream_token(video_url, item.id, child_user_id, "video")
+        if item.id and item.audio_url:
+            audio_url = (
+                sign_cdn_play_url(item.audio_url)
+                if use_cdn_for_media()
+                else training_item_stream_path(item.id, "audio")
+            )
+        else:
+            audio_url = None
+        if item.id and item.video_url:
+            video_url = (
+                sign_cdn_play_url(item.video_url)
+                if use_cdn_for_media()
+                else training_item_stream_path(item.id, "video")
+            )
+        else:
+            video_url = None
+        if child_user_id and item.id and not use_cdn_for_media():
+            from app.core.media_stream_token import append_media_stream_token
+
+            if audio_url:
+                audio_url = append_media_stream_token(audio_url, item.id, child_user_id, "audio")
+            if video_url:
+                video_url = append_media_stream_token(video_url, item.id, child_user_id, "video")
     return {
         "id": item.id,
         "sort_order": item.sort_order,

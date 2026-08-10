@@ -20,6 +20,8 @@ MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 
 def _oss_cfg() -> dict:
     settings = load_settings().get("oss", {})
+    cdn_raw = os.getenv("OSS_CDN_DOMAIN", settings.get("cdn_domain", "")).strip()
+    cdn_domain = cdn_raw.replace("https://", "").replace("http://", "").strip("/")
     return {
         "access_key_id": settings.get("access_key_id", ""),
         "access_key_secret": settings.get("access_key_secret", ""),
@@ -29,7 +31,21 @@ def _oss_cfg() -> dict:
         "prefixes": settings.get("prefixes", [settings.get("prefix", DEFAULT_PREFIX)]),
         "signed_url": settings.get("signed_url", True),
         "sign_expires": int(settings.get("sign_expires", 7200)),
+        "cdn_domain": cdn_domain,
     }
+
+
+def oss_origin_host() -> str:
+    cfg = _oss_cfg()
+    return f"{cfg['bucket']}.{cfg['endpoint']}"
+
+
+def cdn_domain() -> str:
+    return _oss_cfg().get("cdn_domain") or ""
+
+
+def use_cdn_for_media() -> bool:
+    return bool(cdn_domain()) and is_oss_configured()
 
 
 def is_oss_configured() -> bool:
@@ -51,6 +67,9 @@ def object_key_from_url(url: str) -> str | None:
         return url.lstrip("/")
     cfg = _oss_cfg()
     bucket_host = f"{cfg['bucket']}.{cfg['endpoint']}"
+    cdn_host = cfg.get("cdn_domain") or ""
+    if parsed.netloc == cdn_host:
+        return unquote(parsed.path.lstrip("/"))
     if parsed.netloc != bucket_host and cfg["bucket"] not in parsed.netloc:
         return None
     return unquote(parsed.path.lstrip("/"))
@@ -152,8 +171,22 @@ def sign_play_url(url: str | None, expires: int | None = None) -> str | None:
     return bucket.sign_url("GET", key, expires or cfg["sign_expires"])
 
 
+def sign_cdn_play_url(url: str | None, expires: int | None = None) -> str | None:
+    """OSS 签名后将域名替换为 CDN 加速域（需控制台已绑定 OSS 回源 + 私有桶回源）。"""
+    signed = sign_play_url(url, expires)
+    if not signed:
+        return signed
+    cdn = cdn_domain()
+    if not cdn:
+        return signed
+    origin = oss_origin_host()
+    for scheme in ("https", "http"):
+        signed = signed.replace(f"{scheme}://{origin}", f"https://{cdn}")
+    return signed
+
+
 def resolve_play_url(url: str | None) -> str | None:
-    """API 返回前解析播放地址（私有桶自动签名）"""
+    """API 返回前解析播放地址（私有桶自动签名；配置 CDN 时走加速域）。"""
     if not url:
         return None
     cfg = _oss_cfg()
@@ -161,5 +194,7 @@ def resolve_play_url(url: str | None) -> str | None:
         return url
     key = object_key_from_url(url)
     if key:
+        if use_cdn_for_media():
+            return sign_cdn_play_url(url)
         return sign_play_url(url)
     return url
