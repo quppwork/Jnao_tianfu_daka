@@ -219,7 +219,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ensureChildUser, fetchAssessmentReport, fetchLatestAssessment, fetchProfile, getSessionToken, saveProfile } from '@/utils/userApi.js'
+import { ensureChildUser, fetchAssessmentReport, fetchLatestAssessment, fetchProfile, getSessionToken, saveProfile, resolveTrainingStreamUrl } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
@@ -685,10 +685,10 @@ const talentWheelSvg = computed(() => {
 })
 const talentVideoUrl = ref('')
 const showTalentVideo = ref(false)
-function openVideo() {
+async function openVideo() {
   if (!talentVideoUrl.value) {
-    const u = JSON.parse(localStorage.getItem('jnao_user') || '{}')
-    talentVideoUrl.value = `/api/training/video/talent/stream?user_id=${u.id || 1}`
+    const uid = await ensureChildUser()
+    talentVideoUrl.value = resolveTrainingStreamUrl('/api/training/video/talent/stream', uid)
   }
   showTalentVideo.value = true
 }

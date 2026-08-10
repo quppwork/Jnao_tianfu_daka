@@ -262,7 +262,7 @@
       </view>
 
       <!-- 训练阶段 -->
-      <template v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in visiblePhases" :key="phase.block">
+      <template v-if="showTraining && (timerPhase !== 'setup' || (todayPlan?.items?.length > 0)) && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in visiblePhases" :key="phase.block">
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
           <text class="section-title" :class="{ dim: !phase.unlocked, elective: phase.isElective }">
@@ -1383,6 +1383,11 @@ function restoreTrainingVisibility(data) {
   if (items.some(i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0)) {
     showTraining.value = true
     planJustGenerated.value = false
+    return
+  }
+  if (items.some(i => i.video_url || i.audio_url)) {
+    showTraining.value = true
+    planJustGenerated.value = false
   }
 }
 
@@ -1514,7 +1519,13 @@ async function startTrainingTimer() {
     if (needSchedule) {
       const result = await scheduleTrainingPlan(uid, plannedMinutes)
       if (result.error) throw new Error(result.message || '生成训练内容失败')
-      await applyScheduledPlan(uid, result.data)
+      const synced = await fetchTrainingToday(uid, { skipAi: true })
+      if (!synced.error && synced.data?.items?.length) {
+        await applyScheduledPlan(uid, synced.data)
+      } else {
+        await applyScheduledPlan(uid, result.data)
+      }
+      restoreTrainingVisibility(todayPlan.value)
       planJustGenerated.value = true
     }
 
@@ -1568,7 +1579,9 @@ function guardMedia() {
     return false
   }
   if (timerPhase.value === 'setup') {
-    uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
+    const items = todayPlan.value?.items || []
+    if (items.some(i => i.video_url || i.audio_url)) return true
+    uni.showToast({ title: '请先选择时长并点击「开始训练」', icon: 'none' })
     return false
   }
   return true

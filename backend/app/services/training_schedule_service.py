@@ -402,6 +402,12 @@ async def schedule_training_by_duration(
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or not _has_plan_content(plan):
         raise TrainingError("今日方案生成失败", 500)
+    talent = resolve_effective_talent(db, child_user_id)
+    talent_code = talent.get("talent_code") if talent else None
+    if plan.items and talent_code:
+        if repair_plan_media_items(db, plan, talent_code):
+            db.commit()
+            plan = _get_plan_by_date(db, child_user_id, plan_date)
     if plan.items:
         plan.report_text = build_coach_text_for_plan(plan)
         db.commit()

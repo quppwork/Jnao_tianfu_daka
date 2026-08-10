@@ -512,12 +512,26 @@ export function withUser(url, userId) {
   return ensureAuthQuery(url, userId)
 }
 
-/** 训练音视频流 — 同源代理 URL，附带 user_id 鉴权 */
+/** 训练音视频流 — 同源代理 URL，附带 user_id 鉴权；H5 video 需绝对路径 */
 export function resolveTrainingStreamUrl(url, userId) {
   if (!url || !userId) return url || ''
   if (url.startsWith('blob:') || url.startsWith('data:')) return url
   if (!url.includes('/api/training/') || !url.includes('/stream')) return url
-  return ensureAuthQuery(url, userId)
+
+  let path = url
+  let origin = ''
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    try {
+      const u = new URL(path)
+      origin = u.origin
+      path = u.pathname + u.search
+    } catch (_) { /* keep path */ }
+  }
+  path = ensureAuthQuery(path, userId)
+  if (!origin && path.startsWith('/')) {
+    try { origin = window.location.origin } catch (_) {}
+  }
+  return origin ? origin + path : path
 }
 
 /** 答疑图片需带 user_id 鉴权（session 走 Cookie）；补全绝对路径供 <image> 加载 */
