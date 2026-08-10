@@ -767,7 +767,7 @@
               disablePictureInPicture
               @timeupdate="onMediaTimeUpdate"
               @loadedmetadata="onMediaLoadedMetadata"
-              @durationchange="onMediaLoadedMetadata"
+              @durationchange="onVideoDurationChange"
               @seeking="onMediaSeeking"
               @ratechange="lockMediaPlaybackRate"
               @pause="onVideoPause"
@@ -2559,6 +2559,14 @@ function formatMediaTime(sec) {
 
 /** uni-app H5 下 ref 可能不是原生 HTMLVideoElement，需兼容解析 */
 function getTrainingVideoDom() {
+  if (pinnedTrainingVideo) {
+    try {
+      if (typeof document !== 'undefined' && document.body.contains(pinnedTrainingVideo)) {
+        return pinnedTrainingVideo
+      }
+    } catch (_) { /* ignore */ }
+    pinnedTrainingVideo = null
+  }
   const refVal = trainingVideoEl.value
   if (refVal) {
     if (typeof HTMLVideoElement !== 'undefined' && refVal instanceof HTMLVideoElement) return refVal
@@ -2577,6 +2585,42 @@ function getTrainingVideoDom() {
 
 const videoPreloadPool = new Map()
 let videoUiSyncId = null
+/** 当前播放器内唯一 video 元素，避免 querySelector 误取到其它节点 */
+let pinnedTrainingVideo = null
+/** 底部时间轴展示用，过滤 streaming 间隙的 currentTime 归零 */
+let videoUiSecSmoothed = 0
+
+function resetVideoUiClock(initialSec = 0) {
+  videoUiSecSmoothed = Math.max(0, Number(initialSec) || 0)
+}
+
+function pinTrainingVideoEl(el) {
+  if (!el) return
+  const node = el instanceof HTMLVideoElement ? el : (el.querySelector?.('video') || null)
+  if (node instanceof HTMLVideoElement) pinnedTrainingVideo = node
+}
+
+function clearPinnedTrainingVideo() {
+  pinnedTrainingVideo = null
+  videoUiSecSmoothed = 0
+}
+
+function pickVideoUiSec(el) {
+  let cur = Number(el?.currentTime)
+  if (!Number.isFinite(cur) || cur < 0) cur = 0
+  const prev = videoUiSecSmoothed
+  const playing = el && !el.paused && !el.ended
+  if (playing && prev >= 1 && cur < 0.5) return prev
+  if (cur >= prev - 0.25) {
+    videoUiSecSmoothed = cur
+    return cur
+  }
+  if (prev - cur <= MEDIA_SEEK_EPS + 0.5) {
+    videoUiSecSmoothed = cur
+    return cur
+  }
+  return prev
+}
 
 function stopVideoUiSync() {
   if (videoUiSyncId) {
@@ -2589,8 +2633,9 @@ function startVideoUiSync() {
   stopVideoUiSync()
   videoUiSyncId = setInterval(() => {
     if (!mediaPlayer.value.show || mediaPlayer.value.type !== 'video') return
-    syncMediaUiFromElement(getTrainingVideoDom())
-  }, 300)
+    const el = pinnedTrainingVideo || getTrainingVideoDom()
+    if (el) syncMediaUiFromElement(el)
+  }, 500)
 }
 
 function destroyPreloadVideos() {
@@ -2779,18 +2824,19 @@ function syncMediaUiFromElement(el) {
     videoMetadataReady.value = true
     videoLoading.value = false
   }
-  const cur = el.currentTime || 0
-  if (cur > mediaMaxHeardSec.value) mediaMaxHeardSec.value = cur
+  const rawCur = Number(el.currentTime) || 0
+  if (rawCur > mediaMaxHeardSec.value) mediaMaxHeardSec.value = rawCur
   const watchedSec = mediaMaxHeardSec.value
 
   if (mediaPlayer.value.type === 'audio') {
     audioUiDuration.value = durationSec
-    audioUiSec.value = cur
+    audioUiSec.value = rawCur
     audioPlaying.value = !el.paused && !el.ended
   }
   if (mediaPlayer.value.type === 'video') {
-    videoProgressPct.value = durationSec > 0 ? Math.round(cur / durationSec * 100) : 0
-    videoTimeLabel.value = formatMediaTime(cur)
+    const displayCur = pickVideoUiSec(el)
+    videoProgressPct.value = durationSec > 0 ? Math.round(displayCur / durationSec * 100) : 0
+    videoTimeLabel.value = formatMediaTime(displayCur)
     if (durationSec > 0) videoDurationLabel.value = formatMediaTime(durationSec)
     videoPlaying.value = !el.paused && !el.ended
   }
@@ -2809,7 +2855,21 @@ function syncMediaUiFromElement(el) {
 }
 
 function onMediaTimeUpdate(e) {
-  syncMediaUiFromElement(e?.target || activeMediaEl())
+  const el = e?.target
+  if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
+  syncMediaUiFromElement(el || activeMediaEl())
+}
+
+function onVideoDurationChange(e) {
+  const el = e?.target
+  if (!el || mediaPlayer.value.type !== 'video') return
+  if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
+  const d = el.duration || 0
+  if (d > 0) {
+    videoDurationLabel.value = formatMediaTime(d)
+    videoMetadataReady.value = true
+    videoLoading.value = false
+  }
 }
 
 function onMediaEnded(e) {
@@ -3697,20 +3757,25 @@ async function openMediaItem(item, forceType) {
   audioUiDuration.value = Number(prev?.duration_sec || 0)
 
   const openVideo = () => {
+    clearPinnedTrainingVideo()
+    const resumeSec = Number(prev?.watched_sec || 0)
     videoLoading.value = true
     videoMetadataReady.value = false
     videoLoadAttempt.value = 0
     clearVideoRetryTimer()
+    resetVideoUiClock(resumeSec)
     videoProgressPct.value = 0
-    videoTimeLabel.value = '0:00'
+    videoTimeLabel.value = formatMediaTime(resumeSec)
     videoDurationLabel.value = '--:--'
     applyPreloadedVideoMeta(item)
     videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
     nextTick(() => {
+      const el = getTrainingVideoDom()
+      pinTrainingVideoEl(el)
       startVideoUiSync()
       tryPlayVideoAfterOpen()
-      syncMediaUiFromElement(getTrainingVideoDom())
+      if (el) syncMediaUiFromElement(el)
     })
   }
   const openAudio = () => {
@@ -3761,6 +3826,7 @@ function closeMedia() {
   }
   stopVideoUiSync()
   clearVideoRetryTimer()
+  clearPinnedTrainingVideo()
   videoLoadAttempt.value = 0
   const item = lastOpenedItem.value
   if (item?.id && itemNeedsListen(item)) {
