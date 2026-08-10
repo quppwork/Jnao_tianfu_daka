@@ -99,6 +99,7 @@ async def chat_completion(
                 "messages": messages,
                 "max_tokens": max_tokens,
             },
+            timeout=timeout,
         )
         if resp.status_code != 200:
             logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
@@ -150,6 +151,7 @@ async def chat_completion_message(
                 "Content-Type": "application/json",
             },
             json=payload,
+            timeout=timeout,
         )
         if resp.status_code != 200:
             logger.error(
@@ -160,7 +162,12 @@ async def chat_completion_message(
         msg = data["choices"][0]["message"]
         return msg if isinstance(msg, dict) else None
     except httpx.HTTPError as e:
-        logger.warning(f"Doubao tools request failed: {e}")
+        logger.warning(
+            "Doubao tools request failed: type=%s timeout=%s err=%r",
+            type(e).__name__,
+            timeout,
+            e,
+        )
         return None
     except (KeyError, IndexError, TypeError, ValueError) as e:
         logger.warning(f"Doubao tools parse failed: {e}")

@@ -1090,13 +1090,16 @@ export async function refreshTrainingReport(userId, force = true) {
   }
 }
 
-/** 按训练时长排课：框架内 LLM 路由生成 plan_item */
-export async function scheduleTrainingPlan(userId, plannedMinutes) {
+/** 按训练时长排课：默认规则引擎；schedulePrefer=agent 时先试 Agent 辅助 */
+export async function scheduleTrainingPlan(userId, plannedMinutes, schedulePrefer = 'rule') {
   try {
     const data = await apiJson(withUser('/api/training/schedule', userId), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planned_minutes: plannedMinutes }),
+      body: JSON.stringify({
+        planned_minutes: plannedMinutes,
+        schedule_prefer: schedulePrefer === 'agent' ? 'agent' : 'rule',
+      }),
     })
     return { data }
   } catch (e) {
