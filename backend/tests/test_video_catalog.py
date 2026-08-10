@@ -148,3 +148,69 @@ def test_repair_plan_fills_missing_video(db_session, child_with_assessment):
     n = repair_plan_media_items(db_session, plan, talent_code=1)
     assert n >= 1
     assert plan.items[0].video_url
+
+
+def test_attach_clears_video_for_skill_without_catalog(db_session, child_with_assessment):
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.training_day import get_training_day
+    from app.services.training_video_attach import attach_videos_to_plan_items
+
+    import_video_catalog(db_session)
+    plan = TrainingPlan(
+        child_user_id=child_with_assessment,
+        plan_date=get_training_day(),
+        content_index=1,
+        status="pending",
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(
+        TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            ability_type="audio",
+            title="思者影像追忆1阶段1",
+            duration_min=10,
+            audio_url="https://example.com/a.mp3",
+            video_url="https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/stale.mp4",
+            instructions='{"skill":"影像追忆","item_type":"required"}',
+            checkin_status="pending",
+        )
+    )
+    db_session.flush()
+    n = attach_videos_to_plan_items(db_session, plan, only_missing=False)
+    assert n >= 1
+    assert plan.items[0].video_url is None
+
+
+def test_attach_clears_video_for_skill_without_catalog(db_session, child_with_assessment):
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.training_day import get_training_day
+    from app.services.training_video_attach import attach_videos_to_plan_items
+
+    import_video_catalog(db_session)
+    plan = TrainingPlan(
+        child_user_id=child_with_assessment,
+        plan_date=get_training_day(),
+        content_index=1,
+        status="pending",
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(
+        TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            ability_type="audio",
+            title="思者影像追忆1阶段1",
+            duration_min=10,
+            audio_url="https://example.com/a.mp3",
+            video_url="https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/stale.mp4",
+            instructions='{"skill":"影像追忆","item_type":"required"}',
+            checkin_status="pending",
+        )
+    )
+    db_session.flush()
+    n = attach_videos_to_plan_items(db_session, plan, only_missing=False)
+    assert n >= 1
+    assert plan.items[0].video_url is None
