@@ -56,6 +56,15 @@ def main() -> int:
         videos = list_video_objects("shipin/")
         print("\n=== Video (shipin/) ===")
         print("total:", len(videos))
+        total_mb = 0.0
+        for row in videos:
+            size = int(row.get("size") or 0)
+            mb = size / (1024 * 1024)
+            total_mb += mb
+            flag = " LARGE" if mb > 50 else (" warn" if mb > 20 else "")
+            print(f"  {row['key']}  {mb:.1f} MB{flag}")
+        if videos:
+            print(f"  (合计约 {total_mb:.1f} MB — 单条建议 ≤20MB，>50MB 弱网很难流畅)")
         for row in videos[:3]:
             print(" sample:", row["key"], "size=", row["size"])
     except Exception as e:

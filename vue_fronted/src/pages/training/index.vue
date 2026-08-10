@@ -755,17 +755,24 @@
               playsinline
               webkit-playsinline
               x5-playsinline
+              x5-video-player-type="h5"
+              preload="metadata"
               controlsList="nodownload noplaybackrate"
               disablePictureInPicture
-              autoplay
               @timeupdate="onMediaTimeUpdate"
               @loadedmetadata="onMediaLoadedMetadata"
               @seeking="onMediaSeeking"
               @ratechange="lockMediaPlaybackRate"
-              @pause="flushWatchProgress"
+              @pause="onVideoPause"
+              @playing="onVideoPlaying"
+              @waiting="onVideoWaiting"
+              @canplay="onVideoCanPlay"
               @ended="onMediaEnded"
               @error="onTrainingVideoError"
             />
+            <view v-if="videoLoading" class="player-video-loading">
+              <text class="player-video-loading-text">视频缓冲中…</text>
+            </view>
             <view v-else class="player-cover-placeholder">
               <text class="player-cover-icon">🎬</text>
               <text class="player-cover-hint">视频加载中…</text>
@@ -791,15 +798,15 @@
             <view v-if="mediaPlayer.type === 'audio'" class="player-ctrl-btn sm" @click="rewindAudioTen">
               <text>⏪</text>
             </view>
-            <view class="player-ctrl-btn" @click="mediaPlayer.type === 'audio' ? toggleAudioPlay() : null">
-              <text>{{ audioPlaying ? '⏸' : '▶' }}</text>
+            <view class="player-ctrl-btn" @click="toggleMediaPlay">
+              <text>{{ mediaPlayIcon }}</text>
             </view>
           </view>
           <view class="player-ctrl-right">
             <text class="player-time-label">{{ mediaPlayer.type === 'video' ? videoDurationLabel : audioDurationLabel }}</text>
           </view>
         </view>
-        <text class="media-listen-hint">听满约 {{ WATCH_DONE_PCT }}% 后可解锁打卡</text>
+        <text class="media-listen-hint">{{ mediaPlayerHint }}</text>
       </view>
     </view>
 <!-- 已打卡卡片详情 / 页内编辑 -->
@@ -2111,6 +2118,8 @@ let watchProgressSaveTimer = null
 const lastOpenedItem = ref(null)
 const mediaMaxHeardSec = ref(0)
 const audioPlaying = ref(false)
+const videoPlaying = ref(false)
+const videoLoading = ref(false)
 const audioUiSec = ref(0)
 const audioUiDuration = ref(0)
 const WATCH_DONE_PCT = 90
@@ -2431,6 +2440,18 @@ const videoProgressPct = ref(0)
 const videoTimeLabel = ref('0:00')
 const videoDurationLabel = ref('--:--')
 
+const mediaPlayIcon = computed(() => {
+  if (mediaPlayer.value.type === 'video') return videoPlaying.value ? '⏸' : '▶'
+  return audioPlaying.value ? '⏸' : '▶'
+})
+
+const mediaPlayerHint = computed(() => {
+  if (mediaPlayer.value.type === 'video' && videoLoading.value) {
+    return '网络较慢时请稍候，加载完成后点播放或下方控件'
+  }
+  return `听满约 ${WATCH_DONE_PCT}% 后可解锁打卡`
+})
+
 const playerCoverEmoji = computed(() => {
   const t = (audioTitle.value || mediaPlayerTitle.value || '').toLowerCase()
   if (t.includes('超脑') || t.includes('阅读')) return '🧠'
@@ -2563,6 +2584,13 @@ function onMediaLoadedMetadata(e) {
     audioUiDuration.value = el.duration || 0
     audioUiSec.value = el.currentTime || resume || 0
   }
+  if (mediaPlayer.value.type === 'video') {
+    const d = el.duration || 0
+    if (d > 0) {
+      videoDurationLabel.value = `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}`
+      videoLoading.value = false
+    }
+  }
   flushWatchProgress()
 }
 
@@ -2581,9 +2609,11 @@ function onMediaTimeUpdate(e) {
   }
   if (mediaPlayer.value.type === 'video') {
     const cur = el.currentTime || 0
+    if (cur > mediaMaxHeardSec.value) mediaMaxHeardSec.value = cur
     videoProgressPct.value = durationSec > 0 ? Math.round(cur / durationSec * 100) : 0
     videoTimeLabel.value = `${Math.floor(cur / 60)}:${String(Math.floor(cur % 60)).padStart(2, '0')}`
     videoDurationLabel.value = `${Math.floor(durationSec / 60)}:${String(Math.floor(durationSec % 60)).padStart(2, '0')}`
+    videoPlaying.value = !el.paused
   }
   if (durationSec <= 0) return
   const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
@@ -2602,7 +2632,72 @@ function onMediaEnded(e) {
   const el = e?.target || activeMediaEl()
   if (el?.duration) mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, el.duration)
   audioPlaying.value = false
+  videoPlaying.value = false
+  videoLoading.value = false
   flushWatchProgress()
+}
+
+function onVideoWaiting() {
+  videoLoading.value = true
+}
+
+function onVideoCanPlay() {
+  videoLoading.value = false
+}
+
+function onVideoPlaying() {
+  videoPlaying.value = true
+  videoLoading.value = false
+}
+
+function onVideoPause() {
+  videoPlaying.value = false
+  flushWatchProgress()
+}
+
+async function toggleMediaPlay() {
+  if (mediaPlayer.value.type === 'audio') return toggleAudioPlay()
+  return toggleVideoPlay()
+}
+
+async function toggleVideoPlay() {
+  const el = trainingVideoEl.value
+  if (!el) {
+    uni.showToast({ title: '视频仍在加载，请稍候', icon: 'none' })
+    return
+  }
+  lockMediaPlaybackRate({ target: el })
+  try {
+    if (el.paused) {
+      videoLoading.value = true
+      await el.play()
+      videoPlaying.value = true
+    } else {
+      el.pause()
+      videoPlaying.value = false
+      flushWatchProgress()
+    }
+  } catch (_) {
+    videoPlaying.value = false
+    uni.showToast({ title: '播放失败，请点视频下方原生控件', icon: 'none', duration: 2500 })
+  } finally {
+    videoLoading.value = false
+  }
+}
+
+function tryPlayVideoAfterOpen() {
+  const el = trainingVideoEl.value
+  if (!el) return
+  videoLoading.value = true
+  el.play()
+    .then(() => {
+      videoPlaying.value = true
+      videoLoading.value = false
+    })
+    .catch(() => {
+      videoPlaying.value = false
+      videoLoading.value = false
+    })
 }
 
 async function toggleAudioPlay() {
@@ -3312,8 +3407,10 @@ async function deleteCard(idx) {
 }
 
 function onTrainingVideoError() {
+  videoLoading.value = false
+  videoPlaying.value = false
   console.error('[training] video load failed:', videoSrc.value)
-  uni.showToast({ title: '视频加载失败，请退出重进或重新登录', icon: 'none', duration: 3000 })
+  uni.showToast({ title: '视频加载失败，请检查网络后重试', icon: 'none', duration: 3000 })
 }
 
 function applyPlanMedia(plan) {
@@ -3347,16 +3444,29 @@ async function openMediaItem(item, forceType) {
   }
   if (!guardMedia()) return
   lastOpenedItem.value = item
-  const uid = await ensureChildUser()
+  let uid = getChildUserId()
+  if (!uid) {
+    try {
+      uid = await ensureChildUser()
+    } catch (_) {
+      return
+    }
+  }
   const prev = watchProgressMap.value[item.id]
   mediaMaxHeardSec.value = Number(prev?.watched_sec || 0)
   audioPlaying.value = false
+  videoPlaying.value = false
   audioUiSec.value = mediaMaxHeardSec.value
   audioUiDuration.value = Number(prev?.duration_sec || 0)
 
   const openVideo = () => {
+    videoLoading.value = true
+    videoProgressPct.value = 0
+    videoTimeLabel.value = '0:00'
+    videoDurationLabel.value = '--:--'
     videoSrc.value = resolveTrainingStreamUrl(item.video_url, uid)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
+    nextTick(() => tryPlayVideoAfterOpen())
   }
   const openAudio = () => {
     const streamUrl = resolveTrainingStreamUrl(item.audio_url, uid)
@@ -3413,8 +3523,11 @@ function closeMedia() {
     }
   }
   try { trainingAudio?.pause() } catch (_) { /* ignore */ }
+  try { trainingVideoEl.value?.pause() } catch (_) { /* ignore */ }
   destroyTrainingAudio()
   audioPlaying.value = false
+  videoPlaying.value = false
+  videoLoading.value = false
   mediaPlayer.value.show = false
 }
 
@@ -4371,8 +4484,13 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .player-card-c { background:var(--bg-card,#1a2840); border:1px solid rgba(0,210,255,0.2); border-radius:16px; width:100%; max-width:380px; overflow:hidden; padding:0; }
 .player-cover { position:relative; height:180px; background:linear-gradient(135deg,rgba(0,210,255,0.08),rgba(139,92,246,0.08)); display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .player-cover::before { content:''; position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(255,255,255,0.015) 30px,rgba(255,255,255,0.015) 31px); pointer-events:none; }
-.player-cover-video { width:100%; height:100%; }
+.player-cover-video { width:100%; height:100%; position:relative; }
 .player-cover-video .training-video { width:100%; height:100%; object-fit:cover; }
+.player-video-loading {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.45); pointer-events:none;
+}
+.player-video-loading-text { color:#fff; font-size:14px; }
 .player-cover-placeholder { display:flex; flex-direction:column; align-items:center; gap:8px; }
 .player-cover-icon { font-size:48px; }
 .player-cover-hint { color:rgba(255,255,255,0.4); font-size:12px; }
