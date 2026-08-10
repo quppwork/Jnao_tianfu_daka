@@ -312,6 +312,30 @@ class GuideMessage(Base):
     session: Mapped["GuideSession"] = relationship(back_populates="messages")
 
 
+class QaSessionArchive(Base):
+    """学科答疑会话归档 — 超期会话快照，主表删除后供审计与统计"""
+
+    __tablename__ = "qa_session_archive"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    original_session_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    archived_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class GuideSessionArchive(Base):
+    """首页引导会话归档 — 超期会话快照"""
+
+    __tablename__ = "guide_session_archive"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    original_session_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    archived_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class UserSession(Base):
     """登录会话 — 支持按角色限制多端数量"""
 

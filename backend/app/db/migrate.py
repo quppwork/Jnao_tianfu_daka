@@ -129,6 +129,7 @@ def apply_schema_patches(engine: Engine) -> None:
     _apply_user_session_table(engine)
     _apply_wechat_auth_tables(engine)
     _apply_daka_member_table(engine)
+    _apply_chat_archive_tables(engine)
     _backfill_daka_member_gate(engine)
     _apply_parent_child_unique_child(engine)
     _migrate_user_session_utc_to_cst(engine)
@@ -374,6 +375,63 @@ def _apply_daka_member_table(engine: Engine) -> None:
         """
     with engine.begin() as conn:
         conn.execute(text(ddl))
+
+
+def _apply_chat_archive_tables(engine: Engine) -> None:
+    """QA / Guide 会话归档表 — 配合 tools/archive_chat_history.py"""
+    insp = inspect(engine)
+    dialect = engine.dialect.name
+    tables = {
+        "qa_session_archive": """
+            CREATE TABLE qa_session_archive (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                original_session_id INT NOT NULL,
+                child_user_id INT NOT NULL,
+                snapshot_json JSON NOT NULL,
+                archived_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_qa_archive_child (child_user_id, archived_at),
+                INDEX idx_qa_archive_orig (original_session_id)
+            )
+        """,
+        "guide_session_archive": """
+            CREATE TABLE guide_session_archive (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                original_session_id INT NOT NULL,
+                child_user_id INT NOT NULL,
+                snapshot_json JSON NOT NULL,
+                archived_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_guide_archive_child (child_user_id, archived_at),
+                INDEX idx_guide_archive_orig (original_session_id)
+            )
+        """,
+    }
+    if dialect != "mysql":
+        tables = {
+            "qa_session_archive": """
+                CREATE TABLE qa_session_archive (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_session_id INTEGER NOT NULL,
+                    child_user_id INTEGER NOT NULL,
+                    snapshot_json JSON NOT NULL,
+                    archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+            "guide_session_archive": """
+                CREATE TABLE guide_session_archive (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_session_id INTEGER NOT NULL,
+                    child_user_id INTEGER NOT NULL,
+                    snapshot_json JSON NOT NULL,
+                    archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+        }
+    existing = set(insp.get_table_names())
+    for name, ddl in tables.items():
+        if name in existing:
+            continue
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
 
 
 def _backfill_daka_member_gate(engine: Engine) -> None:

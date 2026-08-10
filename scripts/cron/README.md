@@ -22,7 +22,8 @@ mkdir -p /www/wwwroot/jnao_daka/logs
 | 1 | OSS 媒体同步 | 每天 **03:30** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_oss_catalog.sh` |
 | 2 | Cron 日志截断 | 每周日 **04:00** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/cleanup_logs.sh` |
 | 3 | QA 拍图清理 | 每周日 **04:10** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/cleanup_qa_uploads.sh` |
-| 4 | Backend 重启（可选） | 每周日 **04:20** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/restart_backend.sh` |
+| 4 | 聊天历史归档 | 每月 1 日 **04:15** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh` |
+| 5 | Backend 重启（可选） | 每周日 **04:20** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/restart_backend.sh` |
 
 ### 暂不配置（微信一键登录数据暂停更新）
 
@@ -79,7 +80,29 @@ mkdir -p /www/wwwroot/jnao_daka/logs
 QA_UPLOAD_RETAIN_DAYS=30
 ```
 
-### 5. 添加「Backend 重启」（可选）
+### 5. 添加「聊天历史归档」
+
+- **任务类型**：Shell 脚本
+- **任务名称**：JNAO 归档 QA/Guide 聊天
+- **执行周期**：每月 → 1 日 → 04:15
+- **脚本内容**：
+
+```bash
+/bin/bash /www/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh
+```
+
+可选环境变量（写入 `.env.production`）：
+
+```env
+CHAT_ARCHIVE_RETAIN_DAYS=180
+CHAT_ARCHIVE_QA_KEEP_RECENT=20
+CHAT_ARCHIVE_GUIDE_KEEP_RECENT=10
+CHAT_ARCHIVE_BATCH_SIZE=100
+```
+
+说明：超期会话会先写入 `qa_session_archive` / `guide_session_archive` 快照表，再从主表删除；每个孩子至少保留最近 N 条会话。成长页「累计提问」统计会计入已归档消息。
+
+### 6. 添加「Backend 重启」（可选）
 
 - **任务类型**：Shell 脚本
 - **任务名称**：JNAO 低峰重启 Backend
@@ -99,6 +122,7 @@ QA_UPLOAD_RETAIN_DAYS=30
 | OSS 同步 | `logs/sync_oss_catalog.log` |
 | 日志截断 | `logs/cleanup_logs.log` |
 | QA 拍图 | `logs/cleanup_qa_uploads.log` |
+| 聊天归档 | `logs/archive_chat_history.log` |
 | Backend 重启 | `logs/restart_backend.log` |
 
 查看示例：
@@ -120,6 +144,10 @@ cd /www/wwwroot/jnao_daka
 # QA 拍图（预览）
 docker compose -f docker-compose.prod.yml --env-file .env.production exec -T backend \
   python tools/cleanup_qa_uploads.py --dry-run
+
+# 聊天归档（预览）
+docker compose -f docker-compose.prod.yml --env-file .env.production exec -T backend \
+  python tools/archive_chat_history.py --dry-run
 
 # OSS 可读性
 docker compose -f docker-compose.prod.yml --env-file .env.production exec -T backend \

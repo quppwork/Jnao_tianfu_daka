@@ -199,9 +199,12 @@ async def chat_stream(
 
 
 def count_user_messages(db: Session, child_user_id: int) -> int:
-    return db.scalar(
+    live = db.scalar(
         select(func.count())
         .select_from(QaMessage)
         .join(QaSession)
         .where(QaSession.child_user_id == child_user_id, QaMessage.role == "user")
     ) or 0
+    from app.services.chat_archive_service import count_archived_qa_user_messages
+
+    return live + count_archived_qa_user_messages(db, child_user_id)

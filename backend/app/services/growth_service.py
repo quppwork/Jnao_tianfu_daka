@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, ContentItem, QaSession, TalentAssessment, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.assessment_service import get_latest_assessment, resolve_effective_talent
+from app.services.chat_archive_service import earliest_qa_created_at
 from app.services.content_meta import parse_item_meta, skill_from_title
 from app.services.qa_service import count_user_messages
 
@@ -179,14 +180,9 @@ def _build_earned_at_map(db: Session, child_user_id: int, stats: dict) -> dict[s
             mapping["checkin_100"] = _record_date_iso(rec)
 
     if stats["qa_count"] >= 1:
-        first_qa = db.scalar(
-            select(QaSession)
-            .where(QaSession.child_user_id == child_user_id)
-            .order_by(QaSession.id.asc())
-            .limit(1)
-        )
-        if first_qa and first_qa.created_at:
-            mapping["qa_1"] = first_qa.created_at.date().isoformat()
+        first_qa_at = earliest_qa_created_at(db, child_user_id)
+        if first_qa_at:
+            mapping["qa_1"] = first_qa_at.date().isoformat()
 
     if stats["streak"] >= 7:
         mapping["streak_7"] = date.today().isoformat()
@@ -302,14 +298,9 @@ def get_timeline(db: Session, child_user_id: int, limit: int = 40, stats: dict |
             "sort_key": f"skill-{skill}",
         })
 
-    first_qa = db.scalar(
-        select(QaSession)
-        .where(QaSession.child_user_id == child_user_id)
-        .order_by(QaSession.id.asc())
-        .limit(1)
-    )
-    if first_qa:
-        d = first_qa.created_at.date() if first_qa.created_at else date.today()
+    first_qa_at = earliest_qa_created_at(db, child_user_id)
+    if first_qa_at:
+        d = first_qa_at.date()
         events.append({
             "type": "qa",
             "title": "首次学科答疑",
