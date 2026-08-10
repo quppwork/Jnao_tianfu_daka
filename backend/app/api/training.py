@@ -103,7 +103,11 @@ async def schedule_training(
     """按今日训练时长排课：豆包路由 A/B 音频 + 天赋固定视频"""
     try:
         return await schedule_training_by_duration(
-            db, child_user_id, req.planned_minutes, plan_date=plan_date
+            db,
+            child_user_id,
+            req.planned_minutes,
+            plan_date=plan_date,
+            schedule_prefer=req.schedule_prefer,
         )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e

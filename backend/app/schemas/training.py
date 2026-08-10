@@ -82,6 +82,10 @@ class TrainingTodayResponse(BaseModel):
     lesson_day: int | None = None
     training_day_number: int | None = None
     schedule_mode: str | None = None
+    schedule_assist: dict | None = Field(
+        default=None,
+        description="Agent 排课调试信息（理由/草案）；仅 DEV 展示",
+    )
     optional_offers: list[OptionalOfferOut] = Field(default_factory=list)
     timer_phase: str | None = None
     timer_end_at: str | None = None
@@ -95,6 +99,10 @@ class ScheduleRequest(BaseModel):
         ge=20,
         le=480,
         description="今日计划训练总时长（分钟）",
+    )
+    schedule_prefer: str = Field(
+        default="rule",
+        description="排课偏好：rule=仅规则；agent=先试 Agent 辅助，失败回退规则",
     )
 
 
@@ -248,6 +256,7 @@ class TrainingEntryResponse(BaseModel):
     seconds_until_new_day: int | None = None
     day_transition: bool = False
     new_day_ready: bool = True
+    agent_schedule_enabled: bool = False
 
 
 class WindowSetRequest(BaseModel):

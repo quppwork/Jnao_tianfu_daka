@@ -400,6 +400,7 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
             "talent_primary": None,
             "talent_tag": None,
             "talent_code": None,
+            "agent_schedule_enabled": False,
         }
 
     refresh_today_plan_if_talent_changed(db, child_user_id, assessment=talent)
@@ -418,6 +419,8 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
     if user and user.profile_json:
         profile = dict(user.profile_json)
     onboarding = profile.get("onboarding") if isinstance(profile.get("onboarding"), dict) else {}
+    from app.services.training_agent_assist import is_schedule_assist_enabled
+
     return {
         "has_assessment": True,
         "needs_assessment": False,
@@ -431,6 +434,7 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
         "pending_talent": profile.get("pending_talent"),
         "onboarding_completed": bool(onboarding.get("completed_at")),
         "day_locked": day_locked,
+        "agent_schedule_enabled": is_schedule_assist_enabled(),
         **meta,
         **progress,
     }
@@ -681,6 +685,8 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "optional_offers": optional_offers,
         "day_locked": locked,
         "globally_cutoff": globally_cutoff,
+        # DEV：Agent 排课理由；正式 UI 勿展示
+        "schedule_assist": getattr(plan, "schedule_assist_json", None) or None,
         **meta,
         **timer_fields,
     }

@@ -58,6 +58,14 @@
           <view class="time-start-btn" :class="{ disabled: !canStartTimer }" @click="startTrainingTimer">
             <text>开始训练</text>
           </view>
+          <view
+            v-if="agentScheduleEnabled"
+            class="time-start-btn time-start-btn-agent"
+            :class="{ disabled: !canStartTimer }"
+            @click="startTrainingTimerAgent"
+          >
+            <text>智能排课</text>
+          </view>
           <text class="time-setup-hint">{{ timeSetupHint }}</text>
         </view>
 
@@ -83,6 +91,10 @@
           <text class="dev-panel-label">🔧 开发者测试</text>
           <view v-if="devStatusText" class="dev-status">
             <text>{{ devStatusText }}</text>
+          </view>
+          <view v-if="scheduleAssistDevText" class="dev-status dev-assist">
+            <text class="dev-section-label" style="margin-top:0">Agent 排课理由</text>
+            <text>{{ scheduleAssistDevText }}</text>
           </view>
           <text class="dev-section-label">今日操作</text>
           <view class="dev-actions">
@@ -1028,6 +1040,7 @@ onLoad((opts) => {
 const devToolsAvailable = isDevToolsAvailable()
 const devMode = ref(getDevMode())
 const scheduleLoading = ref(false)
+const agentScheduleEnabled = ref(false)
 const entryLoading = ref(false)
 const devStatusText = ref('')
 const timerPhase = ref('setup') // setup | running | expired
@@ -1099,6 +1112,9 @@ const timeSetupHint = computed(() => {
   if (scheduleLoading.value) return '正在按设定时长生成训练内容…'
   if (planJustGenerated.value) return '可在下方查看、编辑训练内容，确认后开始计时'
   if (durationLocked.value) return '时长已锁定，确认方案后开始计时'
+  if (agentScheduleEnabled.value) {
+    return '「开始训练」走标准方案；「智能排课」先试推荐，失败自动改用标准方案'
+  }
   return '选择时长后点击「开始训练」，将按孩子情况分配今日内容'
 })
 /** 训练日已完成（次日凌晨4点才能新开一天），仅禁止重新「开始训练」 */
@@ -1560,6 +1576,14 @@ function isPlanStructureStale(plannedMinutes) {
 }
 
 async function startTrainingTimer() {
+  return startTrainingWithPrefer('rule')
+}
+
+async function startTrainingTimerAgent() {
+  return startTrainingWithPrefer('agent')
+}
+
+async function startTrainingWithPrefer(schedulePrefer = 'rule') {
   if (trainingDayLocked.value) {
     uni.showToast({ title: dayLockText.value, icon: 'none', duration: 2500 })
     return
@@ -1581,7 +1605,7 @@ async function startTrainingTimer() {
     return
   }
 
-    scheduleLoading.value = true
+  scheduleLoading.value = true
   try {
     const uid = await ensureChildUser()
     // 一天一次：仅未开始时允许生成/按新时长重生；已开始绝不因 stale 再调 schedule
@@ -1598,16 +1622,23 @@ async function startTrainingTimer() {
       return
     }
     if (needSchedule) {
-      const result = await scheduleTrainingPlan(uid, plannedMinutes)
+      const result = await scheduleTrainingPlan(uid, plannedMinutes, schedulePrefer)
       if (result.error) throw new Error(result.message || '生成训练内容失败')
       await applyScheduledPlan(uid, result.data)
+      if (schedulePrefer === 'agent' && result.data?.schedule_mode === 'agent_fallback') {
+        uni.showToast({ title: '智能排课未生效，已改用标准方案', icon: 'none', duration: 2500 })
+      } else {
+        uni.showToast({ title: '方案已生成，请确认后开始', icon: 'none' })
+      }
     } else if (!hasContent) {
       throw new Error('暂无训练内容，请稍后重试')
+    } else {
+      uni.showToast({ title: '方案已生成，请确认后开始', icon: 'none' })
     }
 
+    // 远端修复：此处只生成方案并锁定时长，计时在 confirmPlan 后启动
     planJustGenerated.value = true
     showTraining.value = false
-    uni.showToast({ title: '方案已生成，请确认后开始', icon: 'none' })
   } catch (e) {
         uni.showToast({ title: e.message || '生成训练内容失败', icon: 'none', duration: 2500 })
   } finally {
@@ -2195,6 +2226,35 @@ const needAssessment = ref(false)
 const showAssessmentModal = ref(false)
 const todayPlan = ref(null)
 const phaseRecordIds = ref({})
+
+/** DEV only：Agent 排课理由（正式 UI 不展示） */
+const scheduleAssistDevText = computed(() => {
+  const a = todayPlan.value?.schedule_assist
+  if (!a || typeof a !== 'object') return ''
+  const lines = []
+  if (a.mode) lines.push(`模式：${a.mode}`)
+  if (a.reason) lines.push(String(a.reason))
+  else if (a.mode === 'agent') lines.push('（模型未返回 reason）')
+  if (Array.isArray(a.draft) && a.draft.length) {
+    lines.push(`草案：${a.draft.join(' → ')}`)
+  }
+  if (Array.isArray(a.rule_slots) && a.rule_slots.length) {
+    lines.push(`规则对照：${a.rule_slots.join(' → ')}`)
+  }
+  if (Array.isArray(a.projected) && a.projected.length) {
+    lines.push(`落库：${a.projected.join(' → ')}`)
+  }
+  if (Array.isArray(a.padded_from_intent) && a.padded_from_intent.length) {
+    lines.push(`画像补齐：${a.padded_from_intent.join('、')}`)
+  }
+  if (Array.isArray(a.padded_from_rule) && a.padded_from_rule.length) {
+    lines.push(`规则垫底：${a.padded_from_rule.join('、')}`)
+  }
+  if (Array.isArray(a.dropped_for_slot_cap) && a.dropped_for_slot_cap.length) {
+    lines.push(`槽位截断：${a.dropped_for_slot_cap.join('、')}`)
+  }
+  return lines.join('\n')
+})
 
 async function confirmPlan() {
   // 确认方案后才开始计时；训练块在此之后解锁。
@@ -3813,10 +3873,16 @@ async function checkTrainingEntry(uid) {
       needAssessment.value = false
       showAssessmentModal.value = false
       applyTalentLabelFromTag(talent.talent_tag)
+      try {
+        const entry = await fetchTrainingEntry(uid)
+        applyServerTimeMeta(entry)
+        agentScheduleEnabled.value = !!entry.agent_schedule_enabled
+      } catch (_) { /* 开关失败不影响进页 */ }
       return true
     }
     const entry = await fetchTrainingEntry(uid)
     applyServerTimeMeta(entry)
+    agentScheduleEnabled.value = !!entry.agent_schedule_enabled
     if (!entry.needs_assessment && entry.has_assessment) {
       needAssessment.value = false
       showAssessmentModal.value = false
@@ -4435,6 +4501,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .time-start-btn { background:linear-gradient(135deg,rgba(0,210,255,0.35),rgba(0,136,204,0.35)); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
 .time-start-btn text { color:#00d2ff; font-size:15px; font-weight:600; }
 .time-start-btn.disabled { opacity:0.4; }
+.time-start-btn-agent { margin-top:10px; background:linear-gradient(135deg,rgba(120,90,255,0.28),rgba(0,180,200,0.28)); }
+.time-start-btn-agent text { color:#c4b5fd; }
 .time-setup-hint { color:rgba(255,255,255,0.35); font-size:11px; text-align:center; }
 .time-running { text-align:center; padding:4px 0; }
 .time-countdown { display:block; color:#22c55e; font-size:36px; font-weight:800; letter-spacing:0.06em; font-variant-numeric:tabular-nums; }
@@ -4448,6 +4516,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .dev-section-label { display:block; color:rgba(251,191,36,0.55); font-size:10px; font-weight:600; margin:8px 0 4px; }
 .dev-status { margin-bottom:8px; padding:6px 10px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px; }
 .dev-status text { color:rgba(251,191,36,0.9); font-size:10px; line-height:1.4; }
+.dev-assist text { white-space: pre-wrap; word-break: break-word; }
 .dev-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
 .dev-action { flex:1; min-width:88px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 6px; text-align:center; cursor:pointer; }
 .dev-action-primary { background:rgba(34,197,94,0.12); border-color:rgba(34,197,94,0.35); }
@@ -4482,6 +4551,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .time-select-unit { color:#9ca3af; }
 [data-theme="white"] .time-start-btn { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 [data-theme="white"] .time-start-btn text { color:#fff; }
+[data-theme="white"] .time-start-btn-agent { background:linear-gradient(135deg,#7c3aed,#4f46e5); }
+[data-theme="white"] .time-start-btn-agent text { color:#fff; }
 [data-theme="white"] .time-setup-hint { color:#9ca3af; }
 [data-theme="white"] .time-running-hint { color:#9ca3af; }
 [data-theme="white"] .time-expired-sub { color:#9ca3af; }

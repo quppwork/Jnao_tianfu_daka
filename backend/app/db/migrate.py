@@ -32,6 +32,11 @@ def apply_schema_patches(engine: Engine) -> None:
             "ALTER TABLE training_plan ADD COLUMN plan_customized INTEGER DEFAULT 0",
         ),
         (
+            "training_plan",
+            "schedule_assist_json",
+            "ALTER TABLE training_plan ADD COLUMN schedule_assist_json JSON",
+        ),
+        (
             "child_user",
             "account_status",
             "ALTER TABLE child_user ADD COLUMN account_status VARCHAR(20) DEFAULT 'active'",

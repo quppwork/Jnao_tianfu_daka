@@ -17,19 +17,20 @@ Start-Process powershell.exe -ArgumentList @(
 
 Write-Host "[WAIT] 等待后端就绪..." -ForegroundColor Gray
 $ready = $false
-for ($i = 0; $i -lt 15; $i++) {
+# uvicorn --reload 冷启动常见 >7s；过短会导致误报 WARN
+for ($i = 0; $i -lt 40; $i++) {
     Start-Sleep -Milliseconds 500
     try {
         $code = & curl.exe -s -o $null -w "%{http_code}" --max-time 1 "http://127.0.0.1:8012/api/ping" 2>$null
         if ($code -eq "200") {
-            Write-Host "[BACKEND] Ready" -ForegroundColor Green
+            Write-Host "[BACKEND] Ready ($([math]::Round(($i+1)*0.5,1))s)" -ForegroundColor Green
             $ready = $true
             break
         }
     } catch { }
 }
 if (-not $ready) {
-    Write-Host "[WARN] 后端尚未响应，前端窗口仍会启动" -ForegroundColor DarkYellow
+    Write-Host "[WARN] 后端 20s 内未响应，前端窗口仍会启动（请查看 Backend 窗口报错）" -ForegroundColor DarkYellow
 }
 
 Write-Host "[START] 打开前端窗口 (5185)..." -ForegroundColor Yellow

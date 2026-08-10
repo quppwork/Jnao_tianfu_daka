@@ -255,6 +255,9 @@ llm_routing:
   enabled: false
   provider: doubao
   usage: coach_text_only
+  # Agent 辅助排课（P0）：默认关；也可用环境变量 TRAINING_AGENT_SCHEDULE=1 开启
+  schedule_assist: false
+  schedule_timeout_sec: 600
 
 # ══════════════════════════════════════════════════
 # 十三、训练日

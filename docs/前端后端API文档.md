@@ -397,7 +397,12 @@ GET /api/talent/assessment/{assessment_id}?user_id={uid}
 
 ```json
 // Request
-{ "planned_minutes": 120 }
+{
+  "planned_minutes": 120,
+  "schedule_prefer": "rule"
+}
+// schedule_prefer 可选：rule（默认，仅规则）| agent（先试 Agent 辅助，失败回退规则）
+// Agent 路径需总开关开启：TRAINING_AGENT_SCHEDULE=1 或 curriculum llm_routing.schedule_assist=true
 
 // Response (v2.0)
 {
@@ -406,6 +411,7 @@ GET /api/talent/assessment/{assessment_id}?user_id={uid}
   "status": "pending",
   "overall_tier": 1,
   "planned_minutes": 120,
+  "schedule_mode": "rule",
   "items": [
     {
       "id": 1,
@@ -421,6 +427,12 @@ GET /api/talent/assessment/{assessment_id}?user_id={uid}
   "report_text": "今天专注阅读速度..."
 }
 ```
+
+`schedule_mode`：`rule` | `agent` | `agent_fallback` | `existing`。
+
+`schedule_prefer=agent` 时走 `agents/training_schedule` **原生 FC 工具循环**（`get_schedule_context` / `get_available_skills` / `get_recent_training_history` / `get_rule_slot_hint` → `propose_skill_draft`），再由服务层 `validate_and_project` 对齐规则槽位后落库；失败回退规则。与 Guide/QA runner 互不调用。
+
+`GET /api/training/entry` 在开关开启时返回 `agent_schedule_enabled: true`，训练页据此展示「智能排课」按钮（测试期双入口；「开始训练」仍走 rule）。
 
 
 
