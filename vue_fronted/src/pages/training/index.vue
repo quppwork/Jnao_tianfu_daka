@@ -2647,6 +2647,9 @@ function getTrainingVideoDom() {
 const videoPreloadPool = new Map()
 /** 当前 DOM 中已加载的训练视频 item id，关闭弹窗时不销毁以便复用缓冲 */
 let cachedVideoItemId = null
+let cachedVideoUserId = null
+/** 当前训练页绑定的学员 id，切换账号时清空媒体状态 */
+let sessionChildUserId = null
 let videoUiRafId = null
 /** 当前播放器内唯一 video 元素，避免 querySelector 误取到其它节点 */
 let pinnedTrainingVideo = null
@@ -2655,11 +2658,16 @@ let videoUiSecSmoothed = 0
 /** 打开播放器后待 seek 的续播秒数 */
 let videoResumePendingSec = 0
 
-const WATCH_PROGRESS_LS = 'jnao_training_watch_progress_v1'
+const WATCH_PROGRESS_LS_PREFIX = 'jnao_training_watch_progress_v1_'
 
-function readLocalWatchProgress(itemId) {
+function watchProgressLsKey(uid) {
+  const id = uid || getChildUserId() || 0
+  return `${WATCH_PROGRESS_LS_PREFIX}${id}`
+}
+
+function readLocalWatchProgress(itemId, uid) {
   try {
-    const raw = localStorage.getItem(WATCH_PROGRESS_LS)
+    const raw = localStorage.getItem(watchProgressLsKey(uid))
     if (!raw) return null
     return JSON.parse(raw)[String(itemId)] || null
   } catch (_) {
@@ -2667,10 +2675,13 @@ function readLocalWatchProgress(itemId) {
   }
 }
 
-function writeLocalWatchProgress(itemId, wp) {
+function writeLocalWatchProgress(itemId, wp, uid) {
   if (!itemId || !wp) return
+  const userId = uid || getChildUserId()
+  if (!userId) return
   try {
-    const raw = localStorage.getItem(WATCH_PROGRESS_LS)
+    const key = watchProgressLsKey(userId)
+    const raw = localStorage.getItem(key)
     const all = raw ? JSON.parse(raw) : {}
     const prev = all[String(itemId)] || {}
     all[String(itemId)] = {
@@ -2678,7 +2689,7 @@ function writeLocalWatchProgress(itemId, wp) {
       duration_sec: Number(wp.duration_sec) || Number(prev.duration_sec) || 0,
       pct: Math.max(Number(prev.pct) || 0, Number(wp.pct) || 0),
     }
-    localStorage.setItem(WATCH_PROGRESS_LS, JSON.stringify(all))
+    localStorage.setItem(key, JSON.stringify(all))
   } catch (_) { /* ignore */ }
 }
 
@@ -2688,8 +2699,9 @@ function resetVideoUiClock(initialSec = 0) {
 
 function getItemWatchProgress(item) {
   if (!item?.id) return {}
+  const uid = getChildUserId()
   const remote = watchProgressMap.value[item.id] || item.watch_progress || {}
-  const local = readLocalWatchProgress(item.id) || {}
+  const local = uid ? (readLocalWatchProgress(item.id, uid) || {}) : {}
   const watched_sec = Math.max(Number(remote.watched_sec) || 0, Number(local.watched_sec) || 0)
   const duration_sec = Number(remote.duration_sec) || Number(local.duration_sec) || 0
   const pct = duration_sec > 0
@@ -2712,7 +2724,41 @@ function syncItemWatchProgress(item, wp) {
   item.watch_progress = { ...wp }
   const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
   if (planItem) planItem.watch_progress = { ...wp }
-  writeLocalWatchProgress(item.id, wp)
+  writeLocalWatchProgress(item.id, wp, getChildUserId())
+}
+
+function resetMediaSessionForAccountSwitch() {
+  cancelVideoUiRaf()
+  clearVideoRetryTimer()
+  watchProgressMap.value = {}
+  mediaMaxHeardSec.value = 0
+  watchedItemIds.value = new Set()
+  videoSrc.value = ''
+  activeVideoItemId.value = 0
+  cachedVideoItemId = null
+  cachedVideoUserId = null
+  pinnedTrainingVideo = null
+  videoUiSecSmoothed = 0
+  clearVideoResumePending()
+  videoProgressPct.value = 0
+  videoTimeLabel.value = '0:00'
+  videoDurationLabel.value = '--:--'
+  destroyPreloadVideos()
+  planMediaPreloaded.value = false
+  if (mediaPlayer.value.show) {
+    mediaPlayer.value.show = false
+    videoPlaying.value = false
+    videoLoading.value = false
+  }
+}
+
+function ensureSessionChildUser(uid) {
+  if (!uid) return
+  if (sessionChildUserId != null && sessionChildUserId !== uid) {
+    resetMediaSessionForAccountSwitch()
+  }
+  sessionChildUserId = uid
+  try { localStorage.removeItem('jnao_training_watch_progress_v1') } catch (_) { /* 旧版未分账号 */ }
 }
 
 function applyVideoResume(el) {
@@ -2738,7 +2784,7 @@ function applyVideoResume(el) {
   try {
     el.currentTime = resume
     mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
-    resetVideoUiClock(resume)
+    resetVideoUiClock(Number(el.currentTime) || resume)
     return true
   } catch (_) {
     return false
@@ -2767,7 +2813,8 @@ function readVideoDisplaySec(el) {
     videoUiSecSmoothed = cur
     return cur
   }
-  if (playing && prev >= 2 && cur < 1) return prev
+  // 播放中途缓冲导致 currentTime 短暂归零（非刚打开续播）
+  if (playing && prev >= 5 && cur < 1 && prev - cur > 3) return prev
   if (playing) {
     if (cur >= prev - 0.3) videoUiSecSmoothed = Math.max(prev, cur)
     return videoUiSecSmoothed
@@ -2986,7 +3033,8 @@ function syncMediaUiFromElement(el) {
   }
   if (mediaPlayer.value.type === 'video') {
     const displayCur = readVideoDisplaySec(el)
-    videoProgressPct.value = durationSec > 0 ? Math.round(displayCur / durationSec * 100) : 0
+    const barSec = (!el.paused && !el.ended) ? rawCur : displayCur
+    videoProgressPct.value = durationSec > 0 ? Math.min(100, Math.round(barSec / durationSec * 100)) : 0
     videoTimeLabel.value = formatMediaTime(displayCur)
     if (durationSec > 0) videoDurationLabel.value = formatMediaTime(durationSec)
     videoPlaying.value = !el.paused && !el.ended
@@ -3896,6 +3944,7 @@ function applyPlanMedia(plan) {
   if (videoItem?.video_url) {
     videoSrc.value = resolveTrainingStreamUrl(videoItem.video_url, uid)
     cachedVideoItemId = videoItem.id
+    cachedVideoUserId = uid
     activeVideoItemId.value = videoItem.id
   }
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
@@ -3948,15 +3997,13 @@ async function openMediaItem(item, forceType) {
     applyPreloadedVideoMeta(item)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
 
-    const canReusePlayer = cachedVideoItemId === item.id && videoSrc.value && activeVideoItemId.value === item.id
+    const canReusePlayer = cachedVideoItemId === item.id
+      && cachedVideoUserId === uid
+      && videoSrc.value
+      && activeVideoItemId.value === item.id
     const primeUi = (el) => {
       if (!el) return
       pinTrainingVideoEl(el)
-      const cur = Number(el.currentTime) || resumeSec
-      resetVideoUiClock(canReusePlayer ? cur : resumeSec)
-      videoProgressPct.value = durSec > 0 ? Math.round((canReusePlayer ? cur : resumeSec) / durSec * 100) : 0
-      videoTimeLabel.value = formatMediaTime(canReusePlayer ? cur : resumeSec)
-      videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : (el.duration ? formatMediaTime(el.duration) : '--:--')
       applyVideoResume(el)
       syncMediaUiFromElement(el)
       tryPlayVideoAfterOpen()
@@ -3968,10 +4015,11 @@ async function openMediaItem(item, forceType) {
     }
 
     cachedVideoItemId = item.id
+    cachedVideoUserId = uid
     activeVideoItemId.value = item.id
-    resetVideoUiClock(resumeSec)
-    videoProgressPct.value = durSec > 0 ? Math.round(resumeSec / durSec * 100) : 0
-    videoTimeLabel.value = formatMediaTime(resumeSec)
+    resetVideoUiClock(0)
+    videoProgressPct.value = 0
+    videoTimeLabel.value = '0:00'
     videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : '--:--'
     videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0, resumeSec)
     nextTick(() => primeUi(getTrainingVideoDom()))
@@ -4157,6 +4205,7 @@ async function loadTodayPlan(silent = true) {
   needAssessment.value = false
   try {
     const uid = await ensureChildUser()
+    ensureSessionChildUser(uid)
 
     // 提前启动 progress 请求，与主流程并行
     const progressPromise = !talentLabel.value
@@ -4290,6 +4339,8 @@ onMounted(async () => {
   }, 5000)
 })
 onShow(async () => {
+  const uid = getChildUserId()
+  if (uid) ensureSessionChildUser(uid)
   resumeTimerFromStorage()
   await loadTodayPlan(true)
 })
@@ -4303,6 +4354,8 @@ onUnmounted(() => {
   clearVideoRetryTimer()
   destroyPreloadVideos()
   cachedVideoItemId = null
+  cachedVideoUserId = null
+  sessionChildUserId = null
   if (idleGuideTimer) clearTimeout(idleGuideTimer)
   destroyTrainingAudio()
 })
