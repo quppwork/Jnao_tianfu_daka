@@ -185,7 +185,9 @@ class TestAdminApi:
         )
         assert login.status_code == 403
 
-    def test_admin_delete_child_removed_and_login_reactivates(self, client: TestClient, db_session):
+    def test_admin_delete_child_releases_login_name_for_fresh_register(
+        self, client: TestClient, db_session
+    ):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
         pid = _seed_parent(db_session, "13900009903", "家长丙")
@@ -200,21 +202,44 @@ class TestAdminApi:
         row = db_session.get(__import__("app.db.models", fromlist=["ChildUser"]).ChildUser, cid)
         assert row is not None
         assert row.account_status == "removed"
-        assert row.login_name == "kid_hard"
+        assert row.login_name == f"__removed_{cid}__"
+        assert (row.profile_json or {}).get("archived_login_name") == "kid_hard"
 
         login = client.post(
             "/api/auth/login",
             json={"login_name": "kid_hard", "password": "XiaoMing1"},
         )
-        assert login.status_code == 200, login.text
-        db_session.refresh(row)
-        assert row.account_status == "active"
+        assert login.status_code in (401, 403), login.text
 
         recreated = client.post(
             f"/api/parent/children?user_id={pid}",
             json={"login_name": "kid_hard", "nickname": "新童", "password": "XiaoMing2"},
         )
-        assert recreated.status_code == 409, recreated.text
+        assert recreated.status_code == 200, recreated.text
+        assert recreated.json()["id"] != cid
+        assert recreated.json()["login_name"] == "kid_hard"
+        assert recreated.json()["nickname"] == "新童"
+
+    def test_parent_registers_fresh_child_after_admin_delete(self, client: TestClient, db_session):
+        """管理员软删后，家长可用同名账号注册全新孩子（新 id，非恢复旧号）。"""
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        pid = _seed_parent(db_session, "13900009913", "家长回收")
+        old = client.post(
+            f"/api/parent/children?user_id={pid}",
+            json={"login_name": "kid_reclaim", "nickname": "回收童", "password": "XiaoMing1"},
+        ).json()
+        old_id = old["id"]
+        assert client.delete(f"/api/admin/children/{old_id}", **auth).status_code == 200
+
+        fresh = client.post(
+            f"/api/parent/children?user_id={pid}",
+            json={"login_name": "kid_reclaim", "nickname": "回收童新", "password": "XiaoMing2"},
+        )
+        assert fresh.status_code == 200, fresh.text
+        assert fresh.json()["id"] != old_id
+        assert fresh.json()["login_name"] == "kid_reclaim"
+        assert fresh.json()["nickname"] == "回收童新"
 
     def test_admin_update_quota(self, client: TestClient, db_session):
         admin = _admin_login(client)

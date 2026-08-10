@@ -64,6 +64,10 @@ def create_child(
     if auth_service.find_user_by_login_name(db, login_name):
         raise HTTPException(409, "该账号已被使用")
 
+    legacy_removed = auth_service.find_removed_student_by_login_name(db, login_name)
+    if legacy_removed:
+        auth_service.release_student_login_name(db, legacy_removed)
+
     try:
         child = auth_service.register_child(
             db,

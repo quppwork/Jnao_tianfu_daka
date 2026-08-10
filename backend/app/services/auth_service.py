@@ -76,10 +76,27 @@ def effective_parent_phone(user: ChildUser) -> str:
 
 def effective_student_login_name(user: ChildUser) -> str | None:
     ln = (user.login_name or "").strip()
-    if ln.startswith("__deleted_"):
+    if ln.startswith("__removed_") or ln.startswith("__deleted_"):
         archived = (user.profile_json or {}).get("archived_login_name") or ""
         return archived.strip() or ln
     return ln or None
+
+
+def release_student_login_name(db: Session, student: ChildUser) -> None:
+    """软删时释放 login_name，允许同名重新注册新账号。"""
+    if student.role != ROLE_STUDENT:
+        return
+    ln = (student.login_name or "").strip()
+    if not ln or ln.startswith("__removed_") or ln.startswith("__deleted_"):
+        return
+    from sqlalchemy.orm.attributes import flag_modified
+
+    pj = dict(student.profile_json or {})
+    pj["archived_login_name"] = ln
+    student.profile_json = pj
+    student.login_name = f"__removed_{student.id}__"
+    flag_modified(student, "profile_json")
+    db.flush()
 
 
 def restore_student_account(db: Session, student: ChildUser) -> None:
@@ -292,6 +309,17 @@ def find_user_by_login_name(db: Session, login_name: str) -> ChildUser | None:
             ChildUser.login_name == login_name,
             ChildUser.role == ROLE_STUDENT,
             ChildUser.account_status == ACCOUNT_ACTIVE,
+        )
+    )
+
+
+def find_removed_student_by_login_name(db: Session, login_name: str) -> ChildUser | None:
+    """管理员移出生产环境后仍占用 login_name；创建同名账号时需回收。"""
+    return db.scalar(
+        select(ChildUser).where(
+            ChildUser.login_name == login_name,
+            ChildUser.role == ROLE_STUDENT,
+            ChildUser.account_status == ACCOUNT_REMOVED,
         )
     )
 

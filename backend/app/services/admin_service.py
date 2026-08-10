@@ -78,6 +78,7 @@ def _suspend_student_account(db: Session, child: ChildUser) -> None:
 
     revoke_all_sessions(db, child.id)
     child.session_token = None
+    auth_service.release_student_login_name(db, child)
     child.account_status = auth_service.ACCOUNT_REMOVED
     child.deleted_at = datetime.now(TZ)
 
