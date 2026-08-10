@@ -772,7 +772,7 @@
               @error="onTrainingVideoError"
             />
             <view v-if="videoLoading" class="player-video-loading">
-              <text class="player-video-loading-text">视频缓冲中…</text>
+              <text class="player-video-loading-text">{{ videoLoadingHint }}</text>
             </view>
             <view v-else-if="!videoMetadataReady" class="player-cover-placeholder">
               <text class="player-cover-icon">🎬</text>
@@ -2088,6 +2088,9 @@ const audioPlaying = ref(false)
 const videoPlaying = ref(false)
 const videoLoading = ref(false)
 const videoMetadataReady = ref(false)
+const videoLoadAttempt = ref(0)
+const VIDEO_LOAD_MAX_RETRIES = 3
+let videoRetryTimer = null
 const planMediaPreloaded = ref(false)
 const audioUiSec = ref(0)
 const audioUiDuration = ref(0)
@@ -2451,6 +2454,12 @@ const audioDurationLabel = computed(() => {
 const videoProgressPct = ref(0)
 const videoTimeLabel = ref('0:00')
 const videoDurationLabel = ref('--:--')
+const videoLoadingHint = computed(() => {
+  if (videoLoadAttempt.value > 0) {
+    return `正在重试加载 (${videoLoadAttempt.value}/${VIDEO_LOAD_MAX_RETRIES})…`
+  }
+  return '视频缓冲中…'
+})
 
 const mediaPlayIcon = computed(() => {
   if (mediaPlayer.value.type === 'video') return videoPlaying.value ? '⏸' : '▶'
@@ -2757,6 +2766,8 @@ function onVideoWaiting() {
 function onVideoCanPlay() {
   videoLoading.value = false
   videoMetadataReady.value = true
+  videoLoadAttempt.value = 0
+  clearVideoRetryTimer()
   syncMediaUiFromElement(getTrainingVideoDom())
 }
 
@@ -3529,12 +3540,52 @@ async function deleteCard(idx) {
   }
 }
 
+function clearVideoRetryTimer() {
+  if (videoRetryTimer) {
+    clearTimeout(videoRetryTimer)
+    videoRetryTimer = null
+  }
+}
+
+function buildVideoStreamSrc(rawUrl, uid, attempt = 0) {
+  let url = resolveTrainingStreamUrl(rawUrl, uid)
+  if (!url || attempt <= 0) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}_retry=${attempt}&_t=${Date.now()}`
+}
+
+function reloadTrainingVideo(item, uid) {
+  videoLoading.value = true
+  videoMetadataReady.value = false
+  videoSrc.value = buildVideoStreamSrc(item.video_url, uid, videoLoadAttempt.value)
+  nextTick(() => {
+    startVideoUiSync()
+    const el = getTrainingVideoDom()
+    if (el) {
+      try { el.load() } catch (_) { /* ignore */ }
+    }
+    tryPlayVideoAfterOpen()
+    syncMediaUiFromElement(getTrainingVideoDom())
+  })
+}
+
 function onTrainingVideoError() {
+  const item = lastOpenedItem.value
+  const uid = getChildUserId()
+  if (item?.video_url && uid && videoLoadAttempt.value < VIDEO_LOAD_MAX_RETRIES) {
+    videoLoadAttempt.value += 1
+    videoLoading.value = true
+    videoMetadataReady.value = false
+    clearVideoRetryTimer()
+    videoRetryTimer = setTimeout(() => reloadTrainingVideo(item, uid), 700 * videoLoadAttempt.value)
+    return
+  }
+  clearVideoRetryTimer()
   videoLoading.value = false
   videoPlaying.value = false
   videoMetadataReady.value = false
   console.error('[training] video load failed:', videoSrc.value)
-  uni.showToast({ title: '视频加载失败，请检查网络后重试', icon: 'none', duration: 3000 })
+  uni.showToast({ title: '视频加载失败，请关闭后重试或刷新页面', icon: 'none', duration: 3000 })
 }
 
 function applyPlanMedia(plan) {
@@ -3586,11 +3637,13 @@ async function openMediaItem(item, forceType) {
   const openVideo = () => {
     videoLoading.value = true
     videoMetadataReady.value = false
+    videoLoadAttempt.value = 0
+    clearVideoRetryTimer()
     videoProgressPct.value = 0
     videoTimeLabel.value = '0:00'
     videoDurationLabel.value = '--:--'
     applyPreloadedVideoMeta(item)
-    videoSrc.value = resolveTrainingStreamUrl(item.video_url, uid)
+    videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
     nextTick(() => {
       startVideoUiSync()
@@ -3645,6 +3698,8 @@ function closeMedia() {
     watchProgressSaveTimer = null
   }
   stopVideoUiSync()
+  clearVideoRetryTimer()
+  videoLoadAttempt.value = 0
   const item = lastOpenedItem.value
   if (item?.id && itemNeedsListen(item)) {
     syncMediaUiFromElement(activeMediaEl())
@@ -3904,6 +3959,7 @@ onUnmounted(() => {
   clearTimerTick()
   clearDayUnlockWatch()
   stopVideoUiSync()
+  clearVideoRetryTimer()
   destroyPreloadVideos()
   if (idleGuideTimer) clearTimeout(idleGuideTimer)
   destroyTrainingAudio()

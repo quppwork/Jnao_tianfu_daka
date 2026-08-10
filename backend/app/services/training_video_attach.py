@@ -67,9 +67,9 @@ def attach_videos_to_plan_items(
                 item.video_url = None
                 changed += 1
             continue
-        if only_missing and item.video_url:
-            continue
         play_url = video_map[skill].play_url
+        if only_missing and item.video_url and item.video_url == play_url:
+            continue
         if not play_url:
             if item.video_url:
                 item.video_url = None

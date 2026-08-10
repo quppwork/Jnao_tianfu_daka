@@ -183,6 +183,44 @@ def test_attach_clears_video_for_skill_without_catalog(db_session, child_with_as
     assert plan.items[0].video_url is None
 
 
+def test_attach_updates_stale_video_oss_path(db_session, child_with_assessment):
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.training_day import get_training_day
+    from app.services.training_video_attach import attach_videos_to_plan_items
+
+    import_video_catalog(db_session)
+    stale = (
+        "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/"
+        "天赋-视频/超脑阅读技术.mp4"
+    )
+    plan = TrainingPlan(
+        child_user_id=child_with_assessment,
+        plan_date=get_training_day(),
+        content_index=1,
+        status="pending",
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(
+        TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            ability_type="audio",
+            title="超脑阅读",
+            duration_min=10,
+            audio_url="https://example.com/a.mp3",
+            video_url=stale,
+            instructions='{"skill":"超脑阅读","item_type":"required"}',
+            checkin_status="pending",
+        )
+    )
+    db_session.flush()
+    n = attach_videos_to_plan_items(db_session, plan, only_missing=True)
+    assert n >= 1
+    assert "天赋-视频" not in (plan.items[0].video_url or "")
+    assert plan.items[0].video_url.endswith("shipin/超脑阅读技术.mp4")
+
+
 def test_import_video_catalog_migrates_legacy_shipin_subfolder_paths(db_session):
     """OSS shipin/天赋-视频/ 已删除后，导入应把 content_item 迁到 shipin/ 根目录。"""
     legacy = (
