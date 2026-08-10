@@ -31,12 +31,13 @@
       <!-- 今日训练时长 -->
       <view class="card time-card" :class="{ 'time-card-alert': redAlertActive }">
         <view class="time-header">
-          <text class="plan-label">⏰ 请选择训练时长</text>
+          <text class="plan-label">{{ timeCardTitle }}</text>
           <text v-if="timerPhase === 'running'" class="time-status-tag running">进行中</text>
           <text v-else-if="timerPhase === 'expired'" class="time-status-tag expired">已结束</text>
+          <text v-else-if="durationLocked && planJustGenerated" class="time-status-tag pending">待确认</text>
         </view>
 
-        <view v-if="timerPhase === 'setup'" class="time-setup">
+        <view v-if="timerPhase === 'setup' && !durationLocked" class="time-setup">
           <view v-if="showGuideArrow" class="guide-arrow">
             <text>👇 请选择训练时长</text>
           </view>
@@ -57,6 +58,11 @@
           <view class="time-start-btn" :class="{ disabled: !canStartTimer }" @click="startTrainingTimer">
             <text>开始训练</text>
           </view>
+          <text class="time-setup-hint">{{ timeSetupHint }}</text>
+        </view>
+
+        <view v-else-if="timerPhase === 'setup' && durationLocked" class="time-locked">
+          <text class="time-locked-val">{{ lockedDurationLabel }}</text>
           <text class="time-setup-hint">{{ timeSetupHint }}</text>
         </view>
 
@@ -1054,9 +1060,27 @@ const minuteIndex = computed(() => {
   return idx >= 0 ? idx : 0
 })
 const canStartTimer = computed(() => {
+  if (durationLocked.value) return false
   if (trainingDayLocked.value || scheduleLoading.value || entryLoading.value || planJustGenerated.value) return false
   const total = selectedHours.value * 60 + selectedMinutes.value
   return total >= MIN_TRAINING_MINUTES
+})
+const durationLocked = computed(() => {
+  if (timerPhase.value === 'running' || timerPhase.value === 'expired') return true
+  if (planJustGenerated.value) return true
+  const pm = Number(todayPlan.value?.planned_minutes || 0)
+  return !!(todayPlan.value?.plan_id && pm >= MIN_TRAINING_MINUTES)
+})
+const timeCardTitle = computed(() => {
+  if (timerPhase.value === 'running') return '⏰ 今日训练计时'
+  if (timerPhase.value === 'expired') return '⏰ 今日训练'
+  if (durationLocked.value) return '⏰ 今日训练时长'
+  return '⏰ 请选择训练时长'
+})
+const lockedDurationLabel = computed(() => {
+  const pm = Number(todayPlan.value?.planned_minutes || 0)
+  if (pm >= MIN_TRAINING_MINUTES) return formatDuration(pm * 60)
+  return formatDuration((selectedHours.value * 60 + selectedMinutes.value) * 60)
 })
 const isPageLoading = computed(() => scheduleLoading.value || entryLoading.value || planJustGenerated.value)
 const hasPlanItems = computed(() => (todayPlan.value?.items?.length || 0) > 0)
@@ -1074,6 +1098,7 @@ const planEmptyHint = computed(() => {
 const timeSetupHint = computed(() => {
   if (scheduleLoading.value) return '正在按设定时长生成训练内容…'
   if (planJustGenerated.value) return '可在下方查看、编辑训练内容，确认后开始计时'
+  if (durationLocked.value) return '时长已锁定，确认方案后开始计时'
   return '选择时长后点击「开始训练」，将按孩子情况分配今日内容'
 })
 /** 训练日已完成（次日凌晨4点才能新开一天），仅禁止重新「开始训练」 */
@@ -1222,6 +1247,7 @@ const showGuideArrow = ref(false)
 const redAlertActive = ref(false)
 
 function onHourPick(e) {
+  if (durationLocked.value) return
   selectedHours.value = HOUR_OPTIONS[Number(e.detail.value)] ?? 0
   // 切回 0 小时时，分钟不得低于 20
   if (selectedHours.value === 0 && selectedMinutes.value < MIN_TRAINING_MINUTES) {
@@ -1231,6 +1257,7 @@ function onHourPick(e) {
   redAlertActive.value = false
 }
 function onMinutePick(e) {
+  if (durationLocked.value) return
   const opts = minuteOptions.value
   selectedMinutes.value = opts[Number(e.detail.value)] ?? opts[0] ?? MIN_TRAINING_MINUTES
   showGuideArrow.value = false
@@ -1421,6 +1448,10 @@ async function applyScheduledPlan(uid, data) {
   aiPlanText.value = data.report_text || ''
   applyPlanMedia(data)
   hydrateWatchProgressFromPlan(data)
+  if (Number(data.planned_minutes || 0) >= MIN_TRAINING_MINUTES) {
+    syncPickersFromPlannedMinutes(data.planned_minutes)
+    plannedDurationSec.value = data.planned_minutes * 60
+  }
   // 方案变更后清除 position-based 状态，避免 block ID 碰撞
   phaseRecordIds.value = {}
   phaseClicked.value = {}
@@ -1902,12 +1933,14 @@ async function toggleElective(skill) {
   const uid = await ensureChildUser()
   const planId = todayPlan.value?.plan_id
   if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
+  const pendingConfirm = planJustGenerated.value && timerPhase.value === 'setup'
   const inPlan = electiveSkills.value.find(e => e.skill === skill)?.inPlan
   const action = inPlan ? 'remove' : 'add'
   electiveToggling.value = true
   try {
     const data = await toggleElectiveItem(uid, planId, skill, action)
     await applyScheduledPlan(uid, data)
+    if (pendingConfirm) planJustGenerated.value = true
     uni.showToast({ title: inPlan ? `已移除 ${skill}` : `已添加 ${skill}`, icon: 'none' })
   } catch (e) {
     const msg = e.data?.detail || e.message || '操作失败'
@@ -4356,6 +4389,9 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .time-status-tag { font-size:10px; padding:2px 8px; border-radius:999px; }
 .time-status-tag.running { background:rgba(34,197,94,0.15); color:#22c55e; }
 .time-status-tag.expired { background:rgba(239,68,68,0.15); color:#ef4444; }
+.time-status-tag.pending { background:rgba(59,130,246,0.15); color:#3b82f6; }
+.time-locked { text-align:center; padding:8px 0 4px; }
+.time-locked-val { display:block; color:var(--accent); font-size:32px; font-weight:800; letter-spacing:0.06em; font-variant-numeric:tabular-nums; }
 .time-setup { display:flex; flex-direction:column; gap:10px; }
 .guide-arrow { text-align:center; animation: guideBounce 0.8s ease-in-out infinite; }
 .guide-arrow text { font-size:16px; color:#f5a623; font-weight:600; }
