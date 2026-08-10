@@ -993,7 +993,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide } from '@dcloudio/uni-app'
 import { requirePageAuth, ensureChildUser, getChildUserId, resolveTrainingStreamUrl, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
@@ -1177,8 +1177,13 @@ function nowSynced() {
 function formatWindowTime(ms) {
   const s = new Date(ms).toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' })
   const timePart = s.split(' ')[1] || '00:00:00'
-  const [hh, mm] = timePart.split(':')
-  return `${hh}:${mm}`
+  const [hh, mm, ss = '00'] = timePart.split(':')
+  return `${hh}:${mm}:${ss}`
+}
+
+function remainingSecondsUntil(endAtMs) {
+  if (!endAtMs) return 0
+  return Math.max(0, Math.ceil((endAtMs - nowSynced()) / 1000))
 }
 
 function applyDevTimeOverride(iso) {
@@ -1367,20 +1372,33 @@ function applyTimerFromServer(data) {
   }
 
   const endAt = data.timer_end_at ? new Date(data.timer_end_at).getTime() : null
-  const plannedSec = data.timer_planned_seconds || 0
-  let remaining = data.timer_remaining_seconds
-  if (remaining == null && endAt) {
-    remaining = Math.max(0, Math.ceil((endAt - nowSynced()) / 1000))
+  const plannedSec = data.timer_planned_seconds || (data.planned_minutes || 0) * 60 || 0
+  if (!endAt) {
+    const fallback = Number(data.timer_remaining_seconds || 0)
+    if (fallback <= 0) {
+      applyTimerFromServer({ ...data, timer_phase: 'expired' })
+      return
+    }
+    plannedDurationSec.value = plannedSec || fallback
+    remainingSeconds.value = fallback
+    timerPhase.value = 'running'
+    const syntheticEnd = nowSynced() + fallback * 1000
+    persistTimer(syntheticEnd, plannedDurationSec.value, data.plan_id)
+    clearTimerTick()
+    timerTickId = setInterval(tickTrainingTimer, 1000)
+    return
   }
-  if (!endAt || remaining <= 0) {
+
+  const remaining = remainingSecondsUntil(endAt)
+  if (remaining <= 0) {
     applyTimerFromServer({ ...data, timer_phase: 'expired' })
     return
   }
 
-  plannedDurationSec.value = plannedSec
+  plannedDurationSec.value = plannedSec || remaining
   remainingSeconds.value = remaining
   timerPhase.value = 'running'
-  persistTimer(endAt, plannedSec, data.plan_id)
+  persistTimer(endAt, plannedDurationSec.value, data.plan_id)
   clearTimerTick()
   timerTickId = setInterval(tickTrainingTimer, 1000)
 }
@@ -1492,13 +1510,24 @@ function expireTrainingTimer(silent = false) {
 }
 
 function syncTimerFromEndAt(endAt) {
-  const left = Math.ceil((endAt - nowSynced()) / 1000)
+  const left = remainingSecondsUntil(endAt)
   if (left <= 0) {
     expireTrainingTimer(true)
     return
   }
   timerPhase.value = 'running'
   remainingSeconds.value = left
+}
+
+function resumeTimerFromStorage() {
+  const data = readTimerData()
+  if (!data || data.phase !== 'running' || !data.endAt) return false
+  if (Number(data.plannedSec) > 0) plannedDurationSec.value = Number(data.plannedSec)
+  syncTimerFromEndAt(Number(data.endAt))
+  if (timerPhase.value !== 'running') return true
+  clearTimerTick()
+  timerTickId = setInterval(tickTrainingTimer, 1000)
+  return true
 }
 
 function tickTrainingTimer() {
@@ -3985,8 +4014,11 @@ onMounted(async () => {
   }, 5000)
 })
 onShow(async () => {
-  // 始终以服务端 timer_phase / 方案为准，避免 localStorage 脏状态
+  resumeTimerFromStorage()
   await loadTodayPlan(true)
+})
+onHide(() => {
+  clearTimerTick()
 })
 onUnmounted(() => {
   clearTimerTick()

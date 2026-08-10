@@ -37,6 +37,67 @@ class TestTrainingWindow:
         assert _time_in_training_window(time(9, 0), time(18, 0), time(12, 0)) is True
         assert _time_in_training_window(time(9, 0), time(18, 0), time(20, 0)) is False
 
+    def test_refresh_volatile_plan_fields_updates_timer(self, db_session: Session):
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from app.db.models import TrainingItem
+        from app.services.training_service import (
+            _refresh_volatile_plan_fields,
+            set_training_window,
+        )
+
+        user = auth_service.register_child(
+            db_session,
+            parent_phone="13900007703",
+            nickname="计时童",
+            login_name="timer_kid",
+            password="123456",
+        )
+        plan_date = date(2026, 7, 8)
+        plan = TrainingPlan(
+            child_user_id=user.id,
+            plan_date=plan_date,
+            level="A",
+            report_text="",
+            planned_minutes=60,
+            status="pending",
+        )
+        db_session.add(plan)
+        db_session.flush()
+        db_session.add(
+            TrainingItem(
+                plan_id=plan.id,
+                sort_order=1,
+                title="训练项",
+                duration_min=10,
+                checkin_status="pending",
+            )
+        )
+        db_session.commit()
+        set_training_window(db_session, user.id, "10:00:00", "11:00:00", train_date=plan_date)
+
+        stale = {
+            "plan_id": plan.id,
+            "planned_minutes": 60,
+            "items": [{"id": 1, "title": "训练项"}],
+            "timer_phase": "running",
+            "timer_remaining_seconds": 3600,
+            "timer_end_at": "2026-07-08T11:00:00+08:00",
+        }
+
+        t0 = datetime(2026, 7, 8, 10, 0, 0, tzinfo=TZ)
+        t1 = datetime(2026, 7, 8, 10, 10, 0, tzinfo=TZ)
+        with patch("app.services.training_service._user_now", return_value=t0):
+            with patch("app.services.training_service._today_for", return_value=plan_date):
+                first = _refresh_volatile_plan_fields(db_session, user.id, plan_date, stale)
+        with patch("app.services.training_service._user_now", return_value=t1):
+            with patch("app.services.training_service._today_for", return_value=plan_date):
+                second = _refresh_volatile_plan_fields(db_session, user.id, plan_date, stale)
+
+        assert first["timer_remaining_seconds"] == 3600
+        assert second["timer_remaining_seconds"] == 3000
+
 
 class TestStalePlanCleanup:
     def test_stale_plan_deleted_on_resolve(self, db_session: Session):

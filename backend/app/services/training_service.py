@@ -149,11 +149,25 @@ def _parse_time(value: str) -> time:
     parts = value.strip().split(":")
     if len(parts) < 2:
         raise TrainingError("时间格式应为 HH:MM")
-    return time(int(parts[0]), int(parts[1]))
+    sec = int(parts[2]) if len(parts) > 2 else 0
+    return time(int(parts[0]), int(parts[1]), sec)
 
 
 def _format_time(value: time) -> str:
-    return value.strftime("%H:%M")
+    return value.strftime("%H:%M:%S") if value.second else value.strftime("%H:%M")
+
+
+def _refresh_volatile_plan_fields(
+    db: Session, child_user_id: int, plan_date: date, cached: dict
+) -> dict:
+    """缓存命中时仍刷新计时/时钟字段，避免倒计时冻结在旧快照。"""
+    now = _user_now(db, child_user_id)
+    out = dict(cached)
+    out.update(training_day_meta(now, plan_date=plan_date))
+    plan = _resolve_today_plan(db, child_user_id, plan_date)
+    if plan:
+        out.update(_build_timer_fields(db, child_user_id, plan, now))
+    return out
 
 
 def get_content_series(
@@ -768,10 +782,10 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
 
     plan_date = plan_date or _today_for(db, child_user_id)
 
-    # 短期缓存命中 → 跳过所有 DB 查询
+    # 短期缓存命中 → 仍刷新计时字段（倒计时不能复用旧快照）
     cached = _cache_get(child_user_id, plan_date)
     if cached is not None:
-        return cached
+        return _refresh_volatile_plan_fields(db, child_user_id, plan_date, cached)
     if not is_new_day_ready(_user_now(db, child_user_id)):
         raise TrainingError("训练日切换中，请约 5 分钟后再试", 503)
 
