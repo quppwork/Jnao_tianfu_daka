@@ -15,7 +15,7 @@
   <!-- 报告内容 -->
   <view class="app" v-else-if="report">
     <!-- Nav -->
-    <view class="nav"><view class="nav-back" @click="goBack"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></view><text class="nav-title">天赋报告</text><view class="nav-spacer"></view></view>
+    <view class="nav"><view class="nav-back" @click="goBack"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></view><text class="nav-title">{{ isChildReport ? '孩子天赋报告' : '天赋报告' }}</text><view class="nav-spacer"></view></view>
 
     <scroll-view class="body" scroll-y>
       <view class="content">
@@ -78,7 +78,10 @@
             <text v-else class="hero-logo-text">{{ report.check_talent?.[0] || report.talent?.[0] || '?' }}</text>
           </view>
           <view class="hero-info" style="position:relative;z-index:1;">
-            <text class="hero-label">天赋者</text>
+            <view class="hero-type-row">
+              <text class="hero-label">{{ isChildReport ? '小小天赋者' : '天赋者' }}</text>
+              <text class="report-type-chip" :class="isChildReport ? 'chip-child' : 'chip-adult'">{{ isChildReport ? '孩子测试' : '成人测试' }}</text>
+            </view>
             <text class="hero-name">{{ talentDisplay }}</text>
             <text class="hero-desc">{{ attrShort }}</text>
           </view>
@@ -160,20 +163,20 @@
 
         <!-- ══ 8. 给你的建议 ══ -->
         <view class="card" v-if="advice">
-          <text class="sec-title">给你的建议</text>
+          <text class="sec-title">{{ isChildReport ? '给你的小建议' : '给你的建议' }}</text>
           <view v-if="advice.career" class="advice-item">
-            <text class="card-label">事业建议</text>
+            <text class="card-label">{{ isChildReport ? '成长建议' : '事业建议' }}</text>
             <text class="advice-text">{{ advice.career }}</text>
           </view>
           <view v-if="advice.emotion" class="advice-item">
-            <text class="card-label">情感建议</text>
+            <text class="card-label">{{ isChildReport ? '相处建议' : '情感建议' }}</text>
             <text class="advice-text">{{ advice.emotion }}</text>
           </view>
         </view>
 
         <!-- ══ 9. 三条黄金建议 ══ -->
         <view class="card" v-if="goldenAdvice.length">
-          <text class="sec-title">三条黄金建议</text>
+          <text class="sec-title">{{ isChildReport ? '三条小建议' : '三条黄金建议' }}</text>
           <view v-for="(item,i) in goldenAdvice" :key="i" class="golden-item">
             <text class="golden-text">{{ i+1 }}. {{ item }}</text>
           </view>
@@ -181,8 +184,8 @@
 
         <!-- ══ Meta ══ -->
         <view class="meta">
-          <text>记录 #{{ report.id }} · {{ report.create_time }}</text>
-          <text class="meta-link" @tap="openOldReport">旧版报告</text>
+          <text>记录 #{{ report.id }} · {{ report.create_time }} · {{ isChildReport ? '孩子卷' : '成人卷' }}</text>
+          <text v-if="canOpenOldReport" class="meta-link" @tap="openOldReport">旧版报告</text>
         </view>
 
         <!-- ══ Actions ══ -->
@@ -228,7 +231,7 @@ const TALENT_BG_FIGS = { "学者":"/static/talent-xuezhe.png","思者":"/static/
 
 const loading = ref(true)
 const report = ref(null)
-const testType = ref('成人')
+const testType = ref('成人') // '成人' | '孩子'，由测评 type 决定
 const isBackup = ref(false)
 const collapseOpen = ref({})
 const loadError = ref('')
@@ -286,6 +289,9 @@ onMounted(async () => {
     const json = await fetchAssessmentReport(uid, assessmentId)
     if (json.code !== 1) throw new Error('报告加载失败')
     report.value = json.data
+    // 以库内 test_type 为准，回退 report.type（0=成人 1=孩子）
+    const rawType = json.test_type ?? json.data?.type
+    testType.value = Number(rawType) === 1 ? '孩子' : '成人'
 
     // 监听主题切换，触发 SVG 重绘
     themeObserver = new MutationObserver(() => { themeVersion.value++ })
@@ -694,13 +700,21 @@ function openVideo() {
 }
 function closeTalentVideo() { showTalentVideo.value = false }
 function reTest() { goBack() }
+
+const isChildReport = computed(() => testType.value === '孩子')
+/** 远端目前仅有家长/成人旧版 H5；孩子卷不误链成人页 */
+const canOpenOldReport = computed(() => !isChildReport.value && !!report.value?.id)
+
 function openOldReport() {
   const id = report.value?.id
-  if (id) {
-    // #ifdef H5
-    window.open(`https://m.jnao.com/h5/parent_test_result.html?id=${id}`, '_blank')
-    // #endif
+  if (!id) return
+  if (isChildReport.value) {
+    uni.showToast({ title: '孩子卷暂无旧版报告页', icon: 'none' })
+    return
   }
+  // #ifdef H5
+  window.open(`https://m.jnao.com/h5/parent_test_result.html?id=${id}`, '_blank')
+  // #endif
 }
 </script>
 
@@ -728,6 +742,14 @@ function openOldReport() {
 .hero-logo-text { font-size:32px; font-weight:700; color:var(--text-dim); }
 .hero-info { flex:1; min-width:0; }
 .hero-label { font-size:11px; color:var(--text-dim); display:block; margin-bottom:2px; }
+.hero-type-row { display:flex; align-items:center; gap:8px; margin-bottom:2px; flex-wrap:wrap; }
+.hero-type-row .hero-label { margin-bottom:0; }
+.report-type-chip {
+  display:inline-flex; padding:2px 8px; border-radius:999px;
+  font-size:10px; font-weight:600; line-height:1.4;
+}
+.chip-adult { background:rgba(37,99,235,0.1); color:#2563eb; border:1px solid rgba(37,99,235,0.25); }
+.chip-child { background:rgba(34,197,94,0.12); color:#16a34a; border:1px solid rgba(34,197,94,0.3); }
 .hero-name { font-size:20px; font-weight:700; color:var(--text); display:block; }
 .hero-desc { font-size:12px; color:var(--text-dim); line-height:1.5; display:block; margin-top:4px; }
 .hero-bg-fig { position:absolute; right:-10px; top:6px; width:135px; height:150px; opacity:0.15; pointer-events:none; background-size:cover; background-position:center top; background-repeat:no-repeat; z-index:2; }

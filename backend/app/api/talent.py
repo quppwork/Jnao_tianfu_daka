@@ -218,7 +218,10 @@ def get_assessment(
         "data": report,
         "assessment_id": row.id,
         "talent_primary": row.talent_primary,
-        "assessed_at": row.assessed_at.isoformat() if row.assessed_at else None,
+        "test_type": row.test_type,  # 0 adult, 1 child
+        "assessed_at": (
+            row.assessed_at.isoformat() if row.assessed_at else None
+        ),
     }
 
 
