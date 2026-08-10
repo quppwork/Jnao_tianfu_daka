@@ -262,7 +262,7 @@
       </view>
 
       <!-- 训练阶段 -->
-      <template v-if="showTraining && (timerPhase !== 'setup' || (todayPlan?.items?.length > 0)) && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in visiblePhases" :key="phase.block">
+      <template v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in visiblePhases" :key="phase.block">
         <view v-if="pi > 0" class="divider"></view>
         <view :id="'phase-block-' + phase.block" class="phase-section">
           <text class="section-title" :class="{ dim: !phase.unlocked, elective: phase.isElective }">
@@ -747,10 +747,14 @@
           <view v-if="mediaPlayer.type === 'video'" class="player-cover-video">
             <video
               v-if="videoSrc"
+              :key="videoSrc"
               ref="trainingVideoEl"
               class="training-video"
               :src="videoSrc"
               controls
+              playsinline
+              webkit-playsinline
+              x5-playsinline
               controlsList="nodownload noplaybackrate"
               disablePictureInPicture
               autoplay
@@ -760,6 +764,7 @@
               @ratechange="lockMediaPlaybackRate"
               @pause="flushWatchProgress"
               @ended="onMediaEnded"
+              @error="onTrainingVideoError"
             />
             <view v-else class="player-cover-placeholder">
               <text class="player-cover-icon">🎬</text>
@@ -1302,6 +1307,14 @@ function applyTimerFromServer(data) {
   if (phase === 'setup') {
     clearAllTimerKeysForUser()
     resetTimerToSetup()
+    const items = todayPlan.value?.items || []
+    const hasProgress = items.some(
+      i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0
+    )
+    if (!hasProgress) {
+      showTraining.value = false
+      planJustGenerated.value = false
+    }
     return
   }
 
@@ -1381,11 +1394,6 @@ function restoreTrainingVisibility(data) {
     return
   }
   if (items.some(i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0)) {
-    showTraining.value = true
-    planJustGenerated.value = false
-    return
-  }
-  if (items.some(i => i.video_url || i.audio_url)) {
     showTraining.value = true
     planJustGenerated.value = false
   }
@@ -1489,6 +1497,11 @@ async function startTrainingTimer() {
     return
   }
   if (!canStartTimer.value) {
+    if (entryLoading.value) {
+      uni.showToast({ title: '方案加载中，请稍候', icon: 'none' })
+    } else if (scheduleLoading.value) {
+      uni.showToast({ title: '正在开始训练，请稍候', icon: 'none' })
+    }
     showGuideArrow.value = true
     redAlertActive.value = false
     nextTick(() => { redAlertActive.value = true })
@@ -1579,8 +1592,6 @@ function guardMedia() {
     return false
   }
   if (timerPhase.value === 'setup') {
-    const items = todayPlan.value?.items || []
-    if (items.some(i => i.video_url || i.audio_url)) return true
     uni.showToast({ title: '请先选择时长并点击「开始训练」', icon: 'none' })
     return false
   }
@@ -3300,6 +3311,11 @@ async function deleteCard(idx) {
   }
 }
 
+function onTrainingVideoError() {
+  console.error('[training] video load failed:', videoSrc.value)
+  uni.showToast({ title: '视频加载失败，请退出重进或重新登录', icon: 'none', duration: 3000 })
+}
+
 function applyPlanMedia(plan) {
   const uid = getChildUserId()
   const items = plan?.items || []
@@ -3621,32 +3637,7 @@ onMounted(async () => {
   }, 5000)
 })
 onShow(async () => {
-  // 组件重建后从 localStorage 恢复计时器（服务器可能未持久化 timer_end_at）
-  if (timerPhase.value === 'setup') {
-    const saved = readTimerData()
-    if (saved && saved.phase === 'running' && saved.endAt) {
-      plannedDurationSec.value = saved.plannedSec || 0
-      syncTimerFromEndAt(saved.endAt)
-      clearTimerTick()
-      timerTickId = setInterval(tickTrainingTimer, 1000)
-    }
-  }
-
-  // 方案已存在且计时运行中 → 补回训练卡显隐后即可返回（避免重复重载）
-  if (todayPlan.value?.plan_id && timerPhase.value === 'running') {
-    restoreTrainingVisibility(todayPlan.value)
-    return
-  }
-  // 方案存在但不在运行中 → 恢复显隐 + 只刷新打卡记录（轻量）
-  if (todayPlan.value?.plan_id) {
-    restoreTrainingVisibility(todayPlan.value)
-    try {
-      const uid = await ensureChildUser()
-      await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
-    } catch (_) { /* 静默失败 */ }
-    return
-  }
-  // 无方案 → 完整加载
+  // 始终以服务端 timer_phase / 方案为准，避免 localStorage 脏状态
   await loadTodayPlan(true)
 })
 onUnmounted(() => {

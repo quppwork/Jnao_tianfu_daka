@@ -481,7 +481,13 @@ def _should_hide_media(plan: TrainingPlan) -> bool:
     return bool(getattr(plan, "media_exhausted", 0))
 
 
-def _item_to_dict(item: TrainingItem, *, hide_media: bool = False, content: ContentItem | None = None) -> dict:
+def _item_to_dict(
+    item: TrainingItem,
+    *,
+    hide_media: bool = False,
+    content: ContentItem | None = None,
+    child_user_id: int | None = None,
+) -> dict:
     meta = parse_item_instruction(
         item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
     )
@@ -499,6 +505,13 @@ def _item_to_dict(item: TrainingItem, *, hide_media: bool = False, content: Cont
         video_url = training_item_stream_path(item.id, "video")
     else:
         video_url = None
+    if child_user_id and item.id:
+        from app.core.media_stream_token import append_media_stream_token
+
+        if audio_url:
+            audio_url = append_media_stream_token(audio_url, item.id, child_user_id, "audio")
+        if video_url:
+            video_url = append_media_stream_token(video_url, item.id, child_user_id, "video")
     return {
         "id": item.id,
         "sort_order": item.sort_order,
@@ -642,7 +655,12 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "can_customize_plan": can_customize,
         "has_checkin": has_checkin,
         "items": [
-            _item_to_dict(item, hide_media=hide_media, content=content_map.get(item.content_item_id))
+            _item_to_dict(
+                item,
+                hide_media=hide_media,
+                content=content_map.get(item.content_item_id),
+                child_user_id=plan.child_user_id,
+            )
             for item in sorted(plan.items, key=lambda i: i.sort_order)
         ],
         "overall_tier": o_tier,

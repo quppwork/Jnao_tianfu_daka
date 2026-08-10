@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -49,6 +49,48 @@ from app.services.training_service import TrainingError
 from app.services.video_push_service import get_talent_training_video, get_talent_video_raw_url
 
 router = APIRouter(prefix="/api/training", tags=["training"])
+
+
+def _resolve_training_stream_user(
+    request: Request,
+    *,
+    item_id: int,
+    media: str,
+    user_id: int | None,
+    mt: str | None,
+    x_session_token: str | None,
+    session_token: str | None,
+    db: Session,
+) -> int:
+    """Cookie/Header 会话 或 短期 mt 签名（供 video/audio 标签 src 使用）。"""
+    from app.core.media_stream_token import verify_media_stream_token
+    from app.db.models import ChildUser
+    from app.services import auth_service
+
+    def _ensure_student(uid: int) -> int:
+        user = db.get(ChildUser, uid)
+        if not user or (user.role or auth_service.ROLE_STUDENT) != auth_service.ROLE_STUDENT:
+            raise HTTPException(403, "需要学生账号")
+        if not auth_service.has_active_parent_bind(db, uid):
+            raise HTTPException(403, "账号未绑定家长，请联系管理员")
+        return uid
+
+    if user_id and mt and verify_media_stream_token(mt, item_id, user_id, media):
+        user = db.get(ChildUser, user_id)
+        if not user or (user.role or auth_service.ROLE_STUDENT) != auth_service.ROLE_STUDENT:
+            raise HTTPException(403, "需要学生账号")
+        return user_id
+
+    from main import app
+
+    override = app.dependency_overrides.get(get_authenticated_student)
+    if override is not None:
+        return override(user_id=user_id)
+
+    uid = get_authenticated_user(
+        request, user_id, None, x_session_token, session_token, db
+    )
+    return _ensure_student(uid)
 
 
 @router.post("/schedule", response_model=TrainingTodayResponse)
@@ -104,12 +146,26 @@ def training_item_media_stream(
     item_id: int,
     request: Request,
     media: str = Query("video", pattern="^(audio|video)$"),
-    child_user_id: int = Depends(get_authenticated_student),
+    user_id: int | None = Query(None, ge=1),
+    mt: str | None = Query(None, description="短期流签名（API 返回的 video_url/audio_url 自带）"),
+    x_session_token: str | None = Header(None, alias="X-Session-Token"),
+    session_token: str | None = Query(None, description="会话令牌（已弃用，请用 Cookie）"),
     db: Session = Depends(get_db),
 ):
     """训练项音视频流 — 鉴权后从 OSS 代理播放（避免签名 URL 过期）"""
     from app.db.models import TrainingItem, TrainingPlan
     from app.services.oss_stream_service import stream_oss_media
+
+    child_user_id = _resolve_training_stream_user(
+        request,
+        item_id=item_id,
+        media=media,
+        user_id=user_id,
+        mt=mt,
+        x_session_token=x_session_token,
+        session_token=session_token,
+        db=db,
+    )
 
     item = db.get(TrainingItem, item_id)
     if not item:
