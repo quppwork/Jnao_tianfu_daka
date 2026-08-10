@@ -758,14 +758,14 @@
       </view>
     </view>
 
-<!-- Media Player Overlay — 方案C 封面风 -->
-    <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
+<!-- Media Player Overlay — 方案C 封面风；v-show 保留 video 实例与浏览器缓冲，避免每次重进全量加载 -->
+    <view v-show="mediaPlayer.show" class="player-overlay" @click="closeMedia">
       <view class="player-card player-card-c" @click.stop>
         <view class="player-cover">
           <view v-if="mediaPlayer.type === 'video'" class="player-cover-video">
             <video
               v-if="videoSrc"
-              :key="videoSrc"
+              :key="'training-video-' + activeVideoItemId"
               ref="trainingVideoEl"
               class="training-video"
               :src="videoSrc"
@@ -2195,6 +2195,7 @@ const planJustGenerated = ref(false)
 const showTraining = ref(false)
 const showDoneConfirm = ref(false)
 const videoSrc = ref('')
+const activeVideoItemId = ref(0)
 const audioSrc = ref('')
 const audioTitle = ref('🎧 训练用音频')
 const talentLabel = ref('')
@@ -2644,13 +2645,42 @@ function getTrainingVideoDom() {
 }
 
 const videoPreloadPool = new Map()
-let videoUiSyncId = null
+/** 当前 DOM 中已加载的训练视频 item id，关闭弹窗时不销毁以便复用缓冲 */
+let cachedVideoItemId = null
+let videoUiRafId = null
 /** 当前播放器内唯一 video 元素，避免 querySelector 误取到其它节点 */
 let pinnedTrainingVideo = null
-/** 底部时间轴展示用，过滤 streaming 间隙的 currentTime 归零 */
+/** 底部时间展示：播放中单调递增，忽略缓冲间隙 currentTime 回跳 */
 let videoUiSecSmoothed = 0
-/** 打开播放器后待 seek 的续播秒数，seek 完成前 UI 跟真实 currentTime */
+/** 打开播放器后待 seek 的续播秒数 */
 let videoResumePendingSec = 0
+
+const WATCH_PROGRESS_LS = 'jnao_training_watch_progress_v1'
+
+function readLocalWatchProgress(itemId) {
+  try {
+    const raw = localStorage.getItem(WATCH_PROGRESS_LS)
+    if (!raw) return null
+    return JSON.parse(raw)[String(itemId)] || null
+  } catch (_) {
+    return null
+  }
+}
+
+function writeLocalWatchProgress(itemId, wp) {
+  if (!itemId || !wp) return
+  try {
+    const raw = localStorage.getItem(WATCH_PROGRESS_LS)
+    const all = raw ? JSON.parse(raw) : {}
+    const prev = all[String(itemId)] || {}
+    all[String(itemId)] = {
+      watched_sec: Math.max(Number(prev.watched_sec) || 0, Number(wp.watched_sec) || 0),
+      duration_sec: Number(wp.duration_sec) || Number(prev.duration_sec) || 0,
+      pct: Math.max(Number(prev.pct) || 0, Number(wp.pct) || 0),
+    }
+    localStorage.setItem(WATCH_PROGRESS_LS, JSON.stringify(all))
+  } catch (_) { /* ignore */ }
+}
 
 function resetVideoUiClock(initialSec = 0) {
   videoUiSecSmoothed = Math.max(0, Number(initialSec) || 0)
@@ -2658,7 +2688,14 @@ function resetVideoUiClock(initialSec = 0) {
 
 function getItemWatchProgress(item) {
   if (!item?.id) return {}
-  return watchProgressMap.value[item.id] || item.watch_progress || {}
+  const remote = watchProgressMap.value[item.id] || item.watch_progress || {}
+  const local = readLocalWatchProgress(item.id) || {}
+  const watched_sec = Math.max(Number(remote.watched_sec) || 0, Number(local.watched_sec) || 0)
+  const duration_sec = Number(remote.duration_sec) || Number(local.duration_sec) || 0
+  const pct = duration_sec > 0
+    ? Math.min(100, Math.round(watched_sec / duration_sec * 1000) / 10)
+    : Math.max(Number(remote.pct) || 0, Number(local.pct) || 0)
+  return { ...remote, watched_sec, duration_sec, pct }
 }
 
 function getItemResumeSec(item) {
@@ -2675,6 +2712,7 @@ function syncItemWatchProgress(item, wp) {
   item.watch_progress = { ...wp }
   const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
   if (planItem) planItem.watch_progress = { ...wp }
+  writeLocalWatchProgress(item.id, wp)
 }
 
 function applyVideoResume(el) {
@@ -2719,41 +2757,30 @@ function clearPinnedTrainingVideo() {
   clearVideoResumePending()
 }
 
-function pickVideoUiSec(el) {
+function readVideoDisplaySec(el) {
   let cur = Number(el?.currentTime)
   if (!Number.isFinite(cur) || cur < 0) cur = 0
   const prev = videoUiSecSmoothed
-  const playing = el && !el.paused && !el.ended
-  if (videoResumePendingSec > 0 && cur < videoResumePendingSec - 0.75) {
+  const playing = el && !el.paused && !el.ended && !el.seeking
+
+  if (videoResumePendingSec > 0) {
     videoUiSecSmoothed = cur
     return cur
   }
-  if (playing && prev >= 1 && cur < 0.5) return prev
-  if (cur >= prev - 0.25) {
-    videoUiSecSmoothed = cur
-    return cur
+  if (playing && prev >= 2 && cur < 1) return prev
+  if (playing) {
+    if (cur >= prev - 0.3) videoUiSecSmoothed = Math.max(prev, cur)
+    return videoUiSecSmoothed
   }
-  if (prev - cur <= MEDIA_SEEK_EPS + 0.5) {
-    videoUiSecSmoothed = cur
-    return cur
-  }
-  return prev
+  videoUiSecSmoothed = cur
+  return cur
 }
 
-function stopVideoUiSync() {
-  if (videoUiSyncId) {
-    clearInterval(videoUiSyncId)
-    videoUiSyncId = null
+function cancelVideoUiRaf() {
+  if (videoUiRafId) {
+    cancelAnimationFrame(videoUiRafId)
+    videoUiRafId = null
   }
-}
-
-function startVideoUiSync() {
-  stopVideoUiSync()
-  videoUiSyncId = setInterval(() => {
-    if (!mediaPlayer.value.show || mediaPlayer.value.type !== 'video') return
-    const el = pinnedTrainingVideo || getTrainingVideoDom()
-    if (el) syncMediaUiFromElement(el)
-  }, 500)
 }
 
 function destroyPreloadVideos() {
@@ -2958,7 +2985,7 @@ function syncMediaUiFromElement(el) {
     audioPlaying.value = !el.paused && !el.ended
   }
   if (mediaPlayer.value.type === 'video') {
-    const displayCur = pickVideoUiSec(el)
+    const displayCur = readVideoDisplaySec(el)
     videoProgressPct.value = durationSec > 0 ? Math.round(displayCur / durationSec * 100) : 0
     videoTimeLabel.value = formatMediaTime(displayCur)
     if (durationSec > 0) videoDurationLabel.value = formatMediaTime(durationSec)
@@ -2981,6 +3008,14 @@ function syncMediaUiFromElement(el) {
 function onMediaTimeUpdate(e) {
   const el = e?.target
   if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
+  if (mediaPlayer.value.type === 'video') {
+    if (videoUiRafId) return
+    videoUiRafId = requestAnimationFrame(() => {
+      videoUiRafId = null
+      syncMediaUiFromElement(el || activeMediaEl())
+    })
+    return
+  }
   syncMediaUiFromElement(el || activeMediaEl())
 }
 
@@ -3807,21 +3842,27 @@ function clearVideoRetryTimer() {
   }
 }
 
-function buildVideoStreamSrc(rawUrl, uid, attempt = 0) {
+function buildVideoStreamSrc(rawUrl, uid, attempt = 0, startSec = 0) {
   let url = resolveTrainingStreamUrl(rawUrl, uid)
-  if (!url || attempt <= 0) return url
-  const sep = url.includes('?') ? '&' : '?'
-  return `${url}${sep}_retry=${attempt}&_t=${Date.now()}`
+  if (!url) return url
+  if (attempt > 0) {
+    const sep = url.includes('?') ? '&' : '?'
+    url = `${url}${sep}_retry=${attempt}&_t=${Date.now()}`
+  }
+  const start = Math.floor(Number(startSec) || 0)
+  if (start > 0) url = `${url}#t=${start}`
+  return url
 }
 
 function reloadTrainingVideo(item, uid) {
   videoLoading.value = true
   videoMetadataReady.value = false
-  videoSrc.value = buildVideoStreamSrc(item.video_url, uid, videoLoadAttempt.value)
+  const resume = getItemResumeSec(item)
+  videoSrc.value = buildVideoStreamSrc(item.video_url, uid, videoLoadAttempt.value, resume)
   nextTick(() => {
-    startVideoUiSync()
     const el = getTrainingVideoDom()
     if (el) {
+      pinTrainingVideoEl(el)
       try { el.load() } catch (_) { /* ignore */ }
     }
     tryPlayVideoAfterOpen()
@@ -3854,6 +3895,8 @@ function applyPlanMedia(plan) {
   const videoItem = items.find(i => i.item_type === 'video' || i.video_url)
   if (videoItem?.video_url) {
     videoSrc.value = resolveTrainingStreamUrl(videoItem.video_url, uid)
+    cachedVideoItemId = videoItem.id
+    activeVideoItemId.value = videoItem.id
   }
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
   const firstAudio = sorted.find(i => i.audio_url)
@@ -3895,7 +3938,6 @@ async function openMediaItem(item, forceType) {
   audioUiDuration.value = Number(wp.duration_sec || 0)
 
   const openVideo = () => {
-    clearPinnedTrainingVideo()
     const resumeSec = Number(wp.watched_sec || 0)
     const durSec = Number(wp.duration_sec || 0)
     videoResumePendingSec = resumeSec
@@ -3903,20 +3945,36 @@ async function openMediaItem(item, forceType) {
     videoMetadataReady.value = false
     videoLoadAttempt.value = 0
     clearVideoRetryTimer()
-    resetVideoUiClock(0)
-    videoProgressPct.value = durSec > 0 ? Math.round(resumeSec / durSec * 100) : 0
-    videoTimeLabel.value = '0:00'
-    videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : '--:--'
     applyPreloadedVideoMeta(item)
-    videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
-    nextTick(() => {
-      const el = getTrainingVideoDom()
+
+    const canReusePlayer = cachedVideoItemId === item.id && videoSrc.value && activeVideoItemId.value === item.id
+    const primeUi = (el) => {
+      if (!el) return
       pinTrainingVideoEl(el)
-      startVideoUiSync()
+      const cur = Number(el.currentTime) || resumeSec
+      resetVideoUiClock(canReusePlayer ? cur : resumeSec)
+      videoProgressPct.value = durSec > 0 ? Math.round((canReusePlayer ? cur : resumeSec) / durSec * 100) : 0
+      videoTimeLabel.value = formatMediaTime(canReusePlayer ? cur : resumeSec)
+      videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : (el.duration ? formatMediaTime(el.duration) : '--:--')
+      applyVideoResume(el)
+      syncMediaUiFromElement(el)
       tryPlayVideoAfterOpen()
-      if (el) syncMediaUiFromElement(el)
-    })
+    }
+
+    if (canReusePlayer) {
+      nextTick(() => primeUi(getTrainingVideoDom()))
+      return
+    }
+
+    cachedVideoItemId = item.id
+    activeVideoItemId.value = item.id
+    resetVideoUiClock(resumeSec)
+    videoProgressPct.value = durSec > 0 ? Math.round(resumeSec / durSec * 100) : 0
+    videoTimeLabel.value = formatMediaTime(resumeSec)
+    videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : '--:--'
+    videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0, resumeSec)
+    nextTick(() => primeUi(getTrainingVideoDom()))
   }
   const openAudio = () => {
     const streamUrl = resolveTrainingStreamUrl(item.audio_url, uid)
@@ -3964,7 +4022,7 @@ async function closeMedia() {
     clearTimeout(watchProgressSaveTimer)
     watchProgressSaveTimer = null
   }
-  stopVideoUiSync()
+  cancelVideoUiRaf()
   clearVideoRetryTimer()
   const item = lastOpenedItem.value
   if (item?.id && itemNeedsListen(item)) {
@@ -3976,11 +4034,16 @@ async function closeMedia() {
       watchedItemIds.value = new Set(watchedItemIds.value)
     }
   }
-  clearPinnedTrainingVideo()
-  videoLoadAttempt.value = 0
   try { trainingAudio?.pause() } catch (_) { /* ignore */ }
-  try { getTrainingVideoDom()?.pause() } catch (_) { /* ignore */ }
+  try {
+    const el = pinnedTrainingVideo || getTrainingVideoDom()
+    el?.pause()
+  } catch (_) { /* ignore */ }
   destroyTrainingAudio()
+  pinnedTrainingVideo = null
+  videoUiSecSmoothed = 0
+  clearVideoResumePending()
+  videoLoadAttempt.value = 0
   audioPlaying.value = false
   videoPlaying.value = false
   videoLoading.value = false
@@ -4236,9 +4299,10 @@ onHide(() => {
 onUnmounted(() => {
   clearTimerTick()
   clearDayUnlockWatch()
-  stopVideoUiSync()
+  cancelVideoUiRaf()
   clearVideoRetryTimer()
   destroyPreloadVideos()
+  cachedVideoItemId = null
   if (idleGuideTimer) clearTimeout(idleGuideTimer)
   destroyTrainingAudio()
 })
