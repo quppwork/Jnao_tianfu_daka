@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.db.models import (
     GuideMessage,
@@ -116,6 +116,44 @@ def earliest_qa_created_at(db: Session, child_user_id: int) -> datetime | None:
     return live_dt or archived_dt
 
 
+def _qa_newer_count_subquery():
+    """同孩子下比当前会话更新的条数；>= keep_recent 表示不在「最近 N 条」内。
+
+    用相关子查询替代 ROW_NUMBER()，兼容 MySQL 5.7（无窗口函数）。
+    """
+    newer = aliased(QaSession)
+    return (
+        select(func.count())
+        .select_from(newer)
+        .where(
+            newer.child_user_id == QaSession.child_user_id,
+            newer.id > QaSession.id,
+        )
+        .correlate(QaSession)
+        .scalar_subquery()
+    )
+
+
+def _guide_newer_count_subquery():
+    newer = aliased(GuideSession)
+    outer_activity = func.coalesce(GuideSession.updated_at, GuideSession.created_at)
+    inner_activity = func.coalesce(newer.updated_at, newer.created_at)
+    is_newer = or_(
+        inner_activity > outer_activity,
+        and_(inner_activity == outer_activity, newer.id > GuideSession.id),
+    )
+    return (
+        select(func.count())
+        .select_from(newer)
+        .where(
+            newer.child_user_id == GuideSession.child_user_id,
+            is_newer,
+        )
+        .correlate(GuideSession)
+        .scalar_subquery()
+    )
+
+
 def _ranked_qa_ids(
     db: Session,
     *,
@@ -123,26 +161,15 @@ def _ranked_qa_ids(
     keep_recent: int,
     batch_size: int,
 ) -> list[int]:
-    ranked = (
-        select(
-            QaSession.id.label("session_id"),
-            func.row_number()
-            .over(
-                partition_by=QaSession.child_user_id,
-                order_by=QaSession.id.desc(),
-            )
-            .label("rn"),
-            QaSession.created_at,
-        )
-    ).subquery()
+    newer_count = _qa_newer_count_subquery()
     return list(
         db.scalars(
-            select(ranked.c.session_id)
+            select(QaSession.id)
             .where(
-                ranked.c.rn > keep_recent,
-                ranked.c.created_at < cutoff,
+                QaSession.created_at < cutoff,
+                newer_count >= keep_recent,
             )
-            .order_by(ranked.c.session_id.asc())
+            .order_by(QaSession.id.asc())
             .limit(batch_size)
         ).all()
     )
@@ -156,26 +183,15 @@ def _ranked_guide_ids(
     batch_size: int,
 ) -> list[int]:
     activity = func.coalesce(GuideSession.updated_at, GuideSession.created_at)
-    ranked = (
-        select(
-            GuideSession.id.label("session_id"),
-            func.row_number()
-            .over(
-                partition_by=GuideSession.child_user_id,
-                order_by=(GuideSession.updated_at.desc(), GuideSession.id.desc()),
-            )
-            .label("rn"),
-            activity.label("activity_at"),
-        )
-    ).subquery()
+    newer_count = _guide_newer_count_subquery()
     return list(
         db.scalars(
-            select(ranked.c.session_id)
+            select(GuideSession.id)
             .where(
-                ranked.c.rn > keep_recent,
-                ranked.c.activity_at < cutoff,
+                activity < cutoff,
+                newer_count >= keep_recent,
             )
-            .order_by(ranked.c.session_id.asc())
+            .order_by(GuideSession.id.asc())
             .limit(batch_size)
         ).all()
     )
