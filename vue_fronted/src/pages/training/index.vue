@@ -143,8 +143,8 @@
         </template>
       </view>
 
-      <!-- Plan · 时间轴总览（开始训练后才显示） -->
-      <view v-if="timerPhase !== 'setup'" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
+      <!-- Plan · 时间轴总览（生成方案后或计时开始后显示） -->
+      <view v-if="timerPhase !== 'setup' || planJustGenerated" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
         <view class="plan-header">
           <text class="plan-label">📋 今日方案</text>
           <text v-if="talentLabel && !entryLoading && !scheduleLoading" class="plan-header-meta">{{ planHeaderMeta }}</text>
@@ -240,7 +240,7 @@
           </view>
 
           <!-- 🆕 选修环节 -->
-          <view v-if="timerPhase !== 'setup' && todayPlan?.plan_id" class="elective-toggles">
+          <view v-if="(timerPhase !== 'setup' || planJustGenerated) && todayPlan?.plan_id" class="elective-toggles">
             <text class="elective-section-label">🧩 选修环节</text>
             <view class="elective-toggle-item" v-for="es in electiveSkills" :key="es.skill">
               <text class="et-label">{{ es.label }}</text>
@@ -1053,7 +1053,7 @@ const minuteIndex = computed(() => {
   return idx >= 0 ? idx : 0
 })
 const canStartTimer = computed(() => {
-  if (trainingDayLocked.value || scheduleLoading.value || entryLoading.value) return false
+  if (trainingDayLocked.value || scheduleLoading.value || entryLoading.value || planJustGenerated.value) return false
   const total = selectedHours.value * 60 + selectedMinutes.value
   return total >= MIN_TRAINING_MINUTES
 })
@@ -1072,6 +1072,7 @@ const planEmptyHint = computed(() => {
 })
 const timeSetupHint = computed(() => {
   if (scheduleLoading.value) return '正在按设定时长生成训练内容…'
+  if (planJustGenerated.value) return '可在下方查看、编辑训练内容，确认后开始计时'
   return '选择时长后点击「开始训练」，将按孩子情况分配今日内容'
 })
 /** 训练日已完成（次日凌晨4点才能新开一天），仅禁止重新「开始训练」 */
@@ -1320,7 +1321,6 @@ function applyTimerFromServer(data) {
     )
     if (!hasProgress) {
       showTraining.value = false
-      planJustGenerated.value = false
     }
     return
   }
@@ -1507,7 +1507,7 @@ async function startTrainingTimer() {
     if (entryLoading.value) {
       uni.showToast({ title: '方案加载中，请稍候', icon: 'none' })
     } else if (scheduleLoading.value) {
-      uni.showToast({ title: '正在开始训练，请稍候', icon: 'none' })
+      uni.showToast({ title: '正在生成训练内容，请稍候', icon: 'none' })
     }
     showGuideArrow.value = true
     redAlertActive.value = false
@@ -1539,50 +1539,16 @@ async function startTrainingTimer() {
     if (needSchedule) {
       const result = await scheduleTrainingPlan(uid, plannedMinutes)
       if (result.error) throw new Error(result.message || '生成训练内容失败')
-      const synced = await fetchTrainingToday(uid, { skipAi: true })
-      if (!synced.error && synced.data?.items?.length) {
-        await applyScheduledPlan(uid, synced.data)
-      } else {
-        await applyScheduledPlan(uid, result.data)
-      }
-      restoreTrainingVisibility(todayPlan.value)
-      planJustGenerated.value = true
+      await applyScheduledPlan(uid, result.data)
+    } else if (!hasContent) {
+      throw new Error('暂无训练内容，请稍后重试')
     }
 
-    const totalSec = plannedMinutes * 60
-    plannedDurationSec.value = totalSec
-    const nowMs = nowSynced()
-    const endAt = nowMs + totalSec * 1000
-
-    try {
-      await setTrainingWindow(uid, formatWindowTime(nowMs), formatWindowTime(endAt))
-      const synced = await fetchTrainingToday(uid, { skipAi: true })
-      if (!synced.error && synced.data) {
-        applyServerTimeMeta(synced.data)
-        applyTimerFromServer(synced.data)
-        syncPickersAfterTimerRestore(synced.data.planned_minutes)
-      } else {
-        applyTimerFromServer({
-          timer_phase: 'running',
-          timer_end_at: new Date(endAt).toISOString(),
-          timer_planned_seconds: totalSec,
-          timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
-          plan_id: todayPlan.value?.plan_id,
-        })
-      }
-    } catch (_) {
-      applyTimerFromServer({
-        timer_phase: 'running',
-        timer_end_at: new Date(endAt).toISOString(),
-        timer_planned_seconds: totalSec,
-        timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
-        plan_id: todayPlan.value?.plan_id,
-      })
-    }
-
-    uni.showToast({ title: '训练已开始', icon: 'none' })
+    planJustGenerated.value = true
+    showTraining.value = false
+    uni.showToast({ title: '方案已生成，请确认后开始', icon: 'none' })
   } catch (e) {
-        uni.showToast({ title: e.message || '开始训练失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '生成训练内容失败', icon: 'none', duration: 2500 })
   } finally {
     scheduleLoading.value = false
   }
@@ -2163,11 +2129,53 @@ const todayPlan = ref(null)
 const phaseRecordIds = ref({})
 
 async function confirmPlan() {
-  // 仅解锁训练块展示；勿再调 customizePlan。
-  // 「编辑方案」已单独消耗「每日一次」额度，此处再调会导致 403，
-  // 且异常时 planJustGenerated 无法清掉，媒体长期锁在「方案生成中」。
-  showTraining.value = true
-  planJustGenerated.value = false
+  // 确认方案后才开始计时；训练块在此之后解锁。
+  if (scheduleLoading.value || !planJustGenerated.value) {
+    showTraining.value = true
+    planJustGenerated.value = false
+    return
+  }
+  const plannedMinutes = todayPlan.value?.planned_minutes
+    ?? (selectedHours.value * 60 + selectedMinutes.value)
+  if (plannedMinutes < MIN_TRAINING_MINUTES) {
+    uni.showToast({ title: `训练时长至少 ${MIN_TRAINING_MINUTES} 分钟`, icon: 'none' })
+    return
+  }
+
+  scheduleLoading.value = true
+  try {
+    const uid = await ensureChildUser()
+    const totalSec = plannedMinutes * 60
+    plannedDurationSec.value = totalSec
+    const nowMs = nowSynced()
+    const endAt = nowMs + totalSec * 1000
+    const runningTimerPayload = {
+      timer_phase: 'running',
+      timer_end_at: new Date(endAt).toISOString(),
+      timer_planned_seconds: totalSec,
+      timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
+      plan_id: todayPlan.value?.plan_id,
+    }
+
+    await setTrainingWindow(uid, formatWindowTime(nowMs), formatWindowTime(endAt))
+    const synced = await fetchTrainingToday(uid, { skipAi: true })
+    if (!synced.error && synced.data?.timer_phase === 'running') {
+      applyServerTimeMeta(synced.data)
+      applyTimerFromServer(synced.data)
+      syncPickersAfterTimerRestore(synced.data.planned_minutes)
+    } else {
+      applyTimerFromServer(runningTimerPayload)
+      syncPickersAfterTimerRestore(plannedMinutes)
+    }
+
+    showTraining.value = true
+    planJustGenerated.value = false
+    uni.showToast({ title: '训练已开始', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '开始训练失败', icon: 'none', duration: 2500 })
+  } finally {
+    scheduleLoading.value = false
+  }
 }
 
 const checkinSubmitting = ref(false)
@@ -3685,6 +3693,16 @@ async function loadTodayPlan(silent = true) {
     hydrateWatchProgressFromPlan(result.data)
 
     syncPickersAfterTimerRestore(result.data.planned_minutes)
+
+    if (
+      result.data.timer_phase === 'setup'
+      && result.data.items?.length
+      && !result.data.items.some(
+        i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0
+      )
+    ) {
+      planJustGenerated.value = true
+    }
 
     // checkin records + progress 并行等待
     const [progress] = await Promise.all([

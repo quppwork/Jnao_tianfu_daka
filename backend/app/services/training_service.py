@@ -1770,6 +1770,10 @@ def set_training_window(
         db.add(existing)
     db.commit()
     db.refresh(existing)
+    invalidate_plan_cache(child_user_id, train_date)
+    from app.core.cache import invalidate_user_training
+
+    invalidate_user_training(child_user_id, plan_date=train_date)
     return {
         "train_date": existing.train_date,
         "start_time": _format_time(existing.start_time),
@@ -1805,6 +1809,11 @@ def clear_training_window(
         )
     )
     db.commit()
+    if result.rowcount > 0:
+        invalidate_plan_cache(child_user_id, train_date)
+        from app.core.cache import invalidate_user_training
+
+        invalidate_user_training(child_user_id, plan_date=train_date)
     return result.rowcount > 0
 
 
