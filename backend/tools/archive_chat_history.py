@@ -15,7 +15,7 @@ sys.path.insert(0, _BACKEND)
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(_BACKEND, ".env"), override=False)
-load_dotenv(os.path.join(_BACKEND.parent, ".env.production"), override=False)
+load_dotenv(os.path.join(os.path.dirname(_BACKEND), ".env.production"), override=False)
 
 from app.db.session import get_session_factory, init_db
 from app.services.chat_archive_service import run_chat_archive
