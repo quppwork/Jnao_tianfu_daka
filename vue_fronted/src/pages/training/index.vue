@@ -2589,9 +2589,62 @@ let videoUiSyncId = null
 let pinnedTrainingVideo = null
 /** 底部时间轴展示用，过滤 streaming 间隙的 currentTime 归零 */
 let videoUiSecSmoothed = 0
+/** 打开播放器后待 seek 的续播秒数，seek 完成前 UI 跟真实 currentTime */
+let videoResumePendingSec = 0
 
 function resetVideoUiClock(initialSec = 0) {
   videoUiSecSmoothed = Math.max(0, Number(initialSec) || 0)
+}
+
+function getItemWatchProgress(item) {
+  if (!item?.id) return {}
+  return watchProgressMap.value[item.id] || item.watch_progress || {}
+}
+
+function getItemResumeSec(item) {
+  return Math.max(0, Number(getItemWatchProgress(item).watched_sec) || 0)
+}
+
+function clearVideoResumePending() {
+  videoResumePendingSec = 0
+}
+
+function syncItemWatchProgress(item, wp) {
+  if (!item?.id || !wp) return
+  watchProgressMap.value = { ...watchProgressMap.value, [item.id]: { ...wp } }
+  item.watch_progress = { ...wp }
+  const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
+  if (planItem) planItem.watch_progress = { ...wp }
+}
+
+function applyVideoResume(el) {
+  if (!el || mediaPlayer.value.type !== 'video') return false
+  const resume = videoResumePendingSec > 0
+    ? videoResumePendingSec
+    : getItemResumeSec(lastOpenedItem.value)
+  if (resume <= 0.5) {
+    clearVideoResumePending()
+    return false
+  }
+  const dur = Number(el.duration) || 0
+  if (dur > 0 && resume >= dur - 1) {
+    clearVideoResumePending()
+    return false
+  }
+  const cur = Number(el.currentTime) || 0
+  if (cur >= resume - 0.75) {
+    clearVideoResumePending()
+    resetVideoUiClock(cur)
+    return true
+  }
+  try {
+    el.currentTime = resume
+    mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
+    resetVideoUiClock(resume)
+    return true
+  } catch (_) {
+    return false
+  }
 }
 
 function pinTrainingVideoEl(el) {
@@ -2603,6 +2656,7 @@ function pinTrainingVideoEl(el) {
 function clearPinnedTrainingVideo() {
   pinnedTrainingVideo = null
   videoUiSecSmoothed = 0
+  clearVideoResumePending()
 }
 
 function pickVideoUiSec(el) {
@@ -2610,6 +2664,10 @@ function pickVideoUiSec(el) {
   if (!Number.isFinite(cur) || cur < 0) cur = 0
   const prev = videoUiSecSmoothed
   const playing = el && !el.paused && !el.ended
+  if (videoResumePendingSec > 0 && cur < videoResumePendingSec - 0.75) {
+    videoUiSecSmoothed = cur
+    return cur
+  }
   if (playing && prev >= 1 && cur < 0.5) return prev
   if (cur >= prev - 0.25) {
     videoUiSecSmoothed = cur
@@ -2762,17 +2820,22 @@ function onMediaSeeking(e) {
 
 async function flushWatchProgress() {
   const item = lastOpenedItem.value
-  const el = activeMediaEl()
-  if (!item?.id || !el || !itemNeedsListen(item)) return
-  const cachedDur = Number(watchProgressMap.value[item.id]?.duration_sec || 0)
-  const durationSec = el.duration || audioUiDuration.value || cachedDur || 0
-  if (durationSec <= 0) return
-  const watchedSec = Math.min(mediaMaxHeardSec.value || el.currentTime || 0, durationSec)
-  const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
-  watchProgressMap.value = {
-    ...watchProgressMap.value,
-    [item.id]: { watched_sec: watchedSec, duration_sec: durationSec, pct },
-  }
+  if (!item?.id || !itemNeedsListen(item)) return
+  const el = activeMediaEl() || pinnedTrainingVideo
+  const cached = getItemWatchProgress(item)
+  const cachedDur = Number(cached.duration_sec || 0)
+  const durationSec = (el && el.duration) ? el.duration : (audioUiDuration.value || cachedDur || 0)
+  const finalDur = durationSec > 0 ? durationSec : cachedDur
+  if (finalDur <= 0 && mediaMaxHeardSec.value <= 0) return
+  const fromEl = el ? (Number(el.currentTime) || 0) : 0
+  const watchedSec = finalDur > 0
+    ? Math.min(Math.max(mediaMaxHeardSec.value, fromEl), finalDur)
+    : Math.max(mediaMaxHeardSec.value, fromEl)
+  const pct = finalDur > 0
+    ? Math.min(100, Math.round(watchedSec / finalDur * 1000) / 10)
+    : Number(cached.pct || 0)
+  const wp = { watched_sec: watchedSec, duration_sec: finalDur || cachedDur, pct }
+  syncItemWatchProgress(item, wp)
   if (item.video_complete !== undefined) {
     item.video_complete = pct >= WATCH_DONE_PCT
   }
@@ -2780,14 +2843,13 @@ async function flushWatchProgress() {
     const uid = await ensureChildUser()
     const res = await postTrainingWatchProgress(uid, item.id, {
       watched_sec: watchedSec,
-      duration_sec: durationSec,
+      duration_sec: finalDur > 0 ? finalDur : undefined,
     })
     if (res?.watch_progress) {
-      watchProgressMap.value = { ...watchProgressMap.value, [item.id]: res.watch_progress }
+      syncItemWatchProgress(item, res.watch_progress)
     }
     if (res?.video_complete != null && lastOpenedItem.value?.id === item.id) {
       lastOpenedItem.value = { ...lastOpenedItem.value, video_complete: res.video_complete }
-      // 同步到 todayPlan items
       const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
       if (planItem) planItem.video_complete = res.video_complete
     }
@@ -2798,10 +2860,12 @@ function onMediaLoadedMetadata(e) {
   const el = e?.target || activeMediaEl()
   if (!el || !lastOpenedItem.value?.id) return
   lockMediaPlaybackRate({ target: el })
-  const prev = watchProgressMap.value[lastOpenedItem.value.id]
-  const resume = Number(prev?.watched_sec || 0)
+  if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
+  const resume = getItemResumeSec(lastOpenedItem.value)
   mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
-  if (resume > 0 && resume < (el.duration || Infinity) && (el.currentTime || 0) < resume) {
+  if (mediaPlayer.value.type === 'video') {
+    applyVideoResume(el)
+  } else if (resume > 0 && resume < (el.duration || Infinity) && (el.currentTime || 0) < resume) {
     try { el.currentTime = resume } catch (_) { /* ignore */ }
   }
   if (mediaPlayer.value.type === 'audio') {
@@ -2890,14 +2954,22 @@ function onVideoCanPlay() {
   videoMetadataReady.value = true
   videoLoadAttempt.value = 0
   clearVideoRetryTimer()
-  syncMediaUiFromElement(getTrainingVideoDom())
+  const el = getTrainingVideoDom()
+  if (el) {
+    applyVideoResume(el)
+    syncMediaUiFromElement(el)
+  }
 }
 
 function onVideoPlaying() {
   videoPlaying.value = true
   videoLoading.value = false
   videoMetadataReady.value = true
-  syncMediaUiFromElement(getTrainingVideoDom())
+  const el = getTrainingVideoDom()
+  if (el) {
+    applyVideoResume(el)
+    syncMediaUiFromElement(el)
+  }
 }
 
 function onVideoPause() {
@@ -2942,18 +3014,24 @@ function tryPlayVideoAfterOpen() {
   const el = getTrainingVideoDom()
   if (!el) return
   videoLoading.value = true
-  el.play()
-    .then(() => {
-      videoPlaying.value = true
-      videoLoading.value = false
-      videoMetadataReady.value = true
-      syncMediaUiFromElement(el)
-    })
-    .catch(() => {
-      videoPlaying.value = false
-      videoLoading.value = false
-      syncMediaUiFromElement(el)
-    })
+  const start = () => {
+    applyVideoResume(el)
+    return el.play()
+      .then(() => {
+        applyVideoResume(el)
+        videoPlaying.value = true
+        videoLoading.value = false
+        videoMetadataReady.value = true
+        syncMediaUiFromElement(el)
+      })
+      .catch(() => {
+        videoPlaying.value = false
+        videoLoading.value = false
+        syncMediaUiFromElement(el)
+      })
+  }
+  if (el.readyState >= 2) start()
+  else el.addEventListener('canplay', () => start(), { once: true })
 }
 
 async function toggleAudioPlay() {
@@ -3749,24 +3827,26 @@ async function openMediaItem(item, forceType) {
       return
     }
   }
-  const prev = watchProgressMap.value[item.id]
-  mediaMaxHeardSec.value = Number(prev?.watched_sec || 0)
+  const wp = getItemWatchProgress(item)
+  mediaMaxHeardSec.value = Number(wp.watched_sec || 0)
   audioPlaying.value = false
   videoPlaying.value = false
   audioUiSec.value = mediaMaxHeardSec.value
-  audioUiDuration.value = Number(prev?.duration_sec || 0)
+  audioUiDuration.value = Number(wp.duration_sec || 0)
 
   const openVideo = () => {
     clearPinnedTrainingVideo()
-    const resumeSec = Number(prev?.watched_sec || 0)
+    const resumeSec = Number(wp.watched_sec || 0)
+    const durSec = Number(wp.duration_sec || 0)
+    videoResumePendingSec = resumeSec
     videoLoading.value = true
     videoMetadataReady.value = false
     videoLoadAttempt.value = 0
     clearVideoRetryTimer()
-    resetVideoUiClock(resumeSec)
-    videoProgressPct.value = 0
-    videoTimeLabel.value = formatMediaTime(resumeSec)
-    videoDurationLabel.value = '--:--'
+    resetVideoUiClock(0)
+    videoProgressPct.value = durSec > 0 ? Math.round(resumeSec / durSec * 100) : 0
+    videoTimeLabel.value = '0:00'
+    videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : '--:--'
     applyPreloadedVideoMeta(item)
     videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
@@ -3819,24 +3899,25 @@ function openMedia(type) {
     openMediaItem(audio || { audio_url: audioSrc.value, title: audioTitle.value })
   }
 }
-function closeMedia() {
+async function closeMedia() {
   if (watchProgressSaveTimer) {
     clearTimeout(watchProgressSaveTimer)
     watchProgressSaveTimer = null
   }
   stopVideoUiSync()
   clearVideoRetryTimer()
-  clearPinnedTrainingVideo()
-  videoLoadAttempt.value = 0
   const item = lastOpenedItem.value
   if (item?.id && itemNeedsListen(item)) {
-    syncMediaUiFromElement(activeMediaEl())
-    flushWatchProgress()
+    const el = pinnedTrainingVideo || activeMediaEl()
+    if (el) syncMediaUiFromElement(el)
+    await flushWatchProgress()
     if (isItemListenDone(item)) {
       watchedItemIds.value.add(item.id)
       watchedItemIds.value = new Set(watchedItemIds.value)
     }
   }
+  clearPinnedTrainingVideo()
+  videoLoadAttempt.value = 0
   try { trainingAudio?.pause() } catch (_) { /* ignore */ }
   try { getTrainingVideoDom()?.pause() } catch (_) { /* ignore */ }
   destroyTrainingAudio()
