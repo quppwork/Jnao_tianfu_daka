@@ -1996,6 +1996,8 @@ def record_watch_progress(
     }
     db.commit()
     db.refresh(item)
+    if plan:
+        invalidate_plan_cache(child_user_id, plan.plan_date)
     return {
         "item_id": item.id,
         "watch_progress": item.watch_progress,

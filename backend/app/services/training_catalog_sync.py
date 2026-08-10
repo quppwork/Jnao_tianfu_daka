@@ -44,9 +44,10 @@ def ensure_supplementary_catalogs(db: Session) -> int:
         if not path.exists():
             continue
         if name == "xet_video_catalog.json":
-            from app.services.catalog_import import import_video_catalog
+            from app.services.catalog_import import import_video_catalog, repair_video_oss_paths
 
             total += import_video_catalog(db, path, replace=False)
+            repair_video_oss_paths(db)
         else:
             total += import_catalog(db, path, replace=False)
     return total

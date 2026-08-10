@@ -183,34 +183,31 @@ def test_attach_clears_video_for_skill_without_catalog(db_session, child_with_as
     assert plan.items[0].video_url is None
 
 
-def test_attach_clears_video_for_skill_without_catalog(db_session, child_with_assessment):
-    from app.db.models import TrainingItem, TrainingPlan
-    from app.services.training_day import get_training_day
-    from app.services.training_video_attach import attach_videos_to_plan_items
-
-    import_video_catalog(db_session)
-    plan = TrainingPlan(
-        child_user_id=child_with_assessment,
-        plan_date=get_training_day(),
-        content_index=1,
-        status="pending",
+def test_import_video_catalog_migrates_legacy_shipin_subfolder_paths(db_session):
+    """OSS shipin/天赋-视频/ 已删除后，导入应把 content_item 迁到 shipin/ 根目录。"""
+    legacy = (
+        "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/"
+        "%E5%A4%A9%E8%B5%8B-%E8%A7%86%E9%A2%91/%E4%BA%94%E8%80%85%E5%A4%A9%E8%B5%83.mp4"
     )
-    db_session.add(plan)
-    db_session.flush()
     db_session.add(
-        TrainingItem(
-            plan_id=plan.id,
-            sort_order=1,
-            ability_type="audio",
-            title="思者影像追忆1阶段1",
-            duration_min=10,
-            audio_url="https://example.com/a.mp3",
-            video_url="https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/stale.mp4",
-            instructions='{"skill":"影像追忆","item_type":"required"}',
-            checkin_status="pending",
+        ContentItem(
+            talent_code=0,
+            lesson_title="五者天赋视频讲解",
+            play_url=legacy,
+            video_url=legacy,
+            content_type="video",
+            instructions='{"skill":"五者天赋","item_type":"required","stage":1,"phase":1,"order":1,"duration_min":10}',
+            status=1,
         )
     )
-    db_session.flush()
-    n = attach_videos_to_plan_items(db_session, plan, only_missing=False)
-    assert n >= 1
-    assert plan.items[0].video_url is None
+    db_session.commit()
+    import_video_catalog(db_session)
+    row = db_session.scalar(
+        select(ContentItem).where(
+            ContentItem.content_type == "video",
+            ContentItem.lesson_title.like("%五者天赋%"),
+        )
+    )
+    assert row is not None
+    assert "天赋-视频" not in (row.play_url or "")
+    assert row.play_url.endswith("shipin/五者天赋.mp4")

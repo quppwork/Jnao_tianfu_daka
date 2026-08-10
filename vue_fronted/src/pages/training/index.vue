@@ -756,11 +756,12 @@
               webkit-playsinline
               x5-playsinline
               x5-video-player-type="h5"
-              preload="metadata"
+              preload="auto"
               controlsList="nodownload noplaybackrate"
               disablePictureInPicture
               @timeupdate="onMediaTimeUpdate"
               @loadedmetadata="onMediaLoadedMetadata"
+              @durationchange="onMediaLoadedMetadata"
               @seeking="onMediaSeeking"
               @ratechange="lockMediaPlaybackRate"
               @pause="onVideoPause"
@@ -773,7 +774,7 @@
             <view v-if="videoLoading" class="player-video-loading">
               <text class="player-video-loading-text">视频缓冲中…</text>
             </view>
-            <view v-else class="player-cover-placeholder">
+            <view v-else-if="!videoMetadataReady" class="player-cover-placeholder">
               <text class="player-cover-icon">🎬</text>
               <text class="player-cover-hint">视频加载中…</text>
             </view>
@@ -2086,6 +2087,8 @@ const mediaMaxHeardSec = ref(0)
 const audioPlaying = ref(false)
 const videoPlaying = ref(false)
 const videoLoading = ref(false)
+const videoMetadataReady = ref(false)
+const planMediaPreloaded = ref(false)
 const audioUiSec = ref(0)
 const audioUiDuration = ref(0)
 const WATCH_DONE_PCT = 90
@@ -2170,6 +2173,7 @@ async function confirmPlan() {
 
     showTraining.value = true
     planJustGenerated.value = false
+    preloadTodayPlanMedia(uid)
     uni.showToast({ title: '训练已开始', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '开始训练失败', icon: 'none', duration: 2500 })
@@ -2477,9 +2481,104 @@ const playerCoverEmoji = computed(() => {
   return '🎧'
 })
 
+function formatMediaTime(sec) {
+  const n = Math.max(0, Math.floor(sec || 0))
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+}
+
+/** uni-app H5 下 ref 可能不是原生 HTMLVideoElement，需兼容解析 */
+function getTrainingVideoDom() {
+  const refVal = trainingVideoEl.value
+  if (refVal) {
+    if (typeof HTMLVideoElement !== 'undefined' && refVal instanceof HTMLVideoElement) return refVal
+    const el = refVal.$el || refVal
+    if (typeof HTMLVideoElement !== 'undefined' && el instanceof HTMLVideoElement) return el
+    if (el?.querySelector) {
+      const nested = el.querySelector('video')
+      if (nested) return nested
+    }
+  }
+  if (typeof document !== 'undefined') {
+    return document.querySelector('.training-video')
+  }
+  return null
+}
+
+const videoPreloadPool = new Map()
+let videoUiSyncId = null
+
+function stopVideoUiSync() {
+  if (videoUiSyncId) {
+    clearInterval(videoUiSyncId)
+    videoUiSyncId = null
+  }
+}
+
+function startVideoUiSync() {
+  stopVideoUiSync()
+  videoUiSyncId = setInterval(() => {
+    if (!mediaPlayer.value.show || mediaPlayer.value.type !== 'video') return
+    syncMediaUiFromElement(getTrainingVideoDom())
+  }, 300)
+}
+
+function destroyPreloadVideos() {
+  for (const el of videoPreloadPool.values()) {
+    try {
+      el.pause()
+      el.removeAttribute('src')
+      el.load()
+      el.remove()
+    } catch (_) { /* ignore */ }
+  }
+  videoPreloadPool.clear()
+  planMediaPreloaded.value = false
+}
+
+function preloadTodayPlanMedia(uid) {
+  if (typeof document === 'undefined' || !uid) return
+  const items = (todayPlan.value?.items || []).filter(i => i.video_url)
+  if (!items.length) return
+  destroyPreloadVideos()
+  for (const item of items) {
+    const url = resolveTrainingStreamUrl(item.video_url, uid)
+    const el = document.createElement('video')
+    el.preload = 'auto'
+    el.muted = true
+    el.playsInline = true
+    el.setAttribute('playsinline', '')
+    el.style.cssText = 'position:fixed;width:0;height:0;opacity:0;pointer-events:none;left:-9999px'
+    el.src = url
+    document.body.appendChild(el)
+    el.load()
+    videoPreloadPool.set(item.id, el)
+    el.addEventListener('loadedmetadata', () => {
+      const d = el.duration || 0
+      if (d > 0 && item.id) {
+        const prev = watchProgressMap.value[item.id] || {}
+        watchProgressMap.value = {
+          ...watchProgressMap.value,
+          [item.id]: { ...prev, duration_sec: d },
+        }
+      }
+    }, { once: true })
+  }
+  planMediaPreloaded.value = true
+}
+
+function applyPreloadedVideoMeta(item) {
+  const warmed = item?.id ? videoPreloadPool.get(item.id) : null
+  const d = warmed?.duration || Number(watchProgressMap.value[item.id]?.duration_sec || 0)
+  if (d > 0) {
+    videoDurationLabel.value = formatMediaTime(d)
+    videoMetadataReady.value = true
+    videoLoading.value = false
+  }
+}
+
 function activeMediaEl() {
   if (mediaPlayer.value.type === 'audio') return trainingAudio
-  return trainingVideoEl.value
+  return getTrainingVideoDom()
 }
 
 function destroyTrainingAudio() {
@@ -2549,7 +2648,8 @@ async function flushWatchProgress() {
   const item = lastOpenedItem.value
   const el = activeMediaEl()
   if (!item?.id || !el || !itemNeedsListen(item)) return
-  const durationSec = el.duration || audioUiDuration.value || 0
+  const cachedDur = Number(watchProgressMap.value[item.id]?.duration_sec || 0)
+  const durationSec = el.duration || audioUiDuration.value || cachedDur || 0
   if (durationSec <= 0) return
   const watchedSec = Math.min(mediaMaxHeardSec.value || el.currentTime || 0, durationSec)
   const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
@@ -2593,36 +2693,37 @@ function onMediaLoadedMetadata(e) {
     audioUiSec.value = el.currentTime || resume || 0
   }
   if (mediaPlayer.value.type === 'video') {
-    const d = el.duration || 0
-    if (d > 0) {
-      videoDurationLabel.value = `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}`
-      videoLoading.value = false
-    }
+    syncMediaUiFromElement(el)
   }
   flushWatchProgress()
 }
 
-function onMediaTimeUpdate(e) {
-  const el = e?.target || activeMediaEl()
+function syncMediaUiFromElement(el) {
   const item = lastOpenedItem.value
   if (!el || !item?.id) return
   if (clampMediaForward(el)) return
   lockMediaPlaybackRate({ target: el })
-  const durationSec = el.duration || 0
+  const durationSec = el.duration || Number(watchProgressMap.value[item.id]?.duration_sec || 0) || 0
+  if (durationSec > 0) {
+    videoMetadataReady.value = true
+    videoLoading.value = false
+  }
+  const cur = el.currentTime || 0
+  if (cur > mediaMaxHeardSec.value) mediaMaxHeardSec.value = cur
   const watchedSec = mediaMaxHeardSec.value
+
   if (mediaPlayer.value.type === 'audio') {
     audioUiDuration.value = durationSec
-    audioUiSec.value = el.currentTime || 0
-    audioPlaying.value = !el.paused
+    audioUiSec.value = cur
+    audioPlaying.value = !el.paused && !el.ended
   }
   if (mediaPlayer.value.type === 'video') {
-    const cur = el.currentTime || 0
-    if (cur > mediaMaxHeardSec.value) mediaMaxHeardSec.value = cur
     videoProgressPct.value = durationSec > 0 ? Math.round(cur / durationSec * 100) : 0
-    videoTimeLabel.value = `${Math.floor(cur / 60)}:${String(Math.floor(cur % 60)).padStart(2, '0')}`
-    videoDurationLabel.value = `${Math.floor(durationSec / 60)}:${String(Math.floor(durationSec % 60)).padStart(2, '0')}`
-    videoPlaying.value = !el.paused
+    videoTimeLabel.value = formatMediaTime(cur)
+    if (durationSec > 0) videoDurationLabel.value = formatMediaTime(durationSec)
+    videoPlaying.value = !el.paused && !el.ended
   }
+
   if (durationSec <= 0) return
   const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
   watchProgressMap.value = {
@@ -2634,6 +2735,10 @@ function onMediaTimeUpdate(e) {
     watchProgressSaveTimer = null
     flushWatchProgress()
   }, 4000)
+}
+
+function onMediaTimeUpdate(e) {
+  syncMediaUiFromElement(e?.target || activeMediaEl())
 }
 
 function onMediaEnded(e) {
@@ -2651,11 +2756,15 @@ function onVideoWaiting() {
 
 function onVideoCanPlay() {
   videoLoading.value = false
+  videoMetadataReady.value = true
+  syncMediaUiFromElement(getTrainingVideoDom())
 }
 
 function onVideoPlaying() {
   videoPlaying.value = true
   videoLoading.value = false
+  videoMetadataReady.value = true
+  syncMediaUiFromElement(getTrainingVideoDom())
 }
 
 function onVideoPause() {
@@ -2669,7 +2778,7 @@ async function toggleMediaPlay() {
 }
 
 async function toggleVideoPlay() {
-  const el = trainingVideoEl.value
+  const el = getTrainingVideoDom()
   if (!el) {
     uni.showToast({ title: '视频仍在加载，请稍候', icon: 'none' })
     return
@@ -2680,31 +2789,37 @@ async function toggleVideoPlay() {
       videoLoading.value = true
       await el.play()
       videoPlaying.value = true
+      videoMetadataReady.value = true
+      syncMediaUiFromElement(el)
     } else {
       el.pause()
       videoPlaying.value = false
+      syncMediaUiFromElement(el)
       flushWatchProgress()
     }
   } catch (_) {
     videoPlaying.value = false
-    uni.showToast({ title: '播放失败，请点视频下方原生控件', icon: 'none', duration: 2500 })
+    uni.showToast({ title: '播放失败，请点上方视频原生控件', icon: 'none', duration: 2500 })
   } finally {
     videoLoading.value = false
   }
 }
 
 function tryPlayVideoAfterOpen() {
-  const el = trainingVideoEl.value
+  const el = getTrainingVideoDom()
   if (!el) return
   videoLoading.value = true
   el.play()
     .then(() => {
       videoPlaying.value = true
       videoLoading.value = false
+      videoMetadataReady.value = true
+      syncMediaUiFromElement(el)
     })
     .catch(() => {
       videoPlaying.value = false
       videoLoading.value = false
+      syncMediaUiFromElement(el)
     })
 }
 
@@ -3417,6 +3532,7 @@ async function deleteCard(idx) {
 function onTrainingVideoError() {
   videoLoading.value = false
   videoPlaying.value = false
+  videoMetadataReady.value = false
   console.error('[training] video load failed:', videoSrc.value)
   uni.showToast({ title: '视频加载失败，请检查网络后重试', icon: 'none', duration: 3000 })
 }
@@ -3469,12 +3585,18 @@ async function openMediaItem(item, forceType) {
 
   const openVideo = () => {
     videoLoading.value = true
+    videoMetadataReady.value = false
     videoProgressPct.value = 0
     videoTimeLabel.value = '0:00'
     videoDurationLabel.value = '--:--'
+    applyPreloadedVideoMeta(item)
     videoSrc.value = resolveTrainingStreamUrl(item.video_url, uid)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
-    nextTick(() => tryPlayVideoAfterOpen())
+    nextTick(() => {
+      startVideoUiSync()
+      tryPlayVideoAfterOpen()
+      syncMediaUiFromElement(getTrainingVideoDom())
+    })
   }
   const openAudio = () => {
     const streamUrl = resolveTrainingStreamUrl(item.audio_url, uid)
@@ -3522,8 +3644,10 @@ function closeMedia() {
     clearTimeout(watchProgressSaveTimer)
     watchProgressSaveTimer = null
   }
+  stopVideoUiSync()
   const item = lastOpenedItem.value
   if (item?.id && itemNeedsListen(item)) {
+    syncMediaUiFromElement(activeMediaEl())
     flushWatchProgress()
     if (isItemListenDone(item)) {
       watchedItemIds.value.add(item.id)
@@ -3531,11 +3655,12 @@ function closeMedia() {
     }
   }
   try { trainingAudio?.pause() } catch (_) { /* ignore */ }
-  try { trainingVideoEl.value?.pause() } catch (_) { /* ignore */ }
+  try { getTrainingVideoDom()?.pause() } catch (_) { /* ignore */ }
   destroyTrainingAudio()
   audioPlaying.value = false
   videoPlaying.value = false
   videoLoading.value = false
+  videoMetadataReady.value = false
   mediaPlayer.value.show = false
 }
 
@@ -3720,6 +3845,10 @@ async function loadTodayPlan(silent = true) {
     if (result.data.plan_id && result.data.items?.length) {
       refreshAiPlanInBackground(uid)
     }
+
+    if (result.data.timer_phase === 'running' && result.data.items?.length) {
+      preloadTodayPlanMedia(uid)
+    }
   } catch (e) {
     uni.showToast({ title: e.message || '加载今日方案失败', icon: 'none', duration: 2500 })
   } finally {
@@ -3774,6 +3903,8 @@ onShow(async () => {
 onUnmounted(() => {
   clearTimerTick()
   clearDayUnlockWatch()
+  stopVideoUiSync()
+  destroyPreloadVideos()
   if (idleGuideTimer) clearTimeout(idleGuideTimer)
   destroyTrainingAudio()
 })
@@ -4509,7 +4640,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
   background:rgba(0,0,0,0.45); pointer-events:none;
 }
 .player-video-loading-text { color:#fff; font-size:14px; }
-.player-cover-placeholder { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.player-cover-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; pointer-events:none; background:rgba(0,0,0,0.35); }
 .player-cover-icon { font-size:48px; }
 .player-cover-hint { color:rgba(255,255,255,0.4); font-size:12px; }
 .player-cover-audio { display:flex; flex-direction:column; align-items:center; gap:8px; }

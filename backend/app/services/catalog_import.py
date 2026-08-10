@@ -190,6 +190,73 @@ def _content_item_by_oss_key(db: Session, oss_key: str) -> ContentItem | None:
     return None
 
 
+def _content_item_by_video_identity(
+    db: Session,
+    *,
+    skill: str | None,
+    file_name: str | None,
+) -> ContentItem | None:
+    """按技能或文件名匹配已有视频（OSS 路径变更时仍能更新而非重复插入）"""
+    from app.services.content_meta import parse_item_meta, skill_from_title
+
+    skill = (skill or "").strip()
+    file_name = (file_name or "").strip()
+    if not skill and not file_name:
+        return None
+    for row in db.scalars(select(ContentItem).where(ContentItem.content_type == "video")):
+        meta = parse_item_meta(row)
+        row_skill = (meta.get("skill") or skill_from_title(row.lesson_title) or "").strip()
+        if skill and row_skill == skill:
+            return row
+        old_key = str(meta.get("oss_key") or "")
+        play_url = row.play_url or ""
+        if file_name and (
+            old_key.endswith(file_name)
+            or file_name in play_url
+            or file_name.replace(".mp4", "") in (row.lesson_title or "")
+        ):
+            return row
+    return None
+
+
+def repair_video_oss_paths(db: Session) -> dict:
+    """视频从 shipin/天赋-视频/ 挪到 shipin/ 根目录后，刷新 DB 里残留的旧 URL"""
+    from app.db.models import TrainingItem
+
+    content_updated = 0
+    training_updated = 0
+    old_segment = "shipin/天赋-视频/"
+
+    for row in db.scalars(select(ContentItem).where(ContentItem.content_type == "video")):
+        row_changed = False
+        for field in ("play_url", "video_url"):
+            url = getattr(row, field) or ""
+            if old_segment not in url:
+                continue
+            setattr(row, field, url.replace(old_segment, "shipin/"))
+            row_changed = True
+        if row_changed:
+            try:
+                meta = parse_item_meta(row)
+                if isinstance(meta, dict) and old_segment in str(meta.get("oss_key") or ""):
+                    meta["oss_key"] = str(meta["oss_key"]).replace(old_segment, "shipin/")
+                    row.instructions = json.dumps(meta, ensure_ascii=False)
+            except Exception:
+                pass
+            content_updated += 1
+
+    for item in db.scalars(select(TrainingItem).where(TrainingItem.video_url.isnot(None))):
+        url = item.video_url or ""
+        if old_segment not in url:
+            continue
+        item.video_url = url.replace(old_segment, "shipin/")
+        training_updated += 1
+
+    if content_updated or training_updated:
+        db.commit()
+    return {"content_items": content_updated, "training_items": training_updated}
+
+
 def import_video_catalog(db: Session, path: Path | None = None, *, replace: bool = False) -> int:
     """OSS 视频目录 → content_item（开口窍/极速运算/五者天赋等）"""
     p = path or (catalog_data_dir() / "xet_video_catalog.json")
@@ -211,6 +278,12 @@ def import_video_catalog(db: Session, path: Path | None = None, *, replace: bool
         if not existing and row.get("play_url"):
             existing = db.scalar(
                 select(ContentItem).where(ContentItem.play_url == row["play_url"])
+            )
+        if not existing:
+            existing = _content_item_by_video_identity(
+                db,
+                skill=row.get("skill"),
+                file_name=row.get("file_name"),
             )
         if existing:
             changed = False

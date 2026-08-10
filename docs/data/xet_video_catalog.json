@@ -5,9 +5,9 @@
   "items": [
     {
       "id": 1,
-      "file_name": "_1.5极速运算的原理及过程.mp4",
-      "oss_key": "shipin/_1.5极速运算的原理及过程.mp4",
-      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/_1.5极速运算的原理及过程.mp4",
+      "file_name": "1.5极速运算的原理及过程.mp4",
+      "oss_key": "shipin/1.5极速运算的原理及过程.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/1.5极速运算的原理及过程.mp4",
       "lesson_title": "极速运算原理及过程",
       "skill": "极速运算",
       "talent_code": 0,
@@ -19,8 +19,8 @@
     {
       "id": 2,
       "file_name": "五者天赋.mp4",
-      "oss_key": "shipin/天赋-视频/五者天赋.mp4",
-      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/天赋-视频/五者天赋.mp4",
+      "oss_key": "shipin/五者天赋.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/五者天赋.mp4",
       "lesson_title": "五者天赋视频讲解",
       "skill": "五者天赋",
       "talent_code": 0,
@@ -32,8 +32,8 @@
     {
       "id": 3,
       "file_name": "超脑阅读技术.mp4",
-      "oss_key": "shipin/天赋-视频/超脑阅读技术.mp4",
-      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/天赋-视频/超脑阅读技术.mp4",
+      "oss_key": "shipin/超脑阅读技术.mp4",
+      "play_url": "https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com/shipin/超脑阅读技术.mp4",
       "lesson_title": "超脑阅读技术",
       "skill": "超脑阅读",
       "talent_code": 0,
