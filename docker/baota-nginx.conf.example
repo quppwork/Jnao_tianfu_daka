@@ -1,5 +1,15 @@
-# 宝塔面板 → 网站 → 你的域名 → 设置 → 配置文件
-# 在 server { ... } 块内，用以下内容替换或合并 location / 段。
+# 宝塔面板 → 网站 → jnaosoft.cn → 反向代理（或 配置文件）
+# 关键：CSP 必须写在 location / 里，不能只写在 server { } 顶层！
+# 原因：location 里一旦有 add_header / 反代，server 级的 add_header 不会继承到 HTML 响应。
+#
+# 媒体播放（推荐）：.env.production 设 SITE_DOMAIN + OSS_MEDIA_DIRECT_REDIRECT=1，
+# 后端 302 到同域 /api/media/oss/…，不直连 OSS，CSP media-src 'self' 即可。
+# 若仍用 OSS 直链（SAME_ORIGIN=0），则 media-src 须含 OSS 域名（见下方 CSP）。
+#
+# 编辑文件（二选一）：
+#   /www/server/panel/vhost/nginx/proxy/jnaosoft.cn/*.conf
+# 或在主配置里替换 location / 段。
+#
 # 前提：docker compose 已启动，前端监听 127.0.0.1:5185
 
 location / {
@@ -14,11 +24,20 @@ location / {
     client_max_body_size 20m;
     proxy_read_timeout 600s;
     proxy_send_timeout 600s;
+
+    # ── 安全头 + CSP：必须在此 location 内，OSS 直链需 media-src ──
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: data: https://jnao-talent-ai.oss-cn-beijing.aliyuncs.com; connect-src 'self' https://jnaosoft.cn wss://jnaosoft.cn; font-src 'self' data:; frame-ancestors 'self';" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 }
 
-# 说明：
-# - 前端容器内 Nginx 已将 /api 转发到后端，宝塔只需反代到前端即可
-# - 训练/OSS 媒体磁盘缓存在 **Docker 前端容器** 内（volume nginx_media_cache，最大约 10GB）
-# - OSS 直链 302 默认可不走 VPS 代理；同域缓存路径为 /api/media/oss/
-# - SSL 在宝塔「SSL」页签申请 Let's Encrypt 或上传证书
-# - 申请证书后 SITE_DOMAIN 填 https://你的域名
+# 若 server { } 顶层也有同名 add_header，请删掉顶层的 CSP/安全头，避免重复且互相覆盖。
+# 检查 extension 目录是否还有第二条 CSP：
+#   ls /www/server/panel/vhost/nginx/extension/jnaosoft.cn/
+#
+# 验证：
+#   curl -sI https://jnaosoft.cn/ | grep -i content-security
+# 应只有一行，且含 media-src 与 oss-cn-beijing.aliyuncs.com
