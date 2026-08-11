@@ -769,16 +769,15 @@
               ref="trainingVideoEl"
               class="training-video"
               :src="videoSrc"
-              controls
               playsinline
               webkit-playsinline
               x5-playsinline
               x5-video-player-type="h5"
-              preload="auto"
-              controlsList="nodownload noplaybackrate"
-              disablePictureInPicture
+              preload="metadata"
+              @click.stop="toggleVideoPlay"
               @timeupdate="onMediaTimeUpdate"
               @loadedmetadata="onMediaLoadedMetadata"
+              @loadeddata="onVideoLoadedData"
               @durationchange="onVideoDurationChange"
               @seeking="onMediaSeeking"
               @ratechange="lockMediaPlaybackRate"
@@ -2591,7 +2590,10 @@ const mediaPlayIcon = computed(() => {
 
 const mediaPlayerHint = computed(() => {
   if (mediaPlayer.value.type === 'video' && videoLoading.value) {
-    return '网络较慢时请稍候，加载完成后点播放或下方控件'
+    return '视频缓冲中，请稍候…'
+  }
+  if (mediaPlayer.value.type === 'video' && !videoPlaying.value && videoMetadataReady.value) {
+    return '点击下方 ▶ 开始播放'
   }
   return `听满约 ${WATCH_DONE_PCT}% 后可解锁打卡`
 })
@@ -2645,68 +2647,29 @@ function getTrainingVideoDom() {
 }
 
 const videoPreloadPool = new Map()
-/** 当前 DOM 中已加载的训练视频 item id，关闭弹窗时不销毁以便复用缓冲 */
 let cachedVideoItemId = null
 let cachedVideoUserId = null
-/** 当前训练页绑定的学员 id，切换账号时清空媒体状态 */
 let sessionChildUserId = null
-let videoUiRafId = null
-/** 当前播放器内唯一 video 元素，避免 querySelector 误取到其它节点 */
+let sessionPlanId = null
+/** 当前播放器内唯一 video 元素 */
 let pinnedTrainingVideo = null
-/** 底部时间展示：播放中单调递增，忽略缓冲间隙 currentTime 回跳 */
-let videoUiSecSmoothed = 0
+/** 本次打开是否已执行续播 seek */
+let videoResumeApplied = false
 /** 打开播放器后待 seek 的续播秒数 */
 let videoResumePendingSec = 0
 
-const WATCH_PROGRESS_LS_PREFIX = 'jnao_training_watch_progress_v1_'
-
-function watchProgressLsKey(uid) {
-  const id = uid || getChildUserId() || 0
-  return `${WATCH_PROGRESS_LS_PREFIX}${id}`
-}
-
-function readLocalWatchProgress(itemId, uid) {
-  try {
-    const raw = localStorage.getItem(watchProgressLsKey(uid))
-    if (!raw) return null
-    return JSON.parse(raw)[String(itemId)] || null
-  } catch (_) {
-    return null
-  }
-}
-
-function writeLocalWatchProgress(itemId, wp, uid) {
-  if (!itemId || !wp) return
-  const userId = uid || getChildUserId()
-  if (!userId) return
-  try {
-    const key = watchProgressLsKey(userId)
-    const raw = localStorage.getItem(key)
-    const all = raw ? JSON.parse(raw) : {}
-    const prev = all[String(itemId)] || {}
-    all[String(itemId)] = {
-      watched_sec: Math.max(Number(prev.watched_sec) || 0, Number(wp.watched_sec) || 0),
-      duration_sec: Number(wp.duration_sec) || Number(prev.duration_sec) || 0,
-      pct: Math.max(Number(prev.pct) || 0, Number(wp.pct) || 0),
-    }
-    localStorage.setItem(key, JSON.stringify(all))
-  } catch (_) { /* ignore */ }
-}
-
 function resetVideoUiClock(initialSec = 0) {
-  videoUiSecSmoothed = Math.max(0, Number(initialSec) || 0)
+  /* 保留兼容调用，UI 已直接读 currentTime */
 }
 
 function getItemWatchProgress(item) {
   if (!item?.id) return {}
-  const uid = getChildUserId()
   const remote = watchProgressMap.value[item.id] || item.watch_progress || {}
-  const local = uid ? (readLocalWatchProgress(item.id, uid) || {}) : {}
-  const watched_sec = Math.max(Number(remote.watched_sec) || 0, Number(local.watched_sec) || 0)
-  const duration_sec = Number(remote.duration_sec) || Number(local.duration_sec) || 0
+  const watched_sec = Math.max(0, Number(remote.watched_sec) || 0)
+  const duration_sec = Math.max(0, Number(remote.duration_sec) || 0)
   const pct = duration_sec > 0
     ? Math.min(100, Math.round(watched_sec / duration_sec * 1000) / 10)
-    : Math.max(Number(remote.pct) || 0, Number(local.pct) || 0)
+    : Math.max(0, Number(remote.pct) || 0)
   return { ...remote, watched_sec, duration_sec, pct }
 }
 
@@ -2716,6 +2679,7 @@ function getItemResumeSec(item) {
 
 function clearVideoResumePending() {
   videoResumePendingSec = 0
+  videoResumeApplied = false
 }
 
 function syncItemWatchProgress(item, wp) {
@@ -2724,11 +2688,9 @@ function syncItemWatchProgress(item, wp) {
   item.watch_progress = { ...wp }
   const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
   if (planItem) planItem.watch_progress = { ...wp }
-  writeLocalWatchProgress(item.id, wp, getChildUserId())
 }
 
 function resetMediaSessionForAccountSwitch() {
-  cancelVideoUiRaf()
   clearVideoRetryTimer()
   watchProgressMap.value = {}
   mediaMaxHeardSec.value = 0
@@ -2738,7 +2700,6 @@ function resetMediaSessionForAccountSwitch() {
   cachedVideoItemId = null
   cachedVideoUserId = null
   pinnedTrainingVideo = null
-  videoUiSecSmoothed = 0
   clearVideoResumePending()
   videoProgressPct.value = 0
   videoTimeLabel.value = '0:00'
@@ -2749,6 +2710,7 @@ function resetMediaSessionForAccountSwitch() {
     mediaPlayer.value.show = false
     videoPlaying.value = false
     videoLoading.value = false
+    videoMetadataReady.value = false
   }
 }
 
@@ -2758,33 +2720,45 @@ function ensureSessionChildUser(uid) {
     resetMediaSessionForAccountSwitch()
   }
   sessionChildUserId = uid
-  try { localStorage.removeItem('jnao_training_watch_progress_v1') } catch (_) { /* 旧版未分账号 */ }
 }
 
-function applyVideoResume(el) {
+function ensureSessionPlan(planId) {
+  const pid = Number(planId) || 0
+  if (!pid) return
+  if (sessionPlanId != null && sessionPlanId !== pid) {
+    resetMediaSessionForAccountSwitch()
+  }
+  sessionPlanId = pid
+}
+
+function applyVideoResume(el, force = false) {
   if (!el || mediaPlayer.value.type !== 'video') return false
+  if (videoResumeApplied && !force) return true
   const resume = videoResumePendingSec > 0
     ? videoResumePendingSec
     : getItemResumeSec(lastOpenedItem.value)
   if (resume <= 0.5) {
     clearVideoResumePending()
+    videoResumeApplied = true
     return false
   }
   const dur = Number(el.duration) || 0
   if (dur > 0 && resume >= dur - 1) {
     clearVideoResumePending()
+    videoResumeApplied = true
     return false
   }
   const cur = Number(el.currentTime) || 0
-  if (cur >= resume - 0.75) {
+  if (!force && cur >= resume - 0.75) {
     clearVideoResumePending()
-    resetVideoUiClock(cur)
+    videoResumeApplied = true
     return true
   }
   try {
     el.currentTime = resume
     mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
-    resetVideoUiClock(Number(el.currentTime) || resume)
+    videoResumeApplied = true
+    clearVideoResumePending()
     return true
   } catch (_) {
     return false
@@ -2799,35 +2773,21 @@ function pinTrainingVideoEl(el) {
 
 function clearPinnedTrainingVideo() {
   pinnedTrainingVideo = null
-  videoUiSecSmoothed = 0
   clearVideoResumePending()
 }
 
-function readVideoDisplaySec(el) {
-  let cur = Number(el?.currentTime)
-  if (!Number.isFinite(cur) || cur < 0) cur = 0
-  const prev = videoUiSecSmoothed
-  const playing = el && !el.paused && !el.ended && !el.seeking
-
-  if (videoResumePendingSec > 0) {
-    videoUiSecSmoothed = cur
-    return cur
+function syncVideoUiFromElement(el) {
+  if (!el || mediaPlayer.value.type !== 'video') return
+  const durationSec = Number(el.duration) || Number(watchProgressMap.value[lastOpenedItem.value?.id]?.duration_sec) || 0
+  const cur = Math.max(0, Number(el.currentTime) || 0)
+  if (durationSec > 0) {
+    videoMetadataReady.value = true
+    videoLoading.value = false
+    videoDurationLabel.value = formatMediaTime(durationSec)
+    videoProgressPct.value = Math.min(100, Math.round(cur / durationSec * 1000) / 10)
   }
-  // 播放中途缓冲导致 currentTime 短暂归零（非刚打开续播）
-  if (playing && prev >= 5 && cur < 1 && prev - cur > 3) return prev
-  if (playing) {
-    if (cur >= prev - 0.3) videoUiSecSmoothed = Math.max(prev, cur)
-    return videoUiSecSmoothed
-  }
-  videoUiSecSmoothed = cur
-  return cur
-}
-
-function cancelVideoUiRaf() {
-  if (videoUiRafId) {
-    cancelAnimationFrame(videoUiRafId)
-    videoUiRafId = null
-  }
+  videoTimeLabel.value = formatMediaTime(cur)
+  videoPlaying.value = !el.paused && !el.ended
 }
 
 function destroyPreloadVideos() {
@@ -2843,35 +2803,9 @@ function destroyPreloadVideos() {
   planMediaPreloaded.value = false
 }
 
-function preloadTodayPlanMedia(uid) {
-  if (typeof document === 'undefined' || !uid) return
-  const items = (todayPlan.value?.items || []).filter(i => i.video_url)
-  if (!items.length) return
-  destroyPreloadVideos()
-  for (const item of items) {
-    const url = resolveTrainingStreamUrl(item.video_url, uid)
-    const el = document.createElement('video')
-    el.preload = 'auto'
-    el.muted = true
-    el.playsInline = true
-    el.setAttribute('playsinline', '')
-    el.style.cssText = 'position:fixed;width:0;height:0;opacity:0;pointer-events:none;left:-9999px'
-    el.src = url
-    document.body.appendChild(el)
-    el.load()
-    videoPreloadPool.set(item.id, el)
-    el.addEventListener('loadedmetadata', () => {
-      const d = el.duration || 0
-      if (d > 0 && item.id) {
-        const prev = watchProgressMap.value[item.id] || {}
-        watchProgressMap.value = {
-          ...watchProgressMap.value,
-          [item.id]: { ...prev, duration_sec: d },
-        }
-      }
-    }, { once: true })
-  }
-  planMediaPreloaded.value = true
+function preloadTodayPlanMedia(_uid) {
+  /* 禁用后台预加载，避免与主播放器争抢带宽导致卡顿 */
+  planMediaPreloaded.value = false
 }
 
 function applyPreloadedVideoMeta(item) {
@@ -2922,10 +2856,12 @@ function ensureTrainingAudio(src) {
 }
 
 function hydrateWatchProgressFromPlan(plan) {
-  const map = { ...watchProgressMap.value }
+  const map = {}
   for (const item of plan?.items || []) {
     if (!item?.id) continue
-    if (item.watch_progress) map[item.id] = { ...item.watch_progress }
+    if (item.watch_progress && typeof item.watch_progress === 'object') {
+      map[item.id] = { ...item.watch_progress }
+    }
   }
   watchProgressMap.value = map
 }
@@ -3032,12 +2968,7 @@ function syncMediaUiFromElement(el) {
     audioPlaying.value = !el.paused && !el.ended
   }
   if (mediaPlayer.value.type === 'video') {
-    const displayCur = readVideoDisplaySec(el)
-    const barSec = (!el.paused && !el.ended) ? rawCur : displayCur
-    videoProgressPct.value = durationSec > 0 ? Math.min(100, Math.round(barSec / durationSec * 100)) : 0
-    videoTimeLabel.value = formatMediaTime(displayCur)
-    if (durationSec > 0) videoDurationLabel.value = formatMediaTime(durationSec)
-    videoPlaying.value = !el.paused && !el.ended
+    syncVideoUiFromElement(el)
   }
 
   if (durationSec <= 0) return
@@ -3056,15 +2987,15 @@ function syncMediaUiFromElement(el) {
 function onMediaTimeUpdate(e) {
   const el = e?.target
   if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
-  if (mediaPlayer.value.type === 'video') {
-    if (videoUiRafId) return
-    videoUiRafId = requestAnimationFrame(() => {
-      videoUiRafId = null
-      syncMediaUiFromElement(el || activeMediaEl())
-    })
-    return
-  }
   syncMediaUiFromElement(el || activeMediaEl())
+}
+
+function onVideoLoadedData(e) {
+  const el = e?.target
+  if (!el || mediaPlayer.value.type !== 'video') return
+  pinTrainingVideoEl(el)
+  applyVideoResume(el)
+  syncMediaUiFromElement(el)
 }
 
 function onVideoDurationChange(e) {
@@ -3098,10 +3029,7 @@ function onVideoCanPlay() {
   videoLoadAttempt.value = 0
   clearVideoRetryTimer()
   const el = getTrainingVideoDom()
-  if (el) {
-    applyVideoResume(el)
-    syncMediaUiFromElement(el)
-  }
+  if (el) syncMediaUiFromElement(el)
 }
 
 function onVideoPlaying() {
@@ -3109,10 +3037,7 @@ function onVideoPlaying() {
   videoLoading.value = false
   videoMetadataReady.value = true
   const el = getTrainingVideoDom()
-  if (el) {
-    applyVideoResume(el)
-    syncMediaUiFromElement(el)
-  }
+  if (el) syncMediaUiFromElement(el)
 }
 
 function onVideoPause() {
@@ -3147,34 +3072,17 @@ async function toggleVideoPlay() {
     }
   } catch (_) {
     videoPlaying.value = false
-    uni.showToast({ title: '播放失败，请点上方视频原生控件', icon: 'none', duration: 2500 })
+    uni.showToast({ title: '播放失败，请稍候再试', icon: 'none', duration: 2500 })
   } finally {
     videoLoading.value = false
   }
 }
 
-function tryPlayVideoAfterOpen() {
-  const el = getTrainingVideoDom()
+function prepareVideoAfterOpen(el) {
   if (!el) return
-  videoLoading.value = true
-  const start = () => {
-    applyVideoResume(el)
-    return el.play()
-      .then(() => {
-        applyVideoResume(el)
-        videoPlaying.value = true
-        videoLoading.value = false
-        videoMetadataReady.value = true
-        syncMediaUiFromElement(el)
-      })
-      .catch(() => {
-        videoPlaying.value = false
-        videoLoading.value = false
-        syncMediaUiFromElement(el)
-      })
-  }
-  if (el.readyState >= 2) start()
-  else el.addEventListener('canplay', () => start(), { once: true })
+  pinTrainingVideoEl(el)
+  applyVideoResume(el)
+  syncMediaUiFromElement(el)
 }
 
 async function toggleAudioPlay() {
@@ -3890,31 +3798,28 @@ function clearVideoRetryTimer() {
   }
 }
 
-function buildVideoStreamSrc(rawUrl, uid, attempt = 0, startSec = 0) {
+function buildVideoStreamSrc(rawUrl, uid, attempt = 0) {
   let url = resolveTrainingStreamUrl(rawUrl, uid)
   if (!url) return url
   if (attempt > 0) {
     const sep = url.includes('?') ? '&' : '?'
     url = `${url}${sep}_retry=${attempt}&_t=${Date.now()}`
   }
-  const start = Math.floor(Number(startSec) || 0)
-  if (start > 0) url = `${url}#t=${start}`
   return url
 }
 
 function reloadTrainingVideo(item, uid) {
   videoLoading.value = true
   videoMetadataReady.value = false
-  const resume = getItemResumeSec(item)
-  videoSrc.value = buildVideoStreamSrc(item.video_url, uid, videoLoadAttempt.value, resume)
+  videoResumeApplied = false
+  videoSrc.value = buildVideoStreamSrc(item.video_url, uid, videoLoadAttempt.value)
   nextTick(() => {
     const el = getTrainingVideoDom()
     if (el) {
       pinTrainingVideoEl(el)
       try { el.load() } catch (_) { /* ignore */ }
     }
-    tryPlayVideoAfterOpen()
-    syncMediaUiFromElement(getTrainingVideoDom())
+    prepareVideoAfterOpen(getTrainingVideoDom())
   })
 }
 
@@ -3940,13 +3845,6 @@ function onTrainingVideoError() {
 function applyPlanMedia(plan) {
   const uid = getChildUserId()
   const items = plan?.items || []
-  const videoItem = items.find(i => i.item_type === 'video' || i.video_url)
-  if (videoItem?.video_url) {
-    videoSrc.value = resolveTrainingStreamUrl(videoItem.video_url, uid)
-    cachedVideoItemId = videoItem.id
-    cachedVideoUserId = uid
-    activeVideoItemId.value = videoItem.id
-  }
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
   const firstAudio = sorted.find(i => i.audio_url)
   if (firstAudio) {
@@ -3990,6 +3888,7 @@ async function openMediaItem(item, forceType) {
     const resumeSec = Number(wp.watched_sec || 0)
     const durSec = Number(wp.duration_sec || 0)
     videoResumePendingSec = resumeSec
+    videoResumeApplied = false
     videoLoading.value = true
     videoMetadataReady.value = false
     videoLoadAttempt.value = 0
@@ -3997,32 +3896,14 @@ async function openMediaItem(item, forceType) {
     applyPreloadedVideoMeta(item)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
 
-    const canReusePlayer = cachedVideoItemId === item.id
-      && cachedVideoUserId === uid
-      && videoSrc.value
-      && activeVideoItemId.value === item.id
-    const primeUi = (el) => {
-      if (!el) return
-      pinTrainingVideoEl(el)
-      applyVideoResume(el)
-      syncMediaUiFromElement(el)
-      tryPlayVideoAfterOpen()
-    }
-
-    if (canReusePlayer) {
-      nextTick(() => primeUi(getTrainingVideoDom()))
-      return
-    }
-
     cachedVideoItemId = item.id
     cachedVideoUserId = uid
     activeVideoItemId.value = item.id
-    resetVideoUiClock(0)
     videoProgressPct.value = 0
     videoTimeLabel.value = '0:00'
     videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : '--:--'
-    videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0, resumeSec)
-    nextTick(() => primeUi(getTrainingVideoDom()))
+    videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0)
+    nextTick(() => prepareVideoAfterOpen(getTrainingVideoDom()))
   }
   const openAudio = () => {
     const streamUrl = resolveTrainingStreamUrl(item.audio_url, uid)
@@ -4070,7 +3951,6 @@ async function closeMedia() {
     clearTimeout(watchProgressSaveTimer)
     watchProgressSaveTimer = null
   }
-  cancelVideoUiRaf()
   clearVideoRetryTimer()
   const item = lastOpenedItem.value
   if (item?.id && itemNeedsListen(item)) {
@@ -4089,7 +3969,7 @@ async function closeMedia() {
   } catch (_) { /* ignore */ }
   destroyTrainingAudio()
   pinnedTrainingVideo = null
-  videoUiSecSmoothed = 0
+  videoResumeApplied = false
   clearVideoResumePending()
   videoLoadAttempt.value = 0
   audioPlaying.value = false
@@ -4233,6 +4113,7 @@ async function loadTodayPlan(silent = true) {
 
     todayPlan.value = result.data
     applyServerTimeMeta(result.data)
+    ensureSessionPlan(result.data.plan_id)
     applyTimerFromServer(result.data)
     restoreTrainingVisibility(result.data)
 
@@ -4350,12 +4231,12 @@ onHide(() => {
 onUnmounted(() => {
   clearTimerTick()
   clearDayUnlockWatch()
-  cancelVideoUiRaf()
   clearVideoRetryTimer()
   destroyPreloadVideos()
   cachedVideoItemId = null
   cachedVideoUserId = null
   sessionChildUserId = null
+  sessionPlanId = null
   if (idleGuideTimer) clearTimeout(idleGuideTimer)
   destroyTrainingAudio()
 })
@@ -5105,7 +4986,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .player-cover-audio { display:flex; flex-direction:column; align-items:center; gap:8px; }
 .player-cover-label { color:rgba(255,255,255,0.7); font-size:13px; font-weight:500; text-align:center; padding:0 16px; }
 .player-cover-progress { position:absolute; bottom:0; left:0; right:0; height:3px; background:rgba(255,255,255,0.1); }
-.player-cover-progress-fill { height:100%; background:linear-gradient(90deg,#22d3ee,#34d399); transition:width 0.3s; }
+.player-cover-progress-fill { height:100%; background:linear-gradient(90deg,#22d3ee,#34d399); }
 .player-header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 4px; margin-bottom:0; }
 .player-title { color:#fff; font-size:14px; font-weight:600; }
 .player-audio-name { display:block; text-align:center; color:rgba(255,255,255,0.85); font-size:13px; margin-bottom:12px; line-height:1.4; }
