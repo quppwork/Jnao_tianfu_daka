@@ -2657,6 +2657,16 @@ let pinnedTrainingVideo = null
 let videoResumeApplied = false
 /** 打开播放器后待 seek 的续播秒数 */
 let videoResumePendingSec = 0
+/** 程序内 seek（续播）期间不弹「不可快进」 */
+let programmaticSeekUntil = 0
+
+function markProgrammaticSeek(ms = 1200) {
+  programmaticSeekUntil = Date.now() + ms
+}
+
+function isProgrammaticSeek() {
+  return Date.now() < programmaticSeekUntil
+}
 
 function resetVideoUiClock(initialSec = 0) {
   /* 保留兼容调用，UI 已直接读 currentTime */
@@ -2755,8 +2765,9 @@ function applyVideoResume(el, force = false) {
     return true
   }
   try {
-    el.currentTime = resume
     mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
+    markProgrammaticSeek()
+    el.currentTime = resume
     videoResumeApplied = true
     clearVideoResumePending()
     return true
@@ -2871,13 +2882,19 @@ function lockMediaPlaybackRate(e) {
   if (el && el.playbackRate !== 1) el.playbackRate = 1
 }
 
-function clampMediaForward(el) {
+function clampMediaForward(el, { silent = false } = {}) {
   if (!el) return false
-  const t = el.currentTime || 0
+  const t = Number(el.currentTime) || 0
   const max = mediaMaxHeardSec.value
+  if (isProgrammaticSeek()) {
+    if (t > max) mediaMaxHeardSec.value = t
+    return false
+  }
   if (t > max + MEDIA_SEEK_EPS) {
     el.currentTime = max
-    uni.showToast({ title: '训练音视频不可快进', icon: 'none' })
+    if (!silent) {
+      uni.showToast({ title: '训练音视频不可快进', icon: 'none' })
+    }
     return true
   }
   if (t > max) mediaMaxHeardSec.value = t
@@ -2885,7 +2902,7 @@ function clampMediaForward(el) {
 }
 
 function onMediaSeeking(e) {
-  clampMediaForward(e?.target || activeMediaEl())
+  clampMediaForward(e?.target || activeMediaEl(), { silent: isProgrammaticSeek() })
 }
 
 async function flushWatchProgress() {
@@ -2936,7 +2953,11 @@ function onMediaLoadedMetadata(e) {
   if (mediaPlayer.value.type === 'video') {
     applyVideoResume(el)
   } else if (resume > 0 && resume < (el.duration || Infinity) && (el.currentTime || 0) < resume) {
-    try { el.currentTime = resume } catch (_) { /* ignore */ }
+    try {
+      mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
+      markProgrammaticSeek()
+      el.currentTime = resume
+    } catch (_) { /* ignore */ }
   }
   if (mediaPlayer.value.type === 'audio') {
     audioUiDuration.value = el.duration || 0
@@ -2948,10 +2969,10 @@ function onMediaLoadedMetadata(e) {
   flushWatchProgress()
 }
 
-function syncMediaUiFromElement(el) {
+function syncMediaUiFromElement(el, opts = {}) {
   const item = lastOpenedItem.value
   if (!el || !item?.id) return
-  if (clampMediaForward(el)) return
+  if (!opts.skipClamp && clampMediaForward(el)) return
   lockMediaPlaybackRate({ target: el })
   const durationSec = el.duration || Number(watchProgressMap.value[item.id]?.duration_sec || 0) || 0
   if (durationSec > 0) {
@@ -3955,7 +3976,11 @@ async function closeMedia() {
   const item = lastOpenedItem.value
   if (item?.id && itemNeedsListen(item)) {
     const el = pinnedTrainingVideo || activeMediaEl()
-    if (el) syncMediaUiFromElement(el)
+    if (el) {
+      const t = Number(el.currentTime) || 0
+      if (t > mediaMaxHeardSec.value) mediaMaxHeardSec.value = t
+      syncMediaUiFromElement(el, { skipClamp: true })
+    }
     await flushWatchProgress()
     if (isItemListenDone(item)) {
       watchedItemIds.value.add(item.id)
