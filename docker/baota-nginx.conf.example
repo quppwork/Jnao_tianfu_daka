@@ -12,11 +12,13 @@ location / {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     client_max_body_size 20m;
-    proxy_read_timeout 300s;
-    proxy_send_timeout 300s;
+    proxy_read_timeout 600s;
+    proxy_send_timeout 600s;
 }
 
 # 说明：
 # - 前端容器内 Nginx 已将 /api 转发到后端，宝塔只需反代到前端即可
+# - 训练/OSS 媒体磁盘缓存在 **Docker 前端容器** 内（volume nginx_media_cache，最大约 10GB）
+# - OSS 直链 302 默认可不走 VPS 代理；同域缓存路径为 /api/media/oss/
 # - SSL 在宝塔「SSL」页签申请 Let's Encrypt 或上传证书
 # - 申请证书后 SITE_DOMAIN 填 https://你的域名

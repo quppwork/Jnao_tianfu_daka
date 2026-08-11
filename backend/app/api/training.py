@@ -142,6 +142,11 @@ def talent_video_stream(
         if static_path.is_file():
             return FileResponse(static_path, media_type="video/mp4", headers={"Accept-Ranges": "bytes"})
         raise HTTPException(404, "视频资源未找到")
+    from app.services.media_redirect import try_media_redirect
+
+    redirect = try_media_redirect(url)
+    if redirect is not None:
+        return redirect
     return stream_oss_media(url, range_header=request.headers.get("range"))
 
 
@@ -181,14 +186,11 @@ def training_item_media_stream(
     stored = item.video_url if media == "video" else item.audio_url
     if not stored:
         raise HTTPException(404, f"该训练项无{media}资源")
-    from app.services.oss_client import sign_cdn_play_url, use_cdn_for_media
+    from app.services.media_redirect import try_media_redirect
 
-    if use_cdn_for_media():
-        signed = sign_cdn_play_url(stored)
-        if signed:
-            from fastapi.responses import RedirectResponse
-
-            return RedirectResponse(signed, status_code=302)
+    redirect = try_media_redirect(stored)
+    if redirect is not None:
+        return redirect
     return stream_oss_media(stored, range_header=request.headers.get("range"))
 
 

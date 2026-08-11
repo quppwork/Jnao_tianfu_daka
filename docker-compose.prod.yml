@@ -45,6 +45,9 @@ services:
       OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
       OSS_PREFIX: ${OSS_PREFIX:-yinpin/}
       OSS_CDN_DOMAIN: ${OSS_CDN_DOMAIN:-}
+      OSS_MEDIA_DIRECT_REDIRECT: ${OSS_MEDIA_DIRECT_REDIRECT:-1}
+      OSS_MEDIA_SAME_ORIGIN_CACHE: ${OSS_MEDIA_SAME_ORIGIN_CACHE:-0}
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
       TRAINING_AGENT_SCHEDULE: ${TRAINING_AGENT_SCHEDULE:-0}
       TRAINING_AGENT_SCHEDULE_TIMEOUT: ${TRAINING_AGENT_SCHEDULE_TIMEOUT:-600}
       SPEECH_APP_ID: ${SPEECH_APP_ID:-}
@@ -68,6 +71,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${FRONTEND_HOST_PORT:-5185}:80"
+    environment:
+      OSS_BUCKET: ${OSS_BUCKET:-jnao-talent-ai}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
+    volumes:
+      - nginx_media_cache:/var/cache/nginx/media
     depends_on:
       backend:
         condition: service_healthy
@@ -76,6 +84,7 @@ services:
 
 volumes:
   backend_data:
+  nginx_media_cache:
 
 networks:
   jnao_net:

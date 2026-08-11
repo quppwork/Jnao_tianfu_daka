@@ -1,0 +1,111 @@
+server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    client_max_body_size 20m;
+
+    # Gzip 文本压缩（JS/CSS/HTML/JSON 减少 60-70%）
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 512;
+    gzip_types text/css application/javascript text/javascript application/json image/svg+xml;
+    gzip_comp_level 5;
+
+    # OSS 回源 + 磁盘缓存（OSS_MEDIA_SAME_ORIGIN_CACHE=1 时后端 302 到此路径）
+    location ~ ^/api/media/oss/(?<oss_path>.+)$ {
+        resolver 223.5.5.5 8.8.8.8 valid=300s ipv6=off;
+        resolver_timeout 5s;
+
+        proxy_cache media_cache;
+        proxy_cache_key $scheme$host$request_uri;
+        proxy_cache_valid 200 206 7d;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock on;
+        proxy_cache_lock_timeout 60s;
+        add_header X-Cache-Status $upstream_cache_status always;
+        add_header Accept-Ranges bytes always;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host ${OSS_BUCKET}.${OSS_ENDPOINT};
+        proxy_set_header Range $http_range;
+        proxy_set_header Connection "";
+        proxy_buffering on;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+
+        set $oss_origin "https://${OSS_BUCKET}.${OSS_ENDPOINT}";
+        proxy_pass $oss_origin/$oss_path$is_args$args;
+    }
+
+    # 训练流代理回退路径磁盘缓存（OSS_MEDIA_DIRECT_REDIRECT=0 时生效）
+    location ~ ^/api/training/items/[0-9]+/stream$ {
+        proxy_cache media_cache;
+        proxy_cache_key $scheme$host$request_uri;
+        proxy_cache_valid 200 206 1d;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock on;
+        add_header X-Cache-Status $upstream_cache_status always;
+
+        proxy_pass http://backend:8012;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Range $http_range;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_buffering on;
+    }
+
+    location = /api/training/video/talent/stream {
+        proxy_cache media_cache;
+        proxy_cache_key $scheme$host$request_uri;
+        proxy_cache_valid 200 206 1d;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock on;
+        add_header X-Cache-Status $upstream_cache_status always;
+
+        proxy_pass http://backend:8012;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Range $http_range;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_buffering on;
+    }
+
+    location /api/ {
+        proxy_pass http://backend:8012;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_buffering off;
+        add_header Cache-Control "no-store";
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|webp|woff2?|ico|svg)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    location ~ ^/MP_verify_.*\.txt$ {
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+}
