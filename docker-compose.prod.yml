@@ -74,6 +74,7 @@ services:
     environment:
       OSS_BUCKET: ${OSS_BUCKET:-jnao-talent-ai}
       OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
+      OSS_CDN_DOMAIN: ${OSS_CDN_DOMAIN:-}
     volumes:
       - nginx_media_cache:/var/cache/nginx/media
     depends_on:
