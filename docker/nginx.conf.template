@@ -107,7 +107,6 @@ server {
     location / {
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-cache";
-        # OSS 直链 302 后 <video> 从 OSS 拉流，须显式允许 media-src（否则 default-src 'self' 拦截）
-        add_header Content-Security-Policy "default-src 'self'; media-src ${OSS_MEDIA_SRC}; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:;" always;
+        # CSP 由宝塔站点 Nginx 统一配置（避免与容器内重复 add_header 叠加导致 media-src 失效）
     }
 }
