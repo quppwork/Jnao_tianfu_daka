@@ -22,8 +22,12 @@ def oss_media_direct_redirect_enabled() -> bool:
 
 
 def oss_media_same_origin_cache_enabled() -> bool:
-    raw = os.getenv("OSS_MEDIA_SAME_ORIGIN_CACHE", "0").strip().lower()
-    return raw in ("1", "true", "yes", "on")
+    """同域 /api/media/oss/ 缓存路径，规避站点 CSP 未放行 OSS 时视频无法播放。"""
+    raw = os.getenv("OSS_MEDIA_SAME_ORIGIN_CACHE")
+    if raw is None or not str(raw).strip():
+        # 生产默认：有 SITE_DOMAIN 时走同域，不依赖宝塔 CSP 改 media-src
+        return bool((os.getenv("SITE_DOMAIN") or "").strip())
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
 
 def build_same_origin_oss_url(signed_oss_url: str) -> str:
