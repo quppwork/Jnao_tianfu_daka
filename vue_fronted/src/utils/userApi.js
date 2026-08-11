@@ -1405,6 +1405,54 @@ export async function fetchGrowthShare(userId) {
   return apiJson(withUser('/api/growth/share', userId))
 }
 
+// ── 成就/荣誉系统 ──
+
+export async function fetchAchievementList(userId) {
+  const data = await apiJson(withUser('/api/achievement/list', userId))
+  return { items: data.items || [], stats: data.stats || {} }
+}
+
+export async function fetchAchievementStats(userId) {
+  return apiJson(withUser('/api/achievement/stats', userId))
+}
+
+export async function checkAchievements(userId) {
+  return apiJson(withUser('/api/achievement/check', userId), { method: 'POST' })
+}
+
+export async function claimAchievement(userId, achievementId) {
+  return apiJson(withUser('/api/achievement/claim', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ achievement_id: achievementId }),
+  })
+}
+
+export async function fetchUserTitle(userId) {
+  return apiJson(withUser('/api/achievement/title', userId))
+}
+
+export async function setUserTitle(userId, titleCode) {
+  return apiJson(withUser('/api/achievement/title', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title_code: titleCode }),
+  })
+}
+
+export async function fetchShowcase(userId) {
+  const data = await apiJson(withUser('/api/achievement/showcase', userId))
+  return data.slots || []
+}
+
+export async function setShowcaseSlot(userId, slotIndex, achievementId) {
+  return apiJson(withUser('/api/achievement/showcase', userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slot_index: slotIndex, achievement_id: achievementId }),
+  })
+}
+
 // ── 开发者工具（JNAO_DEV_MODE=1）──
 
 export async function fetchDevTrainingStatus(userId) {
