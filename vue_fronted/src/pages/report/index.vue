@@ -190,6 +190,9 @@
 
         <!-- ══ Actions ══ -->
         <view class="actions">
+          <view v-if="isChildReport" class="btn-kid-preview" @tap="openKidReport">
+            <text>🎨 预览儿童版报告</text>
+          </view>
           <view v-if="testType==='孩子' && !isBackup" class="btn-outline" @tap="reTest">深度校准（备用卷）</view>
           <view class="btn-solid" :style="{ background: talentColor }" @tap="goBack">重新测试</view>
         </view>
@@ -231,6 +234,7 @@ const TALENT_BG_FIGS = { "学者":"/static/talent-xuezhe.png","思者":"/static/
 
 const loading = ref(true)
 const report = ref(null)
+const reportId = ref('')
 const testType = ref('成人') // '成人' | '孩子'，由测评 type 决定
 const isBackup = ref(false)
 const collapseOpen = ref({})
@@ -288,6 +292,7 @@ onMounted(async () => {
     }
     const json = await fetchAssessmentReport(uid, assessmentId)
     if (json.code !== 1) throw new Error('报告加载失败')
+    reportId.value = String(json.assessment_id || '')
     report.value = json.data
     // 以库内 test_type 为准，回退 report.type（0=成人 1=孩子）
     const rawType = json.test_type ?? json.data?.type
@@ -701,6 +706,12 @@ async function openVideo() {
 function closeTalentVideo() { showTalentVideo.value = false }
 function reTest() { goBack() }
 
+function openKidReport() {
+  if (reportId.value) {
+    uni.navigateTo({ url: `/pages/report-kid/index?assessment_id=${reportId.value}` })
+  }
+}
+
 const isChildReport = computed(() => testType.value === '孩子')
 /** 远端目前仅有家长/成人旧版 H5；孩子卷不误链成人页 */
 const canOpenOldReport = computed(() => !isChildReport.value && !!report.value?.id)
@@ -803,7 +814,8 @@ function openOldReport() {
 .actions { display:flex; flex-direction:column; gap:10px; padding:0 0 40px; align-items:center; }
 .btn-outline { width:100%; max-width:300px; padding:12px; text-align:center; border:1px solid #fbbf24; border-radius:14px; background:rgba(251,191,36,0.06); color:#f59e0b; font-size:15px; font-weight:500; cursor:pointer; }
 .btn-solid { width:100%; max-width:300px; padding:12px; text-align:center; border-radius:14px; color:#fff; font-size:15px; font-weight:500; cursor:pointer; }
-.btn-outline:active, .btn-solid:active { opacity:0.8; }
+.btn-kid-preview { width:100%; max-width:300px; padding:12px; text-align:center; border:1.5px solid #c4b5fd; border-radius:14px; background:rgba(139,92,246,0.04); color:#7c3aed; font-size:14px; font-weight:500; cursor:pointer; }
+.btn-outline:active, .btn-solid:active, .btn-kid-preview:active { opacity:0.8; }
 
 .radar-wrap, .state-icon-wrap { text-align:center; padding-bottom:8px; }
 .mood-wrap { text-align:center; }

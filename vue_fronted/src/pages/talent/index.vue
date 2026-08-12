@@ -226,7 +226,11 @@ async function loadHistory() {
 
 function viewHistory(h) {
   showHistory.value = false
-  if (h.id) uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
+  if (h.id) {
+    const isChild = h.test_type === 1 || h.test_type === '1'
+    const path = isChild ? '/pages/report-kid/index' : '/pages/report/index'
+    uni.navigateTo({ url: `${path}?assessment_id=${h.id}` })
+  }
 }
 
 function confirmDeleteHistory(h) {
@@ -490,7 +494,10 @@ async function doSubmitReport() {
     if (json.code !== 1) throw new Error('报告生成失败')
     await loadHistory()
     const aid = json.assessment_id
-    let url = `/pages/report/index?assessment_id=${aid}`
+    const isChild = testType.value === '孩子'
+    let url = isChild
+      ? `/pages/report-kid/index?assessment_id=${aid}`
+      : `/pages/report/index?assessment_id=${aid}`
     if (json.talent_conflict) {
       url += `&talent_conflict=1&current_talent=${encodeURIComponent(json.current_talent || '')}`
     }
@@ -543,6 +550,10 @@ function goBack() {
 onLoad((opts) => {
   fromOnboarding.value = opts?.from === 'onboarding'
   studentTypeFromOnboarding.value = opts?.student_type || 'new'
+  if (opts?.type === 'child') {
+    testType.value = '孩子'
+    phase.value = 'confirm'
+  }
 })
 
 // Watch for question change → restart countdown
