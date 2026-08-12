@@ -2,9 +2,9 @@
 # 关键：CSP 必须写在 location / 里，不能只写在 server { } 顶层！
 # 原因：location 里一旦有 add_header / 反代，server 级的 add_header 不会继承到 HTML 响应。
 #
-# 媒体播放（推荐）：.env.production 设 SITE_DOMAIN + OSS_MEDIA_DIRECT_REDIRECT=1，
-# 后端 302 到同域 /api/media/oss/…，不直连 OSS，CSP media-src 'self' 即可。
-# 若仍用 OSS 直链（SAME_ORIGIN=0），则 media-src 须含 OSS 域名（见下方 CSP）。
+# 生产（jnaosoft.cn）：CSP 已在宝塔 location / 配好 media-src 含 OSS 域名时，用直跳 OSS：
+#   OSS_MEDIA_DIRECT_REDIRECT=1  +  OSS_MEDIA_SAME_ORIGIN_CACHE=0
+# 同域 /api/media/oss/ 缓存为备选（CSP 未改好时），见 docs/运维与发版.md
 #
 # 编辑文件（二选一）：
 #   /www/server/panel/vhost/nginx/proxy/jnaosoft.cn/*.conf
