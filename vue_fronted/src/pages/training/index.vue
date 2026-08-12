@@ -808,12 +808,12 @@
           <text class="player-title">{{ mediaPlayerTitle }}</text>
           <view class="player-close" @click="closeMedia">✕</view>
         </view>
-        <view class="player-controls">
+        <view v-if="mediaPlayer.type === 'audio'" class="player-controls">
           <view class="player-ctrl-left">
-            <text class="player-time-label">{{ mediaPlayer.type === 'video' ? videoTimeLabel : audioTimeLabel }}</text>
+            <text class="player-time-label">{{ audioTimeLabel }}</text>
           </view>
           <view class="player-ctrl-center">
-            <view v-if="mediaPlayer.type === 'audio'" class="player-ctrl-btn sm" @click="rewindAudioTen">
+            <view class="player-ctrl-btn sm" @click="rewindAudioTen">
               <text>⏪</text>
             </view>
             <view class="player-ctrl-btn" @click="toggleMediaPlay">
@@ -821,10 +821,10 @@
             </view>
           </view>
           <view class="player-ctrl-right">
-            <text class="player-time-label">{{ mediaPlayer.type === 'video' ? videoDurationLabel : audioDurationLabel }}</text>
+            <text class="player-time-label">{{ audioDurationLabel }}</text>
           </view>
         </view>
-        <text class="media-listen-hint">{{ mediaPlayerHint }}</text>
+        <text v-if="mediaPlayer.type === 'audio'" class="media-listen-hint">{{ mediaPlayerHint }}</text>
       </view>
     </view>
 <!-- 已打卡卡片详情 / 页内编辑 -->
