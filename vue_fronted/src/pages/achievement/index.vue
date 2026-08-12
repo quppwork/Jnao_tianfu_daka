@@ -11,43 +11,12 @@
     <scroll-view class="body" scroll-y :show-scrollbar="false" :enhanced="true">
       <!-- 骨架屏 -->
       <view v-if="loading" class="skeleton">
-        <view class="sk-header"><view class="sk-line w40"></view><view class="sk-line w60"></view></view>
-        <view class="sk-stats"><view v-for="i in 4" :key="'s'+i" class="sk-stat"></view></view>
+        <view class="sk-actions"><view class="sk-action"></view><view class="sk-action"></view></view>
         <view class="sk-title"></view>
-        <view class="sk-badges"><view v-for="i in 8" :key="'b'+i" class="sk-badge"></view></view>
+        <view class="sk-badges"><view v-for="i in 6" :key="'b'+i" class="sk-badge"></view></view>
       </view>
 
       <template v-else>
-        <!-- 顶部统计卡片 -->
-        <view class="stats-card">
-          <view class="stats-header">
-            <text class="stats-title">我的成就</text>
-            <text class="stats-subtitle">点亮勋章，见证成长</text>
-          </view>
-          <view class="stats-grid">
-            <view class="stat-item">
-              <text class="stat-num">{{ stats.claimed || 0 }}</text>
-              <text class="stat-label">已获得</text>
-            </view>
-            <view class="stat-item highlight">
-              <text class="stat-num">{{ stats.ready || 0 }}</text>
-              <text class="stat-label">可领取</text>
-            </view>
-            <view class="stat-item">
-              <text class="stat-num">{{ stats.locked || 0 }}</text>
-              <text class="stat-label">未解锁</text>
-            </view>
-            <view class="stat-item">
-              <text class="stat-num">{{ stats.total || 0 }}</text>
-              <text class="stat-label">总勋章</text>
-            </view>
-          </view>
-          <view class="progress-bar">
-            <view class="progress-fill" :style="{ width: progressPercent + '%' }"></view>
-          </view>
-          <text class="progress-text">完成度 {{ progressPercent }}%</text>
-        </view>
-
         <!-- 快捷入口 -->
         <view class="quick-actions">
           <view class="action-btn" @click="goShowcase">
@@ -74,7 +43,7 @@
             @click="activeTab = tab.key"
           >
             <text>{{ tab.name }}</text>
-            <view v-if="tab.count" class="tab-badge">{{ tab.count }}</view>
+            <view v-if="tab.hasReady" class="tab-dot"></view>
           </view>
         </view>
 
@@ -99,9 +68,7 @@
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                 </svg>
               </view>
-              <view v-if="item.status === 'ready'" class="ready-badge">
-                <text>可领取</text>
-              </view>
+              <view v-if="item.status === 'ready'" class="ready-dot"></view>
             </view>
             <text class="medal-name">{{ item.name }}</text>
             <text class="medal-title">{{ item.title }}</text>
@@ -149,28 +116,21 @@ import AchievementDetail from './components/AchievementDetail.vue'
 
 const loading = ref(true)
 const items = ref([])
-const stats = ref({})
 const activeTab = ref('all')
 const detailVisible = ref(false)
 const selectedAchievement = ref(null)
 
 const tabs = computed(() => [
-  { key: 'all', name: '全部', count: 0 },
-  { key: 'streak', name: '坚持', count: items.value.filter(i => i.category === 'streak').length },
-  { key: 'skill', name: '技能', count: items.value.filter(i => i.category === 'skill').length },
-  { key: 'talent', name: '天赋', count: items.value.filter(i => i.category === 'talent').length },
-  { key: 'milestone', name: '里程碑', count: items.value.filter(i => i.category === 'milestone').length },
+  { key: 'all', name: '全部', count: 0, hasReady: items.value.some(i => i.status === 'ready') },
+  { key: 'streak', name: '坚持', count: 0, hasReady: items.value.some(i => i.category === 'streak' && i.status === 'ready') },
+  { key: 'skill', name: '技能', count: 0, hasReady: items.value.some(i => i.category === 'skill' && i.status === 'ready') },
+  { key: 'talent', name: '天赋', count: 0, hasReady: items.value.some(i => i.category === 'talent' && i.status === 'ready') },
+  { key: 'milestone', name: '里程碑', count: 0, hasReady: items.value.some(i => i.category === 'milestone' && i.status === 'ready') },
 ])
 
 const filteredAchievements = computed(() => {
   if (activeTab.value === 'all') return items.value
   return items.value.filter(i => i.category === activeTab.value)
-})
-
-const progressPercent = computed(() => {
-  const total = stats.value.total || 0
-  const claimed = stats.value.claimed || 0
-  return total > 0 ? Math.round((claimed / total) * 100) : 0
 })
 
 async function loadData() {
@@ -181,7 +141,6 @@ async function loadData() {
     await checkAchievements(uid).catch(() => {})
     const data = await fetchAchievementList(uid)
     items.value = data.items
-    stats.value = data.stats
   } catch (e) {
     console.error('加载成就失败:', e)
     uni.showToast({ title: '加载失败', icon: 'none' })
@@ -245,77 +204,8 @@ onMounted(loadData)
 .body *::-webkit-scrollbar,
 .body::-webkit-scrollbar { display:none; width:0; height:0; }
 
-/* 统计卡片 */
-.stats-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 20px;
-  padding: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
-}
-.stats-header {
-  margin-bottom: 16px;
-}
-.stats-title {
-  color: #fff;
-  font-size: 20px;
-  font-weight: 700;
-  display: block;
-}
-.stats-subtitle {
-  color: rgba(255,255,255,0.8);
-  font-size: 12px;
-  display: block;
-  margin-top: 4px;
-}
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.stat-item {
-  text-align: center;
-  background: rgba(255,255,255,0.15);
-  border-radius: 12px;
-  padding: 12px 8px;
-  backdrop-filter: blur(10px);
-}
-.stat-item.highlight {
-  background: rgba(255, 215, 0, 0.25);
-  border: 1px solid rgba(255, 215, 0, 0.4);
-}
-.stat-num {
-  color: #fff;
-  font-size: 24px;
-  font-weight: 800;
-  display: block;
-}
-.stat-label {
-  color: rgba(255,255,255,0.85);
-  font-size: 11px;
-  display: block;
-  margin-top: 4px;
-}
-.progress-bar {
-  height: 6px;
-  background: rgba(255,255,255,0.2);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #ffd700, #ffed4e);
-  border-radius: 3px;
-  transition: width 0.6s ease;
-}
-.progress-text {
-  color: rgba(255,255,255,0.9);
-  font-size: 12px;
-  text-align: center;
-  display: block;
-}
+/* 统计卡片（已隐藏） */
+.stats-card { display: none; }
 
 /* 快捷入口 */
 .quick-actions {
@@ -386,16 +276,18 @@ onMounted(loadData)
   color: #fff;
   border-color: var(--accent);
 }
-.tab-badge {
+.tab-dot {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  background: #f59e0b;
-  color: #fff;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-weight: 600;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+.tab-item.active .tab-dot {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* 勋章网格 */
@@ -460,13 +352,17 @@ onMounted(loadData)
   background: var(--accent-bg);
   color: var(--accent);
 }
-.ready-badge {
-  background: #f59e0b;
-  color: #fff;
-  font-size: 10px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
+.ready-dot {
+  width: 10px;
+  height: 10px;
+  background: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--bg-card);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
 }
 .medal-name {
   color: var(--text);
@@ -530,17 +426,12 @@ onMounted(loadData)
 
 /* 骨架屏 */
 .skeleton { padding: 0; }
-.sk-header { background:var(--bg-card); border-radius:20px; padding:20px; margin-bottom:16px; }
-.sk-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
-.sk-stat { height:60px; background:var(--bg-card); border-radius:12px; }
+.sk-actions { display:flex; gap:12px; margin-bottom:16px; }
+.sk-action { flex:1; height:72px; background:var(--bg-card); border-radius:16px; }
 .sk-title { width:80px; height:15px; background:var(--bg-card); border-radius:6px; margin:0 0 12px; }
 .sk-badges { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
 .sk-badge { height:180px; border-radius:16px; background:var(--bg-card); }
-.sk-line { height:12px; background:var(--bg); border-radius:4px; }
-.sk-line.w40 { width:40%; }
-.sk-line.w60 { width:60%; margin-top:8px; }
-.skeleton .sk-header *,
-.skeleton .sk-stat,
+.skeleton .sk-action,
 .skeleton .sk-title,
 .skeleton .sk-badge { animation: skPulse 1.4s ease-in-out infinite; }
 @keyframes skPulse { 0%,100% { opacity:0.3; } 50% { opacity:0.7; } }
