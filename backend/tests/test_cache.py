@@ -19,5 +19,4 @@ def test_cache_noop_without_redis(monkeypatch):
 def test_key_helpers():
     assert cache_mod.key_profile(7) == "jnao:profile:7"
     assert cache_mod.key_train_today(3, date(2026, 7, 3)) == "jnao:train:today:3:2026-07-03"
-    assert cache_mod.key_achievement_list(9) == "jnao:ach:list:9"
     assert cache_mod.key_guide_bootstrap(4, "2026-08-13") == "jnao:guide:boot:4:2026-08-13"

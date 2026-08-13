@@ -64,7 +64,6 @@ def _cache_set(child_user_id: int, plan_date: date, data: dict) -> None:
 
 def _invalidate_after_checkin_change(child_user_id: int, plan_date: date) -> None:
     from app.core.cache import (
-        invalidate_user_achievement,
         invalidate_user_growth,
         invalidate_user_guide,
         invalidate_user_training,
@@ -73,7 +72,6 @@ def _invalidate_after_checkin_change(child_user_id: int, plan_date: date) -> Non
     invalidate_plan_cache(child_user_id, plan_date)
     invalidate_user_growth(child_user_id)
     invalidate_user_training(child_user_id, plan_date=plan_date)
-    invalidate_user_achievement(child_user_id)
     invalidate_user_guide(child_user_id)
 
 

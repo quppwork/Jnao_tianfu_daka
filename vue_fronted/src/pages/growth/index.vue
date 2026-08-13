@@ -77,24 +77,6 @@
         <text v-else class="path-hint top">已达成最高荣誉</text>
       </view>
 
-      <!-- 成就系统入口 -->
-      <view class="achievement-entry" @click="goAchievement">
-        <view class="entry-icon">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-          </svg>
-        </view>
-        <view class="entry-content">
-          <text class="entry-title">成就殿堂</text>
-          <text class="entry-desc">解锁勋章，收集称号，展示荣耀</text>
-        </view>
-        <view class="entry-arrow">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        </view>
-      </view>
-
       <!-- 3. 荣誉徽章 -->
       <view class="sec-title"><view class="sec-ic" v-html="ic('medal')"></view><text>荣誉徽章</text></view>
       <view class="badge-grid">
@@ -183,7 +165,6 @@ import {
   fetchGrowthTimeline,
   fetchGrowthSummary,
   fetchGrowthShare,
-  prefetchAchievementList,
 } from '@/utils/userApi.js'
 
 // 与后端 growth_service.get_tier_honor 的 tier 边界保持一致
@@ -338,11 +319,6 @@ function goTrain() {
   uni.navigateTo({ url: '/pages/training/index' })
 }
 
-function goAchievement() {
-  ensureChildUser().then((uid) => prefetchAchievementList(uid)).catch(() => {})
-  uni.navigateTo({ url: '/pages/achievement/index' })
-}
-
 function tlIcon(e) { return ic(TL_ICON_NAMES[e.type] || 'calendar', 11) }
 
 function badgeProgress(b) {
@@ -359,7 +335,6 @@ async function loadGrowth() {
   loading.value = true
   try {
     const uid = await ensureChildUser()
-    prefetchAchievementList(uid)
     const [b, t, s, sh] = await Promise.all([
       fetchGrowthBadges(uid),
       fetchGrowthTimeline(uid),
@@ -467,57 +442,6 @@ async function copyShare() {
 .fresh-btn { background:var(--accent); border-radius:999px; padding:8px 16px; flex-shrink:0; cursor:pointer; }
 .fresh-btn text { color:#fff; font-size:12px; font-weight:600; }
 .fresh-btn:active { opacity:0.85; }
-
-/* 成就系统入口 */
-.achievement-entry {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 20px;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
-}
-.achievement-entry:active {
-  transform: scale(0.98);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
-}
-.entry-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  flex-shrink: 0;
-}
-.entry-content {
-  flex: 1;
-  min-width: 0;
-}
-.entry-title {
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  display: block;
-}
-.entry-desc {
-  color: rgba(255,255,255,0.85);
-  font-size: 12px;
-  display: block;
-  margin-top: 2px;
-}
-.entry-arrow {
-  color: rgba(255,255,255,0.8);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-}
 
 /* 2. 进阶之路 */
 .path-card { background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:16px 14px; margin-bottom:20px; box-sizing:border-box; }

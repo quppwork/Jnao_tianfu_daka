@@ -133,27 +133,6 @@
         "navigationBarTitleText": "成长里程碑",
         "navigationStyle": "custom"
       }
-    },
-    {
-      "path": "pages/achievement/index",
-      "style": {
-        "navigationBarTitleText": "成就殿堂",
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/achievement/showcase",
-      "style": {
-        "navigationBarTitleText": "荣誉展柜",
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/achievement/titles",
-      "style": {
-        "navigationBarTitleText": "称号管理",
-        "navigationStyle": "custom"
-      }
     }
   ],
   "globalStyle": {
