@@ -184,7 +184,7 @@ class TrainingPlan(Base):
     content_index: Mapped[int] = mapped_column(Integer, default=0)
     media_exhausted: Mapped[int] = mapped_column(Integer, default=0)
     plan_customized: Mapped[int] = mapped_column(Integer, default=0)
-    # Agent 辅助排课调试信息（理由/草案等）；正式 UI 不展示
+    # 历史列：曾用于 Agent 辅助排课调试；功能已下线，保留兼容旧库
     schedule_assist_json: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     generated_at: Mapped[datetime | None] = mapped_column(DateTime)

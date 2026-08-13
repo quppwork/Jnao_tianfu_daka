@@ -109,15 +109,27 @@ python -m pytest tests/smoke_test.py -v --tb=short
 | 文档 | 说明 |
 |------|------|
 | **[产品规格](docs/产品规格.md)** | 产品定位 + 四大模块 |
-| **[项目结构说明](docs/项目结构说明.md)** | 目录结构 + 文档索引 |
 | **[前端后端API文档](docs/前端后端API文档.md)** | 按页面编排的 API + 后端逻辑 |
 | **[数据闭环与预留说明](docs/数据闭环与预留说明.md)** | 已闭环 / 预留字段 / 明确不做 |
 | **[运维与发版](docs/运维与发版.md)** | boot_id / 维护 / 发版清单 |
 | **[权重排课方案](docs/权重排课方案.md)** | 训练引擎规格（Decision Tree / 权重） |
 | **[体系架构设计](docs/体系架构设计.md)** | 训练系统架构：状态机 + 引擎映射 |
 | **[微信与家长登录方案](docs/微信与家长登录方案.md)** | 家长端微信登录设计 |
-| **[天赋测试](docs/功能模块文档/天赋测试.md)** | 6 阶段状态机 + API |
-| **[今日训练](docs/功能模块文档/今日训练.md)** | 打卡模块 UX + Part 轮换 |
-| **[学科答疑](docs/功能模块文档/学科答疑.md)** | 分科 AI 辅导设计 |
-| **[脑力奥秘音频资源](docs/data/脑力奥秘-音频资源说明.md)** | 音频资源说明 |
+| **[天赋测试](docs/功能模块文档/天赋测试.md)** | 测评流程 / 报告 |
+| **[今日训练](docs/功能模块文档/今日训练.md)** | 打卡 UX + Part 轮换（引擎见权重排课） |
+| **[学科答疑](docs/功能模块文档/学科答疑.md)** | 分科 AI 辅导 |
+| **[学习监督](docs/功能模块文档/学习监督.md)** | B 端监督（暂未开发 backlog） |
+| **[企微运营](docs/ops/)** | 企业微信客户/账单等运营说明 |
+| `docs/data/` | catalog / OSS 索引（导入用，非 prose） |
 | `docs/过期文件/` | 已收口方案与历史排查（gitignore，仅本地） |
+| `backend/app/agents/README.md` | Guide / QA Agent 边界 |
+
+### 后端要点（摘自原「项目结构说明」）
+
+| 路径 | 说明 |
+|------|------|
+| `backend/main.py` | FastAPI 入口；`boot_id`；请求日志 |
+| `backend/app/core/runtime.py` | 维护模式 / force_logout / 开发强制重登 |
+| `backend/app/agents/guide/` · `qa/` | 引导 / 答疑 Agent（互不调用 runner） |
+| `vue_fronted/src/utils/devBootAuth.js` | 开发态：后端重启清登录 |
+| `vue_fronted/src/utils/appUpdate.js` | build_id 刷新 + 维护遮罩 |
