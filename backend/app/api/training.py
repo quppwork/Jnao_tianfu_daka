@@ -210,6 +210,7 @@ def report_watch_progress(
             item_id,
             watched_sec=req.watched_sec,
             duration_sec=req.duration_sec,
+            media=req.media,
         )
     except TrainingError as e:
         raise HTTPException(e.status_code, e.message) from e

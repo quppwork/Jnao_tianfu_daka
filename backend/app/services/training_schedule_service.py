@@ -31,6 +31,7 @@ from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
     _plan_to_response,
+    _watch_pct,
     create_plan_for_schedule,
 )
 from app.services.training_day import get_training_day, is_new_day_ready
@@ -73,8 +74,7 @@ def _plan_has_started(db: Session, plan: TrainingPlan) -> bool:
     if rec:
         return True
     for it in plan.items:
-        wp = it.watch_progress if isinstance(it.watch_progress, dict) else {}
-        if float(wp.get("pct") or 0) > 0:
+        if _watch_pct(it) > 0:
             return True
     return False
 
@@ -413,8 +413,10 @@ async def schedule_training_by_duration(
         raise TrainingError("今日方案生成失败", 500)
     talent = resolve_effective_talent(db, child_user_id)
     talent_code = talent.get("talent_code") if talent else None
+    started = _plan_has_started(db, plan)
     if plan.items and talent_code:
-        if repair_plan_media_items(db, plan, talent_code):
+        # 已开练只补缺音频，不改配套视频，避免把正在练的方案改掉
+        if repair_plan_media_items(db, plan, talent_code, attach_videos=not started):
             db.commit()
             plan = _get_plan_by_date(db, child_user_id, plan_date)
     if plan.items:

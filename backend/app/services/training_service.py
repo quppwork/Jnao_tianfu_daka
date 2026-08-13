@@ -173,7 +173,9 @@ def _refresh_volatile_plan_fields(
     out.update(training_day_meta(now, plan_date=plan_date))
     plan = _resolve_today_plan(db, child_user_id, plan_date)
     if plan:
+        _heal_started_plan_missing_window(db, child_user_id, plan)
         out.update(_build_timer_fields(db, child_user_id, plan, now))
+        out["pending_confirm"] = _pending_confirm_flag(db, plan, out.get("timer_phase"))
     return out
 
 
@@ -476,19 +478,23 @@ def _item_meta_type(item: TrainingItem) -> str:
 
 
 def item_requires_media_listen(item: TrainingItem) -> bool:
-    """有可播放音/视频且非多元感知/占位时，打卡前须听完/看完。"""
+    """有可播放音频且非多元感知/占位时，打卡前须听满。纯视频不限制进度。"""
     t = _item_meta_type(item)
     if t in ("perception", "placeholder"):
         return False
-    return bool(item.video_url or item.audio_url)
+    return bool(item.audio_url)
 
 
 def _watch_pct(item: TrainingItem) -> float:
     wp = item.watch_progress if isinstance(item.watch_progress, dict) else {}
+    audio = wp.get("audio") if isinstance(wp.get("audio"), dict) else None
+    if audio is not None:
+        return float(audio.get("pct") or 0)
     return float(wp.get("pct") or 0)
 
 
 def is_item_media_complete(item: TrainingItem) -> bool:
+    """打卡门槛：有音频须听满 90%；视频进度不计入、也不拦截。"""
     if not item_requires_media_listen(item):
         return True
     return _watch_pct(item) >= WATCH_COMPLETE_PCT
@@ -558,6 +564,73 @@ def _item_to_dict(
         "video_complete": is_item_video_complete(item),
         "media_hidden": hide_media,
     }
+
+
+def _plan_session_started(db: Session, plan: TrainingPlan | None) -> bool:
+    """已真正开练：完成过、打过卡、或有观看进度。不含「仅排课未确认」。"""
+    if not plan:
+        return False
+    if plan.status == "completed":
+        return True
+    if _plan_has_any_checkin(db, plan):
+        return True
+    for it in plan.items:
+        if _watch_pct(it) > 0:
+            return True
+    return False
+
+
+def _pending_confirm_flag(db: Session | None, plan: TrainingPlan | None, timer_phase: str | None) -> bool:
+    """已排课、未建计时窗口、未开练 → 待确认今日方案。"""
+    if not plan or timer_phase != "setup":
+        return False
+    if plan.status == "completed":
+        return False
+    if not _has_plan_content(plan):
+        return False
+    if int(plan.planned_minutes or 0) < 20:
+        return False
+    if db is not None and _plan_session_started(db, plan):
+        return False
+    return True
+
+
+def _heal_started_plan_missing_window(
+    db: Session, child_user_id: int, plan: TrainingPlan | None
+) -> bool:
+    """旧流程已开练但没有 TrainingWindow 时补窗口，避免被新「待确认」流程踢回上锁。"""
+    if not plan or not _has_plan_content(plan):
+        return False
+    if plan.status == "completed" or getattr(plan, "media_exhausted", 0):
+        return False
+    minutes = int(plan.planned_minutes or 0)
+    if minutes < 20:
+        return False
+    now = _user_now(db, child_user_id)
+    if is_plan_globally_cutoff(plan, now=now):
+        return False
+    today = _today_for(db, child_user_id)
+    if plan.plan_date != today:
+        return False
+    if not _plan_session_started(db, plan):
+        return False
+    existing = db.scalar(
+        select(TrainingWindow).where(
+            TrainingWindow.child_user_id == child_user_id,
+            TrainingWindow.train_date == today,
+        )
+    )
+    if existing:
+        return False
+    end = now + timedelta(minutes=minutes)
+    set_training_window(
+        db,
+        child_user_id,
+        now.strftime("%H:%M:%S"),
+        end.strftime("%H:%M:%S"),
+        train_date=today,
+    )
+    return True
 
 
 def _build_timer_fields(
@@ -698,6 +771,7 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "optional_offers": optional_offers,
         "day_locked": locked,
         "globally_cutoff": globally_cutoff,
+        "pending_confirm": _pending_confirm_flag(db, plan, timer_fields.get("timer_phase")),
         **meta,
         **timer_fields,
     }
@@ -824,12 +898,16 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
 
         ensure_supplementary_catalogs(db)
         talent_code = talent.get("talent_code") if talent else None
-        if repair_plan_media_items(db, plan, talent_code):
+        started = _plan_session_started(db, plan)
+        # 未开练可挂新视频；已开练只补缺音频，避免改掉正在练的方案
+        if repair_plan_media_items(db, plan, talent_code, attach_videos=not started):
             db.commit()
             plan = _resolve_today_plan(db, child_user_id, plan_date)
         if plan and plan.items and is_technical_schedule_note(plan.report_text):
             plan.report_text = build_coach_text_for_plan(plan)
             db.commit()
+        if plan:
+            _heal_started_plan_missing_window(db, child_user_id, plan)
         sync_media_exhausted_from_window(db, child_user_id, plan)
         plan = _resolve_today_plan(db, child_user_id, plan_date)
         result = _plan_to_response(plan, db=db)
@@ -887,6 +965,7 @@ def empty_today_plan_response(
         "timer_end_at": None,
         "timer_planned_seconds": None,
         "timer_remaining_seconds": None,
+        "pending_confirm": False,
         **meta,
     }
 
@@ -2001,6 +2080,7 @@ def record_watch_progress(
     *,
     watched_sec: float,
     duration_sec: float | None = None,
+    media: str | None = None,
 ) -> dict:
     item = db.get(TrainingItem, item_id)
     if not item:
@@ -2014,17 +2094,33 @@ def record_watch_progress(
     watched = max(0.0, float(watched_sec))
     duration = max(0.0, float(duration_sec or 0))
     prev = item.watch_progress if isinstance(item.watch_progress, dict) else {}
-    peak_watched = max(float(prev.get("watched_sec") or 0), watched)
+    kind = (media or "audio").strip().lower()
+    if kind not in ("audio", "video"):
+        kind = "audio"
+
+    slot = prev.get(kind) if isinstance(prev.get(kind), dict) else {}
+    if kind == "audio":
+        peak_watched = max(float(slot.get("watched_sec") or prev.get("watched_sec") or 0), watched)
+    else:
+        peak_watched = max(float(slot.get("watched_sec") or 0), watched)
     if duration > 0:
         pct = min(100.0, round(peak_watched / duration * 100, 1))
     else:
-        pct = float(prev.get("pct") or 0)
+        pct = float(slot.get("pct") or (prev.get("pct") if kind == "audio" else 0) or 0)
 
-    item.watch_progress = {
+    chunk = {
         "watched_sec": round(peak_watched, 1),
-        "duration_sec": round(duration, 1) if duration > 0 else prev.get("duration_sec"),
+        "duration_sec": round(duration, 1) if duration > 0 else slot.get("duration_sec"),
         "pct": pct,
     }
+    next_wp = dict(prev)
+    next_wp[kind] = chunk
+    if kind == "audio":
+        # 顶层 pct 仍表示音频进度，供旧前端/打卡门槛使用
+        next_wp["watched_sec"] = chunk["watched_sec"]
+        next_wp["duration_sec"] = chunk["duration_sec"]
+        next_wp["pct"] = chunk["pct"]
+    item.watch_progress = next_wp
     db.commit()
     db.refresh(item)
     if plan:

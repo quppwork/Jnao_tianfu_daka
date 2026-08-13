@@ -30,6 +30,7 @@ class TrainingItemOut(BaseModel):
 class WatchProgressRequest(BaseModel):
     watched_sec: float = Field(..., ge=0)
     duration_sec: float | None = Field(None, ge=0)
+    media: str | None = Field(None, description="audio|video；缺省按音频计入打卡进度")
 
 
 class WatchProgressResponse(BaseModel):
@@ -87,6 +88,7 @@ class TrainingTodayResponse(BaseModel):
     timer_end_at: str | None = None
     timer_planned_seconds: int | None = None
     timer_remaining_seconds: int | None = None
+    pending_confirm: bool = False
 
 
 class ScheduleRequest(BaseModel):

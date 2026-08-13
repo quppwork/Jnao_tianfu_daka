@@ -34,7 +34,7 @@
           <text class="plan-label">{{ timeCardTitle }}</text>
           <text v-if="timerPhase === 'running'" class="time-status-tag running">进行中</text>
           <text v-else-if="timerPhase === 'expired'" class="time-status-tag expired">已结束</text>
-          <text v-else-if="durationLocked && planJustGenerated" class="time-status-tag pending">待确认</text>
+          <text v-else-if="durationLocked && pendingConfirm" class="time-status-tag pending">待确认</text>
         </view>
 
         <view v-if="timerPhase === 'setup' && !durationLocked" class="time-setup">
@@ -64,6 +64,9 @@
         <view v-else-if="timerPhase === 'setup' && durationLocked" class="time-locked">
           <text class="time-locked-val">{{ lockedDurationLabel }}</text>
           <text class="time-setup-hint">{{ timeSetupHint }}</text>
+          <view v-if="pendingConfirm" class="btn-confirm-plan" style="margin-top:12px;" @click="confirmPlan">
+            <text>确认今日方案并开始训练</text>
+          </view>
         </view>
 
         <view v-else-if="timerPhase === 'running'" class="time-running">
@@ -150,7 +153,7 @@
       </view>
 
       <!-- Plan · 时间轴总览（生成方案后或计时开始后显示） -->
-      <view v-if="timerPhase !== 'setup' || planJustGenerated" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
+      <view v-if="timerPhase !== 'setup' || pendingConfirm" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
         <view class="plan-header">
           <text class="plan-label">📋 今日方案</text>
           <text v-if="talentLabel && !entryLoading && !scheduleLoading" class="plan-header-meta">{{ planHeaderMeta }}</text>
@@ -228,7 +231,7 @@
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
 
           <!-- 确认今日方案 -->
-          <view v-if="planJustGenerated" class="btn-confirm-plan" style="margin-bottom:12px;" @click="confirmPlan">
+          <view v-if="pendingConfirm" class="btn-confirm-plan" style="margin-bottom:12px;" @click="confirmPlan">
             <text>确认今日方案并开始训练</text>
           </view>
 
@@ -246,7 +249,7 @@
           </view>
 
           <!-- 🆕 选修环节 -->
-          <view v-if="(timerPhase !== 'setup' || planJustGenerated) && todayPlan?.plan_id" class="elective-toggles">
+          <view v-if="(timerPhase !== 'setup' || pendingConfirm) && todayPlan?.plan_id" class="elective-toggles">
             <text class="elective-section-label">🧩 选修环节</text>
             <view class="elective-toggle-item" v-for="es in electiveSkills" :key="es.skill">
               <text class="et-label">{{ es.label }}</text>
@@ -336,7 +339,7 @@
             <template v-if="!isPerceptionPhase(phase) && !phase.isElective">
             <view class="checkin-block" :class="{ locked: !isPhaseListenDone(phase) }">
               <view v-if="!isPhaseListenDone(phase)" class="checkin-lock-overlay">
-                <text class="checkin-lock-text">🔒 请先听完/看完音视频（{{ WATCH_DONE_PCT }}%）</text>
+                <text class="checkin-lock-text">🔒 请先听完音频（{{ WATCH_DONE_PCT }}%）</text>
               </view>
               <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
@@ -1070,6 +1073,12 @@ const durationLocked = computed(() => {
   const pm = Number(todayPlan.value?.planned_minutes || 0)
   return !!(todayPlan.value?.plan_id && pm >= MIN_TRAINING_MINUTES)
 })
+/** 已排课未开计时：本次刚生成，或服务端标记待确认 */
+const pendingConfirm = computed(() => {
+  if (timerPhase.value !== 'setup') return false
+  if (planJustGenerated.value) return true
+  return !!todayPlan.value?.pending_confirm
+})
 const timeCardTitle = computed(() => {
   if (timerPhase.value === 'running') return '⏰ 今日训练计时'
   if (timerPhase.value === 'expired') return '⏰ 今日训练'
@@ -1087,7 +1096,7 @@ const trainingHasStarted = computed(() => {
   if (timerPhase.value === 'running' || timerPhase.value === 'expired') return true
   if (Object.keys(phaseRecordIds.value).length > 0) return true
   const items = todayPlan.value?.items || []
-  return items.some(i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0)
+  return items.some(i => i.checkin_status === 'done' || getItemWatchPct(i) > 0)
 })
 const planEmptyHint = computed(() => {
   if (needAssessment.value) return '完成天赋测评后可开始训练'
@@ -1096,7 +1105,7 @@ const planEmptyHint = computed(() => {
 })
 const timeSetupHint = computed(() => {
   if (scheduleLoading.value) return '正在按设定时长生成训练内容…'
-  if (planJustGenerated.value) return '可在下方查看、编辑训练内容，确认后开始计时'
+  if (pendingConfirm.value) return '可在下方查看、编辑训练内容，确认后开始计时'
   if (durationLocked.value) return '时长已锁定，确认方案后开始计时'
   return '选择时长后点击「开始训练」，将按孩子情况分配今日内容'
 })
@@ -1345,13 +1354,30 @@ function applyTimerFromServer(data) {
   const phase = data.timer_phase || 'setup'
 
   if (phase === 'setup') {
+    const local = readTimerData()
+    const localEnd = Number(local?.endAt)
+    const localLeft = localEnd ? remainingSecondsUntil(localEnd) : 0
+    // 待确认方案不要用本地残留计时直接开跑，否则会跳过「确认并开始」
+    if (local?.phase === 'running' && localLeft > 0 && !data.pending_confirm) {
+      plannedDurationSec.value = Number(local.plannedSec) || data.timer_planned_seconds || (data.planned_minutes || 0) * 60 || localLeft
+      remainingSeconds.value = localLeft
+      timerPhase.value = 'running'
+      persistTimer(localEnd, plannedDurationSec.value, data.plan_id || local.planId)
+      clearTimerTick()
+      timerTickId = setInterval(tickTrainingTimer, 1000)
+      const startMs = localEnd - (plannedDurationSec.value || localLeft) * 1000
+      ensureChildUser()
+        .then((uid) => setTrainingWindow(uid, formatWindowTime(startMs), formatWindowTime(localEnd)))
+        .catch(() => {})
+      return
+    }
     clearAllTimerKeysForUser()
     resetTimerToSetup()
     const items = todayPlan.value?.items || []
     const hasProgress = items.some(
-      i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0
+      i => i.checkin_status === 'done' || getItemWatchPct(i) > 0
     )
-    if (!hasProgress) {
+    if (!hasProgress && !data.pending_confirm) {
       showTraining.value = false
     }
     return
@@ -1445,7 +1471,11 @@ function restoreTrainingVisibility(data) {
     planJustGenerated.value = false
     return
   }
-  if (items.some(i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0)) {
+  if (plan.pending_confirm) {
+    planJustGenerated.value = true
+    return
+  }
+  if (items.some(i => i.checkin_status === 'done' || getItemWatchPct(i) > 0)) {
     showTraining.value = true
     planJustGenerated.value = false
   }
@@ -2201,9 +2231,9 @@ const phaseRecordIds = ref({})
 
 async function confirmPlan() {
   // 确认方案后才开始计时；训练块在此之后解锁。
-  if (scheduleLoading.value || !planJustGenerated.value) {
+  if (scheduleLoading.value) return
+  if (!pendingConfirm.value && !planJustGenerated.value) {
     showTraining.value = true
-    planJustGenerated.value = false
     return
   }
   const plannedMinutes = todayPlan.value?.planned_minutes
@@ -2466,19 +2496,16 @@ function videoTitle(item) {
 function itemNeedsListen(item) {
   if (!item) return false
   if (item.item_type === 'perception' || item.item_type === 'placeholder') return false
-  return !!(item.audio_url || item.video_url)
+  return !!item.audio_url
 }
 
 function getItemWatchPct(item) {
-  if (!item?.id) return 0
-  const wp = watchProgressMap.value[item.id] || item.watch_progress || {}
-  return Number(wp.pct || 0)
+  return getMediaSlotProgress(item, 'audio').pct
 }
 
 function isItemListenDone(item) {
   if (!itemNeedsListen(item)) return true
   if (item.checkin_status === 'done') return true
-  if (item.video_complete) return true
   return getItemWatchPct(item) >= WATCH_DONE_PCT
 }
 
@@ -2538,6 +2565,7 @@ const mediaPlayerHint = computed(() => {
   if (mediaPlayer.value.type === 'video' && !videoPlaying.value && videoMetadataReady.value) {
     return '点击下方 ▶ 开始播放'
   }
+  if (mediaPlayer.value.type === 'video') return ''
   return `听满约 ${WATCH_DONE_PCT}% 后可解锁打卡`
 })
 
@@ -2615,19 +2643,45 @@ function resetVideoUiClock(initialSec = 0) {
   /* 保留兼容调用，UI 已直接读 currentTime */
 }
 
+function getMediaSlotProgress(item, mediaType = 'audio') {
+  const remote = (!item?.id)
+    ? {}
+    : (watchProgressMap.value[item.id] || item.watch_progress || {})
+  if (mediaType === 'video') {
+    const v = remote.video && typeof remote.video === 'object' ? remote.video : null
+    if (v) {
+      return {
+        watched_sec: Math.max(0, Number(v.watched_sec) || 0),
+        duration_sec: Math.max(0, Number(v.duration_sec) || 0),
+        pct: Math.max(0, Number(v.pct) || 0),
+      }
+    }
+    return { watched_sec: 0, duration_sec: 0, pct: 0 }
+  }
+  const a = remote.audio && typeof remote.audio === 'object' ? remote.audio : null
+  if (a) {
+    return {
+      watched_sec: Math.max(0, Number(a.watched_sec) || 0),
+      duration_sec: Math.max(0, Number(a.duration_sec) || 0),
+      pct: Math.max(0, Number(a.pct) || 0),
+    }
+  }
+  return {
+    watched_sec: Math.max(0, Number(remote.watched_sec) || 0),
+    duration_sec: Math.max(0, Number(remote.duration_sec) || 0),
+    pct: Math.max(0, Number(remote.pct) || 0),
+  }
+}
+
 function getItemWatchProgress(item) {
   if (!item?.id) return {}
   const remote = watchProgressMap.value[item.id] || item.watch_progress || {}
-  const watched_sec = Math.max(0, Number(remote.watched_sec) || 0)
-  const duration_sec = Math.max(0, Number(remote.duration_sec) || 0)
-  const pct = duration_sec > 0
-    ? Math.min(100, Math.round(watched_sec / duration_sec * 1000) / 10)
-    : Math.max(0, Number(remote.pct) || 0)
-  return { ...remote, watched_sec, duration_sec, pct }
+  const audio = getMediaSlotProgress(item, 'audio')
+  return { ...remote, ...audio }
 }
 
-function getItemResumeSec(item) {
-  return Math.max(0, Number(getItemWatchProgress(item).watched_sec) || 0)
+function getItemResumeSec(item, mediaType = 'audio') {
+  return Math.max(0, Number(getMediaSlotProgress(item, mediaType).watched_sec) || 0)
 }
 
 function clearVideoResumePending() {
@@ -2689,7 +2743,7 @@ function applyVideoResume(el, force = false) {
   if (videoResumeApplied && !force) return true
   const resume = videoResumePendingSec > 0
     ? videoResumePendingSec
-    : getItemResumeSec(lastOpenedItem.value)
+    : getItemResumeSec(lastOpenedItem.value, 'video')
   if (resume <= 0.5) {
     clearVideoResumePending()
     videoResumeApplied = true
@@ -2827,6 +2881,7 @@ function lockMediaPlaybackRate(e) {
 
 function clampMediaForward(el, { silent = false } = {}) {
   if (!el) return false
+  if (mediaPlayer.value.type === 'video') return false
   const t = Number(el.currentTime) || 0
   const max = mediaMaxHeardSec.value
   if (isProgrammaticSeek()) {
@@ -2836,7 +2891,7 @@ function clampMediaForward(el, { silent = false } = {}) {
   if (t > max + MEDIA_SEEK_EPS) {
     el.currentTime = max
     if (!silent) {
-      uni.showToast({ title: '训练音视频不可快进', icon: 'none' })
+      uni.showToast({ title: '训练音频不可快进', icon: 'none' })
     }
     return true
   }
@@ -2850,10 +2905,15 @@ function onMediaSeeking(e) {
 
 async function flushWatchProgress() {
   const item = lastOpenedItem.value
-  if (!item?.id || !itemNeedsListen(item)) return
+  if (!item?.id) return
+  const mediaType = mediaPlayer.value.type === 'video' ? 'video' : 'audio'
+  if (mediaType === 'audio' && !itemNeedsListen(item)) return
   const el = activeMediaEl() || pinnedTrainingVideo
   const cached = getItemWatchProgress(item)
-  const cachedDur = Number(cached.duration_sec || 0)
+  const cachedSlot = mediaType === 'audio'
+    ? (cached.audio && typeof cached.audio === 'object' ? cached.audio : cached)
+    : (cached.video && typeof cached.video === 'object' ? cached.video : {})
+  const cachedDur = Number(cachedSlot.duration_sec || cached.duration_sec || 0)
   const durationSec = (el && el.duration) ? el.duration : (audioUiDuration.value || cachedDur || 0)
   const finalDur = durationSec > 0 ? durationSec : cachedDur
   if (finalDur <= 0 && mediaMaxHeardSec.value <= 0) return
@@ -2863,17 +2923,20 @@ async function flushWatchProgress() {
     : Math.max(mediaMaxHeardSec.value, fromEl)
   const pct = finalDur > 0
     ? Math.min(100, Math.round(watchedSec / finalDur * 1000) / 10)
-    : Number(cached.pct || 0)
+    : Number(cachedSlot.pct || cached.pct || 0)
   const wp = { watched_sec: watchedSec, duration_sec: finalDur || cachedDur, pct }
-  syncItemWatchProgress(item, wp)
-  if (item.video_complete !== undefined) {
-    item.video_complete = pct >= WATCH_DONE_PCT
+  if (mediaType === 'audio') {
+    syncItemWatchProgress(item, { ...cached, ...wp, audio: wp })
+    if (item.video_complete !== undefined) {
+      item.video_complete = pct >= WATCH_DONE_PCT
+    }
   }
   try {
     const uid = await ensureChildUser()
     const res = await postTrainingWatchProgress(uid, item.id, {
       watched_sec: watchedSec,
       duration_sec: finalDur > 0 ? finalDur : undefined,
+      media: mediaType,
     })
     if (res?.watch_progress) {
       syncItemWatchProgress(item, res.watch_progress)
@@ -2891,7 +2954,8 @@ function onMediaLoadedMetadata(e) {
   if (!el || !lastOpenedItem.value?.id) return
   lockMediaPlaybackRate({ target: el })
   if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
-  const resume = getItemResumeSec(lastOpenedItem.value)
+  const kind = mediaPlayer.value.type === 'video' ? 'video' : 'audio'
+  const resume = getItemResumeSec(lastOpenedItem.value, kind)
   mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
   if (mediaPlayer.value.type === 'video') {
     applyVideoResume(el)
@@ -3117,9 +3181,13 @@ function itemStepHint(item, phase) {
     return '📝 多元感知待同步，可先打卡'
   }
   if (isGlobalCutoff.value) return '🔒 训练日已截止'
-  if (isItemWatched(item)) return '✅ 已观看'
+  if (item.audio_url) {
+    if (isItemListenDone(item)) return '✅ 已听完'
+    const pct = getItemWatchPct(item)
+    if (pct > 0) return `已听 ${Math.round(pct)}% · 满 ${WATCH_DONE_PCT}% 可打卡`
+    return `▶ 约 ${item.duration_min || '?'} 分钟 · 听满 ${WATCH_DONE_PCT}% 可打卡`
+  }
   if (item.video_url) return '▶ 点击播放'
-  if (item.audio_url) return `▶ 约 ${item.duration_min || '?'} 分钟`
   return '暂无资源'
 }
 
@@ -3468,7 +3536,7 @@ function openPicker(block) {
     return
   }
   if (!isPhaseListenDone(phase)) {
-    uni.showToast({ title: `请先听完/看完音视频（约 ${WATCH_DONE_PCT}%）`, icon: 'none' })
+    uni.showToast({ title: `请先听完音频（约 ${WATCH_DONE_PCT}%）`, icon: 'none' })
     return
   }
   allowedAbility.value = phase.skillName || ''
@@ -3841,16 +3909,16 @@ async function openMediaItem(item, forceType) {
       return
     }
   }
-  const wp = getItemWatchProgress(item)
-  mediaMaxHeardSec.value = Number(wp.watched_sec || 0)
   audioPlaying.value = false
   videoPlaying.value = false
-  audioUiSec.value = mediaMaxHeardSec.value
-  audioUiDuration.value = Number(wp.duration_sec || 0)
 
   const openVideo = () => {
-    const resumeSec = Number(wp.watched_sec || 0)
-    const durSec = Number(wp.duration_sec || 0)
+    const slot = getMediaSlotProgress(item, 'video')
+    mediaMaxHeardSec.value = slot.watched_sec
+    audioUiSec.value = 0
+    audioUiDuration.value = 0
+    const resumeSec = slot.watched_sec
+    const durSec = slot.duration_sec
     videoResumePendingSec = resumeSec
     videoResumeApplied = false
     videoLoading.value = true
@@ -3870,6 +3938,10 @@ async function openMediaItem(item, forceType) {
     nextTick(() => prepareVideoAfterOpen(getTrainingVideoDom()))
   }
   const openAudio = () => {
+    const slot = getMediaSlotProgress(item, 'audio')
+    mediaMaxHeardSec.value = slot.watched_sec
+    audioUiSec.value = slot.watched_sec
+    audioUiDuration.value = slot.duration_sec
     const streamUrl = resolveTrainingStreamUrl(item.audio_url, uid)
     audioSrc.value = streamUrl
     audioTitle.value = item.title || '训练音频'
@@ -4110,12 +4182,22 @@ async function loadTodayPlan(silent = true) {
 
     if (
       result.data.timer_phase === 'setup'
-      && result.data.items?.length
-      && !result.data.items.some(
-        i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0
-      )
+      && (result.data.pending_confirm
+        || (result.data.items?.length
+          && !result.data.items.some(
+            i => i.checkin_status === 'done' || getItemWatchPct(i) > 0
+          )))
     ) {
       planJustGenerated.value = true
+    } else if (
+      result.data.timer_phase === 'setup'
+      && result.data.items?.some(
+        i => i.checkin_status === 'done' || getItemWatchPct(i) > 0
+      )
+    ) {
+      // 已开练但服务端仍是 setup（窗口缺失）：允许点确认续上，避免卡死上锁
+      planJustGenerated.value = true
+      showTraining.value = true
     }
 
     // checkin records + progress 并行等待

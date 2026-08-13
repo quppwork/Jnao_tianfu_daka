@@ -134,7 +134,7 @@ class TestCheckinV2:
     """POST /api/training/checkin — 打卡 + Tier 晋级判定"""
 
     def test_checkin_requires_media_complete(self, client, user_ready_for_training, db_session):
-        """有音频的项未听完不可打卡。"""
+        """纯音频项未听完不可打卡；有视频的项不限制进度。"""
         from app.db.models import TrainingItem
 
         uid = user_ready_for_training
@@ -143,6 +143,7 @@ class TestCheckinV2:
         item = plan["items"][0]
         row = db_session.get(TrainingItem, item["id"])
         row.audio_url = "https://example.com/a.mp3"
+        row.video_url = None
         db_session.commit()
 
         blocked = client.post("/api/training/checkin", json={
@@ -163,6 +164,61 @@ class TestCheckinV2:
             "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
         }, **_auth(uid))
         assert res.status_code == 200
+
+    def test_video_item_checkin_without_watch(self, client, user_ready_for_training, db_session):
+        """仅视频的训练项不要求看完即可打卡。"""
+        from app.db.models import TrainingItem
+
+        uid = user_ready_for_training
+        sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
+        plan = sched.json()
+        item = plan["items"][0]
+        row = db_session.get(TrainingItem, item["id"])
+        row.video_url = "https://example.com/a.mp4"
+        row.audio_url = None
+        db_session.commit()
+
+        res = client.post("/api/training/checkin", json={
+            "plan_id": plan["plan_id"], "item_id": item["id"],
+            "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
+        }, **_auth(uid))
+        assert res.status_code == 200
+
+    def test_video_watch_does_not_unlock_audio_checkin(self, client, user_ready_for_training, db_session):
+        """音视频并存时，看完视频不能代替听完音频。"""
+        from app.db.models import TrainingItem
+
+        uid = user_ready_for_training
+        auth = _auth(uid)
+        sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **auth)
+        plan = sched.json()
+        item = plan["items"][0]
+        row = db_session.get(TrainingItem, item["id"])
+        row.audio_url = "https://example.com/a.mp3"
+        row.video_url = "https://example.com/a.mp4"
+        db_session.commit()
+
+        client.post(
+            f"/api/training/items/{item['id']}/watch-progress",
+            json={"watched_sec": 95, "duration_sec": 100, "media": "video"},
+            **auth,
+        )
+        blocked = client.post("/api/training/checkin", json={
+            "plan_id": plan["plan_id"], "item_id": item["id"],
+            "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
+        }, **auth)
+        assert blocked.status_code == 403
+
+        client.post(
+            f"/api/training/items/{item['id']}/watch-progress",
+            json={"watched_sec": 95, "duration_sec": 100, "media": "audio"},
+            **auth,
+        )
+        ok = client.post("/api/training/checkin", json={
+            "plan_id": plan["plan_id"], "item_id": item["id"],
+            "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
+        }, **auth)
+        assert ok.status_code == 200
 
     def test_checkin_pass(self, client, user_ready_for_training):
         uid = user_ready_for_training
