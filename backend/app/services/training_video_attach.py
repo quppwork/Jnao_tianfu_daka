@@ -60,12 +60,6 @@ def attach_videos_to_plan_items(
 
     changed = 0
     for item in plan.items:
-        # 已有音频的训练项是音频型，不要自动挂视频（如超脑阅读）
-        if item.audio_url:
-            if item.video_url:
-                item.video_url = None
-                changed += 1
-            continue
         skill = _item_skill_name(item)
         if not skill or skill not in video_map:
             # 无配套视频的技能：清掉历史误挂的 video_url，前端才不显示空视频卡
@@ -81,6 +75,7 @@ def attach_videos_to_plan_items(
                 item.video_url = None
                 changed += 1
             continue
+        # 可与 audio_url 并存（如超脑阅读、极速运算：音频训练 + 配套讲解视频）
         if item.video_url != play_url:
             item.video_url = play_url
             changed += 1

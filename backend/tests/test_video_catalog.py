@@ -150,6 +150,42 @@ def test_repair_plan_fills_missing_video(db_session, child_with_assessment):
     assert plan.items[0].video_url
 
 
+def test_attach_keeps_video_alongside_audio_for_catalog_skill(db_session, child_with_assessment):
+    """有配套视频的技能（如超脑阅读）可同时保留 audio_url + video_url。"""
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.training_day import get_training_day
+    from app.services.training_video_attach import attach_videos_to_plan_items
+
+    import_video_catalog(db_session)
+    plan = TrainingPlan(
+        child_user_id=child_with_assessment,
+        plan_date=get_training_day(),
+        content_index=1,
+        status="pending",
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(
+        TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            ability_type="audio",
+            title="超脑阅读",
+            duration_min=8,
+            audio_url="https://example.com/chaonao.mp3",
+            instructions='{"skill":"超脑阅读","item_type":"required"}',
+            checkin_status="pending",
+        )
+    )
+    db_session.flush()
+    n = attach_videos_to_plan_items(db_session, plan, only_missing=False)
+    assert n >= 1
+    item = plan.items[0]
+    assert item.audio_url
+    assert item.video_url
+    assert "超脑阅读" in item.video_url or item.video_url.endswith("超脑阅读技术.mp4")
+
+
 def test_attach_clears_video_for_skill_without_catalog(db_session, child_with_assessment):
     from app.db.models import TrainingItem, TrainingPlan
     from app.services.training_day import get_training_day
