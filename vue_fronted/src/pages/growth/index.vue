@@ -29,8 +29,8 @@
             <text class="hero-nick">{{ summary.nickname || '学员' }}<text v-if="memberDays" class="hero-since"> · 加入 {{ memberDays }} 天</text></text>
           </view>
           <view class="hero-tier">
-            <text class="hero-tier-num">Tier {{ overallTier }}</text>
-            <text class="hero-tier-total"> / 9</text>
+            <text class="hero-tier-num">{{ formatTier(overallTier) }}</text>
+            <text class="hero-tier-total"> / 九阶</text>
           </view>
         </view>
         <view class="tier-bar"><view class="tier-fill" :style="{ width: tierPercent + '%' }"></view></view>
@@ -68,7 +68,7 @@
                 <text v-else>{{ i + 1 }}</text>
               </view>
               <text class="path-name">{{ t.name }}</text>
-              <text class="path-range">Tier {{ t.min }}+</text>
+              <text class="path-range">{{ formatTier(t.min) }}起</text>
             </view>
             <view v-if="i < TIER_TITLES.length - 1" class="path-link" :class="{ done: i < currentTitleIndex }"></view>
           </template>
@@ -162,7 +162,7 @@
           <view class="sp-stats">
             <text class="sp-stat">打卡 {{ summary?.total_checkins || 0 }} 次</text>
             <text class="sp-stat">徽章 {{ summary?.badges_earned || 0 }} 枚</text>
-            <text class="sp-stat">Tier {{ overallTier }}</text>
+            <text class="sp-stat">{{ formatTier(overallTier) }}</text>
           </view>
         </view>
         <text class="share-hint">复制成长成就文案，分享到微信/朋友圈</text>
@@ -192,6 +192,11 @@ const TIER_TITLES = [
   { name: '劲脑学神', min: 5 },
   { name: '专利精英', min: 8 },
 ]
+const TIER_CN = ['', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', '八阶', '九阶']
+function formatTier(n) {
+  const t = Number(n) || 1
+  return TIER_CN[t] || `${t}阶`
+}
 
 // 线性 SVG 图标（与首页/答疑页同一风格：24 视窗、currentColor 描边）
 const ICON_PATHS = {
