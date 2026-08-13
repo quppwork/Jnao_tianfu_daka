@@ -9,17 +9,13 @@ app/agents/
 │   ├── stage.py / talent.py
 │   └── handoff.py          # navigate 白名单 / situation 文案（Agent 间只交接动作）
 ├── qa/                     # 学科答疑 Agent
-├── guide/                  # 首页引导 Agent
-└── training_schedule/      # 今日训练辅助排课（工具循环出草案，不写库）
-    ├── persona.py / runner.py
-    └── tools/              # 只读 + propose_skill_draft
+└── guide/                  # 首页引导 Agent
 ```
 
 ## 多 Agent 边界（勿耦合）
 
 - **Guide 与 QA 互不 import**；联调靠前端跳转 + `shared/handoff` 的 `navigate` 动作。  
 - **禁止** `guide.runner` 调用 `qa.runner`（或反向）。  
-- **禁止** `training_schedule.runner` 与 Guide/QA runner 互调；排课 Agent 只出草案，落库走 `training_schedule_service`。  
 - 先各自做完，再按需加 thin handoff；不要先做超级 Orchestrator。
 
 ## 职责边界
@@ -69,7 +65,6 @@ app/agents/
 | ~~R5 受控写~~ | ✅ `writes.py` 习惯/意向白名单 + 确认卡 + `/confirm`；可扩白名单 |
 | ~~R11 多模态 / R12 语音~~ | ⏸ **暂不做**（产品确认不加传图/语音入口） |
 | QA Agent 打磨 | **另线** ✅ P0/P1/P2 已收口（语音明确不做） |
-| 今日训练 Agent 辅助排课 | **另线** `agents/training_schedule`：原生 FC 工具循环出草案 → 服务层校验投影落库；与 Guide/QA 互不 import |
 | Orchestrator | **暂不做**（见 handoff 原则） |
 
 Guide 主线已收口。实现记录仅本地 `docs/过期文件/`（不入库）；现行约定见 `docs/前端后端API文档.md`（首页引导）与 `docs/数据闭环与预留说明.md` §1.6。

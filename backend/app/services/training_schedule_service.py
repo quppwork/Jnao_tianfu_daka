@@ -170,12 +170,8 @@ async def populate_plan_items(
     planned_minutes: int,
     *,
     plan_date: date | None = None,
-    slots_override: list[str] | None = None,
 ) -> dict:
-    """v3.0: Decision Tree 选策略 → 权重引擎展开 → OSS 音频 → plan_items。
-
-    slots_override: Agent 投影后的技能列表；提供时跳过 expand_formula，仍走同一落库形态。
-    """
+    """v3.0: Decision Tree 选策略 → 权重引擎展开 → OSS 音频 → plan_items。"""
     ensure_supplementary_catalogs(db)
     plan_date = plan_date or plan.plan_date
     talent = resolve_effective_talent(db, child_user_id)
@@ -209,29 +205,15 @@ async def populate_plan_items(
 
     history = _collect_schedule_history(db, child_user_id, plan_date)
 
-    if slots_override is not None:
-        slots = list(slots_override)
-        formula_result = {
-            "slots": slots,
-            "elective_notes": [],
-            "c_note": None,
-            "exam_note": None,
-            "strategy": "agent_assist",
-            "bundle_id": None,
-            "bundle_note": None,
-            "grade_notes": [],
-            "reason": None,
-        }
-    else:
-        # 公式引擎展开技能组合
-        formula_result = expand_formula(
-            planned_minutes,
-            overall_tier=o_tier,
-            grade_band=grade_band,
-            skill_tiers=skill_tiers,
-            history=history,
-        )
-        slots = formula_result["slots"]
+    # 公式引擎展开技能组合
+    formula_result = expand_formula(
+        planned_minutes,
+        overall_tier=o_tier,
+        grade_band=grade_band,
+        skill_tiers=skill_tiers,
+        history=history,
+    )
+    slots = formula_result["slots"]
 
     # OSS 音频池
     talent_pool = get_talent_content_pool(db, talent_code)
@@ -375,22 +357,13 @@ async def schedule_training_by_duration(
     planned_minutes: int,
     *,
     plan_date: date | None = None,
-    schedule_prefer: str = "rule",
 ) -> dict:
     """用户选定时长 → 生成今日 plan_item。
 
     一天一次训练：未开始可生成/按新时长重生；已开始禁止清表重排，改时长直接 403。
-
-    schedule_prefer:
-      - rule（默认）：仅规则引擎
-      - agent：先试 Agent 草案→校验投影；失败回退规则（schedule_mode=agent_fallback）
     """
     if planned_minutes < 20:
         raise TrainingError("训练时长至少 20 分钟")
-
-    prefer = (schedule_prefer or "rule").strip().lower()
-    if prefer not in ("rule", "agent"):
-        prefer = "rule"
 
     from app.services.dev_clock import resolve_training_now
 
@@ -421,14 +394,10 @@ async def schedule_training_by_duration(
             or _plan_structure_invalid(plan, planned_minutes)
         )
         if need_populate:
-            schedule_mode = await _populate_with_prefer(
-                db,
-                plan,
-                child_user_id,
-                planned_minutes,
-                plan_date=plan_date,
-                prefer=prefer,
+            await populate_plan_items(
+                db, plan, child_user_id, planned_minutes, plan_date=plan_date
             )
+            schedule_mode = "rule"
         else:
             schedule_mode = "existing"
 
@@ -452,105 +421,6 @@ async def schedule_training_by_duration(
         plan.report_text = build_coach_text_for_plan(plan)
         db.commit()
     return _plan_to_schedule_response(db, plan, schedule_mode=schedule_mode)
-
-
-async def _populate_with_prefer(
-    db: Session,
-    plan: TrainingPlan,
-    child_user_id: int,
-    planned_minutes: int,
-    *,
-    plan_date: date,
-    prefer: str,
-) -> str:
-    """按 prefer 填充 plan_items，返回最终 schedule_mode。"""
-    from app.services.training_agent_assist import (
-        AssistFail,
-        is_schedule_assist_enabled,
-        propose_projected_slots,
-    )
-
-    want_agent = prefer == "agent" and is_schedule_assist_enabled()
-    if prefer == "agent" and not is_schedule_assist_enabled():
-        logger.info(
-            "training_schedule_assist prefer=agent disabled → rule child=%s",
-            child_user_id,
-        )
-
-    if want_agent:
-        try:
-            slots, assist_meta = await propose_projected_slots(
-                db,
-                child_user_id,
-                planned_minutes,
-                plan_date=plan_date,
-            )
-            await populate_plan_items(
-                db,
-                plan,
-                child_user_id,
-                planned_minutes,
-                plan_date=plan_date,
-                slots_override=slots,
-            )
-            plan.schedule_assist_json = {
-                "mode": "agent",
-                "reason": assist_meta.get("reason"),
-                "draft": assist_meta.get("draft") or [],
-                "projected": list(slots),
-                "rule_slots": assist_meta.get("rule_slots") or [],
-                "pad_priority": assist_meta.get("pad_priority") or [],
-                "padded_from_intent": assist_meta.get("padded_from_intent") or [],
-                "padded_from_rule": assist_meta.get("padded_from_rule") or [],
-                "tools_used": assist_meta.get("tools_used") or [],
-                "target_n": assist_meta.get("target_n"),
-                "dropped_for_slot_cap": assist_meta.get("dropped_for_slot_cap") or [],
-            }
-            logger.info(
-                "training_schedule_assist prefer=agent mode=agent child=%s strategy=%s tools=%s slots=%s",
-                child_user_id,
-                assist_meta.get("rule_strategy"),
-                [t.get("name") for t in (assist_meta.get("tools_used") or [])],
-                slots,
-            )
-            return "agent"
-        except AssistFail as e:
-            logger.info(
-                "training_schedule_assist prefer=agent mode=agent_fallback fail=%s child=%s msg=%s",
-                e.code,
-                child_user_id,
-                e.message,
-            )
-            fail_code, fail_msg = e.code, e.message
-        except Exception as e:
-            logger.warning(
-                "training_schedule_assist prefer=agent mode=agent_fallback fail=unexpected child=%s err=%s",
-                child_user_id,
-                e,
-            )
-            fail_code, fail_msg = "unexpected", str(e)[:200]
-        await populate_plan_items(
-            db, plan, child_user_id, planned_minutes, plan_date=plan_date
-        )
-        plan.schedule_assist_json = {
-            "mode": "agent_fallback",
-            "reason": f"Agent 失败已回退规则：{fail_code}"
-            + (f"（{fail_msg}）" if fail_msg else ""),
-            "fail_code": fail_code,
-            "fail_message": fail_msg,
-        }
-        return "agent_fallback"
-
-    await populate_plan_items(
-        db, plan, child_user_id, planned_minutes, plan_date=plan_date
-    )
-    plan.schedule_assist_json = None
-    logger.info(
-        "training_schedule_assist prefer=%s mode=rule child=%s",
-        prefer,
-        child_user_id,
-    )
-    return "rule"
 
 
 # 兼容旧调用
