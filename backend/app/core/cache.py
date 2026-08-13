@@ -114,6 +114,14 @@ def key_qa_sessions(user_id: int) -> str:
     return f"qa:sessions:{user_id}"
 
 
+def key_achievement_list(user_id: int) -> str:
+    return f"jnao:ach:list:{user_id}"
+
+
+def key_guide_bootstrap(user_id: int, training_day: date | str) -> str:
+    return f"jnao:guide:boot:{user_id}:{training_day}"
+
+
 def invalidate_user_profile(user_id: int) -> None:
     cache_delete(key_profile(user_id))
 
@@ -137,9 +145,19 @@ def invalidate_user_training(user_id: int, plan_date: date | str | None = None) 
     cache_delete(key_train_progress(user_id))
 
 
+def invalidate_user_achievement(user_id: int) -> None:
+    cache_delete(key_achievement_list(user_id))
+
+
+def invalidate_user_guide(user_id: int) -> None:
+    cache_delete_prefix(f"jnao:guide:boot:{user_id}:")
+
+
 def invalidate_user_read_caches(user_id: int, *, plan_date: date | str | None = None) -> None:
     """写操作后批量失效用户读缓存"""
     invalidate_user_profile(user_id)
     invalidate_user_assessment(user_id)
     invalidate_user_growth(user_id)
     invalidate_user_training(user_id, plan_date=plan_date)
+    invalidate_user_achievement(user_id)
+    invalidate_user_guide(user_id)

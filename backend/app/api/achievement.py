@@ -1,9 +1,16 @@
 """成就/荣誉系统 API"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.cache import (
+    cache_get_json,
+    cache_set_json,
+    invalidate_user_achievement,
+    key_achievement_list,
+    ttl_env,
+)
 from app.core.deps import get_authenticated_student, get_db
 from app.services import achievement_service
 from app.services.achievement_service import AchievementError
@@ -36,11 +43,17 @@ def get_achievement_list(
     db: Session = Depends(get_db),
 ):
     """获取用户勋章列表（含进度和状态）"""
-    # 先检查并更新状态（自动解锁）
+    cache_key = key_achievement_list(child_user_id)
+    cached = cache_get_json(cache_key)
+    if isinstance(cached, dict) and cached.get("items") is not None:
+        return cached
+
     achievement_service.check_and_update_achievements(db, child_user_id)
     items = achievement_service.get_user_achievements(db, child_user_id)
-    stats = achievement_service.get_achievement_stats(db, child_user_id)
-    return {"items": items, "stats": stats}
+    stats = achievement_service.stats_from_items(items)
+    payload = {"items": items, "stats": stats}
+    cache_set_json(cache_key, payload, ttl_env("CACHE_TTL_ACHIEVEMENT", 60))
+    return payload
 
 
 @router.get("/stats")
@@ -76,6 +89,7 @@ def check_achievements(
 ):
     """手动触发检查（返回新解锁的勋章）"""
     newly_ready = achievement_service.check_and_update_achievements(db, child_user_id)
+    invalidate_user_achievement(child_user_id)
     return {"newly_ready": newly_ready, "count": len(newly_ready)}
 
 

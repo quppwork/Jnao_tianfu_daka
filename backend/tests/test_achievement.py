@@ -214,6 +214,33 @@ class TestStats:
         assert stats["total"] == stats["claimed"] + stats["ready"] + stats["locked"]
 
 
+    def test_skill_tier_reads_training_progress(self, db_session: Session, registered_user: dict):
+        """技能勋章进度从 training_progress.skills 读取，达到三阶即可领取"""
+        from app.db.models import ChildUser
+
+        achievement_service.init_achievement_definitions(db_session)
+        user_id = registered_user["child_user_id"]
+        child = db_session.get(ChildUser, user_id)
+        child.profile_json = {
+            "training_progress": {
+                "skills": {
+                    "超脑阅读": {"tier": 3},
+                    "影像追忆": {"tier": 1},
+                    "扫描速记": {"tier": 2},
+                }
+            }
+        }
+        db_session.commit()
+
+        items = {i["code"]: i for i in achievement_service.get_user_achievements(db_session, user_id)}
+        reading = items["skill_speed_reading_t3"]
+        assert reading["progress_current"] == 3
+        assert reading["status"] == "ready"
+        assert "三阶" in reading["progress_text"]
+        assert items["skill_memory_t3"]["status"] == "locked"
+        assert items["skill_scan_t3"]["progress_current"] == 2
+
+
 # ─── API 测试 ────────────────────────────────────────
 
 

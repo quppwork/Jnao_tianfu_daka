@@ -31,6 +31,15 @@ def get_cached_welcome(db: Session, child_user_id: int, training_day: str) -> di
     hit = _BOOTSTRAP_CACHE.get(key)
     if hit:
         return hit
+    try:
+        from app.core.cache import cache_get_json, key_guide_bootstrap
+
+        redis_hit = cache_get_json(key_guide_bootstrap(child_user_id, training_day))
+        if isinstance(redis_hit, dict) and redis_hit.get("welcome"):
+            _BOOTSTRAP_CACHE[key] = redis_hit
+            return redis_hit
+    except Exception:
+        pass
     # 回退 profile_json，跨进程重启仍可用
     child = db.get(ChildUser, child_user_id)
     if not child or not isinstance(child.profile_json, dict):
@@ -63,6 +72,16 @@ def set_cached_welcome(
         "snapshot": payload.get("snapshot") or {},
     }
     _BOOTSTRAP_CACHE[key] = entry
+    try:
+        from app.core.cache import cache_set_json, key_guide_bootstrap, ttl_env
+
+        cache_set_json(
+            key_guide_bootstrap(child_user_id, training_day),
+            entry,
+            ttl_env("CACHE_TTL_GUIDE_BOOTSTRAP", 86400),
+        )
+    except Exception:
+        pass
 
     child = db.get(ChildUser, child_user_id)
     if not child:
@@ -91,3 +110,9 @@ def clear_bootstrap_cache(child_user_id: int | None = None) -> None:
     for k in list(_BOOTSTRAP_CACHE):
         if k.startswith(prefix):
             del _BOOTSTRAP_CACHE[k]
+    try:
+        from app.core.cache import invalidate_user_guide
+
+        invalidate_user_guide(child_user_id)
+    except Exception:
+        pass

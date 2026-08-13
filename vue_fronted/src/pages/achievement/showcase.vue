@@ -135,6 +135,7 @@ import {
   fetchShowcase,
   setShowcaseSlot,
   fetchAchievementList,
+  readAchievementCache,
 } from '@/utils/userApi.js'
 
 const loading = ref(true)
@@ -144,22 +145,29 @@ const slotModalVisible = ref(false)
 const selectedSlot = ref(0)
 
 async function loadData() {
-  loading.value = true
   try {
     const uid = await ensureChildUser()
+    const cached = readAchievementCache(uid)
+    if (cached?.items?.length) {
+      availableAchievements.value = cached.items.filter(i => i.status === 'claimed')
+      loading.value = false
+    } else {
+      loading.value = true
+    }
     const [showcaseData, listData] = await Promise.all([
       fetchShowcase(uid),
       fetchAchievementList(uid),
     ])
 
-    // 填充展柜
     slots.value = showcaseData
-
-    // 筛选已解锁的勋章
     availableAchievements.value = listData.items.filter(i => i.status === 'claimed')
   } catch (e) {
     console.error('加载展柜失败:', e)
-    uni.showToast({ title: '加载失败', icon: 'none' })
+    if (e?.cached?.items?.length) {
+      availableAchievements.value = e.cached.items.filter(i => i.status === 'claimed')
+    } else if (!availableAchievements.value.length) {
+      uni.showToast({ title: '加载失败', icon: 'none' })
+    }
   }
   loading.value = false
 }

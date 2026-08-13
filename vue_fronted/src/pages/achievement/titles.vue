@@ -76,6 +76,7 @@ import {
   fetchUserTitle,
   setUserTitle,
   fetchAchievementList,
+  readAchievementCache,
 } from '@/utils/userApi.js'
 
 const loading = ref(true)
@@ -83,9 +84,15 @@ const currentTitle = ref(null)
 const titleList = ref([])
 
 async function loadData() {
-  loading.value = true
   try {
     const uid = await ensureChildUser()
+    const cached = readAchievementCache(uid)
+    if (cached?.items?.length) {
+      titleList.value = cached.items
+      loading.value = false
+    } else {
+      loading.value = true
+    }
     const [titleData, listData] = await Promise.all([
       fetchUserTitle(uid).catch(() => null),
       fetchAchievementList(uid),
@@ -95,7 +102,11 @@ async function loadData() {
     titleList.value = listData.items
   } catch (e) {
     console.error('加载称号失败:', e)
-    uni.showToast({ title: '加载失败', icon: 'none' })
+    if (e?.cached?.items?.length) {
+      titleList.value = e.cached.items
+    } else if (!titleList.value.length) {
+      uni.showToast({ title: '加载失败', icon: 'none' })
+    }
   }
   loading.value = false
 }

@@ -9,14 +9,15 @@
     </view>
 
     <scroll-view class="body" scroll-y :show-scrollbar="false" :enhanced="true">
-      <!-- 骨架屏 -->
-      <view v-if="loading" class="skeleton">
+      <!-- 骨架屏：仅首次无缓存时展示 -->
+      <view v-if="loading && items.length === 0" class="skeleton">
         <view class="sk-actions"><view class="sk-action"></view><view class="sk-action"></view></view>
         <view class="sk-title"></view>
         <view class="sk-badges"><view v-for="i in 6" :key="'b'+i" class="sk-badge"></view></view>
       </view>
 
       <template v-else>
+        <view v-if="refreshing" class="refresh-bar"></view>
         <!-- 快捷入口 -->
         <view class="quick-actions">
           <view class="action-btn" @click="goShowcase">
@@ -109,12 +110,13 @@ import { ref, computed, onMounted } from 'vue'
 import {
   ensureChildUser,
   fetchAchievementList,
-  checkAchievements,
   claimAchievement,
+  readAchievementCache,
 } from '@/utils/userApi.js'
 import AchievementDetail from './components/AchievementDetail.vue'
 
 const loading = ref(true)
+const refreshing = ref(false)
 const items = ref([])
 const activeTab = ref('all')
 const detailVisible = ref(false)
@@ -133,19 +135,38 @@ const filteredAchievements = computed(() => {
   return items.value.filter(i => i.category === activeTab.value)
 })
 
-async function loadData() {
-  loading.value = true
+async function loadData({ silent = false } = {}) {
+  let uid
   try {
-    const uid = await ensureChildUser()
-    // 先触发检查（自动解锁）
-    await checkAchievements(uid).catch(() => {})
+    uid = await ensureChildUser()
+  } catch (e) {
+    loading.value = false
+    uni.showToast({ title: '加载失败', icon: 'none' })
+    return
+  }
+
+  const cached = readAchievementCache(uid)
+  if (cached?.items?.length) {
+    items.value = cached.items
+    loading.value = false
+    refreshing.value = true
+  } else if (!silent) {
+    loading.value = true
+  }
+
+  try {
     const data = await fetchAchievementList(uid)
     items.value = data.items
   } catch (e) {
     console.error('加载成就失败:', e)
-    uni.showToast({ title: '加载失败', icon: 'none' })
+    if (e?.cached?.items?.length) {
+      items.value = e.cached.items
+    } else if (!items.value.length) {
+      uni.showToast({ title: e.message || '加载失败', icon: 'none' })
+    }
   }
   loading.value = false
+  refreshing.value = false
 }
 
 function showDetail(item) {
@@ -154,14 +175,25 @@ function showDetail(item) {
 }
 
 async function handleClaim(item) {
+  const prevStatus = item.status
+  const prevClaimed = item.claimed_at
+  items.value = items.value.map((i) => (
+    i.id === item.id
+      ? { ...i, status: 'claimed', claimed_at: new Date().toISOString() }
+      : i
+  ))
+  detailVisible.value = false
   try {
     const uid = await ensureChildUser()
     await claimAchievement(uid, item.id)
     uni.showToast({ title: '领取成功！', icon: 'success' })
-    // 重新加载
-    await loadData()
-    detailVisible.value = false
+    await loadData({ silent: true })
   } catch (e) {
+    items.value = items.value.map((i) => (
+      i.id === item.id
+        ? { ...i, status: prevStatus, claimed_at: prevClaimed }
+        : i
+    ))
     uni.showToast({ title: e.message || '领取失败', icon: 'none' })
   }
 }
@@ -203,6 +235,14 @@ onMounted(loadData)
 :deep(.uni-scroll-view) ::-webkit-scrollbar,
 .body *::-webkit-scrollbar,
 .body::-webkit-scrollbar { display:none; width:0; height:0; }
+
+.refresh-bar {
+  height: 2px;
+  margin: -4px 0 12px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.7;
+}
 
 /* 统计卡片（已隐藏） */
 .stats-card { display: none; }

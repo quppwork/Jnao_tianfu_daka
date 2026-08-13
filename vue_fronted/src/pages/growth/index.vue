@@ -183,6 +183,7 @@ import {
   fetchGrowthTimeline,
   fetchGrowthSummary,
   fetchGrowthShare,
+  prefetchAchievementList,
 } from '@/utils/userApi.js'
 
 // 与后端 growth_service.get_tier_honor 的 tier 边界保持一致
@@ -333,6 +334,7 @@ function goTrain() {
 }
 
 function goAchievement() {
+  ensureChildUser().then((uid) => prefetchAchievementList(uid)).catch(() => {})
   uni.navigateTo({ url: '/pages/achievement/index' })
 }
 
@@ -352,6 +354,7 @@ async function loadGrowth() {
   loading.value = true
   try {
     const uid = await ensureChildUser()
+    prefetchAchievementList(uid)
     const [b, t, s, sh] = await Promise.all([
       fetchGrowthBadges(uid),
       fetchGrowthTimeline(uid),

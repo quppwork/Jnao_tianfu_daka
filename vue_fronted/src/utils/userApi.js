@@ -376,20 +376,32 @@ function formatApiError(data, status) {
 }
 
 export async function apiJson(url, options = {}) {
+  const { timeoutMs, signal: userSignal, ...fetchOptions } = options
   const userId = extractUserIdFromUrl(url)
-  const headers = mergeAuthHeaders({ ...options, _url: url }, userId)
+  const headers = mergeAuthHeaders({ ...fetchOptions, _url: url }, userId)
+  const ctrl = timeoutMs ? new AbortController() : null
+  if (ctrl && userSignal) {
+    if (userSignal.aborted) ctrl.abort()
+    else userSignal.addEventListener('abort', () => ctrl.abort(), { once: true })
+  }
+  const signal = ctrl?.signal || userSignal
+  let timeoutId
   let res
   try {
-    res = await fetch(url, { ...options, headers, credentials: 'include' })
+    if (ctrl) timeoutId = setTimeout(() => ctrl.abort(), timeoutMs)
+    res = await fetch(url, { ...fetchOptions, headers, credentials: 'include', signal })
   } catch (e) {
-    console.error(`[api] NETWORK ${options.method || 'GET'} ${url} — ${e.message || 'fetch failed'}`)
-    const err = new Error('网络连接失败，请检查网络')
+    const aborted = e?.name === 'AbortError'
+    console.error(`[api] NETWORK ${fetchOptions.method || 'GET'} ${url} — ${e.message || 'fetch failed'}`)
+    const err = new Error(aborted ? '请求超时，请稍后重试' : '网络连接失败，请检查网络')
     err.status = 0
     throw err
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
   if (res.status === 401 && isFreshLogin() && !isAuthAttemptRequest(url)) {
     await new Promise((r) => setTimeout(r, 400))
-    res = await fetch(url, { ...options, headers, credentials: 'include' })
+    res = await fetch(url, { ...fetchOptions, headers, credentials: 'include', signal })
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -397,7 +409,7 @@ export async function apiJson(url, options = {}) {
       handleMidSessionExpired(url)
     }
     const msg = formatApiError(data, res.status)
-    console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
+    console.error(`[api] ${res.status} ${fetchOptions.method || 'GET'} ${url} — ${msg}`, data)
     const err = new Error(msg)
     err.status = res.status
     err.data = data
@@ -1240,11 +1252,12 @@ export async function deleteGuideSession(userId, sessionId) {
 }
 
 /** 进首页开场 Agent：按情境返回欢迎语 */
-export async function fetchGuideBootstrap(userId, { force = false, use_llm = true } = {}) {
+export async function fetchGuideBootstrap(userId, { force = false, use_llm = true, timeoutMs = 6000 } = {}) {
   return apiJson(withUser('/api/guide/bootstrap', userId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ force, use_llm }),
+    timeoutMs,
   })
 }
 
@@ -1407,9 +1420,74 @@ export async function fetchGrowthShare(userId) {
 
 // ── 成就/荣誉系统 ──
 
+const ACH_CACHE_PREFIX = 'jnao_ach_list_'
+const ACH_CACHE_FRESH_MS = 60 * 1000
+
+function achCacheKey(userId) {
+  return ACH_CACHE_PREFIX + userId
+}
+
+export function readAchievementCache(userId) {
+  if (!userId) return null
+  try {
+    const raw = localStorage.getItem(achCacheKey(userId))
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!Array.isArray(data?.items)) return null
+    return data
+  } catch (_) {
+    return null
+  }
+}
+
+export function writeAchievementCache(userId, data) {
+  if (!userId || !data) return
+  try {
+    localStorage.setItem(achCacheKey(userId), JSON.stringify({
+      items: data.items || [],
+      stats: data.stats || {},
+      ts: Date.now(),
+    }))
+  } catch (_) {}
+}
+
+async function fetchAchievementListOnce(userId, timeoutMs) {
+  const data = await apiJson(withUser('/api/achievement/list', userId), { timeoutMs })
+  const result = { items: data.items || [], stats: data.stats || {} }
+  writeAchievementCache(userId, result)
+  return result
+}
+
 export async function fetchAchievementList(userId) {
-  const data = await apiJson(withUser('/api/achievement/list', userId))
-  return { items: data.items || [], stats: data.stats || {} }
+  try {
+    return await fetchAchievementListOnce(userId, 8000)
+  } catch (e) {
+    if (e?.status === 0) {
+      try {
+        return await fetchAchievementListOnce(userId, 5000)
+      } catch (retryErr) {
+        const cached = readAchievementCache(userId)
+        if (cached) {
+          retryErr.fromCache = true
+          retryErr.cached = cached
+        }
+        throw retryErr
+      }
+    }
+    const cached = readAchievementCache(userId)
+    if (cached) {
+      e.fromCache = true
+      e.cached = cached
+    }
+    throw e
+  }
+}
+
+export function prefetchAchievementList(userId) {
+  if (!userId) return
+  const cached = readAchievementCache(userId)
+  if (cached?.ts && (Date.now() - cached.ts) < ACH_CACHE_FRESH_MS) return
+  fetchAchievementList(userId).catch(() => {})
 }
 
 export async function fetchAchievementStats(userId) {

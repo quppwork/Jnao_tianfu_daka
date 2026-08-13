@@ -1,15 +1,17 @@
 """成就/荣誉系统服务 — 勋章定义、解锁逻辑、展柜管理"""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     AchievementDefinition,
     AchievementShowcase,
-    TrainingPlan,
+    ChildUser,
+    TalentAssessment,
     TrainingRecord,
     UserAchievement,
     UserTitle,
@@ -78,6 +80,8 @@ def init_achievement_definitions(db: Session) -> int:
             existing.title = data["title"]
             existing.description = data["description"]
     db.commit()
+    from app.core.cache import cache_delete_prefix
+    cache_delete_prefix("jnao:ach:list:")
     return count
 
 
@@ -101,6 +105,7 @@ def get_user_achievements(db: Session, user_id: int) -> list[dict]:
     }
 
     result = []
+    ctx = None
     for defn in definitions:
         ua = user_achievements.get(defn.id)
         if ua:
@@ -110,8 +115,9 @@ def get_user_achievements(db: Session, user_id: int) -> list[dict]:
             unlocked_at = ua.unlocked_at
             claimed_at = ua.claimed_at
         else:
-            # 计算当前进度（不创建记录，直到用户触发）
-            progress = _calculate_progress(db, user_id, defn)
+            if ctx is None:
+                ctx = _load_progress_context(db, user_id)
+            progress = _calculate_progress(db, user_id, defn, ctx)
             status = "ready" if progress["current"] >= progress["target"] else "locked"
             progress_current = progress["current"]
             progress_target = progress["target"]
@@ -138,63 +144,72 @@ def get_user_achievements(db: Session, user_id: int) -> list[dict]:
     return result
 
 
-def _calculate_progress(db: Session, user_id: int, definition: AchievementDefinition) -> dict:
-    """计算用户当前进度"""
-    cond = definition.condition_json
+@dataclass(frozen=True)
+class _ProgressContext:
+    assessment_count: int
+    streak_days: int
+    persist_days: int
+    total_checkin: int
+    skill_tiers: dict[str, int]
+
+
+def _load_progress_context(db: Session, user_id: int) -> _ProgressContext:
+    """一次查出所有勋章共用的进度，避免每个勋章单独打库。"""
+    from app.services.child_training_state import get_training_progress
+
+    assessment_count = db.scalar(
+        select(func.count(TalentAssessment.id)).where(
+            TalentAssessment.child_user_id == user_id,
+            TalentAssessment.report_json.isnot(None),
+        )
+    ) or 0
+
+    skill_tiers: dict[str, int] = {}
+    user = db.get(ChildUser, user_id)
+    if user:
+        progress = get_training_progress(user)
+        for name, info in (progress.get("skills") or {}).items():
+            if isinstance(info, dict):
+                skill_tiers[name] = int(info.get("tier") or 1)
+
+    return _ProgressContext(
+        assessment_count=int(assessment_count),
+        streak_days=_get_consecutive_checkin_days(db, user_id),
+        persist_days=_get_training_days_after_assessment(db, user_id),
+        total_checkin=int(
+            db.scalar(
+                select(func.count(TrainingRecord.id)).where(
+                    TrainingRecord.child_user_id == user_id
+                )
+            ) or 0
+        ),
+        skill_tiers=skill_tiers,
+    )
+
+
+def _calculate_progress(
+    db: Session,
+    user_id: int,
+    definition: AchievementDefinition,
+    ctx: _ProgressContext | None = None,
+) -> dict:
+    """计算用户当前进度（可传入共享上下文，避免 N+1）"""
+    if ctx is None:
+        ctx = _load_progress_context(db, user_id)
+    cond = definition.condition_json or {}
     cond_type = cond.get("type")
 
-    if cond_type == "assessment":
-        # 完成测评次数
-        from app.db.models import TalentAssessment
-        count = db.scalar(
-            select(func.count(TalentAssessment.id)).where(
-                TalentAssessment.child_user_id == user_id,
-                TalentAssessment.report_json.isnot(None),
-            )
-        ) or 0
-        return {"current": count, "target": cond.get("count", 1)}
-
-    elif cond_type == "streak":
-        # 连续打卡天数
-        days = _get_consecutive_checkin_days(db, user_id)
-        return {"current": days, "target": cond.get("days", 1)}
-
-    elif cond_type == "skill_tier":
-        # 技能等级（从 child_user.profile_json 读取）
-        from app.db.models import ChildUser
-        user = db.get(ChildUser, user_id)
-        if user and user.profile_json:
-            skill = cond.get("skill")
-            tiers = user.profile_json.get("skill_tiers", {})
-            current_tier = tiers.get(skill, {}).get("tier", 1)
-            return {"current": current_tier, "target": cond.get("tier", 1)}
-        return {"current": 1, "target": cond.get("tier", 1)}
-
-    elif cond_type == "assessment_view":
-        # 完成测评并查看报告
-        from app.db.models import TalentAssessment
-        count = db.scalar(
-            select(func.count(TalentAssessment.id)).where(
-                TalentAssessment.child_user_id == user_id,
-                TalentAssessment.report_json.isnot(None),
-            )
-        ) or 0
-        return {"current": count, "target": cond.get("count", 1)}
-
-    elif cond_type == "persist_after_assessment":
-        # 测评后持续训练天数
-        days = _get_training_days_after_assessment(db, user_id)
-        return {"current": days, "target": cond.get("days", 7)}
-
-    elif cond_type == "total_checkin":
-        # 累计打卡天数
-        count = db.scalar(
-            select(func.count(TrainingRecord.id)).where(
-                TrainingRecord.child_user_id == user_id
-            )
-        ) or 0
-        return {"current": count, "target": cond.get("count", 100)}
-
+    if cond_type in ("assessment", "assessment_view"):
+        return {"current": ctx.assessment_count, "target": cond.get("count", 1)}
+    if cond_type == "streak":
+        return {"current": ctx.streak_days, "target": cond.get("days", 1)}
+    if cond_type == "skill_tier":
+        skill = cond.get("skill")
+        return {"current": ctx.skill_tiers.get(skill, 1), "target": cond.get("tier", 1)}
+    if cond_type == "persist_after_assessment":
+        return {"current": ctx.persist_days, "target": cond.get("days", 7)}
+    if cond_type == "total_checkin":
+        return {"current": ctx.total_checkin, "target": cond.get("count", 100)}
     return {"current": 0, "target": 1}
 
 
@@ -264,13 +279,12 @@ def _get_training_days_after_assessment(db: Session, user_id: int) -> int:
 def check_and_update_achievements(db: Session, user_id: int) -> list[dict]:
     """检查并更新用户勋章状态（返回新解锁的勋章）"""
     newly_ready = []
+    ctx = _load_progress_context(db, user_id)
 
-    # 获取所有激活的勋章定义
     definitions = db.scalars(
         select(AchievementDefinition).where(AchievementDefinition.is_active == 1)
     ).all()
 
-    # 获取用户已有的勋章记录
     user_achievements = {
         ua.achievement_id: ua
         for ua in db.scalars(
@@ -280,7 +294,7 @@ def check_and_update_achievements(db: Session, user_id: int) -> list[dict]:
 
     for defn in definitions:
         ua = user_achievements.get(defn.id)
-        progress = _calculate_progress(db, user_id, defn)
+        progress = _calculate_progress(db, user_id, defn, ctx)
 
         if ua:
             # 更新进度
@@ -357,6 +371,9 @@ def claim_achievement(db: Session, user_id: int, achievement_id: int) -> dict:
     ua.status = "claimed"
     ua.claimed_at = datetime.now(timezone.utc)
     db.commit()
+
+    from app.core.cache import invalidate_user_achievement
+    invalidate_user_achievement(user_id)
 
     defn = db.get(AchievementDefinition, achievement_id)
     return {
@@ -508,6 +525,19 @@ def set_showcase_slot(db: Session, user_id: int, slot_index: int, achievement_id
 
 # ─── 统计 ────────────────────────────────────────
 
+def stats_from_items(items: list[dict]) -> dict:
+    """从列表推导统计，避免额外 COUNT 查询"""
+    total = len(items)
+    claimed = sum(1 for i in items if i.get("status") == "claimed")
+    ready = sum(1 for i in items if i.get("status") == "ready")
+    return {
+        "total": total,
+        "claimed": claimed,
+        "ready": ready,
+        "locked": total - claimed - ready,
+    }
+
+
 def get_achievement_stats(db: Session, user_id: int) -> dict:
     """获取用户成就统计"""
     total = db.scalar(
@@ -534,6 +564,3 @@ def get_achievement_stats(db: Session, user_id: int) -> dict:
         "ready": ready,
         "locked": total - claimed - ready,
     }
-
-
-from sqlalchemy import func
