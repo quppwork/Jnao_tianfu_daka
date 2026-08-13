@@ -23,6 +23,24 @@ class AchievementError(Exception):
         super().__init__(message)
 
 
+_TIER_CN = {
+    1: "一阶", 2: "二阶", 3: "三阶", 4: "四阶", 5: "五阶",
+    6: "六阶", 7: "七阶", 8: "八阶", 9: "九阶",
+}
+
+
+def _tier_cn(tier: int) -> str:
+    return _TIER_CN.get(tier, f"第{tier}阶")
+
+
+def _format_progress_text(defn: AchievementDefinition, current: int, target: int, status: str) -> str:
+    if defn.condition_json.get("type") == "skill_tier":
+        return f"当前{_tier_cn(current)}，目标{_tier_cn(target)}"
+    if target > 1:
+        return f"{current}/{target}"
+    return "已完成" if status != "locked" else "未完成"
+
+
 # ─── 勋章定义初始化 ────────────────────────────────────────
 
 DEFAULT_ACHIEVEMENTS = [
@@ -33,9 +51,9 @@ DEFAULT_ACHIEVEMENTS = [
     {"code": "streak_14", "name": "日渐精进", "title": "执炬者", "description": "连续 14 天完成训练打卡", "category": "streak", "condition_json": {"type": "streak", "days": 14}, "color_theme": "yellow", "sort_order": 4},
     {"code": "streak_21", "name": "独当一面", "title": "破晓", "description": "连续 21 天完成训练打卡", "category": "streak", "condition_json": {"type": "streak", "days": 21}, "color_theme": "yellow", "sort_order": 5},
     # 技能专精系列
-    {"code": "skill_speed_reading_t3", "name": "超脑阅读·速览", "title": "过目", "description": "超脑阅读达到 Tier 3", "category": "skill", "condition_json": {"type": "skill_tier", "skill": "超脑阅读", "tier": 3}, "color_theme": "blue", "sort_order": 10},
-    {"code": "skill_memory_t3", "name": "影像追忆·定格", "title": "留影", "description": "影像追忆达到 Tier 3", "category": "skill", "condition_json": {"type": "skill_tier", "skill": "影像追忆", "tier": 3}, "color_theme": "blue", "sort_order": 11},
-    {"code": "skill_scan_t3", "name": "扫描速记·洞察", "title": "览微", "description": "扫描速记达到 Tier 3", "category": "skill", "condition_json": {"type": "skill_tier", "skill": "扫描速记", "tier": 3}, "color_theme": "blue", "sort_order": 12},
+    {"code": "skill_speed_reading_t3", "name": "超脑阅读·速览", "title": "过目", "description": "超脑阅读达到三阶", "category": "skill", "condition_json": {"type": "skill_tier", "skill": "超脑阅读", "tier": 3}, "color_theme": "blue", "sort_order": 10},
+    {"code": "skill_memory_t3", "name": "影像追忆·定格", "title": "留影", "description": "影像追忆达到三阶", "category": "skill", "condition_json": {"type": "skill_tier", "skill": "影像追忆", "tier": 3}, "color_theme": "blue", "sort_order": 11},
+    {"code": "skill_scan_t3", "name": "扫描速记·洞察", "title": "览微", "description": "扫描速记达到三阶", "category": "skill", "condition_json": {"type": "skill_tier", "skill": "扫描速记", "tier": 3}, "color_theme": "blue", "sort_order": 12},
     # 天赋觉醒系列
     {"code": "talent_first", "name": "天赋觉醒·初阶", "title": "启明", "description": "五者天赋测评完成并查看报告", "category": "talent", "condition_json": {"type": "assessment_view", "count": 1}, "color_theme": "purple", "sort_order": 20},
     {"code": "talent_persist_7", "name": "天赋觉醒·进阶", "title": "明道", "description": "天赋测评完成 7 天后仍持续训练", "category": "talent", "condition_json": {"type": "persist_after_assessment", "days": 7}, "color_theme": "purple", "sort_order": 21},
@@ -45,7 +63,7 @@ DEFAULT_ACHIEVEMENTS = [
 
 
 def init_achievement_definitions(db: Session) -> int:
-    """初始化勋章定义（幂等）"""
+    """初始化勋章定义（幂等，并同步文案）"""
     count = 0
     for data in DEFAULT_ACHIEVEMENTS:
         existing = db.scalar(
@@ -55,6 +73,10 @@ def init_achievement_definitions(db: Session) -> int:
             achievement = AchievementDefinition(**data)
             db.add(achievement)
             count += 1
+        else:
+            existing.name = data["name"]
+            existing.title = data["title"]
+            existing.description = data["description"]
     db.commit()
     return count
 
@@ -108,7 +130,7 @@ def get_user_achievements(db: Session, user_id: int) -> list[dict]:
             "status": status,
             "progress_current": progress_current,
             "progress_target": progress_target,
-            "progress_text": f"{progress_current}/{progress_target}" if progress_target > 1 else ("已完成" if status != "locked" else "未完成"),
+            "progress_text": _format_progress_text(defn, progress_current, progress_target, status),
             "unlocked_at": unlocked_at.isoformat() if unlocked_at else None,
             "claimed_at": claimed_at.isoformat() if claimed_at else None,
         })
