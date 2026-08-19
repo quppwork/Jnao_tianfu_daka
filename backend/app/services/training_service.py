@@ -731,7 +731,7 @@ def toggle_elective_item(
     skill: str,
     action: str,
 ) -> dict:
-    """统一开关选修项：action="add" 追加，action="remove" 按技能名移除"""
+    """统一开关选修项：action="add" 插到方案最前，action="remove" 按技能名移除"""
     if action == "add":
         return append_elective_item(db, child_user_id, plan_id, skill)
     elif action == "remove":
@@ -1344,13 +1344,36 @@ def _try_rotate_part_after_checkin(
     flag_modified(child, "profile_json")
 
 
+# 选修项固定优先级：多元感知（感知力）永远第一关，开口窍第二关，其余按原顺序
+ELECTIVE_PRIORITY = {"感知力": 0, "开口窍": 1}
+
+
+def _resort_plan_elective_priority(plan) -> None:
+    """重排方案 sort_order：选修项按固定优先级排最前，必修项保持原相对顺序。"""
+    items = sorted(plan.items, key=lambda x: x.sort_order or 0)
+
+    def sort_key(it):
+        inst = parse_item_instruction(
+            it.instructions
+            if it.instructions and str(it.instructions).strip().startswith("{")
+            else None
+        )
+        skill = inst.get("skill") if inst else None
+        if skill in ELECTIVE_PRIORITY:
+            return (0, ELECTIVE_PRIORITY[skill])
+        return (1, 0)
+
+    for i, it in enumerate(sorted(items, key=sort_key), start=1):
+        it.sort_order = i
+
+
 def append_elective_item(
     db: Session,
     child_user_id: int,
     plan_id: int,
     skill: str,
 ) -> dict:
-    """在现有方案末尾追加一个选修训练项（如多元感知），有 OSS 音频则带音频"""
+    """在现有方案最前面插入一个选修训练项（如多元感知），有 OSS 音频则带音频"""
     from app.services.content_meta import (
         content_display_title, estimate_duration_min, parse_item_meta,
     )
@@ -1388,7 +1411,8 @@ def append_elective_item(
                     return _plan_to_response(plan, db=db)
 
     items = sorted(plan.items, key=lambda x: x.sort_order)
-    next_sort = (items[-1].sort_order + 1) if items else 1
+    # 选修项插到最前面：取当前最小 sort_order 再减 1（负值排序正常）
+    next_sort = (items[0].sort_order - 1) if items else 1
 
     talent = resolve_effective_talent(db, child_user_id)
     talent_code = talent.get("talent_code") if talent else None
@@ -1435,6 +1459,9 @@ def append_elective_item(
             ),
             checkin_status="pending",
         ))
+
+    db.flush()  # 确保新项进入 plan.items，再按固定优先级重排
+    _resort_plan_elective_priority(plan)
 
     if talent_code:
         ensure_supplementary_catalogs(db)

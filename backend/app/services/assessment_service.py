@@ -580,7 +580,6 @@ def list_assessments(db: Session, child_user_id: int, limit: int = 30) -> list[d
                 else (r.report_json or {}).get("create_time")
             ),
             "assessed_at": r.assessed_at.isoformat() if r.assessed_at else None,
-            "test_type": r.test_type,
         }
         for r in rows
     ]
