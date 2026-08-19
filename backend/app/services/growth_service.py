@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ChildUser, ContentItem, QaSession, TalentAssessment, TrainingItem, TrainingPlan, TrainingRecord
+from app.db.models import ChildUser, ContentItem, QaMessage, QaSession, TalentAssessment, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.assessment_service import get_latest_assessment, resolve_effective_talent
 from app.services.chat_archive_service import earliest_qa_created_at
 from app.services.content_meta import parse_item_meta, skill_from_title
@@ -348,6 +348,93 @@ def get_timeline(db: Session, child_user_id: int, limit: int = 40, stats: dict |
     return events[:limit]
 
 
+def get_calendar_days(db: Session, child_user_id: int) -> list[dict]:
+    """按天聚合孩子每天的活动明细（打卡、完成的训练课、提问、测评）。
+
+    返回按日期升序的列表，每天一条：{"date": "YYYY-MM-DD", "items": [{type, title, icon}]}
+    """
+    from collections import defaultdict
+
+    days: dict[str, list[dict]] = defaultdict(list)
+
+    def _key(d: date) -> str:
+        return d.isoformat()
+
+    # 1) 打卡 + 完成的训练课（列出每一个完成的具体训练项）
+    records = db.scalars(
+        select(TrainingRecord)
+        .where(TrainingRecord.child_user_id == child_user_id)
+        .order_by(TrainingRecord.id.asc())
+    ).all()
+    item_ids = {r.item_id for r in records if r.item_id}
+    items_by_id: dict[int, TrainingItem] = {}
+    content_ids: set[int] = set()
+    if item_ids:
+        rows = db.scalars(select(TrainingItem).where(TrainingItem.id.in_(item_ids))).all()
+        items_by_id = {it.id: it for it in rows}
+        content_ids = {it.content_item_id for it in rows if it.content_item_id}
+    
+    # 获取ContentItem的标题
+    content_by_id: dict[int, ContentItem] = {}
+    if content_ids:
+        c_rows = db.scalars(select(ContentItem).where(ContentItem.id.in_(content_ids))).all()
+        content_by_id = {c.id: c for c in c_rows}
+
+    added_titles: dict[str, set[str]] = defaultdict(set)  # 按日期去重
+    for rec in records:
+        d = _key(rec.train_date if rec.train_date else (rec.created_at.date() if rec.created_at else date.today()))
+        it = items_by_id.get(rec.item_id)
+        if it and it.checkin_status == "done":
+            # 获取训练项标题：优先用TrainingItem.title，其次用ContentItem.lesson_title
+            title = it.title
+            if not title and it.content_item_id:
+                ci = content_by_id.get(it.content_item_id)
+                if ci:
+                    title = ci.lesson_title
+            if not title:
+                title = "完成一项训练"
+            
+            # 去重：同一天同一标题只加一次
+            if title not in added_titles[d]:
+                added_titles[d].add(title)
+                days[d].append({"type": "skill", "title": title, "icon": "brain"})
+
+    # 2) 提问（孩子的提问消息，每天最多展示 3 条最新）
+    # 只查需要的列：qa_message 可能有历史库缺 image_url 列，整表查询会报错
+    msgs = db.execute(
+        select(QaMessage.id, QaMessage.content, QaMessage.created_at)
+        .join(QaSession, QaSession.id == QaMessage.session_id)
+        .where(QaSession.child_user_id == child_user_id, QaMessage.role == "user")
+        .order_by(QaMessage.id.desc())
+    ).all()
+    qa_count: dict[str, int] = defaultdict(int)
+    for m in msgs:
+        if not m.created_at:
+            continue
+        d = _key(m.created_at.date())
+        text = (m.content or "").strip()
+        if not text:
+            continue
+        qa_count[d] += 1
+        if qa_count[d] <= 3:
+            days[d].append({"type": "qa", "title": text[:50], "icon": "message"})
+
+    # 3) 天赋测评
+    assessments = db.scalars(
+        select(TalentAssessment)
+        .where(TalentAssessment.child_user_id == child_user_id)
+        .order_by(TalentAssessment.id.asc())
+    ).all()
+    for a in assessments:
+        if not a.assessed_at:
+            continue
+        d = _key(a.assessed_at.date())
+        if not any(e["type"] == "assessment" for e in days[d]):
+            days[d].append({"type": "assessment", "title": "完成天赋测评", "icon": "star"})
+
+    return [{"date": d, "items": items} for d, items in sorted(days.items())]
+
+
 def get_summary(db: Session, child_user_id: int, stats: dict | None = None) -> dict:
     if stats is None:
         stats = _collect_stats(db, child_user_id)
@@ -383,11 +470,20 @@ def get_summary(db: Session, child_user_id: int, stats: dict | None = None) -> d
     if not talent_primary:
         eff = resolve_effective_talent(db, child_user_id)
         talent_primary = (eff or {}).get("talent_primary")
+
+    # 🆕 积分：按已发生行为累计（打卡 10 分/次 + 提问 5 分/次 + 测评 20 分）
+    points = (
+        stats["checkins"] * 10
+        + stats["qa_count"] * 5
+        + (20 if stats.get("assessment") is not None else 0)
+    )
+
     return {
         "nickname": user.nickname if user else "",
         "talent_primary": talent_primary,
         "overall_tier": overall_tier,        # 🆕 v2.0
         "honor_level": honor,
+        "points": points,                    # 🆕 v2.1 积分
         "total_checkins": stats["checkins"],
         "checkin_streak": stats["streak"],
         "qa_questions": stats["qa_count"],
@@ -398,6 +494,140 @@ def get_summary(db: Session, child_user_id: int, stats: dict | None = None) -> d
         "mastery_skills_target": list(MASTERY_SKILLS),
         "member_since": user.created_at.date().isoformat() if user and user.created_at else None,
     }
+
+
+# 🆕 v2.2 六级九段：轻量段位摘要，供全局角标 / 训练页状态卡使用
+# 六级 = 前 3 级账户身份（会员/VIP会员/导师子女，与付费有关）+ 后 3 级训练称号（传承特使/劲脑学神/专利精英）
+TIER_TITLES = [
+    ("会员", "identity"),
+    ("VIP会员", "identity"),
+    ("导师子女", "identity"),
+    ("传承特使", 1),
+    ("劲脑学神", 5),
+    ("专利精英", 8),
+]
+
+
+def get_tier_brief(db: Session, child_user_id: int) -> dict:
+    """返回六级九段摘要，供全页面角标展示。
+
+    - overall_tier: 九段（1-9，只按有打卡记录的技能取 tier 最小值，与打卡结算一致）
+    - honor_level:  训练称号（三段映射）
+    - title:        当前称号，优先账户身份（profile_json 里手动维护），否则用训练称号
+    - next_title / need: 距下一称号还差几阶（null = 已最高）
+    - advance_pass: 连续达标几次升 1 段（晋级规则，读配置）
+    - skills:       5 个训练项目明细（段位 / 连续达标次数 / 达标标准文案 / 是否练过）
+    """
+    from app.services.child_training_state import (
+        REQUIRED_SKILLS,
+        _grade_band_from_grade,
+        filter_active_skills,
+        get_skills_with_records,
+        get_training_progress,
+        overall_tier as _overall_tier,
+    )
+
+    user = db.get(ChildUser, child_user_id)
+    state = {}
+    overall_tier = 1
+    skills_with_records: set = set()
+    try:
+        if user:
+            state = get_training_progress(user)
+            skills_with_records = get_skills_with_records(db, child_user_id)
+            overall_tier = _overall_tier(filter_active_skills(state, skills_with_records))
+    except Exception:
+        import logging
+        logging.getLogger("jnao").warning("growth: get_tier_brief overall_tier 失败，退回默认", exc_info=True)
+
+    honor = get_tier_honor(overall_tier)
+
+    # 账户身份：profile_json 里手动维护的会员等级，优先展示
+    identity = None
+    if user and isinstance(user.profile_json, dict):
+        identity = user.profile_json.get("member_level") or user.profile_json.get("identity")
+    title = identity if identity else honor
+
+    # 下一称号（只追训练称号这 3 级）
+    next_title = None
+    need = None
+    for name, cond in TIER_TITLES:
+        if isinstance(cond, int) and overall_tier < cond:
+            next_title = name
+            need = cond - overall_tier
+            break
+
+    # 晋级规则：连续达标几次升 1 段（读配置，默认 3）
+    advance_pass = 3
+    try:
+        from config.loader import load_training_tier_thresholds
+        advance_pass = int((load_training_tier_thresholds().get("advance_rule") or {}).get("consecutive_pass") or 3)
+    except Exception:
+        pass
+
+    # 达标标准按学段取
+    grade_band = None
+    if user and isinstance(user.profile_json, dict):
+        pj = user.profile_json
+        grade = pj.get("grade") or (pj.get("learner") or {}).get("grade")
+        if grade:
+            grade_band = _grade_band_from_grade(grade)
+
+    # 5 项目明细
+    state_skills = state.get("skills") or {}
+    skills = []
+    for sk in REQUIRED_SKILLS:
+        sd = state_skills.get(sk) or {}
+        tier = int(sd.get("tier") or 1)
+        skills.append({
+            "name": sk,
+            "tier": tier,
+            "consecutive_pass": int(sd.get("consecutive_pass") or 0),
+            "active": sk in skills_with_records,
+            "rule_text": _skill_rule_text(sk, tier, grade_band),
+        })
+
+    return {
+        "overall_tier": overall_tier,
+        "tier_percent": round(overall_tier / 9 * 100),
+        "honor_level": honor,
+        "title": title,
+        "next_title": next_title,
+        "need": need,
+        "advance_pass": advance_pass,
+        "skills": skills,
+    }
+
+
+def _skill_rule_text(skill: str, tier: int, grade_band: str | None) -> str:
+    """达标标准 → 人类可读文案（前端直接展示）"""
+    from app.services.training_mastery import get_skill_threshold
+
+    th = get_skill_threshold(skill, tier, grade_band)
+    if not th:
+        return "只练不考"
+    rtype = th.get("type")
+    if rtype == "wpm":
+        words = int(th.get("words") or 0)
+        minutes = max(int(th.get("minutes") or 1), 1)
+        return f"每分钟≥{round(words / minutes)}字"
+    if rtype == "recall":
+        parts = []
+        if th.get("words"):
+            parts.append(f"≥{int(th['words'])}字")
+        if th.get("accuracy_pct"):
+            parts.append(f"准确率≥{int(th['accuracy_pct'])}%")
+        return "、".join(parts)
+    if rtype == "memory":
+        s = f"≥{int(th.get('words_per_min') or 0)}字/分"
+        if th.get("reverse_recite"):
+            s += " 可倒背"
+        return s
+    if rtype == "speed_calc":
+        return "完成速算题"
+    if rtype == "program":
+        return f"完成{th.get('name') or '训练项目'}"
+    return "练熟即可"
 
 
 def get_share(db: Session, child_user_id: int) -> dict:

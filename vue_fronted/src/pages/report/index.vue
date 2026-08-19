@@ -15,7 +15,7 @@
   <!-- 报告内容 -->
   <view class="app" v-else-if="report">
     <!-- Nav -->
-    <view class="nav"><view class="nav-back" @click="goBack"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></view><text class="nav-title">{{ isChildReport ? '孩子天赋报告' : '天赋报告' }}</text><view class="nav-spacer"></view></view>
+    <view class="nav"><view class="nav-back" @click="goBack"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></view><text class="nav-title">{{ isChildReport ? '孩子天赋报告' : '天赋报告' }}</text><view v-if="tier" class="nav-tier"><tier-badge :tier="tier" /></view><view class="nav-spacer"></view></view>
 
     <scroll-view class="body" scroll-y>
       <view class="content">
@@ -190,9 +190,6 @@
 
         <!-- ══ Actions ══ -->
         <view class="actions">
-          <view v-if="isChildReport" class="btn-kid-preview" @tap="openKidReport">
-            <text>🎨 预览儿童版报告</text>
-          </view>
           <view v-if="testType==='孩子' && !isBackup" class="btn-outline" @tap="reTest">深度校准（备用卷）</view>
           <view class="btn-solid" :style="{ background: talentColor }" @tap="goBack">重新测试</view>
         </view>
@@ -225,7 +222,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ensureChildUser, fetchAssessmentReport, fetchLatestAssessment, fetchProfile, getSessionToken, saveProfile, resolveTrainingStreamUrl } from '@/utils/userApi.js'
+import { ensureChildUser, fetchAssessmentReport, fetchLatestAssessment, fetchProfile, getSessionToken, saveProfile, resolveTrainingStreamUrl, fetchGrowthTier } from '@/utils/userApi.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
 const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
@@ -234,7 +231,7 @@ const TALENT_BG_FIGS = { "学者":"/static/talent-xuezhe.png","思者":"/static/
 
 const loading = ref(true)
 const report = ref(null)
-const reportId = ref('')
+const tier = ref(null) // 🆕 六级九段角标数据
 const testType = ref('成人') // '成人' | '孩子'，由测评 type 决定
 const isBackup = ref(false)
 const collapseOpen = ref({})
@@ -261,6 +258,9 @@ onMounted(async () => {
     fromOnboarding.value = page?.options?.from === 'onboarding'
     studentTypeFromOb.value = page?.options?.student_type || 'new'
     const uid = await ensureChildUser()
+
+    // 🆕 段位角标（六级九段），独立加载不阻塞
+    fetchGrowthTier(uid).then((d) => { tier.value = d }).catch(() => {})
 
     // 冲突检测
     if (page?.options?.talent_conflict === '1') {
@@ -292,7 +292,6 @@ onMounted(async () => {
     }
     const json = await fetchAssessmentReport(uid, assessmentId)
     if (json.code !== 1) throw new Error('报告加载失败')
-    reportId.value = String(json.assessment_id || '')
     report.value = json.data
     // 以库内 test_type 为准，回退 report.type（0=成人 1=孩子）
     const rawType = json.test_type ?? json.data?.type
@@ -706,12 +705,6 @@ async function openVideo() {
 function closeTalentVideo() { showTalentVideo.value = false }
 function reTest() { goBack() }
 
-function openKidReport() {
-  if (reportId.value) {
-    uni.navigateTo({ url: `/pages/report-kid/index?assessment_id=${reportId.value}` })
-  }
-}
-
 const isChildReport = computed(() => testType.value === '孩子')
 /** 远端目前仅有家长/成人旧版 H5；孩子卷不误链成人页 */
 const canOpenOldReport = computed(() => !isChildReport.value && !!report.value?.id)
@@ -741,6 +734,7 @@ function openOldReport() {
 .nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
 .nav-spacer { width:36px; }
+.nav-tier { display: flex; align-items: center; flex-shrink: 0; margin-right: 8px; }
 .body { flex:1; overflow-y:auto; }
 .content { padding:16px 20px 0; }
 
@@ -814,8 +808,7 @@ function openOldReport() {
 .actions { display:flex; flex-direction:column; gap:10px; padding:0 0 40px; align-items:center; }
 .btn-outline { width:100%; max-width:300px; padding:12px; text-align:center; border:1px solid #fbbf24; border-radius:14px; background:rgba(251,191,36,0.06); color:#f59e0b; font-size:15px; font-weight:500; cursor:pointer; }
 .btn-solid { width:100%; max-width:300px; padding:12px; text-align:center; border-radius:14px; color:#fff; font-size:15px; font-weight:500; cursor:pointer; }
-.btn-kid-preview { width:100%; max-width:300px; padding:12px; text-align:center; border:1.5px solid #c4b5fd; border-radius:14px; background:rgba(139,92,246,0.04); color:#7c3aed; font-size:14px; font-weight:500; cursor:pointer; }
-.btn-outline:active, .btn-solid:active, .btn-kid-preview:active { opacity:0.8; }
+.btn-outline:active, .btn-solid:active { opacity:0.8; }
 
 .radar-wrap, .state-icon-wrap { text-align:center; padding-bottom:8px; }
 .mood-wrap { text-align:center; }

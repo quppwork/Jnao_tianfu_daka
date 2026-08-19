@@ -16,6 +16,16 @@
     </view>
 
     <view class="body">
+      <!-- 🆕 页面顶部信息行：天赋头像 + 孩子名字 + 「天赋 · 第N天」（原成长历程碑/段位椭圆） -->
+      <view v-if="talentLabel" class="hero-idbar">
+        <view class="hero-idbar-avatar" :style="{ borderColor: talentColor, backgroundImage: 'url(' + talentAvatarImg + ')' }"></view>
+        <view class="hero-idbar-main">
+          <text class="hero-idbar-title">{{ childNickname || talentLabel }}</text>
+        </view>
+        <view class="hero-tier-pill" :style="{ borderColor: talentColor }">
+          <text class="hero-tier-pill-num" :style="{ color: talentColor }">{{ heroPill }}</text>
+        </view>
+      </view>
       <view v-if="guideHandoffBanner" class="guide-handoff-banner">
         <view class="guide-handoff-main">
           <text class="guide-handoff-title">张宇老师提醒</text>
@@ -27,6 +37,45 @@
           </text>
         </view>
         <view class="guide-handoff-close" @click="guideHandoffBanner = null"><text>×</text></view>
+      </view>
+      <!-- 段位状态卡（六级九段） -->
+      <view v-if="tier" class="tier-card" @click="goGrowth">
+        <view class="tier-card-head">
+          <view class="tier-card-title">
+            <view class="tier-card-medal" v-html="tierMedalSvg"></view>
+            <text class="tier-card-name">{{ tier.title || tier.honor_level }}</text>
+            <text class="tier-card-tier">第{{ tier.overall_tier }}段</text>
+          </view>
+          <text v-if="tier.next_title" class="tier-card-next">距「{{ tier.next_title }}」还差 {{ tier.need }} 阶 →</text>
+          <text v-else class="tier-card-next top">已达最高段位 🎉</text>
+        </view>
+        <view class="tier-card-bar"><view class="tier-card-fill" :style="{ width: (tier.tier_percent || 0) + '%' }"></view></view>
+        <view class="tier-card-skills" v-if="tier.skills && tier.skills.length">
+          <view class="tier-card-skills-head">
+            <text class="tier-card-skills-title">训练项目段位</text>
+            <view class="tier-card-skills-rhs">
+              <text class="tier-card-skills-tip">连续达标 {{ tier.advance_pass || 3 }} 次升 1 段</text>
+              <view class="tier-info-btn" @click.stop="openTierRules">
+                <text>ⓘ</text>
+                <text class="tier-info-btn-label">晋级规则</text>
+              </view>
+            </view>
+          </view>
+          <view class="tier-skill" v-for="s in tier.skills" :key="s.name">
+            <view class="tier-skill-left">
+              <text class="tier-skill-name">{{ s.name }}</text>
+              <text class="tier-skill-tier" :class="{ muted: !s.active }">{{ s.active ? s.tier + '段' : '未开始' }}</text>
+            </view>
+            <view class="tier-skill-right">
+              <view class="tier-skill-dots" v-if="s.active" @click.stop="explainConsecutive(s)">
+                <view class="tier-skill-dot" v-for="i in (tier.advance_pass || 3)" :key="i" :class="{ on: i <= s.consecutive_pass }"></view>
+                <text class="tier-skill-dot-num">{{ s.consecutive_pass }}/{{ tier.advance_pass || 3 }}</text>
+              </view>
+              <text class="tier-skill-rule" :class="{ muted: !s.active }">{{ s.active ? s.rule_text : '训练后开启' }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="tier-card-foot"><text>九段进度 {{ tier.overall_tier }}/9</text><text>点击查看进阶之路</text></view>
       </view>
       <!-- 今日训练时长 -->
       <view class="card time-card" :class="{ 'time-card-alert': redAlertActive }">
@@ -56,15 +105,7 @@
             </picker>
           </view>
           <view class="time-start-btn" :class="{ disabled: !canStartTimer }" @click="startTrainingTimer">
-            <text>开始训练</text>
-          </view>
-          <view
-            v-if="agentScheduleEnabled"
-            class="time-start-btn time-start-btn-agent"
-            :class="{ disabled: !canStartTimer }"
-            @click="startTrainingTimerAgent"
-          >
-            <text>智能排课</text>
+            <text>生成今日方案</text>
           </view>
           <text class="time-setup-hint">{{ timeSetupHint }}</text>
         </view>
@@ -125,6 +166,15 @@
             <view class="dev-action dev-action-danger" @click="devResetTalentAction"><text>🧬 重置天赋</text></view>
           </view>
           <text class="dev-panel-hint">重置今日 = 仅删今日方案与计时 · 模拟4点 = 虚拟时钟快进到截止 · 新一天 = 快进到 4:05</text>
+        </view>
+      </view>
+
+      <!-- 🆕 时间预算卡下方：天赋头像 + 时间预算引导（仅在选择时长阶段显示，确认时长后隐藏） -->
+      <view v-if="timerPhase === 'setup' && !durationLocked" class="time-budget-tip">
+        <view class="time-budget-avatar" :style="{ borderColor: talentColor, backgroundImage: 'url(' + talentAvatarImg + ')' }"></view>
+        <view class="time-budget-bubble">
+          <text class="time-budget-title">先告诉我你今天的时间预算</text>
+          <text class="time-budget-sub">8小时有8小时的排法 · 30分钟有30分钟的排法</text>
         </view>
       </view>
 
@@ -259,15 +309,18 @@
 
           <!-- 🆕 选修环节 -->
           <view v-if="(timerPhase !== 'setup' || planJustGenerated) && todayPlan?.plan_id" class="elective-toggles">
-            <text class="elective-section-label">🧩 选修环节</text>
+            <text class="elective-section-label">🧩 可选修训练</text>
             <view class="elective-toggle-item" v-for="es in electiveSkills" :key="es.skill">
-              <text class="et-label">{{ es.label }}</text>
-              <view class="et-switch" :class="{ on: es.inPlan }" @click="toggleElective(es.skill)">
-                <view class="et-knob"></view>
+              <view class="et-main">
+                <text class="et-label">{{ es.label }}</text>
+                <view class="et-switch" :class="{ on: es.inPlan }" @click="toggleElective(es.skill)">
+                  <view class="et-knob"></view>
+                </view>
+                <view class="et-info" @click.stop="showElectiveInfoModal(es.skill)"><text>ⓘ</text></view>
               </view>
-              <view class="et-info" @click.stop="showElectiveInfoModal(es.skill)"><text>ⓘ</text></view>
+              <text class="et-desc">{{ es.desc }}</text>
+              <text v-if="es.inPlan && es.rankCN" class="et-pinned">📌 已置顶为第{{ es.rankCN }}关</text>
             </view>
-            <text class="elective-hint">开启后将在训练计划中增加对应的训练环节，可随时开关</text>
       </view>
         </template>
       </view>
@@ -279,89 +332,85 @@
         </view>
       </view>
 
-      <!-- 训练阶段 -->
-      <template v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in visiblePhases" :key="phase.block">
-        <view v-if="pi > 0" class="divider"></view>
-        <view :id="'phase-block-' + phase.block" class="phase-section">
-          <text class="section-title" :class="{ dim: !phase.unlocked, elective: phase.isElective }">
-            {{ phase.label }}{{ phase.unlocked ? '' : ' 🔒' }}{{ phase.isElective ? ' 🆓' : '' }}
-          </text>
+      <!-- 闯关地图 -->
+      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map">
+        <!-- 全部过关横幅 -->
+        <view v-if="questAllDone" class="quest-banner">
+          <text class="quest-banner-text">🎉 今日闯关全部完成！</text>
+        </view>
 
-          <view class="media-block" :class="{ locked: isPhaseMediaLocked(phase) }">
-            <view v-if="isPhaseMediaLocked(phase)" class="media-lock-overlay">
-              <text class="media-lock-text">{{ phaseMediaLockText(phase) }}</text>
-            </view>
-
-            <template v-if="phase.items.length">
-              <view class="step-grid">
-                <template v-for="(item, idx) in phase.items" :key="item.id || idx">
-                  <!-- 音频卡片（仅当有音频时） -->
-                  <view
-                    v-if="item.audio_url"
-                    class="step"
-                    :class="{
-                      'step-preview-locked': !phase.unlocked,
-                      'step-locked': phase.unlocked && isMediaLocked,
-                      'step-watched': phase.unlocked && isItemWatched(item),
-                    }"
-                    @click="openPhaseMediaItem(item, phase, 'audio')"
-                  >
-                    <view class="step-num" :class="{ 'step-num-done': isItemWatched(item), dim: !phase.unlocked }">{{ idx + 1 }}</view>
-                    <view class="step-content">
-                      <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">🎧 音频训练</text>
-                      <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ item.title || '训练项' }}</view>
-                      <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">{{ itemStepHint(item, phase) }}</text>
+        <template v-for="(phase, pi) in planPhases" :key="phase.block">
+          <!-- ===== 关卡卡片 ===== -->
+          <view v-if="phase.questNo !== null" :id="'phase-block-' + phase.block" class="quest-level" :class="{ done: phase.allDone }">
+            <!-- Z 字左右交替：关卡卡 + 视频卡分居中线两侧；图标骑在贯穿虚线上、半跨关卡卡顶部 -->
+            <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked }">
+              <view class="qm-col qm-card-col">
+                <view v-if="phase.audioItem" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem, phase, 'audio')" :style="{ '--qc': talentColor }">
+                  <view class="qa-main">
+                    <text class="qa-status" :class="{ done: phase.allDone, locked: !phase.unlocked }">{{ questStatusText(phase) }}</text>
+                    <view v-if="phase.subtitle && phase.subtitle !== phase.skillName" class="qa-skill">
+                      <text>{{ phase.skillName || '训练' }}</text>
+                      <text v-if="phase.isElective" class="qa-tag">选修</text>
+                    </view>
+                    <text class="qa-name">{{ phase.subtitle || phase.skillName || '训练' }}</text>
+                    <text class="qa-desc">{{ questDescFor(phase) }}</text>
+                    <view class="qa-start" :class="{ locked: !phase.unlocked, done: phase.allDone }">
+                      <view class="qa-start-ic">{{ phase.allDone ? '✓' : '▶' }}</view>
+                      <view class="qa-start-body">
+                        <text class="qa-start-text">{{ questStartText(phase) }}</text>
+                        <text v-if="questSubText(phase)" class="qa-start-sub">{{ questSubText(phase) }}</text>
+                      </view>
                     </view>
                   </view>
-                  <!-- 视频卡片（仅当有 video_url 时） -->
-                  <view
-                    v-if="item.video_url"
-                    class="step step-video"
-                    :class="{
-                      'step-preview-locked': !phase.unlocked,
-                      'step-locked': phase.unlocked && isMediaLocked,
-                      'step-watched': phase.unlocked && isItemWatched(item),
-                    }"
-                    @click.stop="openPhaseMediaItem(item, phase, 'video')"
-                  >
-                    <view class="step-num" :class="{ 'step-num-done': isItemWatched(item), dim: !phase.unlocked }">▶</view>
-                    <view class="step-content">
-                      <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">🎬 视频训练</text>
-                      <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ videoTitle(item) }}</view>
-                      <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">点击播放</text>
-                    </view>
-                  </view>
-                </template>
+                </view>
               </view>
-            </template>
-            <view v-else class="step dim-step">
-              <view class="step-num dim">1</view>
-              <view class="step-content">
-                <text class="step-label dim-text">训练项</text>
-                <view class="step-box dim-box">暂无内容</view>
-                <text class="step-time dim-text">请先生成今日方案</text>
+              <view class="qm-col qm-video-col">
+                <view v-if="phase.videoItem" class="qm-side qm-video" @click="openPhaseMediaItem(phase.videoItem, phase, 'video')">
+                  <text class="qm-emoji">📺</text>
+                  <text class="qm-label">先看视频</text>
+                  <text class="qm-meta">教学示范</text>
+                </view>
+              </view>
+              <!-- 图标节点：绝对定位骑中线，中心对准关卡卡顶部边线（半跨卡顶） -->
+              <view class="quest-node" :class="{ done: phase.allDone, pulse: phase.unlocked && !phase.allDone }">
+                <text class="quest-node-icon">{{ phase.questIcon }}</text>
+                <text v-if="phase.allDone" class="quest-node-star">⭐</text>
               </view>
             </view>
 
-            <text class="lock-tip">{{ phaseTip(phase) }}</text>
-
-            <template v-if="!isPerceptionPhase(phase) && !phase.isElective">
-            <view class="checkin-block" :class="{ locked: !isPhaseListenDone(phase) }">
-              <view v-if="!isPhaseListenDone(phase)" class="checkin-lock-overlay">
-                <text class="checkin-lock-text">🔒 请先听完/看完音视频（{{ WATCH_DONE_PCT }}%）</text>
+            <!-- 打卡：必修关有按钮；多元感知点听即过 -->
+            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin" :class="{ locked: !isPhaseListenDone(phase) }">
+              <view v-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
+                <text class="qct-text">🔒 请先听完音视频（{{ WATCH_DONE_PCT }}%）</text>
               </view>
               <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
               </view>
             </view>
-            </template>
-            <template v-else-if="isPerceptionPhase(phase)">
-              <text v-if="phase.allDone" class="perception-done-text">✅ 多元感知训练已完成 · 点击音频可回听</text>
-              <text v-else class="perception-done-text">点击音频即可完成多元感知训练</text>
-            </template>
+            <view v-else-if="phase.isPercep" class="quest-perception-tip">
+              <text v-if="phase.allDone">✅ 多元感知已完成 · 点击音频可回听</text>
+              <text v-else>点击音频即可完成多元感知训练</text>
+            </view>
           </view>
-        </view>
-      </template>
+
+          <!-- ===== 选修自由训练卡片（不参与闯关虚线） ===== -->
+          <view v-else-if="phase.isElective" class="quest-free">
+            <text class="quest-free-title">🧩 {{ phase.skillName || '选修' }}（选修）</text>
+            <view class="quest-media-free">
+              <view v-if="phase.audioItem" class="qf-side" @click="openPhaseMediaItem(phase.audioItem, phase, 'audio')">
+                <text class="qf-emoji">🎧</text>
+                <text class="qf-label">音频训练</text>
+                <text class="qf-meta">约 {{ phase.audioItem.duration_min || '?' }} 分钟</text>
+              </view>
+              <view v-if="phase.videoItem" class="qf-side" @click="openPhaseMediaItem(phase.videoItem, phase, 'video')">
+                <text class="qf-emoji">🎬</text>
+                <text class="qf-label">视频讲解</text>
+                <text class="qf-meta">可看可不看</text>
+              </view>
+            </view>
+          </view>
+        </template>
+      </view>
 
       <!-- 打卡弹窗（各阶段共用） -->
       <view v-if="showPicker && activePickerBlock" class="picker-overlay" @click="closePicker">
@@ -440,6 +489,7 @@
                     </view>
                   </view>
                 </view>
+                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -507,6 +557,7 @@
                     </view>
                   </view>
                 </view>
+                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -559,6 +610,7 @@
                     </view>
                   </view>
                 </view>
+                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -596,6 +648,7 @@
                     </view>
                   </view>
                 </view>
+                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -1000,12 +1053,14 @@
     </view>
   </view>
   </view>
+  <!-- 晋级规则说明 Modal -->
+  <tier-rules-modal v-model="showTierRules" :advance-pass="tier?.advance_pass || 3" />
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onLoad, onShow, onHide } from '@dcloudio/uni-app'
-import { requirePageAuth, ensureChildUser, getChildUserId, resolveTrainingStreamUrl, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
+import { requirePageAuth, ensureChildUser, getChildUserId, resolveTrainingStreamUrl, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem, fetchGrowthTier } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -1105,16 +1160,18 @@ const trainingHasStarted = computed(() => {
 const planEmptyHint = computed(() => {
   if (needAssessment.value) return '完成天赋测评后可开始训练'
   if (scheduleLoading.value) return '正在生成今日训练内容…'
-  return '选择训练时长，点击「开始训练」生成今日内容'
+  return '选择训练时长，点击「生成今日方案」为你排课'
 })
 const timeSetupHint = computed(() => {
   if (scheduleLoading.value) return '正在按设定时长生成训练内容…'
   if (planJustGenerated.value) return '可在下方查看、编辑训练内容，确认后开始计时'
   if (durationLocked.value) return '时长已锁定，确认方案后开始计时'
-  if (agentScheduleEnabled.value) {
-    return '「开始训练」走标准方案；「智能排课」先试推荐，失败自动改用标准方案'
-  }
-  return '选择时长后点击「开始训练」，将按孩子情况分配今日内容'
+  const h = selectedHours.value
+  const m = selectedMinutes.value
+  const total = h * 60 + m
+  if (total < MIN_TRAINING_MINUTES) return '选择时长后点击「生成今日方案」为你排课'
+  const durText = h > 0 && m > 0 ? `${h}小时${m}分` : h > 0 ? `${h}小时` : `${m}分`
+  return `按 ${durText} 为你排课（可随时改时长重新生成）`
 })
 /** 训练日已完成（次日凌晨4点才能新开一天），仅禁止重新「开始训练」 */
 const trainingDayLocked = computed(() => todayPlan.value?.day_locked === true)
@@ -1161,7 +1218,7 @@ const mediaLockText = computed(() => {
   if (isGlobalCutoff.value) return '凌晨4点训练日已截止'
   if (isMediaExhausted.value || timerPhase.value === 'expired') return '训练时长已到，音视频已锁定'
   if (trainingDayLocked.value && timerPhase.value === 'setup') return dayLockText.value
-  return '请先设置时长并开始训练'
+  return '请先设置时长并生成今日方案'
 })
 const checkinLockText = computed(() => {
   if (isPageLoading.value) return '方案生成中，请稍候...'
@@ -1656,7 +1713,7 @@ function guardMedia() {
     return false
   }
   if (timerPhase.value === 'setup') {
-    uni.showToast({ title: '请先选择时长并点击「开始训练」', icon: 'none' })
+    uni.showToast({ title: '请先选择时长并点击「生成今日方案」', icon: 'none' })
     return false
   }
   return true
@@ -1672,7 +1729,7 @@ function guardCheckin(block) {
     return true
   }
   if (timerPhase.value === 'setup') {
-    uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
+    uni.showToast({ title: '请先设置时长并生成今日方案', icon: 'none' })
     return false
   }
   return true
@@ -1977,12 +2034,28 @@ const electiveSkills = computed(() => {
     })
   }
 
-  // 多元感知（OSS 内部名：感知力）
-  list.push({ skill: '感知力', label: '多元感知', inPlan: skillInPlan('感知力') })
-  // 开口窍：视频选修，独立开关
-  list.push({ skill: '开口窍', label: '开口窍 🎬', inPlan: skillInPlan('开口窍') })
+  // 从方案里读该项的真实时长（分钟）；未排进方案时给兜底默认值
+  function skillDurationMin(skill, fallback) {
+    const item = items.find(i => parseItemInstructions(i.instructions).skill === skill)
+    return (item && item.duration_min) ? item.duration_min : fallback
+  }
 
-  return list
+  // 该项在方案里排第几位（第几关），未排进返回 0
+  const sortedItems = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  function skillRank(skill) {
+    const idx = sortedItems.findIndex(i => parseItemInstructions(i.instructions).skill === skill)
+    return idx >= 0 ? idx + 1 : 0
+  }
+  const CN_NUM = ['零','一','二','三','四','五','六','七','八','九','十']
+
+  // 多元感知（OSS 内部名：感知力）：音频训练
+  const ganDuration = skillDurationMin('感知力', 12)
+  list.push({ skill: '感知力', label: '多元感知', inPlan: skillInPlan('感知力'), desc: `感知力音频训练，时长为${ganDuration}分钟`, mediaTag: 'audio', rank: skillRank('感知力') })
+  // 开口窍：视频选修，独立开关
+  const kaiqiaoDuration = skillDurationMin('开口窍', 30)
+  list.push({ skill: '开口窍', label: '开口窍 🎬', inPlan: skillInPlan('开口窍'), desc: `表达力开口训练，时长为${kaiqiaoDuration}分钟`, mediaTag: 'video', rank: skillRank('开口窍') })
+
+  return list.map(es => ({ ...es, rankCN: es.rank > 0 ? CN_NUM[Math.min(es.rank, CN_NUM.length - 1)] : '' }))
 })
 
 const electiveToggling = ref(false)
@@ -2226,6 +2299,80 @@ const needAssessment = ref(false)
 const showAssessmentModal = ref(false)
 const todayPlan = ref(null)
 const phaseRecordIds = ref({})
+const tier = ref(null) // 🆕 六级九段（角标 + 状态卡）
+const tierMedalSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>'
+
+// 🆕 顶部信息行：天赋头像（与成长页同一套图）+ 主题色 + 段位中文
+const TALENT_AVATAR = {
+  '学者': '/static/talent-xuezhe.png',
+  '思者': '/static/talent-sizhe.png',
+  '行者': '/static/talent-xingzhe.png',
+  '德者': '/static/talent-dezhe.png',
+  '赢者': '/static/talent-yingzhe.png',
+}
+const talentAvatarImg = computed(() => TALENT_AVATAR[talentLabel.value] || '/static/talent-xuezhe.png')
+const TALENT_COLOR = {
+  '学者': '#12417A',
+  '思者': '#22C55E',
+  '行者': '#A57A1A',
+  '德者': '#582E1F',
+  '赢者': '#960D24',
+}
+const talentColor = computed(() => TALENT_COLOR[talentLabel.value] || '#3b82f6')
+const CN_TIER = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
+const heroTier = computed(() => tier.value?.overall_tier || overallTier.value || 1)
+const tierCN = computed(() => CN_TIER[Math.min(9, Math.max(1, heroTier.value)) - 1])
+
+// 🆕 顶部标题改成孩子名字（登录时存在 jnao_user）
+const childNickname = computed(() => {
+  try {
+    const raw = localStorage.getItem('jnao_user')
+    if (raw) {
+      const u = JSON.parse(raw)
+      if (u && u.name) return u.name
+    }
+  } catch (_) { /* ignore */ }
+  return ''
+})
+// 🆕 段位椭圆改成「天赋 · 第N天」
+const heroPill = computed(() => {
+  const day = todayPlan.value?.training_day_number ?? todayPlan.value?.lesson_day ?? lessonIndex.value
+  const base = talentLabel.value || ''
+  return day ? `${base} · 第${day}天` : base
+})
+
+function goGrowth() { uni.navigateTo({ url: '/pages/growth/index' }) }
+
+const showTierRules = ref(false)
+function openTierRules() { showTierRules.value = true }
+function explainConsecutive(s) {
+  const need = (tier.value?.advance_pass || 3)
+  const cur = int(s?.consecutive_pass || 0)
+  if (cur === 0) {
+    uni.showModal({
+      title: `${s.name} · 当前连续 0/${need} 次`,
+      content: `还没有连续达标记录。今天打卡先达「${s.rule_text || '通关标准'}」，开启本轮计数～\n⚠️ 中间有任何一天没达标，会清零重来哦`,
+      showCancel: false,
+      confirmText: '知道了',
+    })
+  } else if (cur >= need) {
+    uni.showModal({
+      title: `${s.name} · 已达成 ${need}/${need} 次`,
+      content: `恭喜，已连续达标 ${need} 次！\n完成本次打卡后即可升段，通关标准将自动升级。`,
+      showCancel: false,
+      confirmText: '太棒了',
+    })
+  } else {
+    const remain = need - cur
+    uni.showModal({
+      title: `${s.name} · 当前连续 ${cur}/${need} 次`,
+      content: `已连续达标 ${cur} 天，再坚持 ${remain} 天即可升段！\n⚠️ 注意：${remain === 1 ? '明天' : '接下来 ' + remain + ' 天'} 打卡必须继续达标「${s.rule_text || '通关标准'}」，否则清零重来`,
+      showCancel: false,
+      confirmText: '加油',
+    })
+  }
+}
+function int(v) { const n = Number(v); return Number.isFinite(n) ? n | 0 : 0 }
 
 /** DEV only：Agent 排课理由（正式 UI 不展示） */
 const scheduleAssistDevText = computed(() => {
@@ -2393,20 +2540,32 @@ const planPhases = computed(() => {
   // v2.0: 每个 item 独立为一个 phase，按 sort_order 顺序
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
   let prevDone = true  // first item always unlocked
+  let requiredNo = 0  // 必修编号只数必修项（选修插最前后，必修仍从 1 开始）
+
+  // 闯关编号：多元感知固定为第 1 关（点听即完成），必修音频从第 2 关起（无感知则必修从第 1 关起）
+  const hasPerception = sorted.some(it => {
+    const s = parseItemInstructions(it.instructions)
+    return it.item_type === 'perception' || s.item_type === 'perception' || (it.title || '').includes('多元感知')
+  })
 
   return sorted.map((item, idx) => {
     const inst = parseItemInstructions(item.instructions)
     const isRequired = inst.item_type !== 'elective' && inst.blocks_next !== false
+    const isPercep = item.item_type === 'perception' || inst.item_type === 'perception' || (item.title || '').includes('多元感知')
     const isDone = item.checkin_status === 'done'
     const unlocked = isRequired ? (prevDone || isDone) : true  // elective always unlocked
 
     // Update prevDone for next iteration — completed items keep the chain alive
     if (isRequired && !isDone) prevDone = false
     if (isDone) prevDone = true
+    if (isRequired) requiredNo += 1
 
     const skillName = inst.skill || resolvePlanItemSkill(item) || ''
     const isElective = !isRequired
-    const label = isElective ? `${skillName || '选修'}（选修）` : `${idx + 1}. ${skillName || '训练'}`
+    const questNo = isPercep ? 1 : (isRequired ? requiredNo + (hasPerception ? 1 : 0) : null)
+    const label = isElective
+      ? (isPercep ? `1. ${skillName || '多元感知'}` : `${skillName || '选修'}（选修）`)
+      : `${questNo}. ${skillName || '训练'}`
 
     let nodeIcon = '○'
     let nodeClass = 'tl-node-locked'
@@ -2430,9 +2589,70 @@ const planPhases = computed(() => {
       nodeClass,
       isElective,
       skillName,
+      // ── 闯关地图字段 ──
+      isPercep,
+      questNo,          // 关卡编号；null = 非关卡（普通选修）
+      questIcon: questIconFor(item, skillName),
+      audioItem: item.audio_url ? item : null,
+      videoItem: item.video_url ? item : null,
     }
   })
 })
+
+/** 关卡项目图标：超脑阅读=📖 书，影像追忆=🎬，扫描速记=✍️ … */
+function questIconFor(item, skill) {
+  const t = `${item?.title || ''} ${skill || ''}`
+  if (t.includes('感知') || skill === '感知力') return '🔮'
+  if (t.includes('超脑') || t.includes('阅读')) return '📖'
+  if (t.includes('影像') || t.includes('追忆')) return '🎬'
+  if (t.includes('扫描') || t.includes('速记')) return '✍️'
+  if (t.includes('作业')) return '✅'
+  if (t.includes('开口')) return '🗣️'
+  return '🎯'
+}
+
+/** 闯关地图全部过关（含多元感知第 1 关点听完成） */
+const questAllDone = computed(() => {
+  const quests = planPhases.value.filter(p => p.questNo !== null)
+  if (!quests.length) return false
+  return quests.every(p => p.allDone)
+})
+
+/** 音频卡片状态行：第 N 关 · 状态 */
+function questStatusText(phase) {
+  if (phase.allDone) return `第 ${phase.questNo} 关 · 已过关`
+  if (!phase.unlocked) return `第 ${phase.questNo} 关 · 未解锁`
+  return `第 ${phase.questNo} 关 · 进行中`
+}
+
+/** 音频卡片开始按钮文案（emoji 由按钮圆图标承载） */
+function questStartText(phase) {
+  if (phase.allDone) return '已通过 · 点击回听'
+  if (!phase.unlocked) return '完成上一关后解锁'
+  if (phase.isPercep) return '开始闯关 · 听音频'
+  return '开始闯关 · 听音频'
+}
+
+/** 关卡卡描述（按技能固定文案，供设计稿引用） */
+function questDescFor(phase) {
+  const s = phase.skillName || ''
+  if (s.includes('超脑') || s.includes('阅读')) return '一目十行 · 观其大略不求甚解'
+  if (s.includes('影像') || s.includes('追忆')) return '闪回定格 · 场景记忆复原'
+  if (s.includes('扫描') || s.includes('速记')) return '快速扫读 · 精准记忆'
+  if (s.includes('感知')) return '唤醒感知力 · 打开五感'
+  if (s.includes('作业')) return '高效专注 · 一次搞定'
+  return ''
+}
+
+/** 关卡卡按钮下说明小字 */
+function questSubText(phase) {
+  if (phase.allDone) return ''
+  if (!phase.unlocked) return ''
+  if (phase.isPercep) return `约 ${phase.audioItem?.duration_min || '?'} 分钟 · 听完即过关`
+  const s = phase.skillName || ''
+  if (s.includes('超脑') || s.includes('阅读')) return '听指令 → 读一段 → 答3问'
+  return `约 ${phase.audioItem?.duration_min || '?'} 分钟`
+}
 
 function parseItemInstructions(instructions) {
   if (typeof instructions === 'string' && instructions.trim().startsWith('{')) {
@@ -3155,7 +3375,7 @@ function phaseCheckinLockText(phase) {
     return prev ? `请先完成训练 ${prev} 打卡` : '待解锁'
   }
   if (phaseHasCheckin(phase)) return checkinLockText.value
-  if (timerPhase.value === 'setup') return '请先选择时长并开始训练'
+  if (timerPhase.value === 'setup') return '请先选择时长并生成今日方案'
   if (timerPhase.value === 'expired') return '时长已到，仍可填写打卡'
   return checkinLockText.value
 }
@@ -4112,6 +4332,9 @@ async function loadTodayPlan(silent = true) {
     const uid = await ensureChildUser()
     ensureSessionChildUser(uid)
 
+    // 🆕 段位角标 + 状态卡（六级九段），独立加载不阻塞主流程
+    fetchGrowthTier(uid).then((d) => { tier.value = d }).catch(() => {})
+
     // 提前启动 progress 请求，与主流程并行
     const progressPromise = !talentLabel.value
       ? fetchTrainingProgress(uid).catch(() => null)
@@ -4284,6 +4507,67 @@ function triggerGlitch() {
 .nav { display:flex; align-items:center; padding:28rpx 28rpx 0; position:relative; z-index:1001; }
 .nav-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+/* 🆕 段位状态卡（六级九段） */
+.tier-card { background:#243046; border:2px solid rgba(0,210,255,0.2); border-radius:20rpx; padding:28rpx 32rpx; margin:0 0 24rpx; cursor:pointer; clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+.tier-card:active { opacity:0.85; }
+.tier-card-head { display:flex; align-items:center; justify-content:space-between; gap:12rpx; }
+.tier-card-title { display:flex; align-items:center; gap:10rpx; min-width:0; }
+.tier-card-medal { display:flex; color:#ffd666; flex-shrink:0; }
+.tier-card-name { color:#fff; font-size:16px; font-weight:700; white-space:nowrap; }
+.tier-card-tier { color:rgba(0,210,255,0.9); font-size:12px; font-weight:600; background:rgba(0,210,255,0.12); border-radius:999px; padding:2px 10px; flex-shrink:0; }
+.tier-card-next { color:#ffd666; font-size:11px; font-weight:600; white-space:nowrap; flex-shrink:0; }
+.tier-card-next.top { color:#4ade80; }
+.tier-card-bar { height:6px; background:rgba(255,255,255,0.08); border-radius:999px; margin:12rpx 0 8rpx; overflow:hidden; }
+.tier-card-fill { height:100%; background:linear-gradient(90deg,#22d3ee,#38bdf8); border-radius:999px; transition:width .4s ease; }
+.tier-card-foot { display:flex; justify-content:space-between; align-items:center; }
+.tier-card-foot text { color:rgba(255,255,255,0.45); font-size:10px; }
+.tier-card-skills { margin-top:16rpx; padding-top:16rpx; border-top:1px solid rgba(255,255,255,0.08); }
+.tier-card-skills-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6rpx; }
+.tier-card-skills-rhs { display:flex; align-items:center; gap:10rpx; }
+.tier-card-skills-title { color:#7dd3fc; font-size:12px; font-weight:700; }
+.tier-card-skills-tip { color:rgba(255,255,255,0.4); font-size:10px; }
+.tier-info-btn {
+  display:inline-flex; align-items:center; gap:4rpx;
+  padding:4rpx 12rpx; border-radius:999px;
+  background:rgba(125, 211, 252, 0.1);
+  border:1px solid rgba(125, 211, 252, 0.3);
+  cursor:pointer; flex-shrink:0;
+}
+.tier-info-btn:active { opacity:0.8; }
+.tier-info-btn text:first-child { color:#7dd3fc; font-size:12px; line-height:1; font-weight:700; }
+.tier-info-btn-label { color:#7dd3fc; font-size:10px; font-weight:600; }
+.tier-skill-dots { cursor:pointer; }
+.tier-skill-dots:active { opacity:0.8; }
+.tier-skill { display:flex; align-items:center; justify-content:space-between; gap:12rpx; padding:8rpx 0; }
+.tier-skill-left { display:flex; align-items:center; gap:10rpx; min-width:0; flex-shrink:0; }
+.tier-skill-name { color:#fff; font-size:13px; font-weight:600; }
+.tier-skill-tier { color:rgba(0,210,255,0.9); font-size:11px; font-weight:700; background:rgba(0,210,255,0.12); border-radius:999px; padding:2px 8px; flex-shrink:0; }
+.tier-skill-tier.muted { color:#8b949e; background:rgba(255,255,255,0.06); }
+.tier-skill-right { display:flex; align-items:center; gap:10rpx; min-width:0; }
+.tier-skill-dots { display:flex; align-items:center; gap:4rpx; flex-shrink:0; }
+.tier-skill-dot { width:10rpx; height:10rpx; border-radius:999px; background:rgba(255,255,255,0.12); }
+.tier-skill-dot.on { background:#22d3ee; }
+.tier-skill-dot-num { color:rgba(255,255,255,0.5); font-size:10px; margin-left:2rpx; }
+.tier-skill-rule { color:rgba(255,255,255,0.55); font-size:11px; text-align:right; flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.tier-skill-rule.muted { color:rgba(255,255,255,0.28); }
+[data-theme="white"] .tier-card { background:#fff; border:2px solid #e5e7eb; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+[data-theme="white"] .tier-card-name { color:#1a1a2e; }
+[data-theme="white"] .tier-card-foot text { color:#94a3b8; }
+[data-theme="white"] .tier-card-bar { background:#e2e8f0; }
+[data-theme="white"] .tier-card-skills { border-top-color:#e5e7eb; }
+[data-theme="white"] .tier-card-skills-title { color:#2563eb; }
+[data-theme="white"] .tier-card-skills-tip { color:#94a3b8; }
+[data-theme="white"] .tier-info-btn { background:#eff6ff; border-color:#bfdbfe; }
+[data-theme="white"] .tier-info-btn text:first-child { color:#2563eb; }
+[data-theme="white"] .tier-info-btn-label { color:#2563eb; }
+[data-theme="white"] .tier-skill-name { color:#1a1a2e; }
+[data-theme="white"] .tier-skill-tier { color:#0d9488; background:#ccfbf1; }
+[data-theme="white"] .tier-skill-tier.muted { color:#9ca3af; background:#f1f5f9; }
+[data-theme="white"] .tier-skill-dot { background:#e2e8f0; }
+[data-theme="white"] .tier-skill-dot.on { background:#14b8a6; }
+[data-theme="white"] .tier-skill-dot-num { color:#94a3b8; }
+[data-theme="white"] .tier-skill-rule { color:#64748b; }
+[data-theme="white"] .tier-skill-rule.muted { color:#cbd5e1; }
 .nav-title { flex:1; text-align:center; color:#fff; font-size:16px; font-weight:600; }
 .nav-dev { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-history { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; z-index:1002; }
@@ -4324,6 +4608,33 @@ function triggerGlitch() {
 .nav-dev.active { background:rgba(251,191,36,0.15); border-color:rgba(251,191,36,0.45); }
 .nav-dev.active text { color:#fbbf24; }
 .body { flex:1; overflow-y:auto; padding:24rpx 28rpx 0; scrollbar-width:none; -ms-overflow-style:none; }
+/* 🆕 顶部信息行：天赋头像（只显示头部）+ 成长历程碑 / MILESTONES + 段位椭圆（与成长页一致） */
+.hero-idbar {
+  display:flex; align-items:center; gap:12px;
+  padding:4px 2px 14px; position:relative; z-index:1;
+}
+.hero-idbar-avatar {
+  width:52px; height:52px; border-radius:50%; overflow:hidden; flex-shrink:0;
+  border:2px solid var(--border);
+  background-color:var(--bg-card);
+  background-size: auto 230%;
+  background-position:50% 26%;
+  background-repeat:no-repeat;
+  box-shadow:var(--card-glow);
+}
+.hero-idbar-main { flex:1; min-width:0; }
+.hero-idbar-title { color:var(--text); font-size:17px; font-weight:800; display:block; letter-spacing:1px; }
+.hero-idbar-en {
+  color:var(--text-dim); font-size:10px; font-weight:600;
+  letter-spacing:3px; display:block; margin-top:3px; text-transform:uppercase;
+}
+.hero-tier-pill {
+  flex-shrink:0; border-radius:999px; text-align:center;
+  padding:8px 12px; max-width:55%; white-space:nowrap;
+  border:1px solid;
+  background:transparent;
+}
+.hero-tier-pill-num { font-size:13px; font-weight:800; white-space:nowrap; }
 .guide-handoff-banner {
   display:flex; align-items:flex-start; gap:12rpx;
   margin-bottom:24rpx; padding:20rpx 24rpx;
@@ -4345,9 +4656,9 @@ function triggerGlitch() {
 .body::-webkit-scrollbar { display:none; }
 
 .card { background:#243046; border-radius:20rpx; padding:28rpx 32rpx; margin-bottom:24rpx; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
-.plan-label { color:#00d2ff; font-size:13px; font-weight:700; display:block; }
+.plan-label { color:#00d2ff; font-size:16px; font-weight:700; display:block; }
 .plan-header { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-bottom:20rpx; flex-wrap:wrap; }
-.plan-header-meta { color:rgba(255,255,255,0.55); font-size:11px; font-weight:600; white-space:nowrap; }
+.plan-header-meta { color:rgba(255,255,255,0.55); font-size:14px; font-weight:600; white-space:nowrap; }
 .plan-loading { color:rgba(255,255,255,0.45); font-size:12px; display:block; padding:8px 0; }
 
 /* ---- AI 方案加载动画 ---- */
@@ -4357,11 +4668,11 @@ function triggerGlitch() {
 .plr-arc { position:absolute; inset:0; border-radius:50%; border:2px solid transparent; border-top-color:#00d2ff; animation:plrSpin 1.2s linear infinite; box-shadow:0 0 12px rgba(0,210,255,0.25); }
 @keyframes plrSpin { to { transform:rotate(360deg); } }
 @keyframes plrPulse { 0%,100% { transform:scale(0.85); opacity:0.5; } 50% { transform:scale(1.1); opacity:1; } }
-.plan-loading-title { display:block; color:#fff; font-size:13px; font-weight:600; margin-bottom:10px; }
+.plan-loading-title { display:block; color:#fff; font-size:16px; font-weight:600; margin-bottom:10px; }
 .plan-loading-bar { height:3px; width:70%; max-width:200px; margin:0 auto 8px; background:rgba(255,255,255,0.06); border-radius:999px; overflow:hidden; }
 .plan-loading-bar-fill { height:100%; width:30%; background:linear-gradient(90deg,transparent,#00d2ff); border-radius:999px; animation:plrBar 1.6s ease-in-out infinite; }
 @keyframes plrBar { 0% { margin-left:0; width:30%; } 50% { margin-left:50%; width:40%; } 100% { margin-left:70%; width:30%; } }
-.plan-loading-hint { display:block; color:rgba(255,255,255,0.3); font-size:10px; }
+.plan-loading-hint { display:block; color:rgba(255,255,255,0.3); font-size:13px; }
 
 /* ---- 方案生成完毕 ---- */
 .plan-done-wrap { text-align:center; padding:28px 8px 16px; animation:doneFadeIn 0.4s ease-out; }
@@ -4372,11 +4683,11 @@ function triggerGlitch() {
 .plan-done-sub { display:block; color:rgba(255,255,255,0.45); font-size:12px; }
 .plan-empty { padding:10px 0 4px; }
 .card-empty { background:rgba(10,18,30,0.6); border:1px solid rgba(0,210,255,0.12); border-radius:14px; padding:20px 16px; text-align:center; }
-.plan-empty-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.5; }
+.plan-empty-text { color:rgba(255,255,255,0.4); font-size:15px; line-height:1.5; }
 .plan-transition-wrap { padding:16px 8px; text-align:center; }
 .plan-transition-icon { font-size:28px; display:block; margin-bottom:8px; }
-.plan-transition-title { color:#e6edf3; font-size:15px; font-weight:600; display:block; }
-.plan-transition-sub { color:rgba(255,255,255,0.5); font-size:12px; margin-top:6px; display:block; }
+.plan-transition-title { color:#e6edf3; font-size:18px; font-weight:600; display:block; }
+.plan-transition-sub { color:rgba(255,255,255,0.5); font-size:15px; margin-top:6px; display:block; }
 .training-video { width:100%; border-radius:10px; background:#000; }
 .audio-controls { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
 .audio-btn-row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
@@ -4409,16 +4720,16 @@ function triggerGlitch() {
 .tl-content { flex:1; min-width:0; padding-bottom:8px; }
 .tl-node-row { cursor:pointer; }
 .tl-phase-head { padding-top:0; min-width:0; display:flex; align-items:center; justify-content:space-between; }
-.tl-phase-title { color:#fff; font-size:12px; font-weight:700; display:block; line-height:1.4; }
+.tl-phase-title { color:#fff; font-size:15px; font-weight:700; display:block; line-height:1.4; }
 .tl-phase-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.tl-phase-meta { color:rgba(255,255,255,0.38); font-size:10px; display:block; margin-top:0; }
-.tl-phase-toggle { color:rgba(255,255,255,0.3); font-size:10px; cursor:pointer; }
+.tl-phase-meta { color:rgba(255,255,255,0.38); font-size:13px; display:block; margin-top:0; }
+.tl-phase-toggle { color:rgba(255,255,255,0.3); font-size:13px; cursor:pointer; }
 .tl-items { margin:6px 0 2px; padding-left:2px; }
 .tl-item { display:flex; align-items:center; gap:6px; padding:5px 0; cursor:pointer; }
 .tl-item-icon { font-size:11px; width:14px; text-align:center; flex-shrink:0; }
-.tl-item-title { flex:1; color:rgba(255,255,255,0.82); font-size:11px; line-height:1.35; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tl-item-title { flex:1; color:rgba(255,255,255,0.82); font-size:14px; line-height:1.35; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tl-item-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.tl-item-dur { color:rgba(255,255,255,0.35); font-size:10px; }
+.tl-item-dur { color:rgba(255,255,255,0.35); font-size:13px; }
 .tl-item-status { font-size:10px; }
 .tl-st-locked { color:rgba(255,255,255,0.3); }
 .tl-st-done { color:#22c55e; }
@@ -4427,14 +4738,14 @@ function triggerGlitch() {
 .plan-progress { margin-top:12px; padding-top:12px; border-top:1px solid rgba(0,210,255,0.12); }
 .plan-progress-track { height:4px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; }
 .plan-progress-fill { height:100%; background:linear-gradient(90deg,#00d2ff,#22c55e); border-radius:999px; transition:width 0.35s ease; box-shadow:0 0 10px rgba(0,210,255,0.35); }
-.plan-progress-text { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:10px; text-align:center; letter-spacing:0.04em; }
+.plan-progress-text { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:13px; text-align:center; letter-spacing:0.04em; }
 .plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-top:12px; }
 .plan-ai-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
 .plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; }
 .plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
 .plan-ai-header { cursor:pointer; }
 .plan-ai-hint { color:rgba(255,255,255,0.35); font-size:10px; }
-.plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
+.plan-warn { color:#fbbf24; font-size:15px; display:block; margin-top:8px; cursor:pointer; }
 .phase-shine {
   position:absolute; top:0; left:-100%; width:100%; height:100%;
   background:linear-gradient(90deg, transparent 0%, rgba(0,210,255,0.06) 30%, rgba(0,210,255,0.15) 50%, rgba(0,210,255,0.06) 70%, transparent 100%);
@@ -4611,28 +4922,32 @@ function triggerGlitch() {
 .training-done-card { text-align:center; padding:16px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:12px; }
 .training-done-icon { font-size:28px; display:block; margin-bottom:4px; }
 .training-done-title { font-size:15px; font-weight:600; color:#22c55e; }
-.btn-confirm-plan { display:block; margin:16px auto 0; padding:12px 28px; background:linear-gradient(135deg,#00d2ff,#0088cc); color:#fff; font-size:14px; font-weight:600; border-radius:24px; text-align:center; cursor:pointer; box-shadow:0 4px 16px rgba(0,210,255,0.3); }
+.btn-confirm-plan { display:block; margin:16px auto 0; padding:12px 28px; background:linear-gradient(135deg,#00d2ff,#0088cc); color:#fff; font-size:17px; font-weight:600; border-radius:24px; text-align:center; cursor:pointer; box-shadow:0 4px 16px rgba(0,210,255,0.3); }
 .btn-confirm-plan text { color:#fff; }
-.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:13px; margin-bottom:4px; }
+.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:16px; margin-bottom:4px; }
 .plan-edit-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
 .plan-edit-bar-text { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
-.peb-title { color:var(--text); font-size:13px; font-weight:600; }
+.peb-title { color:var(--text); font-size:16px; font-weight:600; }
 .peb-desc { color:rgba(255,255,255,0.55); font-size:11px; line-height:1.4; }
-.plan-edit-tip { display:block; color:rgba(255,255,255,0.4); font-size:11px; margin-top:4px; }
-.elective-toggles { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-.elective-toggle-item { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:6px 12px; cursor:pointer; }
-.et-label { color:var(--text); font-size:12px; font-weight:500; }
+.plan-edit-tip { display:block; color:rgba(255,255,255,0.4); font-size:14px; margin-top:4px; }
+.elective-toggles { display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+.elective-toggle-item { display:flex; flex-direction:column; gap:4px; }
+.et-main { display:flex; align-items:center; gap:8px; }
+.et-label { color:var(--text); font-size:15px; font-weight:500; flex:1; min-width:0; }
+.et-desc { display:block; color:rgba(255,255,255,0.45); font-size:12px; line-height:1.5; }
+.et-pinned { display:block; color:#4ade80; font-size:12px; line-height:1.4; font-weight:500; }
 .et-switch { width:36px; height:20px; border-radius:10px; background:var(--border); cursor:pointer; position:relative; transition:background 0.2s; }
 .et-switch.on { background:#00d2ff; }
 .et-knob { width:16px; height:16px; border-radius:50%; background:var(--text); position:absolute; top:2px; left:2px; transition:left 0.2s; }
 .et-switch.on .et-knob { background:#fff; left:18px; }
 .et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(0,210,255,0.12); }
-.et-info text { color:#00d2ff; font-size:13px; font-weight:700; line-height:1; }
+.et-info text { color:#00d2ff; font-size:16px; font-weight:700; line-height:1; }
 .et-info:active { background:rgba(0,210,255,0.2); }
 .et-info:active text { color:#5ce0ff; }
 .et-arrow { color:rgba(255,255,255,0.3); font-size:16px; font-weight:300; margin-left:auto; flex-shrink:0; }
-.elective-section-label { width:100%; color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; margin-bottom:2px; }
-.elective-hint { width:100%; color:rgba(255,255,255,0.3); font-size:12px; line-height:1.4; margin-top:2px; }
+.elective-section-label { width:100%; color:rgba(255,255,255,0.5); font-size:15px; font-weight:500; margin-bottom:2px; }
+[data-theme="white"] .et-desc { color:rgba(0,0,0,0.5); }
+[data-theme="white"] .et-pinned { color:#16a34a; }
 ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .picker-close text { color:rgba(255,255,255,0.5); font-size:14px; }
 .submitted-item { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid rgba(0,210,255,0.1); }
@@ -4671,9 +4986,38 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .time-start-btn { background:linear-gradient(135deg,rgba(0,210,255,0.35),rgba(0,136,204,0.35)); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
 .time-start-btn text { color:#00d2ff; font-size:15px; font-weight:600; }
 .time-start-btn.disabled { opacity:0.4; }
-.time-start-btn-agent { margin-top:10px; background:linear-gradient(135deg,rgba(120,90,255,0.28),rgba(0,180,200,0.28)); }
-.time-start-btn-agent text { color:#c4b5fd; }
+
 .time-setup-hint { color:rgba(255,255,255,0.35); font-size:11px; text-align:center; }
+/* 🆕 时间预算卡下方：天赋头像 + 时间预算引导（头像大小/位置与顶部 hero-idbar 对齐，文字为对话框，配色跟随训练页青色调） */
+.time-budget-tip {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:4px 2px 14px; position:relative; z-index:1;
+}
+.time-budget-avatar {
+  width:52px; height:52px; border-radius:50%; overflow:hidden; flex-shrink:0;
+  border:2px solid var(--border);
+  background-color:var(--bg-card);
+  background-size: auto 230%;       /* 与顶部 hero-idbar-avatar 完全一致：聚焦头部 */
+  background-position:50% 26%;
+  background-repeat:no-repeat;
+  box-shadow:var(--card-glow);
+}
+/* 对话框：青色系底 + 青色描边 + 左下小圆角指向头像，与训练页卡片风格一致 */
+.time-budget-bubble {
+  flex:1; min-width:0;
+  background:rgba(0,210,255,0.06);
+  border:1px solid rgba(0,210,255,0.2);
+  border-radius:16px;
+  border-bottom-left-radius:6px;
+  padding:12px 16px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.12);
+  display:flex; flex-direction:column; gap:4px;
+}
+.time-budget-title { color:#e6f7ff; font-size:14px; font-weight:700; line-height:1.4; }
+.time-budget-sub { color:rgba(255,255,255,0.55); font-size:12px; line-height:1.5; }
+[data-theme="white"] .time-budget-bubble { background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 16px rgba(0,0,0,0.06); }
+[data-theme="white"] .time-budget-title { color:#1a1a2e; }
+[data-theme="white"] .time-budget-sub { color:#6b7280; }
 .time-running { text-align:center; padding:4px 0; }
 .time-countdown { display:block; color:#22c55e; font-size:36px; font-weight:800; letter-spacing:0.06em; font-variant-numeric:tabular-nums; }
 .time-running-hint { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:11px; }
@@ -4721,8 +5065,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .time-select-unit { color:#9ca3af; }
 [data-theme="white"] .time-start-btn { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 [data-theme="white"] .time-start-btn text { color:#fff; }
-[data-theme="white"] .time-start-btn-agent { background:linear-gradient(135deg,#7c3aed,#4f46e5); }
-[data-theme="white"] .time-start-btn-agent text { color:#fff; }
+
 [data-theme="white"] .time-setup-hint { color:#9ca3af; }
 [data-theme="white"] .time-running-hint { color:#9ca3af; }
 [data-theme="white"] .time-expired-sub { color:#9ca3af; }
@@ -4819,6 +5162,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .ftag.on { background:#0088cc; border-color:#00d2ff; color:#fff; box-shadow:0 0 10px rgba(0,210,255,0.2); }
 .form-inline { display:flex; align-items:center; gap:6px; flex:1; }
 .form-file-wrap { flex:1; }
+.form-media-hint { display:block; color:#fbbf24; font-size:11px; line-height:1.5; margin-top:6px; font-weight:500; }
 .file-btn { background:rgba(0,210,255,0.1); border:1px dashed rgba(0,210,255,0.25); border-radius:10px; padding:10px; text-align:center; cursor:pointer; }
 .file-btn text { color:#00d2ff; font-size:12px; }
 .file-hint { color:rgba(255,255,255,0.3); font-size:10px; display:block; margin-top:4px; text-align:center; }
@@ -4828,6 +5172,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .file-del { position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 [data-theme="white"] .file-btn { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .file-btn text { color:#2563eb; }
+[data-theme="white"] .form-media-hint { color:#d97706; }
 [data-theme="white"] .file-hint { color:#9ca3af; }
 
 .form-input.short { width:80px; flex:none; background:#fff; color:#0b111e; }
@@ -4885,8 +5230,6 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .elective-btn text { color:#7c3aed; }
 [data-theme="white"] .elective-btn.disabled { opacity:0.3; }
 [data-theme="white"] .et-arrow { color:rgba(0,0,0,0.3); }
-[data-theme="white"] .et-desc { color:rgba(0,0,0,0.35); }
-[data-theme="white"] .elective-hint { color:rgba(0,0,0,0.35); }
 [data-theme="white"] .plan-ai-label { color:#2563eb; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
 [data-theme="white"] .plan-ai-hint { color:#9ca3af; }
@@ -5524,6 +5867,130 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-reduced-motion] .plr-core {
   display: none;
 }
+
+/* ===== 闯关地图 ===== */
+.quest-map { position:relative; display:flex; flex-direction:column; margin-top:6px; }
+/* 中间一条贯穿虚线（时间线）：参考风格 3px + 有节奏的虚线段 */
+.quest-map::before {
+  content:''; position:absolute; left:50%; top:0; bottom:0; width:3px;
+  transform:translateX(-1.5px);
+  background:repeating-linear-gradient(180deg, rgba(59,130,246,0.35) 0 10px, transparent 10px 19px);
+  pointer-events:none;
+}
+.quest-banner {
+  position:relative; z-index:1;
+  margin-bottom:40px; border-radius:12px; padding:12px 14px; text-align:center;
+  background:linear-gradient(135deg,rgba(245,200,66,0.16),rgba(34,197,94,0.14));
+  border:1px solid rgba(245,200,66,0.35);
+  box-shadow:0 0 18px rgba(245,200,66,0.08);
+}
+.quest-banner-text { font-size:15px; font-weight:700; color:#f5c842; letter-spacing:0.02em; }
+.quest-level { position:relative; }
+/* 关卡大节点：52px 圆形图标，骑在虚线上、中心对齐第一行状态文字；参考风格深底+天赋色边+呼吸光晕 */
+.quest-node {
+  position:absolute; left:50%; top:37px; transform:translate(-50%,-50%);
+  width:52px; height:52px; border-radius:50%; z-index:2;
+  background:#161D2B;
+  border:2.5px solid var(--qc, rgba(59,130,246,0.6));
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none;
+}
+.quest-node.done { border-color:var(--qc, #3b82f6); }
+.quest-node.pulse { animation:questPulse 2s ease-out infinite; }
+@keyframes questPulse {
+  0%,100% { box-shadow:0 0 0 4px rgba(59,130,246,0.10), 0 0 12px rgba(59,130,246,0.4); }
+  50% { box-shadow:0 0 0 8px rgba(59,130,246,0.16), 0 0 22px rgba(59,130,246,0.65); }
+}
+.quest-node-icon { font-size:24px; line-height:1; }
+.quest-node-star { position:absolute; top:-6px; right:-6px; font-size:15px; }
+/* 每一关：左右两列卡片（关卡卡 / 视频卡），卡片边缘距中间虚线 24px（gap:50px = 24+2虚线+24） */
+.quest-media {
+  position:relative; display:flex; gap:50px; align-items:stretch;
+  margin-top:26px; /* 为半跨卡顶的图标上半留空间 */
+}
+.quest-media.locked { opacity:0.55; }
+.quest-media.reversed { flex-direction:row-reverse; }
+.qm-col { flex:1; min-width:0; display:flex; flex-direction:column; }
+.qm-video-col { justify-content:center; } /* 视频卡垂直居中于关卡卡高度（参考风格） */
+.qm-side {
+  min-width:0; border-radius:12px; cursor:pointer;
+  transition:transform 0.15s;
+}
+.qm-side:active { transform:scale(0.98); }
+/* 关卡卡：深色底卡片，边框随天赋变色（参考风格） */
+.qm-audio {
+  display:flex; flex-direction:column;
+  background:linear-gradient(135deg, rgba(59,130,246,0.07), #131926 55%);
+  border:1.5px solid var(--qc, rgba(59,130,246,0.5));
+  border-radius:16px;
+  padding:30px 20px 34px;
+}
+.quest-level.done .qm-audio { background:linear-gradient(135deg, rgba(34,197,94,0.08), #131926 55%); border-color:var(--qc, #3b82f6); }
+.quest-media.locked .qm-audio { background:#131926; border-color:#2A3040; }
+/* 视频卡：参考风格，竖排三行（📺 / 先看视频 / 教学示范），深底蓝边，垂直居中 */
+.qm-video {
+  display:flex; flex-direction:column; justify-content:center; align-items:center; gap:5px;
+  background:#131926; border:1.5px solid #2E6BE6;
+  border-radius:14px; padding:16px 10px;
+}
+.qm-emoji { font-size:22px; line-height:1; }
+.qm-label { font-size:15px; font-weight:800; color:#7FA7EF; }
+.qm-meta { font-size:11px; color:#5F7BC0; }
+/* 关卡卡文字区：左对齐（深色卡，亮色文字，参考排版） */
+.qa-main { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.qa-status { font-size:11px; color:var(--qc, #3b82f6); font-weight:700; letter-spacing:1.5px; }
+.qa-status.done { color:#22c55e; }
+.qa-status.locked { color:#5A6274; }
+.qa-skill { display:flex; align-items:center; gap:5px; font-size:11px; color:#8B93A5; margin-top:2px; }
+.qa-tag {
+  font-size:10px; color:#C9A869; border:1px solid rgba(201,168,105,0.4);
+  background:rgba(201,168,105,0.12);
+  border-radius:999px; padding:1px 6px; line-height:1.3;
+}
+.qa-name { font-size:18px; font-weight:900; color:#EDEBE4; line-height:1.25; margin:2px 0 2px; }
+.qa-desc { font-size:11px; color:#8B93A5; }
+/* 开始闯关：参考风格横条按钮（圆形图标 + 主文字 + 小字） */
+.qa-start {
+  margin-top:8px; padding:9px 10px; border-radius:11px;
+  background:var(--qc, #3b82f6);
+  display:flex; align-items:center; gap:9px;
+  width:100%; min-width:0; box-sizing:border-box;
+}
+.qa-start-ic {
+  width:30px; height:30px; border-radius:50%; flex:none;
+  background:#fff; color:var(--qc, #3b82f6);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px;
+}
+.qa-start-body { display:flex; flex-direction:column; min-width:0; flex:1; }
+.qa-start-text { font-size:13px; font-weight:800; color:#fff; line-height:1.25; overflow-wrap:break-word; }
+.qa-start-sub { font-size:10px; font-weight:600; color:rgba(255,255,255,0.75); margin-top:2px; overflow-wrap:break-word; }
+.qa-start.locked { background:rgba(255,255,255,0.07); }
+.qa-start.locked .qa-start-ic { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.4); }
+.qa-start.locked .qa-start-text { color:rgba(255,255,255,0.45); }
+.qa-start.locked .qa-start-sub { color:rgba(255,255,255,0.3); }
+.qa-start.done { background:rgba(111,207,142,0.16); }
+.qa-start.done .qa-start-ic { background:#6FCF8E; color:#0B0E14; }
+.qa-start.done .qa-start-text { color:#15803d; }
+.quest-checkin { margin-top:12px; }
+.quest-checkin.locked .btn-checkin { opacity:0.55; pointer-events:none; }
+.quest-checkin-tip { display:flex; justify-content:center; margin-bottom:8px; }
+.qct-text { font-size:11px; color:#f59e0b; }
+.quest-perception-tip { margin-top:10px; text-align:center; font-size:12px; color:rgba(255,255,255,0.5); }
+/* 选修自由训练：独立卡片区，不参与闯关虚线 */
+.quest-free { margin-top:16px; }
+.quest-free-title { display:block; font-size:13px; font-weight:700; color:#a78bfa; margin-bottom:8px; }
+.quest-media-free { display:flex; gap:10px; margin-top:6px; }
+.qf-side {
+  flex:1; min-width:0; padding:12px; border-radius:12px; cursor:pointer;
+  background:rgba(15,28,48,0.85); border:1px solid rgba(167,139,250,0.3);
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  transition:transform 0.15s;
+}
+.qf-side:active { transform:scale(0.98); }
+.qf-emoji { font-size:22px; line-height:1; }
+.qf-label { font-size:13px; font-weight:600; color:#fff; }
+.qf-meta { font-size:11px; color:rgba(255,255,255,0.5); }
 </style>
 
 <style>
@@ -5541,4 +6008,33 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .form-del:active { color:#ef4444; }
 [data-theme="white"] .btn-checkin { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 .editor-list::-webkit-scrollbar { display:none; width:0; height:0; }
+/* 闯关地图 · 白色主题（参考质感浅色适配） */
+[data-theme="white"] .quest-banner { background:linear-gradient(135deg,rgba(217,119,6,0.08),rgba(22,163,74,0.08)); border-color:#fbbf24; box-shadow:none; }
+[data-theme="white"] .quest-banner-text { color:#d97706; }
+[data-theme="white"] .quest-map::before { background:repeating-linear-gradient(180deg, rgba(37,99,235,0.22) 0 10px, transparent 10px 19px); }
+[data-theme="white"] .qm-audio { background:#fff; border-color:rgba(37,99,235,0.3); }
+[data-theme="white"] .quest-level.done .qm-audio { background:#fff; border-color:var(--qc, #2563eb); }
+[data-theme="white"] .quest-media.locked .qm-audio { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .qm-video { background:#fff; border-color:#93c5fd; }
+[data-theme="white"] .qm-label { color:#2563eb; }
+[data-theme="white"] .qm-meta { color:#6b7280; }
+[data-theme="white"] .quest-node { background:#fff; border-color:rgba(37,99,235,0.35); }
+[data-theme="white"] .quest-node.done { border-color:var(--qc, #2563eb); }
+[data-theme="white"] .qa-status { color:var(--qc, #2563eb); }
+[data-theme="white"] .qa-status.done { color:#16a34a; }
+[data-theme="white"] .qa-status.locked { color:#9ca3af; }
+[data-theme="white"] .qa-skill { color:#6b7280; }
+[data-theme="white"] .qa-tag { color:#b45309; border-color:#fcd34d; background:rgba(217,119,6,0.08); }
+[data-theme="white"] .qa-name { color:#1a1a2e; }
+[data-theme="white"] .qa-desc { color:#6b7280; }
+[data-theme="white"] .qa-start.locked { background:#f3f4f6; }
+[data-theme="white"] .qa-start.locked .qa-start-ic { background:#e5e7eb; color:#9ca3af; }
+[data-theme="white"] .qa-start.locked .qa-start-text { color:#9ca3af; }
+[data-theme="white"] .qa-start.locked .qa-start-sub { color:#9ca3af; }
+[data-theme="white"] .qa-start.done .qa-start-text { color:#16a34a; }
+[data-theme="white"] .qf-side { background:#fff; border-color:#c4b5fd; }
+[data-theme="white"] .qf-label { color:#1a1a2e; }
+[data-theme="white"] .qf-meta { color:#6b7280; }
+[data-theme="white"] .qct-text { color:#d97706; }
+[data-theme="white"] .quest-perception-tip { color:#6b7280; }
 </style>
