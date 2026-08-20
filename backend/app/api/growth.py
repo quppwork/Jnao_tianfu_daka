@@ -10,7 +10,7 @@ from app.core.cache import (
     key_growth,
     ttl_env,
 )
-from app.services import growth_service
+from app.services import growth_service, academic_plan_service
 
 router = APIRouter(prefix="/api/growth", tags=["growth"])
 
@@ -67,6 +67,31 @@ def get_timeline(
     return {"items": items}
 
 
+@router.get("/calendar")
+def get_calendar(
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    items = _cached_growth(
+        child_user_id,
+        "calendar",
+        lambda: growth_service.get_calendar_days(db, child_user_id),
+    )
+    return {"items": items}
+
+
+@router.get("/tier")
+def get_tier(
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    return _cached_growth(
+        child_user_id,
+        "tier",
+        lambda: growth_service.get_tier_brief(db, child_user_id),
+    )
+
+
 @router.get("/summary")
 def get_summary(
     child_user_id: int = Depends(get_authenticated_student),
@@ -89,3 +114,22 @@ def get_share(
         "share",
         lambda: growth_service.get_share(db, child_user_id),
     )
+
+
+@router.get("/academic-plan")
+async def get_academic_plan(
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+    refresh: bool = Query(False, description="强制刷新AI生成"),
+):
+    """获取学业规划报告（基于训练数据 + AI生成）"""
+    # 学业规划缓存1小时，避免频繁调用AI
+    cache_key = "academic-plan"
+    if not refresh:
+        cached = cache_get_json(key_growth(cache_key, child_user_id))
+        if cached is not None:
+            return cached
+    
+    plan = await academic_plan_service.generate_academic_plan(db, child_user_id)
+    cache_set_json(key_growth(cache_key, child_user_id), plan, ttl_env("CACHE_TTL_ACADEMIC_PLAN", 3600))
+    return plan

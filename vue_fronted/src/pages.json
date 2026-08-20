@@ -100,13 +100,6 @@
       }
     },
     {
-      "path": "pages/report-kid/index",
-      "style": {
-        "navigationBarTitleText": "我的天赋报告",
-        "navigationStyle": "custom"
-      }
-    },
-    {
       "path": "pages/training/index",
       "style": {
         "navigationBarTitleText": "今日训练",
