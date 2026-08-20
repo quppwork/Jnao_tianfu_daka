@@ -11,11 +11,9 @@ from sqlalchemy.orm import selectinload, Session
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.assessment_service import resolve_effective_talent
 from app.services.child_training_state import (
-    filter_active_skills,
+    display_overall_tier,
     get_skill_oss_position,
-    get_skills_with_records,
     get_training_progress,
-    overall_tier,
 )
 from app.services.content_meta import estimate_duration_min, item_instruction, parse_item_meta, content_display_title
 from app.services.talent_content_pool import get_talent_content_pool
@@ -182,11 +180,8 @@ async def populate_plan_items(
     child = db.get(ChildUser, child_user_id)
     state = get_training_progress(child) if child else {}
 
-    # v3.0: 排课后把 overall_tier 写入 content_index（兼容列；真源仍是 training_progress）
-    # 只算有打卡记录的技能
-    skills_with_records = get_skills_with_records(db, child_user_id)
-    active_state = filter_active_skills(state, skills_with_records)
-    o_tier = overall_tier(active_state)
+    # 排课写入的 overall_tier 与成长 /tier、打卡结算同一函数
+    o_tier = display_overall_tier(db, child)
     plan.content_index = o_tier
 
     # 获取年级 → 学段

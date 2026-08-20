@@ -711,11 +711,11 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
             for row in db.scalars(select(ContentItem).where(ContentItem.id.in_(ids))):
                 content_map[row.id] = row
         from app.db.models import ChildUser
-        from app.services.child_training_state import get_training_progress, overall_tier
+        from app.services.child_training_state import display_overall_tier, get_training_progress
 
         child = db.get(ChildUser, plan.child_user_id)
         tp = get_training_progress(child) if child else {}
-        o_tier = overall_tier(tp) if tp else 1
+        o_tier = display_overall_tier(db, child) if child else 1
         main_line_key = f"T{tp.get('training_days', 0)}"  # v2.0: tier-based, not main_line
         main_line_name = f"整体 Tier {o_tier}"
         progress_main_line = main_line_key

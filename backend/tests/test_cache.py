@@ -16,6 +16,17 @@ def test_cache_noop_without_redis(monkeypatch):
     cache_mod.invalidate_user_training(1, plan_date=date.today())
 
 
+def test_invalidate_user_growth_covers_new_buckets(monkeypatch):
+    deleted = []
+    monkeypatch.setattr(cache_mod, "cache_delete", lambda k: deleted.append(k))
+    cache_mod.invalidate_user_growth(9)
+    keys = set(deleted)
+    assert "jnao:growth:calendar:9" in keys
+    assert "jnao:growth:tier:9" in keys
+    assert "jnao:growth:academic-plan:9" in keys
+    assert "jnao:growth:summary:9" in keys
+
+
 def test_key_helpers():
     assert cache_mod.key_profile(7) == "jnao:profile:7"
     assert cache_mod.key_train_today(3, date(2026, 7, 3)) == "jnao:train:today:3:2026-07-03"

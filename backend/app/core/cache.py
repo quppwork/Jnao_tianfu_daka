@@ -127,7 +127,7 @@ def invalidate_user_assessment(user_id: int) -> None:
 
 
 def invalidate_user_growth(user_id: int) -> None:
-    for name in ("summary", "badges", "milestones", "share"):
+    for name in ("summary", "badges", "milestones", "share", "calendar", "tier", "academic-plan"):
         cache_delete(key_growth(name, user_id))
     for limit in (40, 100):
         cache_delete(key_growth(f"timeline:{limit}", user_id))
