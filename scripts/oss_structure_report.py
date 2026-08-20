@@ -2,8 +2,7 @@
 
 用法: python scripts/oss_structure_report.py
 输出:
-  docs/data/oss_by_talent.json      — 按天赋聚合（排课视角）
-  docs/data/oss_structure_by_talent.json — 兼容旧路径
+  docs/data/oss_by_talent.json — 按天赋聚合（排课视角）
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "docs" / "data" / "oss_yinpin_index.json"
 OUT_TALENT = ROOT / "docs" / "data" / "oss_by_talent.json"
-OUT_LEGACY = ROOT / "docs" / "data" / "oss_structure_by_talent.json"
 
 TALENT_ORDER = ["学者", "思者", "行者", "德者", "赢者"]
 TALENT_CODE = {"学者": 1, "思者": 2, "行者": 3, "德者": 4, "赢者": 5}
@@ -127,7 +125,6 @@ def main() -> None:
         }
 
     OUT_TALENT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    OUT_LEGACY.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"Wrote {OUT_TALENT}")
     print(f"Total OSS: {report['total_oss_files']}, unparsed: {report['unparsed_count']}")
