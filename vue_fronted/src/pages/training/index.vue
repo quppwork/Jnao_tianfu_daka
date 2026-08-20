@@ -333,7 +333,7 @@
       </view>
 
       <!-- 闯关地图 -->
-      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map">
+      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map" :class="{ ended: timerPhase === 'expired' }">
         <!-- 全部过关横幅 -->
         <view v-if="questAllDone" class="quest-banner">
           <text class="quest-banner-text">🎉 今日闯关全部完成！</text>
@@ -343,9 +343,9 @@
           <!-- ===== 关卡卡片 ===== -->
           <view v-if="phase.questNo !== null" :id="'phase-block-' + phase.block" class="quest-level" :class="{ done: phase.allDone }">
             <!-- Z 字左右交替：关卡卡 + 视频卡分居中线两侧；图标骑在贯穿虚线上、半跨关卡卡顶部 -->
-            <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked }">
+            <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked || isMediaLocked }">
               <view class="qm-col qm-card-col">
-                <view v-if="phase.audioItem" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem, phase, 'audio')" :style="{ '--qc': talentColor }">
+                <view class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem || phase.items[0], phase, 'audio')" :style="{ '--qc': talentColor }">
                   <view class="qa-main">
                     <text class="qa-status" :class="{ done: phase.allDone, locked: !phase.unlocked }">{{ questStatusText(phase) }}</text>
                     <view v-if="phase.subtitle && phase.subtitle !== phase.skillName" class="qa-skill">
@@ -365,23 +365,23 @@
                 </view>
               </view>
               <view class="qm-col qm-video-col">
-                <view v-if="phase.videoItem" class="qm-side qm-video" @click="openPhaseMediaItem(phase.videoItem, phase, 'video')">
+                <view v-if="phase.videoItem" class="qm-side qm-video" @click.stop="openPhaseMediaItem(phase.videoItem, phase, 'video')">
                   <text class="qm-emoji">📺</text>
                   <text class="qm-label">先看视频</text>
                   <text class="qm-meta">教学示范</text>
                 </view>
               </view>
               <!-- 图标节点：绝对定位骑中线，中心对准关卡卡顶部边线（半跨卡顶） -->
-              <view class="quest-node" :class="{ done: phase.allDone, pulse: phase.unlocked && !phase.allDone }">
+              <view class="quest-node" :class="{ done: phase.allDone, pulse: phase.unlocked && !phase.allDone && !isMediaLocked }">
                 <text class="quest-node-icon">{{ phase.questIcon }}</text>
                 <text v-if="phase.allDone" class="quest-node-star">⭐</text>
               </view>
             </view>
 
-            <!-- 打卡：必修关有按钮；多元感知点听即过 -->
-            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin" :class="{ locked: !isPhaseListenDone(phase) }">
+            <!-- 打卡条：只给已解锁的必修关；未解锁不占位，避免三关按钮叠在一起 -->
+            <view v-if="!phase.isPercep && !phase.isElective && phase.unlocked" class="quest-checkin" :class="{ locked: !isPhaseListenDone(phase) }">
               <view v-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
-                <text class="qct-text">🔒 请先听完音视频（{{ WATCH_DONE_PCT }}%）</text>
+                <text class="qct-text">🔒 请先听完音频（{{ WATCH_DONE_PCT }}%）</text>
               </view>
               <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
@@ -2627,6 +2627,11 @@ function questStatusText(phase) {
 
 /** 音频卡片开始按钮文案（emoji 由按钮圆图标承载） */
 function questStartText(phase) {
+  if (isMediaLocked.value || isMediaExhausted.value) {
+    if (phase.allDone) return '已过关 · 时长已到'
+    if (!phase.unlocked) return '完成上一关后解锁'
+    return '时长已到 · 仍可打卡'
+  }
   if (phase.allDone) return '已通过 · 点击回听'
   if (!phase.unlocked) return '完成上一关后解锁'
   if (phase.isPercep) return '开始闯关 · 听音频'
@@ -5903,6 +5908,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 
 /* ===== 闯关地图 ===== */
 .quest-map { position:relative; display:flex; flex-direction:column; margin-top:6px; }
+.quest-map.ended { margin-top:12px; padding-bottom:24px; }
 /* 中间一条贯穿虚线（时间线）：参考风格 3px + 有节奏的虚线段 */
 .quest-map::before {
   content:''; position:absolute; left:50%; top:0; bottom:0; width:3px;
@@ -5918,7 +5924,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
   box-shadow:0 0 18px rgba(245,200,66,0.08);
 }
 .quest-banner-text { font-size:15px; font-weight:700; color:#f5c842; letter-spacing:0.02em; }
-.quest-level { position:relative; }
+.quest-level { position:relative; margin-bottom:32px; min-height:200px; }
 /* 关卡大节点：52px 圆形图标，骑在虚线上、中心对齐第一行状态文字；参考风格深底+天赋色边+呼吸光晕 */
 .quest-node {
   position:absolute; left:50%; top:37px; transform:translate(-50%,-50%);
@@ -5940,6 +5946,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .quest-media {
   position:relative; display:flex; gap:50px; align-items:stretch;
   margin-top:26px; /* 为半跨卡顶的图标上半留空间 */
+  min-height:168px;
 }
 .quest-media.locked { opacity:0.55; }
 .quest-media.reversed { flex-direction:row-reverse; }
@@ -5957,6 +5964,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
   border:1.5px solid var(--qc, rgba(59,130,246,0.5));
   border-radius:16px;
   padding:30px 20px 34px;
+  min-height:140px;
+  box-sizing:border-box;
 }
 .quest-level.done .qm-audio { background:linear-gradient(135deg, rgba(34,197,94,0.08), #131926 55%); border-color:var(--qc, #3b82f6); }
 .quest-media.locked .qm-audio { background:#131926; border-color:#2A3040; }
