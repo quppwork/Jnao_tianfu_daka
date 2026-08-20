@@ -378,9 +378,12 @@
               </view>
             </view>
 
-            <!-- 打卡条：只给已解锁的必修关；未解锁不占位，避免三关按钮叠在一起 -->
-            <view v-if="!phase.isPercep && !phase.isElective && phase.unlocked" class="quest-checkin" :class="{ locked: !isPhaseListenDone(phase) }">
-              <view v-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
+            <!-- 打卡条：必修关都有；未解锁 / 未听完为灰色不可点 -->
+            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin" :class="{ locked: !phase.unlocked || !isPhaseListenDone(phase) }">
+              <view v-if="!phase.unlocked" class="quest-checkin-tip">
+                <text class="qct-text">🔒 完成上一关打卡后解锁</text>
+              </view>
+              <view v-else-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
                 <text class="qct-text">🔒 请先听完音频（{{ WATCH_DONE_PCT }}%）</text>
               </view>
               <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
