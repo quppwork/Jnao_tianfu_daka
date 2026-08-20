@@ -333,7 +333,7 @@
       </view>
 
       <!-- 闯关地图 -->
-      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map">
+      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map" :style="{ '--qc': talentColor }">
         <!-- 全部过关横幅 -->
         <view v-if="questAllDone" class="quest-banner">
           <text class="quest-banner-text">🎉 今日闯关全部完成！</text>
@@ -341,11 +341,11 @@
 
         <template v-for="(phase, pi) in planPhases" :key="phase.block">
           <!-- ===== 关卡卡片 ===== -->
-          <view v-if="phase.questNo !== null" :id="'phase-block-' + phase.block" class="quest-level" :class="{ done: phase.allDone }">
+          <view v-if="phase.questNo !== null && !phase.allDone" :id="'phase-block-' + phase.block" class="quest-level">
             <!-- Z 字左右交替：关卡卡 + 视频卡分居中线两侧；图标骑在贯穿虚线上、半跨关卡卡顶部 -->
             <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked }">
               <view class="qm-col qm-card-col">
-                <view v-if="phase.audioItem" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem, phase, 'audio')" :style="{ '--qc': talentColor }">
+                <view v-if="phase.audioItem" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem, phase, 'audio')">
                   <view class="qa-main">
                     <text class="qa-status" :class="{ done: phase.allDone, locked: !phase.unlocked }">{{ questStatusText(phase) }}</text>
                     <view v-if="phase.subtitle && phase.subtitle !== phase.skillName" class="qa-skill">
@@ -372,8 +372,8 @@
                 </view>
               </view>
               <!-- 图标节点：绝对定位骑中线，中心对准关卡卡顶部边线（半跨卡顶） -->
-              <view class="quest-node" :class="{ done: phase.allDone, pulse: phase.unlocked && !phase.allDone }">
-                <text class="quest-node-icon">{{ phase.questIcon }}</text>
+              <view class="quest-node" :class="{ done: phase.allDone, locked: !phase.unlocked, pulse: phase.unlocked && !phase.allDone }">
+                <text class="quest-node-icon">{{ !phase.unlocked ? '🔒' : phase.questIcon }}</text>
                 <text v-if="phase.allDone" class="quest-node-star">⭐</text>
               </view>
             </view>
@@ -383,7 +383,7 @@
               <view v-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
                 <text class="qct-text">🔒 请先听完音视频（{{ WATCH_DONE_PCT }}%）</text>
               </view>
-              <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
+              <view v-else class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
               </view>
             </view>
@@ -5874,7 +5874,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .quest-map::before {
   content:''; position:absolute; left:50%; top:0; bottom:0; width:3px;
   transform:translateX(-1.5px);
-  background:repeating-linear-gradient(180deg, rgba(59,130,246,0.35) 0 10px, transparent 10px 19px);
+  background:repeating-linear-gradient(180deg, color-mix(in srgb, var(--qc, #3b82f6) 35%, transparent) 0 10px, transparent 10px 19px);
   pointer-events:none;
 }
 .quest-banner {
@@ -5896,12 +5896,14 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
   pointer-events:none;
 }
 .quest-node.done { border-color:var(--qc, #3b82f6); }
+.quest-node.locked { border-color:#2A3040; }
+.quest-node.locked .quest-node-icon { color:#5A6274; }
 .quest-node.pulse { animation:questPulse 2s ease-out infinite; }
 @keyframes questPulse {
-  0%,100% { box-shadow:0 0 0 4px rgba(59,130,246,0.10), 0 0 12px rgba(59,130,246,0.4); }
-  50% { box-shadow:0 0 0 8px rgba(59,130,246,0.16), 0 0 22px rgba(59,130,246,0.65); }
+  0%,100% { box-shadow:0 0 0 4px color-mix(in srgb, var(--qc, #3b82f6) 10%, transparent), 0 0 12px color-mix(in srgb, var(--qc, #3b82f6) 40%, transparent); }
+  50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--qc, #3b82f6) 16%, transparent), 0 0 22px color-mix(in srgb, var(--qc, #3b82f6) 65%, transparent); }
 }
-.quest-node-icon { font-size:24px; line-height:1; }
+.quest-node-icon { font-size:24px; line-height:1; color:var(--qc, #3b82f6); }
 .quest-node-star { position:absolute; top:-6px; right:-6px; font-size:15px; }
 /* 每一关：左右两列卡片（关卡卡 / 视频卡），卡片边缘距中间虚线 24px（gap:50px = 24+2虚线+24） */
 .quest-media {
@@ -5911,7 +5913,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .quest-media.locked { opacity:0.55; }
 .quest-media.reversed { flex-direction:row-reverse; }
 .qm-col { flex:1; min-width:0; display:flex; flex-direction:column; }
-.qm-video-col { justify-content:center; } /* 视频卡垂直居中于关卡卡高度（参考风格） */
+.qm-video-col { justify-content:flex-start; padding-top:56px; } /* 视频卡与音频卡对角错开（Z字），往下错位 */
 .qm-side {
   min-width:0; border-radius:12px; cursor:pointer;
   transition:transform 0.15s;
@@ -5958,13 +5960,13 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 }
 .qa-start-ic {
   width:30px; height:30px; border-radius:50%; flex:none;
-  background:#fff; color:var(--qc, #3b82f6);
+  background:#0B0E14; color:var(--qc, #3b82f6);
   display:flex; align-items:center; justify-content:center;
   font-size:13px;
 }
 .qa-start-body { display:flex; flex-direction:column; min-width:0; flex:1; }
-.qa-start-text { font-size:13px; font-weight:800; color:#fff; line-height:1.25; overflow-wrap:break-word; }
-.qa-start-sub { font-size:10px; font-weight:600; color:rgba(255,255,255,0.75); margin-top:2px; overflow-wrap:break-word; }
+.qa-start-text { font-size:13px; font-weight:800; color:#0B0E14; line-height:1.25; overflow-wrap:break-word; }
+.qa-start-sub { font-size:10px; font-weight:600; color:rgba(11,14,20,0.7); margin-top:2px; overflow-wrap:break-word; }
 .qa-start.locked { background:rgba(255,255,255,0.07); }
 .qa-start.locked .qa-start-ic { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.4); }
 .qa-start.locked .qa-start-text { color:rgba(255,255,255,0.45); }
@@ -5978,7 +5980,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .qct-text { font-size:11px; color:#f59e0b; }
 .quest-perception-tip { margin-top:10px; text-align:center; font-size:12px; color:rgba(255,255,255,0.5); }
 /* 选修自由训练：独立卡片区，不参与闯关虚线 */
-.quest-free { margin-top:16px; }
+.quest-free { margin-top:16px; background:#0b111e; position:relative; z-index:1; margin-bottom:40px; }
 .quest-free-title { display:block; font-size:13px; font-weight:700; color:#a78bfa; margin-bottom:8px; }
 .quest-media-free { display:flex; gap:10px; margin-top:6px; }
 .qf-side {
@@ -6011,14 +6013,15 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 /* 闯关地图 · 白色主题（参考质感浅色适配） */
 [data-theme="white"] .quest-banner { background:linear-gradient(135deg,rgba(217,119,6,0.08),rgba(22,163,74,0.08)); border-color:#fbbf24; box-shadow:none; }
 [data-theme="white"] .quest-banner-text { color:#d97706; }
-[data-theme="white"] .quest-map::before { background:repeating-linear-gradient(180deg, rgba(37,99,235,0.22) 0 10px, transparent 10px 19px); }
-[data-theme="white"] .qm-audio { background:#fff; border-color:rgba(37,99,235,0.3); }
+[data-theme="white"] .quest-map::before { background:repeating-linear-gradient(180deg, color-mix(in srgb, var(--qc, #2563eb) 22%, transparent) 0 10px, transparent 10px 19px); }
+[data-theme="white"] .qm-audio { background:#fff; border-color:var(--qc, #2563eb); }
 [data-theme="white"] .quest-level.done .qm-audio { background:#fff; border-color:var(--qc, #2563eb); }
 [data-theme="white"] .quest-media.locked .qm-audio { background:#fff; border-color:#e5e7eb; }
 [data-theme="white"] .qm-video { background:#fff; border-color:#93c5fd; }
 [data-theme="white"] .qm-label { color:#2563eb; }
 [data-theme="white"] .qm-meta { color:#6b7280; }
-[data-theme="white"] .quest-node { background:#fff; border-color:rgba(37,99,235,0.35); }
+[data-theme="white"] .quest-node { background:#fff; border-color:var(--qc, #2563eb); }
+[data-theme="white"] .quest-node.locked { border-color:#d1d5db; }
 [data-theme="white"] .quest-node.done { border-color:var(--qc, #2563eb); }
 [data-theme="white"] .qa-status { color:var(--qc, #2563eb); }
 [data-theme="white"] .qa-status.done { color:#16a34a; }
@@ -6032,6 +6035,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .qa-start.locked .qa-start-text { color:#9ca3af; }
 [data-theme="white"] .qa-start.locked .qa-start-sub { color:#9ca3af; }
 [data-theme="white"] .qa-start.done .qa-start-text { color:#16a34a; }
+[data-theme="white"] .quest-free { background:#f0f2f5; }
 [data-theme="white"] .qf-side { background:#fff; border-color:#c4b5fd; }
 [data-theme="white"] .qf-label { color:#1a1a2e; }
 [data-theme="white"] .qf-meta { color:#6b7280; }
