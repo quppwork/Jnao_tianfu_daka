@@ -184,7 +184,7 @@ class TrainingPlan(Base):
     content_index: Mapped[int] = mapped_column(Integer, default=0)
     media_exhausted: Mapped[int] = mapped_column(Integer, default=0)
     plan_customized: Mapped[int] = mapped_column(Integer, default=0)
-    # Agent 辅助排课调试信息（理由/草案等）；正式 UI 不展示
+    # 历史列：曾用于 Agent 辅助排课调试；功能已下线，保留兼容旧库
     schedule_assist_json: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     generated_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -349,78 +349,3 @@ class UserSession(Base):
     device_label: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_active_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-
-# ─── 成就/荣誉系统 ────────────────────────────────────────
-
-
-class AchievementDefinition(Base):
-    """勋章定义 — 系统预设，初始化时写入"""
-
-    __tablename__ = "achievement_definition"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    title: Mapped[str] = mapped_column(String(50), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    category: Mapped[str] = mapped_column(String(20), nullable=False)  # streak/skill/talent/milestone
-    condition_json: Mapped[dict] = mapped_column(JSON, nullable=False)
-    icon_url: Mapped[str | None] = mapped_column(String(500))
-    color_theme: Mapped[str | None] = mapped_column(String(20))  # yellow/blue/purple/green/pink
-    sort_order: Mapped[int] = mapped_column(Integer, default=0)
-    is_active: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-
-class UserAchievement(Base):
-    """用户勋章状态 — 记录每个用户每个勋章的解锁进度"""
-
-    __tablename__ = "user_achievement"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
-    achievement_id: Mapped[int] = mapped_column(ForeignKey("achievement_definition.id"), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), default="locked")  # locked/ready/claimed
-    progress_current: Mapped[int] = mapped_column(Integer, default=0)
-    progress_target: Mapped[int] = mapped_column(Integer, default=1)
-    unlocked_at: Mapped[datetime | None] = mapped_column(DateTime)
-    claimed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
-    )
-
-    achievement: Mapped["AchievementDefinition"] = relationship()
-
-
-class UserTitle(Base):
-    """用户当前佩戴的称号"""
-
-    __tablename__ = "user_title"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False, unique=True)
-    title_code: Mapped[str] = mapped_column(String(50), nullable=False)
-    is_active: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
-    )
-
-
-class AchievementShowcase(Base):
-    """荣誉展柜 — 用户选择的3个展示槽位"""
-
-    __tablename__ = "achievement_showcase"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
-    slot_index: Mapped[int] = mapped_column(Integer, nullable=False)  # 0, 1, 2
-    achievement_id: Mapped[int] = mapped_column(ForeignKey("achievement_definition.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
-    )
-
-    achievement: Mapped["AchievementDefinition"] = relationship()

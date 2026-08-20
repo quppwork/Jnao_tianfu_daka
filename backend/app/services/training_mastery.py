@@ -15,12 +15,10 @@ from typing import TYPE_CHECKING, Any
 from app.services.child_training_state import (
     advance_skill_tier,
     bump_consecutive_pass,
-    filter_active_skills,
+    display_overall_tier,
     get_consecutive_pass,
     get_skill_oss_position,
-    get_skills_with_records,
     get_skill_tier,
-    overall_tier,
     reset_consecutive_pass,
     set_skill_oss_position,
     state_summary,
@@ -352,12 +350,8 @@ def process_checkin_progress(
     # 保存
     save_training_progress(db, child, state)
 
-    # 🆕 overall_tier 只算有打卡记录的技能
-    skills_with_records = get_skills_with_records(db, child.id)
-    active_state = filter_active_skills(state, skills_with_records)
-
     return {
-        "overall_tier": overall_tier(active_state),
+        "overall_tier": display_overall_tier(db, child),
         "skill_results": skill_results,
         "summary": state_summary(state),
     }

@@ -412,7 +412,7 @@ import {
   apiJson,
   withUser,
 } from '@/utils/userApi.js'
-import { refreshTalentState } from '@/utils/talentState.js'
+import { refreshTalentState, applyTalentFromProfile } from '@/utils/talentState.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 const isLight = ref(true)
@@ -489,6 +489,8 @@ async function switchToChild(targetId) {
   }
 }
 
+const FALLBACK_WELCOME = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
+
 const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: '', assessmentId: null })
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
@@ -496,6 +498,18 @@ const welcomeText = ref('正在了解你的训练状态…')
 const welcomeActions = ref([])
 const situationLabel = ref('')
 const proactiveText = ref('')
+
+function hydrateHomeFromLocal() {
+  try {
+    const raw = localStorage.getItem('jnao_user')
+    if (!raw) return
+    const u = JSON.parse(raw)
+    if (u?.name) {
+      currentUserDisplay.value = u.name
+      profile.value.name = u.name
+    }
+  } catch (_) {}
+}
 
 /** 与 backend handoff.ACTION_LABELS 对齐；优先用 API 返回的 act.label */
 const ACTION_LABEL_FALLBACK = {
@@ -755,22 +769,21 @@ function onParentNameInput(e) {
   profile.value.parentName = _inputValue(e)
 }
 
-async function initHome() {
+async function initHome(passedUid = null) {
   try {
-    // 不用 getChildUserId() 避免切换账户后读到旧缓存
-    let uid = null
-    try { uid = await ensureChildUser() } catch (_) { uid = getChildUserId() }
+    let uid = passedUid
+    if (!uid) {
+      try { uid = await ensureChildUser() } catch (_) { uid = getChildUserId() }
+    }
     let profileData
     let guideData
     let bootstrapData
     const loadAll = async () => {
-      const talentWarm = refreshTalentState(uid).catch(() => null)
       const [p, g, b] = await Promise.all([
         fetchProfile(uid),
         fetchGuideSession(uid),
         fetchGuideBootstrap(uid).catch(() => null),
       ])
-      await talentWarm
       return [p, g, b]
     }
     try {
@@ -793,10 +806,15 @@ async function initHome() {
     }
     applyGuideMessages(guideData)
     applyBootstrap(bootstrapData)
+    applyTalentFromProfile(profileData)
+    refreshTalentState(uid, profileData).catch(() => {})
     await applyProfileData(profileData, uid)
+    if (profileData?.nickname) {
+      currentUserDisplay.value = profileData.nickname
+    }
   } catch (e) {
     console.error('[home] initHome 失败:', e?.message || e, e?.status)
-    welcomeText.value = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
+    welcomeText.value = FALLBACK_WELCOME
     proactiveText.value = ''
   }
   loadSiblings()
@@ -826,7 +844,7 @@ function applyGuideMessages(guideData) {
 
 function applyBootstrap(data) {
   if (!data || data.error) {
-    welcomeText.value = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
+    welcomeText.value = FALLBACK_WELCOME
     welcomeActions.value = []
     situationLabel.value = ''
     proactiveText.value = ''
@@ -1039,13 +1057,17 @@ function doLogout() {
 }
 
 onMounted(async () => {
+  if (getChildUserId()) {
+    hydrateHomeFromLocal()
+    pageLoading.value = false
+  }
   const auth = await requirePageAuth('student')
   if (!auth.ok) {
     pageLoading.value = false
     return
   }
   try {
-    await initHome()
+    await initHome(auth.userId)
   } finally {
     pageLoading.value = false
   }

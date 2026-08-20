@@ -72,8 +72,17 @@ def _attach_content_to_item(item: TrainingItem, content: ContentItem, *, skill: 
     item.instructions = json.dumps(inst, ensure_ascii=False)
 
 
-def repair_plan_media_items(db: Session, plan: TrainingPlan, talent_code: int) -> int:
-    """修复占位/无音频项：感知力、扫描速记等主辅练"""
+def repair_plan_media_items(
+    db: Session,
+    plan: TrainingPlan,
+    talent_code: int,
+    *,
+    attach_videos: bool = True,
+) -> int:
+    """修复占位/无音频项：感知力、扫描速记等主辅练。
+
+    attach_videos=False：已开练方案只补缺音频，不改 video_url，避免线上已排课被改媒体。
+    """
     from app.db.models import ChildUser
 
     pool = get_talent_content_pool(db, talent_code)
@@ -127,7 +136,8 @@ def repair_plan_media_items(db: Session, plan: TrainingPlan, talent_code: int) -
 
     if changed:
         db.flush()
-    changed += attach_videos_to_plan_items(db, plan, only_missing=True)
+    if attach_videos:
+        changed += attach_videos_to_plan_items(db, plan, only_missing=True)
     if changed:
         db.flush()
     return changed

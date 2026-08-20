@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     ChildUser,
     ContentItem,
-    TalentAssessment,
     TrainingItem,
     TrainingPlan,
-    TrainingRecord,
 )
 from app.services.assessment_service import get_latest_assessment
 from app.services.content_meta import parse_item_meta, skill_from_title
 from app.services.doubao_client import chat_completion, is_configured
-from app.services.growth_service import get_tier_brief
+from app.services.growth_service import get_tier_brief, _collect_stats
 from app.core.logger import get_logger
 
 logger = get_logger("academic_plan")
@@ -58,24 +56,10 @@ def _collect_training_data(db: Session, child_user_id: int) -> dict:
         report_json = assessment.report_json or {}
         talent_desc = (report_json.get("summary") or talent_type or "")
     
-    # 2. 获取总打卡天数和连续天数
-    total_checkins = db.scalar(
-        select(func.count(func.distinct(TrainingPlan.plan_date)))
-        .join(TrainingRecord, TrainingRecord.plan_id == TrainingPlan.id)
-        .where(TrainingPlan.child_user_id == child_user_id)
-    ) or 0
-    
-    # 3. 获取最近30天训练情况
+    stats = _collect_stats(db, child_user_id)
+    total_checkins = stats["checkins"]
     thirty_days_ago = date.today() - timedelta(days=30)
-    recent_checkin_count = db.scalar(
-        select(func.count(func.distinct(TrainingPlan.plan_date)))
-        .join(TrainingRecord, TrainingRecord.plan_id == TrainingPlan.id)
-        .where(
-            TrainingPlan.child_user_id == child_user_id,
-            TrainingPlan.plan_date >= thirty_days_ago,
-        )
-    ) or 0
-    recent_checkin_days = recent_checkin_count
+    recent_checkin_days = sum(1 for d in stats["checkin_dates"] if d >= thirty_days_ago)
     
     # 4. 获取各技能训练次数和最近等级
     skill_stats = {}
@@ -102,24 +86,13 @@ def _collect_training_data(db: Session, child_user_id: int) -> dict:
         duration = meta.get("duration_minutes") or 10
         skill_stats[skill]["total_minutes"] += duration
     
-    # 5. 获取当前 Tier（从growth_service获取准确值）
+    # 段位消费 /tier 同一份 get_tier_brief，不再按打卡天数估一个数
     overall_tier = 1
     try:
         tier_brief = get_tier_brief(db, child_user_id)
         overall_tier = tier_brief.get("overall_tier", 1) or 1
     except Exception as e:
         logger.warning(f"Failed to get tier from growth_service, using fallback: {e}")
-        # 估算 overall_tier：基于打卡天数
-        if total_checkins >= 50:
-            overall_tier = 5
-        elif total_checkins >= 30:
-            overall_tier = 4
-        elif total_checkins >= 20:
-            overall_tier = 3
-        elif total_checkins >= 10:
-            overall_tier = 2
-        elif total_checkins >= 3:
-            overall_tier = 1
     
     # 6. 获取用户信息
     user = db.get(ChildUser, child_user_id)

@@ -257,6 +257,42 @@ def test_attach_updates_stale_video_oss_path(db_session, child_with_assessment):
     assert plan.items[0].video_url.endswith("shipin/超脑阅读技术.mp4")
 
 
+def test_repair_started_plan_does_not_attach_video(db_session, child_with_assessment):
+    """已开练方案只补音频，不把配套视频写进正在练的项。"""
+    from app.db.models import TrainingItem, TrainingPlan
+    from app.services.training_catalog_sync import repair_plan_media_items
+    from app.services.training_day import get_training_day
+
+    import_video_catalog(db_session)
+    plan = TrainingPlan(
+        child_user_id=child_with_assessment,
+        plan_date=get_training_day(),
+        content_index=1,
+        planned_minutes=60,
+        status="pending",
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(
+        TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            ability_type="audio",
+            title="超脑阅读",
+            duration_min=10,
+            audio_url="https://example.com/a.mp3",
+            content_item_id=1,
+            instructions='{"skill":"超脑阅读","item_type":"required"}',
+            checkin_status="pending",
+            watch_progress={"pct": 20},
+        )
+    )
+    db_session.flush()
+    n = repair_plan_media_items(db_session, plan, talent_code=1, attach_videos=False)
+    assert plan.items[0].video_url is None
+    assert n == 0
+
+
 def test_import_video_catalog_migrates_legacy_shipin_subfolder_paths(db_session):
     """OSS shipin/天赋-视频/ 已删除后，导入应把 content_item 迁到 shipin/ 根目录。"""
     legacy = (

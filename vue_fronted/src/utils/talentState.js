@@ -70,15 +70,22 @@ export function hasEffectiveTalent(state = _state) {
   return !!(state.talent_code || state.talent_primary)
 }
 
+export function applyTalentFromProfile(profile, entry = null) {
+  if (!profile) return _state
+  _state = mergeTalent(profile, entry)
+  _state.userId = profile.child_user_id || _state?.userId || null
+  return _state
+}
+
 /** 从 profile + training/entry 刷新全局天赋（各页面进入时调用） */
-export async function refreshTalentState(userId) {
+export async function refreshTalentState(userId, profileHint = null) {
   const [profile, entry] = await Promise.all([
-    fetchProfile(userId),
+    profileHint ? Promise.resolve(profileHint) : fetchProfile(userId),
     fetchTrainingEntry(userId).catch(() => null),
   ])
-  _state = mergeTalent(profile, entry)
-  _state.userId = userId
-  return _state
+  const state = applyTalentFromProfile(profile, entry)
+  if (state) state.userId = userId
+  return state
 }
 
 export async function ensureTalentState(userId) {

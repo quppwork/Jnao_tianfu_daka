@@ -568,7 +568,7 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
         raise HTTPException(404, "孩子不存在")
 
     active = auth_service.is_account_active(child)
-    from app.services.child_training_state import get_training_progress, overall_tier, state_summary
+    from app.services.child_training_state import display_overall_tier, get_training_progress, state_summary
     from app.services.session_service import list_user_sessions
     from app.services.training_service import (
         get_checkin_history,
@@ -627,7 +627,7 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
         "account_status": child.account_status or auth_service.ACCOUNT_ACTIVE,
         "removed_at": format_cst(child.deleted_at) if child.deleted_at else None,
         "talent_display": pj.get("talent_display") or base.get("talent"),
-        "overall_tier": summary.get("overall_tier") or (overall_tier(progress) if active else 1),
+        "overall_tier": display_overall_tier(db, child) if active else 1,
         "parent_id": parent.id if parent else None,
         "parent_phone": parent.parent_phone if parent else None,
         "parent_nickname": parent.nickname if parent else None,

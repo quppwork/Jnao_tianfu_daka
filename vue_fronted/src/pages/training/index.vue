@@ -333,7 +333,7 @@
       </view>
 
       <!-- 闯关地图 -->
-      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map" :style="{ '--qc': talentColor }">
+      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map" :class="{ ended: timerPhase === 'expired' }" :style="{ '--qc': talentColor }">
         <!-- 全部过关横幅 -->
         <view v-if="questAllDone" class="quest-banner">
           <text class="quest-banner-text">🎉 今日闯关全部完成！</text>
@@ -343,9 +343,9 @@
           <!-- ===== 关卡卡片 ===== -->
           <view v-if="phase.questNo !== null && !phase.allDone" :id="'phase-block-' + phase.block" class="quest-level">
             <!-- Z 字左右交替：关卡卡 + 视频卡分居中线两侧；图标骑在贯穿虚线上、半跨关卡卡顶部 -->
-            <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked }">
+            <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked || isMediaLocked }">
               <view class="qm-col qm-card-col">
-                <view v-if="phase.audioItem" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem, phase, 'audio')">
+                <view v-if="phase.audioItem || phase.items[0]" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem || phase.items[0], phase, 'audio')">
                   <view class="qa-main">
                     <text class="qa-status" :class="{ done: phase.allDone, locked: !phase.unlocked }">{{ questStatusText(phase) }}</text>
                     <view v-if="phase.subtitle && phase.subtitle !== phase.skillName" class="qa-skill">
@@ -365,23 +365,26 @@
                 </view>
               </view>
               <view class="qm-col qm-video-col">
-                <view v-if="phase.videoItem" class="qm-side qm-video" @click="openPhaseMediaItem(phase.videoItem, phase, 'video')">
+                <view v-if="phase.videoItem" class="qm-side qm-video" @click.stop="openPhaseMediaItem(phase.videoItem, phase, 'video')">
                   <text class="qm-emoji">📺</text>
                   <text class="qm-label">先看视频</text>
                   <text class="qm-meta">教学示范</text>
                 </view>
               </view>
               <!-- 图标节点：绝对定位骑中线，中心对准关卡卡顶部边线（半跨卡顶） -->
-              <view class="quest-node" :class="{ done: phase.allDone, locked: !phase.unlocked, pulse: phase.unlocked && !phase.allDone }">
+              <view class="quest-node" :class="{ done: phase.allDone, locked: !phase.unlocked, pulse: phase.unlocked && !phase.allDone && !isMediaLocked }">
                 <text class="quest-node-icon">{{ !phase.unlocked ? '🔒' : phase.questIcon }}</text>
                 <text v-if="phase.allDone" class="quest-node-star">⭐</text>
               </view>
             </view>
 
-            <!-- 打卡：必修关有按钮；多元感知点听即过 -->
-            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin" :class="{ locked: !isPhaseListenDone(phase) }">
-              <view v-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
-                <text class="qct-text">🔒 请先听完音视频（{{ WATCH_DONE_PCT }}%）</text>
+            <!-- 打卡条：必修关都有；未解锁 / 未听完为灰色不可点 -->
+            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin" :class="{ locked: !phase.unlocked || !isPhaseListenDone(phase) }">
+              <view v-if="!phase.unlocked" class="quest-checkin-tip">
+                <text class="qct-text">🔒 完成上一关打卡后解锁</text>
+              </view>
+              <view v-else-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
+                <text class="qct-text">🔒 请先听完音频（{{ WATCH_DONE_PCT }}%）</text>
               </view>
               <view v-else class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
@@ -2627,6 +2630,11 @@ function questStatusText(phase) {
 
 /** 音频卡片开始按钮文案（emoji 由按钮圆图标承载） */
 function questStartText(phase) {
+  if (isMediaLocked.value || isMediaExhausted.value) {
+    if (phase.allDone) return '已过关 · 时长已到'
+    if (!phase.unlocked) return '完成上一关后解锁'
+    return '时长已到 · 仍可打卡'
+  }
   if (phase.allDone) return '已通过 · 点击回听'
   if (!phase.unlocked) return '完成上一关后解锁'
   if (phase.isPercep) return '开始闯关 · 听音频'
@@ -2743,19 +2751,46 @@ function videoTitle(item) {
 function itemNeedsListen(item) {
   if (!item) return false
   if (item.item_type === 'perception' || item.item_type === 'placeholder') return false
-  return !!(item.audio_url || item.video_url)
+  return !!item.audio_url
+}
+
+function getMediaSlotProgress(item, mediaType = 'audio') {
+  const remote = (!item?.id)
+    ? {}
+    : (watchProgressMap.value[item.id] || item.watch_progress || {})
+  if (mediaType === 'video') {
+    const v = remote.video && typeof remote.video === 'object' ? remote.video : null
+    if (v) {
+      return {
+        watched_sec: Math.max(0, Number(v.watched_sec) || 0),
+        duration_sec: Math.max(0, Number(v.duration_sec) || 0),
+        pct: Math.max(0, Number(v.pct) || 0),
+      }
+    }
+    return { watched_sec: 0, duration_sec: 0, pct: 0 }
+  }
+  const a = remote.audio && typeof remote.audio === 'object' ? remote.audio : null
+  if (a) {
+    return {
+      watched_sec: Math.max(0, Number(a.watched_sec) || 0),
+      duration_sec: Math.max(0, Number(a.duration_sec) || 0),
+      pct: Math.max(0, Number(a.pct) || 0),
+    }
+  }
+  return {
+    watched_sec: Math.max(0, Number(remote.watched_sec) || 0),
+    duration_sec: Math.max(0, Number(remote.duration_sec) || 0),
+    pct: Math.max(0, Number(remote.pct) || 0),
+  }
 }
 
 function getItemWatchPct(item) {
-  if (!item?.id) return 0
-  const wp = watchProgressMap.value[item.id] || item.watch_progress || {}
-  return Number(wp.pct || 0)
+  return getMediaSlotProgress(item, 'audio').pct
 }
 
 function isItemListenDone(item) {
   if (!itemNeedsListen(item)) return true
   if (item.checkin_status === 'done') return true
-  if (item.video_complete) return true
   return getItemWatchPct(item) >= WATCH_DONE_PCT
 }
 
@@ -2895,16 +2930,12 @@ function resetVideoUiClock(initialSec = 0) {
 function getItemWatchProgress(item) {
   if (!item?.id) return {}
   const remote = watchProgressMap.value[item.id] || item.watch_progress || {}
-  const watched_sec = Math.max(0, Number(remote.watched_sec) || 0)
-  const duration_sec = Math.max(0, Number(remote.duration_sec) || 0)
-  const pct = duration_sec > 0
-    ? Math.min(100, Math.round(watched_sec / duration_sec * 1000) / 10)
-    : Math.max(0, Number(remote.pct) || 0)
-  return { ...remote, watched_sec, duration_sec, pct }
+  const audio = getMediaSlotProgress(item, 'audio')
+  return { ...remote, ...audio }
 }
 
-function getItemResumeSec(item) {
-  return Math.max(0, Number(getItemWatchProgress(item).watched_sec) || 0)
+function getItemResumeSec(item, mediaType = 'audio') {
+  return Math.max(0, Number(getMediaSlotProgress(item, mediaType).watched_sec) || 0)
 }
 
 function clearVideoResumePending() {
@@ -2966,7 +2997,7 @@ function applyVideoResume(el, force = false) {
   if (videoResumeApplied && !force) return true
   const resume = videoResumePendingSec > 0
     ? videoResumePendingSec
-    : getItemResumeSec(lastOpenedItem.value)
+    : getItemResumeSec(lastOpenedItem.value, 'video')
   if (resume <= 0.5) {
     clearVideoResumePending()
     videoResumeApplied = true
@@ -3127,10 +3158,15 @@ function onMediaSeeking(e) {
 
 async function flushWatchProgress() {
   const item = lastOpenedItem.value
-  if (!item?.id || !itemNeedsListen(item)) return
+  if (!item?.id) return
+  const mediaType = mediaPlayer.value.type === 'video' ? 'video' : 'audio'
+  if (mediaType === 'audio' && !itemNeedsListen(item)) return
   const el = activeMediaEl() || pinnedTrainingVideo
   const cached = getItemWatchProgress(item)
-  const cachedDur = Number(cached.duration_sec || 0)
+  const cachedSlot = mediaType === 'audio'
+    ? (cached.audio && typeof cached.audio === 'object' ? cached.audio : cached)
+    : (cached.video && typeof cached.video === 'object' ? cached.video : {})
+  const cachedDur = Number(cachedSlot.duration_sec || cached.duration_sec || 0)
   const durationSec = (el && el.duration) ? el.duration : (audioUiDuration.value || cachedDur || 0)
   const finalDur = durationSec > 0 ? durationSec : cachedDur
   if (finalDur <= 0 && mediaMaxHeardSec.value <= 0) return
@@ -3140,17 +3176,17 @@ async function flushWatchProgress() {
     : Math.max(mediaMaxHeardSec.value, fromEl)
   const pct = finalDur > 0
     ? Math.min(100, Math.round(watchedSec / finalDur * 1000) / 10)
-    : Number(cached.pct || 0)
+    : Number(cachedSlot.pct || cached.pct || 0)
   const wp = { watched_sec: watchedSec, duration_sec: finalDur || cachedDur, pct }
-  syncItemWatchProgress(item, wp)
-  if (item.video_complete !== undefined) {
-    item.video_complete = pct >= WATCH_DONE_PCT
+  if (mediaType === 'audio') {
+    syncItemWatchProgress(item, { ...cached, ...wp, audio: wp })
   }
   try {
     const uid = await ensureChildUser()
     const res = await postTrainingWatchProgress(uid, item.id, {
       watched_sec: watchedSec,
       duration_sec: finalDur > 0 ? finalDur : undefined,
+      media: mediaType,
     })
     if (res?.watch_progress) {
       syncItemWatchProgress(item, res.watch_progress)
@@ -3168,7 +3204,10 @@ function onMediaLoadedMetadata(e) {
   if (!el || !lastOpenedItem.value?.id) return
   lockMediaPlaybackRate({ target: el })
   if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
-  const resume = getItemResumeSec(lastOpenedItem.value)
+  const resume = getItemResumeSec(
+    lastOpenedItem.value,
+    mediaPlayer.value.type === 'video' ? 'video' : 'audio',
+  )
   mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
   if (mediaPlayer.value.type === 'video') {
     applyVideoResume(el)
@@ -4118,16 +4157,18 @@ async function openMediaItem(item, forceType) {
       return
     }
   }
-  const wp = getItemWatchProgress(item)
-  mediaMaxHeardSec.value = Number(wp.watched_sec || 0)
+  const audioSlot = getMediaSlotProgress(item, 'audio')
+  const videoSlot = getMediaSlotProgress(item, 'video')
+  mediaMaxHeardSec.value = Number(audioSlot.watched_sec || 0)
   audioPlaying.value = false
   videoPlaying.value = false
   audioUiSec.value = mediaMaxHeardSec.value
-  audioUiDuration.value = Number(wp.duration_sec || 0)
+  audioUiDuration.value = Number(audioSlot.duration_sec || 0)
 
   const openVideo = () => {
-    const resumeSec = Number(wp.watched_sec || 0)
-    const durSec = Number(wp.duration_sec || 0)
+    const resumeSec = Number(videoSlot.watched_sec || 0)
+    const durSec = Number(videoSlot.duration_sec || 0)
+    mediaMaxHeardSec.value = resumeSec
     videoResumePendingSec = resumeSec
     videoResumeApplied = false
     videoLoading.value = true
@@ -4194,7 +4235,7 @@ async function closeMedia() {
   }
   clearVideoRetryTimer()
   const item = lastOpenedItem.value
-  if (item?.id && itemNeedsListen(item)) {
+  if (item?.id && (itemNeedsListen(item) || item.video_url)) {
     const el = pinnedTrainingVideo || activeMediaEl()
     if (el) {
       const t = Number(el.currentTime) || 0
@@ -5870,6 +5911,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 
 /* ===== 闯关地图 ===== */
 .quest-map { position:relative; display:flex; flex-direction:column; margin-top:6px; }
+.quest-map.ended { margin-top:12px; padding-bottom:24px; }
 /* 中间一条贯穿虚线（时间线）：参考风格 3px + 有节奏的虚线段 */
 .quest-map::before {
   content:''; position:absolute; left:50%; top:0; bottom:0; width:3px;
@@ -5885,7 +5927,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
   box-shadow:0 0 18px rgba(245,200,66,0.08);
 }
 .quest-banner-text { font-size:15px; font-weight:700; color:#f5c842; letter-spacing:0.02em; }
-.quest-level { position:relative; }
+.quest-level { position:relative; margin-bottom:32px; min-height:200px; }
 /* 关卡大节点：52px 圆形图标，骑在虚线上、中心对齐第一行状态文字；参考风格深底+天赋色边+呼吸光晕 */
 .quest-node {
   position:absolute; left:50%; top:37px; transform:translate(-50%,-50%);
@@ -5909,6 +5951,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .quest-media {
   position:relative; display:flex; gap:50px; align-items:stretch;
   margin-top:26px; /* 为半跨卡顶的图标上半留空间 */
+  min-height:168px;
 }
 .quest-media.locked { opacity:0.55; }
 .quest-media.reversed { flex-direction:row-reverse; }
@@ -5926,6 +5969,8 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
   border:1.5px solid var(--qc, rgba(59,130,246,0.5));
   border-radius:16px;
   padding:30px 20px 34px;
+  min-height:140px;
+  box-sizing:border-box;
 }
 .quest-level.done .qm-audio { background:linear-gradient(135deg, rgba(34,197,94,0.08), #131926 55%); border-color:var(--qc, #3b82f6); }
 .quest-media.locked .qm-audio { background:#131926; border-color:#2A3040; }
