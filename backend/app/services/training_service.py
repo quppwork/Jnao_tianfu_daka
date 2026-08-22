@@ -1090,20 +1090,34 @@ def submit_checkin(
         raise TrainingError("训练日已于凌晨4点截止", 403)
 
     sorted_items = sorted(plan.items, key=lambda x: x.sort_order)
+    from app.services.training_carryover import item_skips_checkin
 
-    # 顺序打卡：必须按 sort_order 完成
+    # 顺序打卡：必须按 sort_order 完成（选修/免打卡项跳过，不阻塞后续必修打卡）
     target_item = None
     if item_id:
         target_item = db.get(TrainingItem, item_id)
-        first_pending = next((it for it in sorted_items if it.checkin_status != "done"), None)
-        if first_pending and target_item and target_item.id != first_pending.id:
+        first_pending = next(
+            (it for it in sorted_items if it.checkin_status != "done" and not item_skips_checkin(it)),
+            None,
+        )
+        # 选修项不受顺序限制；必修项必须等前面未打卡的必修项完成
+        if (
+            first_pending
+            and target_item
+            and not item_skips_checkin(target_item)
+            and target_item.id != first_pending.id
+        ):
             raise TrainingError("请按顺序完成训练项")
     else:
-        target_item = next((it for it in sorted_items if it.checkin_status != "done"), None)
+        target_item = next(
+            (it for it in sorted_items if it.checkin_status != "done" and not item_skips_checkin(it)),
+            None,
+        )
     if not target_item or target_item.plan_id != plan.id:
         raise TrainingError("训练项不存在", 404)
 
-    if not is_item_media_complete(target_item):
+    # 选修/免打卡项：点开即过关，不设「听完 90%」门槛（见 item_skips_checkin）
+    if not item_skips_checkin(target_item) and not is_item_media_complete(target_item):
         raise TrainingError(
             f"请先听完/看完本项音视频后再打卡（需达到 {int(WATCH_COMPLETE_PCT)}%）",
             403,
