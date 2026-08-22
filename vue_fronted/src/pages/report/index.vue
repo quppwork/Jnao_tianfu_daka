@@ -223,11 +223,10 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ensureChildUser, fetchAssessmentReport, fetchLatestAssessment, fetchProfile, getSessionToken, saveProfile, resolveTrainingStreamUrl, fetchGrowthTier } from '@/utils/userApi.js'
+import { TALENT_AVATAR, talentThemeColor } from '@/utils/talentState.js'
 
 const STATE_LABELS = ["相争","难辨","牵制","双生","本命","孤显","无向","无神"]
-const TALENT_COLORS = { "学者":"#12417A","思者":"#22C55E","行者":"#A57A1A","赢者":"#960D24","德者":"#582E1F","迷者":"#9CA3AF" }
 const TALENT_LOGOS = { "学者":"/static/xue.jpg","思者":"/static/si.jpg","赢者":"/static/ying.jpg","德者":"/static/de.jpg","行者":"/static/xing.jpg" }
-const TALENT_BG_FIGS = { "学者":"/static/talent-xuezhe.png","思者":"/static/talent-sizhe.png","赢者":"/static/talent-yingzhe.png","德者":"/static/talent-dezhe.png","行者":"/static/talent-xingzhe.png" }
 
 const loading = ref(true)
 const report = ref(null)
@@ -415,9 +414,9 @@ const isMizhe = computed(() => {
   const t = report.value?.talent || report.value?.talent_primary || ''
   return t === '迷者'
 })
-const talentColor = computed(() => TALENT_COLORS[report.value?.talent] || '#171717')
+const talentColor = computed(() => talentThemeColor(report.value?.talent, '#171717'))
 const talentLogo = computed(() => TALENT_LOGOS[report.value?.talent] || '')
-const talentBgFig = computed(() => TALENT_BG_FIGS[report.value?.talent] || '')
+const talentBgFig = computed(() => TALENT_AVATAR[report.value?.talent] || '')
 const TALENT_BG_MAP = { "学者":"/static/talent-bg-xue.png","思者":"/static/talent-bg-si.png","赢者":"/static/talent-bg-ying.png","德者":"/static/talent-bg-de.png","行者":"/static/talent-bg-xing.png" }
 const talentBgImage = computed(() => TALENT_BG_MAP[report.value?.talent] || '/static/talent-bg-xue.png')
 

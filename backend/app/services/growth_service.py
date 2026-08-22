@@ -577,6 +577,13 @@ def get_tier_brief(db: Session, child_user_id: int) -> dict:
             "rule_text": _skill_rule_text(sk, tier, grade_band),
         })
 
+    path = []
+    for name, cond in TIER_TITLES:
+        if cond == "identity":
+            path.append({"name": name, "identity": True})
+        else:
+            path.append({"name": name, "identity": False, "from_duan": int(cond)})
+
     return {
         "overall_tier": overall_tier,
         "tier_percent": round(overall_tier / 9 * 100),
@@ -586,6 +593,7 @@ def get_tier_brief(db: Session, child_user_id: int) -> dict:
         "need": need,
         "advance_pass": advance_pass,
         "skills": skills,
+        "path": path,
     }
 
 

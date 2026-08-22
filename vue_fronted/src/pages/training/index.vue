@@ -1058,7 +1058,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { onLoad, onShow, onHide } from '@dcloudio/uni-app'
 import { requirePageAuth, ensureChildUser, getChildUserId, resolveTrainingStreamUrl, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem, fetchGrowthTier } from '@/utils/userApi.js'
-import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
+import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState, talentAvatarUrl, talentThemeColor, duanText } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
 
@@ -2287,7 +2287,7 @@ const skillTierProgress = ref({})
 const planHeaderMeta = computed(() => {
   const parts = [talentLabel.value]
   const tier = overallTier.value || todayPlan.value?.overall_tier || 1
-  if (tier > 1) parts.push(`Lv.${tier}`)
+  if (tier > 1) parts.push(duanText(tier))
   const day = todayPlan.value?.training_day_number ?? todayPlan.value?.lesson_day ?? lessonIndex.value
   if (day) parts.push(`第 ${day} 天`)
   return parts.filter(Boolean).join(' · ')
@@ -2299,26 +2299,8 @@ const phaseRecordIds = ref({})
 const tier = ref(null) // 🆕 六级九段（角标 + 状态卡）
 const tierMedalSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>'
 
-// 🆕 顶部信息行：天赋头像（与成长页同一套图）+ 主题色 + 段位中文
-const TALENT_AVATAR = {
-  '学者': '/static/talent-xuezhe.png',
-  '思者': '/static/talent-sizhe.png',
-  '行者': '/static/talent-xingzhe.png',
-  '德者': '/static/talent-dezhe.png',
-  '赢者': '/static/talent-yingzhe.png',
-}
-const talentAvatarImg = computed(() => TALENT_AVATAR[talentLabel.value] || '/static/talent-xuezhe.png')
-const TALENT_COLOR = {
-  '学者': '#12417A',
-  '思者': '#22C55E',
-  '行者': '#A57A1A',
-  '德者': '#582E1F',
-  '赢者': '#960D24',
-}
-const talentColor = computed(() => TALENT_COLOR[talentLabel.value] || '#3b82f6')
-const CN_TIER = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
-const heroTier = computed(() => tier.value?.overall_tier || overallTier.value || 1)
-const tierCN = computed(() => CN_TIER[Math.min(9, Math.max(1, heroTier.value)) - 1])
+const talentAvatarImg = computed(() => talentAvatarUrl(talentLabel.value))
+const talentColor = computed(() => talentThemeColor(talentLabel.value))
 
 // 🆕 顶部标题改成孩子名字（登录时存在 jnao_user）
 const childNickname = computed(() => {

@@ -17,7 +17,7 @@
         <view class="row-line"><text class="label">登录账号</text><text class="val">{{ detail.login_name || '—' }}</text></view>
         <view class="row-line"><text class="label">年级</text><text class="val">{{ detail.grade || '—' }}</text></view>
         <view class="row-line"><text class="label">天赋类型</text><text class="val">{{ detail.talent_display || detail.talent || '—' }}</text></view>
-        <view class="row-line"><text class="label">综合等级</text><text class="val">Lv.{{ detail.overall_tier || 1 }}</text></view>
+        <view class="row-line"><text class="label">综合段位</text><text class="val">第{{ detail.overall_tier || 1 }}段</text></view>
         <view class="row-line"><text class="label">绑定家长</text><text class="val">{{ detail.parent_nickname || '未绑定' }} {{ detail.parent_phone ? `(${detail.parent_phone})` : '' }}</text></view>
         <view class="row-line"><text class="label">注册时间</text><text class="val">{{ formatTime(detail.created_at) }}</text></view>
       </view>
@@ -57,7 +57,7 @@
         <text class="section-title">训练进度</text>
         <view v-for="(sk, name) in detail.training_progress.skills" :key="name" class="mini-row">
           <text class="mini-name">{{ name }}</text>
-          <text class="mini-sub">等级 Lv.{{ sk.tier }} · 连续通过 {{ sk.consecutive_pass || 0 }} 次</text>
+          <text class="mini-sub">第{{ sk.tier }}段 · 连续通过 {{ sk.consecutive_pass || 0 }} 次</text>
         </view>
       </view>
 
