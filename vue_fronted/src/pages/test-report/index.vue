@@ -33,7 +33,7 @@
           <view v-for="t in tData.traits" :key="t.id" class="ttag" :style="{ borderColor: tData.color+'40', background: tData.color+'08' }">
             <text class="ttag-emoji">{{ t.emoji }}</text>
             <text class="ttag-name">{{ t.name }}</text>
-            <text class="ttag-lv">Lv.{{ t.level }}</text>
+            <text class="ttag-lv">第{{ t.level }}级</text>
           </view>
         </view>
       </view>

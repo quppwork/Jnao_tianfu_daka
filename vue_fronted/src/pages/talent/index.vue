@@ -203,7 +203,7 @@ import {
   deleteAssessmentReport,
   submitTalentReport,
 } from '@/utils/userApi.js'
-import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
+import { clearTalentState, refreshTalentState, TALENT_AVATAR } from '@/utils/talentState.js'
 
 // ── State ──
 const fromOnboarding = ref(false)
@@ -519,7 +519,7 @@ function dismissNotice() {
 }
 
 const talentEmoji = { 学者:'📚', 思者:'💡', 行者:'🏃', 德者:'⚖️', 赢者:'🏆' }
-const talentAvatar = { 学者:'/static/talent-xuezhe.png', 思者:'/static/talent-sizhe.png', 行者:'/static/talent-xingzhe.png', 德者:'/static/talent-dezhe.png', 赢者:'/static/talent-yingzhe.png' }
+const talentAvatar = TALENT_AVATAR
 
 function formatHistoryDate(iso) {
   if (!iso) return ''

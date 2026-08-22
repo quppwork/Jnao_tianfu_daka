@@ -6,7 +6,7 @@
       </view>
       <view class="nav-title-wrap">
         <text class="nav-title">成长里程碑</text>
-        <text class="nav-sub">MILESTONES</text>
+        <text class="nav-sub">段位与打卡</text>
       </view>
       <view class="nav-spacer"></view>
     </view>
@@ -31,7 +31,7 @@
         <view class="hero-idbar-avatar" :style="{ borderColor: talentColor, backgroundImage: 'url(' + talentAvatarImg + ')' }"></view>
         <view class="hero-idbar-main">
           <text class="hero-idbar-title">成长历程碑</text>
-          <text class="hero-idbar-en">MILESTONES</text>
+          <text class="hero-idbar-en">段位与打卡</text>
         </view>
         <view class="hero-tier-pill">
           <text class="hero-tier-pill-num">{{ tierCN }}阶</text>
@@ -52,8 +52,8 @@
             </text>
           </view>
           <view class="hero-tier">
-            <text class="hero-tier-num">Tier {{ overallTier }}</text>
-            <text class="hero-tier-total"> / 9</text>
+            <text class="hero-tier-num">第{{ overallTier }}段</text>
+            <text class="hero-tier-total"> / 九段</text>
           </view>
         </view>
         <view class="tier-bar"><view class="tier-fill" :style="{ width: tierPercent + '%' }"></view></view>
@@ -79,19 +79,19 @@
       <view class="path-card">
         <!-- 6 称号阶梯（每个节点独立方框） -->
         <view class="path-steps">
-          <view v-for="(t, i) in TIER_TITLES" :key="t.name"
+          <view v-for="(t, i) in honorPath" :key="t.name"
             class="path-step"
             :class="{ cur: i === currentTitleIndex, done: i < currentTitleIndex, locked: i > currentTitleIndex }">
             <view class="path-step-badge"><text>{{ t.badge }}</text></view>
             <text class="path-step-name">{{ t.name }}</text>
-            <text class="path-step-tag">{{ t.identity ? '身份' : 'Tier ' + t.min + '+' }}</text>
+            <text class="path-step-tag">{{ honorStepTag(t) }}</text>
           </view>
         </view>
 
         <!-- 九段进度（技能等级 1-9）：独立圆角方块 -->
         <view class="tier9-divider"></view>
         <view class="tier9-steps">
-          <view v-for="(s, idx) in TIER9_STEPS" :key="idx"
+          <view v-for="(s, idx) in duanNineSteps" :key="idx"
                 class="tier9-step"
                 :class="[
                   'g' + s.group,
@@ -397,30 +397,15 @@ import {
   fetchGrowthShare,
   fetchAcademicPlan,
 } from '@/utils/userApi.js'
-
-// 进阶之路：前 3 阶为身份阶（会员/VIP会员/导师子女），纯展示不判定；
-// 后 3 阶为技能阶，与后端 growth_service.get_tier_honor 的 tier 边界保持一致
-const TIER_TITLES = [
-  { name: '会员', identity: true, badge: '💳', bare: true },
-  { name: 'VIP会员', identity: true, badge: '💎', bare: true },
-  { name: '导师子女', identity: true, badge: '🎓', bare: true },
-  { name: '传承特使', min: 1, badge: '🏅', bare: true },
-  { name: '劲脑学神', min: 5, badge: '🧠', bare: true },
-  { name: '专利精英', min: 8, badge: '💡', bare: true },
-]
-
-// 九段：三段为一组（初级1-3/中级4-6/高级7-9），方框分格显示，竖排中文数字+段
-const TIER9_STEPS = [
-  { num: '一', group: 1 },
-  { num: '二', group: 1 },
-  { num: '三', group: 1 },
-  { num: '四', group: 2 },
-  { num: '五', group: 2 },
-  { num: '六', group: 2 },
-  { num: '七', group: 3 },
-  { num: '八', group: 3 },
-  { num: '九', group: 3 },
-]
+import {
+  talentAvatarUrl,
+  talentThemeColor,
+  duanCN,
+  decorateHonorPath,
+  honorPathIndex,
+  honorStepTag,
+  duanNineSteps as buildDuanNineSteps,
+} from '@/utils/talentState.js'
 
 // 线性 SVG 图标（与首页/答疑页同一风格：24 视窗、currentColor 描边）
 const ICON_PATHS = {
@@ -622,27 +607,11 @@ const overallTier = computed(() => tier.value?.overall_tier || summary.value?.ov
 const tierPercent = computed(() => Math.round((overallTier.value / 9) * 100))
 const curTier = computed(() => overallTier.value)
 
-// 荣誉卡头像：按天赋动态选图（与天赋报告页同一套天赋插画）
-const TALENT_AVATAR = {
-  '学者': '/static/talent-xuezhe.png',
-  '思者': '/static/talent-sizhe.png',
-  '行者': '/static/talent-xingzhe.png',
-  '德者': '/static/talent-dezhe.png',
-  '赢者': '/static/talent-yingzhe.png',
-}
-const talentAvatarImg = computed(() => TALENT_AVATAR[summary.value?.talent_primary] || '/static/talent-xuezhe.png')
-// 天赋主题色：与天赋报告页一致（思者=绿色），用于头像边框
-const TALENT_COLOR = {
-  '学者': '#12417A',
-  '思者': '#22C55E',
-  '行者': '#A57A1A',
-  '德者': '#582E1F',
-  '赢者': '#960D24',
-}
-const talentColor = computed(() => TALENT_COLOR[summary.value?.talent_primary] || '#3b82f6')
-// 当前段位中文数字（一~九），用于荣誉卡右侧椭圆
-const CN_TIER = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
-const tierCN = computed(() => CN_TIER[Math.min(9, Math.max(1, overallTier.value)) - 1])
+const talentAvatarImg = computed(() => talentAvatarUrl(summary.value?.talent_primary))
+const talentColor = computed(() => talentThemeColor(summary.value?.talent_primary))
+const tierCN = computed(() => duanCN(overallTier.value))
+const honorPath = computed(() => decorateHonorPath(tier.value?.path))
+const duanNineSteps = buildDuanNineSteps()
 
 const memberDays = computed(() => {
   const since = summary.value?.member_since
@@ -652,22 +621,15 @@ const memberDays = computed(() => {
   return Math.floor(diff / 86400000) + 1
 })
 
-// 当前点只落在技能阶（下标 3/4/5）；前 3 阶身份阶纯展示，不参与判定
-const currentTitleIndex = computed(() => {
-  const t = overallTier.value
-  if (t >= 8) return 5
-  if (t >= 5) return 4
-  return 3
-})
+// 当前点按 /tier.honor_level 落在进阶之路上，门槛只认接口
+const currentTitleIndex = computed(() =>
+  honorPathIndex(tier.value?.honor_level || summary.value?.honor_level, tier.value?.path),
+)
 
 const nextTitleInfo = computed(() => {
   const t = tier.value
   if (t?.next_title && t.need) return { name: t.next_title, need: t.need }
-  const idx = currentTitleIndex.value
-  if (idx >= TIER_TITLES.length - 1) return null
-  const next = TIER_TITLES[idx + 1]
-  if (!next || next.identity) return null
-  return { name: next.name, need: Math.max(1, next.min - overallTier.value) }
+  return null
 })
 
 const masteryChips = computed(() => {

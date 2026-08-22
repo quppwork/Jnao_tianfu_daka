@@ -15,7 +15,7 @@ from app.db.models import (
 from app.services.assessment_service import get_latest_assessment
 from app.services.content_meta import parse_item_meta, skill_from_title
 from app.services.doubao_client import chat_completion, is_configured
-from app.services.growth_service import get_tier_brief, _collect_stats
+from app.services.growth_service import get_tier_brief, get_tier_honor, _collect_stats
 from app.core.logger import get_logger
 
 logger = get_logger("academic_plan")
@@ -86,13 +86,20 @@ def _collect_training_data(db: Session, child_user_id: int) -> dict:
         duration = meta.get("duration_minutes") or 10
         skill_stats[skill]["total_minutes"] += duration
     
-    # 段位消费 /tier 同一份 get_tier_brief，不再按打卡天数估一个数
+    # 段位 / 称号只消费 get_tier_brief，与 /tier、成长页进阶之路同一份
     overall_tier = 1
+    honor_level = get_tier_honor(1)
+    next_title = None
+    need = None
     try:
         tier_brief = get_tier_brief(db, child_user_id)
         overall_tier = tier_brief.get("overall_tier", 1) or 1
+        honor_level = tier_brief.get("honor_level") or get_tier_honor(overall_tier)
+        next_title = tier_brief.get("next_title")
+        need = tier_brief.get("need")
     except Exception as e:
         logger.warning(f"Failed to get tier from growth_service, using fallback: {e}")
+        honor_level = get_tier_honor(overall_tier)
     
     # 6. 获取用户信息
     user = db.get(ChildUser, child_user_id)
@@ -111,6 +118,9 @@ def _collect_training_data(db: Session, child_user_id: int) -> dict:
         "total_checkins": total_checkins,
         "recent_30d_checkins": recent_checkin_days,
         "overall_tier": overall_tier,
+        "honor_level": honor_level,
+        "next_title": next_title,
+        "need": need,
         "skill_stats": skill_stats,
     }
 
@@ -169,7 +179,7 @@ def _build_ai_prompt(data: dict, score_proj: dict) -> tuple[str, str]:
 4. 结合学生的天赋类型给出针对性建议
 5. 用清晰的分段结构，适合手机阅读
 6. 字数控制在500-800字
-7. 使用中文输出
+7. 使用中文输出；段位一律写「第N段」，不要写 Tier / Lv
 
 报告结构建议：
 - 🎯 现状评估（基于训练数据）
@@ -177,6 +187,12 @@ def _build_ai_prompt(data: dict, score_proj: dict) -> tuple[str, str]:
 - 📅 学习规划建议（分阶段）
 - 💡 天赋优势发挥建议
 - 🔥 行动寄语"""
+
+    next_title = data.get("next_title")
+    need = data.get("need")
+    next_line = "已是最高训练称号"
+    if next_title:
+        next_line = f"{next_title}（还差{need}阶）" if need else next_title
 
     user_message = f"""请为以下学生生成学业规划报告：
 
@@ -190,6 +206,8 @@ def _build_ai_prompt(data: dict, score_proj: dict) -> tuple[str, str]:
 - 累计打卡：{data['total_checkins']}天
 - 近30天打卡：{data['recent_30d_checkins']}天
 - 当前段位：第{data['overall_tier']}段
+- 当前称号：{data.get('honor_level') or '新学员'}
+- 下一称号：{next_line}
 
 【技能训练情况】
 {skills_text}
@@ -221,6 +239,7 @@ async def generate_academic_plan(db: Session, child_user_id: int, force_refresh:
             "grade": data["grade"],
             "talent_type": data["talent_type"],
             "overall_tier": data["overall_tier"],
+            "honor_level": data.get("honor_level"),
             "total_checkins": data["total_checkins"],
         },
         "score_projection": score_proj,
@@ -286,18 +305,25 @@ def _generate_default_report(data: dict, score_proj: dict) -> str:
     mid_goal = ""
     long_goal = ""
     
+    honor = data.get("honor_level") or get_tier_honor(tier)
+    next_title = data.get("next_title")
+    need = data.get("need")
+
     if checkins < 3:
         recent_goal += "\n2. 连续打卡满3天，解锁第一段晋升"
         mid_goal = "1. 连续打卡21天，养成训练习惯\n2. 掌握2-3个核心技能的基础方法"
-        long_goal = "1. 各技能达到Tier 3以上\n2. 学习效率显著提升，作业时间缩短30%"
+        long_goal = "1. 各技能达到第3段以上\n2. 学习效率显著提升，作业时间缩短30%"
     elif tier < 3:
         recent_goal += "\n2. 挑战连续打卡7天\n3. 尝试解锁第二个技能"
-        mid_goal = "1. 每个必修技能至少训练10次\n2. 提升至Tier 3"
-        long_goal = "1. 核心技能Tier 5+，成为传承特使\n2. 阅读速度、记忆力、计算能力全面提升"
+        mid_goal = "1. 每个必修技能至少训练10次\n2. 提升至第3段"
+        long_goal = f"1. 核心技能达到第5段以上，成为{get_tier_honor(5)}\n2. 阅读速度、记忆力、计算能力全面提升"
     else:
         recent_goal += "\n2. 保持每周至少5天的训练频率\n3. 挑战高分打卡评价"
-        mid_goal = "1. 冲击Tier 5，解锁「劲脑学神」\n2. 将训练技能应用到实际学科学习中"
-        long_goal = "1. 冲刺Tier 8-9，成为专利精英\n2. 形成终身受益的高效学习法"
+        if next_title and need:
+            mid_goal = f"1. 再进{need}阶，解锁「{next_title}」\n2. 将训练技能应用到实际学科学习中"
+        else:
+            mid_goal = f"1. 保持「{honor}」，把技能用到学科学习中\n2. 每周至少完成5天必修训练"
+        long_goal = f"1. 冲刺第8–9段，成为{get_tier_honor(8)}\n2. 形成终身受益的高效学习法"
     
     talent_part = ""
     if talent and talent != "未测评":
