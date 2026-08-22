@@ -199,22 +199,19 @@ def _record_date_iso(rec: TrainingRecord) -> str:
     return date.today().isoformat()
 
 
-def get_milestones(db: Session, child_user_id: int, stats: dict | None = None) -> list[dict]:
-    """🆕 v2.0 九阶荣誉体系 — 三段头衔，按 overall_tier 判定达成状态"""
+def get_milestones(
+    db: Session,
+    child_user_id: int,
+    stats: dict | None = None,
+    overall_tier: int | None = None,
+) -> list[dict]:
+    """三段头衔：段位只消费 display_overall_tier / get_tier_brief，不自己再算一遍。"""
     if stats is None:
         stats = _collect_stats(db, child_user_id)
-    user = stats["user"]
+    if overall_tier is None:
+        from app.services.child_training_state import display_overall_tier
 
-    # 获取 overall_tier
-    overall_tier = 1
-    try:
-        from app.services.child_training_state import get_training_progress, overall_tier as _calc_tier
-        if user:
-            state = get_training_progress(user)
-            overall_tier = _calc_tier(state)
-    except Exception:
-        import logging
-        logging.getLogger("jnao").warning("growth: 计算 overall_tier 失败，退回默认", exc_info=True)
+        overall_tier = display_overall_tier(db, stats["user"])
 
     return [
         {
@@ -380,24 +377,35 @@ def get_calendar_days(db: Session, child_user_id: int) -> list[dict]:
         c_rows = db.scalars(select(ContentItem).where(ContentItem.id.in_(content_ids))).all()
         content_by_id = {c.id: c for c in c_rows}
 
-    added_titles: dict[str, set[str]] = defaultdict(set)  # 按日期去重
+    plan_ids = {r.plan_id for r in records if r.plan_id}
+    plans_by_id: dict[int, TrainingPlan] = {}
+    if plan_ids:
+        plans_by_id = {
+            p.id: p
+            for p in db.scalars(select(TrainingPlan).where(TrainingPlan.id.in_(plan_ids))).all()
+        }
+
+    added_titles: dict[str, set[str]] = defaultdict(set)
+    # 与 summary.total_checkins 同一数据源：有 TrainingRecord 就算打卡，不另滤 checkin_status
     for rec in records:
-        d = _key(rec.train_date if rec.train_date else (rec.created_at.date() if rec.created_at else date.today()))
-        it = items_by_id.get(rec.item_id)
-        if it and it.checkin_status == "done":
-            # 获取训练项标题：优先用TrainingItem.title，其次用ContentItem.lesson_title
-            title = it.title
-            if not title and it.content_item_id:
-                ci = content_by_id.get(it.content_item_id)
-                if ci:
-                    title = ci.lesson_title
-            if not title:
-                title = "完成一项训练"
-            
-            # 去重：同一天同一标题只加一次
-            if title not in added_titles[d]:
-                added_titles[d].add(title)
-                days[d].append({"type": "skill", "title": title, "icon": "brain"})
+        plan = plans_by_id.get(rec.plan_id)
+        day = (
+            plan.plan_date
+            if plan and plan.plan_date
+            else (rec.train_date or (rec.created_at.date() if rec.created_at else date.today()))
+        )
+        d = _key(day)
+        it = items_by_id.get(rec.item_id) if rec.item_id else None
+        title = (it.title if it else None) or None
+        if not title and it and it.content_item_id:
+            ci = content_by_id.get(it.content_item_id)
+            if ci:
+                title = ci.lesson_title
+        if not title:
+            title = "完成一项训练"
+        if title not in added_titles[d]:
+            added_titles[d].add(title)
+            days[d].append({"type": "skill", "title": title, "icon": "brain"})
 
     # 2) 提问（孩子的提问消息，每天最多展示 3 条最新）
     # 只查需要的列：qa_message 可能有历史库缺 image_url 列，整表查询会报错
@@ -440,20 +448,11 @@ def get_summary(db: Session, child_user_id: int, stats: dict | None = None) -> d
         stats = _collect_stats(db, child_user_id)
     badges = get_badges(db, child_user_id, stats=stats)
     earned = sum(1 for b in badges if b["earned"])
-    milestones = get_milestones(db, child_user_id, stats=stats)
-    # 🆕 v2.0: 荣誉头衔优先按九阶 Tier 判定，回退到打卡里程碑
-    overall_tier = 1
-    try:
-        from app.services.child_training_state import get_training_progress, overall_tier as _overall_tier
-        user = stats["user"]
-        if user:
-            state = get_training_progress(user)
-            overall_tier = _overall_tier(state)
-    except Exception:
-        import logging
-        logging.getLogger("jnao").warning("growth: _overall_tier 失败，退回默认", exc_info=True)
-    honor = get_tier_honor(overall_tier)
-    # 回退：无训练进度时用打卡里程碑
+    # 段位只消费 get_tier_brief，与 /tier、训练页角标、学业规划同一份
+    brief = get_tier_brief(db, child_user_id)
+    overall_tier = brief["overall_tier"]
+    honor = brief["honor_level"]
+    milestones = get_milestones(db, child_user_id, stats=stats, overall_tier=overall_tier)
     if honor == "新学员":
         for m in reversed(milestones):
             if m["achieved"]:
@@ -521,24 +520,15 @@ def get_tier_brief(db: Session, child_user_id: int) -> dict:
     from app.services.child_training_state import (
         REQUIRED_SKILLS,
         _grade_band_from_grade,
-        filter_active_skills,
+        display_overall_tier,
         get_skills_with_records,
         get_training_progress,
-        overall_tier as _overall_tier,
     )
 
     user = db.get(ChildUser, child_user_id)
-    state = {}
-    overall_tier = 1
-    skills_with_records: set = set()
-    try:
-        if user:
-            state = get_training_progress(user)
-            skills_with_records = get_skills_with_records(db, child_user_id)
-            overall_tier = _overall_tier(filter_active_skills(state, skills_with_records))
-    except Exception:
-        import logging
-        logging.getLogger("jnao").warning("growth: get_tier_brief overall_tier 失败，退回默认", exc_info=True)
+    state = get_training_progress(user) if user else {}
+    skills_with_records: set = get_skills_with_records(db, child_user_id) if user else set()
+    overall_tier = display_overall_tier(db, user)
 
     honor = get_tier_honor(overall_tier)
 

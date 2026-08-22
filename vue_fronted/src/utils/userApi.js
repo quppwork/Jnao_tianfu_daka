@@ -376,20 +376,32 @@ function formatApiError(data, status) {
 }
 
 export async function apiJson(url, options = {}) {
+  const { timeoutMs, signal: userSignal, ...fetchOptions } = options
   const userId = extractUserIdFromUrl(url)
-  const headers = mergeAuthHeaders({ ...options, _url: url }, userId)
+  const headers = mergeAuthHeaders({ ...fetchOptions, _url: url }, userId)
+  const ctrl = timeoutMs ? new AbortController() : null
+  if (ctrl && userSignal) {
+    if (userSignal.aborted) ctrl.abort()
+    else userSignal.addEventListener('abort', () => ctrl.abort(), { once: true })
+  }
+  const signal = ctrl?.signal || userSignal
+  let timeoutId
   let res
   try {
-    res = await fetch(url, { ...options, headers, credentials: 'include' })
+    if (ctrl) timeoutId = setTimeout(() => ctrl.abort(), timeoutMs)
+    res = await fetch(url, { ...fetchOptions, headers, credentials: 'include', signal })
   } catch (e) {
-    console.error(`[api] NETWORK ${options.method || 'GET'} ${url} — ${e.message || 'fetch failed'}`)
-    const err = new Error('网络连接失败，请检查网络')
+    const aborted = e?.name === 'AbortError'
+    console.error(`[api] NETWORK ${fetchOptions.method || 'GET'} ${url} — ${e.message || 'fetch failed'}`)
+    const err = new Error(aborted ? '请求超时，请稍后重试' : '网络连接失败，请检查网络')
     err.status = 0
     throw err
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
   if (res.status === 401 && isFreshLogin() && !isAuthAttemptRequest(url)) {
     await new Promise((r) => setTimeout(r, 400))
-    res = await fetch(url, { ...options, headers, credentials: 'include' })
+    res = await fetch(url, { ...fetchOptions, headers, credentials: 'include', signal })
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -397,7 +409,7 @@ export async function apiJson(url, options = {}) {
       handleMidSessionExpired(url)
     }
     const msg = formatApiError(data, res.status)
-    console.error(`[api] ${res.status} ${options.method || 'GET'} ${url} — ${msg}`, data)
+    console.error(`[api] ${res.status} ${fetchOptions.method || 'GET'} ${url} — ${msg}`, data)
     const err = new Error(msg)
     err.status = res.status
     err.data = data
@@ -1239,11 +1251,12 @@ export async function deleteGuideSession(userId, sessionId) {
 }
 
 /** 进首页开场 Agent：按情境返回欢迎语 */
-export async function fetchGuideBootstrap(userId, { force = false, use_llm = true } = {}) {
+export async function fetchGuideBootstrap(userId, { force = false, use_llm = true, timeoutMs = 6000 } = {}) {
   return apiJson(withUser('/api/guide/bootstrap', userId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ force, use_llm }),
+    timeoutMs,
   })
 }
 
@@ -1416,54 +1429,6 @@ export async function fetchGrowthShare(userId) {
 
 export async function fetchAcademicPlan(userId, refresh = false) {
   return apiJson(withUser('/api/growth/academic-plan' + (refresh ? '?refresh=true' : ''), userId))
-}
-
-// ── 成就/荣誉系统 ──
-
-export async function fetchAchievementList(userId) {
-  const data = await apiJson(withUser('/api/achievement/list', userId))
-  return { items: data.items || [], stats: data.stats || {} }
-}
-
-export async function fetchAchievementStats(userId) {
-  return apiJson(withUser('/api/achievement/stats', userId))
-}
-
-export async function checkAchievements(userId) {
-  return apiJson(withUser('/api/achievement/check', userId), { method: 'POST' })
-}
-
-export async function claimAchievement(userId, achievementId) {
-  return apiJson(withUser('/api/achievement/claim', userId), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ achievement_id: achievementId }),
-  })
-}
-
-export async function fetchUserTitle(userId) {
-  return apiJson(withUser('/api/achievement/title', userId))
-}
-
-export async function setUserTitle(userId, titleCode) {
-  return apiJson(withUser('/api/achievement/title', userId), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title_code: titleCode }),
-  })
-}
-
-export async function fetchShowcase(userId) {
-  const data = await apiJson(withUser('/api/achievement/showcase', userId))
-  return data.slots || []
-}
-
-export async function setShowcaseSlot(userId, slotIndex, achievementId) {
-  return apiJson(withUser('/api/achievement/showcase', userId), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slot_index: slotIndex, achievement_id: achievementId }),
-  })
 }
 
 // ── 开发者工具（JNAO_DEV_MODE=1）──

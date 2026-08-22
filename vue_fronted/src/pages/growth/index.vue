@@ -618,10 +618,9 @@ function pickMonth(m) {
 }
 const loading = ref(true)
 
-const overallTier = computed(() => summary.value?.overall_tier || 1)
+const overallTier = computed(() => tier.value?.overall_tier || summary.value?.overall_tier || 1)
 const tierPercent = computed(() => Math.round((overallTier.value / 9) * 100))
-// 🆕 九段卡片：优先用轻量 tier 接口的数据，回退 summary
-const curTier = computed(() => tier.value?.overall_tier || summary.value?.overall_tier || 1)
+const curTier = computed(() => overallTier.value)
 
 // 荣誉卡头像：按天赋动态选图（与天赋报告页同一套天赋插画）
 const TALENT_AVATAR = {
@@ -662,6 +661,8 @@ const currentTitleIndex = computed(() => {
 })
 
 const nextTitleInfo = computed(() => {
+  const t = tier.value
+  if (t?.next_title && t.need) return { name: t.next_title, need: t.need }
   const idx = currentTitleIndex.value
   if (idx >= TIER_TITLES.length - 1) return null
   const next = TIER_TITLES[idx + 1]

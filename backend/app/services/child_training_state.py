@@ -200,6 +200,22 @@ def filter_active_skills(state: dict, skills_with_records: set[str]) -> dict:
     return new_state
 
 
+def display_overall_tier(db: "Session", child: "ChildUser | None") -> int:
+    """全站展示用段位：只按有打卡记录的技能取最低阶。
+
+    打卡结算（training_mastery）、成长 /tier /summary、训练今日方案、
+    学业规划必须走这里，避免各接口自己 min(全部技能) 算出不同数字。
+    """
+    if child is None:
+        return 1
+    try:
+        state = get_training_progress(child)
+        skills_with_records = get_skills_with_records(db, child.id)
+        return overall_tier(filter_active_skills(state, skills_with_records))
+    except Exception:
+        return 1
+
+
 # ─── 单个技能状态 ───────────────────────────────────
 
 def get_skill_state(state: dict, skill: str) -> dict:

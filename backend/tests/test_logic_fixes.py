@@ -203,3 +203,138 @@ class TestAdminArchiveFixes:
         res = client.delete(f"/api/admin/children/{child['id']}/bind", **auth)
         assert res.status_code == 200
         assert "warning" in res.json()
+
+
+class TestOpenTodaySmoothTransition:
+    """开放今日训练：已开练沿用现场，未开练才走待确认。"""
+
+    def _make_plan(self, db_session: Session, *, watch_pct: float = 0, minutes: int = 60, suffix: str = "a"):
+        from app.db.models import TrainingItem
+
+        user = auth_service.register_child(
+            db_session,
+            parent_phone=f"1390000881{suffix}",
+            nickname="过渡童",
+            login_name=f"smooth_kid_{suffix}",
+            password="123456",
+        )
+        plan_date = date(2026, 8, 13)
+        plan = TrainingPlan(
+            child_user_id=user.id,
+            plan_date=plan_date,
+            level="A",
+            report_text="",
+            planned_minutes=minutes,
+            status="pending",
+        )
+        db_session.add(plan)
+        db_session.flush()
+        item = TrainingItem(
+            plan_id=plan.id,
+            sort_order=1,
+            title="超脑阅读",
+            duration_min=10,
+            audio_url="https://example.com/a.mp3",
+            checkin_status="pending",
+            watch_progress={"pct": watch_pct} if watch_pct else None,
+        )
+        db_session.add(item)
+        db_session.commit()
+        db_session.refresh(plan)
+        return user, plan, plan_date
+
+    def test_unstarted_plan_is_pending_confirm(self, db_session: Session):
+        from unittest.mock import patch
+
+        from app.services.training_service import _plan_to_response
+
+        user, plan, plan_date = self._make_plan(db_session, suffix="1")
+        now = datetime(2026, 8, 13, 10, 0, 0, tzinfo=TZ)
+        with patch("app.services.training_service._user_now", return_value=now):
+            with patch("app.services.training_service._today_for", return_value=plan_date):
+                out = _plan_to_response(plan, now=now, db=db_session)
+        assert out["timer_phase"] == "setup"
+        assert out["pending_confirm"] is True
+
+    def test_started_without_window_heals_to_running(self, db_session: Session):
+        from unittest.mock import patch
+
+        from app.services.training_service import (
+            _heal_started_plan_missing_window,
+            _plan_to_response,
+            get_training_window,
+        )
+
+        user, plan, plan_date = self._make_plan(db_session, watch_pct=15, suffix="2")
+        now = datetime(2026, 8, 13, 10, 0, 0, tzinfo=TZ)
+        with patch("app.services.training_service._user_now", return_value=now):
+            with patch("app.services.training_service._today_for", return_value=plan_date):
+                healed = _heal_started_plan_missing_window(db_session, user.id, plan)
+                out = _plan_to_response(plan, now=now, db=db_session)
+        assert healed is True
+        assert get_training_window(db_session, user.id, plan_date) is not None
+        assert out["timer_phase"] == "running"
+        assert out["pending_confirm"] is False
+
+    def test_unstarted_plan_does_not_heal_window(self, db_session: Session):
+        from unittest.mock import patch
+
+        from app.services.training_service import (
+            _heal_started_plan_missing_window,
+            get_training_window,
+        )
+
+        user, plan, plan_date = self._make_plan(db_session, suffix="3")
+        now = datetime(2026, 8, 13, 10, 0, 0, tzinfo=TZ)
+        with patch("app.services.training_service._user_now", return_value=now):
+            with patch("app.services.training_service._today_for", return_value=plan_date):
+                healed = _heal_started_plan_missing_window(db_session, user.id, plan)
+        assert healed is False
+        assert get_training_window(db_session, user.id, plan_date) is None
+
+
+class TestVideoProgressNotGated:
+    def test_video_only_complete_without_watch(self):
+        from types import SimpleNamespace
+
+        from app.services.training_service import is_item_media_complete
+
+        item = SimpleNamespace(
+            video_url="https://example.com/a.mp4",
+            audio_url=None,
+            ability_type="video",
+            instructions='{"skill":"开口窍","item_type":"video"}',
+            watch_progress={"pct": 0},
+        )
+        assert is_item_media_complete(item) is True
+
+    def test_audio_plus_video_still_needs_audio(self):
+        from types import SimpleNamespace
+
+        from app.services.training_service import is_item_media_complete
+
+        item = SimpleNamespace(
+            video_url="https://example.com/a.mp4",
+            audio_url="https://example.com/a.mp3",
+            ability_type="audio",
+            instructions='{"skill":"超脑阅读","item_type":"required"}',
+            watch_progress={"pct": 0, "video": {"pct": 100}},
+        )
+        assert is_item_media_complete(item) is False
+        item.watch_progress = {"pct": 90, "audio": {"pct": 90}, "video": {"pct": 10}}
+        assert is_item_media_complete(item) is True
+
+    def test_audio_only_still_needs_watch(self):
+        from types import SimpleNamespace
+
+        from app.services.training_service import is_item_media_complete
+
+        item = SimpleNamespace(
+            video_url=None,
+            audio_url="https://example.com/a.mp3",
+            ability_type="audio",
+            instructions='{"skill":"影像追忆","item_type":"audio"}',
+            watch_progress={"pct": 10},
+        )
+        assert is_item_media_complete(item) is False
+
