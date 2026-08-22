@@ -214,7 +214,10 @@
       <!-- Plan · 时间轴总览（生成方案后或计时开始后显示） -->
       <view v-if="timerPhase !== 'setup' || planJustGenerated" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
         <view class="plan-header">
-          <text class="plan-label">📋 今日方案</text>
+          <view class="plan-header-left">
+            <text class="plan-label">📋 今日方案</text>
+            <text v-if="timerPhase !== 'setup' && !planJustGenerated" class="chip-gold">已确认 ✓</text>
+          </view>
           <text v-if="talentLabel && !entryLoading && !scheduleLoading" class="plan-header-meta">{{ planHeaderMeta }}</text>
         </view>
         <view v-if="scheduleLoading" class="plan-loading-wrap">
@@ -292,6 +295,7 @@
           <!-- 确认今日方案 -->
           <view v-if="planJustGenerated" class="btn-confirm-plan" style="margin-bottom:12px;" @click="confirmPlan">
             <text>确认今日方案并开始训练</text>
+            <text class="btn-confirm-plan-sub">确认后解锁闯关地图 · 开始打卡后不可再修改</text>
           </view>
 
           <!-- 🆕 编辑方案 -->
@@ -325,6 +329,15 @@
         </template>
       </view>
 
+      <!-- 🆕 今日方案下方：天赋头像 + 提示框（结构同时间预算卡下方，文字待替换） -->
+      <view v-if="timerPhase !== 'setup'" class="time-budget-tip">
+        <view class="time-budget-avatar" :style="{ borderColor: talentColor, backgroundImage: 'url(' + talentAvatarImg + ')' }"></view>
+        <view class="time-budget-bubble">
+          <text class="time-budget-title">方案已锁定！</text>
+          <text class="time-budget-sub">先过第一关（音频达到90%）即可打卡了哦</text>
+        </view>
+      </view>
+
       <!-- 全部必修完成 -->
       <view v-if="allRequiredDone" class="training-done-wrap">
         <view class="btn-checkin" @click="showDoneConfirm = true">
@@ -333,7 +346,7 @@
       </view>
 
       <!-- 闯关地图 -->
-      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map" :class="{ ended: timerPhase === 'expired' }">
+      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map" :class="{ ended: timerPhase === 'expired' }" :style="{ '--qc': talentColor }">
         <!-- 全部过关横幅 -->
         <view v-if="questAllDone" class="quest-banner">
           <text class="quest-banner-text">🎉 今日闯关全部完成！</text>
@@ -341,11 +354,12 @@
 
         <template v-for="(phase, pi) in planPhases" :key="phase.block">
           <!-- ===== 关卡卡片 ===== -->
-          <view v-if="phase.questNo !== null" :id="'phase-block-' + phase.block" class="quest-level" :class="{ done: phase.allDone }">
+          <!-- 选修卡完成不消失，可继续回听；必修完成才消失 -->
+          <view v-if="phase.questNo !== null && (!phase.allDone || phase.isElective)" :id="'phase-block-' + phase.block" class="quest-level">
             <!-- Z 字左右交替：关卡卡 + 视频卡分居中线两侧；图标骑在贯穿虚线上、半跨关卡卡顶部 -->
             <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked || isMediaLocked }">
               <view class="qm-col qm-card-col">
-                <view class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem || phase.items[0], phase, 'audio')" :style="{ '--qc': talentColor }">
+                <view v-if="phase.audioItem || phase.items[0]" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem || phase.items[0], phase, phase.audioItem ? 'audio' : 'video')">
                   <view class="qa-main">
                     <text class="qa-status" :class="{ done: phase.allDone, locked: !phase.unlocked }">{{ questStatusText(phase) }}</text>
                     <view v-if="phase.subtitle && phase.subtitle !== phase.skillName" class="qa-skill">
@@ -365,51 +379,31 @@
                 </view>
               </view>
               <view class="qm-col qm-video-col">
-                <view v-if="phase.videoItem" class="qm-side qm-video" @click.stop="openPhaseMediaItem(phase.videoItem, phase, 'video')">
-                  <text class="qm-emoji">📺</text>
-                  <text class="qm-label">先看视频</text>
-                  <text class="qm-meta">教学示范</text>
+                <!-- 纯视频项（无音频）：视频即闯关本身，主卡已承载，不再重复渲染“先看视频”卡 -->
+                <view v-if="phase.videoItem && phase.audioItem" class="qm-side qm-video" @click.stop="openPhaseMediaItem(phase.videoItem, phase, 'video')">
+                  <view class="qm-video-ic"><text>📺</text></view>
+                  <view class="qm-video-body">
+                    <text class="qm-label">先看视频</text>
+                    <text class="qm-meta">教学示范<text v-if="phase.videoItem.duration_min"> · {{ phase.videoItem.duration_min }}分钟</text></text>
+                  </view>
                 </view>
               </view>
               <!-- 图标节点：绝对定位骑中线，中心对准关卡卡顶部边线（半跨卡顶） -->
-              <view class="quest-node" :class="{ done: phase.allDone, pulse: phase.unlocked && !phase.allDone && !isMediaLocked }">
-                <text class="quest-node-icon">{{ phase.questIcon }}</text>
+              <view class="quest-node" :class="{ done: phase.allDone, locked: !phase.unlocked, pulse: phase.unlocked && !phase.allDone && !isMediaLocked }">
+                <text class="quest-node-icon">{{ !phase.unlocked ? '🔒' : phase.questIcon }}</text>
                 <text v-if="phase.allDone" class="quest-node-star">⭐</text>
               </view>
             </view>
 
             <!-- 打卡条：必修关都有；未解锁 / 未听完为灰色不可点 -->
-            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin" :class="{ locked: !phase.unlocked || !isPhaseListenDone(phase) }">
-              <view v-if="!phase.unlocked" class="quest-checkin-tip">
-                <text class="qct-text">🔒 完成上一关打卡后解锁</text>
-              </view>
-              <view v-else-if="!isPhaseListenDone(phase)" class="quest-checkin-tip">
-                <text class="qct-text">🔒 请先听完音频（{{ WATCH_DONE_PCT }}%）</text>
-              </view>
-              <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
+            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin">
+              <view v-if="isPhaseListenDone(phase)" class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
                 <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
               </view>
             </view>
             <view v-else-if="phase.isPercep" class="quest-perception-tip">
               <text v-if="phase.allDone">✅ 多元感知已完成 · 点击音频可回听</text>
               <text v-else>点击音频即可完成多元感知训练</text>
-            </view>
-          </view>
-
-          <!-- ===== 选修自由训练卡片（不参与闯关虚线） ===== -->
-          <view v-else-if="phase.isElective" class="quest-free">
-            <text class="quest-free-title">🧩 {{ phase.skillName || '选修' }}（选修）</text>
-            <view class="quest-media-free">
-              <view v-if="phase.audioItem" class="qf-side" @click="openPhaseMediaItem(phase.audioItem, phase, 'audio')">
-                <text class="qf-emoji">🎧</text>
-                <text class="qf-label">音频训练</text>
-                <text class="qf-meta">约 {{ phase.audioItem.duration_min || '?' }} 分钟</text>
-              </view>
-              <view v-if="phase.videoItem" class="qf-side" @click="openPhaseMediaItem(phase.videoItem, phase, 'video')">
-                <text class="qf-emoji">🎬</text>
-                <text class="qf-label">视频讲解</text>
-                <text class="qf-meta">可看可不看</text>
-              </view>
             </view>
           </view>
         </template>
@@ -484,6 +478,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -492,7 +487,6 @@
                     </view>
                   </view>
                 </view>
-                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -552,6 +546,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -560,7 +555,6 @@
                     </view>
                   </view>
                 </view>
-                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -605,6 +599,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -613,7 +608,6 @@
                     </view>
                   </view>
                 </view>
-                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -643,6 +637,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -651,7 +646,6 @@
                     </view>
                   </view>
                 </view>
-                <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
@@ -2134,7 +2128,7 @@ async function autoCompletePerception(phase) {
     await persistPhaseCheckin(phase.block, cardsList)
     await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
     await loadTodayPlan(true)
-    uni.showToast({ title: '✅ 多元感知训练完成！', icon: 'none' })
+    // 选修感知：完成后不弹提示、卡片保留（见 quest-level 渲染条件）
   } catch (e) {
     uni.showToast({ title: e.message || '提交失败', icon: 'none', duration: 2500 })
   } finally {
@@ -2525,13 +2519,9 @@ const planPhases = computed(() => {
   // v2.0: 每个 item 独立为一个 phase，按 sort_order 顺序
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
   let prevDone = true  // first item always unlocked
-  let requiredNo = 0  // 必修编号只数必修项（选修插最前后，必修仍从 1 开始）
 
-  // 闯关编号：多元感知固定为第 1 关（点听即完成），必修音频从第 2 关起（无感知则必修从第 1 关起）
-  const hasPerception = sorted.some(it => {
-    const s = parseItemInstructions(it.instructions)
-    return it.item_type === 'perception' || s.item_type === 'perception' || (it.title || '').includes('多元感知')
-  })
+  // 闯关编号：所有项（必修/选修/感知）按今日方案 sort_order 顺序连续编号（1,2,3…），
+  // 选修因此也进入 Z 字左右交替（reversed 由 questNo 奇偶决定），并显示「第 N 关 · 选修」。
 
   return sorted.map((item, idx) => {
     const inst = parseItemInstructions(item.instructions)
@@ -2543,13 +2533,13 @@ const planPhases = computed(() => {
     // Update prevDone for next iteration — completed items keep the chain alive
     if (isRequired && !isDone) prevDone = false
     if (isDone) prevDone = true
-    if (isRequired) requiredNo += 1
 
     const skillName = inst.skill || resolvePlanItemSkill(item) || ''
     const isElective = !isRequired
-    const questNo = isPercep ? 1 : (isRequired ? requiredNo + (hasPerception ? 1 : 0) : null)
+    // 按今日方案顺序连续编号：置顶选修（开口窍）即为第 1 关，Z 字由奇偶自然交替
+    const questNo = idx + 1
     const label = isElective
-      ? (isPercep ? `1. ${skillName || '多元感知'}` : `${skillName || '选修'}（选修）`)
+      ? (isPercep ? `${questNo}. ${skillName || '多元感知'}` : `${questNo}. ${skillName || '选修'}（选修）`)
       : `${questNo}. ${skillName || '训练'}`
 
     let nodeIcon = '○'
@@ -2591,20 +2581,27 @@ function questIconFor(item, skill) {
   if (t.includes('超脑') || t.includes('阅读')) return '📖'
   if (t.includes('影像') || t.includes('追忆')) return '🎬'
   if (t.includes('扫描') || t.includes('速记')) return '✍️'
-  if (t.includes('作业')) return '✅'
+  if (t.includes('作业')) return '🏆'
+  if (t.includes('精力') || t.includes('恢复')) return '🌙'
   if (t.includes('开口')) return '🗣️'
   return '🎯'
 }
 
 /** 闯关地图全部过关（含多元感知第 1 关点听完成） */
 const questAllDone = computed(() => {
-  const quests = planPhases.value.filter(p => p.questNo !== null)
+  const quests = planPhases.value.filter(p => p.questNo !== null && !p.isElective)
   if (!quests.length) return false
   return quests.every(p => p.allDone)
 })
 
-/** 音频卡片状态行：第 N 关 · 状态 */
+/** 音频卡片状态行：第 N 关 · 状态（选修按参考原型：收 官 · 选修 / 终 点） */
 function questStatusText(phase) {
+  if (phase.isElective) {
+    const s = phase.skillName || ''
+    if (s.includes('作业')) return '终 点'
+    if (s.includes('精力') || s.includes('恢复')) return '收 官 · 选修'
+    return `第 ${phase.questNo} 关 · 选修`
+  }
   if (phase.allDone) return `第 ${phase.questNo} 关 · 已过关`
   if (!phase.unlocked) return `第 ${phase.questNo} 关 · 未解锁`
   return `第 ${phase.questNo} 关 · 进行中`
@@ -2620,6 +2617,8 @@ function questStartText(phase) {
   if (phase.allDone) return '已通过 · 点击回听'
   if (!phase.unlocked) return '完成上一关后解锁'
   if (phase.isPercep) return '开始闯关 · 听音频'
+  // 纯视频项：闯关即看视频（参考原型 play 文案），不再写成“听音频”
+  if (phase.videoItem && !phase.audioItem) return '开始闯关 · 看视频'
   return '开始闯关 · 听音频'
 }
 
@@ -2630,7 +2629,9 @@ function questDescFor(phase) {
   if (s.includes('影像') || s.includes('追忆')) return '闪回定格 · 场景记忆复原'
   if (s.includes('扫描') || s.includes('速记')) return '快速扫读 · 精准记忆'
   if (s.includes('感知')) return '唤醒感知力 · 打开五感'
-  if (s.includes('作业')) return '高效专注 · 一次搞定'
+  if (s.includes('作业')) return '通关后的实战演练'
+  if (s.includes('精力') || s.includes('恢复')) return '冥想放松音频 · 给大脑充电'
+  if (s.includes('开口')) return '视频训练 · 表达力开口练习'
   return ''
 }
 
@@ -2641,6 +2642,9 @@ function questSubText(phase) {
   if (phase.isPercep) return `约 ${phase.audioItem?.duration_min || '?'} 分钟 · 听完即过关`
   const s = phase.skillName || ''
   if (s.includes('超脑') || s.includes('阅读')) return '听指令 → 读一段 → 答3问'
+  if (s.includes('精力') || s.includes('恢复')) return '跟着练 · 完成即过关'
+  // 纯视频项：小字用视频时长（参考原型 play 小字）
+  if (phase.videoItem && !phase.audioItem) return `跟着练 · 完成即过关`
   return `约 ${phase.audioItem?.duration_min || '?'} 分钟`
 }
 
@@ -4681,6 +4685,8 @@ function triggerGlitch() {
 .card { background:#243046; border-radius:20rpx; padding:28rpx 32rpx; margin-bottom:24rpx; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
 .plan-label { color:#00d2ff; font-size:16px; font-weight:700; display:block; }
 .plan-header { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-bottom:20rpx; flex-wrap:wrap; }
+.plan-header-left { display:flex; align-items:center; gap:8px; }
+.chip-gold { font-size:11px; font-weight:800; color:#C9A869; border:1px solid rgba(201,168,105,.5); padding:3px 10px; border-radius:999px; white-space:nowrap; }
 .plan-header-meta { color:rgba(255,255,255,0.55); font-size:14px; font-weight:600; white-space:nowrap; }
 .plan-loading { color:rgba(255,255,255,0.45); font-size:12px; display:block; padding:8px 0; }
 
@@ -4947,6 +4953,7 @@ function triggerGlitch() {
 .training-done-title { font-size:15px; font-weight:600; color:#22c55e; }
 .btn-confirm-plan { display:block; margin:16px auto 0; padding:12px 28px; background:linear-gradient(135deg,#00d2ff,#0088cc); color:#fff; font-size:17px; font-weight:600; border-radius:24px; text-align:center; cursor:pointer; box-shadow:0 4px 16px rgba(0,210,255,0.3); }
 .btn-confirm-plan text { color:#fff; }
+.btn-confirm-plan-sub { display:block; font-size:12px; font-weight:600; opacity:.75; margin-top:3px; }
 .plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:16px; margin-bottom:4px; }
 .plan-edit-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
 .plan-edit-bar-text { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
@@ -5892,13 +5899,13 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 }
 
 /* ===== 闯关地图 ===== */
-.quest-map { position:relative; display:flex; flex-direction:column; margin-top:6px; }
+.quest-map { position:relative; display:flex; flex-direction:column; margin-top:6px; padding-bottom:40px; }
 .quest-map.ended { margin-top:12px; padding-bottom:24px; }
 /* 中间一条贯穿虚线（时间线）：参考风格 3px + 有节奏的虚线段 */
 .quest-map::before {
   content:''; position:absolute; left:50%; top:0; bottom:0; width:3px;
   transform:translateX(-1.5px);
-  background:repeating-linear-gradient(180deg, rgba(59,130,246,0.35) 0 10px, transparent 10px 19px);
+  background:repeating-linear-gradient(180deg, color-mix(in srgb, var(--qc, #3b82f6) 35%, transparent) 0 10px, transparent 10px 19px);
   pointer-events:none;
 }
 .quest-banner {
@@ -5920,12 +5927,14 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
   pointer-events:none;
 }
 .quest-node.done { border-color:var(--qc, #3b82f6); }
+.quest-node.locked { border-color:#2A3040; }
+.quest-node.locked .quest-node-icon { color:#5A6274; }
 .quest-node.pulse { animation:questPulse 2s ease-out infinite; }
 @keyframes questPulse {
-  0%,100% { box-shadow:0 0 0 4px rgba(59,130,246,0.10), 0 0 12px rgba(59,130,246,0.4); }
-  50% { box-shadow:0 0 0 8px rgba(59,130,246,0.16), 0 0 22px rgba(59,130,246,0.65); }
+  0%,100% { box-shadow:0 0 0 4px color-mix(in srgb, var(--qc, #3b82f6) 10%, transparent), 0 0 12px color-mix(in srgb, var(--qc, #3b82f6) 40%, transparent); }
+  50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--qc, #3b82f6) 16%, transparent), 0 0 22px color-mix(in srgb, var(--qc, #3b82f6) 65%, transparent); }
 }
-.quest-node-icon { font-size:24px; line-height:1; }
+.quest-node-icon { font-size:24px; line-height:1; color:var(--qc, #3b82f6); }
 .quest-node-star { position:absolute; top:-6px; right:-6px; font-size:15px; }
 /* 每一关：左右两列卡片（关卡卡 / 视频卡），卡片边缘距中间虚线 24px（gap:50px = 24+2虚线+24） */
 .quest-media {
@@ -5936,7 +5945,7 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .quest-media.locked { opacity:0.55; }
 .quest-media.reversed { flex-direction:row-reverse; }
 .qm-col { flex:1; min-width:0; display:flex; flex-direction:column; }
-.qm-video-col { justify-content:center; } /* 视频卡垂直居中于关卡卡高度（参考风格） */
+.qm-video-col { justify-content:flex-start; padding-top:56px; } /* 视频卡与音频卡对角错开（Z字），往下错位 */
 .qm-side {
   min-width:0; border-radius:12px; cursor:pointer;
   transition:transform 0.15s;
@@ -5954,15 +5963,20 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 }
 .quest-level.done .qm-audio { background:linear-gradient(135deg, rgba(34,197,94,0.08), #131926 55%); border-color:var(--qc, #3b82f6); }
 .quest-media.locked .qm-audio { background:#131926; border-color:#2A3040; }
-/* 视频卡：参考风格，竖排三行（📺 / 先看视频 / 教学示范），深底蓝边，垂直居中 */
+/* 视频卡：与「开始闯关」按钮同款布局（圆形图标在左 + 两行文字在右，垂直居中） */
 .qm-video {
-  display:flex; flex-direction:column; justify-content:center; align-items:center; gap:5px;
+  display:flex; align-items:center; justify-content:center; gap:6px;
   background:#131926; border:1.5px solid #2E6BE6;
-  border-radius:14px; padding:16px 10px;
+  border-radius:14px; padding:16px 12px;
 }
-.qm-emoji { font-size:22px; line-height:1; }
-.qm-label { font-size:15px; font-weight:800; color:#7FA7EF; }
-.qm-meta { font-size:11px; color:#5F7BC0; }
+.qm-video-ic {
+  width:46px; height:46px; border-radius:50%; flex:none;
+  background:#0B0E14; color:#2E6BE6;
+  display:flex; align-items:center; justify-content:center; font-size:24px;
+}
+.qm-video-body { display:flex; flex-direction:column; min-width:0; align-items:flex-start; }
+.qm-label { font-size:16px; font-weight:800; color:#7FA7EF; line-height:1.25; }
+.qm-meta { font-size:12px; font-weight:600; color:#5F7BC0; margin-top:2px; }
 /* 关卡卡文字区：左对齐（深色卡，亮色文字，参考排版） */
 .qa-main { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
 .qa-status { font-size:11px; color:var(--qc, #3b82f6); font-weight:700; letter-spacing:1.5px; }
@@ -5985,13 +5999,13 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 }
 .qa-start-ic {
   width:30px; height:30px; border-radius:50%; flex:none;
-  background:#fff; color:var(--qc, #3b82f6);
+  background:#0B0E14; color:var(--qc, #3b82f6);
   display:flex; align-items:center; justify-content:center;
   font-size:13px;
 }
 .qa-start-body { display:flex; flex-direction:column; min-width:0; flex:1; }
-.qa-start-text { font-size:13px; font-weight:800; color:#fff; line-height:1.25; overflow-wrap:break-word; }
-.qa-start-sub { font-size:10px; font-weight:600; color:rgba(255,255,255,0.75); margin-top:2px; overflow-wrap:break-word; }
+.qa-start-text { font-size:13px; font-weight:800; color:#0B0E14; line-height:1.25; overflow-wrap:break-word; }
+.qa-start-sub { font-size:10px; font-weight:600; color:rgba(11,14,20,0.7); margin-top:2px; overflow-wrap:break-word; }
 .qa-start.locked { background:rgba(255,255,255,0.07); }
 .qa-start.locked .qa-start-ic { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.4); }
 .qa-start.locked .qa-start-text { color:rgba(255,255,255,0.45); }
@@ -6004,20 +6018,6 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .quest-checkin-tip { display:flex; justify-content:center; margin-bottom:8px; }
 .qct-text { font-size:11px; color:#f59e0b; }
 .quest-perception-tip { margin-top:10px; text-align:center; font-size:12px; color:rgba(255,255,255,0.5); }
-/* 选修自由训练：独立卡片区，不参与闯关虚线 */
-.quest-free { margin-top:16px; }
-.quest-free-title { display:block; font-size:13px; font-weight:700; color:#a78bfa; margin-bottom:8px; }
-.quest-media-free { display:flex; gap:10px; margin-top:6px; }
-.qf-side {
-  flex:1; min-width:0; padding:12px; border-radius:12px; cursor:pointer;
-  background:rgba(15,28,48,0.85); border:1px solid rgba(167,139,250,0.3);
-  display:flex; flex-direction:column; align-items:center; gap:4px;
-  transition:transform 0.15s;
-}
-.qf-side:active { transform:scale(0.98); }
-.qf-emoji { font-size:22px; line-height:1; }
-.qf-label { font-size:13px; font-weight:600; color:#fff; }
-.qf-meta { font-size:11px; color:rgba(255,255,255,0.5); }
 </style>
 
 <style>
@@ -6038,14 +6038,15 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 /* 闯关地图 · 白色主题（参考质感浅色适配） */
 [data-theme="white"] .quest-banner { background:linear-gradient(135deg,rgba(217,119,6,0.08),rgba(22,163,74,0.08)); border-color:#fbbf24; box-shadow:none; }
 [data-theme="white"] .quest-banner-text { color:#d97706; }
-[data-theme="white"] .quest-map::before { background:repeating-linear-gradient(180deg, rgba(37,99,235,0.22) 0 10px, transparent 10px 19px); }
-[data-theme="white"] .qm-audio { background:#fff; border-color:rgba(37,99,235,0.3); }
+[data-theme="white"] .quest-map::before { background:repeating-linear-gradient(180deg, color-mix(in srgb, var(--qc, #2563eb) 22%, transparent) 0 10px, transparent 10px 19px); }
+[data-theme="white"] .qm-audio { background:#fff; border-color:var(--qc, #2563eb); }
 [data-theme="white"] .quest-level.done .qm-audio { background:#fff; border-color:var(--qc, #2563eb); }
 [data-theme="white"] .quest-media.locked .qm-audio { background:#fff; border-color:#e5e7eb; }
 [data-theme="white"] .qm-video { background:#fff; border-color:#93c5fd; }
 [data-theme="white"] .qm-label { color:#2563eb; }
 [data-theme="white"] .qm-meta { color:#6b7280; }
-[data-theme="white"] .quest-node { background:#fff; border-color:rgba(37,99,235,0.35); }
+[data-theme="white"] .quest-node { background:#fff; border-color:var(--qc, #2563eb); }
+[data-theme="white"] .quest-node.locked { border-color:#d1d5db; }
 [data-theme="white"] .quest-node.done { border-color:var(--qc, #2563eb); }
 [data-theme="white"] .qa-status { color:var(--qc, #2563eb); }
 [data-theme="white"] .qa-status.done { color:#16a34a; }
@@ -6059,9 +6060,6 @@ ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 [data-theme="white"] .qa-start.locked .qa-start-text { color:#9ca3af; }
 [data-theme="white"] .qa-start.locked .qa-start-sub { color:#9ca3af; }
 [data-theme="white"] .qa-start.done .qa-start-text { color:#16a34a; }
-[data-theme="white"] .qf-side { background:#fff; border-color:#c4b5fd; }
-[data-theme="white"] .qf-label { color:#1a1a2e; }
-[data-theme="white"] .qf-meta { color:#6b7280; }
 [data-theme="white"] .qct-text { color:#d97706; }
 [data-theme="white"] .quest-perception-tip { color:#6b7280; }
 </style>
