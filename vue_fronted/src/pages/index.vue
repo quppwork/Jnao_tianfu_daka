@@ -457,7 +457,10 @@ async function loadSiblings() {
     const uid = getChildUserId()
     if (!uid) return
     const data = await fetchSiblings(uid)
-    siblings.value = data.siblings || []
+    siblings.value = (data.siblings || []).filter((s) => {
+      const st = s.account_status
+      return !st || st === 'active'
+    })
     if (data.current?.nickname) {
       currentUserDisplay.value = data.current.nickname
     }

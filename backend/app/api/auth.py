@@ -404,6 +404,10 @@ def switch_child(
         raise HTTPException(404, "用户不存在")
     if target.role == "parent":
         raise HTTPException(400, "不能切换到家长账户")
+    from app.services.auth_service import is_account_active
+
+    if not is_account_active(target):
+        raise HTTPException(404, "该账号已删除")
 
     # 验证同一家长
     current_parent = (
@@ -430,6 +434,7 @@ def list_siblings(
     """获取当前孩子的兄弟姐妹列表（同家长下）。"""
     from app.db.models import ChildUser, ParentChildBind
     from app.services.assessment_service import effective_talent_code
+    from app.services.auth_service import is_account_active
 
     current = db.get(ChildUser, child_user_id)
     if not current:
@@ -459,7 +464,7 @@ def list_siblings(
     items = []
     for sid in (siblings or []):
         child = db.get(ChildUser, sid)
-        if not child:
+        if not child or child.role == "parent" or not is_account_active(child):
             continue
         talent = ""
         try:
@@ -471,6 +476,7 @@ def list_siblings(
             "nickname": child.nickname or f"学员{sid}",
             "login_name": child.login_name or "",
             "talent": _talent_name(talent) if talent else "",
+            "account_status": child.account_status or "active",
         })
 
     return {"siblings": items, "current": {
