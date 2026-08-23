@@ -299,9 +299,9 @@
             <view class="plan-id-info">
               <view class="plan-id-name-row">
                 <text class="plan-id-name">{{ academicPlan.student?.nickname || '学员' }}</text>
-                <text class="plan-id-badge">测试于 {{ planTestDate }}</text>
+                <text class="plan-id-badge">生成于 {{ planTestDate }}</text>
               </view>
-              <text class="plan-id-sub">学业规划报告</text>
+              <text class="plan-id-sub">{{ planLearnerLine }}</text>
             </view>
           </view>
           <view class="plan-id-boost">
@@ -340,25 +340,54 @@
             <text class="plan-section-title">提分目标</text>
             <text class="plan-section-sub">分阶段突破，越努力越接近满分</text>
           </view>
-          <view v-for="(t, i) in planTiers" :key="i" class="plan-tier-card">
-            <view class="plan-tier-ic" v-html="ic(t.icon, 20)"></view>
-            <view class="plan-tier-info">
-              <text class="plan-tier-name">{{ t.title }}</text>
-              <text class="plan-tier-desc">{{ t.desc }}</text>
+          <view
+            v-for="(t, i) in planTiers"
+            :key="i"
+            class="plan-tier-card"
+            :class="{ open: expandedTiers[i] }"
+            @click="toggleTier(i)"
+          >
+            <view class="plan-tier-main">
+              <view class="plan-tier-ic" v-html="ic(t.icon, 20)"></view>
+              <view class="plan-tier-info">
+                <text class="plan-tier-name">{{ t.title }}</text>
+                <text class="plan-tier-desc">{{ t.desc }}</text>
+              </view>
+              <text class="plan-tier-score">{{ t.score }}</text>
+              <text class="plan-chev">{{ expandedTiers[i] ? '▾' : '›' }}</text>
             </view>
-            <text class="plan-tier-score">{{ t.score }}</text>
+            <text v-if="expandedTiers[i] && t.hint" class="plan-tier-hint">{{ t.hint }}</text>
           </view>
         </view>
 
         <!-- 规划要点 -->
         <view v-if="planNotes.length" class="plan-card">
           <text class="plan-card-title">规划要点</text>
-          <view v-for="(n, i) in planNotes" :key="i" class="plan-note-row">
+          <view
+            v-for="(n, i) in planNotes"
+            :key="i"
+            class="plan-note-row"
+            :class="{ open: expandedNotes[i] }"
+            @click="toggleNote(i)"
+          >
             <view class="plan-note-ic" v-html="ic(n.icon, 14)"></view>
             <view class="plan-note-info">
-              <text class="plan-note-name">{{ n.title }}</text>
-              <text class="plan-note-text">{{ n.text }}</text>
+              <view class="plan-note-head">
+                <text class="plan-note-name">{{ n.title }}</text>
+                <text class="plan-chev">{{ expandedNotes[i] ? '▾' : '›' }}</text>
+              </view>
+              <text class="plan-note-text">{{ expandedNotes[i] ? n.full : n.preview }}</text>
             </view>
+          </view>
+        </view>
+
+        <view v-if="academicPlan.report_content" class="plan-card" @click="showFullReport = !showFullReport">
+          <view class="plan-note-head">
+            <text class="plan-card-title" style="margin-bottom:0;">完整报告</text>
+            <text class="plan-chev">{{ showFullReport ? '▾' : '›' }}</text>
+          </view>
+          <view v-if="showFullReport" class="plan-full-report">
+            <text v-for="(line, i) in planFullLines" :key="i" class="plan-full-line" :class="line.type">{{ line.text }}</text>
           </view>
         </view>
 
@@ -467,6 +496,16 @@ const showTierRules = ref(false)
 const showPlanModal = ref(false)
 const academicPlan = ref(null)
 const planLoading = ref(false)
+const expandedNotes = ref({})
+const expandedTiers = ref({})
+const showFullReport = ref(false)
+
+function toggleNote(i) {
+  expandedNotes.value = { ...expandedNotes.value, [i]: !expandedNotes.value[i] }
+}
+function toggleTier(i) {
+  expandedTiers.value = { ...expandedTiers.value, [i]: !expandedTiers.value[i] }
+}
 
 // ── 成长足迹：年月周三级周视图 ──
 const calendarDays = ref([]) // 后端返回：[{ date: 'YYYY-MM-DD', items: [{type,title,icon}] }]
@@ -777,6 +816,9 @@ async function openAcademicPlan(refresh = false) {
     const uid = await ensureChildUser()
     const plan = await fetchAcademicPlan(uid, refresh)
     academicPlan.value = plan
+    expandedNotes.value = {}
+    expandedTiers.value = {}
+    showFullReport.value = false
   } catch (e) {
     console.error('Failed to load academic plan:', e)
     uni.showToast({ title: '加载失败，请重试', icon: 'none' })
@@ -854,6 +896,16 @@ const planTestDate = computed(() => {
   return String(d).slice(0, 10).replace(/-/g, '.')
 })
 
+const planLearnerLine = computed(() => {
+  const s = academicPlan.value?.student || {}
+  const bits = ['学业规划报告']
+  if (s.grade) bits.push(s.grade)
+  if (s.age) bits.push(`${s.age}岁`)
+  return bits.join(' · ')
+})
+
+const planFullLines = computed(() => formatReportContent(academicPlan.value?.report_content || ''))
+
 // 最高提升空间（总提分）
 const planBoostTotal = computed(() => academicPlan.value?.score_projection?.total_estimated_boost || 0)
 
@@ -869,7 +921,7 @@ const planStatusTitle = computed(() => {
 // 状态卡描述：从报告「现状评估」小节取第一条要点
 const planStatusDesc = computed(() => {
   const s = planNotes.value.find(n => n.type === 'status')
-  if (s) return s.text
+  if (s) return s.preview || s.text
   const c = academicPlan.value?.student?.total_checkins || 0
   return c > 0 ? `已累计打卡 ${c} 天，坚持训练还能再进一步。` : '完成第一次打卡，AI 将为你规划提分路径。'
 })
@@ -880,25 +932,46 @@ const planSubjects = computed(() => {
   return items.map(it => ({ subject: it.subject, boost: it.estimated_boost }))
 })
 
-// 提分目标：把总提分切成三档
+function previewText(full, limit = 42) {
+  const t = String(full || '').replace(/\s+/g, ' ').trim()
+  if (!t) return ''
+  return t.length > limit ? `${t.slice(0, limit)}…` : t
+}
+
 const planTiers = computed(() => {
+  const api = academicPlan.value?.goal_stages
+  if (api?.length) return api
   const total = planBoostTotal.value
   if (total <= 0) return []
   const third = Math.max(1, Math.round(total / 3))
   const two = Math.max(third + 1, Math.round((total * 2) / 3))
   return [
-    { icon: 'zap', title: '三档提分', desc: '先拿下基础分', score: `1-${third} 分` },
-    { icon: 'target', title: '二档提分', desc: '再冲一程', score: `${third + 1}-${two} 分` },
-    { icon: 'trophy', title: '一档提分', desc: '挑战最高目标', score: `${two + 1}-${total} 分` },
+    { icon: 'zap', title: '三档提分', desc: '先拿下基础分', score: `1-${third} 分`, hint: '每天先完成必修打卡，把基础动作做稳。' },
+    { icon: 'target', title: '二档提分', desc: '再冲一程', score: `${third + 1}-${two} 分`, hint: '连续训练，把方法用到当天作业里。' },
+    { icon: 'trophy', title: '一档提分', desc: '挑战最高目标', score: `${two + 1}-${total} 分`, hint: '冲击更高正确率和速度。' },
   ]
 })
 
-// 规划要点：从报告小节里提取关键内容，优先保证「问题描述」「行动寄语」
+const NOTE_META = [
+  { key: 'status', icon: 'help-circle', title: '问题描述', type: 'status', match: /现状|评估/ },
+  { key: 'motto', icon: 'zap', title: '行动寄语', type: 'motto', match: /寄语|加油|坚持/ },
+  { key: 'plan', icon: 'book-open', title: '规划建议', type: 'plan', match: /规划|建议|目标/ },
+  { key: 'talent', icon: 'flask', title: '天赋发挥', type: 'talent', match: /天赋/ },
+]
+
 const planNotes = computed(() => {
   const plan = academicPlan.value
   if (!plan) return []
+  const sections = plan.sections || {}
+  const fromApi = NOTE_META.map((m) => {
+    const full = (sections[m.key] || '').trim()
+    if (!full) return null
+    return { ...m, full, preview: previewText(full), text: full }
+  }).filter(Boolean)
+  if (fromApi.length) return fromApi.slice(0, 4)
+
   const lines = formatReportContent(plan.report_content)
-  const collected = {} // title -> note
+  const collected = {}
   let curTitle = ''
   for (const line of lines) {
     if (line.type === 'title' || line.type === 'section') {
@@ -908,22 +981,17 @@ const planNotes = computed(() => {
     if (line.type !== 'text' && line.type !== 'bullet') continue
     const clean = line.text.trim()
     if (!clean) continue
-    const iconMap = (t) => {
-      if (/现状|评估/.test(t)) return { icon: 'help-circle', title: '问题描述', type: 'status' }
-      if (/规划|建议|目标/.test(t)) return { icon: 'book-open', title: '规划建议', type: 'plan' }
-      if (/天赋/.test(t)) return { icon: 'flask', title: '天赋发挥', type: 'talent' }
-      if (/寄语|加油|坚持/.test(t)) return { icon: 'zap', title: '行动寄语', type: 'motto' }
-      return null
-    }
-    const mapped = iconMap(curTitle)
-    if (!mapped) continue
-    // 同一小节只取第一条
-    if (collected[mapped.title]) continue
-    collected[mapped.title] = { ...mapped, text: clean.length > 26 ? clean.slice(0, 26) + '…' : clean }
+    const meta = NOTE_META.find((m) => m.match.test(curTitle))
+    if (!meta) continue
+    if (!collected[meta.title]) collected[meta.title] = { ...meta, parts: [] }
+    collected[meta.title].parts.push(clean)
   }
-  // 展示优先级：问题描述 > 行动寄语 > 规划建议 > 天赋发挥，最多 3 条
-  const priority = ['问题描述', '行动寄语', '规划建议', '天赋发挥']
-  return priority.map(t => collected[t]).filter(Boolean).slice(0, 3)
+  return NOTE_META.map((m) => {
+    const row = collected[m.title]
+    if (!row) return null
+    const full = row.parts.join('\n')
+    return { ...m, full, preview: previewText(full), text: full }
+  }).filter(Boolean)
 })
 </script>
 
@@ -1507,8 +1575,10 @@ const planNotes = computed(() => {
   border-radius:16px;
   padding:14px;
   margin-bottom:10px;
-  display:flex; align-items:center; gap:12px;
+  cursor:pointer;
 }
+.plan-tier-card:active { opacity:0.88; }
+.plan-tier-main { display:flex; align-items:center; gap:12px; }
 .plan-tier-ic {
   width:44px; height:44px; border-radius:50%;
   background:var(--accent-bg); color:var(--accent);
@@ -1518,18 +1588,35 @@ const planNotes = computed(() => {
 .plan-tier-name { color:var(--text); font-size:15px; font-weight:700; display:block; }
 .plan-tier-desc { color:var(--text-dim); font-size:12px; margin-top:2px; display:block; }
 .plan-tier-score { color:var(--accent); font-size:14px; font-weight:700; flex-shrink:0; }
+.plan-tier-hint {
+  display:block; margin-top:10px; padding-top:10px;
+  border-top:1px solid var(--border);
+  color:var(--text); font-size:13px; line-height:1.65;
+  white-space:pre-wrap; word-break:break-word;
+}
+.plan-chev { color:var(--accent); font-size:16px; flex-shrink:0; width:16px; text-align:center; }
 
 /* 规划要点 */
-.plan-note-row { display:flex; gap:10px; padding:9px 0; }
+.plan-note-row { display:flex; gap:10px; padding:11px 0; cursor:pointer; }
 .plan-note-row + .plan-note-row { border-top:1px solid var(--border); }
+.plan-note-row:active { opacity:0.88; }
 .plan-note-ic {
   width:28px; height:28px; border-radius:50%;
   background:var(--accent-bg); color:var(--accent);
   display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  margin-top:2px;
 }
 .plan-note-info { flex:1; min-width:0; }
+.plan-note-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .plan-note-name { color:var(--text); font-size:14px; font-weight:600; display:block; }
-.plan-note-text { color:var(--text-dim); font-size:13px; line-height:1.5; margin-top:2px; display:block; }
+.plan-note-text {
+  color:var(--text-dim); font-size:13px; line-height:1.65; margin-top:4px;
+  display:block; white-space:pre-wrap; word-break:break-word;
+}
+.plan-full-report { margin-top:10px; }
+.plan-full-line { display:block; color:var(--text); font-size:13px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
+.plan-full-line.section, .plan-full-line.title { color:var(--accent); font-weight:700; margin-top:10px; }
+.plan-full-line.spacer { height:6px; }
 
 /* 重要提示 */
 .plan-tip {
