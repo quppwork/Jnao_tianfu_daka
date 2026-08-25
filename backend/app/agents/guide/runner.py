@@ -57,8 +57,9 @@ def build_chat_system_prompt(
     *,
     tool_block: str = "",
     memory_block: str = "",
+    rag_block: str = "",
 ) -> str:
-    """人设 + 当日情境 + 策略 + 长期摘要 + 对话记忆 + 可选工具结果。"""
+    """人设 + 当日情境 + 策略 + 长期摘要 + 对话记忆 + 可选知识库/工具结果。"""
     ctx = _prepare_context(db, child_user_id)
     parts = [
         SYSTEM_PROMPT,
@@ -93,6 +94,15 @@ def build_chat_system_prompt(
             memory_block,
             "—— 对话记忆结束 ——",
         ])
+    if rag_block:
+        parts.extend([
+            "",
+            "—— 知识库参考（仅作事实依据，用教练口吻转述，勿整段背诵）——",
+            rag_block,
+            "—— 知识库结束 ——",
+            "说明：知识库只补充说明性内容；今日进度/是否已练等仍以「学生情境」和「工具查询结果」为准。",
+            "需要动手时仍按人设做「先答后导」，自然导向天赋测试/今日训练/学科答疑/成长里程碑等入口（前端会出按钮）。",
+        ])
     if tool_block:
         parts.extend([
             "",
@@ -101,6 +111,23 @@ def build_chat_system_prompt(
             "—— 工具结果结束 ——",
         ])
     return "\n".join(parts)
+
+
+async def _gather_rag(message: str) -> tuple[str, list[str]]:
+    """完整百炼 RAG：Retrieve/Search → 切片块；失败返回空，不阻断对话。"""
+    from app.services.bailian import guide_rag_query
+    from app.services.guide_rag_router import should_guide_use_rag
+
+    if not should_guide_use_rag(message):
+        return "", []
+    rag = await guide_rag_query(message)
+    if not rag or not rag.rag_block:
+        return "", []
+    sources = list(rag.sources)
+    logger.info(
+        f"guide rag mode={rag.mode} nodes={rag.node_count} sources={sources[:3]}"
+    )
+    return rag.rag_block, sources
 
 
 def prepare_history(history: list[dict] | None) -> list[dict]:
@@ -251,11 +278,13 @@ async def run_chat(
     tools_used, tool_block = await _gather_tools(
         db, child_user_id, message, history=hist, use_tools=use_tools
     )
+    rag_block, rag_sources = await _gather_rag(message)
     system = build_chat_system_prompt(
         db,
         child_user_id,
         tool_block=tool_block,
         memory_block=memory_block,
+        rag_block=rag_block,
     )
     reply = await chat_completion(
         system_prompt=system,
@@ -270,6 +299,9 @@ async def run_chat(
             f"guide leak_suspect uid={child_user_id} hits={leak_hits}"
         )
     meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
+    if rag_sources:
+        meta["rag_sources"] = rag_sources
+        meta["rag_used"] = True
     emit_guide_trace(
         build_turn_trace(
             child_user_id=child_user_id,
@@ -311,7 +343,11 @@ async def run_chat_stream(
     tools_used, tool_block = await _gather_tools(
         db, child_user_id, message, history=hist, use_tools=use_tools
     )
+    rag_block, rag_sources = await _gather_rag(message)
     meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
+    if rag_sources:
+        meta["rag_sources"] = rag_sources
+        meta["rag_used"] = True
     yield ("meta", meta)
 
     system = build_chat_system_prompt(
@@ -319,6 +355,7 @@ async def run_chat_stream(
         child_user_id,
         tool_block=tool_block,
         memory_block=memory_block,
+        rag_block=rag_block,
     )
     parts: list[str] = []
     async for token in chat_completion_stream(

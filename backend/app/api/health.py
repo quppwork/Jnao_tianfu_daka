@@ -80,6 +80,22 @@ async def health():
         "connected": is_configured(),
     }
 
+    from app.services.bailian import bailian_status
+
+    br = bailian_status()
+    integrations["bailian_rag"] = {
+        "status": "live" if br.get("ready") else "pending",
+        "description": "阿里云百炼知识库 RAG（Retrieve/Search → 豆包生成）",
+        "connected": bool(br.get("ready")),
+        **{k: br[k] for k in (
+            "mode", "index_id", "workspace_id", "retrieve_ready", "search_ready", "pipeline"
+        ) if k in br},
+    }
+    # 旧 enterprise_rag 代理：仅学科答疑遗留路径，引导页已切百炼
+    integrations["tianfu_rag"]["description"] = (
+        "【遗留】本地 enterprise_rag /chat（学科答疑）；引导页已改用 bailian_rag"
+    )
+
     overall = "ok" if db_ok["connected"] else "degraded"
     return {
         "status": overall,

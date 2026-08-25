@@ -72,3 +72,6 @@ docs/过期文件/
 docs/export/qywx_*
 docs/export/.qywx_pipeline_state.json
 
+# 压测账号明文表（含密码，不入库）
+backend/tools/*loadtest*.csv
+

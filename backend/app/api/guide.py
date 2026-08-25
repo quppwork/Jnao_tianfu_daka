@@ -40,6 +40,7 @@ async def guide_debug():
     from config.loader import load_settings
     from app.agents.guide.trace import get_guide_trace_metrics
     from app.agents.guide.writes import list_write_ops
+    from app.services.bailian import bailian_status
 
     c = load_settings().get("doubao", {})
     return {
@@ -49,6 +50,7 @@ async def guide_debug():
         "base": c.get("api_base"),
         "trace_metrics": get_guide_trace_metrics(),
         "write_ops": list_write_ops(),
+        "bailian_rag": bailian_status(),
     }
 
 
