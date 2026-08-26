@@ -14,11 +14,14 @@ from typing import Any
 from app.core.logger import get_logger
 from app.services.bailian.config import (
     BailianConfig,
+    config_ready_for_generate,
     config_ready_for_retrieve,
     config_ready_for_search,
     guide_rag_ready,
     load_bailian_config,
+    training_rag_ready,
 )
+from app.services.bailian.generate import generate_stream_sync, generate_sync
 from app.services.bailian.models import RagResult
 from app.services.bailian.retrieve import retrieve_sync
 from app.services.bailian.search import search_sync
@@ -86,6 +89,116 @@ async def guide_rag_query(query: str, *, timeout: float = 20) -> RagResult | Non
     return await rag_query(query, timeout=timeout, require_guide_enabled=True)
 
 
+async def training_rag_query(query: str, *, timeout: float = 20) -> RagResult | None:
+    """训练页专用：查音视频/训练视频知识库（BAILIAN_VIDEO_INDEX_ID）。"""
+    q = (query or "").strip()
+    if not q:
+        return None
+    cfg = load_bailian_config()
+    if not training_rag_ready(cfg):
+        return None
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                _run_sync,
+                q,
+                cfg=cfg,
+                index_id=cfg.video_index_id,
+            ),
+            timeout=timeout,
+        )
+    except Exception as e:
+        logger.warning(f"bailian training_rag_query failed: {e}")
+        return None
+
+
+async def guide_knowledge_reply(
+    query: str,
+    *,
+    instructions: str | None = None,
+    timeout: float | None = None,
+) -> str | None:
+    """引导页：百炼直答（文档库），不经过豆包。"""
+    cfg = load_bailian_config()
+    if not (guide_rag_ready(cfg) and config_ready_for_generate(cfg) and cfg.index_id):
+        return None
+    q = (query or "").strip()
+    if not q:
+        return None
+    t = timeout if timeout is not None else cfg.generate_timeout
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                generate_sync,
+                q,
+                index_id=cfg.index_id,
+                cfg=cfg,
+                instructions=instructions,
+                timeout=t,
+            ),
+            timeout=t + 2,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("bailian guide_knowledge_reply timeout query=%r", q[:80])
+        return None
+    except Exception as e:
+        logger.warning(f"bailian guide_knowledge_reply failed: {e}")
+        return None
+
+
+async def training_knowledge_reply(
+    query: str,
+    *,
+    instructions: str | None = None,
+    timeout: float | None = None,
+) -> str | None:
+    """训练页：百炼直答（视频库），不经过豆包。"""
+    cfg = load_bailian_config()
+    if not (training_rag_ready(cfg) and config_ready_for_generate(cfg)):
+        return None
+    q = (query or "").strip()
+    if not q:
+        return None
+    t = timeout if timeout is not None else cfg.generate_timeout
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                generate_sync,
+                q,
+                index_id=cfg.video_index_id,
+                cfg=cfg,
+                instructions=instructions,
+                timeout=t,
+            ),
+            timeout=t + 2,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("bailian training_knowledge_reply timeout query=%r", q[:80])
+        return None
+    except Exception as e:
+        logger.warning(f"bailian training_knowledge_reply failed: {e}")
+        return None
+
+
+def guide_knowledge_reply_stream(
+    query: str,
+    *,
+    instructions: str | None = None,
+):
+    cfg = load_bailian_config()
+    if not (guide_rag_ready(cfg) and config_ready_for_generate(cfg) and cfg.index_id):
+        return
+    q = (query or "").strip()
+    if not q:
+        return
+    yield from generate_stream_sync(
+        q,
+        index_id=cfg.index_id,
+        cfg=cfg,
+        instructions=instructions,
+    )
+
+
 def bailian_status() -> dict[str, Any]:
     cfg = load_bailian_config()
     return {
@@ -93,6 +206,14 @@ def bailian_status() -> dict[str, Any]:
         "ready": guide_rag_ready(cfg),
         "workspace_id": cfg.workspace_id or None,
         "index_id": cfg.index_id or None,
+        "video_index_id": cfg.video_index_id or None,
+        "training_rag_enabled": cfg.training_rag_enabled,
+        "training_rag_ready": training_rag_ready(cfg),
+        "rag_generate": cfg.rag_generate,
+        "generate_ready": config_ready_for_generate(cfg),
+        "generate_model": cfg.generate_model,
+        "generate_timeout": cfg.generate_timeout,
+        "rag_fallback_doubao": cfg.rag_fallback_doubao,
         "api_host": cfg.api_host or None,
         "endpoint": cfg.endpoint,
         "mode": cfg.mode,
@@ -105,5 +226,5 @@ def bailian_status() -> dict[str, Any]:
         "agent_id_ok": bool(cfg.agent_id),
         "retrieve_ready": config_ready_for_retrieve(cfg),
         "search_ready": config_ready_for_search(cfg),
-        "pipeline": "query → retrieve|search → rerank(optional) → rag_block → doubao",
+        "pipeline": "query → Retrieve 切片 → 豆包生成 | file_search 直答（可选）",
     }

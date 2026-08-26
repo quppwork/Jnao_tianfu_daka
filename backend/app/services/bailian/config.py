@@ -39,6 +39,12 @@ class BailianConfig:
     enable_reranking: bool
     enable_rewrite: bool
     guide_enabled: bool
+    video_index_id: str
+    training_rag_enabled: bool
+    rag_generate: bool
+    generate_model: str
+    generate_timeout: float
+    rag_fallback_doubao: bool
 
 
 DEFAULT_OPENAPI_ENDPOINT = "bailian.cn-beijing.aliyuncs.com"
@@ -71,6 +77,12 @@ def load_bailian_config() -> BailianConfig:
         enable_reranking=_truthy("BAILIAN_ENABLE_RERANKING", "1"),
         enable_rewrite=_truthy("BAILIAN_ENABLE_REWRITE", "0"),
         guide_enabled=_truthy("GUIDE_RAG_ENABLED", "0"),
+        video_index_id=_env("BAILIAN_VIDEO_INDEX_ID", "BAILIAN_TRAINING_VIDEO_INDEX_ID"),
+        training_rag_enabled=_truthy("TRAINING_RAG_ENABLED", "0"),
+        rag_generate=_truthy("BAILIAN_RAG_GENERATE", "0"),
+        generate_model=_env("BAILIAN_GENERATE_MODEL") or "qwen3.8-max",
+        generate_timeout=float(_env("BAILIAN_GENERATE_TIMEOUT") or "25"),
+        rag_fallback_doubao=_truthy("BAILIAN_RAG_FALLBACK_DOUBAO", "1"),
     )
 
 
@@ -91,3 +103,17 @@ def guide_rag_ready(cfg: BailianConfig | None = None) -> bool:
     if c.mode == "search":
         return config_ready_for_search(c)
     return config_ready_for_retrieve(c)
+
+
+def training_rag_ready(cfg: BailianConfig | None = None) -> bool:
+    c = cfg or load_bailian_config()
+    if not c.training_rag_enabled:
+        return False
+    if not config_ready_for_retrieve(c):
+        return False
+    return bool(c.video_index_id)
+
+
+def config_ready_for_generate(cfg: BailianConfig | None = None) -> bool:
+    c = cfg or load_bailian_config()
+    return bool(c.workspace_id and c.api_host and c.dashscope_api_key and c.rag_generate)

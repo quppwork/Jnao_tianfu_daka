@@ -1273,11 +1273,13 @@ export async function confirmGuideWrite(userId, writeOp, args = {}) {
   })
 }
 
-export async function sendGuideMessage(userId, message, sessionId = null) {
+export async function sendGuideMessage(userId, message, sessionId = null, options = {}) {
   return apiJson(withUser('/api/guide/chat', userId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, session_id: sessionId }),
+    timeoutMs: options.timeoutMs ?? 90000,
+    signal: options.signal,
   })
 }
 

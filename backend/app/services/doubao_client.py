@@ -16,7 +16,7 @@ _http_client: httpx.AsyncClient | None = None
 def _get_client(timeout: float) -> httpx.AsyncClient:
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        _http_client = httpx.AsyncClient(timeout=timeout)
+        _http_client = httpx.AsyncClient(timeout=timeout, trust_env=False)
     return _http_client
 
 
@@ -206,7 +206,7 @@ async def vision_chat_completion(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             resp = await client.post(
                 f"{cfg['api_base']}/chat/completions",
                 headers={
@@ -254,7 +254,7 @@ async def chat_completion_stream(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
             async with client.stream(
                 "POST",
                 f"{cfg['api_base']}/chat/completions",
@@ -337,7 +337,7 @@ async def vision_chat_completion_stream(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
+        async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
             async with client.stream(
                 "POST",
                 f"{cfg['api_base']}/chat/completions",

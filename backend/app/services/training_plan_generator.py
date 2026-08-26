@@ -1,15 +1,73 @@
-"""AI 每日训练报告生成 — 结合天赋、昨日打卡与今日推送音频"""
+"""AI 每日训练报告 — Retrieve + 豆包为主；可选百炼 file_search 直答。"""
 
 from datetime import date
 
 from sqlalchemy.orm import Session
 
+from app.core.logger import get_logger
 from app.services.assessment_service import get_latest_assessment
 from app.services.doubao_client import chat_completion
+from app.services.training_rag_query import build_training_rag_query
 from app.services.training_service import get_yesterday_training_context
+
+logger = get_logger("training.report")
 
 REPORT_SYSTEM = """你是陪伴孩子的训练老师。用简单、温暖的话告诉孩子今天怎么练（2-4 句）。
 说清楚：先练什么、再练什么、练完怎么打卡。不要用「主线」「训练块」「轮次」等技术词。"""
+
+TRAINING_BAILIAN_INSTRUCTIONS = REPORT_SYSTEM
+
+
+def _report_system_with_rag(rag_block: str) -> str:
+    if not rag_block:
+        return REPORT_SYSTEM
+    return (
+        f"{REPORT_SYSTEM}\n\n"
+        "—— 训练视频知识库参考（仅作事实依据，用孩子能懂的话转述，勿整段背诵）——\n"
+        f"{rag_block}\n"
+        "—— 知识库结束 ——\n"
+        "说明：知识库补充训练方法/示范要点；今日具体练哪些项仍以输入里的「今日训练」为准。"
+    )
+
+
+async def _gather_training_rag_block(
+    *,
+    talent_primary: str | None,
+    lesson_title: str,
+    item_titles: list[str] | None = None,
+    yesterday_summary: str | None = None,
+) -> str:
+    from app.services.bailian import training_rag_query
+
+    query = build_training_rag_query(
+        talent_primary=talent_primary,
+        lesson_title=lesson_title,
+        item_titles=item_titles,
+        yesterday_summary=yesterday_summary,
+    )
+    rag = await training_rag_query(query)
+    if not rag or not rag.rag_block:
+        return ""
+    logger.info(
+        "training rag retrieve nodes=%s sources=%s",
+        rag.node_count,
+        rag.sources[:3],
+    )
+    return rag.rag_block
+
+
+async def _generate_with_doubao(
+    context: str,
+    *,
+    rag_block: str = "",
+) -> str | None:
+    ai_text = await chat_completion(
+        system_prompt=_report_system_with_rag(rag_block),
+        user_message=context,
+        max_tokens=180,
+        timeout=12,
+    )
+    return ai_text.strip() if ai_text else None
 
 
 async def generate_daily_report_text(
@@ -19,21 +77,75 @@ async def generate_daily_report_text(
     lesson_title: str,
     talent_primary: str | None,
     yesterday_summary: str | None = None,
+    item_titles: list[str] | None = None,
 ) -> str:
     context = f"天赋：{talent_primary or '未知'}；今日训练：{lesson_title}"
+    if item_titles:
+        names = "、".join(t for t in item_titles if t)
+        if names:
+            context += f"；训练项：{names}"
     if yesterday_summary:
         context += f"；昨日：{yesterday_summary}"
     else:
         context += "；首次训练"
 
-    ai_text = await chat_completion(
-        system_prompt=REPORT_SYSTEM,
-        user_message=context,
-        max_tokens=180,
-        timeout=12,
+    from app.services.bailian import training_knowledge_reply
+    from app.services.bailian.config import config_ready_for_generate, load_bailian_config
+
+    cfg = load_bailian_config()
+    rag_query = build_training_rag_query(
+        talent_primary=talent_primary,
+        lesson_title=lesson_title,
+        item_titles=item_titles,
+        yesterday_summary=yesterday_summary,
     )
-    if ai_text:
-        return ai_text.strip()
+
+    # 主链路：Retrieve 切片 → 豆包润色
+    if cfg.rag_fallback_doubao and not cfg.rag_generate:
+        rag_block = await _gather_training_rag_block(
+            talent_primary=talent_primary,
+            lesson_title=lesson_title,
+            item_titles=item_titles,
+            yesterday_summary=yesterday_summary,
+        )
+        primary = await _generate_with_doubao(context, rag_block=rag_block)
+        if primary:
+            logger.info(
+                "training retrieve+doubao reply len=%s nodes=%s",
+                len(primary),
+                bool(rag_block),
+            )
+            return primary
+
+    # 可选：百炼 file_search 直答（BAILIAN_RAG_GENERATE=1）
+    if config_ready_for_generate(cfg):
+        prompt = f"{context}\n\n请根据知识库中的训练示范与说明，给出今日训练指引。\n用户背景：{rag_query}"
+        ai_text = await training_knowledge_reply(prompt, instructions=TRAINING_BAILIAN_INSTRUCTIONS)
+        if ai_text:
+            logger.info("training bailian direct reply len=%s", len(ai_text))
+            return ai_text.strip()
+        if cfg.rag_fallback_doubao:
+            logger.info("training bailian failed, fallback retrieve+doubao uid=%s", child_user_id)
+            rag_block = await _gather_training_rag_block(
+                talent_primary=talent_primary,
+                lesson_title=lesson_title,
+                item_titles=item_titles,
+                yesterday_summary=yesterday_summary,
+            )
+            fallback = await _generate_with_doubao(context, rag_block=rag_block)
+            if fallback:
+                return fallback
+    elif cfg.rag_fallback_doubao:
+        rag_block = await _gather_training_rag_block(
+            talent_primary=talent_primary,
+            lesson_title=lesson_title,
+            item_titles=item_titles,
+            yesterday_summary=yesterday_summary,
+        )
+        fallback = await _generate_with_doubao(context, rag_block=rag_block)
+        if fallback:
+            return fallback
+
     return f"今日请完成音频训练「{lesson_title}」，认真听完后打卡。"
 
 
@@ -98,6 +210,7 @@ async def ensure_plan_report(
 
     assessment = get_latest_assessment(db, child_user_id)
     lesson = plan.items[0].title if plan.items else "今日训练"
+    item_titles = [it.title for it in plan.items if it.title]
     yesterday_summary = get_yesterday_training_context(db, child_user_id, plan_date)
     plan.report_text = await generate_daily_report_text(
         db,
@@ -105,11 +218,11 @@ async def ensure_plan_report(
         lesson_title=lesson or "今日训练",
         talent_primary=assessment.talent_primary if assessment else None,
         yesterday_summary=yesterday_summary,
+        item_titles=item_titles,
     )
     db.commit()
     db.refresh(plan)
     plan_data["report_text"] = plan.report_text
-    # 强制再生 AI 文案后清除缓存，让下次 GET /today 返回新文案
     from app.services.training_service import invalidate_plan_cache
     invalidate_plan_cache(child_user_id, plan.plan_date)
     return plan_data

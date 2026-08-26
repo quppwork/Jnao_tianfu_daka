@@ -68,3 +68,33 @@ class RagResult:
                 for n in self.nodes
             ],
         }
+
+
+def merge_rag_results(
+    *results: RagResult | None,
+    mode: str = "retrieve",
+    query: str = "",
+    top_n: int | None = None,
+) -> RagResult | None:
+    """合并多库 Retrieve 结果（按 score 去重 doc chunk）。"""
+    merged: list[RagNode] = []
+    seen: set[str] = set()
+    for result in results:
+        if not result:
+            continue
+        for node in result.nodes:
+            key = node.chunk_id or f"{node.doc_id}:{node.text[:80]}"
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(node)
+    if not merged:
+        return None
+    merged.sort(key=lambda n: n.score if n.score is not None else -1.0, reverse=True)
+    if top_n is not None and top_n > 0:
+        merged = merged[:top_n]
+    return RagResult(
+        nodes=merged,
+        mode=mode,
+        query=query or (results[0].query if results and results[0] else ""),
+    )

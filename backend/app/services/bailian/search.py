@@ -47,7 +47,7 @@ def search_sync(
         "query": query,
         "images": [],
     }
-    with httpx.Client(timeout=timeout) as client:
+    with httpx.Client(timeout=timeout, trust_env=False) as client:
         resp = client.post(url, headers=headers, json=payload)
     if resp.status_code != 200:
         logger.warning(f"bailian search HTTP {resp.status_code}: {resp.text[:200]}")

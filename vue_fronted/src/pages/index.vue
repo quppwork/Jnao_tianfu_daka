@@ -401,7 +401,7 @@ import {
   fetchSiblings,
   switchChildAccount,
   applySwitchChildSession,
-  sendGuideMessageStream,
+  sendGuideMessage,
   confirmGuideWrite,
   clearGuideSession,
   fetchProfile,
@@ -419,7 +419,7 @@ const isLight = ref(true)
 const pageLoading = ref(true)
 const inputText = ref('')
 const loading = ref(false)
-let streamAbort = null
+let chatAbort = null
 let abortRequested = false
 const guideSessionId = ref(null)
 const messages = ref([])
@@ -660,28 +660,28 @@ async function sendMsg() {
       applyStreamStoppedHint(messages, aiIdx)
       return
     }
-    const { promise, abort } = sendGuideMessageStream(uid, text, guideSessionId.value, {
-      onToken(chunk) {
-        messages.value[aiIdx].text += chunk
-        scrollChat()
-      },
-      onDone(data) {
-        guideSessionId.value = data.session_id
-        if (data.reply) messages.value[aiIdx].text = data.reply
-        if (Array.isArray(data.actions)) {
-          messages.value[aiIdx].actions = normalizeGuideActions(data.actions)
-        }
-        if (Array.isArray(data.tools_used)) {
-          messages.value[aiIdx].tools_used = data.tools_used
-        }
-        if (Array.isArray(data.blocks)) {
-          messages.value[aiIdx].blocks = data.blocks
-        }
-        if (data.situation_label) situationLabel.value = data.situation_label
-      },
+    const controller = new AbortController()
+    chatAbort = () => controller.abort()
+    const data = await sendGuideMessage(uid, text, guideSessionId.value, {
+      timeoutMs: 90000,
+      signal: controller.signal,
     })
-    streamAbort = abort
-    await promise
+    if (abortRequested) {
+      applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
+    guideSessionId.value = data.session_id
+    messages.value[aiIdx].text = data.reply || ''
+    if (Array.isArray(data.actions)) {
+      messages.value[aiIdx].actions = normalizeGuideActions(data.actions)
+    }
+    if (Array.isArray(data.tools_used)) {
+      messages.value[aiIdx].tools_used = data.tools_used
+    }
+    if (Array.isArray(data.blocks)) {
+      messages.value[aiIdx].blocks = data.blocks
+    }
+    if (data.situation_label) situationLabel.value = data.situation_label
   } catch (e) {
     if (isStreamAborted(e)) {
       applyStreamStoppedHint(messages, aiIdx)
@@ -693,7 +693,7 @@ async function sendMsg() {
       messages.value[aiIdx].text = e?.message || '网络错误，请稍后再试'
     }
   } finally {
-    streamAbort = null
+    chatAbort = null
     abortRequested = false
     loading.value = false
   }
@@ -703,7 +703,7 @@ async function sendMsg() {
 
 function stopStream() {
   abortRequested = true
-  streamAbort?.()
+  chatAbort?.()
 }
 
 function applyProfileData(data, uid, { fetchLatest = true } = {}) {
