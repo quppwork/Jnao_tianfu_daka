@@ -24,7 +24,15 @@ async def test_guide_retrieve_doubao_primary(monkeypatch):
 
     captured: dict = {}
 
-    def _fake_system_prompt(db, child_user_id, *, tool_block="", memory_block="", rag_block=""):
+    def _fake_system_prompt(
+        db,
+        child_user_id,
+        *,
+        tool_block="",
+        memory_block="",
+        rag_block="",
+        message="",
+    ):
         captured["rag_block"] = rag_block
         captured["tool_block"] = tool_block
         return "SYSTEM"

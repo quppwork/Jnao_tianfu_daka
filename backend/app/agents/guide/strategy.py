@@ -57,6 +57,17 @@ SITUATION_STRATEGY: dict[str, str] = {
     ),
 }
 
+# 已有知识库参考时：不催促「少展开、快去训练」，改由 KB + 练法指令主导
+SITUATION_STRATEGY_WITH_KB: dict[str, str] = {
+    "ready_to_train": (
+        "情境「练法问答」：知识库已提供练法参考，优先转述其中可操作步骤；"
+        "语气仍温暖，勿用空泛「小目标/闯关」套话替代具体练法。"
+    ),
+    "training_in_progress": (
+        "情境「训练进行中」：结合知识库练法要点鼓励续练；完成情况以工具为准。"
+    ),
+}
+
 _COMMON_FOOTER = (
     "策略仅影响语气与侧重点；事实仍以情境卡片与工具结果为准；"
     "禁止解释 Part/晋级公式/达标次数；禁止编造进度数字。"
@@ -80,6 +91,8 @@ def _normalize_talent(raw: str | None) -> str | None:
 def resolve_strategy(
     ctx: GuideContext | None,
     long_term: LongTermSummary | None = None,
+    *,
+    kb_context: bool = False,
 ) -> dict[str, Any]:
     """组装本轮策略；无匹配时返回空 lines。"""
     if not strategy_enabled() or ctx is None:
@@ -95,7 +108,10 @@ def resolve_strategy(
 
     sit = str(getattr(ctx, "situation", None) or "")
     if sit and sit in SITUATION_STRATEGY:
-        lines.append(SITUATION_STRATEGY[sit])
+        if kb_context and sit in SITUATION_STRATEGY_WITH_KB:
+            lines.append(SITUATION_STRATEGY_WITH_KB[sit])
+        elif not (kb_context and sit == "ready_to_train"):
+            lines.append(SITUATION_STRATEGY[sit])
         keys.append(f"situation:{sit}")
 
     weak: list[str] = []

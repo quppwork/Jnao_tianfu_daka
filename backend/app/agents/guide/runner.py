@@ -45,6 +45,13 @@ logger = get_logger("guide.runner")
 
 HISTORY_MAX_TURNS = 12
 
+RAG_PRACTICE_ANSWER_HINT = (
+    "本轮用户问的是「怎么练/如何练习」类问题，且下方已有知识库参考。"
+    "必须先从中提炼 1–2 条具体可操作方法（动作、节奏、注意事项），用教练口吻转述；"
+    "禁止只用天赋策略套话（如「小目标」「闯关」「拆解目标」）敷衍；"
+    "讲完练法后再自然提去今日训练动手（前端会出按钮）。"
+)
+
 
 def _prepare_context(db: Session, child_user_id: int) -> GuideContext:
     ctx = build_guide_context(db, child_user_id)
@@ -58,9 +65,13 @@ def build_chat_system_prompt(
     tool_block: str = "",
     memory_block: str = "",
     rag_block: str = "",
+    message: str = "",
 ) -> str:
     """人设 + 当日情境 + 策略 + 长期摘要 + 对话记忆 + 可选知识库/工具结果。"""
+    from app.services.guide_rag_query import is_guide_practice_method_question
+
     ctx = _prepare_context(db, child_user_id)
+    has_kb = bool((rag_block or "").strip())
     parts = [
         SYSTEM_PROMPT,
         "",
@@ -71,7 +82,9 @@ def build_chat_system_prompt(
     lt = build_long_term_summary(
         db, child_user_id, training_day=ctx.training_day
     )
-    strategy_block = strategy_to_prompt_block(resolve_strategy(ctx, lt))
+    strategy_block = strategy_to_prompt_block(
+        resolve_strategy(ctx, lt, kb_context=has_kb)
+    )
     if strategy_block:
         parts.extend([
             "",
@@ -95,14 +108,20 @@ def build_chat_system_prompt(
             "—— 对话记忆结束 ——",
         ])
     if rag_block:
-        parts.extend([
+        rag_parts = [
             "",
             "—— 知识库参考（仅作事实依据，用教练口吻转述，勿整段背诵）——",
             rag_block,
             "—— 知识库结束 ——",
             "说明：知识库只补充说明性内容；今日进度/是否已练等仍以「学生情境」和「工具查询结果」为准。",
-            "需要动手时仍按人设做「先答后导」，自然导向天赋测试/今日训练/学科答疑/成长里程碑等入口（前端会出按钮）。",
-        ])
+        ]
+        if is_guide_practice_method_question(message):
+            rag_parts.extend(["", "—— 练法回答要求 ——", RAG_PRACTICE_ANSWER_HINT, "—— 练法要求结束 ——"])
+        else:
+            rag_parts.append(
+                "需要动手时仍按人设做「先答后导」，自然导向天赋测试/今日训练/学科答疑/成长里程碑等入口（前端会出按钮）。"
+            )
+        parts.extend(rag_parts)
     if tool_block:
         parts.extend([
             "",
@@ -116,16 +135,22 @@ def build_chat_system_prompt(
 async def _gather_rag(message: str) -> tuple[str, list[str]]:
     """百炼 Retrieve 切片 → rag_block（主链路，BAILIAN_RAG_GENERATE=0 时）。"""
     from app.services.bailian import guide_rag_query
+    from app.services.guide_rag_query import build_guide_rag_query
     from app.services.guide_rag_router import should_guide_use_rag
 
     if not should_guide_use_rag(message):
         return "", []
-    rag = await guide_rag_query(message)
+    query = build_guide_rag_query(message)
+    rag = await guide_rag_query(query)
     if not rag or not rag.rag_block:
         return "", []
     sources = list(rag.sources)
     logger.info(
-        f"guide rag mode={rag.mode} nodes={rag.node_count} sources={sources[:3]}"
+        "guide rag mode=%s nodes=%s query=%r sources=%s",
+        rag.mode,
+        rag.node_count,
+        query[:80],
+        sources[:3],
     )
     return rag.rag_block, sources
 
@@ -372,6 +397,7 @@ async def run_chat(
         tool_block=tool_block,
         memory_block=memory_block,
         rag_block=rag_block,
+        message=message,
     )
     reply = await chat_completion(
         system_prompt=system,
@@ -490,6 +516,7 @@ async def run_chat_stream(
         tool_block=tool_block,
         memory_block=memory_block,
         rag_block=rag_block,
+        message=message,
     )
     parts: list[str] = []
     async for token in chat_completion_stream(

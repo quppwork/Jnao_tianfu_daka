@@ -14,6 +14,11 @@ def test_homework_skips_rag():
     assert not should_guide_use_rag("帮我做这道应用题")
 
 
+def test_elective_skills_trigger_rag():
+    assert should_guide_use_rag("开口窍怎么练习")
+    assert should_guide_use_rag("多元感知是什么")
+
+
 def test_greeting_skips_rag():
     assert not should_guide_use_rag("你好")
     assert not should_guide_use_rag("谢谢")
