@@ -94,6 +94,28 @@ def test_resolve_reply_actions_level_up_to_train():
     assert acts2 and acts2[0]["target"] == "train"
 
 
+def test_resolve_reply_actions_math_question_to_qa():
+    """学科解题类问句 → 学科答疑，而非默认今日训练。"""
+    acts = resolve_reply_actions(
+        situation_next="train",
+        message="我有数学题我该怎么办",
+        has_assessment=True,
+    )
+    assert acts and acts[0]["target"] == "qa"
+    assert "学科答疑" in acts[0]["label"]
+    assert acts[0].get("query", {}).get("subject") == "数学"
+
+
+def test_resolve_reply_actions_reply_mentions_qa():
+    acts = resolve_reply_actions(
+        situation_next="train",
+        message="你好",
+        reply="具体题去「学科答疑」更合适",
+        has_assessment=True,
+    )
+    assert acts and acts[0]["target"] == "qa"
+
+
 def test_situation_label():
     assert "测评" in situation_label("need_assessment")
     assert situation_label("unknown") == ""

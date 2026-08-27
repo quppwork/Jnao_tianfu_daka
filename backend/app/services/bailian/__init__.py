@@ -22,6 +22,11 @@ from app.services.bailian.config import (
     training_rag_ready,
 )
 from app.services.bailian.generate import generate_stream_sync, generate_sync
+from app.services.bailian.knowledge_chat import (
+    KnowledgeChatResult,
+    knowledge_chat_sync,
+    knowledge_chat_url,
+)
 from app.services.bailian.models import RagResult
 from app.services.bailian.retrieve import retrieve_sync
 from app.services.bailian.search import search_sync
@@ -226,5 +231,6 @@ def bailian_status() -> dict[str, Any]:
         "agent_id_ok": bool(cfg.agent_id),
         "retrieve_ready": config_ready_for_retrieve(cfg),
         "search_ready": config_ready_for_search(cfg),
-        "pipeline": "query → Retrieve 切片 → 豆包生成 | file_search 直答（可选）",
+        "knowledge_chat_url": knowledge_chat_url(cfg),
+        "pipeline": "knowledge/chat(aid) | Retrieve | file_search",
     }

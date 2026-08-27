@@ -34,7 +34,7 @@ _INTENT_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
         "talent",
         ("天赋", "测评", "报告", "什么者", "潜能", "赢者", "学者", "思者", "德者", "行者", "解读"),
     ),
-    ("qa", ("答疑", "作业", "题目", "讲解", "不会做", "功课")),
+    ("qa", ("答疑", "作业", "题目", "讲解", "不会做", "功课", "数学题", "语文题", "英语题", "应用题", "计算题")),
     (
         "history",
         (
@@ -159,6 +159,8 @@ def infer_navigate_intent(
     text = (message or "").strip()
     if not text:
         return None
+    if should_route_to_qa(text):
+        return "qa"
     # 查历史打卡明细：默认导「历史记录」并尽量带上日期；今日语境仍可贴训练
     if "get_day_checkin_detail" in used:
         if any(k in text for k in ("今天", "今日", "开始练", "去训练")) and not any(
@@ -197,6 +199,63 @@ def _focus_skill_from_message(message: str) -> str | None:
     for sk in _SKILL_FOCUS:
         if sk in text:
             return sk
+    return None
+
+
+_QA_PROBLEM_HINTS = (
+    "题",
+    "不会做",
+    "不会写",
+    "不会算",
+    "怎么办",
+    "怎么解",
+    "求解",
+    "算一下",
+    "作业",
+    "功课",
+    "讲解",
+    "答案",
+)
+
+_QA_PROBLEM_PHRASES = (
+    "数学题",
+    "语文题",
+    "英语题",
+    "物理题",
+    "化学题",
+    "应用题",
+    "计算题",
+    "我有数学",
+    "我有语文",
+    "我有英语",
+)
+
+
+def should_route_to_qa(message: str) -> bool:
+    """学科解题 / 作业类问句 → 学科答疑。"""
+    text = (message or "").strip()
+    if not text:
+        return False
+    if any(p in text for p in _QA_PROBLEM_PHRASES):
+        return True
+    if _qa_subject_from_message(text) and any(h in text for h in _QA_PROBLEM_HINTS):
+        return True
+    return False
+
+
+def _intent_from_reply(reply: str) -> str | None:
+    """回复正文明确导向某入口时，按钮与之对齐。"""
+    text = (reply or "").strip()
+    if not text:
+        return None
+    if "学科答疑" in text:
+        return "qa"
+    if "今日训练" in text:
+        return "train"
+    if "天赋测试" in text or "天赋报告" in text:
+        return "talent"
+    if "成长里程碑" in text:
+        return "growth"
     return None
 
 
@@ -251,9 +310,12 @@ def resolve_reply_actions(
     message: str,
     tools_used: list[dict[str, Any]] | None = None,
     has_assessment: bool = False,
+    reply: str | None = None,
 ) -> list[dict]:
     """优先按本轮意图给按钮；天赋意图且已测评 → 报告页；带深交接 query。"""
     intent = infer_navigate_intent(message, tools_used)
+    if not intent and reply:
+        intent = _intent_from_reply(reply)
     if intent == "talent":
         target = "report" if has_assessment else "talent"
         return actions_for_next(target, query=_handoff_query(

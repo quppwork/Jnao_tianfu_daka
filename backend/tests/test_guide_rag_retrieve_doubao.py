@@ -49,7 +49,7 @@ async def test_guide_retrieve_doubao_primary(monkeypatch):
         "app.agents.guide.runner._try_bailian_direct_reply",
         new=AsyncMock(),
     ) as direct, patch(
-        "app.agents.guide.runner.build_chat_system_prompt",
+        "app.agents.guide.runner.build_kb_primary_system_prompt",
         side_effect=_fake_system_prompt,
     ), patch(
         "app.services.doubao_client.chat_completion",
@@ -94,12 +94,9 @@ async def test_guide_skips_direct_when_generate_off(monkeypatch):
         "app.services.bailian.guide_rag_query",
         new=AsyncMock(return_value=None),
     ), patch(
-        "app.agents.guide.runner.build_chat_system_prompt",
-        return_value="SYSTEM",
-    ), patch(
         "app.services.doubao_client.chat_completion",
         new=AsyncMock(return_value="请去今日训练看看。"),
-    ), patch("app.agents.guide.runner._prepare_context"), patch(
+    ) as doubao, patch("app.agents.guide.runner._prepare_context"), patch(
         "app.agents.guide.runner._prepare_memory_and_history",
         return_value=([], ""),
     ), patch(
@@ -114,4 +111,6 @@ async def test_guide_skips_direct_when_generate_off(monkeypatch):
         result = await run_chat(object(), 1, "学者天赋是什么")
 
     direct.assert_not_called()
-    assert result.get("rag_source") == "doubao_no_kb_chunks"
+    doubao.assert_not_called()
+    assert result.get("rag_source") == "template_fallback"
+    assert "天赋" in result["reply"]

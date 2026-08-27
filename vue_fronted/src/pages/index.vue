@@ -84,31 +84,7 @@
 
     <!-- Chat Area -->
     <view class="chat-section" id="chatScroll">
-      <!-- 开场欢迎（bootstrap；对话开始后仍保留，避免割裂） -->
-      <view v-if="welcomeText" class="chat-welcome">
-        <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
-        <view class="welcome-card">
-          <view v-if="situationLabel" class="welcome-status">
-            <text class="welcome-status-text">{{ situationLabel }}</text>
-          </view>
-          <text class="welcome-sub">{{ welcomeText }}</text>
-          <view v-if="proactiveText" class="welcome-proactive">
-            <text class="welcome-proactive-text">{{ proactiveText }}</text>
-            <view class="welcome-proactive-close" @click="proactiveText = ''"><text>×</text></view>
-          </view>
-          <view v-if="welcomeActions.length" class="chat-actions welcome-actions">
-            <view
-              v-for="(act, ai) in welcomeActions"
-              :key="ai"
-              class="welcome-action"
-              @click="runNavigateAction(act)"
-            >
-              <text>{{ act.label || actionLabel(act.target) }}</text>
-            </view>
-          </view>
-        </view>
-      </view>
-      <!-- 聊天记录 -->
+      <!-- 聊天记录（优先展示，避免每日规划卡片顶在上面） -->
       <view v-for="(m,i) in messages" :key="i" class="chat-row" :class="{ user: m.role === 'user' }">
         <view class="chat-av me" v-if="m.role==='user'">
           <image v-if="userTalentAvatar" class="user-avatar-img" :src="userTalentAvatar" mode="aspectFill"></image>
@@ -128,10 +104,14 @@
             <text class="thinking-label">agent思考中</text>
           </view>
           <view
-            v-else-if="m.text"
-            class="chat-bbl"
-            :class="{ me: m.role==='user', ai: m.role!=='user' }"
+            v-else-if="m.text && m.role === 'user'"
+            class="chat-bbl me"
           >{{ m.text }}</view>
+          <view
+            v-else-if="m.text"
+            class="chat-bbl ai chat-rich"
+            v-html="formatGuideRichHtml(m.text)"
+          ></view>
           <view
             v-if="m.role==='ai' && m.blocks?.length"
             class="guide-blocks"
@@ -224,6 +204,34 @@
               :class="{ fail: t.ok === false }"
             >
               <text>{{ t.name || 'tool' }}{{ t.ok === false ? ' ✕' : '' }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+      <!-- 每日规划 / 开场欢迎：放在历史对话下面，进页滚到底即可看到 -->
+      <view
+        v-if="showDailyWelcome && welcomeText"
+        class="chat-welcome"
+        :class="{ 'chat-welcome-after': messages.length > 0 }"
+      >
+        <view class="chat-av ai"><image class="ai-avatar-img" src="/static/teacher-avatar.png" mode="aspectFill"></image></view>
+        <view class="welcome-card">
+          <view v-if="situationLabel" class="welcome-status">
+            <text class="welcome-status-text">{{ situationLabel }}</text>
+          </view>
+          <text class="welcome-sub">{{ welcomeText }}</text>
+          <view v-if="proactiveText" class="welcome-proactive">
+            <text class="welcome-proactive-text">{{ proactiveText }}</text>
+            <view class="welcome-proactive-close" @click="proactiveText = ''"><text>×</text></view>
+          </view>
+          <view v-if="welcomeActions.length" class="chat-actions welcome-actions">
+            <view
+              v-for="(act, ai) in welcomeActions"
+              :key="ai"
+              class="welcome-action"
+              @click="runNavigateAction(act)"
+            >
+              <text>{{ act.label || actionLabel(act.target) }}</text>
             </view>
           </view>
         </view>
@@ -325,6 +333,7 @@
                 <text>＋ 新建对话</text>
               </view>
               <text class="btn-hint">不删除当前内容，会留在下方历史里；下一句起新会话</text>
+              <text class="btn-hint">对话框最多保留 20 条，更早内容自动进入下方历史</text>
 
               <view class="chat-actions-row">
                 <view class="btn-text-action" @click="clearCurrentGuideChat">
@@ -383,6 +392,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import {
   clearChildUserId,
   ensureChildUser,
@@ -414,6 +424,8 @@ import {
 } from '@/utils/userApi.js'
 import { refreshTalentState, applyTalentFromProfile } from '@/utils/talentState.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
+import { formatGuideRichHtml } from '@/utils/chatRichText.js'
+import 'katex/dist/katex.min.css'
 
 const isLight = ref(true)
 const pageLoading = ref(true)
@@ -421,6 +433,7 @@ const inputText = ref('')
 const loading = ref(false)
 let chatAbort = null
 let abortRequested = false
+const GUIDE_DIALOG_MESSAGE_LIMIT = 20
 const guideSessionId = ref(null)
 const messages = ref([])
 const showSettings = ref(false)
@@ -498,6 +511,7 @@ const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: ''
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
 const gradeIndex = ref(0)
 const welcomeText = ref('正在了解你的训练状态…')
+const showDailyWelcome = ref(true)
 const welcomeActions = ref([])
 const situationLabel = ref('')
 const proactiveText = ref('')
@@ -646,6 +660,7 @@ function onKeyDown(e) {
 async function sendMsg() {
   const text = inputText.value.trim()
   if (!text || loading.value) return
+  showDailyWelcome.value = false
   messages.value.push({ role: 'user', text })
   inputText.value = ''
   const aiIdx = messages.value.length
@@ -682,6 +697,10 @@ async function sendMsg() {
       messages.value[aiIdx].blocks = data.blocks
     }
     if (data.situation_label) situationLabel.value = data.situation_label
+    if (messages.value.length > GUIDE_DIALOG_MESSAGE_LIMIT) {
+      messages.value = trimGuideMessages(messages.value)
+    }
+    await loadGuideSessionList()
   } catch (e) {
     if (isStreamAborted(e)) {
       applyStreamStoppedHint(messages, aiIdx)
@@ -809,12 +828,15 @@ async function initHome(passedUid = null) {
     }
     applyGuideMessages(guideData)
     applyBootstrap(bootstrapData)
+    showDailyWelcome.value = true
     applyTalentFromProfile(profileData)
     refreshTalentState(uid, profileData).catch(() => {})
     await applyProfileData(profileData, uid)
     if (profileData?.nickname) {
       currentUserDisplay.value = profileData.nickname
     }
+    await nextTick()
+    scrollChat()
   } catch (e) {
     console.error('[home] initHome 失败:', e?.message || e, e?.status)
     welcomeText.value = FALLBACK_WELCOME
@@ -823,14 +845,21 @@ async function initHome(passedUid = null) {
   loadSiblings()
 }
 
-function applyGuideMessages(guideData) {
+function trimGuideMessages(msgs) {
+  const list = Array.isArray(msgs) ? msgs : []
+  if (list.length <= GUIDE_DIALOG_MESSAGE_LIMIT) return list
+  return list.slice(-GUIDE_DIALOG_MESSAGE_LIMIT)
+}
+
+function applyGuideMessages(guideData, { trim = true } = {}) {
   if (!guideData) {
     guideSessionId.value = null
     messages.value = []
     return
   }
   guideSessionId.value = guideData.session_id
-  const rawMsgs = guideData.messages || []
+  let rawMsgs = guideData.messages || []
+  if (trim) rawMsgs = trimGuideMessages(rawMsgs)
   const hasUser = rawMsgs.some(m => m.role === 'user')
   messages.value = (hasUser ? rawMsgs : [])
     .map(m => {
@@ -956,6 +985,7 @@ async function startNewGuideChat() {
     // 不删除当前会话：保留进历史，下一句消息会新建 session
     guideSessionId.value = null
     messages.value = []
+    showDailyWelcome.value = true
     const bootstrapData = await fetchGuideBootstrap(uid, { force: false }).catch(() => null)
     applyBootstrap(bootstrapData)
     await loadGuideSessionList()
@@ -980,6 +1010,7 @@ async function clearCurrentGuideChat() {
     }
     guideSessionId.value = null
     messages.value = []
+    showDailyWelcome.value = true
     const bootstrapData = await fetchGuideBootstrap(uid, { force: true }).catch(() => null)
     applyBootstrap(bootstrapData)
     await loadGuideSessionList()
@@ -994,7 +1025,8 @@ async function switchGuideSession(sessionId) {
   try {
     const uid = await ensureChildUser()
     const data = await fetchGuideSessionById(uid, sessionId)
-    applyGuideMessages(data)
+    applyGuideMessages(data, { trim: false })
+    showDailyWelcome.value = false
     showSettings.value = false
     await nextTick()
     scrollChat()
@@ -1076,9 +1108,19 @@ onMounted(async () => {
   }
 })
 
+onShow(() => {
+  if (!pageLoading.value) {
+    nextTick(() => scrollChat())
+  }
+})
+
 function scrollChat() {
-  const el = document.getElementById('chatScroll')
-  if (el) el.scrollTop = el.scrollHeight
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById('chatScroll')
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  })
 }
 
 
@@ -1206,6 +1248,7 @@ function onNavTap() {
 
 .chat-section { flex:1; overflow-y:auto; padding:12px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
 .chat-welcome { display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; }
+.chat-welcome-after { margin-top:4px; margin-bottom:0; }
 .welcome-card {
   flex:1; background:var(--chat-ai-bg); border-radius:16px;
   border:1px solid var(--border);
@@ -1311,6 +1354,82 @@ function onNavTap() {
 }
 .chat-bbl.me { background:var(--chat-me-bg); color:var(--text-sub); border-bottom-right-radius:6px; }
 [data-theme="white"] .chat-bbl.me { background:#eef2ff; color:#1e293b; border:1px solid #e0e7ff; }
+
+.chat-rich {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.72;
+  word-break: break-word;
+}
+.chat-rich .gd-p {
+  margin: 0 0 10px;
+}
+.chat-rich .gd-p:last-child { margin-bottom: 0; }
+.chat-rich .gd-h {
+  margin: 14px 0 8px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.45;
+}
+.chat-rich .gd-h:first-child,
+.chat-rich .gd-sec:first-child,
+.chat-rich .gd-p:first-child { margin-top: 0; }
+.chat-rich .gd-h1 { font-size: 15px; }
+.chat-rich .gd-h2 { font-size: 14px; }
+.chat-rich .gd-h3 { font-size: 13px; }
+.chat-rich .gd-sec {
+  margin: 12px 0 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.chat-rich .gd-ul,
+.chat-rich .gd-ol {
+  margin: 6px 0 10px;
+  padding-left: 1.25em;
+}
+.chat-rich .gd-ul { list-style: disc; }
+.chat-rich .gd-ol { list-style: decimal; }
+.chat-rich .gd-ul li,
+.chat-rich .gd-ol li {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+.chat-rich .gd-quote {
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(88, 166, 255, 0.35);
+  background: rgba(88, 166, 255, 0.06);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-sub);
+}
+[data-theme="white"] .chat-rich .gd-quote {
+  background: #f8fafc;
+  border-left-color: #93c5fd;
+}
+.chat-rich .gd-quote p { margin: 0 0 4px; }
+.chat-rich .gd-quote p:last-child { margin-bottom: 0; }
+.chat-rich .gd-hr {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+.chat-rich strong {
+  font-weight: 700;
+  color: var(--text);
+}
+.chat-rich em {
+  font-style: italic;
+  color: var(--text-sub);
+}
+.chat-rich .katex { font-size: 1.02em; }
+.chat-rich .katex-display {
+  margin: 8px 0;
+  overflow-x: auto;
+}
 
 .thinking-bbl {
   display:flex; align-items:center; gap:8px; min-height:20px;
