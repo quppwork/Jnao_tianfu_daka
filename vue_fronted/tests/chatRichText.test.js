@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { renderLatexInPlainText, formatQaRichHtml, escapeHtml } from '../src/utils/chatRichText.js'
+import {
+  renderLatexInPlainText,
+  formatQaRichHtml,
+  formatGuideRichHtml,
+  sanitizeGuideReply,
+  escapeHtml,
+} from '../src/utils/chatRichText.js'
 
 describe('chatRichText', () => {
   it('escapeHtml 转义尖括号', () => {
@@ -34,5 +40,28 @@ describe('chatRichText', () => {
   it('formatQaRichHtml 保留 ** 加粗', () => {
     const html = formatQaRichHtml('**步骤一**：先化简')
     expect(html).toContain('<strong>步骤一</strong>')
+  })
+
+  it('sanitizeGuideReply 去掉知识库开头', () => {
+    const t = sanitizeGuideReply('根据知识库中的信息，关于「五者天赋」。五者指…')
+    expect(t).toBe('五者指…')
+  })
+
+  it('formatGuideRichHtml 渲染标题与列表', () => {
+    const raw = `### 1. 五者天赋
+
+**思者**
+
+- 观察力强
+- 逻辑清晰
+
+1. 学者
+2. 行者`
+    const html = formatGuideRichHtml(raw)
+    expect(html).toContain('gd-h3')
+    expect(html).toContain('gd-sec')
+    expect(html).toContain('gd-ul')
+    expect(html).toContain('gd-ol')
+    expect(html).toContain('思者')
   })
 })

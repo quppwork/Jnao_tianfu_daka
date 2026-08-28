@@ -28,6 +28,15 @@ class GuideBootstrapRequest(BaseModel):
     use_llm: bool = True
 
 
+class GuideKbDebugQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    source_key: str | None = Field(
+        None, description="kb_registry 中的 key，如 video_practice / talent_doc"
+    )
+    aid: str | None = Field(None, description="直接指定 aid-*，优先于 source_key")
+    timeout: float = Field(90, ge=10, le=180)
+
+
 class GuideConfirmRequest(BaseModel):
     write_op: str = Field(..., min_length=1, max_length=64)
     args: dict = Field(default_factory=dict)
@@ -40,6 +49,8 @@ async def guide_debug():
     from config.loader import load_settings
     from app.agents.guide.trace import get_guide_trace_metrics
     from app.agents.guide.writes import list_write_ops
+    from app.services.bailian import bailian_status
+    from app.agents.guide.kb_agent import guide_kb_agent_ready
 
     c = load_settings().get("doubao", {})
     return {
@@ -47,8 +58,77 @@ async def guide_debug():
         "model": c.get("model"),
         "key_ok": is_configured(),
         "base": c.get("api_base"),
+        "kb_agent_ready": guide_kb_agent_ready(),
         "trace_metrics": get_guide_trace_metrics(),
         "write_ops": list_write_ops(),
+        "bailian_rag": bailian_status(),
+    }
+
+
+@router.get("/debug/kb/sources")
+async def guide_debug_kb_sources():
+    """P0：列出可调用知识源（Agent 目录）。"""
+    if not is_debug_routes_enabled():
+        raise HTTPException(404, "Not Found")
+    from app.services.kb_registry import get_kb_registry
+
+    reg = get_kb_registry()
+    return {"sources": reg.list_sources(), "count": len(reg.sources)}
+
+
+@router.post("/debug/kb/query")
+async def guide_debug_kb_query(req: GuideKbDebugQueryRequest):
+    """P0：裸调百炼 knowledge/chat，不叠加代码侧人设/策略/模板。"""
+    if not is_debug_routes_enabled():
+        raise HTTPException(404, "Not Found")
+    import asyncio
+
+    from app.services.bailian.knowledge_chat import knowledge_chat_sync
+    from app.services.kb_registry import get_kb_registry
+
+    reg = get_kb_registry()
+    src = reg.resolve(source_key=req.source_key, aid=req.aid)
+    if not src and req.aid:
+        aid = req.aid.strip()
+        source_key = None
+        source_name = None
+    elif src:
+        aid = src.aid
+        source_key = src.key
+        source_name = src.name
+    else:
+        raise HTTPException(
+            400,
+            "请提供 source_key（video_practice / talent_doc）或 aid",
+        )
+
+    result = await asyncio.to_thread(
+        knowledge_chat_sync,
+        req.query,
+        aid=aid,
+        timeout=req.timeout,
+    )
+    if result is None:
+        raise HTTPException(
+            502,
+            "knowledge/chat 调用失败（检查 DASHSCOPE_API_KEY、aid 是否已发布、网络/超时）",
+        )
+
+    return {
+        "source_key": source_key,
+        "source_name": source_name,
+        "aid": aid,
+        "query": req.query,
+        **result.to_public_dict(),
+        "reply": result.reply,
+        "retrieved_docs_preview": [
+            {
+                "doc_name": d.doc_name,
+                "score": d.score,
+                "text_preview": (d.text[:200] + "…") if len(d.text) > 200 else d.text,
+            }
+            for d in result.retrieved_docs[:5]
+        ],
     }
 
 

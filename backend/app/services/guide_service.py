@@ -1,12 +1,16 @@
 """首页引导对话 — 会话持久化 + 开场 bootstrap 入口"""
 
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import GuideMessage, GuideSession
+
+# 首页对话框最多展示/保留的消息条数；超出部分拆入历史会话
+GUIDE_DIALOG_MESSAGE_LIMIT = 20
 
 
 def _history_for_llm(session: GuideSession) -> list[dict]:
@@ -23,10 +27,17 @@ def _meta_from_message(m: GuideMessage) -> dict:
     }
 
 
-def _payload_messages(session: GuideSession) -> list[dict]:
+def _payload_messages(
+    session: GuideSession,
+    *,
+    limit: int | None = None,
+) -> list[dict]:
     """API 回放：content + actions / tools_used / blocks。"""
+    msgs = list(session.messages or [])
+    if limit and limit > 0 and len(msgs) > limit:
+        msgs = msgs[-limit:]
     out: list[dict] = []
-    for m in session.messages:
+    for m in msgs:
         row = {"role": m.role, "content": m.content}
         if m.role == "assistant":
             meta = _meta_from_message(m)
@@ -64,9 +75,47 @@ def get_active_session(db: Session, child_user_id: int) -> GuideSession | None:
     return db.scalar(
         select(GuideSession)
         .where(GuideSession.child_user_id == child_user_id)
-        .order_by(GuideSession.id.desc())
+        .order_by(GuideSession.updated_at.desc(), GuideSession.id.desc())
         .limit(1)
     )
+
+
+def _session_title_from_messages(
+    messages: list[GuideMessage],
+    default: str = "首页对话",
+) -> str:
+    for m in messages:
+        if m.role == "user" and (m.content or "").strip():
+            return (m.content or "").strip()[:30]
+    return default
+
+
+def _archive_session_overflow(db: Session, session: GuideSession) -> GuideSession | None:
+    """当前会话消息超过上限时，将最早的消息拆到独立历史会话。"""
+    msgs = list(session.messages or [])
+    limit = GUIDE_DIALOG_MESSAGE_LIMIT
+    if len(msgs) <= limit:
+        return None
+
+    overflow = msgs[:-limit]
+    archive = GuideSession(
+        child_user_id=session.child_user_id,
+        title=_session_title_from_messages(overflow),
+    )
+    anchor = overflow[-1]
+    if anchor.created_at:
+        archive.created_at = anchor.created_at
+        archive.updated_at = anchor.created_at
+    db.add(archive)
+    db.flush()
+
+    for m in overflow:
+        m.session_id = archive.id
+
+    session.updated_at = datetime.now()
+    db.commit()
+    db.refresh(session)
+    return archive
 
 
 def load_session_payload(db: Session, child_user_id: int) -> dict:
@@ -76,7 +125,7 @@ def load_session_payload(db: Session, child_user_id: int) -> dict:
         return {"session_id": None, "messages": []}
     return {
         "session_id": session.id,
-        "messages": _payload_messages(session),
+        "messages": _payload_messages(session, limit=GUIDE_DIALOG_MESSAGE_LIMIT),
     }
 
 
@@ -85,7 +134,7 @@ def list_sessions(db: Session, child_user_id: int, limit: int = 30) -> list[dict
     rows = db.scalars(
         select(GuideSession)
         .where(GuideSession.child_user_id == child_user_id)
-        .order_by(GuideSession.id.desc())
+        .order_by(GuideSession.updated_at.desc(), GuideSession.id.desc())
         .limit(limit * 2)
     ).all()
     items: list[dict] = []
@@ -185,6 +234,7 @@ async def chat(
         )
     )
     db.commit()
+    _archive_session_overflow(db, session)
 
     return {
         "session_id": session.id,
@@ -230,6 +280,7 @@ async def chat_stream(
             )
         )
         db.commit()
+        _archive_session_overflow(db, session)
         yield ("done", {"session_id": session.id, **result})
         return
 
@@ -257,6 +308,7 @@ async def chat_stream(
         )
     )
     db.commit()
+    _archive_session_overflow(db, session)
     yield (
         "done",
         {

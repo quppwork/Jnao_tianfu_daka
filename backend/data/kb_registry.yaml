@@ -1,0 +1,38 @@
+# 引导页知识源目录 — Agent 选库用（入库后更新 tags/summary 即可，无需改代码）
+sources:
+  - key: video_practice
+    name: 视频库
+    aid: aid-1e85a55e08334536ae820aea073df9e7
+    index_id: l37mx47k4u
+    tags:
+      - 练法
+      - 怎么练
+      - 如何练
+      - 开口窍
+      - 开口穹
+      - 超脑阅读
+      - 影像追忆
+      - 扫描速记
+      - 感知力
+      - 多元感知
+      - 视频示范
+      - 训练方法
+    summary: 讲师训练与示范视频切片；回答具体怎么练、步骤与要点。
+
+  - key: talent_doc
+    name: Jinao天赋知识库
+    aid: aid-e517c082211c4171a1d7297a11c90a0c
+    index_id: x1micrdmjq
+    tags:
+      - 天赋
+      - 学者
+      - 思者
+      - 赢者
+      - 德者
+      - 行者
+      - 五者
+      - 年级要求
+      - 晋级
+      - 平台说明
+      - 学习规律
+    summary: 天赋解读、五者介绍、年级要求与学习规律等文档。

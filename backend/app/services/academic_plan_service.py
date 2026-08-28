@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agents.shared.stage import STAGE_RULES, infer_school_stage
 from app.db.models import (
     ChildUser,
     ContentItem,
@@ -13,12 +15,21 @@ from app.db.models import (
     TrainingPlan,
 )
 from app.services.assessment_service import get_latest_assessment
+from app.services.child_training_state import child_grade
 from app.services.content_meta import parse_item_meta, skill_from_title
 from app.services.doubao_client import chat_completion, is_configured
 from app.services.growth_service import get_tier_brief, get_tier_honor, _collect_stats
 from app.core.logger import get_logger
 
 logger = get_logger("academic_plan")
+
+_SECTION_RULES = (
+    ("status", re.compile(r"现状|评估")),
+    ("score", re.compile(r"提分潜力")),
+    ("plan", re.compile(r"规划|建议|目标")),
+    ("talent", re.compile(r"天赋")),
+    ("motto", re.compile(r"寄语")),
+)
 
 # 技能名称映射
 SKILL_NAMES = {
@@ -101,21 +112,39 @@ def _collect_training_data(db: Session, child_user_id: int) -> dict:
         logger.warning(f"Failed to get tier from growth_service, using fallback: {e}")
         honor_level = get_tier_honor(overall_tier)
     
-    # 6. 获取用户信息
+    seven_days_ago = date.today() - timedelta(days=7)
+    recent_7d_checkins = sum(1 for d in stats["checkin_dates"] if d >= seven_days_ago)
+
     user = db.get(ChildUser, child_user_id)
-    grade = None
     nickname = "学员"
+    grade = None
+    age = None
+    school_stage = "primary_high"
     if user:
         nickname = user.nickname or "学员"
-        profile = user.profile_json or {}
-        grade = profile.get("grade")
-    
+        pj = user.profile_json if isinstance(user.profile_json, dict) else {}
+        learner = pj.get("learner") if isinstance(pj.get("learner"), dict) else {}
+        grade = child_grade(user)
+        raw_age = pj.get("age") or learner.get("age")
+        try:
+            age = int(raw_age) if raw_age not in (None, "") else None
+        except (TypeError, ValueError):
+            age = None
+        school_stage = infer_school_stage(
+            grade=grade,
+            age=age,
+            school_stage=pj.get("school_stage") or learner.get("school_stage"),
+        )
+
     return {
         "nickname": nickname,
         "grade": grade,
+        "age": age,
+        "school_stage": school_stage,
         "talent_type": talent_type,
         "talent_desc": talent_desc,
         "total_checkins": total_checkins,
+        "recent_7d_checkins": recent_7d_checkins,
         "recent_30d_checkins": recent_checkin_days,
         "overall_tier": overall_tier,
         "honor_level": honor_level,
@@ -153,6 +182,76 @@ def _estimate_score_improvement(data: dict) -> dict:
     }
 
 
+def _parse_report_sections(content: str) -> dict[str, str]:
+    """把报告拆成前端可点开的完整小节，不截断。"""
+    sections: dict[str, list[str]] = {k: [] for k, _ in _SECTION_RULES}
+    current: str | None = None
+    for raw in (content or "").splitlines():
+        line = raw.strip().replace("**", "")
+        if not line:
+            continue
+        heading = (
+            line.startswith("#")
+            or line.startswith("🎯")
+            or line.startswith("📈")
+            or line.startswith("📅")
+            or line.startswith("💡")
+            or line.startswith("🔥")
+        )
+        mapped = None
+        if heading:
+            for key, pat in _SECTION_RULES:
+                if pat.search(line):
+                    mapped = key
+                    break
+        if mapped:
+            current = mapped
+            continue
+        if current:
+            sections[current].append(line)
+    return {k: "\n".join(v).strip() for k, v in sections.items() if v}
+
+
+def _build_goal_stages(data: dict, score_proj: dict) -> list[dict]:
+    total = int(score_proj.get("total_estimated_boost") or 0)
+    if total <= 0:
+        return []
+    third = max(1, round(total / 3))
+    two = max(third + 1, round((total * 2) / 3))
+    skills = "、".join(list(data.get("skill_stats") or {})[:3]) or "今日必修训练"
+    grade = data.get("grade") or "当前年级"
+    stage = data.get("school_stage") or "primary_high"
+    if stage == "primary_low":
+        hints = (
+            f"先把每天的{skills}听完、打上卡，像刷牙一样养成习惯。",
+            f"练熟一项再加一项，{grade}阶段重在跟得上、做得完。",
+            f"能自己读完一小段、算对几道题，就是这个阶段的最高目标。",
+        )
+    elif stage == "junior":
+        hints = (
+            f"用{skills}先稳住作业速度，少拖到晚上。",
+            f"把训练方法用到错题和预习上，{grade}阶段重在少返工。",
+            f"考试前用同样的方法过一遍薄弱科，冲这档提分。",
+        )
+    elif stage == "senior":
+        hints = (
+            f"把{skills}嵌进日常刷题节奏，先保证完成量。",
+            f"针对薄弱模块加练，{grade}阶段重在正确率。",
+            f"用训练提速审题和计算，为综合卷留出检查时间。",
+        )
+    else:
+        hints = (
+            f"每天完成{skills}打卡，先拿到基础分。",
+            f"连续训练，把方法用到{grade}的作业里。",
+            f"冲击更高正确率和速度，挑战这档提分。",
+        )
+    return [
+        {"icon": "zap", "title": "三档提分", "desc": "先拿下基础分", "score": f"1-{third} 分", "hint": hints[0]},
+        {"icon": "target", "title": "二档提分", "desc": "再冲一程", "score": f"{third + 1}-{two} 分", "hint": hints[1]},
+        {"icon": "trophy", "title": "一档提分", "desc": "挑战最高目标", "score": f"{two + 1}-{total} 分", "hint": hints[2]},
+    ]
+
+
 def _build_ai_prompt(data: dict, score_proj: dict) -> tuple[str, str]:
     """构建 AI 提示词"""
     
@@ -169,22 +268,28 @@ def _build_ai_prompt(data: dict, score_proj: dict) -> tuple[str, str]:
             score_text += f"  - {item['subject']}：预计可提分{item['estimated_boost']}分（已训练{item['trained_sessions']}次）\n"
     else:
         score_text = "  - 开始训练后将获得个性化提分预测\n"
+
+    stage = data.get("school_stage") or "primary_high"
+    stage_rule = STAGE_RULES.get(stage, STAGE_RULES["primary_high"])
     
-    system_prompt = """你是JNAO劲脑天赋成长平台的专业学业规划师。请根据学生的训练数据，生成一份专业、鼓励性、可执行的学业规划报告。
+    system_prompt = f"""你是JNAO劲脑天赋成长平台的学业规划师。根据学生最近训练状态，生成一份可执行的学业规划。
+
+学段约束（必须遵守）：
+{stage_rule}
+- 建议必须符合该年龄、年级的日常学习，禁止越级（小学低年级不谈中考/高考；小学不布置高中题量）
+- 用学生听得懂的词，目标要小、能本周做到
+- 必须结合「近7天 / 近30天」训练，不要空喊加油
 
 要求：
-1. 语气积极正面，鼓励学生
-2. 分析要具体，基于提供的真实数据
-3. 给出可落地的近期（1-2周）、中期（1-2月）、长期（学期）目标
-4. 结合学生的天赋类型给出针对性建议
-5. 用清晰的分段结构，适合手机阅读
-6. 字数控制在500-800字
-7. 使用中文输出；段位一律写「第N段」，不要写 Tier / Lv
+1. 语气积极，分析要引用真实打卡和技能数据
+2. 近期（1-2周）、中期（1-2月）、长期（本学期）目标分开写，每项目标写具体做什么
+3. 结合天赋类型给一条能用上的方法
+4. 适合手机阅读；500-800字；中文；段位写「第N段」，不要写 Tier / Lv
 
-报告结构建议：
-- 🎯 现状评估（基于训练数据）
+必须使用这些小标题（方便前端展开）：
+- 🎯 现状评估
 - 📈 提分潜力分析
-- 📅 学习规划建议（分阶段）
+- 📅 学习规划建议
 - 💡 天赋优势发挥建议
 - 🔥 行动寄语"""
 
@@ -194,16 +299,20 @@ def _build_ai_prompt(data: dict, score_proj: dict) -> tuple[str, str]:
     if next_title:
         next_line = f"{next_title}（还差{need}阶）" if need else next_title
 
+    age_line = f"{data['age']}岁" if data.get("age") else "未填写"
     user_message = f"""请为以下学生生成学业规划报告：
 
 【学生信息】
 - 昵称：{data['nickname']}
 - 年级：{data['grade'] or '未填写'}
+- 年龄：{age_line}
+- 学段：{stage}
 - 天赋类型：{data['talent_type'] or '未测评'}
 - 天赋描述：{data['talent_desc'] or '暂无'}
 
-【训练数据】
+【最近训练状态】
 - 累计打卡：{data['total_checkins']}天
+- 近7天打卡：{data.get('recent_7d_checkins', 0)}天
 - 近30天打卡：{data['recent_30d_checkins']}天
 - 当前段位：第{data['overall_tier']}段
 - 当前称号：{data.get('honor_level') or '新学员'}
@@ -214,7 +323,7 @@ def _build_ai_prompt(data: dict, score_proj: dict) -> tuple[str, str]:
 【提分预测】
 {score_text}
 
-请生成一份专业的学业规划报告。"""
+请生成符合其年龄和年级的学业规划报告。"""
 
     return system_prompt, user_message
 
@@ -237,14 +346,19 @@ async def generate_academic_plan(db: Session, child_user_id: int, force_refresh:
         "student": {
             "nickname": data["nickname"],
             "grade": data["grade"],
+            "age": data.get("age"),
+            "school_stage": data.get("school_stage"),
             "talent_type": data["talent_type"],
             "overall_tier": data["overall_tier"],
             "honor_level": data.get("honor_level"),
             "total_checkins": data["total_checkins"],
+            "recent_7d_checkins": data.get("recent_7d_checkins", 0),
         },
         "score_projection": score_proj,
         "skill_stats": data["skill_stats"],
+        "goal_stages": _build_goal_stages(data, score_proj),
         "report_content": default_report,
+        "sections": _parse_report_sections(default_report),
         "ai_generated": False,
     }
     
@@ -255,11 +369,12 @@ async def generate_academic_plan(db: Session, child_user_id: int, force_refresh:
             ai_content = await chat_completion(
                 system_prompt=system_prompt,
                 user_message=user_msg,
-                max_tokens=1200,
+                max_tokens=1600,
                 timeout=60,
             )
             if ai_content and len(ai_content.strip()) > 100:
                 result["report_content"] = ai_content.strip()
+                result["sections"] = _parse_report_sections(ai_content)
                 result["ai_generated"] = True
                 logger.info(f"Academic plan AI generated for user {child_user_id}")
         except Exception as e:
@@ -275,20 +390,25 @@ def _generate_default_report(data: dict, score_proj: dict) -> str:
     tier = data["overall_tier"]
     checkins = data["total_checkins"]
     talent = data["talent_type"] or "专属"
-    
-    # 根据训练情况给出不同的开头
+    grade = data.get("grade") or ""
+    age = data.get("age")
+    stage = data.get("school_stage") or "primary_high"
+    who = f"{grade}的{nickname}" if grade else nickname
+    age_bit = f"{age}岁、" if age else ""
+    recent7 = data.get("recent_7d_checkins", 0)
+
     if checkins == 0:
-        opening = f"欢迎{nickname}同学！你即将开启一段精彩的大脑训练之旅。"
-        status = "目前你还没有开始训练，建议从今天开始第一次打卡。"
+        opening = f"欢迎{who}同学！按你现在的{age_bit}年级，我们从每天一小步开始。"
+        status = "目前还没有开始训练，建议今天完成第一次打卡，先熟悉听音频和打卡步骤。"
     elif checkins < 7:
-        opening = f"很棒！{nickname}同学，你已经迈出了训练的第一步！"
-        status = f"你已经完成了{checkins}天训练，继续保持这个势头，7天就能养成一个好习惯。"
+        opening = f"很棒！{who}同学已经迈出第一步。"
+        status = f"已完成{checkins}天训练，近7天打卡{recent7}天。继续保持，满7天就更容易养成习惯。"
     elif checkins < 30:
-        opening = f"太棒了！{nickname}同学，你的坚持令人印象深刻！"
-        status = f"你已经累计打卡{checkins}天，达到第{tier}段。坚持训练21天以上，大脑已经开始形成新的神经连接！"
+        opening = f"太棒了！{who}同学的坚持很稳。"
+        status = f"累计打卡{checkins}天，近7天{recent7}天，当前第{tier}段。再坚持几周，训练会越来越轻松。"
     else:
-        opening = f"{nickname}同学，你是真正的训练达人！"
-        status = f"累计打卡{checkins}天，当前第{tier}段。长期的坚持正在重塑你的大脑能力！"
+        opening = f"{who}同学已经练出节奏了。"
+        status = f"累计打卡{checkins}天，近7天{recent7}天，当前第{tier}段。把方法用到这个年级的作业里，进步会更明显。"
     
     # 提分部分
     score_part = ""
@@ -309,21 +429,34 @@ def _generate_default_report(data: dict, score_proj: dict) -> str:
     next_title = data.get("next_title")
     need = data.get("need")
 
-    if checkins < 3:
-        recent_goal += "\n2. 连续打卡满3天，解锁第一段晋升"
-        mid_goal = "1. 连续打卡21天，养成训练习惯\n2. 掌握2-3个核心技能的基础方法"
-        long_goal = "1. 各技能达到第3段以上\n2. 学习效率显著提升，作业时间缩短30%"
-    elif tier < 3:
-        recent_goal += "\n2. 挑战连续打卡7天\n3. 尝试解锁第二个技能"
-        mid_goal = "1. 每个必修技能至少训练10次\n2. 提升至第3段"
-        long_goal = f"1. 核心技能达到第5段以上，成为{get_tier_honor(5)}\n2. 阅读速度、记忆力、计算能力全面提升"
+    if stage == "primary_low":
+        homework = "把今天学的一小段读给家长听，或做完当天练习"
+        mid_apply = "能自己读完短文、算对几道口算"
+        long_apply = "上课更跟得上，写作业少走神"
+    elif stage in ("junior", "senior"):
+        homework = "用训练方法完成当天作业里最难的一科"
+        mid_apply = "错题当天订正，预习不再从零开始"
+        long_apply = "考试留出检查时间，薄弱科少丢基础分"
     else:
-        recent_goal += "\n2. 保持每周至少5天的训练频率\n3. 挑战高分打卡评价"
+        homework = "把训练方法用到当天语文或数学作业"
+        mid_apply = "作业更快做完，正确率更稳"
+        long_apply = "课堂和考试都更专注"
+
+    if checkins < 3:
+        recent_goal += "\n2. 连续打卡满3天，熟悉听音频和打卡"
+        mid_goal = f"1. 连续打卡21天，养成习惯\n2. {mid_apply}"
+        long_goal = f"1. 各技能达到第3段以上\n2. {long_apply}"
+    elif tier < 3:
+        recent_goal += f"\n2. 近7天尽量打满5天\n3. {homework}"
+        mid_goal = f"1. 每个必修技能至少训练10次\n2. 提升至第3段"
+        long_goal = f"1. 核心技能达到第5段以上，成为{get_tier_honor(5)}\n2. {long_apply}"
+    else:
+        recent_goal += f"\n2. 每周至少5天训练\n3. {homework}"
         if next_title and need:
-            mid_goal = f"1. 再进{need}阶，解锁「{next_title}」\n2. 将训练技能应用到实际学科学习中"
+            mid_goal = f"1. 再进{need}阶，解锁「{next_title}」\n2. {mid_apply}"
         else:
-            mid_goal = f"1. 保持「{honor}」，把技能用到学科学习中\n2. 每周至少完成5天必修训练"
-        long_goal = f"1. 冲刺第8–9段，成为{get_tier_honor(8)}\n2. 形成终身受益的高效学习法"
+            mid_goal = f"1. 保持「{honor}」\n2. 每周至少5天必修训练"
+        long_goal = f"1. 冲刺第8–9段，成为{get_tier_honor(8)}\n2. {long_apply}"
     
     talent_part = ""
     if talent and talent != "未测评":
@@ -351,12 +484,12 @@ def _generate_default_report(data: dict, score_proj: dict) -> str:
 
 🔥 **行动寄语**
 
-大脑的可塑性超乎你的想象！每一次专注的训练，都在实实在在地改变你的大脑结构。坚持下去，你会发现：
-- 课文背得更快了
-- 数学题算得更准了
-- 看书注意力更集中了
-- 考试做题速度明显提升
+按你现在的年级，每天认真练一小会儿就够。坚持下去，你会发现：
+- 读课文更顺
+- 口算或作业更快
+- 看书更能坐得住
+- 课堂上更跟得上
 
-从今天开始，每天进步一点点，三个月后你会感谢现在努力的自己！加油！💪"""
+从今天开始，每天进步一点点。加油！"""
 
     return report

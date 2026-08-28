@@ -45,6 +45,21 @@ logger = get_logger("guide.runner")
 
 HISTORY_MAX_TURNS = 12
 
+RAG_PRACTICE_ANSWER_HINT = (
+    "本轮为练法类问题：从知识库参考提炼 1–2 条可操作方法，用教练口吻转述；"
+    "禁止天赋套话（小目标/闯关/拆解目标）替代知识库内容。"
+)
+
+KB_PRIMARY_PERSONA = (
+    "你是张宇老师，陪伴孩子的训练教练。用温暖简洁口吻（2-4句）。"
+    "学科解题引导去学科答疑；不解释排课/晋级/Tier 规则；不编造进度。"
+)
+
+KB_POLISH_HINT = (
+    "【回答优先级】下方「知识库参考」是唯一主要事实来源，必须优先转述其中内容；"
+    "人设与工具结果仅作语气与情境补充，不得用策略套话覆盖或替代知识库。"
+)
+
 
 def _prepare_context(db: Session, child_user_id: int) -> GuideContext:
     ctx = build_guide_context(db, child_user_id)
@@ -57,9 +72,14 @@ def build_chat_system_prompt(
     *,
     tool_block: str = "",
     memory_block: str = "",
+    rag_block: str = "",
+    message: str = "",
 ) -> str:
-    """人设 + 当日情境 + 策略 + 长期摘要 + 对话记忆 + 可选工具结果。"""
+    """人设 + 当日情境 + 策略 + 长期摘要 + 对话记忆 + 可选知识库/工具结果。"""
+    from app.services.guide_rag_query import is_guide_practice_method_question
+
     ctx = _prepare_context(db, child_user_id)
+    has_kb = bool((rag_block or "").strip())
     parts = [
         SYSTEM_PROMPT,
         "",
@@ -70,7 +90,9 @@ def build_chat_system_prompt(
     lt = build_long_term_summary(
         db, child_user_id, training_day=ctx.training_day
     )
-    strategy_block = strategy_to_prompt_block(resolve_strategy(ctx, lt))
+    strategy_block = strategy_to_prompt_block(
+        resolve_strategy(ctx, lt, kb_context=has_kb)
+    )
     if strategy_block:
         parts.extend([
             "",
@@ -93,6 +115,21 @@ def build_chat_system_prompt(
             memory_block,
             "—— 对话记忆结束 ——",
         ])
+    if rag_block:
+        rag_parts = [
+            "",
+            "—— 知识库参考（仅作事实依据，用教练口吻转述，勿整段背诵）——",
+            rag_block,
+            "—— 知识库结束 ——",
+            "说明：知识库只补充说明性内容；今日进度/是否已练等仍以「学生情境」和「工具查询结果」为准。",
+        ]
+        if is_guide_practice_method_question(message):
+            rag_parts.extend(["", "—— 练法回答要求 ——", RAG_PRACTICE_ANSWER_HINT, "—— 练法要求结束 ——"])
+        else:
+            rag_parts.append(
+                "需要动手时仍按人设做「先答后导」，自然导向天赋测试/今日训练/学科答疑/成长里程碑等入口（前端会出按钮）。"
+            )
+        parts.extend(rag_parts)
     if tool_block:
         parts.extend([
             "",
@@ -101,6 +138,113 @@ def build_chat_system_prompt(
             "—— 工具结果结束 ——",
         ])
     return "\n".join(parts)
+
+
+def build_kb_primary_system_prompt(
+    db: Session,
+    child_user_id: int,
+    *,
+    tool_block: str = "",
+    memory_block: str = "",
+    rag_block: str = "",
+    message: str = "",
+) -> str:
+    """知识库命中：KB 为主，提示词仅润色（不注入完整策略层）。"""
+    from app.services.guide_rag_query import is_guide_practice_method_question
+
+    ctx = _prepare_context(db, child_user_id)
+    parts = [
+        KB_PRIMARY_PERSONA,
+        "",
+        "—— 学生情境 ——",
+        ctx.to_prompt_block(),
+        "—— 情境结束 ——",
+        "",
+        "—— 知识库参考（优先依据，必须转述）——",
+        rag_block,
+        "—— 知识库结束 ——",
+        KB_POLISH_HINT,
+    ]
+    if is_guide_practice_method_question(message):
+        parts.extend(["", RAG_PRACTICE_ANSWER_HINT])
+    if memory_block:
+        parts.extend(["", "—— 对话记忆 ——", memory_block, "—— 对话记忆结束 ——"])
+    if tool_block:
+        parts.extend([
+            "",
+            "—— 工具查询结果（情境补充，不覆盖知识库练法）——",
+            tool_block,
+            "—— 工具结果结束 ——",
+        ])
+    return "\n".join(parts)
+
+
+async def _gather_rag(message: str) -> tuple[str, list[str]]:
+    """百炼 Retrieve 切片 → rag_block（主链路，BAILIAN_RAG_GENERATE=0 时）。"""
+    from app.services.bailian import guide_rag_query
+    from app.services.guide_rag_query import build_guide_rag_query
+    from app.services.guide_rag_router import should_guide_use_rag
+
+    if not should_guide_use_rag(message):
+        return "", []
+    query = build_guide_rag_query(message)
+    rag = await guide_rag_query(query)
+    if not rag or not rag.rag_block:
+        return "", []
+    sources = list(rag.sources)
+    logger.info(
+        "guide rag mode=%s nodes=%s query=%r sources=%s",
+        rag.mode,
+        rag.node_count,
+        query[:80],
+        sources[:3],
+    )
+    return rag.rag_block, sources
+
+
+GUIDE_BAILIAN_INSTRUCTIONS = (
+    "你是张宇老师，陪伴孩子的训练教练。"
+    "根据知识库内容用温暖、简短的教练口吻回答（2-4句）。"
+    "不要编造平台进度；需要动手时可提示去天赋报告、今日训练、学科答疑或成长里程碑。"
+    "学科解题类问题引导去学科答疑，不要在首页讲题。"
+    "不要解释排课/晋级/Tier 等内部规则。"
+)
+
+
+def build_guide_bailian_instructions(db: Session, child_user_id: int, *, memory_block: str = "") -> str:
+    """百炼直答时注入精简版人设 + 学生情境（完整 SYSTEM_PROMPT 仍留给豆包兜底）。"""
+    ctx = _prepare_context(db, child_user_id)
+    parts = [GUIDE_BAILIAN_INSTRUCTIONS, "", "—— 学生情境 ——", ctx.to_prompt_block()]
+    if memory_block:
+        parts.extend(["", "—— 对话记忆 ——", memory_block])
+    return "\n".join(parts)
+
+
+async def _try_bailian_direct_reply(
+    db: Session,
+    child_user_id: int,
+    message: str,
+    *,
+    memory_block: str = "",
+) -> tuple[str | None, bool]:
+    """百炼 file_search 直答；命中 RAG 路由且配置就绪时启用。"""
+    from app.services.bailian import guide_knowledge_reply
+    from app.services.bailian.config import config_ready_for_generate, load_bailian_config
+    from app.services.guide_rag_router import should_guide_use_rag
+
+    if not should_guide_use_rag(message):
+        return None, False
+    cfg = load_bailian_config()
+    if not config_ready_for_generate(cfg):
+        return None, True
+    instructions = build_guide_bailian_instructions(
+        db, child_user_id, memory_block=memory_block
+    )
+    text = await guide_knowledge_reply(message, instructions=instructions)
+    if text:
+        logger.info("guide bailian direct reply len=%s", len(text))
+        return text.strip(), True
+    return None, True
 
 
 def prepare_history(history: list[dict] | None) -> list[dict]:
@@ -128,6 +272,7 @@ def _meta_from_ctx(
     *,
     message: str = "",
     tools_used: list[dict[str, Any]] | None = None,
+    reply: str = "",
 ) -> dict[str, Any]:
     tools = tools_used or []
     actions = resolve_reply_actions(
@@ -135,6 +280,7 @@ def _meta_from_ctx(
         message=message,
         tools_used=tools,
         has_assessment=bool(ctx.has_assessment),
+        reply=reply,
     )
     # R5：显式「记下」意图 → 确认卡置顶（确认前不落库）
     confirms = propose_write_confirms(message)
@@ -232,6 +378,28 @@ async def _gather_tools(
     return all_audit, text
 
 
+async def _minimal_guide_reply(
+    message: str,
+    history: list[dict] | None = None,
+) -> str:
+    """KB Agent 未命中时的轻量兜底（无长人设/策略）。"""
+    from app.services.doubao_client import chat_completion, is_configured
+
+    if not is_configured():
+        return "我这边暂时没接上，你可以先去「今日训练」看看～"
+    system = (
+        "你是训练教练张宇，用简短中文回答。"
+        "学科具体解题引导去「学科答疑」；需要示范引导去「今日训练」。"
+    )
+    reply = await chat_completion(
+        system_prompt=system,
+        user_message=message,
+        history=history,
+        max_tokens=320,
+    )
+    return (reply or "").strip() or "好的，有需要随时问我～"
+
+
 async def run_chat(
     db: Session,
     child_user_id: int,
@@ -248,15 +416,140 @@ async def run_chat(
     hist, memory_block = _prepare_memory_and_history(
         db, child_user_id, message, history
     )
+
+    from app.agents.guide.kb_agent import guide_kb_agent_ready, run_guide_kb_turn
+
+    if guide_kb_agent_ready():
+        kb_result = await run_guide_kb_turn(
+            db, child_user_id, message, history=hist, ctx=ctx
+        )
+        if kb_result is not None:
+            text = (kb_result.get("reply") or "").strip()
+            leak_hits = scan_guide_leaks(text)
+            tools_used = list(kb_result.get("tools_used") or [])
+            meta = {k: v for k, v in kb_result.items() if k != "reply"}
+            emit_guide_trace(
+                build_turn_trace(
+                    child_user_id=child_user_id,
+                    message=message,
+                    tools_used=tools_used,
+                    duration_ms=timer.ms(),
+                    situation=meta.get("situation"),
+                    next_action=meta.get("next_action"),
+                    reply=text,
+                    leak_hits=leak_hits,
+                    stream=False,
+                )
+            )
+            return {"reply": text, **meta}
+
+        text = await _minimal_guide_reply(message, history=hist)
+        meta = _meta_from_ctx(ctx, message=message, tools_used=[], reply=text)
+        meta["rag_source"] = "minimal_doubao"
+        leak_hits = scan_guide_leaks(text)
+        emit_guide_trace(
+            build_turn_trace(
+                child_user_id=child_user_id,
+                message=message,
+                tools_used=[],
+                duration_ms=timer.ms(),
+                situation=meta.get("situation"),
+                next_action=meta.get("next_action"),
+                reply=text,
+                leak_hits=leak_hits,
+                stream=False,
+            )
+        )
+        return {"reply": text, **meta}
+
     tools_used, tool_block = await _gather_tools(
         db, child_user_id, message, history=hist, use_tools=use_tools
     )
-    system = build_chat_system_prompt(
-        db,
-        child_user_id,
-        tool_block=tool_block,
-        memory_block=memory_block,
-    )
+
+    from app.services.bailian.config import load_bailian_config
+    from app.services.guide_rag_router import should_guide_use_rag
+
+    cfg = load_bailian_config()
+    rag_route_hit = should_guide_use_rag(message)
+
+    bailian_reply: str | None = None
+    if rag_route_hit and cfg.rag_generate:
+        bailian_reply, _ = await _try_bailian_direct_reply(
+            db, child_user_id, message, memory_block=memory_block
+        )
+    if bailian_reply:
+        text = bailian_reply
+        meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+        meta["rag_used"] = True
+        meta["rag_source"] = "bailian_generate"
+        leak_hits = scan_guide_leaks(text)
+        emit_guide_trace(
+            build_turn_trace(
+                child_user_id=child_user_id,
+                message=message,
+                tools_used=tools_used,
+                duration_ms=timer.ms(),
+                situation=meta.get("situation"),
+                next_action=meta.get("next_action"),
+                reply=text,
+                leak_hits=leak_hits,
+                stream=False,
+            )
+        )
+        return {"reply": text, **meta}
+
+    if rag_route_hit and not cfg.rag_fallback_doubao:
+        text = "知识库暂时不可用，请稍后再试或直接去今日训练看看。"
+        meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+        meta["rag_used"] = True
+        meta["rag_source"] = "retrieve_unavailable"
+        return {"reply": text, **meta}
+
+    rag_block, rag_sources = await _gather_rag(message) if rag_route_hit else ("", [])
+
+    if rag_route_hit and not rag_block:
+        from app.services.guide_rag_fallback import build_rag_miss_fallback
+
+        fallback = build_rag_miss_fallback(message, ctx)
+        if fallback:
+            logger.info("guide rag template fallback uid=%s", child_user_id)
+            meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=fallback)
+            meta["rag_used"] = True
+            meta["rag_source"] = "template_fallback"
+            emit_guide_trace(
+                build_turn_trace(
+                    child_user_id=child_user_id,
+                    message=message,
+                    tools_used=tools_used,
+                    duration_ms=timer.ms(),
+                    situation=meta.get("situation"),
+                    next_action=meta.get("next_action"),
+                    reply=fallback,
+                    leak_hits=[],
+                    stream=False,
+                )
+            )
+            return {"reply": fallback, **meta}
+        logger.warning("guide retrieve empty, doubao without kb chunks uid=%s", child_user_id)
+
+    if rag_block:
+        system = build_kb_primary_system_prompt(
+            db,
+            child_user_id,
+            tool_block=tool_block,
+            memory_block=memory_block,
+            rag_block=rag_block,
+            message=message,
+        )
+    else:
+        system = build_chat_system_prompt(
+            db,
+            child_user_id,
+            tool_block=tool_block,
+            memory_block=memory_block,
+            rag_block=rag_block,
+            message=message,
+        )
     reply = await chat_completion(
         system_prompt=system,
         user_message=message,
@@ -269,7 +562,12 @@ async def run_chat(
         logger.warning(
             f"guide leak_suspect uid={child_user_id} hits={leak_hits}"
         )
-    meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
+    meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+    if rag_route_hit or rag_sources:
+        meta["rag_used"] = True
+        meta["rag_source"] = "retrieve_doubao" if rag_sources else "doubao_no_kb_chunks"
+        if rag_sources:
+            meta["rag_sources"] = rag_sources
     emit_guide_trace(
         build_turn_trace(
             child_user_id=child_user_id,
@@ -308,18 +606,153 @@ async def run_chat_stream(
     hist, memory_block = _prepare_memory_and_history(
         db, child_user_id, message, history
     )
+
+    from app.agents.guide.kb_agent import guide_kb_agent_ready, run_guide_kb_turn
+
+    if guide_kb_agent_ready():
+        kb_result = await run_guide_kb_turn(
+            db, child_user_id, message, history=hist, ctx=ctx
+        )
+        if kb_result is not None:
+            text = (kb_result.get("reply") or "").strip()
+            meta = {k: v for k, v in kb_result.items() if k != "reply"}
+            tools_used = list(meta.get("tools_used") or [])
+            yield ("meta", meta)
+            yield ("token", text)
+            leak_hits = scan_guide_leaks(text)
+            emit_guide_trace(
+                build_turn_trace(
+                    child_user_id=child_user_id,
+                    message=message,
+                    tools_used=tools_used,
+                    duration_ms=timer.ms(),
+                    situation=meta.get("situation"),
+                    next_action=meta.get("next_action"),
+                    reply=text,
+                    leak_hits=leak_hits,
+                    stream=True,
+                )
+            )
+            return
+
+        text = await _minimal_guide_reply(message, history=hist)
+        meta = _meta_from_ctx(ctx, message=message, tools_used=[], reply=text)
+        meta["rag_source"] = "minimal_doubao"
+        yield ("meta", meta)
+        yield ("token", text)
+        emit_guide_trace(
+            build_turn_trace(
+                child_user_id=child_user_id,
+                message=message,
+                tools_used=[],
+                duration_ms=timer.ms(),
+                situation=meta.get("situation"),
+                next_action=meta.get("next_action"),
+                reply=text,
+                leak_hits=scan_guide_leaks(text),
+                stream=True,
+            )
+        )
+        return
+
     tools_used, tool_block = await _gather_tools(
         db, child_user_id, message, history=hist, use_tools=use_tools
     )
+
+    from app.services.bailian.config import load_bailian_config
+    from app.services.guide_rag_router import should_guide_use_rag
+
+    cfg = load_bailian_config()
+    rag_route_hit = should_guide_use_rag(message)
+
+    bailian_reply: str | None = None
+    if rag_route_hit and cfg.rag_generate:
+        bailian_reply, _ = await _try_bailian_direct_reply(
+            db, child_user_id, message, memory_block=memory_block
+        )
     meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
+    if bailian_reply or rag_route_hit:
+        meta["rag_used"] = True
+        if bailian_reply:
+            meta["rag_source"] = "bailian_generate"
+        else:
+            meta["rag_source"] = "retrieve_doubao_pending"
     yield ("meta", meta)
 
-    system = build_chat_system_prompt(
-        db,
-        child_user_id,
-        tool_block=tool_block,
-        memory_block=memory_block,
-    )
+    if bailian_reply:
+        yield ("token", bailian_reply)
+        leak_hits = scan_guide_leaks(bailian_reply)
+        emit_guide_trace(
+            build_turn_trace(
+                child_user_id=child_user_id,
+                message=message,
+                tools_used=tools_used,
+                duration_ms=timer.ms(),
+                situation=meta.get("situation"),
+                next_action=meta.get("next_action"),
+                reply=bailian_reply,
+                leak_hits=leak_hits,
+                stream=True,
+            )
+        )
+        return
+
+    if rag_route_hit and not cfg.rag_fallback_doubao:
+        yield ("token", "知识库暂时不可用，请稍后再试。")
+        return
+
+    rag_block, rag_sources = await _gather_rag(message) if rag_route_hit else ("", [])
+    if rag_route_hit and not rag_block:
+        from app.services.guide_rag_fallback import build_rag_miss_fallback
+
+        fallback = build_rag_miss_fallback(message, ctx)
+        if fallback:
+            meta["rag_source"] = "template_fallback"
+            meta["rag_used"] = True
+            yield ("meta", meta)
+            yield ("token", fallback)
+            emit_guide_trace(
+                build_turn_trace(
+                    child_user_id=child_user_id,
+                    message=message,
+                    tools_used=tools_used,
+                    duration_ms=timer.ms(),
+                    situation=meta.get("situation"),
+                    next_action=meta.get("next_action"),
+                    reply=fallback,
+                    leak_hits=[],
+                    stream=True,
+                )
+            )
+            return
+        logger.warning("guide retrieve empty stream, doubao without kb uid=%s", child_user_id)
+
+    if rag_block:
+        system = build_kb_primary_system_prompt(
+            db,
+            child_user_id,
+            tool_block=tool_block,
+            memory_block=memory_block,
+            rag_block=rag_block,
+            message=message,
+        )
+    else:
+        system = build_chat_system_prompt(
+            db,
+            child_user_id,
+            tool_block=tool_block,
+            memory_block=memory_block,
+            rag_block=rag_block,
+            message=message,
+        )
+    if rag_route_hit:
+        meta["rag_source"] = "retrieve_doubao" if rag_sources else "doubao_no_kb_chunks"
+    if rag_sources:
+        meta["rag_sources"] = rag_sources
+        meta["rag_used"] = True
+    if rag_route_hit or rag_sources:
+        yield ("meta", meta)
+
     parts: list[str] = []
     async for token in chat_completion_stream(
         system_prompt=system,

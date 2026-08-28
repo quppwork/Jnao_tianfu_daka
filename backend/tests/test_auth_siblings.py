@@ -1,6 +1,7 @@
 """同家长下切换孩子账户 — /api/auth/siblings + /api/auth/switch-child"""
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from tests.test_parent_auth import CHILD_PWD, STRONG_PWD, _parent_auth, _register_parent
 
@@ -96,3 +97,47 @@ class TestAuthSiblings:
 
         # sanity: cannot switch to self via wrong parent kid
         assert kid_a["id"] != kid_b["id"]
+
+    def test_siblings_hides_removed_and_blocks_switch(self, client: TestClient, db_session: Session):
+        from app.db.models import ChildUser
+
+        parent = _register_parent(client, "13900007704", password=STRONG_PWD)
+        pauth = _parent_auth(parent)
+        kid1 = client.post(
+            "/api/parent/children",
+            json={"login_name": "sw_keep", "nickname": "测试1", "password": CHILD_PWD},
+            **pauth,
+        ).json()
+        kid2 = client.post(
+            "/api/parent/children",
+            json={"login_name": "sw_gone", "nickname": "测试", "password": CHILD_PWD},
+            **pauth,
+        ).json()
+
+        removed = db_session.get(ChildUser, kid2["id"])
+        removed.account_status = "removed"
+        db_session.commit()
+
+        login1 = client.post(
+            "/api/auth/login",
+            json={"login_name": "sw_keep", "password": CHILD_PWD},
+        )
+        assert login1.status_code == 200, login1.text
+        uid1 = login1.json()["child_user_id"]
+        auth1 = _student_auth(login1.json())
+
+        siblings = client.get("/api/auth/siblings", **auth1)
+        assert siblings.status_code == 200, siblings.text
+        ids = {s["id"] for s in siblings.json()["siblings"]}
+        assert kid1["id"] not in ids
+        assert kid2["id"] not in ids
+
+        denied = client.post(
+            "/api/auth/switch-child",
+            params={
+                "user_id": uid1,
+                "session_token": login1.json().get("session_token", ""),
+                "target_child_id": kid2["id"],
+            },
+        )
+        assert denied.status_code == 404
