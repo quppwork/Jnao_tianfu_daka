@@ -1,22 +1,22 @@
 # Scripts
 
-## 推荐：一键启动
+## 推荐：一键启动（仓库根目录）
 
 | 系统 | 方式 |
 |------|------|
-| **Windows** | 双击 `start_all.bat`，Ctrl+C 停止 |
-| **Linux/Mac** | `bash start_all.sh`，Ctrl+C 停止 |
+| **Windows** | 双击根目录 `start.bat`，或 `scripts\start_all.bat` / `start_all.ps1` |
+| **Linux/Mac** | `bash scripts/start_all.sh` |
 
-两个服务在**同一个终端**运行：
-- 后端后台运行，日志输出到 `logs/backend.log`
-- 前端前台运行
-- Ctrl+C 停止时会自动清理后端进程
+根目录 `start.bat` / `stop.bat` / `reset.bat` 为 Windows 快捷入口；详细逻辑在 `scripts/`。
+
+- 后端 → http://127.0.0.1:8012
+- 前端 → http://127.0.0.1:5185
 
 ## 单独启动
 
 | 脚本 | 说明 |
 |------|------|
-| `start_backend.bat` / `.sh` | 仅后端 → http://127.0.0.1:8012 |
-| `start_frontend.bat` / `.sh` | 仅前端 → http://127.0.0.1:5185 |
+| `start_backend.bat` / `.sh` | 仅后端 |
+| `start_frontend.bat` / `.sh` | 仅前端 |
 
-启动前会自动清理端口占用。
+启动前会尽量清理端口占用。运维脚本分类见 `backend/tools/README.md`。

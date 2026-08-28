@@ -3,10 +3,12 @@
 from . import checkin as _checkin
 from . import checkin_cards as _checkin_cards
 from . import common as _common
+from . import elective as _elective
+from . import media as _media
 from . import service as _service
 from . import window as _window
 
-for _mod in (_common, _window, _checkin_cards, _checkin, _service):
+for _mod in (_common, _window, _media, _elective, _checkin_cards, _checkin, _service):
     for _name, _val in vars(_mod).items():
         if _name.startswith("__"):
             continue

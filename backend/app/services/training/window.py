@@ -31,7 +31,7 @@ def sync_media_exhausted_from_window(db: Session, child_user_id: int, plan: Trai
         return False
     if _time_in_training_window(row.start_time, row.end_time, now.time()):
         return False
-    from app.services.training.service import mark_plan_media_exhausted
+    from app.services.training.media import mark_plan_media_exhausted
     return mark_plan_media_exhausted(db, plan)
 
 def set_training_window(
