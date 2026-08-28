@@ -28,6 +28,8 @@ import {
 } from '../appSession.js'
 
 const CHILD_KEY = 'jnao_child_user_id'
+const PARENT_SLOT_KEY = 'jnao_parent_user_id'
+const STUDENT_SLOT_KEY = 'jnao_student_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
 const SESSION_TOKEN_KEY = 'jnao_session_token' // legacy，迁移后不再写入
@@ -95,12 +97,40 @@ function clearFreshLogin() {
   } catch (_) { /* ignore */ }
 }
 
-/** 读取当前登录的 child_user_id，无则返回 null */
+/** 读取当前登录的 child_user_id（活跃会话槽），无则返回 null */
 export function getChildUserId() {
   try {
     const raw = localStorage.getItem(CHILD_KEY)
     if (raw) return parseInt(raw, 10)
   } catch (e) { /* ignore */ }
+  return null
+}
+
+/** 家长身份 id：优先独立槽 jnao_parent_user_id，再读 auth 快照 */
+export function getParentUserId() {
+  try {
+    const raw = localStorage.getItem(PARENT_SLOT_KEY)
+    if (raw) {
+      const n = parseInt(raw, 10)
+      if (n) return n
+    }
+  } catch (_) { /* ignore */ }
+  const snap = readAuthSnapshot()
+  return snap.parent?.userId || null
+}
+
+/** 学生身份 id：优先 jnao_student_user_id / 快照，兼容 CHILD_KEY */
+export function getStudentUserId() {
+  try {
+    const raw = localStorage.getItem(STUDENT_SLOT_KEY)
+    if (raw) {
+      const n = parseInt(raw, 10)
+      if (n) return n
+    }
+  } catch (_) { /* ignore */ }
+  const snap = readAuthSnapshot()
+  if (snap.student?.userId) return snap.student.userId
+  if (snap.role === 'student') return getChildUserId()
   return null
 }
 

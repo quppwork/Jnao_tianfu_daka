@@ -1,13 +1,14 @@
 /**
- * 家长端：孩子 CRUD / ensureChildUser
+ * 家长端：孩子 CRUD；家长/学生身份入口
+ *
+ * 身份约定：
+ * - ensureParentUser / getParentUserId → 家长中心
+ * - ensureChildUser（= ensureStudentUser）→ 学生业务页（训练/引导/答疑…）
+ * 后端手机号「谁是正规家长」见 parent_identity_service + parent_reconcile_service
  */
 import {
   apiJson,
   withUser,
-  getChildUserId,
-  setChildUserId,
-  markChildUserSessionValid,
-  invalidateChildUserSession,
   requirePageAuth,
   NeedLoginError,
 } from './client.js'
@@ -58,8 +59,17 @@ export async function deleteParentChild(parentId, childId) {
 }
 
 /**
- * 全局用户入口 — 学生页 onMounted 调用
- * 无有效学生 session 时跳转登录，不再自动 guest 注册
+ * 家长页入口：校验 parent session，返回家长 userId
+ */
+export async function ensureParentUser() {
+  const auth = await requirePageAuth('parent')
+  if (!auth.ok) throw new NeedLoginError('请先登录家长账号')
+  return auth.userId
+}
+
+/**
+ * 学生业务页入口（训练/首页引导/答疑/成长…）
+ * 无有效学生 session 时跳转登录；家长 session 会踢到家长中心
  */
 export async function ensureChildUser(nickname = '学员') {
   const role = _readStoredRole()
@@ -73,6 +83,9 @@ export async function ensureChildUser(nickname = '学员') {
   return auth.userId
 }
 
+/** 与 ensureChildUser 同义，语义更清晰 */
+export const ensureStudentUser = ensureChildUser
+
 /** JNAO 外部 API 用的 uid（存于 child_user.jnao_uid） */
 export async function ensureJnaoUid(userId) {
   const profile = await apiJson(withUser('/api/user/profile', userId))
@@ -85,4 +98,3 @@ export async function ensureJnaoUid(userId) {
   })
   return jnaoUid
 }
-

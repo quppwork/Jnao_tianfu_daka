@@ -137,7 +137,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  requirePageAuth,
+  ensureParentUser,
   logoutAndGoLogin,
   fetchParentChildren,
   fetchParentQuota,
@@ -190,25 +190,14 @@ onMounted(() => loadData())
 async function loadData() {
   loading.value = true
   try {
-    const auth = await requirePageAuth('parent')
-    if (!auth.ok) return
-
-    const raw = localStorage.getItem('jnao_user')
-    if (raw) {
-      const u = JSON.parse(raw)
-      if (u.role !== 'parent') {
-        logoutAndGoLogin()
-        return
+    parentId.value = await ensureParentUser()
+    try {
+      const raw = localStorage.getItem('jnao_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        parentName.value = u.name || '家长'
       }
-      parentName.value = u.name || '家长'
-      parentId.value = u.id || auth.userId
-    } else {
-      parentId.value = auth.userId
-    }
-    if (!parentId.value) {
-      logoutAndGoLogin()
-      return
-    }
+    } catch (_) { /* ignore */ }
     const ready = await ensureParentAccountReady(parentId.value)
     if (!ready) return
     const [list, q] = await Promise.all([

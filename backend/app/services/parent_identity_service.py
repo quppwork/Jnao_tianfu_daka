@@ -1,5 +1,9 @@
 """家长手机号身份解析 — 注册/登录/发短信统一判定（child_user + daka_member）。
 
+「家长身份收敛」后端侧：凡按手机号判断「是否已注册 / 该登录谁 /
+能否发短信」都应走本模块（或经 auth_service → parent_reconcile），
+避免各入口各自查 ChildUser / daka_member 导致重复账号或误拦截。
+
 wx_member_snapshot 仅用于微信 openid 查询，不参与浏览器短信注册拦截。
 """
 
