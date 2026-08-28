@@ -7,7 +7,7 @@
  *   api/{training,guide,qa,...}.js
  *     ↑
  *   userApi.js（聚合导出）
- *   userApiCore.js（认证/家长/管理员，也依赖 client）
+ *   api/{auth,parent,admin}.js → userApiCore.js（兼容）→ userApi.js
  */
 import { getQaImageLocal, parseQaImageId } from '../qaMedia.js'
 import { authHeaders } from '../loginGuard.js'
@@ -31,9 +31,47 @@ const CHILD_KEY = 'jnao_child_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
 const SESSION_TOKEN_KEY = 'jnao_session_token' // legacy，迁移后不再写入
+const ADMIN_USER_KEY = 'jnao_admin_user'
 const ADMIN_LOGGED_IN_KEY = 'jnao_admin_logged_in'
 const FRESH_LOGIN_KEY = 'jnao_fresh_login_until'
 const FRESH_LOGIN_MS = 20000
+
+export function getAdminUserId() {
+  try {
+    const raw = localStorage.getItem(ADMIN_USER_KEY)
+    if (raw) return JSON.parse(raw).id
+  } catch (_) { /* ignore */ }
+  return null
+}
+
+export function getAdminSessionToken() {
+  return ''
+}
+
+export function hasAdminSession() {
+  try {
+    return localStorage.getItem(ADMIN_LOGGED_IN_KEY) === '1' && !!getAdminUserId()
+  } catch (_) {
+    return false
+  }
+}
+
+export function clearAdminSession() {
+  clearSessionForKind('admin')
+}
+
+/** 写入管理员本地 session（登录成功后调用） */
+export function persistAdminLocalSession(data) {
+  localStorage.setItem(ADMIN_USER_KEY, JSON.stringify({
+    id: data.child_user_id,
+    name: data.nickname,
+    role: 'admin',
+    loginName: data.login_name,
+  }))
+  try { localStorage.setItem(ADMIN_LOGGED_IN_KEY, '1') } catch (_) { /* ignore */ }
+  invalidatePageAuthCache('admin')
+  markPageAuthValidated('admin', data.child_user_id)
+}
 
 /** 刚完成登录后的宽限期：Cookie 写入前避免 401 误踢回登录页 */
 export function markFreshLogin() {
@@ -150,6 +188,12 @@ export function invalidatePageAuthCache(kind = null) {
     _authValidatedAt[k] = 0
     _authValidatedUid[k] = null
   }
+}
+
+/** 登录成功后标记本页 auth 已校验，避免立刻再打 /me */
+export function markPageAuthValidated(kind, userId) {
+  _authValidatedUid[kind] = userId
+  _authValidatedAt[kind] = Date.now()
 }
 
 /** 页面进入前校验 session；网络异常允许离线继续，仅 401 才登出 */
@@ -576,3 +620,12 @@ export function withAdmin(url, adminId) {
   }
   return result
 }
+
+export class NeedLoginError extends Error {
+  constructor(message = '请先登录') {
+    super(message)
+    this.name = 'NeedLoginError'
+  }
+}
+
+
