@@ -448,10 +448,12 @@ async def run_chat(
     )
 
     from app.agents.guide.kb_agent import guide_kb_agent_ready, run_guide_kb_turn
-    from app.agents.shared.handoff import should_route_to_qa
+    from app.agents.guide.pipeline import GuidePath, finalize_guide_payload, resolve_guide_path
+
+    path = resolve_guide_path(message, kb_agent_ready=guide_kb_agent_ready())
 
     # 学科解题类：豆包引导 → 学科答疑按钮（不进知识库 / 不贴今日训练）
-    if should_route_to_qa(message):
+    if path is GuidePath.QA_HANDOFF:
         text = await _qa_handoff_reply(message, history=hist)
         tools_used = [{"name": "qa_handoff", "ok": True}]
         meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
@@ -470,9 +472,9 @@ async def run_chat(
                 stream=False,
             )
         )
-        return {"reply": text, **meta}
+        return finalize_guide_payload(reply=text, meta=meta, path=path)
 
-    if guide_kb_agent_ready():
+    if path is GuidePath.KB_AGENT:
         kb_result = await run_guide_kb_turn(
             db, child_user_id, message, history=hist, ctx=ctx
         )
@@ -498,7 +500,7 @@ async def run_chat(
                     stream=False,
                 )
             )
-            return {"reply": text, **meta}
+            return finalize_guide_payload(reply=text, meta=meta, path=path)
 
         text = await _minimal_guide_reply(message, history=hist)
         meta = _meta_from_ctx(ctx, message=message, tools_used=[], reply=text)
@@ -517,7 +519,7 @@ async def run_chat(
                 stream=False,
             )
         )
-        return {"reply": text, **meta}
+        return finalize_guide_payload(reply=text, meta=meta, path=GuidePath.MINIMAL)
 
     tools_used, tool_block = await _gather_tools(
         db, child_user_id, message, history=hist, use_tools=use_tools
@@ -665,13 +667,16 @@ async def run_chat_stream(
     )
 
     from app.agents.guide.kb_agent import guide_kb_agent_ready, run_guide_kb_turn
-    from app.agents.shared.handoff import should_route_to_qa
+    from app.agents.guide.pipeline import GuidePath, resolve_guide_path
 
-    if should_route_to_qa(message):
+    path = resolve_guide_path(message, kb_agent_ready=guide_kb_agent_ready())
+
+    if path is GuidePath.QA_HANDOFF:
         text = await _qa_handoff_reply(message, history=hist)
         tools_used = [{"name": "qa_handoff", "ok": True}]
         meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
         meta["rag_source"] = "qa_handoff"
+        meta["pipeline_path"] = path.value
         yield ("meta", meta)
         yield ("token", text)
         emit_guide_trace(
@@ -689,7 +694,7 @@ async def run_chat_stream(
         )
         return
 
-    if guide_kb_agent_ready():
+    if path is GuidePath.KB_AGENT:
         kb_result = await run_guide_kb_turn(
             db, child_user_id, message, history=hist, ctx=ctx
         )
@@ -708,6 +713,7 @@ async def run_chat_stream(
                     "blocks",
                 ):
                     meta[k] = v
+            meta["pipeline_path"] = path.value
             yield ("meta", meta)
             yield ("token", text)
             leak_hits = scan_guide_leaks(text)
@@ -729,6 +735,7 @@ async def run_chat_stream(
         text = await _minimal_guide_reply(message, history=hist)
         meta = _meta_from_ctx(ctx, message=message, tools_used=[], reply=text)
         meta["rag_source"] = "minimal_doubao"
+        meta["pipeline_path"] = GuidePath.MINIMAL.value
         yield ("meta", meta)
         yield ("token", text)
         emit_guide_trace(
