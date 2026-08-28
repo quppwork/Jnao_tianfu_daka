@@ -1,12 +1,15 @@
 /**
- * 后端 API 统一入口（兼容旧 import）
+ * 后端 API 统一入口（兼容旧 import，无循环依赖）
  *
- * 实现拆分:
- *   userApiCore.js  — session / HTTP / 认证 / 家长 / 管理员
- *   api/profile.js | talent.js | training.js | guide.js | qa.js | growth.js | dev.js | account.js
- *
- * 新代码可按域引入，例如: import { sendGuideMessage } from '@/utils/api/guide.js'
+ * 依赖方向:
+ *   api/client.js  ←  session + HTTP 底座
+ *        ↑
+ *   api/{profile,talent,training,guide,qa,growth,dev,account}.js
+ *   userApiCore.js（认证/家长/管理员）
+ *        ↑
+ *   userApi.js（本文件，仅 re-export）
  */
+export * from './api/client.js'
 export * from './userApiCore.js'
 export * from './api/profile.js'
 export * from './api/talent.js'

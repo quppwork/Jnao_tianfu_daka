@@ -1,7 +1,7 @@
 /**
  * training API
  */
-import { apiJson, withUser } from '../userApiCore.js'
+import { apiJson, withUser } from './client.js'
 
 // ── 今日训练（核心模块：入口→排课→打卡→历史）──
 

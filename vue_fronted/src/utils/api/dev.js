@@ -1,7 +1,7 @@
 /**
  * dev API
  */
-import { apiJson, withUser } from '../userApiCore.js'
+import { apiJson, withUser } from './client.js'
 
 // ── 开发者工具（JNAO_DEV_MODE=1）──
 

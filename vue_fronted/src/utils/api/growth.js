@@ -1,7 +1,7 @@
 /**
  * growth API
  */
-import { apiJson, withUser } from '../userApiCore.js'
+import { apiJson, withUser } from './client.js'
 
 // ── 成长里程碑 ──
 

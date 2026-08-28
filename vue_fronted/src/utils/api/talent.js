@@ -1,7 +1,7 @@
 /**
  * talent API
  */
-import { apiJson, withUser } from '../userApiCore.js'
+import { apiJson, withUser } from './client.js'
 
 // ── 天赋测评 ──
 

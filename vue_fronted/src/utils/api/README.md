@@ -1,21 +1,20 @@
-# API 域模块
+# API 层（无循环依赖）
 
-按业务拆分的前端 API 封装。页面可继续 `import { … } from '@/utils/userApi.js'`。
-
-| 文件 | 职责 |
-|------|------|
-| `../userApiCore.js` | session / HTTP / 认证 / 家长 / 管理员 |
-| `profile.js` | 用户资料 |
-| `talent.js` | 天赋测评 |
-| `training.js` | 今日训练 + 选修 |
-| `guide.js` | 首页引导对话 |
-| `qa.js` | 学科答疑 + 语音 |
-| `growth.js` | 成长里程碑 |
-| `dev.js` | 开发者工具 |
-| `account.js` | 切换孩子账号 |
-
-新代码建议按域引入，例如：
-
-```js
-import { sendGuideMessage } from '@/utils/api/guide.js'
 ```
+api/client.js          ← session + HTTP 底座（唯一底层）
+      ↑
+api/{profile,talent,training,guide,qa,growth,dev,account}.js
+userApiCore.js         ← 认证 / 家长 / 管理员
+      ↑
+userApi.js             ← 兼容聚合 export（页面可继续从这里 import）
+```
+
+## 规则
+
+1. **禁止** `api/*` 域模块互相 import，也禁止依赖 `userApi.js` / `userApiCore.js`
+2. 域模块只允许：`import { apiJson, withUser, ... } from './client.js'`
+3. 新代码优先按域引入，例如：`import { sendGuideMessage } from '@/utils/api/guide.js'`
+
+## 循环依赖
+
+当前 utils 内 import 图为 **DAG（无环）**。`useLoginFlow` 已改为只依赖 `api/client.js`，避免为两个函数加载全部域模块。

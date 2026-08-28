@@ -1,7 +1,7 @@
 /**
  * qa API
  */
-import { apiJson, withUser, streamPostSse } from '../userApiCore.js'
+import { apiJson, withUser, streamPostSse } from './client.js'
 
 // ── 学科答疑 ──
 

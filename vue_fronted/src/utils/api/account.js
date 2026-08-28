@@ -1,7 +1,7 @@
 /**
  * account API
  */
-import { apiJson, withUser, setChildUserId, markChildUserSessionValid, invalidatePageAuthCache } from '../userApiCore.js'
+import { apiJson, withUser, setChildUserId, markChildUserSessionValid, invalidatePageAuthCache } from './client.js'
 
 // ── 切换账户 ──
 export async function fetchSiblings(userId) {

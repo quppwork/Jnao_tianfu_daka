@@ -1,7 +1,7 @@
 /**
  * guide API
  */
-import { apiJson, withUser, streamPostSse } from '../userApiCore.js'
+import { apiJson, withUser, streamPostSse } from './client.js'
 
 // ── 首页引导对话 ──
 
