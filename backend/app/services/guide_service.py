@@ -299,6 +299,24 @@ async def chat_stream(
         yield ("token", payload)
 
     reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+    # 流式结束后再按完整回复对齐按钮（防止文案导学科答疑、按钮仍是今日训练）
+    try:
+        from app.agents.guide.runner import _meta_from_ctx
+        from app.agents.guide.context import build_guide_context
+
+        ctx = build_guide_context(db, child_user_id)
+        aligned = _meta_from_ctx(
+            ctx,
+            message=message,
+            tools_used=list(meta.get("tools_used") or []),
+            reply=reply,
+        )
+        meta["actions"] = aligned.get("actions") or meta.get("actions") or []
+        meta["next_action"] = aligned.get("next_action") or meta.get("next_action")
+        if aligned.get("situation_label"):
+            meta["situation_label"] = aligned["situation_label"]
+    except Exception:
+        pass
     db.add(
         GuideMessage(
             session_id=session.id,

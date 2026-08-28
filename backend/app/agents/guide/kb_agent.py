@@ -255,13 +255,14 @@ async def run_guide_kb_turn(
         return None
 
     if is_homework_message(text):
-        from app.agents.shared.handoff import resolve_reply_actions
+        from app.agents.shared.handoff import resolve_reply_actions, primary_navigate_target
 
         actions = resolve_reply_actions(
             situation_next=ctx.next_action if ctx else None,
             message=text,
             tools_used=[],
             has_assessment=bool(ctx.has_assessment) if ctx else False,
+            reply="学科答疑",
         )
         qa_actions = [a for a in actions if a.get("type") == "navigate" and a.get("target") == "qa"]
         if not qa_actions:
@@ -269,6 +270,9 @@ async def run_guide_kb_turn(
         return {
             "reply": "具体作业题去「学科答疑」里问更合适，我可以帮你在那边讲解思路～",
             "actions": qa_actions,
+            "next_action": primary_navigate_target(qa_actions) or "qa",
+            "situation": ctx.situation if ctx else None,
+            "situation_label": None,
             "tools_used": [{"name": "kb_homework_redirect", "ok": True}],
             "rag_used": False,
             "rag_source": "homework_redirect",

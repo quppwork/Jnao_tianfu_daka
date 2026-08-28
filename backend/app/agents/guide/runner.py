@@ -274,6 +274,8 @@ def _meta_from_ctx(
     tools_used: list[dict[str, Any]] | None = None,
     reply: str = "",
 ) -> dict[str, Any]:
+    from app.agents.shared.handoff import primary_navigate_target
+
     tools = tools_used or []
     actions = resolve_reply_actions(
         situation_next=ctx.next_action,
@@ -286,14 +288,42 @@ def _meta_from_ctx(
     confirms = propose_write_confirms(message)
     if confirms:
         actions = list(confirms) + list(actions)
+    # 按钮意图优先：避免 reply 已导学科答疑而 next_action 仍是情境默认 train
+    effective_next = primary_navigate_target(actions) or ctx.next_action
     return {
         "situation": ctx.situation,
-        "next_action": ctx.next_action,
+        "next_action": effective_next,
         "situation_label": situation_label(ctx.situation),
         "actions": actions,
         "tools_used": tools,
         "blocks": build_ui_blocks(tools),
     }
+
+
+async def _qa_handoff_reply(
+    message: str,
+    history: list[dict] | None = None,
+) -> str:
+    """学科题意图：豆包只做引导话术，不讲题。"""
+    from app.services.doubao_client import chat_completion, is_configured
+
+    if not is_configured():
+        return "具体题目去「学科答疑」里问更合适，我可以帮你在那边讲解思路～"
+    system = (
+        "你是训练教练张宇老师。用户在问学科题目或作业，不要直接讲题或给答案。"
+        "用一两句自然中文引导去「学科答疑」，可点下方按钮进入。"
+        "不要提今日训练，不要提知识库。"
+    )
+    reply = await chat_completion(
+        system_prompt=system,
+        user_message=message,
+        history=history,
+        max_tokens=160,
+    )
+    text = (reply or "").strip()
+    if "学科答疑" not in text:
+        text = "具体题目去「学科答疑」里问更合适，我可以帮你在那边讲解思路～"
+    return text
 
 
 async def _gather_tools(
@@ -418,6 +448,29 @@ async def run_chat(
     )
 
     from app.agents.guide.kb_agent import guide_kb_agent_ready, run_guide_kb_turn
+    from app.agents.shared.handoff import should_route_to_qa
+
+    # 学科解题类：豆包引导 → 学科答疑按钮（不进知识库 / 不贴今日训练）
+    if should_route_to_qa(message):
+        text = await _qa_handoff_reply(message, history=hist)
+        tools_used = [{"name": "qa_handoff", "ok": True}]
+        meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+        meta["rag_source"] = "qa_handoff"
+        leak_hits = scan_guide_leaks(text)
+        emit_guide_trace(
+            build_turn_trace(
+                child_user_id=child_user_id,
+                message=message,
+                tools_used=tools_used,
+                duration_ms=timer.ms(),
+                situation=meta.get("situation"),
+                next_action=meta.get("next_action"),
+                reply=text,
+                leak_hits=leak_hits,
+                stream=False,
+            )
+        )
+        return {"reply": text, **meta}
 
     if guide_kb_agent_ready():
         kb_result = await run_guide_kb_turn(
@@ -427,7 +480,11 @@ async def run_chat(
             text = (kb_result.get("reply") or "").strip()
             leak_hits = scan_guide_leaks(text)
             tools_used = list(kb_result.get("tools_used") or [])
-            meta = {k: v for k, v in kb_result.items() if k != "reply"}
+            # 再对齐一次：KB 回复若指向学科答疑，按钮必须同步
+            meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+            for k, v in kb_result.items():
+                if k not in ("reply", "actions", "next_action", "situation", "situation_label", "tools_used", "blocks"):
+                    meta[k] = v
             emit_guide_trace(
                 build_turn_trace(
                     child_user_id=child_user_id,
@@ -608,6 +665,29 @@ async def run_chat_stream(
     )
 
     from app.agents.guide.kb_agent import guide_kb_agent_ready, run_guide_kb_turn
+    from app.agents.shared.handoff import should_route_to_qa
+
+    if should_route_to_qa(message):
+        text = await _qa_handoff_reply(message, history=hist)
+        tools_used = [{"name": "qa_handoff", "ok": True}]
+        meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+        meta["rag_source"] = "qa_handoff"
+        yield ("meta", meta)
+        yield ("token", text)
+        emit_guide_trace(
+            build_turn_trace(
+                child_user_id=child_user_id,
+                message=message,
+                tools_used=tools_used,
+                duration_ms=timer.ms(),
+                situation=meta.get("situation"),
+                next_action=meta.get("next_action"),
+                reply=text,
+                leak_hits=scan_guide_leaks(text),
+                stream=True,
+            )
+        )
+        return
 
     if guide_kb_agent_ready():
         kb_result = await run_guide_kb_turn(
@@ -615,8 +695,19 @@ async def run_chat_stream(
         )
         if kb_result is not None:
             text = (kb_result.get("reply") or "").strip()
-            meta = {k: v for k, v in kb_result.items() if k != "reply"}
-            tools_used = list(meta.get("tools_used") or [])
+            tools_used = list(kb_result.get("tools_used") or [])
+            meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+            for k, v in kb_result.items():
+                if k not in (
+                    "reply",
+                    "actions",
+                    "next_action",
+                    "situation",
+                    "situation_label",
+                    "tools_used",
+                    "blocks",
+                ):
+                    meta[k] = v
             yield ("meta", meta)
             yield ("token", text)
             leak_hits = scan_guide_leaks(text)
@@ -670,6 +761,7 @@ async def run_chat_stream(
         bailian_reply, _ = await _try_bailian_direct_reply(
             db, child_user_id, message, memory_block=memory_block
         )
+    # 流式前先按问句意图出按钮；完整 reply 结束后再对齐一次
     meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
     if bailian_reply or rag_route_hit:
         meta["rag_used"] = True
@@ -680,6 +772,12 @@ async def run_chat_stream(
     yield ("meta", meta)
 
     if bailian_reply:
+        meta = _meta_from_ctx(
+            ctx, message=message, tools_used=tools_used, reply=bailian_reply
+        )
+        meta["rag_used"] = True
+        meta["rag_source"] = "bailian_generate"
+        yield ("meta", meta)
         yield ("token", bailian_reply)
         leak_hits = scan_guide_leaks(bailian_reply)
         emit_guide_trace(
@@ -707,6 +805,9 @@ async def run_chat_stream(
 
         fallback = build_rag_miss_fallback(message, ctx)
         if fallback:
+            meta = _meta_from_ctx(
+                ctx, message=message, tools_used=tools_used, reply=fallback
+            )
             meta["rag_source"] = "template_fallback"
             meta["rag_used"] = True
             yield ("meta", meta)
@@ -780,6 +881,11 @@ async def run_chat_stream(
         yield ("token", token)
 
     text = "".join(parts)
+    # 完整回复后再对齐按钮（解决「文案学科答疑、按钮今日训练」）
+    aligned = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+    meta["actions"] = aligned.get("actions") or meta.get("actions") or []
+    meta["next_action"] = aligned.get("next_action") or meta.get("next_action")
+    yield ("meta", meta)
     leak_hits = scan_guide_leaks(text)
     if leak_hits:
         logger.warning(
