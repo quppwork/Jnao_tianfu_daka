@@ -1278,7 +1278,7 @@ export async function sendGuideMessage(userId, message, sessionId = null, option
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, session_id: sessionId }),
-    timeoutMs: options.timeoutMs ?? 90000,
+    timeoutMs: options.timeoutMs ?? 150000,
     signal: options.signal,
   })
 }

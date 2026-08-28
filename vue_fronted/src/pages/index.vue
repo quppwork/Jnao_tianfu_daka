@@ -694,7 +694,7 @@ async function sendMsg() {
     const controller = new AbortController()
     chatAbort = () => controller.abort()
     const data = await sendGuideMessage(uid, text, guideSessionId.value, {
-      timeoutMs: 90000,
+      timeoutMs: 150000,
       signal: controller.signal,
     })
     if (abortRequested) {

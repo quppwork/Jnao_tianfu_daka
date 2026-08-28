@@ -17,10 +17,12 @@ logger = get_logger("guide.kb_agent")
 
 KB_FC_SYSTEM = (
     "你是首页引导的工具调度器，只负责选择知识源并调用工具，不要生成给用户的最终回答。"
-    "可先调用 list_knowledge_sources 查看各源的 tags 与 summary，再调用 query_knowledge。"
-    "练法、训练示范、开口窍、超脑阅读等优先 video_practice；"
-    "天赋、五者、年级要求、平台说明等优先 talent_doc。"
-    "学科具体解题（算题、求答案）不要调用 query_knowledge。"
+    "可先 list_knowledge_sources，再必须调用 query_knowledge 查库。"
+    "练法、怎么练、开口窍、超脑阅读、影像追忆、扫描速记、示范视频 → source_key=video_practice。"
+    "其余知识问答默认 source_key=talent_doc："
+    "天赋/五者/年级/晋级、平台说明、课程/产品/营期（如火箭提分营）、"
+    "为什么要系统训练、什么是某某营/课 等。"
+    "仅当用户在问今日训练进度、打招呼闲聊、或学科具体解题时，不要调用 query_knowledge。"
 )
 
 KB_TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -74,8 +76,62 @@ _HOMEWORK_PATTERNS = (
     "计算题",
 )
 
-_PRACTICE_HINTS = ("怎么练", "如何练", "练法", "训练方法", "示范", "开口", "超脑", "影像", "速记")
-_TALENT_HINTS = ("天赋", "学者", "思者", "赢者", "德者", "行者", "五者", "年级", "晋级")
+_PRACTICE_HINTS = (
+    "怎么练",
+    "如何练",
+    "练法",
+    "训练方法",
+    "示范",
+    "开口窍",
+    "开口穹",
+    "超脑",
+    "影像追忆",
+    "扫描速记",
+    "极速运算",
+    "极速学习",
+    "多元感知",
+)
+_TALENT_HINTS = (
+    "天赋",
+    "学者",
+    "思者",
+    "赢者",
+    "德者",
+    "行者",
+    "五者",
+    "年级",
+    "晋级",
+)
+_DOC_KNOWLEDGE_HINTS = (
+    "什么是",
+    "什么叫",
+    "为什么",
+    "介绍一下",
+    "介绍下",
+    "是什么",
+    "提分营",
+    "火箭",
+    "营期",
+    "课程",
+    "产品",
+    "收费",
+    "多少钱",
+    "适合谁",
+    "系统训练",
+    "单点刷题",
+    "平台说明",
+    "学习规律",
+)
+_SKIP_KB_HINTS = (
+    "今日训练如何",
+    "今日训练怎么样",
+    "打卡情况",
+    "练完了吗",
+    "完成了吗",
+    "你好",
+    "您好",
+    "在吗",
+)
 
 
 def _parse_kb_tool_calls(message: dict | None) -> list[dict[str, Any]]:
@@ -140,10 +196,34 @@ def is_homework_message(message: str) -> bool:
     return should_route_to_qa(message)
 
 
-def pick_source_by_tags(message: str) -> KnowledgeSource | None:
-    reg = get_kb_registry()
+def _looks_like_practice(message: str) -> bool:
+    text = message or ""
+    return any(h in text for h in _PRACTICE_HINTS)
+
+
+def _looks_like_doc_knowledge(message: str) -> bool:
+    text = message or ""
+    if any(h in text for h in _TALENT_HINTS):
+        return True
+    if any(h in text for h in _DOC_KNOWLEDGE_HINTS):
+        return True
+    if ("什么" in text or "为何" in text or "为什么" in text) and not _looks_like_practice(text):
+        return True
+    return False
+
+
+def _should_skip_kb_query(message: str) -> bool:
     text = (message or "").strip()
     if not text:
+        return True
+    return any(h in text for h in _SKIP_KB_HINTS)
+
+
+def pick_source_by_tags(message: str) -> KnowledgeSource | None:
+    """标签命中或启发式选库；非练法知识问默认 talent_doc。"""
+    reg = get_kb_registry()
+    text = (message or "").strip()
+    if not text or _should_skip_kb_query(text):
         return None
 
     best: KnowledgeSource | None = None
@@ -157,9 +237,12 @@ def pick_source_by_tags(message: str) -> KnowledgeSource | None:
     if best_score > 0:
         return best
 
-    if any(h in text for h in _PRACTICE_HINTS):
+    if _looks_like_practice(text):
         return reg.get("video_practice")
-    if any(h in text for h in _TALENT_HINTS):
+    if _looks_like_doc_knowledge(text):
+        return reg.get("talent_doc")
+    # 非练法：默认文档库（新入库主题未进 tags 时仍可查到）
+    if not _looks_like_practice(text):
         return reg.get("talent_doc")
     return None
 
@@ -171,8 +254,18 @@ async def plan_kb_tool_calls(
 ) -> list[dict[str, Any]]:
     from app.services.doubao_client import chat_completion_message, is_configured
 
-    if not is_configured():
+    text = (message or "").strip()
+    if not text or _should_skip_kb_query(text) or is_homework_message(text):
         return []
+
+    if not is_configured():
+        src = pick_source_by_tags(text)
+        if not src:
+            return []
+        return [{
+            "name": "query_knowledge",
+            "args": {"source_key": src.key, "query": text},
+        }]
 
     list_tools()
     messages: list[dict[str, Any]] = [{"role": "system", "content": KB_FC_SYSTEM}]
@@ -183,7 +276,7 @@ async def plan_kb_tool_calls(
             content = item.get("content") or item.get("text") or ""
             if content:
                 messages.append({"role": role, "content": content})
-    messages.append({"role": "user", "content": (message or "").strip()})
+    messages.append({"role": "user", "content": text})
 
     try:
         msg = await chat_completion_message(
@@ -195,7 +288,7 @@ async def plan_kb_tool_calls(
         )
     except Exception as e:
         logger.warning("kb agent FC failed: %s", e)
-        return []
+        msg = None
 
     allowed = {"list_knowledge_sources", "query_knowledge"}
     picks: list[dict[str, Any]] = []
@@ -204,8 +297,17 @@ async def plan_kb_tool_calls(
             continue
         args = dict(pick.get("args") or {})
         if pick["name"] == "query_knowledge" and not args.get("query"):
-            args["query"] = (message or "").strip()
+            args["query"] = text
         picks.append({"name": pick["name"], "args": args})
+
+    # 豆包只列源或漏调 query：按启发式补一次查库
+    if not any(p["name"] == "query_knowledge" for p in picks):
+        src = pick_source_by_tags(text)
+        if src:
+            picks.append({
+                "name": "query_knowledge",
+                "args": {"source_key": src.key, "query": text},
+            })
     return picks
 
 

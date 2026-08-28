@@ -34,7 +34,8 @@ def query_knowledge(
     query = str(a.get("query") or "").strip()
     source_key = str(a.get("source_key") or "").strip()
     aid = str(a.get("aid") or "").strip()
-    timeout = float(a.get("timeout") or 120)
+    # 给百炼深度思考留足时间；前端引导超时约 150s
+    timeout = float(a.get("timeout") or 90)
 
     if not query:
         return {"ok": False, "error": "query 不能为空"}
