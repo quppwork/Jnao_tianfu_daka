@@ -3,7 +3,6 @@
     <view class="card">
       <text class="badge">仅限工作人员</text>
       <text class="title">管理后台登录</text>
-      <text class="desc">与家长 / 孩子账号分开，请勿在此使用手机号或昵称</text>
       <view class="input-wrap">
         <input class="input" v-model="form.loginName" placeholder="管理员账号" />
       </view>
@@ -70,8 +69,7 @@ function confirmClearCache() {
 .app { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--bg); }
 .card { width:100%; max-width:360px; background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:24px; }
 .badge { display:block; text-align:center; color:#f59e0b; font-size:11px; font-weight:600; margin-bottom:8px; letter-spacing:0.05em; }
-.title { display:block; text-align:center; color:var(--text); font-size:18px; font-weight:700; margin-bottom:8px; }
-.desc { display:block; text-align:center; color:var(--text-dim); font-size:12px; line-height:1.5; margin-bottom:20px; }
+.title { display:block; text-align:center; color:var(--text); font-size:18px; font-weight:700; margin-bottom:20px; }
 .input-wrap { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:0 12px; margin-bottom:12px; }
 .input { padding:12px 0; font-size:15px; color:var(--text); width:100%; }
 .btn { background:linear-gradient(135deg,#f59e0b,#d97706); border-radius:12px; padding:14px; text-align:center; margin-top:8px; }

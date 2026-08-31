@@ -195,16 +195,19 @@ export function clearSessionForKind(kind) {
   }
 }
 
-export function redirectToLoginForKind(kind) {
+export function redirectToLoginForKind(kind, opts = {}) {
   if (kind === 'admin') {
     logoutAdminAndGoLogin()
     return
   }
   const url = kind === 'student' ? '/pages/login/index?role=student' : '/pages/login/index'
-  const msg = kind === 'student' ? '请先登录孩子账号' : '登录已失效，请重新登录'
-  try {
-    uni.showToast({ title: msg, icon: 'none', duration: 2500 })
-  } catch (_) { /* ignore */ }
+  // 冷启动无 session 静默跳登录；会话过期/鉴权失败再提示
+  if (!opts.silent) {
+    const msg = kind === 'student' ? '请先登录孩子账号' : '登录已失效，请重新登录'
+    try {
+      uni.showToast({ title: msg, icon: 'none', duration: 2500 })
+    } catch (_) { /* ignore */ }
+  }
   logoutAndGoLogin(url)
 }
 
@@ -241,7 +244,7 @@ export async function requirePageAuth(kind) {
       try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
-    redirectToLoginForKind(kind)
+    redirectToLoginForKind(kind, { silent: true })
     return { ok: false, reason: 'missing_local' }
   }
 
@@ -424,7 +427,7 @@ function handleMidSessionExpired(url) {
   try {
     uni.showToast({ title: '登录已失效，请重新登录', icon: 'none' })
   } catch (_) { /* ignore */ }
-  setTimeout(() => redirectToLoginForKind(kind), 400)
+  setTimeout(() => redirectToLoginForKind(kind, { silent: true }), 400)
 }
 function formatApiError(data, status) {
   const d = data?.detail ?? data?.message
