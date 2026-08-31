@@ -1,0 +1,600 @@
+{
+  "date": "2026-08-31",
+  "summary": {
+    "files": 20,
+    "changed": 5,
+    "link_changes": 44,
+    "heading_skips": 0,
+    "missing_h1": 0
+  },
+  "files": [
+    {
+      "file": "delivery/delivery-escort-sop.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 29,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "delivery/training-system-framework.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 58,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "foundations/talents.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 43,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "foundations/theory.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 68,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "frontline/cases.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 1,
+        "has_h1": true,
+        "levels": [
+          1
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "frontline/products.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 26,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "frontline/quotes.md",
+      "changed": true,
+      "list_markers": 0,
+      "link_change_count": 1,
+      "headings": {
+        "count": 9,
+        "has_h1": true,
+        "levels": [
+          1,
+          2
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "frontline/sales.md",
+      "changed": true,
+      "list_markers": 0,
+      "link_change_count": 3,
+      "headings": {
+        "count": 11,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "frontline/technology.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 17,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "meta/sources.md",
+      "changed": true,
+      "list_markers": 0,
+      "link_change_count": 2,
+      "headings": {
+        "count": 18,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "meta/transcript-screening-2026-08-28.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 5,
+        "has_h1": true,
+        "levels": [
+          1,
+          2
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "practice/learning-methods.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 39,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "practice/parent-child/de-si.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 16,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "practice/parent-child/xue-si.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 17,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "practice/parent-child/ying-xing.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 15,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "practice/talents-application.md",
+      "changed": true,
+      "list_markers": 0,
+      "link_change_count": 3,
+      "headings": {
+        "count": 40,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "README.md",
+      "changed": true,
+      "list_markers": 0,
+      "link_change_count": 35,
+      "headings": {
+        "count": 11,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "training/examples/training-plan-winner-girl-10yo.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 65,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "training/methods.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 44,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "skips": []
+      }
+    },
+    {
+      "file": "training/safety.md",
+      "changed": false,
+      "list_markers": 0,
+      "link_change_count": 0,
+      "headings": {
+        "count": 26,
+        "has_h1": true,
+        "levels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "skips": []
+      }
+    }
+  ],
+  "link_changes": [
+    {
+      "type": "excluded_target",
+      "from": "frontline/quotes.md",
+      "url": "../practice/parent-child/README.md",
+      "note": "亲子组合索引（本批未收录，仅收录已填格）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "frontline/sales.md",
+      "url": "../practice/parent-child/README.md",
+      "note": "亲子组合索引（本批未收录，仅收录已填格）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "frontline/sales.md",
+      "url": "../practice/parent-child/README.md",
+      "note": "亲子组合索引（本批未收录，仅收录已填格）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "frontline/sales.md",
+      "url": "../internal/agent-instruction.md",
+      "note": "内部文档（另批隔离，本批未收录）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "meta/sources.md",
+      "url": "./_raw/zhangyu-pack/",
+      "note": "原始归档（另批隔离，本批未收录）"
+    },
+    {
+      "type": "url_normalize",
+      "from": "meta/sources.md",
+      "url": "./transcript-screening-2026-08-28.md",
+      "new": "transcript-screening-2026-08-28.md"
+    },
+    {
+      "type": "excluded_target",
+      "from": "practice/talents-application.md",
+      "url": "parent-child/README.md",
+      "note": "亲子组合索引（本批未收录，仅收录已填格）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "practice/talents-application.md",
+      "url": "parent-child/README.md",
+      "note": "亲子组合索引（本批未收录，仅收录已填格）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "practice/talents-application.md",
+      "url": "parent-child/README.md",
+      "note": "亲子组合索引（本批未收录，仅收录已填格）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "../文档预处理规范.md",
+      "note": "文档预处理规范（仓库流程文档，非知识正文）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./_templates/README.md",
+      "note": "扩写模板（本批未收录）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./foundations/README.md",
+      "note": "分层导航 README（本批未收录）"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./foundations/theory.md",
+      "new": "foundations/theory.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./foundations/talents.md",
+      "new": "foundations/talents.md"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./practice/README.md",
+      "note": "分层导航 README（本批未收录）"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./practice/talents-application.md",
+      "new": "practice/talents-application.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./practice/learning-methods.md",
+      "new": "practice/learning-methods.md"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./practice/parent-child/README.md",
+      "note": "亲子组合索引（本批未收录，仅收录已填格）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./training/README.md",
+      "note": "分层导航 README（本批未收录）"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./training/methods.md",
+      "new": "training/methods.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./training/safety.md",
+      "new": "training/safety.md"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./delivery/README.md",
+      "note": "分层导航 README（本批未收录）"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./delivery/training-system-framework.md",
+      "new": "delivery/training-system-framework.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./delivery/delivery-escort-sop.md",
+      "new": "delivery/delivery-escort-sop.md"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./frontline/README.md",
+      "note": "分层导航 README（本批未收录）"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./frontline/sales.md",
+      "new": "frontline/sales.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./frontline/quotes.md",
+      "new": "frontline/quotes.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./frontline/cases.md",
+      "new": "frontline/cases.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./frontline/products.md",
+      "new": "frontline/products.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./frontline/technology.md",
+      "new": "frontline/technology.md"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./internal/README.md",
+      "note": "内部文档（另批隔离，本批未收录）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./internal/management.md",
+      "note": "内部文档（另批隔离，本批未收录）"
+    },
+    {
+      "type": "excluded_target",
+      "from": "README.md",
+      "url": "./internal/agent-instruction.md",
+      "note": "内部文档（另批隔离，本批未收录）"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./meta/sources.md",
+      "new": "meta/sources.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./meta/sources.md",
+      "new": "meta/sources.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./foundations/talents.md",
+      "new": "foundations/talents.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./foundations/theory.md",
+      "new": "foundations/theory.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./practice/talents-application.md",
+      "new": "practice/talents-application.md"
+    },
+    {
+      "type": "broken_or_oob",
+      "from": "README.md",
+      "url": "./practice/parent-child/",
+      "note": "目标不在本批 cleaned 内"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./training/methods.md",
+      "new": "training/methods.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./training/safety.md",
+      "new": "training/safety.md"
+    },
+    {
+      "type": "url_normalize",
+      "from": "README.md",
+      "url": "./foundations/talents.md",
+      "new": "foundations/talents.md"
+    },
+    {
+      "type": "broken_or_oob",
+      "from": "README.md",
+      "url": "../talent-drama/README.md",
+      "note": "目标不在本批 cleaned 内"
+    },
+    {
+      "type": "broken_or_oob",
+      "from": "README.md",
+      "url": "../finance-ops/README.md",
+      "note": "目标不在本批 cleaned 内"
+    }
+  ]
+}

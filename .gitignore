@@ -68,9 +68,12 @@ h5_fronted/
 docs/**
 !docs/data/
 !docs/data/**
-# 脑科学教育 · 入库前文档预处理规范（可入库；正文知识包仍本地）
+# 脑科学教育 · 入库前文档预处理规范与 staging 交付物（正文知识包仍本地）
 !docs/brain-education/
 !docs/brain-education/文档预处理规范.md
+!docs/brain-education/staging/
+!docs/brain-education/staging/**
+docs/brain-education/staging/_run_*.py
 
 # 归档过期文档（仅本地）
 docs/过期文件/

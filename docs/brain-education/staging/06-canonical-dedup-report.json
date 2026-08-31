@@ -1,0 +1,251 @@
+{
+  "date": "2026-08-31",
+  "canonical_topics": {
+    "五力展开": "foundations/talents.md",
+    "脑波/变聪明公式": "foundations/theory.md",
+    "孩子单型怎么带": "practice/talents-application.md",
+    "家长×孩子话术": "practice/parent-child/",
+    "训练方法/九段": "training/methods.md",
+    "训练安全异常": "training/safety.md",
+    "修炼总诀用词": "foundations/talents.md"
+  },
+  "by_role": {
+    "unique": 7,
+    "canonical": 8,
+    "summary_of": 2,
+    "glossary": 1,
+    "index": 3
+  },
+  "files": [
+    {
+      "file": "delivery/delivery-escort-sop.md",
+      "role": "unique",
+      "topics": [
+        "护航SOP"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "交付护航流程"
+    },
+    {
+      "file": "delivery/training-system-framework.md",
+      "role": "unique",
+      "topics": [
+        "交付框架标准"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {
+        "训练方法/九段": "training/methods.md"
+      },
+      "note": "交付体系框架，与 methods 分工不同"
+    },
+    {
+      "file": "foundations/talents.md",
+      "role": "canonical",
+      "topics": [
+        "五力展开",
+        "修炼总诀用词",
+        "五者画像"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "五力/总诀权威全文"
+    },
+    {
+      "file": "foundations/theory.md",
+      "role": "canonical",
+      "topics": [
+        "脑波/变聪明公式",
+        "大脑理论总框架"
+      ],
+      "duplicate_topics": {
+        "五力展开": "foundations/talents.md"
+      },
+      "refer_to": {},
+      "note": "脑波与变聪明公式权威全文；§五五者为总框架，展开见 talents"
+    },
+    {
+      "file": "frontline/cases.md",
+      "role": "unique",
+      "topics": [
+        "案例索引"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "案例钩子；须核实，非效果承诺"
+    },
+    {
+      "file": "frontline/products.md",
+      "role": "unique",
+      "topics": [
+        "产品线"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "产品说明，保留全文"
+    },
+    {
+      "file": "frontline/quotes.md",
+      "role": "unique",
+      "topics": [
+        "金句口播"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "场景独立，保留全文"
+    },
+    {
+      "file": "frontline/sales.md",
+      "role": "unique",
+      "topics": [
+        "跨组合招生通则"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {
+        "家长×孩子话术": "practice/parent-child/"
+      },
+      "note": "招生通则；亲子专案权威见 parent-child 已填格"
+    },
+    {
+      "file": "frontline/technology.md",
+      "role": "summary_of",
+      "topics": [
+        "设备形态/科技话术"
+      ],
+      "duplicate_topics": {
+        "脑波/变聪明公式": "foundations/theory.md"
+      },
+      "refer_to": {},
+      "note": "设备形态；脑波公式权威见 theory"
+    },
+    {
+      "file": "glossary.md",
+      "role": "glossary",
+      "topics": [
+        "术语表"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "步骤5产出"
+    },
+    {
+      "file": "meta/sources.md",
+      "role": "index",
+      "topics": [
+        "资料溯源"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "元信息"
+    },
+    {
+      "file": "meta/transcript-screening-2026-08-28.md",
+      "role": "index",
+      "topics": [
+        "转写筛选说明"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "元信息"
+    },
+    {
+      "file": "practice/learning-methods.md",
+      "role": "summary_of",
+      "topics": [
+        "学习方法/态度系统"
+      ],
+      "duplicate_topics": {
+        "孩子单型怎么带": "practice/talents-application.md"
+      },
+      "refer_to": {},
+      "note": "§二等涉及单型带法处为摘要，全文见 talents-application"
+    },
+    {
+      "file": "practice/parent-child/de-si.md",
+      "role": "canonical",
+      "topics": [
+        "家长×孩子话术",
+        "德者×思者"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "亲子格完整方案"
+    },
+    {
+      "file": "practice/parent-child/xue-si.md",
+      "role": "canonical",
+      "topics": [
+        "家长×孩子话术",
+        "学者×思者"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "亲子格完整方案"
+    },
+    {
+      "file": "practice/parent-child/ying-xing.md",
+      "role": "canonical",
+      "topics": [
+        "家长×孩子话术",
+        "赢者×行者"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "亲子格完整方案"
+    },
+    {
+      "file": "practice/talents-application.md",
+      "role": "canonical",
+      "topics": [
+        "孩子单型怎么带"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "按孩子单型带法权威全文"
+    },
+    {
+      "file": "README.md",
+      "role": "index",
+      "topics": [
+        "知识包总索引",
+        "口径裁定纪要入口"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "索引与裁定入口；非主题权威全文"
+    },
+    {
+      "file": "training/examples/training-plan-winner-girl-10yo.md",
+      "role": "unique",
+      "topics": [
+        "个案训练方案范例"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {
+        "训练方法/九段": "training/methods.md"
+      },
+      "note": "个案范例；方法权威仍以 methods 为准"
+    },
+    {
+      "file": "training/methods.md",
+      "role": "canonical",
+      "topics": [
+        "训练方法/九段"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "训练方法与九段权威全文"
+    },
+    {
+      "file": "training/safety.md",
+      "role": "canonical",
+      "topics": [
+        "训练安全异常"
+      ],
+      "duplicate_topics": {},
+      "refer_to": {},
+      "note": "安全手册权威全文"
+    }
+  ],
+  "unknown": []
+}
