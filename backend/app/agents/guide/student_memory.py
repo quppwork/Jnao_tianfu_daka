@@ -13,14 +13,18 @@ from typing import Any
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.agents.memory_policy import (
+    MAX_DIGEST_CHARS,
+    GUIDE_HISTORY_KEEP_DEFAULT as HISTORY_KEEP_DEFAULT,
+    fold_overflow_history as _policy_fold,
+    digest_prompt_block,
+)
 from app.db.models import ChildUser
 
 MEMORY_KEY = "guide_memory"
 MEMORY_VERSION = 1
 MAX_OPEN_INTENTS = 5
 MAX_RECENT_FOCUS = 8
-MAX_DIGEST_CHARS = 600
-HISTORY_KEEP_DEFAULT = 12
 
 _SKILL_NAMES = (
     "超脑阅读",
@@ -117,25 +121,13 @@ def fold_overflow_history(
     keep: int = HISTORY_KEEP_DEFAULT,
 ) -> tuple[list[dict], dict[str, Any]]:
     """超出 keep 的旧轮次压进 rolling_summary，返回尾部历史 + 更新后的 mem。"""
-    msgs = list(messages or [])
-    out_mem = deepcopy(mem) if mem else _empty_memory()
-    if keep <= 0 or len(msgs) <= keep:
-        return msgs, out_mem
-    older = msgs[:-keep]
-    recent = msgs[-keep:]
-    lines: list[str] = []
-    for m in older:
-        role = "学员" if m.get("role") == "user" else "老师"
-        c = str(m.get("content") or "").strip().replace("\n", " ")
-        if c:
-            lines.append(f"{role}:{c[:80]}")
-    chunk = "；".join(lines)
-    prev = str(out_mem.get("rolling_summary") or "").strip()
-    merged = f"{prev}；{chunk}".strip("；") if prev else chunk
-    if len(merged) > MAX_DIGEST_CHARS:
-        merged = "…" + merged[-(MAX_DIGEST_CHARS - 1) :]
-    out_mem["rolling_summary"] = merged
-    return recent, out_mem
+    return _policy_fold(
+        messages,
+        mem,
+        keep=keep,
+        max_digest_chars=MAX_DIGEST_CHARS,
+        empty_mem_factory=_empty_memory,
+    )
 
 
 def extract_from_user_message(message: str, mem: dict[str, Any]) -> dict[str, Any]:

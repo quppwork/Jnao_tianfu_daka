@@ -604,6 +604,22 @@ function normalizeGuideActions(raw) {
   return out
 }
 
+/** 文案已导学科答疑时，按钮必须同步（避免仍显示「去今日训练」） */
+function alignGuideActionsWithReply(reply, rawActions) {
+  const actions = normalizeGuideActions(rawActions)
+  const text = String(reply || '')
+  const confirms = actions.filter(a => a.type === 'confirm')
+  if (text.includes('学科答疑')) {
+    const qa = actions.filter(a => a.type === 'navigate' && a.target === 'qa')
+    if (qa.length) return [...confirms, ...qa]
+    return [
+      ...confirms,
+      { type: 'navigate', target: 'qa', label: actionLabel('qa') },
+    ]
+  }
+  return actions
+}
+
 function normalizeNavigateActions(raw) {
   return normalizeGuideActions(raw).filter(a => a.type === 'navigate')
 }
@@ -678,7 +694,7 @@ async function sendMsg() {
     const controller = new AbortController()
     chatAbort = () => controller.abort()
     const data = await sendGuideMessage(uid, text, guideSessionId.value, {
-      timeoutMs: 90000,
+      timeoutMs: 150000,
       signal: controller.signal,
     })
     if (abortRequested) {
@@ -687,9 +703,10 @@ async function sendMsg() {
     }
     guideSessionId.value = data.session_id
     messages.value[aiIdx].text = data.reply || ''
-    if (Array.isArray(data.actions)) {
-      messages.value[aiIdx].actions = normalizeGuideActions(data.actions)
-    }
+    messages.value[aiIdx].actions = alignGuideActionsWithReply(
+      data.reply,
+      Array.isArray(data.actions) ? data.actions : [],
+    )
     if (Array.isArray(data.tools_used)) {
       messages.value[aiIdx].tools_used = data.tools_used
     }
@@ -867,7 +884,7 @@ function applyGuideMessages(guideData, { trim = true } = {}) {
       return {
         role: isAi ? 'ai' : 'user',
         text: m.content || m.text || '',
-        actions: isAi ? normalizeGuideActions(m.actions) : [],
+        actions: isAi ? alignGuideActionsWithReply(m.content || m.text || '', m.actions) : [],
         tools_used: isAi && Array.isArray(m.tools_used) ? m.tools_used : [],
         blocks: isAi && Array.isArray(m.blocks) ? m.blocks : [],
       }

@@ -215,6 +215,10 @@ _QA_PROBLEM_HINTS = (
     "功课",
     "讲解",
     "答案",
+    "帮我看",
+    "帮我解",
+    "这道",
+    "这题",
 )
 
 _QA_PROBLEM_PHRASES = (
@@ -228,6 +232,12 @@ _QA_PROBLEM_PHRASES = (
     "我有数学",
     "我有语文",
     "我有英语",
+    "我有题",
+    "有道题",
+    "有个题",
+    "不会这题",
+    "学科问题",
+    "学科题",
 )
 
 
@@ -240,11 +250,18 @@ def should_route_to_qa(message: str) -> bool:
         return True
     if _qa_subject_from_message(text) and any(h in text for h in _QA_PROBLEM_HINTS):
         return True
+    # 「我有…题…怎么办」等口语
+    if "题" in text and any(h in text for h in ("怎么办", "怎么做", "不会", "求解", "答案")):
+        if not any(k in text for k in ("训练", "打卡", "开口窍", "超脑", "影像", "扫描")):
+            return True
     return False
 
 
 def _intent_from_reply(reply: str) -> str | None:
-    """回复正文明确导向某入口时，按钮与之对齐。"""
+    """回复正文明确导向某入口时，按钮与之对齐。
+
+    同时提到多个入口时：学科答疑优先于今日训练（避免兜底文案误贴训练按钮）。
+    """
     text = (reply or "").strip()
     if not text:
         return None
@@ -256,6 +273,14 @@ def _intent_from_reply(reply: str) -> str | None:
         return "talent"
     if "成长里程碑" in text:
         return "growth"
+    return None
+
+
+def primary_navigate_target(actions: list[dict] | None) -> str | None:
+    """从 actions 取主跳转 target（忽略 confirm）。"""
+    for a in actions or []:
+        if isinstance(a, dict) and a.get("type") == "navigate" and a.get("target") in NAVIGATE_TARGETS:
+            return str(a["target"])
     return None
 
 

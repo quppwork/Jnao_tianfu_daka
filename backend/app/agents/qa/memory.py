@@ -12,10 +12,15 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.models import QaMessage, QaSession
 
+from app.agents.memory_policy import (
+    MAX_DIGEST_CHARS,
+    HISTORY_KEEP_DEFAULT,
+    HISTORY_LOAD_DEFAULT,
+    fold_overflow_history as _fold_overflow_history,
+    digest_prompt_block,
+)
+
 MEMORY_VERSION = 1
-MAX_DIGEST_CHARS = 600
-HISTORY_KEEP_DEFAULT = 10
-HISTORY_LOAD_DEFAULT = 40
 
 
 def _empty_memory() -> dict[str, Any]:
@@ -54,35 +59,17 @@ def fold_overflow_history(
     *,
     keep: int = HISTORY_KEEP_DEFAULT,
 ) -> tuple[list[dict], dict[str, Any]]:
-    """超出 keep 的旧轮次压进 rolling_summary，返回尾部历史 + 更新后的 mem。"""
-    msgs = list(messages or [])
-    out_mem = deepcopy(mem) if mem else _empty_memory()
-    if keep <= 0 or len(msgs) <= keep:
-        return msgs, out_mem
-    older = msgs[:-keep]
-    recent = msgs[-keep:]
-    lines: list[str] = []
-    for m in older:
-        role = "学员" if m.get("role") == "user" else "老师"
-        c = str(m.get("content") or "").strip().replace("\n", " ")
-        if c:
-            lines.append(f"{role}:{c[:80]}")
-    chunk = "；".join(lines)
-    prev = str(out_mem.get("rolling_summary") or "").strip()
-    merged = f"{prev}；{chunk}".strip("；") if prev else chunk
-    if len(merged) > MAX_DIGEST_CHARS:
-        merged = "…" + merged[-(MAX_DIGEST_CHARS - 1) :]
-    out_mem["rolling_summary"] = merged
-    return recent, out_mem
+    return _fold_overflow_history(
+        messages,
+        mem,
+        keep=keep,
+        max_digest_chars=MAX_DIGEST_CHARS,
+        empty_mem_factory=_empty_memory,
+    )
 
 
 def memory_to_prompt_block(mem: dict[str, Any] | None) -> str:
-    if not mem:
-        return ""
-    digest = str(mem.get("rolling_summary") or "").strip()
-    if not digest:
-        return ""
-    return f"近期本题对话摘要: {digest}"
+    return digest_prompt_block(mem, label="近期本题对话摘要")
 
 
 class QaMemory:

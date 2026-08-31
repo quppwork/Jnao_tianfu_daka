@@ -88,12 +88,16 @@ class TestTrainingWindow:
 
         t0 = datetime(2026, 7, 8, 10, 0, 0, tzinfo=TZ)
         t1 = datetime(2026, 7, 8, 10, 10, 0, tzinfo=TZ)
-        with patch("app.services.training_service._user_now", return_value=t0):
-            with patch("app.services.training_service._today_for", return_value=plan_date):
-                first = _refresh_volatile_plan_fields(db_session, user.id, plan_date, stale)
-        with patch("app.services.training_service._user_now", return_value=t1):
-            with patch("app.services.training_service._today_for", return_value=plan_date):
-                second = _refresh_volatile_plan_fields(db_session, user.id, plan_date, stale)
+        with patch("app.services.training.plan_view._user_now", return_value=t0), \
+             patch("app.services.training.plan_view._today_for", return_value=plan_date), \
+             patch("app.services.training.service._user_now", return_value=t0), \
+             patch("app.services.training.service._today_for", return_value=plan_date):
+            first = _refresh_volatile_plan_fields(db_session, user.id, plan_date, stale)
+        with patch("app.services.training.plan_view._user_now", return_value=t1), \
+             patch("app.services.training.plan_view._today_for", return_value=plan_date), \
+             patch("app.services.training.service._user_now", return_value=t1), \
+             patch("app.services.training.service._today_for", return_value=plan_date):
+            second = _refresh_volatile_plan_fields(db_session, user.id, plan_date, stale)
 
         assert first["timer_remaining_seconds"] == 3600
         assert second["timer_remaining_seconds"] == 3000
@@ -126,8 +130,8 @@ class TestStalePlanCleanup:
         # 日切窗口 4:00–4:05 内同训练日方案视为 stale
         now = datetime(2026, 7, 7, 4, 2, 0, tzinfo=TZ).replace(tzinfo=None)
 
-        with patch("app.services.training_service._user_now", return_value=now):
-            with patch("app.services.training_service._today_for", return_value=plan_date):
+        with patch("app.services.training.service._user_now", return_value=now):
+            with patch("app.services.training.service._today_for", return_value=plan_date):
                 result = _resolve_today_plan(db_session, user.id, plan_date)
 
         assert result is None
@@ -250,8 +254,8 @@ class TestOpenTodaySmoothTransition:
 
         user, plan, plan_date = self._make_plan(db_session, suffix="1")
         now = datetime(2026, 8, 13, 10, 0, 0, tzinfo=TZ)
-        with patch("app.services.training_service._user_now", return_value=now):
-            with patch("app.services.training_service._today_for", return_value=plan_date):
+        with patch("app.services.training.plan_view._user_now", return_value=now):
+            with patch("app.services.training.plan_view._today_for", return_value=plan_date):
                 out = _plan_to_response(plan, now=now, db=db_session)
         assert out["timer_phase"] == "setup"
         assert out["pending_confirm"] is True
@@ -267,8 +271,8 @@ class TestOpenTodaySmoothTransition:
 
         user, plan, plan_date = self._make_plan(db_session, watch_pct=15, suffix="2")
         now = datetime(2026, 8, 13, 10, 0, 0, tzinfo=TZ)
-        with patch("app.services.training_service._user_now", return_value=now):
-            with patch("app.services.training_service._today_for", return_value=plan_date):
+        with patch("app.services.training.plan_view._user_now", return_value=now):
+            with patch("app.services.training.plan_view._today_for", return_value=plan_date):
                 healed = _heal_started_plan_missing_window(db_session, user.id, plan)
                 out = _plan_to_response(plan, now=now, db=db_session)
         assert healed is True
@@ -286,8 +290,8 @@ class TestOpenTodaySmoothTransition:
 
         user, plan, plan_date = self._make_plan(db_session, suffix="3")
         now = datetime(2026, 8, 13, 10, 0, 0, tzinfo=TZ)
-        with patch("app.services.training_service._user_now", return_value=now):
-            with patch("app.services.training_service._today_for", return_value=plan_date):
+        with patch("app.services.training.plan_view._user_now", return_value=now):
+            with patch("app.services.training.plan_view._today_for", return_value=plan_date):
                 healed = _heal_started_plan_missing_window(db_session, user.id, plan)
         assert healed is False
         assert get_training_window(db_session, user.id, plan_date) is None

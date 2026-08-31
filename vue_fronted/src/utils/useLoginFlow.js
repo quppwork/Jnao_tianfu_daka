@@ -2,7 +2,7 @@
  * 登录流程状态机 — 鉴权 /  settling / 跳转，session 已写入时不报失败
  */
 import { computed, ref } from 'vue'
-import { getLoggedInUserId, hasUserSession } from './userApi.js'
+import { getLoggedInUserId, hasUserSession } from './api/client.js'
 
 export function minDelay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))

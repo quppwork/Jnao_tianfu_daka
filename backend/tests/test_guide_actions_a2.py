@@ -116,6 +116,28 @@ def test_resolve_reply_actions_reply_mentions_qa():
     assert acts and acts[0]["target"] == "qa"
 
 
+def test_resolve_reply_actions_short_qa_reply_overrides_train():
+    """回复仅「去学科答疑」时，按钮不得仍是今日训练。"""
+    acts = resolve_reply_actions(
+        situation_next="train",
+        message="这题怎么做",
+        reply="去「学科答疑」",
+        has_assessment=True,
+    )
+    assert acts and acts[0]["target"] == "qa"
+
+
+def test_primary_navigate_target_sync():
+    from app.agents.shared.handoff import primary_navigate_target
+
+    acts = resolve_reply_actions(
+        situation_next="train",
+        message="我有数学题我该怎么办",
+        has_assessment=True,
+    )
+    assert primary_navigate_target(acts) == "qa"
+
+
 def test_situation_label():
     assert "测评" in situation_label("need_assessment")
     assert situation_label("unknown") == ""
