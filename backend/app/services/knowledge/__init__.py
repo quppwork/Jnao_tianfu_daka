@@ -97,16 +97,49 @@ class BailianKnowledgeBackend:
             )
         except Exception:
             return None
-        if not chat or not (chat.text or "").strip():
+        if not chat or not (chat.reply or "").strip():
             return None
         return KnowledgeAnswer(
             kind="chat",
             query=query,
-            text=(chat.text or "").strip(),
-            sources=list(getattr(chat, "sources", None) or []),
+            text=(chat.reply or "").strip(),
+            sources=[
+                str(d.get("doc_name") or d.get("title") or "")
+                for d in (chat.retrieved_docs or [])
+                if isinstance(d, dict)
+            ],
             chat=chat,
-            meta={"aid": agent_id},
+            meta={"aid": agent_id, "request_id": chat.request_id},
         )
+
+
+def answer_chat_sync(
+    query: str,
+    *,
+    aid: str,
+    timeout: float = 90,
+) -> KnowledgeAnswer | None:
+    """同步入口（工具注册表 / 非 async 上下文）。"""
+    from app.services.bailian.knowledge_chat import knowledge_chat_sync
+
+    agent_id = (aid or "").strip()
+    if not agent_id:
+        return None
+    chat = knowledge_chat_sync(query, aid=agent_id, timeout=timeout)
+    if not chat or not (chat.reply or "").strip():
+        return None
+    return KnowledgeAnswer(
+        kind="chat",
+        query=query,
+        text=(chat.reply or "").strip(),
+        sources=[
+            str(d.get("doc_name") or d.get("title") or "")
+            for d in (chat.retrieved_docs or [])
+            if isinstance(d, dict)
+        ],
+        chat=chat,
+        meta={"aid": agent_id, "request_id": chat.request_id},
+    )
 
 
 _default_backend: KnowledgeBackend | None = None

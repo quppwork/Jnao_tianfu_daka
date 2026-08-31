@@ -4,10 +4,11 @@
 
 | 系统 | 方式 |
 |------|------|
-| **Windows** | 双击根目录 `start.bat`，或 `scripts\start_all.bat` / `start_all.ps1` |
+| **Windows** | 双击根目录 `start.bat`（内部调 `scripts\start_all.ps1`）；或 `scripts\start_all.bat` |
 | **Linux/Mac** | `bash scripts/start_all.sh` |
 
-根目录 `start.bat` / `stop.bat` / `reset.bat` 为 Windows 快捷入口；详细逻辑在 `scripts/`。
+**不要**再维护第二套「一键启停」逻辑：根目录 `start.bat` / `stop.bat` / `reset.bat` 只做转发；
+真实流程集中在 `scripts/start_all.ps1`、`stop_all.ps1`、`run_backend.ps1`、`run_frontend.ps1`。
 
 - 后端 → http://127.0.0.1:8012
 - 前端 → http://127.0.0.1:5185

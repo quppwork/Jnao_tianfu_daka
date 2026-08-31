@@ -77,23 +77,29 @@ async def test_run_guide_kb_turn_mock_query(monkeypatch):
 
     from app.agents.guide.context import GuideContext
     from app.agents.guide import kb_agent
+    from app.services.knowledge import KnowledgeAnswer
 
     kb_agent.get_kb_registry.cache_clear()
+
+    ans = KnowledgeAnswer(
+        kind="chat",
+        query="开口窍怎么练",
+        text="开口窍从慢到快练朗读，先去今日训练看示范。",
+        sources=[],
+        chat=type(
+            "R",
+            (),
+            {"reply": "开口窍从慢到快练朗读，先去今日训练看示范。", "request_id": "r1", "retrieved_docs": []},
+        )(),
+        meta={"request_id": "r1"},
+    )
 
     with patch(
         "app.agents.guide.kb_agent.plan_kb_tool_calls",
         new=AsyncMock(return_value=[]),
     ), patch(
-        "app.agents.guide.tools.kb_tools.knowledge_chat_sync",
-        return_value=type(
-            "R",
-            (),
-            {
-                "reply": "开口窍从慢到快练朗读，先去今日训练看示范。",
-                "request_id": "r1",
-                "retrieved_docs": [],
-            },
-        )(),
+        "app.agents.guide.tools.kb_tools.answer_chat_sync",
+        return_value=ans,
     ), patch(
         "app.agents.guide.runner._meta_from_ctx",
         return_value={"actions": [], "tools_used": []},

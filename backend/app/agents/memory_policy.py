@@ -5,6 +5,12 @@
 - 答疑：qa_session.meta_json rolling_summary（随会话删清）
 
 本模块只统一「怎么压历史、摘要多长、进 prompt 的标签」。
+
+写入时机约定：
+1. 生成前（必写）：fold 溢出 +（引导）抽取用户意向 → save；答疑仅在
+   rolling_summary 变化时 save_session_memory。
+2. 助手正文：进会话消息表，不回灌进 digest（避免双写膨胀）。
+3. 显式画像写入：仅引导 writes 确认卡白名单，确认后落库。
 """
 
 from __future__ import annotations
