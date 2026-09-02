@@ -11,6 +11,7 @@ from app.core.deps import (
     get_authenticated_user,
     get_db,
 )
+from app.core.biz_log import biz_event, biz_timer
 from app.core.cache import (
     cache_get_json,
     cache_set_json,
@@ -101,15 +102,23 @@ async def schedule_training(
     plan_date: date | None = Query(None),
 ):
     """按今日训练时长排课：豆包路由 A/B 音频 + 天赋固定视频"""
-    try:
-        return await schedule_training_by_duration(
-            db,
-            child_user_id,
-            req.planned_minutes,
-            plan_date=plan_date,
-        )
-    except TrainingError as e:
-        raise HTTPException(e.status_code, e.message) from e
+    with biz_timer(
+        "training.schedule",
+        minutes=req.planned_minutes,
+        plan_date=str(plan_date) if plan_date else "today",
+    ) as ctx:
+        try:
+            return await schedule_training_by_duration(
+                db,
+                child_user_id,
+                req.planned_minutes,
+                plan_date=plan_date,
+            )
+        except TrainingError as e:
+            ctx["result"] = f"fail_{e.status_code}"
+            ctx["level"] = "warning"
+            ctx["fields"]["err"] = e.message[:60]
+            raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/video/talent", response_model=TalentVideoResponse)
@@ -222,10 +231,13 @@ def training_entry(
     db: Session = Depends(get_db),
 ):
     """训练页入口：优先检查最新天赋并同步今日方案状态"""
-    try:
-        return training_service.get_training_entry(db, child_user_id)
-    except TrainingError as e:
-        raise HTTPException(e.status_code, e.message) from e
+    with biz_timer("training.entry") as ctx:
+        try:
+            return training_service.get_training_entry(db, child_user_id)
+        except TrainingError as e:
+            ctx["result"] = f"fail_{e.status_code}"
+            ctx["level"] = "warning"
+            raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/today", response_model=TrainingTodayResponse)
@@ -236,12 +248,19 @@ async def training_today(
     skip_ai: bool = Query(False, description="跳过 AI 生成，加快首屏"),
 ):
     """今日训练方案：按天赋推送音频 + AI 生成今日指令（参考昨日打卡）"""
-    try:
-        return await ensure_plan_report(
-            db, child_user_id, plan_date, skip_ai=skip_ai
-        )
-    except TrainingError as e:
-        raise HTTPException(e.status_code, e.message) from e
+    with biz_timer(
+        "training.today",
+        plan_date=str(plan_date) if plan_date else "today",
+        skip_ai=skip_ai,
+    ) as ctx:
+        try:
+            return await ensure_plan_report(
+                db, child_user_id, plan_date, skip_ai=skip_ai
+            )
+        except TrainingError as e:
+            ctx["result"] = f"fail_{e.status_code}"
+            ctx["level"] = "warning"
+            raise HTTPException(e.status_code, e.message) from e
 
 
 @router.post("/checkin", response_model=CheckinResponse)
@@ -250,22 +269,32 @@ def training_checkin(
     child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
-    try:
-        return training_service.submit_checkin(
-            db,
-            child_user_id,
-            plan_id=req.plan_id,
-            item_id=req.item_id,
-            ability_type=req.ability_type,
-            time_spent=req.time_spent,
-            content=req.content,
-            result=req.result,
-            note=req.note,
-            attitude_pct=req.attitude_pct,
-            cards=req.cards,
-        )
-    except TrainingError as e:
-        raise HTTPException(e.status_code, e.message) from e
+    with biz_timer(
+        "training.checkin",
+        plan_id=req.plan_id,
+        item_id=req.item_id,
+        ability=req.ability_type,
+    ) as ctx:
+        try:
+            out = training_service.submit_checkin(
+                db,
+                child_user_id,
+                plan_id=req.plan_id,
+                item_id=req.item_id,
+                ability_type=req.ability_type,
+                time_spent=req.time_spent,
+                content=req.content,
+                result=req.result,
+                note=req.note,
+                attitude_pct=req.attitude_pct,
+                cards=req.cards,
+            )
+            return out
+        except TrainingError as e:
+            ctx["result"] = f"fail_{e.status_code}"
+            ctx["level"] = "warning"
+            ctx["fields"]["err"] = e.message[:60]
+            raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/checkin/today", response_model=list[CheckinRecordOut])
@@ -399,12 +428,15 @@ def set_window(
     child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
-    try:
-        return training_service.set_training_window(
-            db, child_user_id, req.start_time, req.end_time
-        )
-    except TrainingError as e:
-        raise HTTPException(e.status_code, e.message) from e
+    with biz_timer("training.window_set") as ctx:
+        try:
+            return training_service.set_training_window(
+                db, child_user_id, req.start_time, req.end_time
+            )
+        except TrainingError as e:
+            ctx["result"] = f"fail_{e.status_code}"
+            ctx["level"] = "warning"
+            raise HTTPException(e.status_code, e.message) from e
 
 
 @router.get("/window", response_model=WindowResponse)

@@ -27,10 +27,12 @@ def _require_parent_id(
     db: Session = Depends(get_db),
 ) -> int:
     from app.services import auth_service
+    from app.core.biz_log import bind_user
 
     user = auth_service.get_child_user(db, user_id)
     if not user or user.role != auth_service.ROLE_PARENT:
         raise HTTPException(403, "需要家长账号")
+    bind_user(user_id, role=auth_service.ROLE_PARENT)
     return user_id
 
 
@@ -102,8 +104,17 @@ def create_child(
         region=req.region,
     )
     from app.services import auth_service
+    from app.core.biz_log import biz_event
 
     invalidate_user_profile(child.id)
+    biz_event(
+        "parent.child_create",
+        result="ok",
+        uid=user_id,
+        role="parent",
+        child_id=child.id,
+        login_name=child.login_name or "-",
+    )
     return ChildSummaryOut(**auth_service.child_summary(db, child))
 
 
@@ -127,6 +138,15 @@ def update_child(
     from app.services import auth_service
 
     invalidate_user_profile(child.id)
+    from app.core.biz_log import biz_event
+
+    biz_event(
+        "parent.child_update",
+        result="ok",
+        uid=user_id,
+        role="parent",
+        child_id=child.id,
+    )
     return ChildSummaryOut(**auth_service.child_summary(db, child))
 
 
@@ -137,6 +157,15 @@ def delete_child(
     db: Session = Depends(get_db),
 ):
     parent_service.delete_child(db, user_id, child_id)
+    from app.core.biz_log import biz_event
+
+    biz_event(
+        "parent.child_delete",
+        result="ok",
+        uid=user_id,
+        role="parent",
+        child_id=child_id,
+    )
     return {"ok": True}
 
 

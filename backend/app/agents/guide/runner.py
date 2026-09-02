@@ -5,6 +5,7 @@ guide_service 只负责会话落库，生成回复一律走本模块。
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -44,6 +45,8 @@ from app.core.logger import get_logger
 logger = get_logger("guide.runner")
 
 HISTORY_MAX_TURNS = 12
+# legacy 路径：工具与知识外呼并行时的外层超时（秒）
+LEGACY_PARALLEL_TIMEOUT = 45.0
 
 RAG_PRACTICE_ANSWER_HINT = (
     "本轮为练法类问题：从知识库参考提炼 1–2 条可操作方法，用教练口吻转述；"
@@ -180,17 +183,21 @@ def build_kb_primary_system_prompt(
 
 
 async def _gather_rag(message: str) -> tuple[str, list[str]]:
-    """百炼 Retrieve 切片 → rag_block（主链路，BAILIAN_RAG_GENERATE=0 时）。"""
-    from app.services.bailian import guide_rag_query
+    """知识后端 Retrieve 切片 → rag_block（主链路，BAILIAN_RAG_GENERATE=0 时）。"""
     from app.services.guide_rag_query import build_guide_rag_query
     from app.services.guide_rag_router import should_guide_use_rag
+    from app.services.knowledge import get_knowledge_backend
 
     if not should_guide_use_rag(message):
         return "", []
     query = build_guide_rag_query(message)
-    rag = await guide_rag_query(query)
-    if not rag or not rag.rag_block:
+    ans = await get_knowledge_backend().retrieve_chunks(query, timeout=20)
+    if not ans or not ans.rag or not ans.rag.rag_block:
+        # 兼容：若后端只填了 text
+        if ans and ans.text:
+            return ans.text, list(ans.sources or [])
         return "", []
+    rag = ans.rag
     sources = list(rag.sources)
     logger.info(
         "guide rag mode=%s nodes=%s query=%r sources=%s",
@@ -257,7 +264,12 @@ def _prepare_memory_and_history(
     message: str,
     history: list[dict] | None,
 ) -> tuple[list[dict], str]:
-    """折叠超长历史、抽取本轮用户话、落库记忆，返回 (hist, memory_block)。"""
+    """引导记忆写入时机（与 QaMemory.prepare_history_and_digest 对齐）：
+
+    1. 生成前：fold 溢出 → 抽取本轮用户话 → **立即 save**（失败重试也保留意向）
+    2. 助手回复：由 guide_service 落会话消息，不回写 guide_memory 正文
+    3. 显式「记下」：走 writes 确认卡，确认后才写画像（见 propose_write_confirms）
+    """
     mem = load_guide_memory(db, child_user_id)
     full = list(history or [])
     full, mem = fold_overflow_history(full, mem, keep=HISTORY_MAX_TURNS)
@@ -265,6 +277,66 @@ def _prepare_memory_and_history(
     save_guide_memory(db, child_user_id, mem)
     hist = truncate_history(full, max_turns=HISTORY_MAX_TURNS)
     return hist, memory_to_prompt_block(mem)
+
+
+async def _legacy_tools_and_knowledge(
+    db: Session,
+    child_user_id: int,
+    message: str,
+    *,
+    history: list[dict],
+    use_tools: bool,
+    memory_block: str,
+    rag_route_hit: bool,
+    rag_generate: bool,
+) -> tuple[list[dict[str, Any]], str, str | None, str, list[str]]:
+    """LEGACY_RAG：工具与百炼直答/Retrieve 并行，外层 wait_for 防拖死。"""
+    tools_used: list[dict[str, Any]] = []
+    tool_block = ""
+    bailian_reply: str | None = None
+    rag_block, rag_sources = "", []
+    try:
+        if rag_route_hit and rag_generate:
+            (tools_used, tool_block), (bailian_reply, _) = await asyncio.wait_for(
+                asyncio.gather(
+                    _gather_tools(
+                        db, child_user_id, message, history=history, use_tools=use_tools
+                    ),
+                    _try_bailian_direct_reply(
+                        db, child_user_id, message, memory_block=memory_block
+                    ),
+                ),
+                timeout=LEGACY_PARALLEL_TIMEOUT,
+            )
+            if not bailian_reply:
+                rag_block, rag_sources = await asyncio.wait_for(
+                    _gather_rag(message), timeout=25.0
+                )
+        elif rag_route_hit:
+            (tools_used, tool_block), (rag_block, rag_sources) = await asyncio.wait_for(
+                asyncio.gather(
+                    _gather_tools(
+                        db, child_user_id, message, history=history, use_tools=use_tools
+                    ),
+                    _gather_rag(message),
+                ),
+                timeout=LEGACY_PARALLEL_TIMEOUT,
+            )
+        else:
+            tools_used, tool_block = await asyncio.wait_for(
+                _gather_tools(
+                    db, child_user_id, message, history=history, use_tools=use_tools
+                ),
+                timeout=LEGACY_PARALLEL_TIMEOUT,
+            )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "guide legacy parallel timeout uid=%s rag=%s generate=%s",
+            child_user_id,
+            rag_route_hit,
+            rag_generate,
+        )
+    return tools_used, tool_block, bailian_reply, rag_block, rag_sources
 
 
 def _meta_from_ctx(
@@ -521,21 +593,26 @@ async def run_chat(
         )
         return finalize_guide_payload(reply=text, meta=meta, path=GuidePath.MINIMAL)
 
-    tools_used, tool_block = await _gather_tools(
-        db, child_user_id, message, history=hist, use_tools=use_tools
-    )
-
     from app.services.bailian.config import load_bailian_config
     from app.services.guide_rag_router import should_guide_use_rag
 
     cfg = load_bailian_config()
     rag_route_hit = should_guide_use_rag(message)
+    path = GuidePath.LEGACY_RAG
 
-    bailian_reply: str | None = None
-    if rag_route_hit and cfg.rag_generate:
-        bailian_reply, _ = await _try_bailian_direct_reply(
-            db, child_user_id, message, memory_block=memory_block
+    tools_used, tool_block, bailian_reply, rag_block, rag_sources = (
+        await _legacy_tools_and_knowledge(
+            db,
+            child_user_id,
+            message,
+            history=hist,
+            use_tools=use_tools,
+            memory_block=memory_block,
+            rag_route_hit=rag_route_hit,
+            rag_generate=bool(cfg.rag_generate),
         )
+    )
+
     if bailian_reply:
         text = bailian_reply
         meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
@@ -555,16 +632,14 @@ async def run_chat(
                 stream=False,
             )
         )
-        return {"reply": text, **meta}
+        return finalize_guide_payload(reply=text, meta=meta, path=path)
 
     if rag_route_hit and not cfg.rag_fallback_doubao:
         text = "知识库暂时不可用，请稍后再试或直接去今日训练看看。"
         meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
         meta["rag_used"] = True
         meta["rag_source"] = "retrieve_unavailable"
-        return {"reply": text, **meta}
-
-    rag_block, rag_sources = await _gather_rag(message) if rag_route_hit else ("", [])
+        return finalize_guide_payload(reply=text, meta=meta, path=path)
 
     if rag_route_hit and not rag_block:
         from app.services.guide_rag_fallback import build_rag_miss_fallback
@@ -588,7 +663,7 @@ async def run_chat(
                     stream=False,
                 )
             )
-            return {"reply": fallback, **meta}
+            return finalize_guide_payload(reply=fallback, meta=meta, path=path)
         logger.warning("guide retrieve empty, doubao without kb chunks uid=%s", child_user_id)
 
     if rag_block:
@@ -640,10 +715,7 @@ async def run_chat(
             stream=False,
         )
     )
-    return {
-        "reply": text,
-        **meta,
-    }
+    return finalize_guide_payload(reply=text, meta=meta, path=path)
 
 
 async def run_chat_stream(
@@ -753,23 +825,27 @@ async def run_chat_stream(
         )
         return
 
-    tools_used, tool_block = await _gather_tools(
-        db, child_user_id, message, history=hist, use_tools=use_tools
-    )
-
     from app.services.bailian.config import load_bailian_config
     from app.services.guide_rag_router import should_guide_use_rag
 
     cfg = load_bailian_config()
     rag_route_hit = should_guide_use_rag(message)
 
-    bailian_reply: str | None = None
-    if rag_route_hit and cfg.rag_generate:
-        bailian_reply, _ = await _try_bailian_direct_reply(
-            db, child_user_id, message, memory_block=memory_block
+    tools_used, tool_block, bailian_reply, rag_block, rag_sources = (
+        await _legacy_tools_and_knowledge(
+            db,
+            child_user_id,
+            message,
+            history=hist,
+            use_tools=use_tools,
+            memory_block=memory_block,
+            rag_route_hit=rag_route_hit,
+            rag_generate=bool(cfg.rag_generate),
         )
+    )
     # 流式前先按问句意图出按钮；完整 reply 结束后再对齐一次
     meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used)
+    meta["pipeline_path"] = GuidePath.LEGACY_RAG.value
     if bailian_reply or rag_route_hit:
         meta["rag_used"] = True
         if bailian_reply:
@@ -784,6 +860,7 @@ async def run_chat_stream(
         )
         meta["rag_used"] = True
         meta["rag_source"] = "bailian_generate"
+        meta["pipeline_path"] = GuidePath.LEGACY_RAG.value
         yield ("meta", meta)
         yield ("token", bailian_reply)
         leak_hits = scan_guide_leaks(bailian_reply)
@@ -806,7 +883,6 @@ async def run_chat_stream(
         yield ("token", "知识库暂时不可用，请稍后再试。")
         return
 
-    rag_block, rag_sources = await _gather_rag(message) if rag_route_hit else ("", [])
     if rag_route_hit and not rag_block:
         from app.services.guide_rag_fallback import build_rag_miss_fallback
 
@@ -817,6 +893,7 @@ async def run_chat_stream(
             )
             meta["rag_source"] = "template_fallback"
             meta["rag_used"] = True
+            meta["pipeline_path"] = GuidePath.LEGACY_RAG.value
             yield ("meta", meta)
             yield ("token", fallback)
             emit_guide_trace(

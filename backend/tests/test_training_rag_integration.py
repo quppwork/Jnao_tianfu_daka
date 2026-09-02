@@ -122,6 +122,9 @@ async def test_guide_bailian_direct_skips_doubao(monkeypatch):
             "app.agents.guide.runner._prepare_memory_and_history",
             return_value=([], ""),
         ), patch(
+            "app.agents.guide.kb_agent.guide_kb_agent_ready",
+            return_value=False,
+        ), patch(
             "app.agents.guide.runner._gather_tools",
             new=AsyncMock(return_value=([], "")),
         ), patch(
@@ -130,4 +133,5 @@ async def test_guide_bailian_direct_skips_doubao(monkeypatch):
         ):
             result = await run_chat(_Db(), 1, "学者有什么特点")
         assert "学者" in result["reply"]
+        assert result.get("pipeline_path") == "legacy_rag"
         doubao.assert_not_called()

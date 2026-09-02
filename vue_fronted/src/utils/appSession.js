@@ -44,7 +44,9 @@ export function isPublicPath(path) {
 /** @returns {'admin'|'parent'|'student'|null} */
 export function inferAuthKindFromPath(path) {
   const p = normalizePath(path)
-  if (isPublicPath(p)) return null
+  // 冷启动常见 route=/ 或空：勿当成学生业务页去鉴权（会误弹「请先登录孩子账号」）
+  if (!p || p === '/' || isPublicPath(p)) return null
+  if (!p.startsWith('/pages/')) return null
   if (p.startsWith('/pages/admin/')) return 'admin'
   if (p.startsWith('/pages/parent/')) return 'parent'
   return 'student'

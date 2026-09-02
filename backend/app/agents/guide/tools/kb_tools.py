@@ -1,4 +1,4 @@
-"""百炼知识库 Agent 工具 — 只读。"""
+"""百炼知识库 Agent 工具 — 只读；经 KnowledgeBackend 抽象，便于换源。"""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.agents.guide.tools import register
 from app.core.logger import get_logger
-from app.services.bailian.knowledge_chat import knowledge_chat_sync
 from app.services.kb_registry import get_kb_registry
+from app.services.knowledge import answer_chat_sync
 
 logger = get_logger("guide.tools.kb")
 
@@ -45,8 +45,8 @@ def query_knowledge(
     if not src:
         return {"ok": False, "error": "未知知识源，请先 list_knowledge_sources"}
 
-    result = knowledge_chat_sync(query, aid=src.aid, timeout=timeout)
-    if not result or not (result.reply or "").strip():
+    result = answer_chat_sync(query, aid=src.aid, timeout=timeout)
+    if not result or not (result.text or "").strip():
         return {
             "ok": False,
             "error": "knowledge/chat 无有效回复",
@@ -54,13 +54,14 @@ def query_knowledge(
             "aid": src.aid,
         }
 
+    chat = result.chat
     return {
         "ok": True,
-        "reply": result.reply.strip(),
+        "reply": result.text.strip(),
         "source_key": src.key,
         "source_name": src.name,
         "aid": src.aid,
-        "request_id": result.request_id,
-        "reply_len": len(result.reply),
-        "retrieved_doc_count": len(result.retrieved_docs),
+        "request_id": (chat.request_id if chat else None) or result.meta.get("request_id"),
+        "reply_len": len(result.text),
+        "retrieved_doc_count": len(chat.retrieved_docs) if chat else 0,
     }

@@ -33,6 +33,12 @@ describe('normalizePath / inferAuthKindFromPath', () => {
     expect(inferAuthKindFromPath('/pages/login/index')).toBeNull()
     expect(isPublicPath('/pages/login/register-parent')).toBe(true)
   })
+
+  it('冷启动根路径 → null（勿当学生鉴权）', () => {
+    expect(inferAuthKindFromPath('/')).toBeNull()
+    expect(inferAuthKindFromPath('')).toBeNull()
+    expect(inferAuthKindFromPath('/favicon.ico')).toBeNull()
+  })
 })
 
 describe('readAuthSnapshot — 三端 session 槽位互不干扰', () => {

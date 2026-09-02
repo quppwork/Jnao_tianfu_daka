@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_db
+from app.core.biz_log import biz_event, biz_timer
 from app.core.logger import get_logger
 from app.core.rate_limit import check_guide_chat_limits
 from app.core.security import is_debug_routes_enabled
@@ -178,17 +179,20 @@ async def guide_bootstrap(
     db: Session = Depends(get_db),
 ):
     """进首页开场：按情境返回欢迎语（模板保底，可选 LLM）。"""
-    result = await guide_service.bootstrap(
-        db,
-        child_user_id,
-        force=req.force,
-        use_llm=req.use_llm,
-    )
-    logger.info(
-        f"Guide bootstrap uid={child_user_id} situation={result.get('situation')} "
-        f"source={result.get('source')}"
-    )
-    return result
+    with biz_timer("guide.bootstrap", force=req.force, use_llm=req.use_llm) as ctx:
+        result = await guide_service.bootstrap(
+            db,
+            child_user_id,
+            force=req.force,
+            use_llm=req.use_llm,
+        )
+        ctx["fields"]["situation"] = result.get("situation")
+        ctx["fields"]["source"] = result.get("source")
+        logger.info(
+            f"Guide bootstrap uid={child_user_id} situation={result.get('situation')} "
+            f"source={result.get('source')}"
+        )
+        return result
 
 
 @router.post("/clear")
@@ -197,6 +201,7 @@ def guide_clear(
     db: Session = Depends(get_db),
 ):
     cleared = guide_service.clear_sessions(db, child_user_id)
+    biz_event("guide.clear", result="ok", cleared=cleared)
     return {"cleared": cleared}
 
 
@@ -226,13 +231,21 @@ async def guide_chat(
 ):
     check_guide_chat_limits(child_user_id)
     if not is_configured():
+        biz_event("guide.chat", result="no_ai_config")
         return {"reply": "AI 服务未配置，请先设置豆包 API Key。", "session_id": req.session_id}
 
-    result = await guide_service.chat(
-        db, child_user_id, req.message, session_id=req.session_id
-    )
-    logger.info(f"Guide chat uid={child_user_id}: {req.message[:30]}...")
-    return result
+    with biz_timer(
+        "guide.chat",
+        session_id=req.session_id,
+        msg_len=len(req.message or ""),
+    ) as ctx:
+        result = await guide_service.chat(
+            db, child_user_id, req.message, session_id=req.session_id
+        )
+        ctx["fields"]["path"] = (result or {}).get("pipeline_path") or "-"
+        ctx["fields"]["rag"] = (result or {}).get("rag_source") or "-"
+        logger.info(f"Guide chat uid={child_user_id}: {req.message[:30]}...")
+        return result
 
 
 @router.post("/chat/stream")
@@ -243,9 +256,16 @@ async def guide_chat_stream(
 ):
     """SSE 流式引导对话"""
     check_guide_chat_limits(child_user_id)
+    biz_event(
+        "guide.chat_stream",
+        result="start",
+        session_id=req.session_id,
+        msg_len=len(req.message or ""),
+    )
 
     async def events():
         if not is_configured():
+            biz_event("guide.chat_stream", result="no_ai_config")
             yield sse_json({"type": "error", "message": "AI 服务未配置，请先设置豆包 API Key。"})
             yield sse_done()
             return
@@ -255,6 +275,7 @@ async def guide_chat_stream(
             )
         ):
             yield chunk
+        biz_event("guide.chat_stream", result="ok")
 
     return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 

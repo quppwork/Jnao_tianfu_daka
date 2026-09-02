@@ -1,6 +1,12 @@
 """Agent 间交接协议 — 仅 navigate / handoff，禁止 Agent 互相调用 runner。
 
 Guide → 前端跳转答疑/训练等；不在此 import agents.qa。
+
+协议要点：
+- actions[]：{type: navigate|confirm_write, target|write_op, label, ...}
+- next_action：主按钮 target（与 actions 中 navigate 对齐）
+- should_route_to_qa：路由层纯函数；真正跳转靠前端执行 actions
+- 跨 Agent 不直接 await 对方 runner，只交付 payload / 按钮
 """
 
 from __future__ import annotations

@@ -95,7 +95,11 @@ class QaMemory:
         load_limit: int = HISTORY_LOAD_DEFAULT,
         keep: int = HISTORY_KEEP_DEFAULT,
     ) -> tuple[list[dict], str]:
-        """加载历史 → 折叠溢出进会话摘要 → 返回 (截断历史, prompt 块)。"""
+        """生成前：加载历史 → 折叠溢出进会话摘要 → 有变化则落库。
+
+        写入时机见 memory_policy 模块说明；助手回复只写入 QaMessage，
+        不在此回写 rolling_summary。
+        """
         full = QaMemory.load_chat_history(session, limit=load_limit)
         mem = load_session_memory(session)
         history, mem = fold_overflow_history(full, mem, keep=keep)

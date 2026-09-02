@@ -135,6 +135,40 @@ def mock_doubao():
             return_value={"role": "assistant", "content": ""},
         ) as mock_fc,
         patch("app.services.doubao_client.is_configured", return_value=True),
+        # 本机若配置了百炼选库，禁止走真外呼；单测一律走 mock 豆包兜底
+        patch("app.agents.guide.kb_agent.guide_kb_agent_ready", return_value=False),
+        patch(
+            "app.agents.guide.kb_agent.run_guide_kb_turn",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        # kb_tools 模块级 import，必须打在使用处
+        patch(
+            "app.agents.guide.tools.kb_tools.answer_chat_sync",
+            return_value=None,
+        ),
+        patch(
+            "app.services.knowledge.answer_chat_sync",
+            return_value=None,
+        ),
+        patch(
+            "app.agents.guide.runner._try_bailian_direct_reply",
+            new_callable=AsyncMock,
+            return_value=(None, False),
+        ),
+        patch(
+            "app.agents.guide.runner._gather_rag",
+            new_callable=AsyncMock,
+            return_value=("", []),
+        ),
+        patch(
+            "app.services.guide_rag_router.should_guide_use_rag",
+            return_value=False,
+        ),
+        patch(
+            "app.services.guide_rag_fallback.build_rag_miss_fallback",
+            return_value=None,
+        ),
     ):
         yield {"chat": mock_chat, "stream": _fake_stream, "fc": mock_fc}
 

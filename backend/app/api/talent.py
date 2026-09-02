@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_db
+from app.core.biz_log import biz_event, biz_timer
 from app.core.cache import (
     cache_get_json,
     cache_set_json,
@@ -67,47 +68,54 @@ async def talent_report(
     db: Session = Depends(get_db),
 ):
     """提交答案 + 获取报告（一步完成），落库到当前登录学生"""
-    try:
-        record_id = await jnao_submit(req.answer, req.uid, req.type)
-        report = await jnao_get_report(record_id)
-        assessment_id = None
-        conflict = False
-        locked = False
-        lock_msg = None
-        current_talent = None
-        user = db.get(ChildUser, child_user_id)
-        if user and user.profile_json:
-            current_talent = (user.profile_json or {}).get("talent_primary")
-        row = assessment_service.save_assessment(
-            db,
-            child_user_id=child_user_id,
-            jnao_record_id=str(record_id),
-            answer_bitstring=req.answer,
-            test_type=req.type,
-            report=report,
-        )
-        assessment_id = row.id
-        conflict = getattr(row, "_talent_conflict", False)
-        locked = getattr(row, "_talent_locked", False)
-        last_chance = getattr(row, "_talent_last_chance", False)
-        _invalidate_assessment_caches(child_user_id)
-        if locked:
-            lock_msg = assessment_service.TALENT_LOCK_MSG
-        if conflict and user:
-            db.refresh(user)
-            current_talent = (user.profile_json or {}).get("talent_primary") or current_talent
-        return {
-            "code": 1,
-            "data": report,
-            "assessment_id": assessment_id,
-            "talent_conflict": conflict,
-            "talent_locked": locked,
-            "talent_last_chance": last_chance,
-            "lock_message": lock_msg,
-            "current_talent": current_talent,
-        }
-    except Exception as e:
-        raise HTTPException(502, str(e)) from e
+    with biz_timer("talent.report", test_type=req.type) as ctx:
+        try:
+            record_id = await jnao_submit(req.answer, req.uid, req.type)
+            report = await jnao_get_report(record_id)
+            assessment_id = None
+            conflict = False
+            locked = False
+            lock_msg = None
+            current_talent = None
+            user = db.get(ChildUser, child_user_id)
+            if user and user.profile_json:
+                current_talent = (user.profile_json or {}).get("talent_primary")
+            row = assessment_service.save_assessment(
+                db,
+                child_user_id=child_user_id,
+                jnao_record_id=str(record_id),
+                answer_bitstring=req.answer,
+                test_type=req.type,
+                report=report,
+            )
+            assessment_id = row.id
+            conflict = getattr(row, "_talent_conflict", False)
+            locked = getattr(row, "_talent_locked", False)
+            last_chance = getattr(row, "_talent_last_chance", False)
+            _invalidate_assessment_caches(child_user_id)
+            if locked:
+                lock_msg = assessment_service.TALENT_LOCK_MSG
+            if conflict and user:
+                db.refresh(user)
+                current_talent = (user.profile_json or {}).get("talent_primary") or current_talent
+            ctx["fields"]["assessment_id"] = assessment_id
+            ctx["fields"]["conflict"] = conflict
+            ctx["fields"]["locked"] = locked
+            return {
+                "code": 1,
+                "data": report,
+                "assessment_id": assessment_id,
+                "talent_conflict": conflict,
+                "talent_locked": locked,
+                "talent_last_chance": last_chance,
+                "lock_message": lock_msg,
+                "current_talent": current_talent,
+            }
+        except Exception as e:
+            ctx["result"] = "error"
+            ctx["level"] = "error"
+            ctx["fields"]["err"] = type(e).__name__
+            raise HTTPException(502, str(e)) from e
 
 
 @router.post("/assessment")
