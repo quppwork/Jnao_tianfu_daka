@@ -1,0 +1,271 @@
+# 脑科学教育文档包 · 入库前预处理规范
+
+> **文档地位**：本文件是 `docs/brain-education` 进入任意知识库之前的**唯一预处理标准**。  
+> **工作边界**：我们只做**文档处理**；向量化、建索引、平台入库、业务对接由接手方在收到 staging 包后完成。  
+> **源目录**：`docs/brain-education/brain-education/`（五层知识体系正文）  
+> **原则**：源目录尽量只读；改动产出到独立 **staging** 目录，可重复执行。
+
+---
+
+## 1. 范围界定
+
+### 1.1 我们负责（文档预处理）
+
+| 步骤 | 中文名 | 英文名 |
+|------|--------|--------|
+| 1 | 语料盘点 | Corpus Inventory |
+| 2 | 语料筛选 | Document Selection |
+| 3 | 数据清洗 | Data Cleaning / Denoising |
+| 4 | 文档规范化 | Document Normalization |
+| 5 | 术语归一 | Term / Entity Normalization |
+| 6 | 权威源与去重 | Canonical Source / Deduplication |
+| 7 | 口径对齐 / 冲突消解 | Knowledge Alignment |
+| 8 | 脱敏与合规标注 | PII Redaction / Compliance Tagging |
+| 9 | 文本分块 | Chunking |
+| 10 | 上下文增强 | Context Enrichment |
+| 11 | 元数据标注 | Metadata Annotation |
+| 12 | 质检验收 | Quality Assurance |
+| 13 | Staging 导出 | Corpus Staging |
+
+### 1.2 明确不做（交给接手方）
+
+以下工作**不在本文档处理范围内**，预处理完成后交接：
+
+- Embedding / 向量化
+- Indexing / 建索引
+- 向具体知识库平台上传（Ingestion）
+- 检索策略、重排、Agent 选库、业务系统对接
+- 线上效果调优与持续运营
+
+交接物：见文末「Staging 交付物」。
+
+---
+
+## 2. 标准步骤说明（按顺序执行）
+
+### 步骤 1 · 语料盘点（Corpus Inventory）
+
+- 列出 `brain-education/` 下全部文件
+- 分类：正文 / 模板 / 原始归档 / 垃圾 / 索引说明
+- 为每文件打状态：`published`（可入）/ `draft`（草稿）/ `exclude`（排除）；另用 `isolate` 表示隔离另批
+
+**交付物（已产出）：** [staging/01-corpus-inventory.md](./staging/01-corpus-inventory.md) · [staging/01-corpus-inventory.json](./staging/01-corpus-inventory.json)
+
+### 步骤 2 · 语料筛选（Document Selection）
+
+**建议纳入本批 published：**
+
+- `foundations/`、`practice/`（含已填完的 `parent-child/`）、`training/`、`delivery/`、`frontline/`
+- 根 `README.md`（可选，作总索引块）
+
+**建议排除（exclude）：**
+
+| 路径 | 原因 |
+|------|------|
+| `_templates/` | 写作模板，不是知识正文 |
+| `__MACOSX/`、`._*`、`.DS_Store` | 解压/系统垃圾 |
+| 空文件、仅标题无正文的亲子格 | 占位，避免污染检索 |
+| 各子目录纯导航型 `README.md` | 可选合并进 manifest，避免重复导航块 |
+
+**建议隔离另批（不与正文混切）：**
+
+| 路径 | 原因 |
+|------|------|
+| `internal/` | 内部专用，受众不同 |
+| `meta/_raw/` | 原始转写，噪声大，需单独清洗 |
+
+**交付物（已产出）：** [staging/02-document-selection.md](./staging/02-document-selection.md) · [staging/02-document-selection.json](./staging/02-document-selection.json)  
+→ 本批冻结为 `include_core` + `include_meta`；后续步骤仅处理纳入清单。
+
+### 步骤 3 · 数据清洗（Data Cleaning）
+
+- 删除垃圾文件与空文件
+- 统一 **UTF-8（无 BOM）**、换行 **LF**
+- 去掉连续空行、乱码、本机绝对路径（如 `Downloads/`、`C:\Users\...`）
+- 源材料死链改为「源材料未随包公开」或删除路径字面量
+
+**交付物（已产出）：**
+- 清洗副本：`staging/cleaned/`（路径已去掉双层 `brain-education/`）
+- 报告：[staging/03-data-cleaning-report.md](./staging/03-data-cleaning-report.md) · [staging/03-data-cleaning-report.json](./staging/03-data-cleaning-report.json)  
+→ 后续步骤基于 `cleaned/`，不覆盖源目录正文。
+
+### 步骤 4 · 文档规范化（Document Normalization）
+
+- Markdown 标题层级连续（`#` → `##` → `###`）
+- 表格、列表、中英文标点风格统一
+- staging 时路径扁平化：避免双层 `brain-education/brain-education/` 造成相对路径混乱
+- 库内相对链接：保留为「见 xxx.md §章节」或写入 metadata；不依赖运行时文件树
+
+**交付物（已产出）：**
+- 规范化副本：`staging/normalized/`
+- 报告：[staging/04-normalization-report.md](./staging/04-normalization-report.md) · [staging/04-normalization-report.json](./staging/04-normalization-report.json)  
+→ 后续步骤基于 `normalized/`。
+
+### 步骤 5 · 术语归一（Term Normalization）
+
+- 统一五者名称、技能名称、常见转写错字（例：思者 / 死者 / 思哲 → **思者**）
+- 产出 `glossary.md`（术语表），可单独成块
+
+**交付物（已产出）：**
+- 术语归一副本：`staging/term_normalized/`
+- 术语表：[staging/glossary.md](./glossary.md)（同步于 `term_normalized/glossary.md`）
+- 报告：[staging/05-term-normalization-report.md](./staging/05-term-normalization-report.md) · [staging/05-term-normalization-report.json](./staging/05-term-normalization-report.json)  
+→ 后续步骤基于 `term_normalized/`。
+
+### 步骤 6 · 权威源与去重（Canonical / Deduplication）
+
+遵循知识包 README「单一真相源」：
+
+| 主题 | 权威全文落点（canonical） |
+|------|---------------------------|
+| 五力展开 | `foundations/talents.md` |
+| 脑波 / 变聪明公式 | `foundations/theory.md` |
+| 孩子单型怎么带 | `practice/talents-application.md` |
+| 家长×孩子话术 | `practice/parent-child/` |
+| 训练方法 / 九段 | `training/methods.md` |
+| 训练安全异常 | `training/safety.md` |
+
+其它文件若重复长文：改为摘要 + 指向权威源，或标记 `duplicate_of` 且**不上传重复全文**。
+
+**交付物（已产出）：**
+- 带角色横幅的副本：`staging/canonical/`
+- 权威源地图：[staging/canonical-map.md](./canonical-map.md)
+- 报告：[staging/06-canonical-dedup-report.md](./staging/06-canonical-dedup-report.md) · [staging/06-canonical-dedup-report.json](./staging/06-canonical-dedup-report.json)  
+→ 本步**不硬删**长文，以横幅标明 canonical / summary_of；入库侧应对权威源加权。  
+→ 后续步骤基于 `canonical/`。
+
+### 步骤 7 · 口径对齐（Knowledge Alignment）
+
+- 将根 README「口径裁定纪要」固化为 `canon.md`（权威口径一页纸）
+- 消除互相矛盾表述；冲突以裁定纪要为准
+- 宣传数据、案例数字：标记「须核实」，不得当绝对事实切进无标注块
+
+**交付物（已产出）：**
+- 权威口径：[staging/canon.md](./canon.md)（同步于 `aligned/canon.md`）
+- 对齐副本：`staging/aligned/`（frontline 宣传向文件已加「须核实」横幅）
+- 报告：[staging/07-alignment-report.md](./staging/07-alignment-report.md) · [staging/07-alignment-report.json](./staging/07-alignment-report.json)  
+→ 冲突以 `canon.md` 为准；后续步骤基于 `aligned/`。
+
+### 步骤 8 · 脱敏与合规（Redaction / Compliance）
+
+- 案例人名、学校、手机、详细地址 → 泛化或删除
+- `training/safety.md` 等医疗/心理相关：块头固定免责（非诊断、极端情况转专业人士）
+- 内容性质标注：`sop`（可执行）/ `sales`（话术）/ `case`（案例）/ `theory`（理论）/ `metaphor`（教学比喻）
+- `internal/` 若处理：物理放入 `internal_only/`，与对外 staging 分开
+
+### 步骤 9 · 文本分块（Chunking）
+
+| 文档类型 | 切法 |
+|----------|------|
+| 理论长文（theory、talents、learning-methods 等） | 按 `##` / `###`，单块约 300–800 汉字 |
+| 安全手册（safety） | 按 9.1.1、9.1.2…；表格尽量整表一块 |
+| 金句 / 案例 | 一条 / 一案一块 |
+| 亲子宫格 | 一格一块 |
+| 总索引 README | 可整篇一块作导航 |
+
+可选：相邻块重叠 50–100 字（overlapping chunks）。
+
+### 步骤 10 · 上下文增强（Context Enrichment）
+
+每块正文开头注入路径前缀，例如：
+
+```text
+[脑科学教育 · L3 training · safety.md · 9.1.2 多元感知类]
+```
+
+保留书名、章节等来源信息，便于接手方做引用展示。
+
+### 步骤 11 · 元数据标注（Metadata Annotation）
+
+每个 chunk 对应一份 sidecar（YAML/JSON），建议字段：
+
+```yaml
+doc_id: training/safety
+section: "9.1.2"
+layer: L3                    # L1–L5 | internal | meta
+topics: [多元感知, 高敏感]
+audience: [一线老师, 家长]   # 或 staff / parent
+content_type: sop            # theory | sop | sales | case | glossary | canon
+canonical: true
+status: published            # published | draft | exclude
+risk_level: medical_hint     # none | medical_hint | psychological
+verify_required: false
+source: 超脑进化之书·第十章
+lang: zh-CN
+version_date: "2026-08-28"
+```
+
+并生成 `manifest.json`：文件清单、处理日期、规范版本、排除原因。
+
+### 步骤 12 · 质检验收（QA）
+
+**自动（建议）：**
+
+- 无空块、无 draft/exclude 混入 published
+- 块长分布检查（过短 / 过长）
+- 标题重复、明显重复段落
+- 内部链接清单或断链报告
+
+**人工（黄金问题集，不少于 20 条）：**
+
+示例方向（按本包内容拟定，可扩展）：
+
+1. 五者有哪几种？
+2. 思者「最不喜欢学」相关口径是什么？
+3. α 脑波频率口径？
+4. 聪明疼如何分档处理？是否处方建议？
+5. 感知高敏感应停哪类训练？
+6. 行者画像是否存在双面说法？
+
+通过后方可导出 staging。
+
+### 步骤 13 · Staging 导出（Corpus Staging）
+
+源目录保持不动；输出独立目录（示例结构）：
+
+```text
+staging/brain-education/
+├── chunks/              # 切好、带前缀的文本块
+├── metadata/            # 与 chunk 一一对应的 yaml/json
+├── glossary.md          # 术语表
+├── canon.md             # 权威口径
+├── manifest.json        # 清单与版本
+├── qa-golden.md         # 黄金问题与期望命中说明
+└── excluded.md          # 未纳入文件及原因
+```
+
+将整个 `staging/brain-education/` 交给接手方，并附本规范链接。
+
+---
+
+## 3. 最小可行版本（时间紧时）
+
+至少完成以下 5 项再交接：
+
+1. 删除 `__MACOSX` / 模板 / 明显空草稿  
+2. 产出 `canon.md` + `glossary.md`  
+3. 按标题分块 + 加 `[层/文件/章节]` 前缀  
+4. `safety` 与 `internal` 分目录并加 risk 标记  
+5. ≥20 条黄金问题人工过一遍  
+
+---
+
+## 4. 交接清单（给接手方）
+
+预处理方交付：
+
+- [ ] `staging/brain-education/` 完整目录  
+- [ ] `manifest.json`（含规范版本与处理日期）  
+- [ ] `excluded.md`  
+- [ ] `qa-golden.md`  
+- [ ] 本文件路径：`docs/brain-education/文档预处理规范.md`  
+
+接手方自行负责：向量化、建索引、平台入库、检索与业务接入。
+
+---
+
+## 5. 修订记录
+
+| 日期 | 说明 |
+|------|------|
+| 2026-08-31 | 初版：界定文档预处理范围与 13 步标准；明确后续知识库工作外送 |

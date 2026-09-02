@@ -1,0 +1,86 @@
+{
+  "name": "脑科学教育知识包",
+  "version": "1.0.0",
+  "spec": "docs/brain-education/文档预处理规范.md",
+  "spec_version": "v1 (2026-08-31)",
+  "processing_date": "2026-09-01",
+  "source_dir": "docs/brain-education/brain-education/",
+  "pipeline_steps": [
+    "01 语料盘点",
+    "02 语料筛选",
+    "03 数据清洗",
+    "04 文档规范化",
+    "05 术语归一",
+    "06 权威源与去重",
+    "07 口径对齐",
+    "08 脱敏与合规",
+    "09 文本分块",
+    "10 上下文增强",
+    "11 元数据标注"
+  ],
+  "batch": {
+    "include_core": 17,
+    "include_meta": 3,
+    "source_files_in_batch": 23
+  },
+  "total_chunks": 280,
+  "layers": {
+    "index": 1,
+    "canon": 2,
+    "glossary": 1,
+    "L4": 36,
+    "L1": 59,
+    "L5": 37,
+    "meta": 20,
+    "L2": 65,
+    "L3": 59
+  },
+  "content_types": {
+    "index": 1,
+    "canon": 2,
+    "glossary": 1,
+    "sop": 160,
+    "theory": 64,
+    "case": 9,
+    "sales": 23,
+    "meta": 20
+  },
+  "excluded": {
+    "drop": {
+      "count": 91,
+      "reason": "垃圾/系统文件（__MACOSX、.DS_Store、._* 等）"
+    },
+    "hold_draft": {
+      "count": 22,
+      "reason": "空草稿/仅标题占位（parent-child 其余 22 格等）"
+    },
+    "hold_isolate": {
+      "count": 11,
+      "reason": "内部专用/原始归档（internal/、meta/_raw/）另批隔离"
+    }
+  },
+  "metadata_schema": {
+    "doc_id": "string, 源文档标识（去.md）",
+    "chunk_id": "string, 块标识",
+    "chunk_path": "string, 最终包内相对路径",
+    "section": "string, 章节号",
+    "section_title": "string, 章节标题",
+    "chapter": "string, 所属章",
+    "layer": "string, L1–L5|meta|index|canon|glossary",
+    "topics": "list, 主题词",
+    "audience": "list, 受众",
+    "content_type": "theory|sop|sales|case|glossary|canon|index|meta",
+    "canonical": "bool, 是否为权威全文",
+    "status": "published|draft|exclude",
+    "risk_level": "none|medical_hint|psychological",
+    "verify_required": "bool",
+    "source": "string, 来源",
+    "lang": "zh-CN",
+    "version_date": "YYYY-MM-DD",
+    "chars": "int, 字符数"
+  },
+  "qa_status": "passed",
+  "qa_report": "12-qa-report.md (自动6项 + 黄金问题集24条)",
+  "export_date": "2026-09-01",
+  "package": "staging/brain-education/"
+}

@@ -1,0 +1,21 @@
+doc_id: "canon"
+chunk_id: "canon__full"
+chunk_path: "canon__full.md"
+section: "full"
+section_title: "权威口径（Canon）"
+chapter: ""
+layer: "canon"
+topics:
+  - "权威口径"
+  - "Canon"
+audience:
+  - "顾问"
+content_type: "canon"
+canonical: false
+status: "published"
+risk_level: "none"
+verify_required: false
+source: "源材料未随包公开"
+lang: "zh-CN"
+version_date: "2026-09-01"
+chars: 1121

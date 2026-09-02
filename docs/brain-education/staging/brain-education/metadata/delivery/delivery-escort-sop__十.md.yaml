@@ -1,0 +1,22 @@
+doc_id: "delivery/delivery-escort-sop"
+chunk_id: "delivery-escort-sop__十"
+chunk_path: "delivery/delivery-escort-sop__十.md"
+section: "十"
+section_title: "十、最小落地清单（给团队）"
+chapter: "十、最小落地清单（给团队）"
+layer: "L4"
+topics:
+  - "最小落地清单"
+  - "给团队"
+audience:
+  - "交付老师"
+  - "管理层"
+content_type: "sop"
+canonical: false
+status: "published"
+risk_level: "none"
+verify_required: false
+source: "> - 《纪要_06-18 护航交付标准化建设》（2026-06-18）"
+lang: "zh-CN"
+version_date: "2026-09-01"
+chars: 157

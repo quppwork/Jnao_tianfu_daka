@@ -1,0 +1,20 @@
+doc_id: "README"
+chunk_id: "README__full"
+chunk_path: "README__full.md"
+section: "full"
+section_title: "脑科学教育知识体系"
+chapter: ""
+layer: "index"
+topics:
+  - "脑科学教育知识体系"
+audience:
+  - "顾问"
+content_type: "index"
+canonical: false
+status: "published"
+risk_level: "none"
+verify_required: false
+source: "线下大会演讲转写 + 《天赋物语》短剧素材 + 《超脑进化之书》精读 + 同事汇总资料包"
+lang: "zh-CN"
+version_date: "2026-09-01"
+chars: 4562
