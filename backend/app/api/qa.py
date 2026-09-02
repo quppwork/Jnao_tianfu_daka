@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_db
+from app.core.biz_log import biz_event, biz_timer
 from app.core.rate_limit import check_qa_chat_limits
 from app.core.security import is_debug_routes_enabled
 from app.core.sse import SSE_HEADERS, emit_event_stream, sse_done, sse_json
@@ -59,18 +60,27 @@ async def qa_chat(
     db: Session = Depends(get_db),
 ):
     check_qa_chat_limits(child_user_id)
-    try:
-        return await qa_service.chat(
-            db,
-            child_user_id,
-            req.message,
-            session_id=req.session_id,
-            subject=req.subject,
-            image_id=req.image_id,
-            use_rag=req.use_rag,
-        )
-    except ValueError as e:
-        raise HTTPException(404, str(e)) from e
+    with biz_timer(
+        "qa.chat",
+        session_id=req.session_id,
+        subject=req.subject or "-",
+        msg_len=len(req.message or ""),
+        has_image=bool(req.image_id),
+    ) as ctx:
+        try:
+            return await qa_service.chat(
+                db,
+                child_user_id,
+                req.message,
+                session_id=req.session_id,
+                subject=req.subject,
+                image_id=req.image_id,
+                use_rag=req.use_rag,
+            )
+        except ValueError as e:
+            ctx["result"] = "not_found"
+            ctx["level"] = "warning"
+            raise HTTPException(404, str(e)) from e
 
 
 @router.post("/chat/stream")
@@ -81,6 +91,13 @@ async def qa_chat_stream(
 ):
     """SSE 流式学科答疑"""
     check_qa_chat_limits(child_user_id)
+    biz_event(
+        "qa.chat_stream",
+        result="start",
+        session_id=req.session_id,
+        subject=req.subject or "-",
+        msg_len=len(req.message or ""),
+    )
 
     async def events():
         try:
@@ -96,7 +113,9 @@ async def qa_chat_stream(
                 )
             ):
                 yield chunk
+            biz_event("qa.chat_stream", result="ok")
         except ValueError as e:
+            biz_event("qa.chat_stream", result="not_found", level="warning")
             yield sse_json({"type": "error", "message": str(e)})
             yield sse_done()
 

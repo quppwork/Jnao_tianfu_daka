@@ -95,6 +95,10 @@ def get_authenticated_user(
         )
         raise HTTPException(401, "已在其他设备登录或会话已失效，请重新登录")
 
+    from app.core.biz_log import bind_user
+    from app.services import auth_service
+
+    bind_user(uid, role=(user.role or auth_service.ROLE_STUDENT))
     return uid
 
 
@@ -105,12 +109,14 @@ def get_authenticated_student(
     """学生端 API：在 session 有效基础上要求 role=student。"""
     from app.db.models import ChildUser
     from app.services import auth_service
+    from app.core.biz_log import bind_user
 
     user = db.get(ChildUser, user_id)
     if not user or (user.role or auth_service.ROLE_STUDENT) != auth_service.ROLE_STUDENT:
         raise HTTPException(403, "需要学生账号")
     if not auth_service.has_active_parent_bind(db, user_id):
         raise HTTPException(403, "账号未绑定家长，请联系管理员")
+    bind_user(user_id, role=auth_service.ROLE_STUDENT)
     return user_id
 
 
@@ -135,6 +141,7 @@ def get_admin_user(
     from app.services import auth_service
     from app.services.auth_service import is_account_active
     from app.services.session_service import validate_session
+    from app.core.biz_log import bind_user
 
     user = db.get(ChildUser, uid)
     if not user or not is_account_active(user):
@@ -148,4 +155,5 @@ def get_admin_user(
         raise HTTPException(401, "管理员会话无效或已在其他设备登录，请重新登录")
     if user.role != auth_service.ROLE_ADMIN:
         raise HTTPException(401, "管理员会话无效，请重新登录")
+    bind_user(uid, role=auth_service.ROLE_ADMIN)
     return uid

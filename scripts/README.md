@@ -21,3 +21,20 @@
 | `start_frontend.bat` / `.sh` | 仅前端 |
 
 启动前会尽量清理端口占用。运维脚本分类见 `backend/tools/README.md`。
+
+## 线上行为日志（按用户排查）
+
+每条业务日志带 **uid**（`ChildUser.id`，全站唯一）和 **rid**（单次请求 ID）：
+
+```text
+biz action=training.checkin uid=42 role=student rid=a1b2c3d4 result=ok ms=128 plan_id=9
+```
+
+服务器查看：
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f --tail=200 backend
+# 或按人过滤：
+docker compose -f docker-compose.prod.yml --env-file .env.production logs backend 2>&1 | grep 'uid=42'
+docker compose -f docker-compose.prod.yml --env-file .env.production logs backend 2>&1 | grep 'biz action='
+```

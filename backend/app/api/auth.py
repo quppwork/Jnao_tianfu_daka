@@ -144,6 +144,17 @@ def _issue_and_respond(
     db.refresh(user)
     role = user.role or auth_service.ROLE_STUDENT
     set_session_cookie(response, user.session_token or "", role=role)
+    from app.core.biz_log import bind_user, biz_event
+
+    bind_user(user.id, role=role)
+    biz_event(
+        "auth.login",
+        result="ok",
+        uid=user.id,
+        role=role,
+        login_name=user.login_name or "-",
+        channel=getattr(user, "login_channel", None) or "-",
+    )
     logger.info(
         "auth login ok uid=%s role=%s login_name=%s",
         user.id,
@@ -369,6 +380,9 @@ def logout(
     revoke_all_sessions(db, user_id)
     db.commit()
     clear_session_cookie(response, role=role)
+    from app.core.biz_log import biz_event
+
+    biz_event("auth.logout", result="ok", uid=user_id, role=role)
     return {"ok": True}
 
 
