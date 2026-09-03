@@ -11,15 +11,23 @@ from dotenv import load_dotenv
 def project_roots(tools_file: str | Path) -> tuple[Path, Path]:
     """Return (BACKEND, ROOT).
 
-    - 本地仓库: backend/tools/xxx.py → BACKEND=backend, ROOT=仓库根
-    - Docker 镜像: /app/tools/xxx.py → BACKEND=ROOT=/app
+    从脚本位置向上找带 main.py + app/ 的目录（兼容 tools/ 与 tools/wework/）。
+
+    - 本地仓库: backend/tools[/wework]/xxx.py → BACKEND=backend, ROOT=仓库根
+    - Docker 镜像: /app/tools[/wework]/xxx.py → BACKEND=ROOT=/app
     """
-    tools = Path(tools_file).resolve().parent
-    backend = tools.parent
-    # Docker: main.py 在 /app，且没有上层 backend/ 目录
-    if (backend / "main.py").exists() and not (backend.parent / "backend").is_dir():
-        return backend, backend
-    return backend, backend.parent
+    here = Path(tools_file).resolve().parent
+    backend: Path | None = None
+    for p in [here, *here.parents]:
+        if (p / "main.py").is_file() and (p / "app").is_dir():
+            backend = p
+            break
+    if backend is None:
+        raise RuntimeError(f"找不到 backend 根目录（需含 main.py 与 app/）: {tools_file}")
+    # 仓库根有 backend/ 子目录；Docker 镜像 WORKDIR=/app，没有这层
+    if (backend.parent / "backend").is_dir():
+        return backend, backend.parent
+    return backend, backend
 
 
 def export_dir(backend: Path, root: Path) -> Path:

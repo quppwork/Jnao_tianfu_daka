@@ -1356,7 +1356,11 @@ def main() -> int:
         help="忽略收款历史读档，强制按 --pay-from / --pay-history-days 重拉",
     )
     ap.add_argument("--from-json", default="", help="跳过 contact_list，用本地缓存")
-    ap.add_argument("--skip-served", action="store_true")
+    ap.add_argument(
+        "--skip-served",
+        action="store_true",
+        help="复用已有 qywx_served_contacts_*.json；没有缓存则自动改拉 contact_list",
+    )
     ap.add_argument("--skip-pay", action="store_true")
     ap.add_argument("--skip-detail", action="store_true")
     ap.add_argument("--skip-enrich", action="store_true")
@@ -1375,6 +1379,7 @@ def main() -> int:
     args = ap.parse_args()
 
     EXPORT.mkdir(parents=True, exist_ok=True)
+    _log(f"缓存目录 {EXPORT}")
     state = load_state()
     synced: set[str] = set(state.get("synced_external_userids") or [])
     failed: dict[str, str] = dict(state.get("failed_external_userids") or {})
@@ -1424,10 +1429,13 @@ def main() -> int:
     elif args.skip_served and not args.history_only:
         cands = sorted(EXPORT.glob("qywx_served_contacts_*.json"))
         if not cands:
-            raise RuntimeError("无 served 缓存，请去掉 --skip-served")
-        cache = cands[-1]
-        rows = json.loads(cache.read_text(encoding="utf-8")).get("rows") or []
-        _log(f"复用缓存 {cache.name} rows={len(rows)}")
+            _log(f"[warn] 无 served 缓存（目录 {EXPORT}），忽略 --skip-served，改为现场拉取 contact_list")
+            rows = fetch_contact_list(token)
+            cache = save_served_cache(rows)
+        else:
+            cache = cands[-1]
+            rows = json.loads(cache.read_text(encoding="utf-8")).get("rows") or []
+            _log(f"复用缓存 {cache.name} rows={len(rows)}")
     else:
         _log("=== 1/4 拉取已服务外部联系人 contact_list ===")
         rows = fetch_contact_list(token)
