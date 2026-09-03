@@ -68,6 +68,8 @@ h5_fronted/
 docs/**
 !docs/data/
 !docs/data/**
+!docs/export/
+!docs/export/qywx_follow_mobile.csv
 # 前端实验页归档（从 vue_fronted 移出，需进库可追溯）
 !docs/archive/
 !docs/archive/frontend-sandbox/
@@ -75,10 +77,6 @@ docs/**
 
 # 归档过期文档（仅本地）
 docs/过期文件/
-
-# 企业微信导出（含客户/收款等敏感数据）
-docs/export/qywx_*
-docs/export/.qywx_pipeline_state.json
 
 # 压测账号明文表（含密码，不入库）
 backend/tools/*loadtest*.csv

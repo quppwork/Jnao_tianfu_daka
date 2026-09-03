@@ -44,7 +44,8 @@ import requests
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
-from _wework_paths import export_dir, load_env, project_roots  # noqa: E402
+from _wework_paths import export_dir, load_env, now_sh_str, project_roots  # noqa: E402
+from _wework_trace import finish_sync_run, start_sync_run  # noqa: E402
 
 BACKEND, ROOT = project_roots(__file__)
 load_env(BACKEND, ROOT)
@@ -80,7 +81,7 @@ def connect_db() -> pymysql.connections.Connection:
     )
     if not m:
         raise RuntimeError("无法解析 LEGACY_DATABASE_URL")
-    return pymysql.connect(
+    conn = pymysql.connect(
         host=m.group(3),
         port=int(m.group(4) or 3306),
         user=unquote(m.group(1)),
@@ -91,6 +92,8 @@ def connect_db() -> pymysql.connections.Connection:
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False,
     )
+    conn.cursor().execute("SET time_zone = '+08:00'")
+    return conn
 
 
 def get_token(secret: str | None = None) -> str:
@@ -156,39 +159,90 @@ CREATE TABLE IF NOT EXISTS `{TABLE}` (
         if cur.fetchone()["c"] == 0:
             cur.execute(f"ALTER TABLE `{TABLE}` {ddl}")
             _log(f"  ALTER add {col}")
+    for col, ddl in [
+        ("created_at", "ADD COLUMN created_at DATETIME NULL COMMENT '首次入库(上海)' AFTER fetched_at"),
+        ("updated_at", "ADD COLUMN updated_at DATETIME NULL COMMENT '最后改写(上海)' AFTER created_at"),
+        ("last_sync_run_id", "ADD COLUMN last_sync_run_id VARCHAR(32) NULL AFTER updated_at"),
+    ]:
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s AND COLUMN_NAME=%s",
+            (TABLE, col),
+        )
+        if cur.fetchone()["c"] == 0:
+            cur.execute(f"ALTER TABLE `{TABLE}` {ddl}")
+            _log(f"  ALTER add {col}")
+    cur.execute(
+        f"UPDATE `{TABLE}` SET created_at=fetched_at "
+        f"WHERE created_at IS NULL AND fetched_at IS NOT NULL"
+    )
+    cur.execute(
+        f"UPDATE `{TABLE}` SET updated_at=fetched_at "
+        f"WHERE updated_at IS NULL AND fetched_at IS NOT NULL"
+    )
 
 
-def load_mobile_csv(path: str) -> dict[str, str]:
-    out: dict[str, str] = {}
+def load_contact_csv(path: str) -> tuple[dict[str, str], dict[str, str]]:
+    """企微通讯录 CSV → (userid→mobile, userid→姓名)。无手机的人仍可写入姓名。"""
+    mobiles: dict[str, str] = {}
+    names: dict[str, str] = {}
     p = Path(path)
     if not p.exists():
         raise RuntimeError(f"mobile csv 不存在: {p}")
+
+    def _put(uid: str, name: str | None, mob: str | None) -> None:
+        uid = (uid or "").strip()
+        if not uid:
+            return
+        nm = (name or "").strip()
+        if nm:
+            names[uid] = nm
+        if mob:
+            mobiles[uid] = mob
+
     with p.open("r", encoding="utf-8-sig", newline="") as f:
+        sample = f.read(4096)
+        f.seek(0)
         reader = csv.DictReader(f)
-        # 兼容无表头两列
-        if reader.fieldnames and (
-            "follow_userid" not in {h.strip().lower() for h in reader.fieldnames}
-            and "userid" not in {h.strip().lower() for h in reader.fieldnames}
-        ):
-            f.seek(0)
-            for row in csv.reader(f):
-                if len(row) < 2:
-                    continue
-                uid, mob = row[0].strip(), norm_mobile(row[1])
-                if uid and mob:
-                    out[uid] = mob
-            return out
-        for row in reader:
-            keys = {k.lower().strip(): k for k in row.keys() if k}
-            uid_k = keys.get("follow_userid") or keys.get("userid") or keys.get("员工userid")
-            mob_k = keys.get("mobile") or keys.get("phone") or keys.get("手机号") or keys.get("手机")
-            if not uid_k or not mob_k:
+        fields = [h.strip() for h in (reader.fieldnames or []) if h]
+        lower = {h.lower(): h for h in fields}
+        wecom = "账号" in fields or "姓名" in fields
+        mapped = (
+            "follow_userid" in lower
+            or "userid" in lower
+            or "员工userid" in lower
+        )
+        if wecom or mapped:
+            for row in reader:
+                keys = {k.lower().strip(): k for k in row.keys() if k}
+                uid_k = (
+                    row.get("账号")
+                    or row.get(keys.get("follow_userid") or "")
+                    or row.get(keys.get("userid") or "")
+                    or row.get(keys.get("员工userid") or "")
+                )
+                name_k = row.get("姓名") or row.get(keys.get("follow_name") or "") or row.get(keys.get("name") or "")
+                mob_k = (
+                    row.get("手机")
+                    or row.get(keys.get("mobile") or "")
+                    or row.get(keys.get("phone") or "")
+                    or row.get(keys.get("手机号") or "")
+                )
+                uid = str(uid_k or "").strip()
+                if ":" in uid:
+                    uid = uid.split(":")[-1].strip()
+                _put(uid, str(name_k or "").strip() or None, norm_mobile(mob_k))
+            return mobiles, names
+        f.seek(0)
+        for row in csv.reader(f):
+            if len(row) < 2:
                 continue
-            uid = (row.get(uid_k) or "").strip()
-            mob = norm_mobile(row.get(mob_k))
-            if uid and mob:
-                out[uid] = mob
-    return out
+            uid = row[0].strip()
+            if uid.lower() in {"follow_userid", "userid", "账号"}:
+                continue
+            name = row[2].strip() if len(row) > 2 else None
+            _put(uid, name, norm_mobile(row[1]))
+    return mobiles, names
 
 
 def collect_userids(cur: Any, only_table: bool = True) -> list[str]:
@@ -339,21 +393,25 @@ def upsert_row(cur: Any, row: dict[str, Any]) -> None:
         f"""
 INSERT INTO `{TABLE}` (
   follow_userid, follow_name, mobile, unionid, third_uid, xet_user_id,
-  bind_phone, position, department_json, fetched_at
+  bind_phone, position, department_json, fetched_at, created_at, updated_at,
+  last_sync_run_id
 ) VALUES (
   %(follow_userid)s, %(follow_name)s, %(mobile)s, %(unionid)s, %(third_uid)s, %(xet_user_id)s,
-  %(bind_phone)s, %(position)s, %(department_json)s, %(fetched_at)s
+  %(bind_phone)s, %(position)s, %(department_json)s, %(fetched_at)s, %(created_at)s,
+  %(updated_at)s, %(last_sync_run_id)s
 )
 ON DUPLICATE KEY UPDATE
-  follow_name=VALUES(follow_name),
+  follow_name=COALESCE(NULLIF(VALUES(follow_name),''), follow_name),
   mobile=COALESCE(VALUES(mobile), mobile),
-  unionid=VALUES(unionid),
-  third_uid=VALUES(third_uid),
-  xet_user_id=VALUES(xet_user_id),
-  bind_phone=VALUES(bind_phone),
+  unionid=COALESCE(NULLIF(VALUES(unionid),''), unionid),
+  third_uid=COALESCE(NULLIF(VALUES(third_uid),''), third_uid),
+  xet_user_id=COALESCE(NULLIF(VALUES(xet_user_id),''), xet_user_id),
+  bind_phone=COALESCE(VALUES(bind_phone), bind_phone),
   position=COALESCE(VALUES(position), position),
   department_json=COALESCE(VALUES(department_json), department_json),
-  fetched_at=VALUES(fetched_at)
+  fetched_at=VALUES(fetched_at),
+  updated_at=VALUES(updated_at),
+  last_sync_run_id=VALUES(last_sync_run_id)
 """,
         row,
     )
@@ -371,6 +429,7 @@ def run_follow_user_enrich(
     skip_api: bool = True,
     sleep: float = 0.03,
     write_result_csv: bool = False,
+    sync_run_id: str | None = None,
 ) -> dict[str, Any]:
     """把通讯录手机号 + 三端关联写入 ys_qywx_follow_user（供 pipeline 复用）。
 
@@ -387,11 +446,11 @@ def run_follow_user_enrich(
     elif DEFAULT_MOBILE_CSV.exists():
         csv_path = DEFAULT_MOBILE_CSV
 
-    csv_map = load_mobile_csv(str(csv_path)) if csv_path else {}
-    if csv_map:
-        _log(f"mobile csv 载入 {len(csv_map)} 条 <- {csv_path}")
-    elif csv_path:
-        _log(f"[warn] mobile csv 为空或不存在: {csv_path}")
+    csv_mobile: dict[str, str] = {}
+    csv_name: dict[str, str] = {}
+    if csv_path:
+        csv_mobile, csv_name = load_contact_csv(str(csv_path))
+        _log(f"通讯录载入 手机={len(csv_mobile)} 姓名={len(csv_name)} <- {csv_path}")
 
     token = None
     contact_token = None
@@ -409,19 +468,25 @@ def run_follow_user_enrich(
     cur = conn.cursor()
     ensure_schema(cur)
     conn.commit()
+    own_run = False
+    run_id = (sync_run_id or "").strip()
+    if apply and not run_id:
+        run_id = start_sync_run(cur, kind="follow_enrich", argv="sync_qywx_follow_user_enrich")
+        own_run = True
+        conn.commit()
 
     userids = set(collect_userids(cur, only_table=not expand))
     # 通讯录里有、库里还没有的员工也入库，避免「有号但表里没人」
-    userids |= set(csv_map.keys())
+    userids |= set(csv_mobile) | set(csv_name)
     userids_list = sorted(userids)
-    _log(f"待同步员工 {len(userids_list)} 人（expand={expand} csv={len(csv_map)}）")
+    _log(f"待同步员工 {len(userids_list)} 人（expand={expand} csv手机={len(csv_mobile)} csv姓名={len(csv_name)}）")
     third_map, xet_map, third_by_union = build_mobile_maps(cur)
     _log(
         f"手机号索引 third={len(third_map)} xet={len(xet_map)} "
         f"union→third={len(third_by_union)}"
     )
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_sh_str()
     stats: dict[str, Any] = {
         "total": 0,
         "api_ok": 0,
@@ -460,12 +525,12 @@ def run_follow_user_enrich(
                 if i == 1:
                     _log(f"[warn] user/get 失败: {d.get('errcode')} {d.get('errmsg')}")
 
-        name = (d.get("name") if api_ok else None) or old.get("follow_name")
+        name = (d.get("name") if api_ok else None) or csv_name.get(uid) or old.get("follow_name")
 
         mobile = None
         src = None
-        if uid in csv_map:
-            mobile = csv_map[uid]
+        if uid in csv_mobile:
+            mobile = csv_mobile[uid]
             src = "csv"
             stats["mobile_from_csv"] += 1
         if not mobile and api_ok:
@@ -525,6 +590,9 @@ def run_follow_user_enrich(
             "position": position,
             "department_json": dept_json,
             "fetched_at": now,
+            "created_at": now,
+            "updated_at": now,
+            "last_sync_run_id": run_id or None,
         }
         preview.append({**row, "_mobile_src": src})
         if apply:
@@ -581,6 +649,9 @@ def run_follow_user_enrich(
         _log(f"结果 CSV: {out}")
         stats["result_csv"] = str(out)
 
+    if apply and own_run and run_id:
+        finish_sync_run(cur, run_id, status="ok", stats={k: v for k, v in stats.items() if k != "csv_path"})
+        conn.commit()
     conn.close()
     return stats
 

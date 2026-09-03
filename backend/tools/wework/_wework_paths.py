@@ -3,9 +3,22 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
+
+TZ_SH = ZoneInfo("Asia/Shanghai")
+
+
+def now_sh() -> datetime:
+    """当前上海时间（naive，写入 MySQL DATETIME）。"""
+    return datetime.now(TZ_SH).replace(tzinfo=None)
+
+
+def now_sh_str() -> str:
+    return now_sh().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def project_roots(tools_file: str | Path) -> tuple[Path, Path]:
