@@ -1,22 +1,20 @@
-"""统一日志系统 — 控制台 + 文件，自动轮转"""
+"""统一日志 — 仅输出到 stdout，由 Loki/Alloy 采集与检索。"""
 
-import os
+from __future__ import annotations
+
 import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
+import os
 
-LOG_DIR = Path(__file__).parent.parent.parent.parent / "logs"
-LOG_FILE = LOG_DIR / "app.log"
-MAX_BYTES = 5 * 1024 * 1024  # 5MB per file
-BACKUP_COUNT = 3
 
-def setup_logging(name: str = "jnao", level: int = logging.INFO) -> logging.Logger:
-    """配置日志器：控制台输出 + 文件轮转"""
-    os.makedirs(LOG_DIR, exist_ok=True)
+def setup_logging(name: str = "jnao", level: int | None = None) -> logging.Logger:
+    """配置日志器：只打控制台（容器 stdout）。"""
+    if level is None:
+        level_name = (os.getenv("JNAO_LOG_LEVEL") or "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
 
     logger = logging.getLogger(name)
     if logger.handlers:
-        return logger  # 已经配置过
+        return logger
 
     logger.setLevel(level)
     fmt = logging.Formatter(
@@ -24,24 +22,16 @@ def setup_logging(name: str = "jnao", level: int = logging.INFO) -> logging.Logg
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # 控制台
     console = logging.StreamHandler()
     console.setLevel(level)
     console.setFormatter(fmt)
     logger.addHandler(console)
-
-    # 文件轮转
-    file_handler = RotatingFileHandler(
-        LOG_FILE, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT, encoding="utf-8"
-    )
-    file_handler.setLevel(level)
-    file_handler.setFormatter(fmt)
-    logger.addHandler(file_handler)
-
+    logger.propagate = False
     return logger
 
+
 def get_logger(name: str = "jnao") -> logging.Logger:
-    """获取已配置的日志器，未配置则自动初始化"""
+    """获取已配置的日志器，未配置则自动初始化。"""
     logger = logging.getLogger(name)
     if not logger.handlers:
         return setup_logging(name)

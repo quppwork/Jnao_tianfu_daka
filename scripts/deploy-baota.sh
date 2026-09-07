@@ -6,7 +6,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 COMPOSE_FILE="docker-compose.prod.yml"
+LOGGING_FILE="docker-compose.logging.yml"
 ENV_FILE=".env.production"
+COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+if [ -f "$LOGGING_FILE" ]; then
+  COMPOSE_ARGS+=(-f "$LOGGING_FILE")
+fi
 
 echo "========================================"
 echo "  JNAO 宝塔生产部署"
@@ -53,36 +58,40 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 
 echo "[1/4] 构建镜像（生产精简依赖，无 pytest/ffmpeg/whisper）..."
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
+docker compose "${COMPOSE_ARGS[@]}" --env-file "$ENV_FILE" build
 
-echo "[2/4] 启动容器..."
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+echo "[2/4] 启动容器（含 Loki / Alloy / Grafana 日志栈）..."
+docker compose "${COMPOSE_ARGS[@]}" --env-file "$ENV_FILE" up -d
 
 echo "[3/4] 等待后端健康检查..."
 sleep 5
-docker compose -f "$COMPOSE_FILE" ps
+docker compose "${COMPOSE_ARGS[@]}" --env-file "$ENV_FILE" ps
 
 echo "[4/4] 表结构由后端 init_db 自动创建/补丁（migrate.py）"
 echo "      若库中已有 v1 训练进度数据，可选手动执行一次："
-echo "      docker compose -f $COMPOSE_FILE exec backend python migrate_state_v2.py"
+echo "      docker compose ${COMPOSE_ARGS[*]} --env-file $ENV_FILE exec backend python migrate_state_v2.py"
 
 FRONTEND_PORT="${FRONTEND_HOST_PORT:-5185}"
+GRAFANA_PORT="${GRAFANA_HOST_PORT:-3000}"
 echo ""
 echo "========================================"
 echo "  部署完成"
 echo "========================================"
 echo "  本机访问: http://127.0.0.1:${FRONTEND_PORT}"
+echo "  日志面板: http://127.0.0.1:${GRAFANA_PORT}  (Explore → Loki)"
+echo "           账号见 .env.production 中 GRAFANA_ADMIN_*"
 echo ""
 echo "  宝塔后续:"
 echo "  1. 网站 → 反向代理 → http://127.0.0.1:${FRONTEND_PORT}"
 echo "  2. SSL → 申请证书"
-echo "  3. 安全组仅开放 22/80/443"
+echo "  3. 安全组仅开放 22/80/443（Grafana 勿对公网裸开，可另建反代 + 强密码）"
 echo ""
 echo "  微信会员 openid 镜像（首次 + 每天 04:00 全量 + 每 15 分钟增量）:"
-echo "  docker compose -f $COMPOSE_FILE --env-file $ENV_FILE exec -T backend python tools/sync_wx_member_snapshot.py"
+echo "  docker compose ${COMPOSE_ARGS[*]} --env-file $ENV_FILE exec -T backend python tools/sync_wx_member_snapshot.py"
 echo "  宝塔全量: bash $ROOT/scripts/cron/sync_wx_snapshot_daily.sh"
 echo "  宝塔增量: bash $ROOT/scripts/cron/sync_wx_snapshot_incremental.sh"
 echo ""
 echo "  常用命令:"
-echo "    日志: docker compose -f $COMPOSE_FILE logs -f backend"
-echo "    重启: docker compose -f $COMPOSE_FILE restart"
+echo "    日志 UI: 浏览器打开 Grafana → Explore → 查询 {container=\"jnao-daka-backend\"}"
+echo "    临时跟屏: docker compose ${COMPOSE_ARGS[*]} --env-file $ENV_FILE logs -f backend"
+echo "    重启: docker compose ${COMPOSE_ARGS[*]} --env-file $ENV_FILE restart"
