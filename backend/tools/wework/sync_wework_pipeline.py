@@ -63,6 +63,7 @@ TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
 from _wework_paths import export_dir, load_env, project_roots  # noqa: E402
+from _wework_trace import finish_sync_run, start_sync_run  # noqa: E402
 
 BACKEND, ROOT = project_roots(__file__)
 load_env(BACKEND, ROOT)
@@ -75,6 +76,21 @@ import fetch_wework_externalpay_bills as pay  # noqa: E402
 QYAPI = "https://qyapi.weixin.qq.com/cgi-bin"
 STATE_PATH = EXPORT / ".qywx_pipeline_state.json"
 PAY_TABLE = "ys_qywx_pay_bill"
+_ACTIVE_SYNC: dict[str, str] = {"run_id": "", "db_host": ""}
+
+
+def _complete_active_sync(status: str = "ok", error: str | None = None) -> None:
+    rid = _ACTIVE_SYNC.get("run_id") or ""
+    if not rid:
+        return
+    try:
+        conn = _connect_legacy(_ACTIVE_SYNC.get("db_host") or "")
+        finish_sync_run(conn.cursor(), rid, status=status, error=error)
+        conn.close()
+    except Exception as e:  # noqa: BLE001
+        _log(f"[warn] finish sync_run: {e}")
+    finally:
+        _ACTIVE_SYNC["run_id"] = ""
 
 
 def _log(msg: str) -> None:
@@ -684,6 +700,12 @@ CUSTOMER_WX_COLS: list[tuple[str, str]] = [
     ("wx_name", "ADD COLUMN wx_name VARCHAR(128) NULL AFTER contact_phone"),
 ]
 
+PAY_TRACE_COLS: list[tuple[str, str]] = [
+    ("created_at", "ADD COLUMN created_at DATETIME NULL COMMENT '首次入库(上海)' AFTER fetched_at"),
+    ("updated_at", "ADD COLUMN updated_at DATETIME NULL COMMENT '最后改写(上海)' AFTER created_at"),
+    ("last_sync_run_id", "ADD COLUMN last_sync_run_id VARCHAR(32) NULL AFTER updated_at"),
+]
+
 
 def _ensure_pay_bill_columns(cur: Any, cols: list[tuple[str, str]]) -> None:
     cur.execute(f"SHOW TABLES LIKE '{PAY_TABLE}'")
@@ -710,6 +732,21 @@ def ensure_pay_bill_wx_name_column(cur: Any) -> None:
     _ensure_pay_bill_columns(cur, CUSTOMER_WX_COLS)
 
 
+def ensure_pay_bill_trace_columns(cur: Any) -> None:
+    _ensure_pay_bill_columns(cur, PAY_TRACE_COLS)
+    cur.execute(f"SHOW TABLES LIKE '{PAY_TABLE}'")
+    if not cur.fetchone():
+        return
+    cur.execute(
+        f"UPDATE `{PAY_TABLE}` SET created_at=fetched_at "
+        f"WHERE created_at IS NULL AND fetched_at IS NOT NULL"
+    )
+    cur.execute(
+        f"UPDATE `{PAY_TABLE}` SET updated_at=fetched_at "
+        f"WHERE updated_at IS NULL AND fetched_at IS NOT NULL"
+    )
+
+
 def _connect_legacy(db_host: str = "") -> Any:
     maybe_override_db_host(db_host)
     import pymysql
@@ -721,7 +758,7 @@ def _connect_legacy(db_host: str = "") -> Any:
     )
     if not m:
         raise RuntimeError("无法解析 LEGACY_DATABASE_URL")
-    return pymysql.connect(
+    conn = pymysql.connect(
         host=m.group(3),
         port=int(m.group(4) or 3306),
         user=unquote(m.group(1)),
@@ -731,6 +768,8 @@ def _connect_legacy(db_host: str = "") -> Any:
         autocommit=True,
         cursorclass=pymysql.cursors.DictCursor,
     )
+    conn.cursor().execute("SET time_zone = '+08:00'")
+    return conn
 
 
 def _load_union_link_maps(cur: Any) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
@@ -1094,13 +1133,21 @@ def enrich_pay_bill_payee_from_follow(db_host: str = "") -> dict[str, Any]:
     return {"updated": updated, "stats": dict(stats)}
 
 
-def write_pay_upsert_sql(path: Path, flats: list[dict[str, Any]], begin_time: int, end_time: int) -> None:
+def write_pay_upsert_sql(
+    path: Path,
+    flats: list[dict[str, Any]],
+    begin_time: int,
+    end_time: int,
+    run_id: str = "",
+) -> None:
     now = now_sh().strftime("%Y-%m-%d %H:%M:%S")
     begin_dt = _unix_to_dt(begin_time)
     end_dt = _unix_to_dt(end_time)
+    run_esc = week._esc(run_id or None)
     with path.open("w", encoding="utf-8") as f:
-        f.write(f"-- pay upsert range {begin_dt} ~ {end_dt} (human datetime / yuan)\n")
+        f.write(f"-- pay upsert range {begin_dt} ~ {end_dt} run_id={run_id or '-'}\n")
         f.write("SET NAMES utf8mb4;\n")
+        f.write("SET time_zone = '+08:00';\n")
         f.write(
             f"""
 CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
@@ -1135,6 +1182,9 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
   range_begin DATETIME NULL,
   range_end DATETIME NULL,
   fetched_at DATETIME NOT NULL,
+  created_at DATETIME NULL,
+  updated_at DATETIME NULL,
+  last_sync_run_id VARCHAR(32) NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_tx_bill (transaction_id, bill_type, out_refund_no),
   KEY idx_pay_time (pay_time),
@@ -1151,6 +1201,9 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
             ("third_uid", "ADD COLUMN third_uid VARCHAR(64) NULL"),
             ("xet_user_id", "ADD COLUMN xet_user_id VARCHAR(64) NULL"),
             ("bind_phone", "ADD COLUMN bind_phone VARCHAR(32) NULL"),
+            ("created_at", "ADD COLUMN created_at DATETIME NULL"),
+            ("updated_at", "ADD COLUMN updated_at DATETIME NULL"),
+            ("last_sync_run_id", "ADD COLUMN last_sync_run_id VARCHAR(32) NULL"),
         ] + [(c, d) for c, d in CUSTOMER_WX_COLS] + [(c, d) for c, d in PAYEE_COLS]
         for col, ddl in alter_cols:
             f.write(
@@ -1161,13 +1214,28 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
             )
 
         f.write(
+            f"DROP TEMPORARY TABLE IF EXISTS _qywx_pay_created;\n"
+            f"CREATE TEMPORARY TABLE _qywx_pay_created (\n"
+            f"  transaction_id VARCHAR(64) NOT NULL,\n"
+            f"  bill_type INT NOT NULL DEFAULT 0,\n"
+            f"  refund_key VARCHAR(64) NOT NULL DEFAULT '',\n"
+            f"  created_at DATETIME NOT NULL,\n"
+            f"  PRIMARY KEY (transaction_id, bill_type, refund_key)\n"
+            f");\n"
+            f"INSERT IGNORE INTO _qywx_pay_created\n"
+            f"SELECT transaction_id, IFNULL(bill_type,0), IFNULL(out_refund_no,''), MIN(created_at)\n"
+            f"FROM {PAY_TABLE}\n"
+            f"WHERE pay_time >= {week._esc(begin_dt)} AND pay_time <= {week._esc(end_dt)}\n"
+            f"  AND created_at IS NOT NULL AND transaction_id IS NOT NULL AND transaction_id<>''\n"
+            f"GROUP BY transaction_id, IFNULL(bill_type,0), IFNULL(out_refund_no,'');\n"
             f"DELETE FROM {PAY_TABLE} WHERE pay_time >= {week._esc(begin_dt)} "
             f"AND pay_time <= {week._esc(end_dt)};\n"
         )
         cols = (
             "transaction_id,out_trade_no,out_refund_no,pay_time,payment_type,trade_state,bill_type,"
             "total_fee,total_refund_fee,commodity,remark,payee_userid,external_userid,mch_id,"
-            "contact_name,contact_phone,raw_json,range_begin,range_end,fetched_at"
+            "contact_name,contact_phone,raw_json,range_begin,range_end,fetched_at,"
+            "created_at,updated_at,last_sync_run_id"
         )
         for i in range(0, len(flats), 40):
             vals = []
@@ -1196,6 +1264,9 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
                             week._esc(begin_dt),
                             week._esc(end_dt),
                             week._esc(now),
+                            week._esc(now),
+                            week._esc(now),
+                            run_esc,
                         ]
                     )
                     + ")"
@@ -1203,6 +1274,15 @@ CREATE TABLE IF NOT EXISTS {PAY_TABLE} (
             if vals:
                 f.write(f"INSERT INTO {PAY_TABLE} ({cols}) VALUES\n")
                 f.write(",\n".join(vals) + ";\n")
+        f.write(
+            f"UPDATE {PAY_TABLE} p INNER JOIN _qywx_pay_created c\n"
+            f"  ON c.transaction_id=p.transaction_id\n"
+            f" AND c.bill_type=IFNULL(p.bill_type,0)\n"
+            f" AND c.refund_key=IFNULL(p.out_refund_no,'')\n"
+            f"SET p.created_at=c.created_at\n"
+            f"WHERE p.pay_time >= {week._esc(begin_dt)} AND p.pay_time <= {week._esc(end_dt)};\n"
+            f"DROP TEMPORARY TABLE IF EXISTS _qywx_pay_created;\n"
+        )
 
 
 def maybe_override_db_host(db_host: str) -> None:
@@ -1297,12 +1377,14 @@ def apply_sql_files(files: list[Path], db_host: str) -> None:
         autocommit=True,
     )
     cur = conn.cursor()
+    cur.execute("SET time_zone = '+08:00'")
     # 收款表：若仍是 unix/分，先转成人读的 DATETIME/元，并保证员工列存在
     if any("pay" in p.name or "enrich" in p.name for p in files):
         try:
             ensure_pay_bill_human_schema(cur)
             ensure_pay_bill_payee_columns(cur)
             ensure_pay_bill_wx_name_column(cur)
+            ensure_pay_bill_trace_columns(cur)
             repair_pay_bill_pay_time_timezone(cur)
         except Exception as e:  # noqa: BLE001
             _log(f"[warn] pay_bill schema migrate: {e}")
@@ -1385,6 +1467,25 @@ def main() -> int:
     failed: dict[str, str] = dict(state.get("failed_external_userids") or {})
     out_files: list[Path] = []
     stamp = now_sh().strftime("%Y%m%d%H%M%S")
+    run_id = ""
+
+    if args.apply or args.payee_enrich_only:
+        try:
+            conn = _connect_legacy(args.db_host)
+            kind = (
+                "payee_enrich"
+                if args.payee_enrich_only
+                else "enrich_only"
+                if args.enrich_only
+                else "pipeline"
+            )
+            run_id = start_sync_run(conn.cursor(), kind=kind, argv=" ".join(sys.argv))
+            conn.close()
+            _ACTIVE_SYNC["run_id"] = run_id
+            _ACTIVE_SYNC["db_host"] = args.db_host or ""
+            _log(f"sync_run {run_id}")
+        except Exception as e:  # noqa: BLE001
+            _log(f"[warn] sync_run 未记录: {e}")
 
     def _sync_staff_then_payee() -> None:
         """通讯录 CSV/库内手机 → 员工表 → 账单 payee_*；并回填客户微信昵称 wx_name。"""
@@ -1397,6 +1498,7 @@ def main() -> int:
             expand=True,
             skip_api=True,
             write_result_csv=False,
+            sync_run_id=run_id or None,
         )
         _log("=== 回填收款员工字段（payee_*）===")
         enrich_pay_bill_payee_from_follow(args.db_host)
@@ -1405,6 +1507,7 @@ def main() -> int:
 
     if args.payee_enrich_only:
         _sync_staff_then_payee()
+        _complete_active_sync()
         return 0
 
     if args.enrich_only:
@@ -1415,6 +1518,7 @@ def main() -> int:
                 apply_sql_files([p], args.db_host)
         if args.apply and not args.skip_payee_enrich:
             _sync_staff_then_payee()
+        _complete_active_sync()
         return 0
 
     token = get_token()
@@ -1493,7 +1597,7 @@ def main() -> int:
             bills = pay.fetch_bills(token, bts, ets)
             flats = [pay.flatten(b) for b in bills]
             pay_sql = EXPORT / f"qywx_pipeline_pay_{args.recent_days}d_{stamp}.sql"
-            write_pay_upsert_sql(pay_sql, flats, bts, ets)
+            write_pay_upsert_sql(pay_sql, flats, bts, ets, run_id)
             _log(f"收款 {len(flats)} 条 -> {pay_sql.name}")
             # 收款先于客户历史详情写库，避免详情 SQL 失败拖死 pay_bill
             if args.apply:
@@ -1549,7 +1653,7 @@ def main() -> int:
                         bills2 = pay.fetch_bills(token, b2, e2)
                         flats2 = [pay.flatten(b) for b in bills2]
                         pay_sql2 = EXPORT / f"qywx_pipeline_pay_hist_{days}d_p{part}_{stamp}.sql"
-                        write_pay_upsert_sql(pay_sql2, flats2, b2, e2)
+                        write_pay_upsert_sql(pay_sql2, flats2, b2, e2, run_id)
                         _log(f"  历史收款 {len(flats2)} 条 -> {pay_sql2.name}")
                         if args.apply:
                             apply_sql_files([pay_sql2], args.db_host)
@@ -1703,6 +1807,7 @@ def main() -> int:
         f"  {EXPORT / 'qywx_follow_mobile.csv'}\n"
         "宝塔定时无需单独加员工任务；--apply 会同步员工并回填 payee_*。"
     )
+    _complete_active_sync()
     return 0
 
 
@@ -1710,5 +1815,6 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as e:  # noqa: BLE001
+        _complete_active_sync(status="error", error=str(e))
         print(f"[ERROR] {e}", file=sys.stderr, flush=True)
         raise SystemExit(1)
