@@ -18,7 +18,11 @@ from app.services.assessment_service import get_latest_assessment
 from app.services.child_training_state import child_grade
 from app.services.content_meta import parse_item_meta, skill_from_title
 from app.services.doubao_client import chat_completion, is_configured
-from app.services.growth_service import get_tier_brief, get_tier_honor, _collect_stats
+from app.services.growth_service import (
+    get_tier_brief,
+    get_tier_honor,
+    _collect_stats,
+)
 from app.core.logger import get_logger
 
 logger = get_logger("academic_plan")

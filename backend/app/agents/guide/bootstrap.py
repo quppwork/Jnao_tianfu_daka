@@ -29,24 +29,25 @@ async def run_bootstrap(
     use_llm: bool = True,
 ) -> dict[str, Any]:
     """运行开场流水线，返回 bootstrap 载荷。"""
-    ctx = build_guide_context(db, child_user_id)
-    ctx = apply_situation(ctx)
-    assert ctx.situation and ctx.next_action
+    ctx = build_guide_context(db, child_user_id)  # 生成引导上下文
+    ctx = apply_situation(ctx)  # 应用情境
+    assert ctx.situation and ctx.next_action  # 确保情境和下一个动作存在
 
     long_term = build_long_term_summary(
         db, child_user_id, training_day=ctx.training_day
-    )
+    )  # 生成长期总结
 
-    from app.agents.guide.proactive import resolve_proactive
-    from app.agents.shared.handoff import actions_for_next, situation_label
+    from app.agents.guide.proactive import resolve_proactive  # 生成主动句
+    from app.agents.shared.handoff import actions_for_next, situation_label  # 生成动作列表和情境标签
 
-    if not force:
-        cached = get_cached_welcome(db, child_user_id, ctx.training_day)
-        if cached and cached.get("welcome"):
-            sit = cached.get("situation") or ctx.situation
-            nxt = cached.get("next_action") or ctx.next_action
+    if not force:  # 如果不需要强制重新生成
+        cached = get_cached_welcome(db, child_user_id, ctx.training_day)  # 获取缓存的开场欢迎文案
+        # 如果缓存的开场欢迎文案存在
+        if cached and cached.get("welcome"):  
+            sit = cached.get("situation") or ctx.situation   # 获取缓存的情境
+            nxt = cached.get("next_action") or ctx.next_action   # 获取缓存的下一个动作
             # 情境以当日实时为准，便于主动句判定；欢迎文案仍用缓存
-            proactive = resolve_proactive(db, child_user_id, ctx, long_term)
+            proactive = resolve_proactive(db, child_user_id, ctx, long_term)  # 生成主动句
             out = {
                 "training_day": ctx.training_day,
                 "situation": sit,

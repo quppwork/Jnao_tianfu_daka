@@ -19,9 +19,9 @@ from copy import deepcopy
 from typing import Any
 
 # ── 预算（改这里即可同时影响 guide / qa）──
-MAX_DIGEST_CHARS = 600
-HISTORY_KEEP_DEFAULT = 10
-HISTORY_LOAD_DEFAULT = 40
+MAX_DIGEST_CHARS = 600  # 摘要长度
+HISTORY_KEEP_DEFAULT = 10  # 历史保留轮次
+HISTORY_LOAD_DEFAULT = 40  # 历史加载轮次
 GUIDE_HISTORY_KEEP_DEFAULT = 12  # 引导略多保留几轮短问答
 
 
@@ -58,6 +58,7 @@ def fold_overflow_history(
     return recent, out_mem
 
 
+# 摘要提示块
 def digest_prompt_block(
     mem: dict[str, Any] | None,
     *,

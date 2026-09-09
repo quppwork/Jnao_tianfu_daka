@@ -64,10 +64,30 @@ h5_fronted/
 .trash/
 .mcp.json
 
-# 设计/待办文档（仅本地，不进远端；生产仅需 docs/data/ 训练目录）
+# 设计/待办文档默认不进远端；下列为需入库的白名单
 docs/**
 !docs/data/
 !docs/data/**
+# 产品与架构主文档（从 bc7a908 前历史复原）
+!docs/产品规格.md
+!docs/体系架构设计.md
+!docs/前端后端API文档.md
+!docs/微信与家长登录方案.md
+!docs/数据闭环与预留说明.md
+!docs/权重排课方案.md
+!docs/运维与发版.md
+!docs/功能模块文档/
+!docs/功能模块文档/**
+!docs/ops/
+!docs/ops/**
+# 对外依赖总览（大模型 / RAG / 业务上游）
+!docs/外部接入与上游API.md
+# 前端实际调用的本系统 API 清单
+!docs/前端API调用清单.md
+# 前端对接契约（给无源码的外部前端团队）
+!docs/前端对接API契约.md
+# 技术现状与上架评估（对外同步）
+!docs/技术现状与智能体上架评估.md
 # 脑科学教育 · 入库前文档预处理规范与 staging 交付物（正文知识包仍本地）
 !docs/brain-education/
 !docs/brain-education/文档预处理规范.md
