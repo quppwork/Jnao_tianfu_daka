@@ -17,11 +17,13 @@ services:
     volumes:
       - backend_data:/app/data
       - ./docs/data:/catalog_data:ro
+      - ./docs/export/qywx_follow_mobile.csv:/app/data/qywx_export/qywx_follow_mobile.csv:ro
     env_file:
       - .env.production
     environment:
       JNAO_HOST: 0.0.0.0
       JNAO_PORT: "8012"
+      TZ: Asia/Shanghai
       JNAO_ENV: production
       JNAO_DEV_MODE: "0"
       JNAO_DEBUG_ROUTES: "0"
