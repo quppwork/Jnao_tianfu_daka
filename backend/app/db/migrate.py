@@ -138,6 +138,174 @@ def apply_schema_patches(engine: Engine) -> None:
     _backfill_daka_member_gate(engine)
     _apply_parent_child_unique_child(engine)
     _migrate_user_session_utc_to_cst(engine)
+    _apply_p1_constraints_and_indexes(engine)
+
+
+def _existing_index_names(engine: Engine, table: str) -> set[str]:
+    insp = inspect(engine)
+    if table not in insp.get_table_names():
+        return set()
+    return {idx["name"] for idx in insp.get_indexes(table) if idx.get("name")}
+
+
+def _ensure_index(engine: Engine, table: str, name: str, ddl_mysql: str, ddl_sqlite: str) -> None:
+    """幂等创建索引/唯一键；已存在则跳过。"""
+    if name in _existing_index_names(engine, table):
+        return
+    # MySQL：UNIQUE 也会出现在 get_indexes；PRIMARY 不在此列表时仍可再查 unique
+    insp = inspect(engine)
+    if table not in insp.get_table_names():
+        return
+    for uk in insp.get_unique_constraints(table):
+        if uk.get("name") == name:
+            return
+    dialect = engine.dialect.name
+    stmt = ddl_mysql if dialect == "mysql" else ddl_sqlite
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(stmt))
+    except Exception:
+        # 并发/已存在/方言差异：再查一次，仍有则吞掉
+        if name in _existing_index_names(engine, table):
+            return
+        for uk in inspect(engine).get_unique_constraints(table):
+            if uk.get("name") == name:
+                return
+        raise
+
+
+def _apply_p1_constraints_and_indexes(engine: Engine) -> None:
+    """补齐与线上一致的唯一键/索引（create_all 对已有表不会补约束）。"""
+    specs: list[tuple[str, str, str, str]] = [
+        (
+            "training_plan",
+            "uk_training_plan_user_date",
+            "ALTER TABLE training_plan ADD UNIQUE KEY uk_training_plan_user_date (child_user_id, plan_date)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_training_plan_user_date ON training_plan(child_user_id, plan_date)",
+        ),
+        (
+            "training_window",
+            "uk_training_window_user_date",
+            "ALTER TABLE training_window ADD UNIQUE KEY uk_training_window_user_date (child_user_id, train_date)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_training_window_user_date ON training_window(child_user_id, train_date)",
+        ),
+        (
+            "training_window",
+            "idx_training_window_user",
+            "ALTER TABLE training_window ADD INDEX idx_training_window_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_training_window_user ON training_window(child_user_id)",
+        ),
+        (
+            "parent_wechat_bind",
+            "uk_wechat_openid_app",
+            "ALTER TABLE parent_wechat_bind ADD UNIQUE KEY uk_wechat_openid_app (openid, app_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_wechat_openid_app ON parent_wechat_bind(openid, app_id)",
+        ),
+        (
+            "parent_wechat_bind",
+            "uk_wechat_parent_app",
+            "ALTER TABLE parent_wechat_bind ADD UNIQUE KEY uk_wechat_parent_app (parent_id, app_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_wechat_parent_app ON parent_wechat_bind(parent_id, app_id)",
+        ),
+        (
+            "parent_child_bind",
+            "uk_parent_child",
+            "ALTER TABLE parent_child_bind ADD UNIQUE KEY uk_parent_child (parent_id, child_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_parent_child ON parent_child_bind(parent_id, child_id)",
+        ),
+        (
+            "content_item",
+            "idx_content_talent_sort",
+            "ALTER TABLE content_item ADD INDEX idx_content_talent_sort (talent_code, lesson_sort)",
+            "CREATE INDEX IF NOT EXISTS idx_content_talent_sort ON content_item(talent_code, lesson_sort)",
+        ),
+        (
+            "training_record",
+            "idx_record_user_date",
+            "ALTER TABLE training_record ADD INDEX idx_record_user_date (child_user_id, train_date)",
+            "CREATE INDEX IF NOT EXISTS idx_record_user_date ON training_record(child_user_id, train_date)",
+        ),
+        (
+            "training_record",
+            "idx_record_plan",
+            "ALTER TABLE training_record ADD INDEX idx_record_plan (plan_id)",
+            "CREATE INDEX IF NOT EXISTS idx_record_plan ON training_record(plan_id)",
+        ),
+        (
+            "training_record",
+            "idx_record_item",
+            "ALTER TABLE training_record ADD INDEX idx_record_item (item_id)",
+            "CREATE INDEX IF NOT EXISTS idx_record_item ON training_record(item_id)",
+        ),
+        (
+            "guide_session",
+            "idx_guide_session_user",
+            "ALTER TABLE guide_session ADD INDEX idx_guide_session_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_guide_session_user ON guide_session(child_user_id)",
+        ),
+        (
+            "qa_session",
+            "idx_qa_session_user",
+            "ALTER TABLE qa_session ADD INDEX idx_qa_session_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_qa_session_user ON qa_session(child_user_id)",
+        ),
+        (
+            "talent_assessment",
+            "idx_talent_assessment_user",
+            "ALTER TABLE talent_assessment ADD INDEX idx_talent_assessment_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_talent_assessment_user ON talent_assessment(child_user_id)",
+        ),
+        (
+            "wx_member_snapshot",
+            "idx_wx_snapshot_mobile",
+            "ALTER TABLE wx_member_snapshot ADD INDEX idx_wx_snapshot_mobile (mobile)",
+            "CREATE INDEX IF NOT EXISTS idx_wx_snapshot_mobile ON wx_member_snapshot(mobile)",
+        ),
+        (
+            "wx_member_snapshot",
+            "idx_wx_snapshot_unionid",
+            "ALTER TABLE wx_member_snapshot ADD INDEX idx_wx_snapshot_unionid (unionid)",
+            "CREATE INDEX IF NOT EXISTS idx_wx_snapshot_unionid ON wx_member_snapshot(unionid)",
+        ),
+        (
+            "user_session",
+            "idx_user_session_last_active",
+            "ALTER TABLE user_session ADD INDEX idx_user_session_last_active (last_active_at)",
+            "CREATE INDEX IF NOT EXISTS idx_user_session_last_active ON user_session(last_active_at)",
+        ),
+        (
+            "user_session",
+            "idx_user_session_user",
+            "ALTER TABLE user_session ADD INDEX idx_user_session_user (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_session_user ON user_session(user_id)",
+        ),
+        (
+            "qa_session_archive",
+            "idx_qa_archive_user_time",
+            "ALTER TABLE qa_session_archive ADD INDEX idx_qa_archive_user_time (child_user_id, archived_at)",
+            "CREATE INDEX IF NOT EXISTS idx_qa_archive_user_time ON qa_session_archive(child_user_id, archived_at)",
+        ),
+        (
+            "qa_session_archive",
+            "idx_qa_archive_orig",
+            "ALTER TABLE qa_session_archive ADD INDEX idx_qa_archive_orig (original_session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_qa_archive_orig ON qa_session_archive(original_session_id)",
+        ),
+        (
+            "guide_session_archive",
+            "idx_guide_archive_user_time",
+            "ALTER TABLE guide_session_archive ADD INDEX idx_guide_archive_user_time (child_user_id, archived_at)",
+            "CREATE INDEX IF NOT EXISTS idx_guide_archive_user_time ON guide_session_archive(child_user_id, archived_at)",
+        ),
+        (
+            "guide_session_archive",
+            "idx_guide_archive_orig",
+            "ALTER TABLE guide_session_archive ADD INDEX idx_guide_archive_orig (original_session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_guide_archive_orig ON guide_session_archive(original_session_id)",
+        ),
+    ]
+    for table, name, mysql_ddl, sqlite_ddl in specs:
+        _ensure_index(engine, table, name, mysql_ddl, sqlite_ddl)
 
 
 def _apply_parent_child_unique_child(engine: Engine) -> None:

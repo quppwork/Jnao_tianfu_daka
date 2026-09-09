@@ -1,4 +1,4 @@
-"""ORM models — 对应 migrations/001_mvp.sql"""
+"""ORM models — 表结构真源；唯一键/索引需与线上及 migrate 幂等补丁一致。"""
 
 from datetime import date, datetime, time
 
@@ -6,11 +6,13 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
     Text,
     Time,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -56,6 +58,10 @@ class WxMemberSnapshot(Base):
     """从 db_fz_jingnao.ys_wx_member 同步的微信会员镜像（只读对照，不写入老库）"""
 
     __tablename__ = "wx_member_snapshot"
+    __table_args__ = (
+        Index("idx_wx_snapshot_mobile", "mobile"),
+        Index("idx_wx_snapshot_unionid", "unionid"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     wx_member_id: Mapped[int | None] = mapped_column(Integer)
@@ -94,6 +100,10 @@ class ParentWechatBind(Base):
     """微信 openid 与 Jnao 家长账号绑定"""
 
     __tablename__ = "parent_wechat_bind"
+    __table_args__ = (
+        UniqueConstraint("openid", "app_id", name="uk_wechat_openid_app"),
+        UniqueConstraint("parent_id", "app_id", name="uk_wechat_parent_app"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parent_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
@@ -107,6 +117,10 @@ class ParentWechatBind(Base):
 
 class ParentChildBind(Base):
     __tablename__ = "parent_child_bind"
+    __table_args__ = (
+        UniqueConstraint("parent_id", "child_id", name="uk_parent_child"),
+        UniqueConstraint("child_id", name="uk_parent_child_child_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parent_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
@@ -125,6 +139,7 @@ class ParentChildBind(Base):
 
 class TalentAssessment(Base):
     __tablename__ = "talent_assessment"
+    __table_args__ = (Index("idx_talent_assessment_user", "child_user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     child_user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
@@ -155,6 +170,7 @@ class TalentAssessmentArchive(Base):
 
 class ContentItem(Base):
     __tablename__ = "content_item"
+    __table_args__ = (Index("idx_content_talent_sort", "talent_code", "lesson_sort"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source_id: Mapped[int | None] = mapped_column(Integer)
@@ -174,6 +190,9 @@ class ContentItem(Base):
 
 class TrainingPlan(Base):
     __tablename__ = "training_plan"
+    __table_args__ = (
+        UniqueConstraint("child_user_id", "plan_date", name="uk_training_plan_user_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     child_user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
@@ -218,6 +237,11 @@ class TrainingItem(Base):
 
 class TrainingRecord(Base):
     __tablename__ = "training_record"
+    __table_args__ = (
+        Index("idx_record_user_date", "child_user_id", "train_date"),
+        Index("idx_record_plan", "plan_id"),
+        Index("idx_record_item", "item_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     child_user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
@@ -240,6 +264,10 @@ class TrainingRecord(Base):
 
 class TrainingWindow(Base):
     __tablename__ = "training_window"
+    __table_args__ = (
+        UniqueConstraint("child_user_id", "train_date", name="uk_training_window_user_date"),
+        Index("idx_training_window_user", "child_user_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -251,6 +279,7 @@ class TrainingWindow(Base):
 
 class QaSession(Base):
     __tablename__ = "qa_session"
+    __table_args__ = (Index("idx_qa_session_user", "child_user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -285,6 +314,7 @@ class QaMessage(Base):
 
 class GuideSession(Base):
     __tablename__ = "guide_session"
+    __table_args__ = (Index("idx_guide_session_user", "child_user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -318,6 +348,10 @@ class QaSessionArchive(Base):
     """学科答疑会话归档 — 超期会话快照，主表删除后供审计与统计"""
 
     __tablename__ = "qa_session_archive"
+    __table_args__ = (
+        Index("idx_qa_archive_user_time", "child_user_id", "archived_at"),
+        Index("idx_qa_archive_orig", "original_session_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     original_session_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -330,6 +364,10 @@ class GuideSessionArchive(Base):
     """首页引导会话归档 — 超期会话快照"""
 
     __tablename__ = "guide_session_archive"
+    __table_args__ = (
+        Index("idx_guide_archive_user_time", "child_user_id", "archived_at"),
+        Index("idx_guide_archive_orig", "original_session_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     original_session_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -342,6 +380,10 @@ class UserSession(Base):
     """登录会话 — 支持按角色限制多端数量"""
 
     __tablename__ = "user_session"
+    __table_args__ = (
+        Index("idx_user_session_user", "user_id"),
+        Index("idx_user_session_last_active", "last_active_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("child_user.id"), nullable=False)
