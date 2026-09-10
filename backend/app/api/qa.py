@@ -44,7 +44,7 @@ async def qa_debug():
 class QaChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     session_id: int | None = Field(None, ge=1)
-    subject: str | None = Field(None, max_length=20, description="数学/语文/英语/科学")
+    subject: str | None = Field(None, max_length=20, description="数学/语文/英语/科学/学习心法")
     image_id: str | None = Field(None, max_length=64)
     use_rag: bool | None = Field(None, description="是否检索教学法知识库")
 

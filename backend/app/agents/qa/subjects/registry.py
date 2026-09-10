@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.agents.qa.subjects import chinese, english, math, science
+from app.agents.qa.subjects import chinese, english, math, mind, science
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ _REGISTRY: dict[str, SubjectAgent] = {
     "语文": SubjectAgent("chinese", "语文", chinese.ROLE_PROMPT, chinese.ANSWER_STYLE, chinese.TYPICAL_TOPICS),
     "英语": SubjectAgent("english", "英语", english.ROLE_PROMPT, english.ANSWER_STYLE, english.TYPICAL_TOPICS),
     "科学": SubjectAgent("science", "科学", science.ROLE_PROMPT, science.ANSWER_STYLE, science.TYPICAL_TOPICS),
+    "学习心法": SubjectAgent("mind", "学习心法", mind.ROLE_PROMPT, mind.ANSWER_STYLE, mind.TYPICAL_TOPICS),
 }
 
 

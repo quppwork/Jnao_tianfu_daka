@@ -402,11 +402,11 @@ async function goBack() {
     if (st === 'returning') {
       uni.redirectTo({ url: '/pages/login/onboarding/index?resume=4' })
     } else {
-      uni.redirectTo({ url: '/pages/index' })
+      uni.redirectTo({ url: '/pages/dayu/home' })
     }
     return
   }
-  uni.redirectTo({ url: '/pages/index' })
+  uni.redirectTo({ url: '/pages/dayu/home' })
 }
 
 // Computed

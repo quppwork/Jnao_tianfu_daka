@@ -1,7 +1,21 @@
 /**
  * qa API
  */
-import { apiJson, withUser, streamPostSse } from './client.js'
+import {
+  apiJson,
+  withUser,
+  streamPostSse,
+  getChildUserId,
+  hasUserSession,
+  NeedLoginError,
+} from './client.js'
+import { authHeaders } from '../loginGuard.js'
+
+function qaAuthHeaders(userId) {
+  const headers = { ...authHeaders() }
+  if (userId) headers['X-Child-User-Id'] = String(userId)
+  return headers
+}
 
 // ── 学科答疑 ──
 
@@ -65,7 +79,7 @@ export function sendQaMessageStream(userId, message, sessionId = null, options =
 export async function uploadQaImage(userId, file) {
   const form = new FormData()
   form.append('file', file)
-  const headers = mergeAuthHeaders({}, userId)
+  const headers = qaAuthHeaders(userId)
   const res = await fetch(withUser('/api/qa/upload-image', userId), {
     method: 'POST',
     headers,
@@ -81,7 +95,7 @@ export async function transcribeVoice(audioBlob, filename = 'speech.webm') {
   if (!userId || !hasUserSession()) throw new NeedLoginError()
   const form = new FormData()
   form.append('audio', audioBlob, filename)
-  const headers = mergeAuthHeaders({}, userId)
+  const headers = qaAuthHeaders(userId)
   const res = await fetch(withUser('/api/voice/asr', userId), { method: 'POST', headers, body: form })
   const data = await res.json().catch(() => ({}))
   if (!res.ok || data.error) throw new Error(data.error || data.detail || '语音识别失败')

@@ -133,11 +133,17 @@ describe('consumePostLoginRoute — 按角色隔离跳转', () => {
     expect(consumePostLoginRoute('/pages/parent/index', 'parent')).toBe('/pages/parent/index')
   })
 
-  it('学生登录不恢复家长/管理员页面', async () => {
+  it('学生登录不恢复家长/管理员页面，且旧首页映射到大宇壳', async () => {
     const { saveRouteSnapshot, consumePostLoginRoute } = await import('../src/utils/appSession.js')
     saveRouteSnapshot('/pages/admin/index')
     saveRouteSnapshot('/pages/index')
-    expect(consumePostLoginRoute('/pages/index', 'student')).toBe('/pages/index')
+    expect(consumePostLoginRoute('/pages/dayu/home', 'student')).toBe('/pages/dayu/home')
+  })
+
+  it('学生旧对话页快照也映射到大宇壳', async () => {
+    const { saveRouteSnapshot, consumePostLoginRoute } = await import('../src/utils/appSession.js')
+    saveRouteSnapshot('/pages/index', 'chat=1')
+    expect(consumePostLoginRoute('/pages/dayu/home', 'student')).toBe('/pages/dayu/home')
   })
 })
 describe('repairAuthStorage / sanitizeAuthForLoginEntry', () => {

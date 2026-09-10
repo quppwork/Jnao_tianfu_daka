@@ -407,6 +407,15 @@ export function routeToUrl(route, query = '') {
   return q ? `${route}?${q}` : route
 }
 
+/** 旧学生首页 /pages/index 已废弃，一律回大宇壳首页 */
+function normalizeStudentHomeRoute(route, query = '') {
+  const base = normalizePath(route).split('?')[0]
+  if (base === '/pages/index') {
+    return '/pages/dayu/home'
+  }
+  return routeToUrl(route, query)
+}
+
 /** 登录成功后恢复刷新前页面；仅恢复与当前登录端一致的路由 */
 export function consumePostLoginRoute(fallbackUrl, kind) {
   if (!kind) return fallbackUrl
@@ -418,6 +427,7 @@ export function consumePostLoginRoute(fallbackUrl, kind) {
     if (key) sessionStorage.removeItem(key)
     sessionStorage.removeItem(LAST_ROUTE_KEY)
   } catch (_) { /* ignore */ }
+  if (kind === 'student') return normalizeStudentHomeRoute(snap.route, snap.query)
   return routeToUrl(snap.route, snap.query)
 }
 

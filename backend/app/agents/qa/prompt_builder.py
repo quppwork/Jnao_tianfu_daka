@@ -71,9 +71,15 @@ def build_qa_system_prompt(
     if agent:
         lines.append(agent.role_prompt)
         lines.append(agent.answer_style)
-        lines.append(f"当前学科频道：{agent.display_name}。请严格按该学科的规范作答。")
+        lines.append(
+            f"当前学科频道：{agent.display_name}。"
+            "请严格按该学科规范作答，并全程服从其中的【人物性格提示词】控制语气与句式。"
+        )
     else:
-        lines.append("学科范围：数学、语文、英语、科学。请根据学员问题判断学科并作答。")
+        lines.append(
+            "学科范围：数学、语文、英语、科学、学习心法。"
+            "请根据学员问题判断学科并作答；未指定时先确认学科再精讲。"
+        )
 
     if strategy_block:
         lines.append(strategy_block)
