@@ -4,12 +4,6 @@
 
     <view class="qa-header">
 
-      <view class="nav-back" @tap="goBack">
-
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-
-      </view>
-
       <text class="nav-title">学科答疑</text>
 
       <view class="nav-history" @tap="openSessionSheet"><text>历史</text></view>
@@ -281,6 +275,8 @@
       </view>
     </view>
 
+    <app-tab-bar active="qa" />
+
   </view>
 
 </template>
@@ -291,6 +287,7 @@
 
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import AppTabBar from '@/components/app-tab-bar/app-tab-bar.vue'
 
 import {
 
@@ -446,7 +443,7 @@ const learnerGrade = ref('')
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
 
-function goBack() { uni.navigateBack({ delta: 1 }) }
+function goBack() { uni.reLaunch({ url: '/pages/index' }) }
 
 
 
@@ -1713,6 +1710,10 @@ onBeforeUnmount(() => {
 
   color: var(--text);
 
+  padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+
+  box-sizing: border-box;
+
 }
 
 
@@ -1824,7 +1825,7 @@ onBeforeUnmount(() => {
 
 .nav-back:active { background: #f3f4f6; }
 
-.nav-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; color: var(--text); }
+.nav-title { flex: 1; text-align: left; font-size: 16px; font-weight: 600; color: var(--text); }
 
 .nav-spacer { width: 36px; }
 .nav-history { padding: 6px 12px; border-radius: 999px; background: var(--accent-bg); border: 1px solid rgba(88,166,255,0.2); cursor: pointer; }

@@ -1,0 +1,511 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>大宇智能体 · 今日通关挑战</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  /* ===== 生日预告条 ===== */
+  .bdbar{margin:12px 18px 0;display:flex;align-items:center;gap:10px;border-radius:14px;padding:11px 13px;text-decoration:none;color:#fff;
+         background:linear-gradient(135deg,#241A33,#3A1530);border:1.5px solid #C9A869}
+  .bdbar .bdi{font-size:20px}
+  .bdbar .bdt{flex:1;font-size:12.5px;font-weight:800;color:#F0DFB8;line-height:1.5}
+  .bdbar .bdt small{display:block;font-size:10px;color:#C99AB0;font-weight:700}
+  .bdbar .bdg{font-size:15px;font-weight:900;color:#C9A869}
+  /* ===== 闸门：确认方案 ===== */
+  .gate{margin:12px 18px;background:linear-gradient(160deg,#1A2233,#101623 70%);border:1.5px solid #C9A869;border-radius:18px;padding:16px}
+  .gate .gt{font-size:21px;font-weight:900;color:#EDEBE4;display:flex;justify-content:space-between;align-items:center}
+  .gate .day{font-size:12px;font-weight:800;color:#C9A869;border:1px solid rgba(201,168,105,.5);padding:3px 10px;border-radius:999px}
+  .gate .cnt{display:flex;align-items:baseline;gap:8px;margin:8px 0 10px}
+  .gate .cnt b{font-size:36px;font-weight:900;color:#C9A869;line-height:1}
+  .gate .cnt span{font-size:15px;font-weight:700;color:#EDEBE4}
+  .gate .cnt small{font-size:12px;color:#8B93A5;margin-left:auto}
+  .gitem{display:flex;align-items:center;gap:9px;font-size:15.5px;color:#D8DCE6;font-weight:600;padding:7px 0;border-top:1px dashed #232B3D}
+  .gitem:first-of-type{border-top:none}
+  .gitem .n{width:24px;height:24px;border-radius:7px;background:#1E2A44;color:#7FA7EF;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
+  .gitem .st{margin-left:auto;font-size:11.5px;color:#5A6274;font-weight:700}
+  .gitem.opt .n{background:rgba(201,168,105,.15);color:#C9A869}
+  .stage2.done .lv-card{border-color:rgba(111,207,142,.55)}
+  .stage2.done .orb{background:linear-gradient(135deg,#2c9064,#4FAE72)}
+  html.lt .stage2.done .lv-card{border-color:#30904f}
+  /* 选修开关 */
+  .opts{margin-top:12px;background:rgba(255,255,255,.03);border:1px dashed #2A3040;border-radius:14px;padding:12px 14px}
+  .opts .ot{font-size:13px;font-weight:800;color:#C9A869;margin-bottom:8px}
+  .opt{display:flex;align-items:center;gap:10px;padding:8px 0}
+  .opt .on_name{font-size:16px;font-weight:800;color:#EDEBE4}
+  .opt .od{font-size:11.5px;color:#5A6274}
+  .opt .sw{margin-left:auto;width:52px;height:30px;border-radius:99px;background:#232B3D;position:relative;cursor:pointer;flex:none;transition:.2s}
+  .opt .sw::after{content:"";position:absolute;left:4px;top:4px;width:22px;height:22px;border-radius:50%;background:#5A6274;transition:.2s}
+  .opt.on .sw{background:#6FCF8E}
+  .opt.on .sw::after{left:26px;background:#0B0E14}
+  .opt .tip{font-size:10.5px;color:#6FCF8E;display:none}
+  .opt.on .tip{display:block}
+  .confirm{margin:14px 18px 4px;background:#2E6BE6;color:#fff;border-radius:16px;padding:17px;font-size:19px;font-weight:900;text-align:center;cursor:pointer}
+  .confirm small{display:block;font-size:12px;font-weight:600;opacity:.75;margin-top:3px}
+  .editline{margin:0 18px 10px;font-size:12px;color:#5A6274;display:flex;justify-content:space-between}
+  .editline a{color:#7FA7EF;font-weight:700}
+
+  /* ===== 闯关地图（确认后展开） ===== */
+  #map{display:none}
+  .confirmed .gate .confirmlock{display:block}
+  .plan2{margin:10px 18px 4px;background:linear-gradient(160deg,#1A2233,#101623 70%);border:1.5px solid #C9A869;border-radius:18px;padding:14px 16px 12px}
+  .plan2 .ph{display:flex;align-items:center;justify-content:space-between}
+  .plan2 .pt{font-size:21px;font-weight:900;color:#EDEBE4}
+  .plan2 .count{display:flex;align-items:baseline;gap:8px;margin:6px 0 8px}
+  .plan2 .count b{font-size:38px;font-weight:900;color:#C9A869;line-height:1}
+  .plan2 .count span{font-size:16px;font-weight:700;color:#EDEBE4}
+  .plan2 .count small{font-size:12px;color:#8B93A5;margin-left:auto}
+  .plan2 .bar{height:9px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:4px}
+  .plan2 .bar i{display:block;height:100%;width:4%;border-radius:99px;background:linear-gradient(90deg,#C9A869,#6FCF8E)}
+  .path{position:relative;margin:14px 0 0;padding:0 18px}
+  .path::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:3px;background:repeating-linear-gradient(180deg,#2A3040 0 10px,transparent 10px 19px);transform:translateX(-50%)}
+  .stage{display:flex;margin-bottom:14px;position:relative}
+  .stage .node{width:44%;flex:none}
+  .stage .vtip{width:44%;flex:none;display:flex;align-items:center;justify-content:center}
+  .stage:not(.right) .node{order:1}
+  .stage:not(.right) .vtip{order:2;margin-left:auto}
+  .stage.right .vtip{order:1}
+  .stage.right .node{order:2;margin-left:auto}
+  .orb{position:absolute;left:50%;top:14px;transform:translateX(-50%);width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;z-index:2;background:#161D2B;border:2.5px solid #2A3040;color:#5A6274}
+  .stage.active .orb{border-color:#6FCF8E;color:#6FCF8E;box-shadow:0 0 0 5px rgba(111,207,142,.12),0 0 16px rgba(111,207,142,.5);animation:breath 2s infinite}
+  @keyframes breath{0%,100%{box-shadow:0 0 0 4px rgba(111,207,142,.10),0 0 12px rgba(111,207,142,.4)}50%{box-shadow:0 0 0 8px rgba(111,207,142,.16),0 0 22px rgba(111,207,142,.65)}}
+  .stage.active .card{border-color:#6FCF8E;background:linear-gradient(135deg,rgba(111,207,142,.10),#131926 60%)}
+  .stage.locked .card{opacity:.5}
+  .lv{font-size:11px;font-weight:700;letter-spacing:1.5px;color:#5A6274}
+  .stage.active .lv{color:#6FCF8E}
+  .name{font-size:18px;font-weight:900;color:#EDEBE4;margin:2px 0 2px}
+  .stage.locked .name{color:#6B7385}
+  .tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;margin-left:6px;vertical-align:2px;background:rgba(201,168,105,.15);color:#C9A869;border:1px solid rgba(201,168,105,.4)}
+  .play{margin-top:8px;display:flex;align-items:center;gap:8px;background:#6FCF8E;color:#0B0E14;border-radius:11px;padding:9px 10px;font-size:14px;font-weight:800}
+  .play .ic{width:30px;height:30px;border-radius:50%;background:#0B0E14;color:#6FCF8E;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+  .play small{display:block;font-size:10.5px;font-weight:600;opacity:.75}
+  .lockline{margin-top:7px;font-size:11.5px;color:#5A6274}
+  .vbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#131926;border:1.5px solid #2E6BE6;border-radius:14px;padding:16px 10px}
+  .vbtn .vi{font-size:20px}
+  .vbtn .vt{font-size:15px;font-weight:800;color:#7FA7EF}
+  .vbtn .vs{font-size:11px;color:#5F7BC0;display:block;text-align:center}
+  .stage.locked .vbtn{border-color:#232B3D;opacity:.5}
+  .stage.locked .vbtn .vt{color:#5A6274}
+  .hidden-stage{display:none}
+
+  /* ===== 第一步：选择时长 ===== */
+  #stepTime .tpick{margin:12px 18px;background:linear-gradient(160deg,#1A2233,#101623 70%);border:1.5px solid #2E6BE6;border-radius:18px;padding:18px 16px}
+  #stepTime .tt{font-size:20px;font-weight:900;color:#EDEBE4;display:flex;align-items:center;gap:8px}
+  #stepTime .tt .st8{margin-left:auto;font-size:11px;font-weight:800;color:#7FA7EF;border:1px solid #2E6BE6;padding:3px 10px;border-radius:99px}
+  #stepTime .big{font-size:56px;font-weight:900;color:#4EA0D8;text-align:center;margin:16px 0 4px;letter-spacing:2px}
+  #stepTime .cap{text-align:center;font-size:12.5px;color:#8B93A5;margin-bottom:14px}
+  #stepTime .quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+  #stepTime .quick div{background:#131926;border:1.5px solid #232B3D;border-radius:12px;padding:11px 0;text-align:center;font-size:14.5px;font-weight:800;color:#8B93A5;cursor:pointer}
+  #stepTime .quick div.on{border-color:#2E6BE6;color:#7FA7EF;background:rgba(46,107,230,.12)}
+  #stepTime .step{display:flex;justify-content:center;gap:26px;align-items:center;margin-bottom:6px}
+  #stepTime .step .col{text-align:center}
+  #stepTime .step .lab{font-size:12px;color:#5A6274;margin-top:4px}
+  #stepTime .step button{width:44px;height:44px;border-radius:50%;background:#1E2A44;border:none;color:#7FA7EF;font-size:22px;font-weight:900;cursor:pointer}
+  #stepTime .step .val{font-size:30px;font-weight:900;color:#EDEBE4;min-width:64px}
+  .goPlan{margin:14px 18px 4px;background:#2E6BE6;color:#fff;border-radius:16px;padding:17px;font-size:19px;font-weight:900;text-align:center;cursor:pointer}
+  .goPlan small{display:block;font-size:12px;font-weight:600;opacity:.75;margin-top:3px}
+  #gate{display:none}
+
+  /* ===== 剧情闯关 · 关卡大卡（场景图+超级武器+双视频） ===== */
+  .stage2{position:relative;margin:0 18px 18px}
+  .stage2 .orb{position:absolute;left:50%;top:-23px;transform:translateX(-50%);width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;z-index:3;background:#161D2B;border:2.5px solid #2A3040;color:#5A6274}
+  .stage2.active .orb{border-color:#6FCF8E;color:#6FCF8E;box-shadow:0 0 0 5px rgba(111,207,142,.12),0 0 16px rgba(111,207,142,.5);animation:breath 2s infinite}
+  .lv-card{border-radius:18px;overflow:hidden;background:#131926;border:1.5px solid #232B3D;position:relative}
+  .stage2.active .lv-card{border-color:#6FCF8E;box-shadow:0 0 0 1px rgba(111,207,142,.35),0 10px 26px rgba(0,0,0,.45)}
+  .stage2.locked .lv-card{opacity:.42;filter:saturate(.3)}
+  .stage2.locked .simg img{filter:grayscale(1) brightness(.5)}
+  .stage2.locked .simg .sname b{color:#6B7385 !important;text-shadow:none}
+  .stage2.locked .simg .slv{background:#3A4152;color:#9AA3B5;border-color:#3A4152}
+  .stage2.locked .simg .smj{opacity:.6}
+  html.lt .stage2.locked .simg img{filter:grayscale(1) brightness(.9)}
+  .simg{position:relative;aspect-ratio:16/8.2;overflow:hidden;background:#0E1420}
+  .simg img{width:100%;height:100%;object-fit:cover;display:block}
+  .simg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,14,22,.08) 40%,rgba(10,14,22,.88))}
+  .simg .slv{position:absolute;left:12px;top:10px;z-index:2;font-size:11px;font-weight:800;letter-spacing:1px;color:#C9D4E8;background:rgba(11,14,20,.62);border:1px solid #2A3040;border-radius:8px;padding:4px 10px;backdrop-filter:blur(4px)}
+  .stage2.active .simg .slv{color:#0B0E14;background:#6FCF8E;border-color:#6FCF8E}
+  .simg .smj{position:absolute;right:12px;top:10px;z-index:2;font-size:10.5px;font-weight:900;color:#FFE1A0;background:rgba(60,40,8,.55);border:1px solid rgba(220,180,100,.55);border-radius:8px;padding:4px 10px;backdrop-filter:blur(4px)}
+  .simg .sname{position:absolute;left:14px;bottom:10px;z-index:2;display:flex;align-items:center;gap:8px}
+  .simg .sname b{font-size:22px;font-weight:900;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7)}
+  .simg .sname .tag{margin-left:0}
+  .sbody{padding:12px 14px 14px}
+  .ssub{font-size:12.5px;color:#8B93A5;margin-bottom:10px}
+  .weapon{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(201,168,105,.16),rgba(201,168,105,.05));border:1.5px solid rgba(201,168,105,.55);border-radius:13px;padding:11px 12px;cursor:pointer}
+  .weapon .ic{width:36px;height:36px;border-radius:50%;background:#C9A869;color:#101623;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none;box-shadow:0 0 14px rgba(201,168,105,.5)}
+  .weapon b{font-size:15.5px;font-weight:900;color:#F0DFB8;display:block}
+  .weapon small{display:block;font-size:10.5px;font-weight:600;color:#A89668;margin-top:2px}
+  .stage2.locked .weapon{border-style:dashed;background:rgba(255,255,255,.03)}
+  .stage2.locked .weapon .ic{background:#232B3D;color:#5A6274;box-shadow:none}
+  .stage2.locked .weapon b{color:#6B7385}
+  .vids{display:flex;gap:8px;margin-top:9px}
+  .vids .vid{flex:1;display:flex;align-items:center;gap:8px;border-radius:12px;padding:9px 10px;text-decoration:none;border:1.5px solid #2A3040;background:#0E1420}
+  .vids .vid span{font-size:18px;flex:none}
+  .vids .vid b{display:block;font-size:13px;font-weight:900;color:#D8DCE6}
+  .vids .vid small{display:block;font-size:9.5px;color:#5A6274;margin-top:1px;font-weight:600}
+  .vids .vid.mj{border-color:rgba(201,168,105,.45);background:rgba(201,168,105,.07)}
+  .vids .vid.mj b{color:#E8CE9A}
+  .vids .vid.zd{border-color:rgba(46,107,230,.5);background:rgba(46,107,230,.08)}
+  .vids .vid.zd b{color:#8FB4FF}
+  .stage2.locked .vids .vid{opacity:.6}
+  .lockmask{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#8B93A5;letter-spacing:1px}
+
+  /* ===== 超脑九段 · 能量塔条 ===== */
+  .t9in{margin-top:12px;padding-top:11px;border-top:1px dashed rgba(201,168,105,.35)}
+  .tower9{margin:12px 18px 4px;background:linear-gradient(160deg,#1C1626,#101623 70%);border:1.5px solid #6B4FA0;border-radius:18px;padding:14px 16px 12px;position:relative;overflow:hidden}
+  .tower9::before{content:"";position:absolute;right:-30px;top:-40px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(150,110,230,.22),transparent 70%)}
+  .t9h{display:flex;align-items:baseline;justify-content:space-between}
+  .t9h b{font-size:15.5px;font-weight:900;color:#E4D8FF}
+  .t9h span{font-size:11px;font-weight:800;color:#B39DE0;border:1px solid rgba(150,110,230,.5);border-radius:99px;padding:3px 10px}
+  .t9segs{display:flex;gap:4px;margin:11px 0 9px}
+  .t9segs i{flex:1;height:10px;border-radius:4px;background:#241E33;border:1px solid #322A45}
+  .t9segs i.lit{background:linear-gradient(180deg,#C9A869,#8A6BF0);border-color:transparent;box-shadow:0 0 8px rgba(150,110,230,.6)}
+  .t9segs i.half{background:linear-gradient(90deg,#8A6BF0 35%,#241E33 35%);border-color:#322A45}
+  .t9tip{font-size:11.5px;color:#9C8DC4;line-height:1.6}
+  .t9tip b{color:#E4D8FF}
+  /* 技能完成度 */
+  .skl{margin-top:8px;background:rgba(0,0,0,.28);border:1px solid rgba(78,160,216,.22);border-radius:10px;padding:7px 10px 9px}
+  .skl-h{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#7fa8c9;font-weight:800;letter-spacing:.05em;margin-bottom:5px}
+  .skl-h b{font-size:11px;color:#6FD3A7;font-variant-numeric:tabular-nums}
+  .skl-h b.zero{color:#5c6b7f}
+  .skl-bar{height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden;position:relative}
+  .skl-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#2C6E9E,#4EA0D8,#6FD3A7);box-shadow:0 0 8px rgba(111,211,167,.55);transition:width .8s ease;position:relative}
+  .skl-bar i::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 6px,rgba(255,255,255,.18) 6px 7px)}
+  .skl-tip{font-size:9px;color:#5c7a94;margin-top:4px}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt /* ===== 生日预告条 ===== */
+  .bdbar{margin:12px 18px 0;display:flex;align-items:center;gap:10px;border-radius:14px;padding:11px 13px;text-decoration:none;color:#141414;
+         background:linear-gradient(135deg,#d6cce5,#eac5e0);border:1.5px solid #967536}html.lt .bdbar .bdi{font-size:20px}html.lt .bdbar .bdt{flex:1;font-size:12.5px;font-weight:800;color:#47360f;line-height:1.5}html.lt .bdbar .bdt small{display:block;font-size:10px;color:#65364c;font-weight:700}html.lt .bdbar .bdg{font-size:15px;font-weight:900;color:#967536}html.lt /* ===== 闸门：确认方案 ===== */
+  .gate{margin:12px 18px;background:linear-gradient(160deg,#ccd4e5,#dce2ef 70%);border:1.5px solid #967536;border-radius:18px;padding:16px}html.lt .gate .gt{font-size:21px;font-weight:900;color:#1b1912;display:flex;justify-content:space-between;align-items:center}html.lt .gate .day{font-size:12px;font-weight:800;color:#967536;border:1px solid rgba(150,117,54,.5);padding:3px 10px;border-radius:999px}html.lt .gate .cnt{display:flex;align-items:baseline;gap:8px;margin:8px 0 10px}html.lt .gate .cnt b{font-size:36px;font-weight:900;color:#967536;line-height:1}html.lt .gate .cnt span{font-size:15px;font-weight:700;color:#1b1912}html.lt .gate .cnt small{font-size:12px;color:#5a6274;margin-left:auto}html.lt .gitem{display:flex;align-items:center;gap:9px;font-size:15.5px;color:#191d27;font-weight:600;padding:7px 0;border-top:1px dashed #c2cadc}html.lt .gitem:first-of-type{border-top:none}html.lt .gitem .n{width:24px;height:24px;border-radius:7px;background:#bbc7e1;color:#103880;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}html.lt .gitem .st{margin-left:auto;font-size:11.5px;color:#8b93a5;font-weight:700}html.lt .gitem.opt .n{background:rgba(150,117,54,.15);color:#967536}html.lt /* 选修开关 */
+  .opts{margin-top:12px;background:rgba(20,20,20,.03);border:1px dashed #bfc5d5;border-radius:14px;padding:12px 14px}html.lt .opts .ot{font-size:13px;font-weight:800;color:#967536;margin-bottom:8px}html.lt .opt{display:flex;align-items:center;gap:10px;padding:8px 0}html.lt .opt .on_name{font-size:16px;font-weight:800;color:#1b1912}html.lt .opt .od{font-size:11.5px;color:#8b93a5}html.lt .opt .sw{margin-left:auto;width:52px;height:30px;border-radius:99px;background:#c2cadc;position:relative;cursor:pointer;flex:none;transition:.2s}html.lt .opt .sw::after{content:"";position:absolute;left:4px;top:4px;width:22px;height:22px;border-radius:50%;background:#8b93a5;transition:.2s}html.lt .opt.on .sw{background:#30904f}html.lt .opt.on .sw::after{left:26px;background:#ebeef4}html.lt .opt .tip{font-size:10.5px;color:#30904f;display:none}html.lt .opt.on .tip{display:block}html.lt .confirm{margin:14px 18px 4px;background:#1956d1;color:#141414;border-radius:16px;padding:17px;font-size:19px;font-weight:900;text-align:center;cursor:pointer}html.lt .confirm small{display:block;font-size:12px;font-weight:600;opacity:.75;margin-top:3px}html.lt .editline{margin:0 18px 10px;font-size:12px;color:#8b93a5;display:flex;justify-content:space-between}html.lt .editline a{color:#103880;font-weight:700}html.lt /* ===== 闯关地图（确认后展开） ===== */
+  #map{display:none}html.lt .confirmed .gate .confirmlock{display:block}html.lt .plan2{margin:10px 18px 4px;background:linear-gradient(160deg,#ccd4e5,#dce2ef 70%);border:1.5px solid #967536;border-radius:18px;padding:14px 16px 12px}html.lt .plan2 .ph{display:flex;align-items:center;justify-content:space-between}html.lt .plan2 .pt{font-size:21px;font-weight:900;color:#1b1912}html.lt .plan2 .count{display:flex;align-items:baseline;gap:8px;margin:6px 0 8px}html.lt .plan2 .count b{font-size:38px;font-weight:900;color:#967536;line-height:1}html.lt .plan2 .count span{font-size:16px;font-weight:700;color:#1b1912}html.lt .plan2 .count small{font-size:12px;color:#5a6274;margin-left:auto}html.lt .plan2 .bar{height:9px;border-radius:99px;background:rgba(20,20,20,.08);overflow:hidden;margin-top:4px}html.lt .plan2 .bar i{display:block;height:100%;width:4%;border-radius:99px;background:linear-gradient(90deg,#967536,#30904f)}html.lt .path{position:relative;margin:14px 0 0;padding:0 18px}html.lt .path::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:3px;background:repeating-linear-gradient(180deg,#bfc5d5 0 10px,transparent 10px 19px);transform:translateX(-50%)}html.lt .stage{display:flex;margin-bottom:14px;position:relative}html.lt .stage .node{width:44%;flex:none}html.lt .stage .vtip{width:44%;flex:none;display:flex;align-items:center;justify-content:center}html.lt .stage:not(.right) .node{order:1}html.lt .stage:not(.right) .vtip{order:2;margin-left:auto}html.lt .stage.right .vtip{order:1}html.lt .stage.right .node{order:2;margin-left:auto}html.lt .orb{position:absolute;left:50%;top:14px;transform:translateX(-50%);width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;z-index:2;background:#d4dbe9;border:2.5px solid #bfc5d5;color:#8b93a5}html.lt .stage.active .orb{border-color:#30904f;color:#30904f;box-shadow:0 0 0 5px rgba(48,144,79,.12),0 0 16px rgba(48,144,79,.5);animation:breath 2s infinite}@keyframes breath{0%,100%{box-shadow:0 0 0 4px rgba(48,144,79,.10),0 0 12px rgba(48,144,79,.4)}50%{box-shadow:0 0 0 8px rgba(48,144,79,.16),0 0 22px rgba(48,144,79,.65)}}html.lt .stage.active .card{border-color:#30904f;background:linear-gradient(135deg,rgba(48,144,79,.10),#d9dfec 60%)}html.lt .stage.locked .card{opacity:.5}html.lt .lv{font-size:11px;font-weight:700;letter-spacing:1.5px;color:#8b93a5}html.lt .stage.active .lv{color:#30904f}html.lt .name{font-size:18px;font-weight:900;color:#1b1912;margin:2px 0 2px}html.lt .stage.locked .name{color:#7a8294}html.lt .tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;margin-left:6px;vertical-align:2px;background:rgba(150,117,54,.15);color:#967536;border:1px solid rgba(150,117,54,.4)}html.lt .play{margin-top:8px;display:flex;align-items:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:11px;padding:9px 10px;font-size:14px;font-weight:800}html.lt .play .ic{width:30px;height:30px;border-radius:50%;background:#ebeef4;color:#30904f;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}html.lt .play small{display:block;font-size:10.5px;font-weight:600;opacity:.75}html.lt .lockline{margin-top:7px;font-size:11.5px;color:#8b93a5}html.lt .vbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#d9dfec;border:1.5px solid #1956d1;border-radius:14px;padding:16px 10px}html.lt .vbtn .vi{font-size:20px}html.lt .vbtn .vt{font-size:15px;font-weight:800;color:#103880}html.lt .vbtn .vs{font-size:11px;color:#3f5ba0;display:block;text-align:center}html.lt .stage.locked .vbtn{border-color:#c2cadc;opacity:.5}html.lt .stage.locked .vbtn .vt{color:#8b93a5}html.lt .hidden-stage{display:none}html.lt /* ===== 第一步：选择时长 ===== */
+  #stepTime .tpick{margin:12px 18px;background:linear-gradient(160deg,#ccd4e5,#dce2ef 70%);border:1.5px solid #1956d1;border-radius:18px;padding:18px 16px}html.lt #stepTime .tt{font-size:20px;font-weight:900;color:#1b1912;display:flex;align-items:center;gap:8px}html.lt #stepTime .tt .st8{margin-left:auto;font-size:11px;font-weight:800;color:#103880;border:1px solid #1956d1;padding:3px 10px;border-radius:99px}html.lt #stepTime .big{font-size:56px;font-weight:900;color:#2779b1;text-align:center;margin:16px 0 4px;letter-spacing:2px}html.lt #stepTime .cap{text-align:center;font-size:12.5px;color:#5a6274;margin-bottom:14px}html.lt #stepTime .quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}html.lt #stepTime .quick div{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:12px;padding:11px 0;text-align:center;font-size:14.5px;font-weight:800;color:#5a6274;cursor:pointer}html.lt #stepTime .quick div.on{border-color:#1956d1;color:#103880;background:rgba(25,86,209,.12)}html.lt #stepTime .step{display:flex;justify-content:center;gap:26px;align-items:center;margin-bottom:6px}html.lt #stepTime .step .col{text-align:center}html.lt #stepTime .step .lab{font-size:12px;color:#8b93a5;margin-top:4px}html.lt #stepTime .step button{width:44px;height:44px;border-radius:50%;background:#bbc7e1;border:none;color:#103880;font-size:22px;font-weight:900;cursor:pointer}html.lt #stepTime .step .val{font-size:30px;font-weight:900;color:#1b1912;min-width:64px}html.lt .goPlan{margin:14px 18px 4px;background:#1956d1;color:#141414;border-radius:16px;padding:17px;font-size:19px;font-weight:900;text-align:center;cursor:pointer}html.lt .goPlan small{display:block;font-size:12px;font-weight:600;opacity:.75;margin-top:3px}html.lt #gate{display:none}html.lt /* ===== 剧情闯关 · 关卡大卡（场景图+超级武器+双视频） ===== */
+  .stage2{position:relative;margin:0 18px 18px}html.lt .stage2 .orb{position:absolute;left:50%;top:-23px;transform:translateX(-50%);width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;z-index:3;background:#d4dbe9;border:2.5px solid #bfc5d5;color:#8b93a5}html.lt .stage2.active .orb{border-color:#30904f;color:#30904f;box-shadow:0 0 0 5px rgba(48,144,79,.12),0 0 16px rgba(48,144,79,.5);animation:breath 2s infinite}html.lt .lv-card{border-radius:18px;overflow:hidden;background:#d9dfec;border:1.5px solid #c2cadc;position:relative}html.lt .stage2.active .lv-card{border-color:#30904f;box-shadow:0 0 0 1px rgba(48,144,79,.35),0 10px 26px rgba(247,247,247,.45)}html.lt .stage2.locked .lv-card{opacity:.48;filter:saturate(.55)}html.lt .simg{position:relative;aspect-ratio:16/8.2;overflow:hidden;background:#dfe5f1}html.lt .simg img{width:100%;height:100%;object-fit:cover;display:block}html.lt .simg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(233,237,245,.08) 40%,rgba(233,237,245,.88))}html.lt .simg .slv{position:absolute;left:12px;top:10px;z-index:2;font-size:11px;font-weight:800;letter-spacing:1px;color:#172236;background:rgba(235,238,244,.62);border:1px solid #bfc5d5;border-radius:8px;padding:4px 10px;backdrop-filter:blur(4px)}html.lt .stage2.active .simg .slv{color:#ebeef4;background:#30904f;border-color:#30904f}html.lt .simg .smj{position:absolute;right:12px;top:10px;z-index:2;font-size:10.5px;font-weight:900;color:#5f4100;background:rgba(247,227,195,.55);border:1px solid rgba(155,115,35,.55);border-radius:8px;padding:4px 10px;backdrop-filter:blur(4px)}html.lt .simg .sname{position:absolute;left:14px;bottom:10px;z-index:2;display:flex;align-items:center;gap:8px}html.lt .simg .sname b{font-size:22px;font-weight:900;color:#141414;text-shadow:0 2px 10px rgba(247,247,247,.7)}html.lt .simg .sname .tag{margin-left:0}html.lt .sbody{padding:12px 14px 14px}html.lt .ssub{font-size:12.5px;color:#5a6274;margin-bottom:10px}html.lt .weapon{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(150,117,54,.16),rgba(150,117,54,.05));border:1.5px solid rgba(150,117,54,.55);border-radius:13px;padding:11px 12px;cursor:pointer}html.lt .weapon .ic{width:36px;height:36px;border-radius:50%;background:#967536;color:#dce2ef;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none;box-shadow:0 0 14px rgba(150,117,54,.5)}html.lt .weapon b{font-size:15.5px;font-weight:900;color:#47360f;display:block}html.lt .weapon small{display:block;font-size:10.5px;font-weight:600;color:#978557;margin-top:2px}html.lt .stage2.locked .weapon{border-style:dashed;background:rgba(20,20,20,.03)}html.lt .stage2.locked .weapon .ic{background:#c2cadc;color:#8b93a5;box-shadow:none}html.lt .stage2.locked .weapon b{color:#7a8294}html.lt .vids{display:flex;gap:8px;margin-top:9px}html.lt .vids .vid{flex:1;display:flex;align-items:center;gap:8px;border-radius:12px;padding:9px 10px;text-decoration:none;border:1.5px solid #bfc5d5;background:#dfe5f1}html.lt .vids .vid span{font-size:18px;flex:none}html.lt .vids .vid b{display:block;font-size:13px;font-weight:900;color:#191d27}html.lt .vids .vid small{display:block;font-size:9.5px;color:#8b93a5;margin-top:1px;font-weight:600}html.lt .vids .vid.mj{border-color:rgba(150,117,54,.45);background:rgba(150,117,54,.07)}html.lt .vids .vid.mj b{color:#654b17}html.lt .vids .vid.zd{border-color:rgba(25,86,209,.5);background:rgba(25,86,209,.08)}html.lt .vids .vid.zd b{color:#002570}html.lt .stage2.locked .vids .vid{opacity:.6}html.lt .lockmask{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#5a6274;letter-spacing:1px}html.lt /* ===== 超脑九段 · 能量塔条 ===== */
+  .t9in{margin-top:12px;padding-top:11px;border-top:1px dashed rgba(201,168,105,.35)}
+  .tower9{margin:12px 18px 4px;background:linear-gradient(160deg,#dfd9e9,#dce2ef 70%);border:1.5px solid #7b5fb0;border-radius:18px;padding:14px 16px 12px;position:relative;overflow:hidden}html.lt .tower9::before{content:"";position:absolute;right:-30px;top:-40px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(65,25,145,.22),transparent 70%)}html.lt .t9h{display:flex;align-items:baseline;justify-content:space-between}html.lt .t9h b{font-size:15.5px;font-weight:900;color:#0d0029}html.lt .t9h span{font-size:11px;font-weight:800;color:#351f62;border:1px solid rgba(65,25,145,.5);border-radius:99px;padding:3px 10px}html.lt .t9segs{display:flex;gap:4px;margin:11px 0 9px}html.lt .t9segs i{flex:1;height:10px;border-radius:4px;background:#d2cce1;border:1px solid #c2bad5}html.lt .t9segs i.lit{background:linear-gradient(180deg,#967536,#2e0f94);border-color:transparent;box-shadow:0 0 8px rgba(65,25,145,.6)}html.lt .t9segs i.half{background:linear-gradient(90deg,#2e0f94 35%,#d2cce1 35%);border-color:#c2bad5}html.lt .t9tip{font-size:11.5px;color:#4a3b72;line-height:1.6}html.lt .t9tip b{color:#0d0029}html.lt /* 技能完成度 */
+  .skl{margin-top:8px;background:rgba(247,247,247,.28);border:1px solid rgba(39,121,177,.22);border-radius:10px;padding:7px 10px 9px}html.lt .skl-h{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#365f80;font-weight:800;letter-spacing:.05em;margin-bottom:5px}html.lt .skl-h b{font-size:11px;color:#2c9064;font-variant-numeric:tabular-nums}html.lt .skl-h b.zero{color:#808fa3}html.lt .skl-bar{height:7px;border-radius:99px;background:rgba(20,20,20,.07);overflow:hidden;position:relative}html.lt .skl-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#61a3d3,#2779b1,#2c9064);box-shadow:0 0 8px rgba(44,144,100,.55);transition:width .8s ease;position:relative}html.lt .skl-bar i::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 6px,rgba(20,20,20,.18) 6px 7px)}html.lt .skl-tip{font-size:9px;color:#6b89a3;margin-top:4px}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div><div class="t1">大宇智能体</div><div class="t2">DAYU · 今日通关挑战</div></div>
+    </div>
+    <div class="chip-g">思者 · 第 1 天</div>
+  </div>
+
+  <!-- ===== 生日预告条 ===== -->
+  <a class="bdbar" href="birthday.html" id="bdbar" style="display:none">
+    <span class="bdi">🎂</span>
+    <span class="bdt" id="bdtext"></span>
+    <span class="bdg">→</span>
+  </a>
+
+  <!-- ===== 第一步：选择今日时长 ===== -->
+  <div id="stepTime">
+    <div class="tpick">
+      <div class="tt">⏰ 今天练多久？<span class="st8">第 1 步 · 选时长</span></div>
+      <div class="big" id="tBig">08:00:00</div>
+      <div class="cap">选多久，就排多少</div>
+      <div class="quick" id="quick">
+        <div data-m="30">30分钟</div><div data-m="60">1小时</div><div data-m="120">2小时</div><div data-m="240">4小时</div>
+        <div data-m="360">6小时</div><div data-m="480" class="on">8小时</div><div data-m="600">10小时</div><div data-m="15">15分钟</div>
+      </div>
+      <div class="step">
+        <div class="col"><button onclick="adj(-60)">−</button><div class="lab">减1小时</div></div>
+        <div class="col"><div class="val" id="tVal">8小时 0分</div></div>
+        <div class="col"><button onclick="adj(60)">＋</button><div class="lab">加1小时</div></div>
+      </div>
+      <div class="step" style="margin-top:4px">
+        <div class="col"><button onclick="adj(-10)">−</button><div class="lab">减10分钟</div></div>
+        <div class="col"></div>
+        <div class="col"><button onclick="adj(10)">＋</button><div class="lab">加10分钟</div></div>
+      </div>
+    </div>
+    <div class="goPlan" onclick="genPlan()">生成今日挑战<small>按所选时长排关</small></div>
+    <div class="dayu">
+      <div class="bear"></div>
+      <div class="bubble"><b>练多久，排多少关。</b>8小时有8小时的闯法。</div>
+    </div>
+  </div>
+
+  <!-- ===== 第二步：确认方案 ===== -->
+  <div class="gate" id="gate">
+    <div class="gt">🏮 今日通关挑战 <span class="day">思者 · 第 1 天</span></div>
+    <div class="cnt"><b id="gcnt">8</b><span>个技能任务</span><small id="gmeta">与中央电脑技能墙同步 · 逐个点亮</small></div>
+    <div id="glist">
+      <div class="gitem opt" id="g-gz" style="display:flex"><div class="n">选</div>感知力·多元感知<span class="st">置顶选修</span></div>
+      <div class="gitem opt" id="g-kkq" style="display:none"><div class="n">选</div>开口窍·视频课<span class="st">置顶选修</span></div>
+      <div class="gitem"><div class="n">1</div>超脑阅读<span class="st">0/1 · 进行中</span></div>
+      <div class="gitem"><div class="n">2</div>影像追忆<span class="st">待解锁</span></div>
+      <div class="gitem"><div class="n">3</div>超脑阅读Ⅱ<span class="st">待解锁</span></div>
+      <div class="gitem"><div class="n">4</div>影像追忆Ⅱ<span class="st">待解锁</span></div>
+      <div class="gitem"><div class="n">5</div>超脑阅读Ⅲ<span class="st">待解锁</span></div>
+      <div class="gitem"><div class="n">6</div>影像追忆Ⅲ<span class="st">待解锁</span></div>
+      <div class="gitem opt"><div class="n">选</div>高效作业<span class="st">通关后解锁</span></div>
+      <div class="gitem opt"><div class="n">选</div>精力恢复<span class="st">通关后解锁</span></div>
+    </div>
+
+    <div class="opts">
+      <div class="ot">🧩 选修 · 开了置顶第1关</div>
+      <div class="opt on" id="opt-gz" onclick="toggleOpt(&#39;gz&#39;)">
+        <div><div class="on_name">多元感知</div><div class="od">感知力音频训练 · 约12分钟</div><div class="tip">已置顶为第 1 关 ✓</div></div>
+        <div class="sw"></div>
+      </div>
+      <div class="opt" id="opt-kkq" onclick="toggleOpt(&#39;kkq&#39;)">
+        <div><div class="on_name">开口窍 🎬</div><div class="od">视频训练 · 表达力开口练习</div><div class="tip">已置顶为第 1 关 ✓</div></div>
+        <div class="sw"></div>
+      </div>
+    </div>
+
+    <div class="confirm" id="confirmBtn" onclick="confirmPlan()">确认 · 开启今日挑战<small id="cfmt">打卡后不可再改</small></div>
+    <div class="editline"><a href="#">📝 编辑方案</a><span>仅可改一次</span></div>
+  </div>
+
+  <!-- ===== 闯关地图 ===== -->
+  <div id="map">
+    <div class="plan2">
+      <div class="ph"><div class="pt">今日修炼挑战</div><span class="chip-gold" style="font-size:11px">已确认 ✓</span></div>
+      <div class="count"><b id="mcnt">8</b><span>个技能任务</span><small>完成当前任务解锁新任务</small></div>
+      <div class="bar"><i id="mBar"></i></div>
+      <div class="t9in">
+        <div class="t9h"><b>能量塔</b><span id="t9Stage">当前 一段 · 铸基期</span></div>
+        <div class="t9segs"><i class="lit"></i><i class="half"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+      </div>
+    </div>
+
+    <div class="dayu">
+      <div class="bear"></div>
+      <div class="bubble"><b>先过第1关</b>，再来找我盖章。每关都有秘籍剧情片+专属指导视频，看完再练，事半功倍。</div>
+    </div>
+
+    <div class="path" id="taskPath"></div>
+  </div>
+
+  <div class="foot">
+    <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a class="on" href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+</div>
+<script src="birthday.js"></script>
+<script>
+/* 生日预告条 */
+(function(){
+  if(typeof BD==='undefined')return;
+  const bar=document.getElementById('bdbar'),tx=document.getElementById('bdtext');
+  bar.style.display='flex';
+  if(!BD.isSet()){
+    tx.innerHTML='登记生日，领「五桩合体·武者盲盒」限量礼物🎁<small>终身只能登记一次 · 登记后生日有专属惊喜</small>';
+  }else if(BD.isToday()){
+    tx.innerHTML='🎉 今天是你的生日！打卡完成后去聊天室收祝福<small>生日限定礼物已送达 · 查看生日档案</small>';
+  }else{
+    const n=BD.daysUntil();
+    tx.innerHTML=`距离你的生日还有 <b style="color:#FFD76F">${n}</b> 天 · 生日礼物已在准备<small>每天打卡，生日彩蛋会更隆重</small>`;
+  }
+})();
+</script>
+<script>
+const state={gz:true,kkq:false};
+function recount(){
+  const opt=(state.gz?1:0)+(state.kkq?1:0);
+  document.getElementById('gcnt').textContent=8;
+  document.getElementById('gmeta').textContent=`必闯6关 · 选修${2+opt}关 · ≈${60+opt*10}分钟`;
+  document.getElementById('mcnt').textContent=8;
+}
+function toggleOpt(k){
+  state[k]=!state[k];
+  document.getElementById('opt-'+k).classList.toggle('on',state[k]);
+  document.getElementById('g-'+(k==='gz'?'gz':'kkq')).style.display=state[k]?'flex':'none';
+  recount();
+let mins=480;
+function fmt(m){const h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':00';}
+function renderT(){
+  document.getElementById('tBig').textContent=fmt(mins);
+  document.getElementById('tVal').textContent=Math.floor(mins/60)+'小时 '+ (mins%60)+'分';
+  document.querySelector('.goPlan small').textContent='按 '+Math.floor(mins/60)+' 小时 '+(mins%60)+' 分排课';
+  document.querySelectorAll('#quick div').forEach(d=>d.classList.toggle('on',+d.dataset.m===mins));
+}
+function adj(d){mins=Math.max(15,Math.min(720,mins+d));renderT();}
+document.querySelectorAll('#quick div').forEach(d=>d.onclick=()=>{mins=+d.dataset.m;renderT();});
+function genPlan(){
+  document.getElementById('stepTime').style.display='none';
+  document.getElementById('gate').style.display='block';
+  document.getElementById('cfmt').textContent='今日 '+fmt(mins)+' · 打卡后不可再改';
+  window.scrollTo(0,0);
+}
+}
+function confirmPlan(){
+  try{
+    var m = (typeof mins!=='undefined'?mins:480);
+    if(window.parent && window.parent!==window){
+      window.parent.postMessage({type:'dayu-train-confirm', minutes:m}, '*');
+      return;
+    }
+  }catch(e){}
+document.getElementById('gate').style.display='none';
+  document.getElementById('map').style.display='block';
+  window.scrollTo(0,0);
+}
+recount();
+let mins=480;
+function fmt(m){const h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':00';}
+function renderT(){
+  document.getElementById('tBig').textContent=fmt(mins);
+  document.getElementById('tVal').textContent=Math.floor(mins/60)+'小时 '+ (mins%60)+'分';
+  document.querySelector('.goPlan small').textContent='按 '+Math.floor(mins/60)+' 小时 '+(mins%60)+' 分排课';
+  document.querySelectorAll('#quick div').forEach(d=>d.classList.toggle('on',+d.dataset.m===mins));
+}
+function adj(d){mins=Math.max(15,Math.min(720,mins+d));renderT();}
+document.querySelectorAll('#quick div').forEach(d=>d.onclick=()=>{mins=+d.dataset.m;renderT();});
+function genPlan(){
+  document.getElementById('stepTime').style.display='none';
+  document.getElementById('gate').style.display='block';
+  document.getElementById('cfmt').textContent='今日 '+fmt(mins)+' · 打卡后不可再改';
+  window.scrollTo(0,0);
+}
+/* ===== 技能完成度（与中央电脑共用 jn_skill_prog） ===== */
+const SKL={
+  key:'jn_skill_prog',
+  /* 演示默认值：训练流程实际产生完成度时调用 SKL.set(技能名, 0-100) 覆盖 */
+  demo:{'多元感知':64,'心门九剑':38,'吸照大法':45,'无相神功':0,'吸照大法 · 进阶':0,'无相神功 · 进阶':0,'吸照大法 · 化境':0,'无相神功 · 化境':0,'昙花宝典':0,'呼吸打坐':72},
+  all(){try{return Object.assign({},this.demo,JSON.parse(localStorage.getItem(this.key)||'{}'));}catch(e){return Object.assign({},this.demo);}},
+  get(n){const a=this.all();return a[n]!=null?a[n]:0;},
+  set(n,p){const a=this.all();a[n]=Math.max(0,Math.min(100,Math.round(p)));localStorage.setItem(this.key,JSON.stringify(a));},
+  paint(){
+    document.querySelectorAll('#map .stage2, .path .stage2').forEach(st=>{
+      const card=st.querySelector('.lv-card'); if(!card||card.querySelector('.skl'))return;
+      const mj=(card.querySelector('.smj')||{}).textContent||'';
+      const name=mj.replace(/^秘籍 · /,'').trim(); if(!name)return;
+      const locked=st.classList.contains('locked');
+      const pct=locked?0:this.get(name);
+      const tip=pct>=100?'✅ 已达标准 · 技能已点亮':(pct>0?'首次使用并达到 100%，该技能在中央电脑点亮':'完成度达 100% 才点亮 · 练一次涨一次');
+      const div=document.createElement('div');div.className='skl';
+      div.innerHTML='<div class="skl-h"><span>⚡ 技能完成度 · '+name+'</span><b class="'+(pct?'':'zero')+'">'+pct+'%</b></div>'
+        +'<div class="skl-bar"><i style="width:0"></i></div><div class="skl-tip">'+tip+'</div>';
+      const body=card.querySelector('.sbody'); const ssub=body.querySelector('.ssub');
+      ssub?ssub.insertAdjacentElement('afterend',div):body.prepend(div);
+      setTimeout(()=>{div.querySelector('.skl-bar i').style.width=pct+'%';},80);
+    });
+  }
+};
+SKL.paint();
+
+/* ================= 8 技能任务地图（与中央电脑技能墙同步 · 不重复 · 图取九大秘籍） ================= */
+const TASKS=[
+ ['多元感知','🎧','assets/miji/mj-tfsd.jpg','六感神剑','感知力音频训练 · 约12分钟'],
+ ['心门九剑','⚔️','assets/miji/mj-scyj.jpg','心门九剑','表达力开口练习 · 视频训练'],
+ ['吸照大法','📖','assets/miji/mj-cnyd.jpg','吸照大法','超脑阅读 · 一目十行'],
+ ['无相神功','🧠','assets/miji/mj-yxzj.jpg','无相神功','影像追忆 · 画面回放'],
+ ['昙花宝典','🌸','assets/miji/mj-gxzy.jpg','昙花宝典','瞬时记忆 · 过目不忘'],
+ ['左右同搏','🎞️','assets/miji/mj-yxdy.jpg','左右同搏','影像记忆进阶 · 双脑协同'],
+ ['极速学习','🚀','assets/miji/mj-jsys.jpg','太极神功','极速学习法 · 以柔克刚'],
+ ['呼吸打坐','🍃','assets/miji/mj-jlhf.jpg','呼吸打坐','静定调息 · 收官恢复'],
+];
+const TSK_DEMO={};
+function tskProg(n){
+  try{const s=JSON.parse(localStorage.getItem('jn_skill_prog')||'{}');if(s[n]!=null)return s[n];}catch(e){}
+  return TSK_DEMO[n]||0;
+}
+(function(){
+  let firstZero=false;
+  const html=TASKS.map((t,i)=>{
+    const p=tskProg(t[0]);
+    let st,stx;
+    if(p>=100){st='done';stx='已点亮 ✓';}
+    else if(p>0){st='active';stx='进行中 · '+p+'%';}
+    else if(!firstZero){st='active';firstZero=true;stx='进行中 · 当前任务';}
+    else{st='locked';stx='待解锁';}
+    const lock=st==='locked';
+    return `<div class="stage2 ${st==='active'?'active':st==='done'?'done':'locked'}"${i===0?' style="margin-top:26px"':''}>
+      <div class="orb">${lock?'🔒':t[1]}</div>
+      <div class="lv-card">
+        <div class="simg">
+          <img src="${t[2]}" alt="${t[0]}">
+          <span class="slv">任务 ${i+1} / 8 · ${stx}</span>
+          <span class="smj">秘籍 · ${t[3]}</span>
+          <div class="sname"><b>${t[0]}</b>${st==='done'?'<span class="tag">已点亮</span>':''}</div>
+        </div>
+        <div class="sbody">
+          <div class="ssub">${t[4]}</div>
+          <div class="weapon"><div class="ic">▶</div><div><b>${lock?'🔒 先点亮前一个技能':'拔出超级武器 · 开始训练'}</b><small>${lock?'技能一个一个点亮，别急':p>=100?'温故知新 · 可以再刷一遍':'完成度达 100% 即在中央电脑点亮'}</small></div></div>
+          <div class="vids">
+            <a class="vid mj" href="javascript:;"><span>📜</span><div><b>秘籍剧情</b><small>《${t[3]}》片段</small></div></a>
+            <a class="vid zd" href="javascript:;"><span>🎯</span><div><b>过关指导</b><small>按你的训练情况匹配</small></div></a>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('taskPath').innerHTML=html;
+  /* 进度条：完成度均值 */
+  const avg=Math.round(TASKS.reduce((a,t)=>a+Math.min(100,tskProg(t[0])),0)/8);
+  const mb=document.getElementById('mBar');if(mb)mb.style.width=Math.max(4,avg)+'%';
+  /* 确认屏列表同步 */
+  const gl=document.getElementById('glist');
+  if(gl){
+    let fz=false;
+    gl.innerHTML=TASKS.map((t,i)=>{
+      const p=tskProg(t[0]);
+      let stx;
+      if(p>=100)stx='已点亮 ✓';
+      else if(p>0)stx=p+'% · 进行中';
+      else if(!fz){fz=true;stx='当前任务';}
+      else stx='待解锁';
+      return `<div class="gitem"><div class="n">${i+1}</div>${t[0]} · ${t[4].split(' · ')[0]}<span class="st">${stx}</span></div>`;
+    }).join('');
+  }
+})();
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+</body></html>

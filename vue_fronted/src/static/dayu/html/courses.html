@@ -1,0 +1,233 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>天赋课程 · 我的课程体系</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  body{background:#0B0E14}
+  /* ===== 置顶：线下大课报名广告 ===== */
+  .adtop{margin:12px 18px 0;border-radius:20px;overflow:hidden;position:relative;border:2px solid rgba(245,213,118,.75);
+    background:linear-gradient(150deg,#2A1A08,#14100A 60%,#1A0E04);box-shadow:0 0 26px rgba(245,160,60,.28)}
+  .adtop::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 85% 15%,rgba(245,120,60,.25),transparent 55%);pointer-events:none}
+  .adtop .inner{position:relative;padding:14px 14px 13px}
+  .adtag{display:inline-block;font-size:9.5px;font-weight:900;color:#231a04;background:linear-gradient(135deg,#FFE9A8,#F5A623);border-radius:5px;padding:2.5px 8px;letter-spacing:.1em}
+  .adtop h2{margin:8px 0 3px;font-size:20px;color:#FFE9A8;letter-spacing:1px;text-shadow:0 0 14px rgba(245,166,35,.5)}
+  .adtop .adsub{font-size:11px;color:#E8D9A8;line-height:1.7}
+  .adseat{margin-top:10px;background:rgba(0,0,0,.35);border:1px solid rgba(245,213,118,.35);border-radius:12px;padding:9px 11px}
+  .adseat .r1{display:flex;justify-content:space-between;font-size:11px;font-weight:800}
+  .adseat .r1 .en{color:#FFB020}
+  .adseat .r1 .left{color:#FF6B4A;animation:urg 1.2s infinite}
+  @keyframes urg{50%{opacity:.45}}
+  .adbar{margin-top:7px;height:7px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
+  .adbar i{display:block;height:100%;background:linear-gradient(90deg,#F5A623,#FF6B4A);border-radius:4px;transition:width 1s}
+  .adrow{display:flex;align-items:center;gap:10px;margin-top:11px}
+  .adprice{font-size:11px;color:#E8D9A8;font-weight:800}
+  .adprice b{font-size:17px;color:#FFE9A8}
+  .adprice s{color:#8B96AB;font-size:10px;font-weight:400;margin-left:4px}
+  .adbtn{margin-left:auto;flex:none;font-size:14px;font-weight:900;color:#fff;background:linear-gradient(135deg,#FF8A3D,#FF4A2E);border-radius:99px;padding:11px 22px;box-shadow:0 0 18px rgba(255,106,60,.55);animation:btnP 1.6s infinite}
+  @keyframes btnP{50%{box-shadow:0 0 28px rgba(255,106,60,.9)}}
+  .hd{margin:14px 18px 0;background:linear-gradient(160deg,#1A2233,#0E1420 75%);border:1.5px solid #C9A869;border-radius:20px;padding:16px;position:relative;overflow:hidden}
+  .hd::before{content:"";position:absolute;right:-40px;top:-50px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,105,.18),transparent 70%)}
+  .hd b{font-size:20px;letter-spacing:3px;color:#F0DFB8}
+  .hd small{display:block;font-size:10.5px;color:#8B93A5;margin-top:4px;letter-spacing:1px}
+  .sec{margin:16px 18px 0;font-size:13px;font-weight:900;color:#EDEBE4;display:flex;justify-content:space-between;align-items:baseline}
+  .sec span{font-size:10px;color:#5E6B84;font-weight:700}
+  /* 已报名课程 */
+  .my{margin:10px 18px 0;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:16px;padding:13px;position:relative}
+  .my .row{display:flex;align-items:center;gap:10px}
+  .my .ic{width:44px;height:44px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(135deg,#2A2410,#141008);border:1px solid rgba(245,213,118,.4)}
+  .my h3{margin:0;font-size:15px;color:#EDEBE4}
+  .my .sub{font-size:10px;color:#8B96AB;margin-top:2px}
+  .my .go{flex:none;margin-left:auto;font-size:10.5px;font-weight:800;color:#231a04;background:linear-gradient(135deg,#FFE9A8,#C9A227);border-radius:99px;padding:6px 12px}
+  .pbar{margin-top:10px;height:6px;border-radius:3px;background:#0C0F16;overflow:hidden}
+  .pbar i{display:block;height:100%;background:linear-gradient(90deg,#C9A227,#FFE9A8);border-radius:3px}
+  .ptxt{margin-top:5px;font-size:9.5px;color:#C9A869;font-weight:800}
+  /* 章节 */
+  .chaps{margin-top:10px;border-top:1px dashed #232B3D;padding-top:8px}
+  .chap{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:11.5px;color:#B8C0D0}
+  .chap .dot{width:16px;height:16px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px}
+  .chap.done .dot{background:rgba(111,207,142,.2);color:#6FCF8E;border:1px solid rgba(111,207,142,.5)}
+  .chap.done{color:#8B96AB}
+  .chap.now .dot{background:rgba(245,213,118,.15);color:#F5D576;border:1px solid rgba(245,213,118,.6)}
+  .chap.todo .dot{border:1px dashed #3A4458;color:#5E6B84}
+  .chap .tm{margin-left:auto;font-size:9px;color:#5E6B84}
+  /* 九大秘籍 */
+  .mjgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 18px 0}
+  .mj{border-radius:12px;overflow:hidden;border:1.5px solid #232B3D;background:#131926;position:relative}
+  .mj img{width:100%;height:108px;object-fit:cover;display:block}
+  .mj .mn{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 5px;font-size:10.5px;font-weight:900;color:#F0DFB8;text-align:center;background:linear-gradient(transparent,rgba(5,6,10,.92))}
+  /* 报名课程 */
+  .vip{margin:10px 18px 0;display:flex;gap:12px;background:#131926;border:1.5px solid #232B3D;border-radius:16px;padding:12px;align-items:center}
+  .vip img{width:78px;height:78px;flex:none;border-radius:12px;object-fit:cover;border:1px solid rgba(255,255,255,.1)}
+  .vip .vi{flex:1;min-width:0}
+  .vip h3{margin:0 0 3px;font-size:14.5px;color:#EDEBE4}
+  .vip p{margin:0;font-size:10.5px;line-height:1.65;color:#8B96AB}
+  .vip .price{margin-top:5px;font-size:10px;font-weight:800;color:#F5D576}
+  .vip .btn{flex:none;font-size:11px;font-weight:900;color:#04182c;background:linear-gradient(135deg,#BFE3FF,#4EA0D8);border-radius:99px;padding:8px 13px;box-shadow:0 0 12px rgba(78,160,216,.35)}
+  .tip{margin:14px 18px 0;font-size:10px;color:#5E6B84;line-height:1.8;text-align:center}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt body{background:#ebeef4}html.lt /* ===== 置顶：线下大课报名广告 ===== */
+  .adtop{margin:12px 18px 0;border-radius:20px;overflow:hidden;position:relative;border:2px solid rgba(137,105,10,.75);
+    background:linear-gradient(150deg,#f7e7d5,#f5f1eb 60%,#fbefe5);box-shadow:0 0 26px rgba(195,110,10,.28)}html.lt .adtop::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 85% 15%,rgba(195,70,10,.25),transparent 55%);pointer-events:none}html.lt .adtop .inner{position:relative;padding:14px 14px 13px}html.lt .adtag{display:inline-block;font-size:9.5px;font-weight:900;color:#fbf2dc;background:linear-gradient(135deg,#574100,#dc8d0a);border-radius:5px;padding:2.5px 8px;letter-spacing:.1em}html.lt .adtop h2{margin:8px 0 3px;font-size:20px;color:#574100;letter-spacing:1px;text-shadow:0 0 14px rgba(220,141,10,.5)}html.lt .adtop .adsub{font-size:11px;color:#574817;line-height:1.7}html.lt .adseat{margin-top:10px;background:rgba(247,247,247,.35);border:1px solid rgba(137,105,10,.35);border-radius:12px;padding:9px 11px}html.lt .adseat .r1{display:flex;justify-content:space-between;font-size:11px;font-weight:800}html.lt .adseat .r1 .en{color:#df9000}html.lt .adseat .r1 .left{color:#b52100;animation:urg 1.2s infinite}@keyframes urg{50%{opacity:.45}}html.lt .adbar{margin-top:7px;height:7px;border-radius:4px;background:rgba(20,20,20,.08);overflow:hidden}html.lt .adbar i{display:block;height:100%;background:linear-gradient(90deg,#dc8d0a,#b52100);border-radius:4px;transition:width 1s}html.lt .adrow{display:flex;align-items:center;gap:10px;margin-top:11px}html.lt .adprice{font-size:11px;color:#574817;font-weight:800}html.lt .adprice b{font-size:17px;color:#574100}html.lt .adprice s{color:#545f74;font-size:10px;font-weight:400;margin-left:4px}html.lt .adbtn{margin-left:auto;flex:none;font-size:14px;font-weight:900;color:#141414;background:linear-gradient(135deg,#c24d00,#d11c00);border-radius:99px;padding:11px 22px;box-shadow:0 0 18px rgba(195,46,0,.55);animation:btnP 1.6s infinite}@keyframes btnP{50%{box-shadow:0 0 28px rgba(195,46,0,.9)}}html.lt .hd{margin:14px 18px 0;background:linear-gradient(160deg,#ccd4e5,#dfe5f1 75%);border:1.5px solid #967536;border-radius:20px;padding:16px;position:relative;overflow:hidden}html.lt .hd::before{content:"";position:absolute;right:-40px;top:-50px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(150,117,54,.18),transparent 70%)}html.lt .hd b{font-size:20px;letter-spacing:3px;color:#47360f}html.lt .hd small{display:block;font-size:10.5px;color:#5a6274;margin-top:4px;letter-spacing:1px}html.lt .sec{margin:16px 18px 0;font-size:13px;font-weight:900;color:#1b1912;display:flex;justify-content:space-between;align-items:baseline}html.lt .sec span{font-size:10px;color:#7b88a1;font-weight:700}html.lt /* 已报名课程 */
+  .my{margin:10px 18px 0;background:#d9dfec;border:1.5px solid rgba(216,177,54,.5);border-radius:16px;padding:13px;position:relative}html.lt .my .row{display:flex;align-items:center;gap:10px}html.lt .my .ic{width:44px;height:44px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(135deg,#efe9d5,#f7f3eb);border:1px solid rgba(137,105,10,.4)}html.lt .my h3{margin:0;font-size:15px;color:#1b1912}html.lt .my .sub{font-size:10px;color:#545f74;margin-top:2px}html.lt .my .go{flex:none;margin-left:auto;font-size:10.5px;font-weight:800;color:#fbf2dc;background:linear-gradient(135deg,#574100,#d8b136);border-radius:99px;padding:6px 12px}html.lt .pbar{margin-top:10px;height:6px;border-radius:3px;background:#e9ecf3;overflow:hidden}html.lt .pbar i{display:block;height:100%;background:linear-gradient(90deg,#d8b136,#574100);border-radius:3px}html.lt .ptxt{margin-top:5px;font-size:9.5px;color:#967536;font-weight:800}html.lt /* 章节 */
+  .chaps{margin-top:10px;border-top:1px dashed #c2cadc;padding-top:8px}html.lt .chap{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:11.5px;color:#2f3747}html.lt .chap .dot{width:16px;height:16px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px}html.lt .chap.done .dot{background:rgba(48,144,79,.2);color:#30904f;border:1px solid rgba(48,144,79,.5)}html.lt .chap.done{color:#545f74}html.lt .chap.now .dot{background:rgba(137,105,10,.15);color:#89690a;border:1px solid rgba(137,105,10,.6)}html.lt .chap.todo .dot{border:1px dashed #a7b1c5;color:#7b88a1}html.lt .chap .tm{margin-left:auto;font-size:9px;color:#7b88a1}html.lt /* 九大秘籍 */
+  .mjgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 18px 0}html.lt .mj{border-radius:12px;overflow:hidden;border:1.5px solid #c2cadc;background:#d9dfec;position:relative}html.lt .mj img{width:100%;height:108px;object-fit:cover;display:block}html.lt .mj .mn{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 5px;font-size:10.5px;font-weight:900;color:#47360f;text-align:center;background:linear-gradient(transparent,rgba(245,246,250,.92))}html.lt /* 报名课程 */
+  .vip{margin:10px 18px 0;display:flex;gap:12px;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:12px;align-items:center}html.lt .vip img{width:78px;height:78px;flex:none;border-radius:12px;object-fit:cover;border:1px solid rgba(20,20,20,.1)}html.lt .vip .vi{flex:1;min-width:0}html.lt .vip h3{margin:0 0 3px;font-size:14.5px;color:#1b1912}html.lt .vip p{margin:0;font-size:10.5px;line-height:1.65;color:#545f74}html.lt .vip .price{margin-top:5px;font-size:10px;font-weight:800;color:#89690a}html.lt .vip .btn{flex:none;font-size:11px;font-weight:900;color:#d3e7fb;background:linear-gradient(135deg,#002440,#2779b1);border-radius:99px;padding:8px 13px;box-shadow:0 0 12px rgba(39,121,177,.35)}html.lt .tip{margin:14px 18px 0;font-size:10px;color:#7b88a1;line-height:1.8;text-align:center}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 置顶：线下大课报名 -->
+  <div class="adtop">
+    <div class="inner">
+      <span class="adtag">🔥 线下大课 · 限额报名中</span>
+      <h2>超脑训练营 · 四天三夜</h2>
+      <div class="adsub">张宇老师亲授线下集训：九大秘籍实景训练 · 白名单赛事直通辅导<br/>十月大会场 · 芯少年九大核心项目全开</div>
+      <div class="adseat">
+        <div class="r1"><span class="en">已报名 <b id="adEn">183</b> 人</span><span class="left">⚠ 仅剩 <b id="adLeft">7</b> 个名额</span></div>
+        <div class="adbar"><i id="adBar" style="width:96%"></i></div>
+      </div>
+      <div class="adrow">
+        <div class="adprice">早鸟价 <b>¥3980</b><s>¥5980</s></div>
+        <a class="adbtn" href="javascript:;" onclick="alert(&#39;超脑训练营 · 线下大课报名\n\n剩余名额已为你锁定 10 分钟\n报名缴费通道接入中，敬请期待 🔥&#39;)">立即抢报 ›</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="hd"><b>天赋课程</b><small>张无忌的课程体系 · 已报名课程 + 九大秘籍内容 + 精品课报名入口</small></div>
+
+  <div class="sec">🎓 我的课程 <span>已报名 1 门</span></div>
+
+  <!-- 已报名 1：大书道 -->
+  <div class="my">
+    <div class="row">
+      <div class="ic">🖋️</div>
+      <div><h3>大书道课程</h3><div class="sub">天赋书道 · 太极九图 · 五音开五窍（单独购买 · 已开通）</div></div>
+      <a class="go" href="javascript:;" onclick="alert(&#39;快捷听课入口：继续《篆书 · 心中有太极》\n\n播放器接入中，敬请期待 ✨&#39;)">继续听课 ›</a>
+    </div>
+    <div class="pbar"><i style="width:38%"></i></div>
+    <div class="ptxt">已学 3 / 8 讲 · 38%</div>
+    <div class="chaps">
+      <div class="chap done"><span class="dot">✓</span>第 1 讲 · 眼中有太极（书道Ⅰ）<span class="tm">已学</span></div>
+      <div class="chap done"><span class="dot">✓</span>第 2 讲 · 心中有太极（篆书）<span class="tm">已学</span></div>
+      <div class="chap done"><span class="dot">✓</span>第 3 讲 · 五兽桩 · 站桩定力<span class="tm">已学</span></div>
+      <div class="chap now"><span class="dot">▶</span>第 4 讲 · 五音开五窍（隶书）<span class="tm">学到 12:40</span></div>
+      <div class="chap todo"><span class="dot">·</span>第 5 讲 · 枯笔与飞白<span class="tm">未学</span></div>
+      <div class="chap todo"><span class="dot">·</span>第 6 讲 · 字里行间练观察<span class="tm">未学</span></div>
+      <div class="chap todo"><span class="dot">·</span>第 7 讲 · 一幅字的全息记忆<span class="tm">未学</span></div>
+      <div class="chap todo"><span class="dot">·</span>第 8 讲 · 结业：给自己写座右铭<span class="tm">未学</span></div>
+    </div>
+  </div>
+
+
+  <div class="sec">📜 九大秘籍 · 课程内容 <span>天赋测试同源介绍</span></div>
+  <div class="mjgrid" id="mj"></div>
+
+  <div class="sec">✨ 精品课报名 <span>3 个直接报名入口</span></div>
+
+  <div class="vip">
+    <img src="/static/dayu/assets/adv/love-together.png" alt=""/>
+    <div class="vi">
+      <h3>爱上学习训练营</h3>
+      <p>21 天学习动力系统重建：从&#34;要我学&#34;到&#34;我要学&#34;，亲子关系同步修复课。</p>
+      <div class="price">限时开放 · 即将上线</div>
+    </div>
+    <a class="btn" href="javascript:;" onclick="alert(&#39;爱上学习训练营 · 报名\n\n报名缴费通道接入中，敬请期待 ✨&#39;)">立即报名</a>
+  </div>
+
+  <div class="vip">
+    <img src="/static/dayu/assets/miji/sys-contest.jpg" alt=""/>
+    <div class="vi">
+      <h3>白名单赛事直通车</h3>
+      <p>中国青少年人工智能大赛等教育部白名单赛事：选题、集训、参赛一站式带赛。</p>
+      <div class="price">限额招生 · 审核制</div>
+    </div>
+    <a class="btn" href="javascript:;" onclick="alert(&#39;白名单赛事直通车 · 报名\n\n报名缴费通道接入中，敬请期待 ✨&#39;)">立即报名</a>
+  </div>
+
+  <div class="vip">
+    <img src="/static/dayu/assets/miji/sys-drama.jpg" alt=""/>
+    <div class="vi">
+      <h3>AI 短剧创作营</h3>
+      <p>从剧本到成片：用 AI 工具独立完成一部竖屏短剧，优秀作品直通《天赋物语》彩蛋。</p>
+      <div class="price">兴趣选拔 · 即将上线</div>
+    </div>
+    <a class="btn" href="javascript:;" onclick="alert(&#39;AI 短剧创作营 · 报名\n\n报名缴费通道接入中，敬请期待 ✨&#39;)">立即报名</a>
+  </div>
+
+  <div class="tip">课程均为独立产品，单独介绍、单独报名 · 已报名课程从这里一键进入听课</div>
+
+  <div class="foot">
+    <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+</div>
+<script>
+const MJ=[['六感神剑','mj-tfsd','多元感知 · 六感全开'],['左右同搏','mj-yxdy','左右脑协同 · 一心二用'],['无相神功','mj-yxzj','想象力 · 脑中造世界'],['吸照大法','mj-cnyd','超脑阅读 · 一眼十行'],['心门九剑','mj-scyj','直觉决策 · 快准狠'],['昙花宝典','mj-gxzy','影像追忆 · 过目不忘'],['太极神功','mj-jsys','思维太极 · 以柔克刚'],['呼吸打坐','mj-jlhf','专注力 · 静中生慧'],['九阳绝学','mj-bddt','极速学习 · 融会贯通']];
+/* 名额紧缺感：名额不断缩小 */
+(function(){
+  let left=7,en=183;const total=190;
+  setInterval(()=>{
+    if(left>2&&Math.random()<0.6){left--;en++;
+      document.getElementById('adLeft').textContent=left;
+      document.getElementById('adEn').textContent=en;
+      document.getElementById('adBar').style.width=Math.round(en/total*100)+'%';
+    }
+  },9000);
+})();
+document.getElementById('mj').innerHTML=MJ.map(([n,f,d])=>
+  `<a class="mj" href="javascript:;" onclick="alert('${n}\\n\\n${d}\\n\\n该秘籍课已包含在超脑九段训练营中，去「中央电脑」开始今日训练。')"><img src="/static/dayu/assets/miji/${f}.jpg" alt="${n}"><div class="mn">${n}</div></a>`).join('');
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+</body></html>

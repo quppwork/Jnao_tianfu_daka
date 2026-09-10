@@ -78,17 +78,31 @@
       }
     },
     {
-      "path": "pages/index",
+      "path": "pages/dayu/home",
       "type": "home",
       "style": {
-        "navigationBarTitleText": "JNAO",
+        "navigationBarTitleText": "大宇AI",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/index",
+      "style": {
+        "navigationBarTitleText": "大宇对话",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/talent/hub",
+      "style": {
+        "navigationBarTitleText": "天赋测评中心",
         "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/talent/index",
       "style": {
-        "navigationBarTitleText": "天赋测试",
+        "navigationBarTitleText": "个人测试",
         "navigationStyle": "custom"
       }
     },
@@ -96,6 +110,13 @@
       "path": "pages/report/index",
       "style": {
         "navigationBarTitleText": "天赋报告",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/training/dayu",
+      "style": {
+        "navigationBarTitleText": "今日修炼",
         "navigationStyle": "custom"
       }
     },
@@ -114,9 +135,16 @@
       }
     },
     {
-      "path": "pages/qa/index",
+      "path": "pages/qa/dayu",
       "style": {
         "navigationBarTitleText": "学科答疑",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/qa/index",
+      "style": {
+        "navigationBarTitleText": "学科答疑对话",
         "navigationStyle": "custom"
       }
     },
@@ -126,10 +154,38 @@
         "navigationBarTitleText": "成长里程碑",
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/hub/story",
+      "style": {
+        "navigationBarTitleText": "历史剧情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/hub/courses",
+      "style": {
+        "navigationBarTitleText": "天赋课程",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/hub/academy",
+      "style": {
+        "navigationBarTitleText": "天赋学院",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/hub/console",
+      "style": {
+        "navigationBarTitleText": "中央电脑",
+        "navigationStyle": "custom"
+      }
     }
   ],
   "globalStyle": {
-    "backgroundColor": "#f0f2f5",
+    "backgroundColor": "#07090e",
     "navigationBarBackgroundColor": "#0d1117",
     "navigationBarTextStyle": "white",
     "navigationStyle": "custom"

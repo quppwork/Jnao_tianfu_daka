@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 from sqlalchemy import delete, select
@@ -113,6 +114,23 @@ def validate_session(db: Session, user_id: int, token: str | None) -> bool:
                 row = migrated
         if not row:
             return False
-    row.last_active_at = _now()
+    now = _now()
+    # 降频写库：默认 5 分钟内同一会话不刷新 last_active_at（SESSION_TOUCH_INTERVAL_SEC）
+    touch_sec = 300
+    raw = (os.getenv("SESSION_TOUCH_INTERVAL_SEC") or "").strip()
+    if raw:
+        try:
+            touch_sec = max(0, int(raw))
+        except ValueError:
+            touch_sec = 300
+    last = row.last_active_at
+    if touch_sec > 0 and last is not None:
+        try:
+            delta = (now - last).total_seconds()
+        except TypeError:
+            delta = touch_sec
+        if delta < touch_sec:
+            return True
+    row.last_active_at = now
     db.commit()
     return True

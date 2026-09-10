@@ -543,6 +543,10 @@ function goBack() {
 onLoad((opts) => {
   fromOnboarding.value = opts?.from === 'onboarding'
   studentTypeFromOnboarding.value = opts?.student_type || 'new'
+  if (opts?.history === '1' || opts?.history === 'true') {
+    showHistory.value = true
+    loadHistory()
+  }
 })
 
 // Watch for question change → restart countdown

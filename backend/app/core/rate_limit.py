@@ -1,4 +1,4 @@
-"""简易内存限流 — 单进程有效；生产多 worker 建议配合 Redis。"""
+"""限流 — Redis 优先（多 worker 共享），不可用时降级进程内存。"""
 
 from __future__ import annotations
 
@@ -17,15 +17,23 @@ def reset_rate_limit_buckets() -> None:
     _buckets.clear()
 
 
-def check_rate_limit(
+def _env_int(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _check_rate_limit_memory(
     key: str,
     *,
     max_calls: int,
     window_sec: int,
-    detail: str | None = None,
+    detail: str | None,
 ) -> None:
-    if max_calls <= 0:
-        return
     now = time.time()
     bucket = [t for t in _buckets[key] if now - t < window_sec]
     if len(bucket) >= max_calls:
@@ -37,14 +45,52 @@ def check_rate_limit(
     _buckets[key] = bucket
 
 
-def _env_int(name: str, default: int) -> int:
-    raw = (os.getenv(name) or "").strip()
-    if not raw:
-        return default
+def _check_rate_limit_redis(
+    key: str,
+    *,
+    max_calls: int,
+    window_sec: int,
+    detail: str | None,
+) -> bool:
+    """成功走 Redis 返回 True；客户端不可用返回 False 以便降级。"""
+    from app.core.cache import get_client
+
+    client = get_client()
+    if not client:
+        return False
+    rkey = f"rl:{key}"
     try:
-        return int(raw)
-    except ValueError:
-        return default
+        n = int(client.incr(rkey))
+        if n == 1:
+            client.expire(rkey, max(1, window_sec))
+        if n > max_calls:
+            raise HTTPException(
+                429,
+                detail or "请求过于频繁，请稍后再试",
+            )
+        return True
+    except HTTPException:
+        raise
+    except Exception:
+        return False
+
+
+def check_rate_limit(
+    key: str,
+    *,
+    max_calls: int,
+    window_sec: int,
+    detail: str | None = None,
+) -> None:
+    if max_calls <= 0:
+        return
+    if _check_rate_limit_redis(
+        key, max_calls=max_calls, window_sec=window_sec, detail=detail
+    ):
+        return
+    _check_rate_limit_memory(
+        key, max_calls=max_calls, window_sec=window_sec, detail=detail
+    )
 
 
 def check_guide_chat_limits(child_user_id: int) -> None:

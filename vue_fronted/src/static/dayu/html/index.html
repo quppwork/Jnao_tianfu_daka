@@ -1,0 +1,198 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>大宇智能体 · 首页</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  /* 顶栏：用户名居中 + 设置/主题 */
+  .hometop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+  .hometop .sp{flex:1}
+  .hometop .user{font-size:21px;font-weight:900;color:#EDEBE4;flex:2;text-align:center}
+  .hometop .user small{font-size:12px;color:#5A6274}
+  .hometop .icons{flex:1;text-align:right;font-size:18px;color:#8B93A5;letter-spacing:8px}
+  /* 头图：分层人物 + 投影 + 浮动动画 */
+  .hero{position:relative;margin:6px 18px 0;width:calc(100% - 36px);aspect-ratio:1125/480;border-radius:18px;border:1.5px solid #232B3D;background:url("/static/dayu/assets/hero_bg.jpg") center/cover;overflow:hidden}
+  .hero-p{position:absolute;bottom:0}
+  /* 张宇：定住不动，身体沉到底边，与背景融合 */
+  .hero-p.zy{left:4.3%;height:93%;filter:drop-shadow(0 8px 12px rgba(6,10,24,.5))}
+  /* 卡通：保留呼吸浮动，配合同步地面投影 */
+  .hero-p.ct{left:22.2%;height:82%;bottom:1.2%;animation:heroFloat 3.6s ease-in-out infinite;animation-delay:-1.8s;filter:drop-shadow(6px 10px 10px rgba(6,10,24,.55))}
+  .hero-sh{position:absolute;border-radius:50%;background:radial-gradient(ellipse at center,rgba(4,6,16,.85),rgba(4,6,16,.35) 55%,transparent 72%);filter:blur(1.5px)}
+  .zy-sh{display:none}
+  /* 卡通地面投影：更大更实，随浮动缩放脉动 */
+  .ct-sh{left:23.5%;bottom:0.6%;width:24%;height:6.5%;animation:heroShadow 3.6s ease-in-out infinite;animation-delay:-1.8s}
+  /* 张宇下半身与蓝色面板的融合渐变（压在人物最前层） */
+  .hero-fuse{position:absolute;left:0;right:0;bottom:0;height:16%;background:linear-gradient(180deg,transparent,rgba(64,86,176,.5) 78%,rgba(62,84,180,.72));pointer-events:none}
+  @keyframes heroFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.4%)}}
+  @keyframes heroShadow{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.86);opacity:.55}}
+  /* 四功能一排 */
+  .nav4{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 18px}
+  .nav4 a{flex:1;background:#131926;border:1.5px solid #232B3D;border-radius:14px;padding:12px 2px;text-align:center}
+  .nav4 .i{font-size:22px}
+  .nav4 .n{font-size:12.5px;font-weight:800;color:#EDEBE4;margin-top:4px}
+  /* 对话卡 */
+  .chat{margin:4px 18px;background:#131926;border:1.5px solid #232B3D;border-radius:18px;padding:14px}
+  .chat .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .chat .head .av{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar-dayu.jpg") center 12%/120% auto;border:2px solid #EDEBE4;flex:none}
+  .chat .head .tag{background:rgba(46,107,230,.14);border:1px solid #2E6BE6;color:#7FA7EF;font-size:12.5px;font-weight:800;padding:4px 12px;border-radius:99px}
+  .chat p{font-size:14.5px;color:#D8DCE6;line-height:1.65}
+  .chat p b{color:#6FCF8E}
+  .chat .warn{margin-top:10px;font-size:12.5px;color:#C9A869;line-height:1.55;background:rgba(201,168,105,.08);border-radius:10px;padding:8px 10px}
+  .chat .go{display:inline-block;margin-top:12px;background:#2E6BE6;color:#fff;font-size:16px;font-weight:900;padding:12px 22px;border-radius:99px}
+  /* 提问条 */
+  .askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:8px 18px;display:flex;gap:10px;align-items:center;background:rgba(11,14,20,.94)}
+  .askbar .box{flex:1;background:#161D2B;border:1.5px solid #2A3040;border-radius:999px;padding:11px 16px;font-size:14px;color:#5A6274}
+  .askbar .send{width:42px;height:42px;border-radius:50%;background:#6FCF8E;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt /* 顶栏：用户名居中 + 设置/主题 */
+  .hometop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}html.lt .hometop .sp{flex:1.2}html.lt .hometop .user{font-size:17px;font-weight:900;color:#1b1912;flex:1;text-align:center;white-space:nowrap}html.lt .hometop .user small{font-size:11px;color:#8b93a5}html.lt .hometop .icons{flex:1.2;text-align:right;font-size:17px;color:#5a6274;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.acctbtn{display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:0;color:#F5D9A8;background:linear-gradient(135deg,rgba(201,162,39,.3),rgba(201,162,39,.12));border:1.5px solid #C9A227;border-radius:99px;padding:5px 12px;text-decoration:none;vertical-align:3px;margin-right:2px}
+/* 算力额度条 */
+.qpill{display:inline-flex;align-items:center;gap:5px;background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:3px 9px;text-decoration:none;vertical-align:middle;white-space:nowrap}
+.qpill b{font-size:11px;font-weight:900;color:#F5D9A8}
+.qpill .qb{width:26px;height:6px;border-radius:99px;background:#0A0F1C;border:1px solid #2A3040;overflow:hidden}
+.qpill .qb i{display:block;height:100%;width:12%;background:linear-gradient(90deg,#F5D576,#E0863C)}
+html.lt .qpill{background:#d9dfec;border-color:#c2cadc}html.lt .qpill b{color:#967536}html.lt .qpill .qb{background:#c9d2e4;border-color:#bfc5d5}
+/* 算力耗尽弹窗 */
+.qmask{position:fixed;inset:0;background:rgba(5,8,16,.72);z-index:200;display:none;align-items:center;justify-content:center;padding:30px}
+.qmask.show{display:flex}
+.qpop{background:#131926;border:1.5px solid #C9A227;border-radius:22px;padding:24px 20px;text-align:center;max-width:330px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.qpop .qi{font-size:40px}
+.qpop h3{font-size:18px;font-weight:900;color:#F5D9A8;margin:10px 0 8px}
+.qpop p{font-size:12.5px;color:#8B93A5;line-height:1.7}
+.qpop .qgo{display:block;margin-top:16px;background:linear-gradient(90deg,#F5D576,#C9A869);color:#0D111F;font-size:15px;font-weight:900;border-radius:99px;padding:13px;text-decoration:none}
+.qpop .qlater{display:block;margin-top:10px;font-size:11.5px;color:#5A6274;text-decoration:none}
+html.lt .acctbtn{color:#967536;background:rgba(150,117,54,.12);border-color:#967536}html.lt /* 头图 */
+  .heroimg{display:block;margin:6px 18px 0;width:calc(100% - 36px);border-radius:18px;border:1.5px solid #c2cadc}html.lt /* 四功能一排 */
+  .nav4{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 18px}html.lt .nav4 a{flex:1;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:14px;padding:12px 2px;text-align:center}html.lt .nav4 .i{font-size:22px}html.lt .nav4 .n{font-size:12.5px;font-weight:800;color:#1b1912;margin-top:4px}html.lt /* 对话卡 */
+  .chat{margin:4px 18px;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:18px;padding:14px}html.lt .chat .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}html.lt .chat .head .av{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar-dayu.jpg") center 12%/120% auto;border:2px solid #1956d1;flex:none}html.lt .chat .head .tag{background:rgba(25,86,209,.14);border:1px solid #1956d1;color:#103880;font-size:12.5px;font-weight:800;padding:4px 12px;border-radius:99px}html.lt .chat p{font-size:14.5px;color:#191d27;line-height:1.65}html.lt .chat p b{color:#30904f}html.lt .chat .warn{margin-top:10px;font-size:12.5px;color:#967536;line-height:1.55;background:rgba(150,117,54,.08);border-radius:10px;padding:8px 10px}html.lt .chat .go{display:inline-block;margin-top:12px;background:#1956d1;color:#141414;font-size:16px;font-weight:900;padding:12px 22px;border-radius:99px}html.lt /* 提问条 */
+  .askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:8px 18px;display:flex;gap:10px;align-items:center;background:rgba(235,238,244,.94)}html.lt .askbar .box{flex:1;background:#d4dbe9;border:1.5px solid #bfc5d5;border-radius:999px;padding:11px 16px;font-size:14px;color:#8b93a5}html.lt .askbar .send{width:42px;height:42px;border-radius:50%;background:#30904f;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="phone" style="padding-bottom:150px">
+
+  <div class="hometop">
+    <div class="sp" style="text-align:left"><a class="acctbtn" href="parent.html">家长账户</a></div>
+    <div class="user">张无忌 <small>▾</small></div>
+    <div class="icons"><span class="themebtn" style="cursor:pointer" onclick="toggleTheme()">☀️</span></div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-sh zy-sh"></div>
+    <div class="hero-sh ct-sh"></div>
+    <img class="hero-p zy" src="/static/dayu/assets/_zy-cut.png" alt="张宇老师"/>
+    <img class="hero-p ct" src="/static/dayu/assets/_cartoon-cut.png" alt="天赋小勇士"/>
+    <div class="hero-fuse"></div>
+  </div>
+
+  <div class="nav4">
+    <a href="test.html"><div class="i"><img src="/static/dayu/assets/ic/dna.png" style="width:60px;height:60px;object-fit:contain;vertical-align:middle" alt=""/></div><div class="n">天赋测试</div></a>
+    <a href="history.html"><div class="i"><img src="/static/dayu/assets/ic/clapper.png" style="width:60px;height:60px;object-fit:contain;vertical-align:middle" alt=""/></div><div class="n">历史剧情</div></a>
+    <a href="courses.html"><div class="i"><img src="/static/dayu/assets/ic/books.png" style="width:60px;height:60px;object-fit:contain;vertical-align:middle" alt=""/></div><div class="n">天赋课程</div></a>
+  </div>
+
+  <div class="chat">
+    <div class="head">
+      <div class="av"></div>
+      <div class="tag">今日：请先完成天赋测评</div>
+    </div>
+    <p>张无忌，你好！我是张宇老师的智能体——<b>大宇智能体</b>，你的专属 AI 教练。点「天赋测试」开始，测完回来我帮你看结果！</p>
+    <div class="warn">⚠️ 训练为「张无忌」准备。不是本人？点顶部「张无忌 ▾」切换账号，别混了数据。</div>
+    <a class="go" href="test.html">去天赋测试 ›</a>
+  </div>
+
+  <div class="askbar" id="askbar" style="cursor:pointer">
+    <div class="box">输入问题…</div>
+    <div class="send">➤</div>
+  </div>
+  <script>
+  (function(){
+    function goChat(){
+      try{
+        if(window.parent && window.parent!==window){
+          window.parent.postMessage({type:'dayu-nav', path:'/pages/index?chat=1'}, '*');
+        }
+      }catch(e){}
+    }
+    var bar=document.getElementById('askbar');
+    if(bar) bar.onclick=goChat;
+  })();
+  </script>
+
+  <div class="foot">
+    <a class="on" href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+  <!-- 每日弹窗：先进群 · 推广奖算力 · 充值（每侧每天一次） -->
+  <div class="qmask" id="qmask">
+    <div class="qpop">
+      <div class="qi">⚡</div>
+      <h3>算力不足？先进群领福利</h3>
+      <p style="margin-bottom:10px">新学员请<b style="color:#F5D9A8">先扫码进微信群</b>——群里有值班真人导师、打卡提醒和算力福利。</p>
+      <img src="/static/dayu/assets/wx-group-qr.png" alt="微信群二维码" style="width:150px;border-radius:12px;border:1.5px solid rgba(245,213,118,.5)"/>
+      <p style="margin-top:9px">📣 邀请好友下载大宇App，<b style="color:#F5D9A8">你和好友各得 200 点算力</b>，上不封顶。</p>
+      <a class="qgo" href="javascript:;" onclick="alert(&#39;群号已复制：DAYU-QUN-3（演示）\n请打开微信 → 添加朋友 → 输入群号进群 ✅&#39;)">一键复制群号 · 微信扫码进群</a>
+      <a class="qgo" href="wallet.html" style="background:#171E2E;color:#9AD9FF;border:1.5px solid #2E6BE6;margin-top:8px">算力不够？去充值/开会员 ›</a>
+      <a class="qlater" href="javascript:document.getElementById(&#39;qmask&#39;).classList.remove(&#39;show&#39;)">今天不再提醒</a>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var d=new Date(),k='qn_pop_kid_'+d.getFullYear()+(d.getMonth()+1)+d.getDate();
+    try{if(!localStorage.getItem(k)){localStorage.setItem(k,'1');setTimeout(function(){document.getElementById('qmask').classList.add('show')},1200);}}catch(e){}
+  })();
+  </script>
+
+</div>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+</body></html>

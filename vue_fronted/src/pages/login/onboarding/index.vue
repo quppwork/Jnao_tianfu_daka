@@ -306,7 +306,7 @@ function nextDataStep() {
 
 async function goHome() {
   try { await persistOnboarding({ finalize: true }) } catch (_) {}
-  uni.redirectTo({ url: '/pages/index' })
+  uni.redirectTo({ url: '/pages/dayu/home' })
 }
 
 onMounted(async () => {
@@ -329,7 +329,7 @@ onMounted(async () => {
     const p = await fetchProfile(uid)
     const ob = p.profile_json?.onboarding || {}
     if (ob.completed_at) {
-      uni.redirectTo({ url: '/pages/index' })
+      uni.redirectTo({ url: '/pages/dayu/home' })
       return
     }
     if (ob.student_type) studentType.value = ob.student_type
