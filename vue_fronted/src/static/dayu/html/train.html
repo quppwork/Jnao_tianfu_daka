@@ -208,7 +208,7 @@ function toggleTheme(){
     <div class="chip-g">思者 · 第 1 天</div>
   </div>
 
-  <!-- ===== 生日预告条 ===== -->
+  <!-- ===== 生日预告条（演示用，默认隐藏） ===== -->
   <a class="bdbar" href="birthday.html" id="bdbar" style="display:none">
     <span class="bdi">🎂</span>
     <span class="bdt" id="bdtext"></span>
@@ -219,15 +219,15 @@ function toggleTheme(){
   <div id="stepTime">
     <div class="tpick">
       <div class="tt">⏰ 今天练多久？<span class="st8">第 1 步 · 选时长</span></div>
-      <div class="big" id="tBig">08:00:00</div>
+      <div class="big" id="tBig">00:40:00</div>
       <div class="cap">选多久，就排多少</div>
       <div class="quick" id="quick">
         <div data-m="30">30分钟</div><div data-m="60">1小时</div><div data-m="120">2小时</div><div data-m="240">4小时</div>
-        <div data-m="360">6小时</div><div data-m="480" class="on">8小时</div><div data-m="600">10小时</div><div data-m="15">15分钟</div>
+        <div data-m="360">6小时</div><div data-m="480">8小时</div><div data-m="600">10小时</div><div data-m="40" class="on">40分钟</div>
       </div>
       <div class="step">
         <div class="col"><button onclick="adj(-60)">−</button><div class="lab">减1小时</div></div>
-        <div class="col"><div class="val" id="tVal">8小时 0分</div></div>
+        <div class="col"><div class="val" id="tVal">0小时 40分</div></div>
         <div class="col"><button onclick="adj(60)">＋</button><div class="lab">加1小时</div></div>
       </div>
       <div class="step" style="margin-top:4px">
@@ -236,7 +236,7 @@ function toggleTheme(){
         <div class="col"><button onclick="adj(10)">＋</button><div class="lab">加10分钟</div></div>
       </div>
     </div>
-    <div class="goPlan" onclick="genPlan()">生成今日挑战<small>按所选时长排关</small></div>
+    <div class="goPlan" onclick="genPlan()">生成今日挑战<small>按 0 小时 40 分排课</small></div>
     <div class="dayu">
       <div class="bear"></div>
       <div class="bubble"><b>练多久，排多少关。</b>8小时有8小时的闯法。</div>
@@ -247,33 +247,14 @@ function toggleTheme(){
   <div class="gate" id="gate">
     <div class="gt">🏮 今日通关挑战 <span class="day">思者 · 第 1 天</span></div>
     <div class="cnt"><b id="gcnt">8</b><span>个技能任务</span><small id="gmeta">与中央电脑技能墙同步 · 逐个点亮</small></div>
-    <div id="glist">
-      <div class="gitem opt" id="g-gz" style="display:flex"><div class="n">选</div>感知力·多元感知<span class="st">置顶选修</span></div>
-      <div class="gitem opt" id="g-kkq" style="display:none"><div class="n">选</div>开口窍·视频课<span class="st">置顶选修</span></div>
-      <div class="gitem"><div class="n">1</div>超脑阅读<span class="st">0/1 · 进行中</span></div>
-      <div class="gitem"><div class="n">2</div>影像追忆<span class="st">待解锁</span></div>
-      <div class="gitem"><div class="n">3</div>超脑阅读Ⅱ<span class="st">待解锁</span></div>
-      <div class="gitem"><div class="n">4</div>影像追忆Ⅱ<span class="st">待解锁</span></div>
-      <div class="gitem"><div class="n">5</div>超脑阅读Ⅲ<span class="st">待解锁</span></div>
-      <div class="gitem"><div class="n">6</div>影像追忆Ⅲ<span class="st">待解锁</span></div>
-      <div class="gitem opt"><div class="n">选</div>高效作业<span class="st">通关后解锁</span></div>
-      <div class="gitem opt"><div class="n">选</div>精力恢复<span class="st">通关后解锁</span></div>
-    </div>
+    <div id="glist"></div>
 
-    <div class="opts">
-      <div class="ot">🧩 选修 · 开了置顶第1关</div>
-      <div class="opt on" id="opt-gz" onclick="toggleOpt(&#39;gz&#39;)">
-        <div><div class="on_name">多元感知</div><div class="od">感知力音频训练 · 约12分钟</div><div class="tip">已置顶为第 1 关 ✓</div></div>
-        <div class="sw"></div>
-      </div>
-      <div class="opt" id="opt-kkq" onclick="toggleOpt(&#39;kkq&#39;)">
-        <div><div class="on_name">开口窍 🎬</div><div class="od">视频训练 · 表达力开口练习</div><div class="tip">已置顶为第 1 关 ✓</div></div>
-        <div class="sw"></div>
-      </div>
+    <div class="opts" id="optsBox" style="display:none">
+      <div class="ot">🧩 选修（由后端方案决定，此处仅展示）</div>
     </div>
 
     <div class="confirm" id="confirmBtn" onclick="confirmPlan()">确认 · 开启今日挑战<small id="cfmt">打卡后不可再改</small></div>
-    <div class="editline"><a href="#">📝 编辑方案</a><span>仅可改一次</span></div>
+    <div class="editline"><span></span><span id="editHint">时长确认后由后端锁定</span></div>
   </div>
 
   <!-- ===== 闯关地图 ===== -->
@@ -291,7 +272,7 @@ function toggleTheme(){
 
     <div class="dayu">
       <div class="bear"></div>
-      <div class="bubble"><b>先过第1关</b>，再来找我盖章。每关都有秘籍剧情片+专属指导视频，看完再练，事半功倍。</div>
+      <div class="bubble" id="mapBubble"><b>先过当前关</b>，再继续下一关。点卡片可播放或打卡。</div>
     </div>
 
     <div class="path" id="taskPath"></div>
@@ -306,206 +287,374 @@ function toggleTheme(){
   </div>
 
 </div>
-<script src="birthday.js"></script>
 <script>
-/* 生日预告条 */
-(function(){
-  if(typeof BD==='undefined')return;
-  const bar=document.getElementById('bdbar'),tx=document.getElementById('bdtext');
-  bar.style.display='flex';
-  if(!BD.isSet()){
-    tx.innerHTML='登记生日，领「五桩合体·武者盲盒」限量礼物🎁<small>终身只能登记一次 · 登记后生日有专属惊喜</small>';
-  }else if(BD.isToday()){
-    tx.innerHTML='🎉 今天是你的生日！打卡完成后去聊天室收祝福<small>生日限定礼物已送达 · 查看生日档案</small>';
-  }else{
-    const n=BD.daysUntil();
-    tx.innerHTML=`距离你的生日还有 <b style="color:#FFD76F">${n}</b> 天 · 生日礼物已在准备<small>每天打卡，生日彩蛋会更隆重</small>`;
+/**
+ * 今日修炼壳：保留静态 UI，业务由宿主 pages/training/dayu.vue 经 postMessage 驱动。
+ * Child → Parent: dayu-train-ready | dayu-train-schedule | dayu-train-confirm | dayu-train-media | dayu-train-checkin | dayu-nav
+ * Parent → Child: dayu-train-state | dayu-train-error
+ */
+(function () {
+  var MIN = 20;
+  var MAX = 720;
+  var mins = 40;
+  var phase = 'setup'; // setup | confirm | running | expired | need_assessment
+  var plan = null;
+  var talentLabel = '';
+  var dayNum = 1;
+  var scheduling = false;
+
+  var SKILL_META = {
+    '超脑阅读': { emoji: '📖', img: '/static/dayu/assets/miji/mj-tfsd.jpg', mj: '吸照大法' },
+    '影像追忆': { emoji: '🧠', img: '/static/dayu/assets/miji/sys-drama.jpg', mj: '无相神功' },
+    '扫描速记': { emoji: '🌸', img: '/static/dayu/assets/miji/mj-tfsd.jpg', mj: '昙花宝典' },
+    '极速运算': { emoji: '⚡', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '极速运算' },
+    '极速学习': { emoji: '🚀', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '太极神功' },
+    '难题专练': { emoji: '🎯', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '难题专练' },
+    '文科扫书': { emoji: '📚', img: '/static/dayu/assets/miji/mj-tfsd.jpg', mj: '文科扫书' },
+    '理科扫书': { emoji: '🔬', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '理科扫书' },
+    '高效作业': { emoji: '✏️', img: '/static/dayu/assets/miji/sys-drama.jpg', mj: '高效作业' },
+    '多元感知': { emoji: '🎧', img: '/static/dayu/assets/miji/mj-tfsd.jpg', mj: '六感神剑' },
+    '精力恢复': { emoji: '🍃', img: '/static/dayu/assets/miji/sys-drama.jpg', mj: '呼吸打坐' },
+    '天赋绘画': { emoji: '🎨', img: '/static/dayu/assets/miji/sys-drama.jpg', mj: '天赋绘画' },
+    '音乐灵感': { emoji: '🎵', img: '/static/dayu/assets/miji/sys-drama.jpg', mj: '音乐灵感' },
+    '棋类专注': { emoji: '♟️', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '棋类专注' }
+  };
+  var DEFAULT_META = { emoji: '⚔️', img: '/static/dayu/assets/miji/mj-tfsd.jpg', mj: '今日修炼' };
+  var ELECTIVES = { '精力恢复': 1, '多元感知': 1, '高效作业': 1 };
+
+  function post(payload) {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(payload, '*');
+        return true;
+      }
+    } catch (e) { /* ignore */ }
+    return false;
   }
-})();
-</script>
-<script>
-const state={gz:true,kkq:false};
-function recount(){
-  const opt=(state.gz?1:0)+(state.kkq?1:0);
-  document.getElementById('gcnt').textContent=8;
-  document.getElementById('gmeta').textContent=`必闯6关 · 选修${2+opt}关 · ≈${60+opt*10}分钟`;
-  document.getElementById('mcnt').textContent=8;
-}
-function toggleOpt(k){
-  state[k]=!state[k];
-  document.getElementById('opt-'+k).classList.toggle('on',state[k]);
-  document.getElementById('g-'+(k==='gz'?'gz':'kkq')).style.display=state[k]?'flex':'none';
-  recount();
-let mins=480;
-function fmt(m){const h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':00';}
-function renderT(){
-  document.getElementById('tBig').textContent=fmt(mins);
-  document.getElementById('tVal').textContent=Math.floor(mins/60)+'小时 '+ (mins%60)+'分';
-  document.querySelector('.goPlan small').textContent='按 '+Math.floor(mins/60)+' 小时 '+(mins%60)+' 分排课';
-  document.querySelectorAll('#quick div').forEach(d=>d.classList.toggle('on',+d.dataset.m===mins));
-}
-function adj(d){mins=Math.max(15,Math.min(720,mins+d));renderT();}
-document.querySelectorAll('#quick div').forEach(d=>d.onclick=()=>{mins=+d.dataset.m;renderT();});
-function genPlan(){
-  document.getElementById('stepTime').style.display='none';
-  document.getElementById('gate').style.display='block';
-  document.getElementById('cfmt').textContent='今日 '+fmt(mins)+' · 打卡后不可再改';
-  window.scrollTo(0,0);
-}
-}
-function confirmPlan(){
-  try{
-    var m = (typeof mins!=='undefined'?mins:480);
-    if(window.parent && window.parent!==window){
-      window.parent.postMessage({type:'dayu-train-confirm', minutes:m}, '*');
-      return;
+
+  function fmt(m) {
+    m = Math.max(0, Number(m) || 0);
+    var h = Math.floor(m / 60);
+    var mm = m % 60;
+    return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0') + ':00';
+  }
+
+  function skillOf(item) {
+    if (!item) return '训练';
+    var raw = item.instructions;
+    if (raw && typeof raw === 'object' && raw.skill) return String(raw.skill);
+    if (typeof raw === 'string' && raw.trim().charAt(0) === '{') {
+      try {
+        var j = JSON.parse(raw);
+        if (j.skill) return String(j.skill);
+      } catch (e) { /* ignore */ }
     }
-  }catch(e){}
-document.getElementById('gate').style.display='none';
-  document.getElementById('map').style.display='block';
-  window.scrollTo(0,0);
-}
-recount();
-let mins=480;
-function fmt(m){const h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':00';}
-function renderT(){
-  document.getElementById('tBig').textContent=fmt(mins);
-  document.getElementById('tVal').textContent=Math.floor(mins/60)+'小时 '+ (mins%60)+'分';
-  document.querySelector('.goPlan small').textContent='按 '+Math.floor(mins/60)+' 小时 '+(mins%60)+' 分排课';
-  document.querySelectorAll('#quick div').forEach(d=>d.classList.toggle('on',+d.dataset.m===mins));
-}
-function adj(d){mins=Math.max(15,Math.min(720,mins+d));renderT();}
-document.querySelectorAll('#quick div').forEach(d=>d.onclick=()=>{mins=+d.dataset.m;renderT();});
-function genPlan(){
-  document.getElementById('stepTime').style.display='none';
-  document.getElementById('gate').style.display='block';
-  document.getElementById('cfmt').textContent='今日 '+fmt(mins)+' · 打卡后不可再改';
-  window.scrollTo(0,0);
-}
-/* ===== 技能完成度（与中央电脑共用 jn_skill_prog） ===== */
-const SKL={
-  key:'jn_skill_prog',
-  /* 演示默认值：训练流程实际产生完成度时调用 SKL.set(技能名, 0-100) 覆盖 */
-  demo:{'多元感知':64,'心门九剑':38,'吸照大法':45,'无相神功':0,'吸照大法 · 进阶':0,'无相神功 · 进阶':0,'吸照大法 · 化境':0,'无相神功 · 化境':0,'昙花宝典':0,'呼吸打坐':72},
-  all(){try{return Object.assign({},this.demo,JSON.parse(localStorage.getItem(this.key)||'{}'));}catch(e){return Object.assign({},this.demo);}},
-  get(n){const a=this.all();return a[n]!=null?a[n]:0;},
-  set(n,p){const a=this.all();a[n]=Math.max(0,Math.min(100,Math.round(p)));localStorage.setItem(this.key,JSON.stringify(a));},
-  paint(){
-    document.querySelectorAll('#map .stage2, .path .stage2').forEach(st=>{
-      const card=st.querySelector('.lv-card'); if(!card||card.querySelector('.skl'))return;
-      const mj=(card.querySelector('.smj')||{}).textContent||'';
-      const name=mj.replace(/^秘籍 · /,'').trim(); if(!name)return;
-      const locked=st.classList.contains('locked');
-      const pct=locked?0:this.get(name);
-      const tip=pct>=100?'✅ 已达标准 · 技能已点亮':(pct>0?'首次使用并达到 100%，该技能在中央电脑点亮':'完成度达 100% 才点亮 · 练一次涨一次');
-      const div=document.createElement('div');div.className='skl';
-      div.innerHTML='<div class="skl-h"><span>⚡ 技能完成度 · '+name+'</span><b class="'+(pct?'':'zero')+'">'+pct+'%</b></div>'
-        +'<div class="skl-bar"><i style="width:0"></i></div><div class="skl-tip">'+tip+'</div>';
-      const body=card.querySelector('.sbody'); const ssub=body.querySelector('.ssub');
-      ssub?ssub.insertAdjacentElement('afterend',div):body.prepend(div);
-      setTimeout(()=>{div.querySelector('.skl-bar i').style.width=pct+'%';},80);
+    var texts = [item.title, item.lesson_title, item.ability_type].filter(Boolean).map(String);
+    var keys = Object.keys(SKILL_META);
+    for (var i = 0; i < texts.length; i++) {
+      for (var k = 0; k < keys.length; k++) {
+        if (texts[i].indexOf(keys[k]) >= 0) return keys[k];
+      }
+    }
+    return texts[0] || '训练';
+  }
+
+  function isElective(item) {
+    if (!item) return false;
+    if (item.item_type === 'elective' || item.item_type === 'perception') return true;
+    return !!ELECTIVES[skillOf(item)];
+  }
+
+  function itemDone(item) {
+    if (!item) return false;
+    if (item.checkin_status === 'done') return true;
+    var pct = item.watch_progress && Number(item.watch_progress.pct);
+    return pct >= 100;
+  }
+
+  function itemPct(item) {
+    if (itemDone(item)) return 100;
+    var pct = item && item.watch_progress && Number(item.watch_progress.pct);
+    return isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+  }
+
+  function items() {
+    return (plan && Array.isArray(plan.items)) ? plan.items : [];
+  }
+
+  function chipText() {
+    var t = talentLabel || '学员';
+    return t + ' · 第 ' + (dayNum || 1) + ' 天';
+  }
+
+  function setChip() {
+    var el = document.querySelector('.topbar .chip-g');
+    if (el) el.textContent = chipText();
+    var day = document.querySelector('#gate .day');
+    if (day) day.textContent = chipText();
+  }
+
+  function showOnly(which) {
+    var step = document.getElementById('stepTime');
+    var gate = document.getElementById('gate');
+    var map = document.getElementById('map');
+    if (step) step.style.display = which === 'setup' ? 'block' : 'none';
+    if (gate) gate.style.display = which === 'confirm' ? 'block' : 'none';
+    if (map) map.style.display = (which === 'running' || which === 'expired') ? 'block' : 'none';
+  }
+
+  function renderT() {
+    var big = document.getElementById('tBig');
+    var val = document.getElementById('tVal');
+    var go = document.querySelector('.goPlan small');
+    if (big) big.textContent = fmt(mins);
+    if (val) val.textContent = Math.floor(mins / 60) + '小时 ' + (mins % 60) + '分';
+    if (go) go.textContent = '按 ' + Math.floor(mins / 60) + ' 小时 ' + (mins % 60) + ' 分排课';
+    document.querySelectorAll('#quick div').forEach(function (d) {
+      d.classList.toggle('on', +d.dataset.m === mins);
     });
   }
-};
-SKL.paint();
 
-/* ================= 8 技能任务地图（与中央电脑技能墙同步 · 不重复 · 图取九大秘籍） ================= */
-const TASKS=[
- ['多元感知','🎧','assets/miji/mj-tfsd.jpg','六感神剑','感知力音频训练 · 约12分钟'],
- ['心门九剑','⚔️','assets/miji/mj-scyj.jpg','心门九剑','表达力开口练习 · 视频训练'],
- ['吸照大法','📖','assets/miji/mj-cnyd.jpg','吸照大法','超脑阅读 · 一目十行'],
- ['无相神功','🧠','assets/miji/mj-yxzj.jpg','无相神功','影像追忆 · 画面回放'],
- ['昙花宝典','🌸','assets/miji/mj-gxzy.jpg','昙花宝典','瞬时记忆 · 过目不忘'],
- ['左右同搏','🎞️','assets/miji/mj-yxdy.jpg','左右同搏','影像记忆进阶 · 双脑协同'],
- ['极速学习','🚀','assets/miji/mj-jsys.jpg','太极神功','极速学习法 · 以柔克刚'],
- ['呼吸打坐','🍃','assets/miji/mj-jlhf.jpg','呼吸打坐','静定调息 · 收官恢复'],
-];
-const TSK_DEMO={};
-function tskProg(n){
-  try{const s=JSON.parse(localStorage.getItem('jn_skill_prog')||'{}');if(s[n]!=null)return s[n];}catch(e){}
-  return TSK_DEMO[n]||0;
-}
-(function(){
-  let firstZero=false;
-  const html=TASKS.map((t,i)=>{
-    const p=tskProg(t[0]);
-    let st,stx;
-    if(p>=100){st='done';stx='已点亮 ✓';}
-    else if(p>0){st='active';stx='进行中 · '+p+'%';}
-    else if(!firstZero){st='active';firstZero=true;stx='进行中 · 当前任务';}
-    else{st='locked';stx='待解锁';}
-    const lock=st==='locked';
-    return `<div class="stage2 ${st==='active'?'active':st==='done'?'done':'locked'}"${i===0?' style="margin-top:26px"':''}>
-      <div class="orb">${lock?'🔒':t[1]}</div>
-      <div class="lv-card">
-        <div class="simg">
-          <img src="${t[2]}" alt="${t[0]}">
-          <span class="slv">任务 ${i+1} / 8 · ${stx}</span>
-          <span class="smj">秘籍 · ${t[3]}</span>
-          <div class="sname"><b>${t[0]}</b>${st==='done'?'<span class="tag">已点亮</span>':''}</div>
-        </div>
-        <div class="sbody">
-          <div class="ssub">${t[4]}</div>
-          <div class="weapon"><div class="ic">▶</div><div><b>${lock?'🔒 先点亮前一个技能':'拔出超级武器 · 开始训练'}</b><small>${lock?'技能一个一个点亮，别急':p>=100?'温故知新 · 可以再刷一遍':'完成度达 100% 即在中央电脑点亮'}</small></div></div>
-          <div class="vids">
-            <a class="vid mj" href="javascript:;"><span>📜</span><div><b>秘籍剧情</b><small>《${t[3]}》片段</small></div></a>
-            <a class="vid zd" href="javascript:;"><span>🎯</span><div><b>过关指导</b><small>按你的训练情况匹配</small></div></a>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-  document.getElementById('taskPath').innerHTML=html;
-  /* 进度条：完成度均值 */
-  const avg=Math.round(TASKS.reduce((a,t)=>a+Math.min(100,tskProg(t[0])),0)/8);
-  const mb=document.getElementById('mBar');if(mb)mb.style.width=Math.max(4,avg)+'%';
-  /* 确认屏列表同步 */
-  const gl=document.getElementById('glist');
-  if(gl){
-    let fz=false;
-    gl.innerHTML=TASKS.map((t,i)=>{
-      const p=tskProg(t[0]);
-      let stx;
-      if(p>=100)stx='已点亮 ✓';
-      else if(p>0)stx=p+'% · 进行中';
-      else if(!fz){fz=true;stx='当前任务';}
-      else stx='待解锁';
-      return `<div class="gitem"><div class="n">${i+1}</div>${t[0]} · ${t[4].split(' · ')[0]}<span class="st">${stx}</span></div>`;
+  window.adj = function (d) {
+    mins = Math.max(MIN, Math.min(MAX, mins + d));
+    renderT();
+  };
+
+  window.genPlan = function () {
+    if (scheduling) return;
+    if (mins < MIN) {
+      alert('至少 ' + MIN + ' 分钟');
+      return;
+    }
+    scheduling = true;
+    var go = document.querySelector('.goPlan');
+    if (go) go.style.opacity = '0.6';
+    if (!post({ type: 'dayu-train-schedule', minutes: mins })) {
+      scheduling = false;
+      if (go) go.style.opacity = '1';
+      alert('请在 App 内打开以连接排课');
+    }
+  };
+
+  window.confirmPlan = function () {
+    if (!plan || !plan.plan_id) {
+      alert('请先生成方案');
+      return;
+    }
+    if (!post({ type: 'dayu-train-confirm' })) {
+      alert('请在 App 内打开以开启挑战');
+    }
+  };
+
+  function statusLabel(item, idx, firstActiveIdx) {
+    if (itemDone(item)) return '已完成 ✓';
+    var p = itemPct(item);
+    if (p > 0) return '进行中 · ' + p + '%';
+    if (idx === firstActiveIdx) return '当前任务';
+    return '待解锁';
+  }
+
+  function firstActiveIndex(list) {
+    for (var i = 0; i < list.length; i++) {
+      if (!itemDone(list[i])) return i;
+    }
+    return list.length ? list.length - 1 : 0;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderGate() {
+    var list = items();
+    var gcnt = document.getElementById('gcnt');
+    var gmeta = document.getElementById('gmeta');
+    var glist = document.getElementById('glist');
+    var cfmt = document.getElementById('cfmt');
+    var pm = Number(plan && plan.planned_minutes) || mins;
+    var elect = list.filter(isElective).length;
+    var core = list.length - elect;
+    if (gcnt) gcnt.textContent = String(list.length);
+    if (gmeta) gmeta.textContent = '必闯' + core + '关 · 选修' + elect + '关 · ≈' + pm + '分钟';
+    if (cfmt) cfmt.textContent = '今日 ' + fmt(pm) + ' · 打卡后不可再改';
+    if (!glist) return;
+    var fa = firstActiveIndex(list);
+    glist.innerHTML = list.map(function (it, i) {
+      var sk = skillOf(it);
+      var n = isElective(it) ? '选' : String(i + 1);
+      var cls = isElective(it) ? 'gitem opt' : 'gitem';
+      return '<div class="' + cls + '"><div class="n">' + n + '</div>' + escapeHtml(sk) +
+        (it.duration_min ? ' · 约' + it.duration_min + '分钟' : '') +
+        '<span class="st">' + statusLabel(it, i, fa) + '</span></div>';
     }).join('');
   }
-})();
-</script>
-<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
 
+  function renderMap() {
+    var list = items();
+    var mcnt = document.getElementById('mcnt');
+    var path = document.getElementById('taskPath');
+    var bar = document.getElementById('mBar');
+    var bubble = document.getElementById('mapBubble');
+    if (mcnt) mcnt.textContent = String(list.length);
+    var doneN = list.filter(itemDone).length;
+    var avg = list.length ? Math.round((doneN / list.length) * 100) : 0;
+    if (bar) bar.style.width = Math.max(4, avg) + '%';
+    if (bubble) {
+      bubble.innerHTML = phase === 'expired'
+        ? '<b>计时已结束</b>，仍可补打卡。点卡片播放或提交。'
+        : '<b>先过当前关</b>，再继续下一关。点卡片可播放或打卡。';
+    }
+    if (!path) return;
+    var fa = firstActiveIndex(list);
+    var total = list.length || 1;
+    path.innerHTML = list.map(function (it, i) {
+      var sk = skillOf(it);
+      var meta = SKILL_META[sk] || DEFAULT_META;
+      var done = itemDone(it);
+      var p = itemPct(it);
+      var locked = !done && i > fa;
+      var active = !done && i === fa;
+      var stClass = done ? 'done' : (active ? 'active' : 'locked');
+      var stx = statusLabel(it, i, fa);
+      var sub = (it.duration_min ? '约' + it.duration_min + '分钟' : '按方案训练') +
+        (isElective(it) ? ' · 选修' : '');
+      var weaponTitle = locked ? '🔒 先完成上一关' : (done ? '再练一遍 / 查看' : '开始训练');
+      var weaponSub = locked ? '关卡逐个解锁' : (done ? '已打卡，可回看媒体' : '播放媒体后可打卡');
+      var idAttr = escapeHtml(String(it.id || ''));
+      var skSafe = escapeHtml(sk);
+      return '<div class="stage2 ' + stClass + '"' + (i === 0 ? ' style="margin-top:26px"' : '') + ' data-id="' + idAttr + '">' +
+        '<div class="orb">' + (locked ? '🔒' : meta.emoji) + '</div>' +
+        '<div class="lv-card">' +
+          '<div class="simg">' +
+            '<img src="' + meta.img + '" alt="' + skSafe + '" onerror="this.style.opacity=.3">' +
+            '<span class="slv">任务 ' + (i + 1) + ' / ' + total + ' · ' + stx + '</span>' +
+            '<span class="smj">秘籍 · ' + escapeHtml(meta.mj) + '</span>' +
+            '<div class="sname"><b>' + skSafe + '</b>' + (done ? '<span class="tag">已完成</span>' : '') + '</div>' +
+          '</div>' +
+          '<div class="sbody">' +
+            '<div class="ssub">' + escapeHtml(sub) + '</div>' +
+            '<div class="skl"><div class="skl-h"><span>⚡ 进度 · ' + skSafe + '</span><b class="' + (p ? '' : 'zero') + '">' + p + '%</b></div>' +
+            '<div class="skl-bar"><i style="width:' + p + '%"></i></div></div>' +
+            '<div class="weapon" data-act="media" data-id="' + idAttr + '"><div class="ic">▶</div><div><b>' + weaponTitle + '</b><small>' + weaponSub + '</small></div></div>' +
+            '<div class="vids">' +
+              '<a class="vid mj" href="javascript:;" data-act="media" data-id="' + idAttr + '"><span>📜</span><div><b>开始练习</b><small>播放训练媒体</small></div></a>' +
+              '<a class="vid zd" href="javascript:;" data-act="checkin" data-id="' + idAttr + '"><span>✅</span><div><b>提交打卡</b><small>记录今日完成</small></div></a>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
 
+  function applyState(msg) {
+    scheduling = false;
+    var go = document.querySelector('.goPlan');
+    if (go) go.style.opacity = '1';
 
-<script>
-(function(){
-  function nav(path){
-    try{
-      if(window.parent && window.parent !== window){
-        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
-        return;
-      }
-    }catch(e){}
+    if (msg.phase) phase = msg.phase;
+    if (msg.plan !== undefined) plan = msg.plan;
+    if (msg.talentLabel) talentLabel = msg.talentLabel;
+    if (msg.dayNum) dayNum = msg.dayNum;
+    setChip();
+
+    if (phase === 'need_assessment') {
+      showOnly('setup');
+      var bub = document.querySelector('#stepTime .bubble');
+      if (bub) bub.innerHTML = '<b>需要先完成天赋测评</b>，再回来生成今日方案。';
+      return;
+    }
+
+    if (phase === 'confirm' && plan && (plan.items || []).length) {
+      showOnly('confirm');
+      renderGate();
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    if ((phase === 'running' || phase === 'expired') && plan && (plan.items || []).length) {
+      showOnly(phase);
+      renderMap();
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    showOnly('setup');
+    if (plan && plan.planned_minutes) {
+      mins = Math.max(MIN, Number(plan.planned_minutes) || mins);
+    }
+    renderT();
+  }
+
+  document.querySelectorAll('#quick div').forEach(function (d) {
+    d.onclick = function () {
+      mins = +d.dataset.m;
+      renderT();
+    };
+  });
+
+  var taskPath = document.getElementById('taskPath');
+  if (taskPath) {
+    taskPath.addEventListener('click', function (e) {
+      var t = e.target.closest && e.target.closest('[data-act]');
+      if (!t) return;
+      e.preventDefault();
+      var id = t.getAttribute('data-id');
+      var act = t.getAttribute('data-act');
+      if (!id) return;
+      if (act === 'media') post({ type: 'dayu-train-media', itemId: id });
+      if (act === 'checkin') post({ type: 'dayu-train-checkin', itemId: id });
+    });
+  }
+
+  window.addEventListener('message', function (ev) {
+    var data = ev && ev.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'dayu-train-state') applyState(data);
+    if (data.type === 'dayu-train-error') {
+      scheduling = false;
+      var go2 = document.querySelector('.goPlan');
+      if (go2) go2.style.opacity = '1';
+      if (data.message) alert(data.message);
+    }
+  });
+
+  function nav(path) {
+    if (post({ type: 'dayu-nav', path: path })) return;
     location.href = path;
   }
-  document.addEventListener('click', function(e){
+  document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a');
-    if(!a) return;
+    if (!a) return;
     var href = a.getAttribute('href') || '';
-    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    if (!href || href.indexOf('javascript:') === 0 || href.charAt(0) === '#') return;
     var file = href.split('?')[0].split('#')[0].split('/').pop();
-    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
-    if(map[file] || map[href]){
+    var mapNav = {
+      'index.html': '/pages/dayu/home',
+      'train.html': '/pages/training/dayu',
+      'answer.html': '/pages/qa/dayu',
+      'drama.html': '/pages/hub/academy',
+      'milestone.html': '/pages/hub/console',
+      'test.html': '/pages/talent/hub',
+      'history.html': '/pages/hub/story',
+      'courses.html': '/pages/hub/courses',
+      'birthday.html': '/pages/hub/console'
+    };
+    if (mapNav[file]) {
       e.preventDefault();
       e.stopPropagation();
-      nav(map[file] || map[href]);
+      nav(mapNav[file]);
     }
   }, true);
-  // personal test expand -> go real talent
-  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+
+  renderT();
+  showOnly('setup');
+  post({ type: 'dayu-train-ready' });
 })();
+
 </script>
 
 </body></html>

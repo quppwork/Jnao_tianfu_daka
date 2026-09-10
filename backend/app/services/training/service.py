@@ -717,10 +717,6 @@ def _try_rotate_part_after_checkin(
     flag_modified(child, "profile_json")
 
 
-# 选修项固定优先级：多元感知（感知力）永远第一关，开口窍第二关，其余按原顺序
-ELECTIVE_PRIORITY = {"感知力": 0, "开口窍": 1}
-
-
 def _auto_promote_to_returning(db: Session, child_user_id: int) -> None:
     """累计打卡 >= 30 次的新学员 -> 自动转为老学员。
 

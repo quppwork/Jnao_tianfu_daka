@@ -10,6 +10,9 @@ from app.services.content_meta import parse_item_instruction
 from app.services.training.common import TrainingError, invalidate_plan_cache
 from app.services.training_day import is_plan_globally_cutoff
 
+# 选修置顶顺序：感知力(多元感知) > 开口窍
+ELECTIVE_PRIORITY = {"感知力": 0, "开口窍": 1, "多元感知": 0}
+
 def toggle_elective_item(
     db: Session,
     child_user_id: int,

@@ -57,6 +57,11 @@ def set_training_window(
             end_time=end,
         )
         db.add(existing)
+    # 重新开窗 = 重新计时：清除媒体用尽，允许再次听看
+    from app.services.training.service import _get_plan_by_date
+    plan = _get_plan_by_date(db, child_user_id, train_date)
+    if plan and getattr(plan, "media_exhausted", 0):
+        plan.media_exhausted = 0
     db.commit()
     db.refresh(existing)
     invalidate_plan_cache(child_user_id, train_date)
