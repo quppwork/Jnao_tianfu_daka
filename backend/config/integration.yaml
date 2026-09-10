@@ -22,6 +22,11 @@ endpoints:
     description: "同家长下切换孩子账户"
     endpoint: "POST /api/auth/switch-child"
 
+  partner_jinnao_register_parent:
+    status: live
+    description: "劲脑合作方免短信注册家长，返回本系统 user_id（需 X-Api-Key）"
+    endpoint: "POST /api/partner/jinnao/register-parent"
+
   talent_report:
     status: live
     description: "天赋测评提交与报告（一步完成）"

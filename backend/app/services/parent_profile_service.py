@@ -315,3 +315,76 @@ def register_parent_by_sms(
         raise
     finally:
         challenge_release_lock(lock_key)
+
+
+def register_parent_from_partner(
+    db: Session,
+    *,
+    phone: str,
+    nickname: str,
+    real_name: str | None = None,
+    password: str | None = None,
+    register_channel: str = "jinnao",
+    register_source: str = "劲脑",
+    partner_ref: str | None = None,
+) -> tuple[ChildUser, bool]:
+    """合作方免短信注册家长。返回 (user, created)。
+
+    已注册时返回既有账号且 created=False，便于对方用本系统 user_id 做关联。
+    """
+    from app.services.auth_challenge_store import challenge_release_lock, challenge_try_lock
+    from app.services.member_registry_service import register_daka_member_from_user
+    from app.services.parent_identity_service import find_login_parent_user
+    from app.services.sms_service import normalize_phone
+
+    phone = normalize_phone(phone)
+    lock_key = f"auth:register:{phone}"
+    if not challenge_try_lock(lock_key, 30):
+        raise HTTPException(429, "注册处理中，请稍后再试")
+    try:
+        existing = find_login_parent_user(db, phone)
+        if existing:
+            return existing, False
+
+        from app.core.nickname_policy import validate_nickname, validate_real_name
+        from app.core.password_policy import validate_password_strength
+        from app.services.parent_identity_service import assert_parent_can_register
+
+        assert_parent_can_register(db, phone)
+        nick = validate_nickname(nickname, field_label="昵称")
+        name = validate_real_name(real_name or "")
+        pwd_value = validate_password_strength((password or "").strip())
+
+        now = datetime.now(TZ).replace(tzinfo=None)
+        now_iso = format_cst(now)
+        parent_block: dict = {
+            "real_name": name,
+            "phone_verified_at": now_iso,
+            "register_source": (register_source or "").strip()[:32] or "劲脑",
+        }
+        ref = (partner_ref or "").strip()
+        if ref:
+            parent_block["partner_ref"] = ref[:64]
+
+        pj: dict = {"parent": parent_block}
+        user = auth_service.register_child(
+            db,
+            parent_phone=phone,
+            nickname=nick,
+            password=pwd_value,
+            role=auth_service.ROLE_PARENT,
+            child_quota=auth_service.DEFAULT_CHILD_QUOTA,
+            commit=False,
+        )
+        user.profile_json = pj
+        flag_modified(user, "profile_json")
+        channel = (register_channel or "jinnao").strip()[:20] or "jinnao"
+        register_daka_member_from_user(db, user, register_channel=channel)
+        db.commit()
+        db.refresh(user)
+        return user, True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        challenge_release_lock(lock_key)

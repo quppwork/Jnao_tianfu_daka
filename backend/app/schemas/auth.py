@@ -114,6 +114,29 @@ class SmsRegisterRequest(BaseModel):
     bind_ticket: str | None = Field(None, min_length=8, max_length=128)
 
 
+class PartnerJinnaoRegisterRequest(BaseModel):
+    """劲脑合作方免短信注册家长（参数与短信注册一致，去掉 sms_code）。"""
+    phone: str = Field(..., min_length=11, max_length=20)
+    real_name: str = Field(..., min_length=2, max_length=20)
+    nickname: str = Field(..., min_length=2, max_length=20)
+    password: str = Field(..., min_length=8, max_length=128)
+    partner_ref: str | None = Field(
+        None,
+        max_length=64,
+        description="劲脑侧用户标识，可选，便于排查关联",
+    )
+
+
+class PartnerJinnaoRegisterResponse(BaseModel):
+    user_id: int = Field(..., description="本系统家长用户 ID，可用于关联")
+    parent_phone: str
+    nickname: str
+    register_channel: str = "jinnao"
+    register_source: str = "劲脑"
+    created: bool = Field(..., description="true=新注册，false=手机号已存在并返回原账号")
+    partner_ref: str | None = None
+
+
 class ParentProfileResponse(BaseModel):
     id: int
     parent_phone: str
