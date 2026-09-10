@@ -7,7 +7,9 @@
     <template v-else>
     <!-- Nav Bar -->
     <view class="nav-bar">
-      <view class="nav-spacer"></view>
+      <view class="nav-left" @click="goParentCenter">
+        <text class="nav-parent-label">家长账户</text>
+      </view>
       <!-- 账户切换 -->
       <view class="nav-center" @click="toggleAccountSwitcher">
         <text class="nav-user-name">{{ currentUserDisplay }}</text>
@@ -37,11 +39,6 @@
       <!-- 遮罩 -->
       <view v-if="showAccountSwitcher" class="asd-mask" @click="showAccountSwitcher = false"></view>
       <view class="nav-actions">
-        <!-- 设置 -->
-        <view class="nav-icon-btn" @click="openSettings">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </view>
-        <!-- 主题 -->
         <view class="nav-icon-btn" @click="toggleTheme">
           <svg v-if="isLight" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -49,36 +46,27 @@
       </view>
     </view>
 
-    <!-- Hero Banner -->
-    <view class="hero-banner">
-      <image class="hero-img" src="/static/teacher.png" mode="widthFix" lazy-load />
-    </view>
-
-    <!-- 1x4 Function Grid -->
-    <view class="func-grid">
-      <view class="func-card" @tap="openPage('talent')">
-        <view class="func-icon icon-card">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#58a6ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+    <!-- Brand + chips（改版展示壳；历史剧情/天赋课程映射待产品确认） -->
+    <view class="brand-block">
+      <view class="brand-head">
+        <image class="brand-avatar" src="/static/teacher-avatar.png" mode="aspectFill" />
+        <view class="brand-text">
+          <text class="brand-name">大宇智能体</text>
+          <text class="brand-sub">张宇老师 · 专属 AI 教练</text>
         </view>
-        <text class="func-label">天赋测试</text>
       </view>
-      <view class="func-card" @tap="openPage('train')">
-        <view class="func-icon icon-card">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#58a6ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="8 14 11.5 17 16 14"/></svg>
+      <view class="chip-row">
+        <view
+          v-for="chip in homeChips"
+          :key="chip.key"
+          class="chip-btn"
+          @tap="openChip(chip)"
+        >
+          <text>{{ chip.label }}</text>
         </view>
-        <text class="func-label">今日训练</text>
       </view>
-      <view class="func-card" @tap="openPage('qa')">
-        <view class="func-icon icon-card">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#58a6ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </view>
-        <text class="func-label">学科答疑</text>
-      </view>
-      <view class="func-card" @tap="openPage('growth')">
-        <view class="func-icon icon-card">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#58a6ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
-        </view>
-        <text class="func-label">成长里程碑</text>
+      <view v-if="situationLabel" class="today-hint">
+        <text>今日：{{ situationLabel }}</text>
       </view>
     </view>
 
@@ -260,6 +248,8 @@
       </view>
     </view>
 
+    <app-tab-bar active="guide" />
+
     <!-- Settings Modal -->
     <view v-if="showSettings" class="picker-overlay" @click="showSettings = false">
       <view class="picker-card settings-card" @click.stop>
@@ -392,7 +382,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onLoad } from '@dcloudio/uni-app'
 import {
   clearChildUserId,
   ensureChildUser,
@@ -425,8 +415,11 @@ import {
 import { refreshTalentState, applyTalentFromProfile } from '@/utils/talentState.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 import { formatGuideRichHtml } from '@/utils/chatRichText.js'
+import { HOME_CHIPS, switchMainTab } from '@/utils/mainTabs.js'
+import AppTabBar from '@/components/app-tab-bar/app-tab-bar.vue'
 import 'katex/dist/katex.min.css'
 
+const homeChips = HOME_CHIPS
 const isLight = ref(true)
 const pageLoading = ref(true)
 const inputText = ref('')
@@ -505,7 +498,7 @@ async function switchToChild(targetId) {
   }
 }
 
-const FALLBACK_WELCOME = '你好！我是张宇老师。有问题随时问我，也可以从上方入口进入各功能。'
+const FALLBACK_WELCOME = '你好！我是张宇老师的智能体——大宇智能体，你的专属 AI 教练。点上方入口开始，或直接问我。'
 
 const profile = ref({ name: '', grade: '', talent: '', phone: '', parentName: '', assessmentId: null })
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
@@ -532,7 +525,7 @@ function hydrateHomeFromLocal() {
 const ACTION_LABEL_FALLBACK = {
   talent: '去天赋测试 ›',
   report: '去天赋报告 ›',
-  train: '去今日训练 ›',
+  train: '去今日修炼 ›',
   qa: '去学科答疑 ›',
   growth: '去成长里程碑 ›',
   history: '去历史记录 ›',
@@ -567,7 +560,7 @@ function actionLabel(target) {
 }
 
 function blockTitleFallback(type) {
-  if (type === 'today_summary') return '今日训练'
+  if (type === 'today_summary') return '今日修炼'
   if (type === 'skill_snapshot') return '技能档位'
   if (type === 'checkin_day') return '打卡摘要'
   return '摘要'
@@ -899,7 +892,7 @@ function applyBootstrap(data) {
     proactiveText.value = ''
     return
   }
-  welcomeText.value = data.welcome || '你好！我是张宇老师。今天可以从上方入口开始训练或提问。'
+    welcomeText.value = data.welcome || '你好！我是大宇智能体。今天可以从上方入口开始训练或提问。'
   const fromActions = normalizeNavigateActions(data.actions)
   if (fromActions.length) {
     welcomeActions.value = fromActions
@@ -1108,6 +1101,12 @@ function doLogout() {
   showSettings.value = false
 }
 
+onLoad((query) => {
+  if (query?.open_settings === '1') {
+    nextTick(() => openSettings())
+  }
+})
+
 onMounted(async () => {
   if (getChildUserId()) {
     hydrateHomeFromLocal()
@@ -1149,6 +1148,8 @@ async function openPage(name, query) {
     qa: '/pages/qa/index',
     growth: '/pages/growth/index',
     history: '/pages/training/history',
+    academy: '/pages/hub/academy',
+    console: '/pages/hub/console',
   }
   if (name === 'report') {
     try {
@@ -1175,6 +1176,18 @@ async function openPage(name, query) {
     uni.showToast({ title: '进入: ' + name, icon: 'none' })
     return
   }
+  if (name === 'train' || name === 'qa' || name === 'academy' || name === 'console') {
+    if (query && typeof query === 'object') {
+      const qs = Object.entries(query)
+        .filter(([, v]) => v != null && String(v).trim())
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v).trim())}`)
+        .join('&')
+      switchMainTab(qs ? `${url}?${qs}` : url)
+      return
+    }
+    switchMainTab(url)
+    return
+  }
   let full = url
   if (query && typeof query === 'object') {
     const qs = Object.entries(query)
@@ -1184,6 +1197,19 @@ async function openPage(name, query) {
     if (qs) full = `${url}?${qs}`
   }
   uni.navigateTo({ url: full })
+}
+
+function openChip(chip) {
+  if (!chip?.path) return
+  if (chip.key === 'course') {
+    switchMainTab(chip.path)
+    return
+  }
+  uni.navigateTo({ url: chip.path })
+}
+
+function goParentCenter() {
+  uni.navigateTo({ url: '/pages/parent/index' })
 }
 
 let navTapCount = 0
@@ -1208,6 +1234,8 @@ function onNavTap() {
 .app {
   display:flex; flex-direction:column; height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto;
   background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden;
+  padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
 }
 .page-loading {
   flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
@@ -1221,7 +1249,8 @@ function onNavTap() {
 @keyframes loginSpin { to { transform:rotate(360deg); } }
 
 .nav-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 8px; }
-.nav-spacer { width:78px; flex-shrink:0; }
+.nav-left { min-width:78px; flex-shrink:0; cursor:pointer; }
+.nav-parent-label { color:var(--text-dim); font-size:13px; font-weight:600; }
 .nav-center { color:var(--text); font-size:15px; font-weight:600; text-align:center; cursor:pointer; display:flex; align-items:center; gap:4px; }
 .nav-user-name { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .nav-switch-arrow { font-size:10px; color:var(--text-dim); }
@@ -1240,28 +1269,71 @@ function onNavTap() {
 .nav-icon-btn:active { opacity:1; background:var(--accent-bg); border-color:var(--border); }
 .nav-icon-btn svg { display:block; }
 
-.hero-banner {
-  margin: 0 14px;
-  padding: 6px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, var(--accent-bg), var(--bg-card));
+.brand-block {
+  padding: 4px 14px 10px;
+  flex-shrink: 0;
+}
+.brand-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.brand-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   border: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
 }
-.hero-img { width: 100%; border-radius: 14px; display: block; }
-
-.func-grid { display:flex; gap:8px; padding:10px 14px 12px; }
-.func-card {
-  flex:1; background:var(--bg-card); border-radius:16px; padding:12px 6px 10px;
-  display:flex; flex-direction:column; align-items:center; gap:6px;
-  border:1px solid var(--border); transition:all 0.15s;
+.brand-text { min-width: 0; }
+.brand-name {
+  display: block;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
 }
-.func-card:active { background:var(--accent-bg); border-color:var(--accent); transform:scale(0.96); }
-.func-icon {
-  width:36px; height:36px; border-radius:10px;
-  display:flex; align-items:center; justify-content:center;
-  background:var(--accent-bg); border:1px solid var(--border);
+.brand-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-dim);
+  font-size: 12px;
 }
-.func-label { color:var(--text-sub); font-size:11px; font-weight:600; }
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip-btn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.chip-btn text {
+  color: var(--text-sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+.chip-btn:active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+.today-hint {
+  margin-top: 10px;
+}
+.today-hint text {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
 
 .chat-section { flex:1; overflow-y:auto; padding:12px 14px 0; scrollbar-width:none; -ms-overflow-style:none; }
 .chat-welcome { display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; }
@@ -1475,7 +1547,7 @@ function onNavTap() {
 .input-panel {
   flex-shrink: 0;
   margin: 6px 14px 0;
-  padding: 0 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 0 0 8px;
 }
 .input-wrap {
   display: flex;

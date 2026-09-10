@@ -241,7 +241,7 @@ export async function requirePageAuth(kind) {
       return { ok: false, reason: 'wrong_role' }
     }
     if (kind === 'parent' && snap.student?.userId) {
-      try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
+      try { uni.reLaunch({ url: '/pages/dayu/home' }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
     redirectToLoginForKind(kind, { silent: true })
@@ -296,7 +296,7 @@ export async function requirePageAuth(kind) {
         return { ok: false, reason: 'wrong_role' }
       }
       if (kind === 'parent' && role === 'student') {
-        try { uni.reLaunch({ url: '/pages/index' }) } catch (_) { /* ignore */ }
+        try { uni.reLaunch({ url: '/pages/dayu/home' }) } catch (_) { /* ignore */ }
         return { ok: false, reason: 'wrong_role' }
       }
       redirectToLoginForKind(kind)

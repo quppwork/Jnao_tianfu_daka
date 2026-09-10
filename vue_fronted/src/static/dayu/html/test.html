@@ -1,0 +1,590 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>大宇智能体 · 天赋测试</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  body{background:#0B0E14}
+  /* ===== 通用 ===== */
+  .step{display:none;animation:stin .35s ease}
+  .step.on{display:block}
+  @keyframes stin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .qbar{display:flex;align-items:center;gap:10px;margin:8px 18px 0}
+  .qmode{flex:none;font-size:12px;font-weight:800;color:#8FB4FF;background:rgba(46,107,230,.14);border:1px solid rgba(46,107,230,.45);border-radius:99px;padding:4px 11px}
+  .qprog{flex:1;height:7px;border-radius:99px;background:#1A2233;overflow:hidden}
+  .qprog i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#2E6BE6,#7AA6FF);width:0;transition:width .35s ease}
+  .qnum{flex:none;font-size:12.5px;font-weight:800;color:#8B93A5;font-variant-numeric:tabular-nums}
+
+  /* ===== 第0步 · 选择测试对象 ===== */
+  .pick-t{font-size:26px;font-weight:900;color:#EDEBE4;text-align:center;margin:46px 18px 6px}
+  .hub4{display:flex;flex-direction:column;gap:10px;margin:16px 18px 4px}
+  .hub{display:flex;align-items:center;gap:13px;background:#131926;border:1.5px solid #232B3D;border-radius:18px;padding:15px 16px;text-decoration:none;position:relative;transition:transform .15s}
+  .hub:active{transform:scale(.97)}
+  .hub .hi{font-size:28px;flex:none;width:48px;height:48px;border-radius:14px;background:#0D1119;border:1px solid #232B3D;display:flex;align-items:center;justify-content:center}
+  .hub .hm{flex:1}
+  .hub b{display:block;font-size:16.5px;font-weight:900;color:#EDEBE4}
+  .hub span{display:block;font-size:11px;color:#8B93A5;margin-top:2px}
+  .hub .arr{flex:none;font-size:16px;color:#5A6274;font-weight:900}
+  .hub.cur{border-color:rgba(111,207,142,.55);box-shadow:0 6px 18px rgba(111,207,142,.12)}
+  .hub .lock{position:absolute;top:10px;right:12px;font-size:12px;font-style:normal;opacity:.85}
+  .recbtn{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px 18px 0;background:linear-gradient(135deg,rgba(201,162,39,.18),rgba(201,162,39,.06));border:1.5px solid rgba(201,162,39,.6);border-radius:16px;padding:15px;text-decoration:none;transition:transform .15s}
+  .recbtn:active{transform:scale(.97)}
+  .recbtn .ri{font-size:20px}
+  .recbtn b{font-size:16px;font-weight:900;color:#F5D576}
+  .recbtn span{font-size:11px;color:#A8946a;margin-left:2px}
+  html.lt .hub{background:#d9dfec;border-color:#c2cadc}
+  html.lt .hub .hi{background:#e8edf6;border-color:#c2cadc}
+  html.lt .hub b{color:#1b1912}html.lt .hub span{color:#5a6274}
+  html.lt .recbtn{background:rgba(201,162,39,.1);border-color:rgba(150,115,25,.5)}
+  html.lt .recbtn b{color:#7a5f10}html.lt .recbtn span{color:#97855a}
+  .gate{position:fixed;inset:0;z-index:90;background:rgba(5,8,14,.72);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:26px}
+  .gate.on{display:flex}
+  .gate .gb{background:#161D2B;border:1.5px solid #2A3040;border-radius:22px;padding:24px 20px;max-width:330px;width:100%;text-align:center}
+  .gate .gb h3{font-size:17px;font-weight:900;color:#EDEBE4;margin-bottom:8px}
+  .gate .gb p{font-size:12.5px;color:#8B93A5;line-height:1.7;margin-bottom:14px}
+  .gate input{width:100%;background:#0D1119;border:1.5px solid #2A3040;border-radius:12px;padding:12px;font-size:16px;color:#EDEBE4;text-align:center;letter-spacing:6px;outline:none}
+  .gate .gok{margin-top:14px;background:linear-gradient(135deg,#6FCF8E,#4FAE72);color:#0B1A10;border-radius:12px;padding:12px;font-size:15px;font-weight:900;cursor:pointer}
+  .gate .gno{margin-top:10px;font-size:12.5px;color:#8B93A5;cursor:pointer;padding:6px}
+  .gate .gerr{color:#E05252;font-size:12px;margin-top:8px;min-height:16px}
+  html.lt .gate .gb{background:#eef1f7;border-color:#c2cadc}html.lt .gate .gb h3{color:#1b1912}html.lt .gate .gb p{color:#5a6274}html.lt .gate input{background:#fff;border-color:#c2cadc;color:#1b1912}
+  .pick-s{font-size:13px;color:#8B93A5;text-align:center;margin-bottom:26px}
+  .pick{display:flex;gap:14px;margin:0 18px}
+  .pk{flex:1;background:#131926;border:1.5px solid #232B3D;border-radius:22px;padding:26px 12px 20px;text-align:center;position:relative;overflow:hidden;transition:transform .15s,border-color .2s;cursor:pointer}
+  .pk:active{transform:scale(.96)}
+  .pk::before{content:"";position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:130px;height:130px;border-radius:50%;opacity:.14}
+  .pk.kid::before{background:#6FCF8E}
+  .pk.adu::before{background:#2E6BE6}
+  .pk .pi{width:88px;height:88px;margin:0 auto 12px;border-radius:26px;display:flex;align-items:center;justify-content:center;font-size:46px;position:relative}
+  .pk.kid .pi{background:linear-gradient(145deg,rgba(111,207,142,.22),rgba(111,207,142,.06));border:1.5px solid rgba(111,207,142,.5);box-shadow:0 8px 22px rgba(111,207,142,.18)}
+  .pk.adu .pi{background:linear-gradient(145deg,rgba(46,107,230,.26),rgba(46,107,230,.07));border:1.5px solid rgba(46,107,230,.55);box-shadow:0 8px 22px rgba(46,107,230,.22)}
+  .pk b{display:block;font-size:18px;font-weight:900;color:#EDEBE4}
+  .pk span{display:block;font-size:11.5px;color:#8B93A5;margin-top:5px}
+  .pk.kid:hover{border-color:#6FCF8E}.pk.adu:hover{border-color:#2E6BE6}
+
+  /* ===== 第1步 · 确认 ===== */
+  .cf-card{margin:52px 26px 0;background:#131926;border:1.5px solid #232B3D;border-radius:26px;padding:38px 24px 30px;text-align:center;position:relative;overflow:hidden}
+  .cf-card::before{content:"";position:absolute;inset:-60%;background:conic-gradient(from 0deg,transparent 70%,rgba(122,166,255,.14),transparent 92%);animation:cfsw 5s linear infinite}
+  @keyframes cfsw{to{transform:rotate(360deg)}}
+  .cf-in{position:relative}
+  .cf-ic{font-size:52px}
+  .cf-card h2{font-size:24px;font-weight:900;color:#EDEBE4;margin:14px 0 8px}
+  .cf-card p{font-size:13.5px;color:#8B93A5;line-height:1.8;margin-bottom:8px}
+  .cf-meta{display:flex;justify-content:center;gap:8px;margin:14px 0 24px}
+  .cf-meta span{font-size:11px;font-weight:800;color:#8FB4FF;background:rgba(46,107,230,.12);border:1px solid rgba(46,107,230,.4);border-radius:8px;padding:4px 10px}
+  .cf-row{display:flex;gap:12px;position:relative}
+  .cf-row .later{flex:1;background:#161D2B;border:1.5px solid #2A3040;border-radius:14px;padding:14px;font-size:15px;font-weight:700;color:#8B93A5;text-align:center}
+  .cf-row .go{flex:1.4;background:linear-gradient(135deg,#3A7BFF,#2E5BD6);border-radius:14px;padding:14px;font-size:15px;font-weight:900;color:#fff;text-align:center;box-shadow:0 8px 20px rgba(46,107,230,.4);cursor:pointer}
+
+  /* ===== 第2步 · 答题 ===== */
+  .undo{margin:14px 18px 0;background:#161D2B;border:1px solid #2A3040;border-radius:14px;padding:10px 14px;display:none;align-items:center;gap:10px;font-size:12px;color:#8B93A5}
+  .undo.on{display:flex;animation:stin .3s}
+  .undo .uaw{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .undo .uaw b{color:#7AA6FF}
+  .undo .ubtn{flex:none;font-size:12px;font-weight:800;color:#8FB4FF;border:1px solid rgba(46,107,230,.5);border-radius:9px;padding:4px 10px;cursor:pointer}
+  .qcard{margin:14px 18px 0;background:#131926;border:1.5px solid #232B3D;border-radius:26px;padding:24px 20px 22px;position:relative;overflow:hidden}
+  .qcard::after{content:"";position:absolute;top:-46px;right:-46px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(46,107,230,.16),transparent 70%)}
+  .qtag{display:inline-block;font-size:12px;font-weight:800;color:#8FB4FF;background:rgba(46,107,230,.14);border-radius:8px;padding:3px 10px;margin-bottom:14px}
+  .qtm{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .ring{width:46px;height:46px;flex:none;position:relative}
+  .ring svg{width:46px;height:46px;transform:rotate(-90deg)}
+  .ring .rb{fill:none;stroke:#232B3D;stroke-width:4}
+  .ring .rf{fill:none;stroke:#3A7BFF;stroke-width:4;stroke-linecap:round;stroke-dasharray:125.6;transition:stroke-dashoffset 1s linear,stroke .3s}
+  .ring.warn .rf{stroke:#E05252}
+  .ring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#EDEBE4;font-variant-numeric:tabular-nums}
+  .qhint{flex:1;font-size:12px;color:#8B93A5}
+  .qhint .bar{height:4px;border-radius:99px;background:#1A2233;margin-top:6px;overflow:hidden}
+  .qhint .bar i{display:block;height:100%;background:#3A7BFF;width:100%;transition:width 1s linear}
+  .qq{font-size:20px;font-weight:900;color:#EDEBE4;line-height:1.65;min-height:100px;position:relative;z-index:1}
+  .qans{display:flex;gap:12px;margin-top:18px;position:relative;z-index:1}
+  .qa{flex:1;border-radius:16px;padding:16px 8px;font-size:16px;font-weight:900;text-align:center;cursor:pointer;transition:transform .12s}
+  .qa:active{transform:scale(.95)}
+  .qa.yes{background:linear-gradient(135deg,#3A7BFF,#2E5BD6);color:#fff;box-shadow:0 8px 20px rgba(46,107,230,.38)}
+  .qa.no{background:#161D2B;border:1.5px solid #2A3040;color:#8B93A5}
+  .cheer{position:fixed;left:50%;bottom:110px;transform:translateX(-50%) translateY(20px);background:linear-gradient(135deg,#3A7BFF,#2E5BD6);color:#fff;font-size:14px;font-weight:900;border-radius:99px;padding:11px 22px;box-shadow:0 10px 26px rgba(46,107,230,.5);opacity:0;pointer-events:none;transition:all .3s;z-index:60}
+  .cheer.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .robotip{text-align:center;font-size:11.5px;color:#5A6274;margin-top:16px}
+
+  /* ===== 第3步 · 完成 ===== */
+  .done{margin:90px 26px 0;text-align:center}
+  .done .ck{width:96px;height:96px;margin:0 auto;border-radius:50%;background:linear-gradient(135deg,#3A7BFF,#2E5BD6);display:flex;align-items:center;justify-content:center;font-size:46px;color:#fff;box-shadow:0 0 0 12px rgba(46,107,230,.14),0 0 0 26px rgba(46,107,230,.06);animation:ckpop .5s cubic-bezier(.2,1.6,.4,1)}
+  @keyframes ckpop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+  .done h2{font-size:26px;font-weight:900;color:#EDEBE4;margin:26px 0 8px}
+  .done p{font-size:13.5px;color:#8B93A5;margin-bottom:30px}
+  .done .go{display:block;background:linear-gradient(135deg,#3A7BFF,#2E5BD6);color:#fff;border-radius:16px;padding:16px;font-size:17px;font-weight:900;box-shadow:0 10px 26px rgba(46,107,230,.42);cursor:pointer}
+
+  /* ===== 迷者结果 ===== */
+  .mz-warn{margin:20px 18px 0;background:rgba(201,162,39,.09);border:1.5px solid rgba(201,162,39,.55);border-radius:20px;padding:18px;display:flex;gap:13px}
+  .mz-warn .wi{font-size:30px;flex:none}
+  .mz-warn b{display:block;font-size:16.5px;font-weight:900;color:#E3C98F;margin-bottom:6px}
+  .mz-warn p{font-size:12.5px;color:#B9AE94;line-height:1.7}
+  .mz-re{display:block;margin-top:14px;background:linear-gradient(135deg,#E0A92E,#B9830F);color:#fff;text-align:center;border-radius:13px;padding:12px;font-size:15px;font-weight:900}
+  .mz-card{margin:16px 18px 0;background:#131926;border:1.5px solid #232B3D;border-radius:22px;padding:18px;display:flex;gap:14px;align-items:center}
+  .mz-card .mz-g{width:64px;height:64px;flex:none;border-radius:18px;background:#1A2233;border:1.5px solid #2A3040;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900;color:#5A6274}
+  .mz-card .mt1{font-size:11.5px;color:#8B93A5}
+  .mz-card .mt1 span{color:#8FB4FF;border:1px solid rgba(46,107,230,.4);border-radius:6px;padding:1px 7px;margin-left:6px;font-size:10px}
+  .mz-card .mt2{font-size:21px;font-weight:900;color:#EDEBE4;margin:3px 0}
+  .mz-card .mt3{font-size:12px;color:#8B93A5;line-height:1.6}
+  .mz-stat{margin:14px 18px 0;background:#131926;border:1.5px solid #232B3D;border-radius:18px;display:flex}
+  .mz-stat div{flex:1;text-align:center;padding:16px 4px}
+  .mz-stat div+div{border-left:1px solid #232B3D}
+  .mz-stat b{display:block;font-size:19px;font-weight:900;color:#EDEBE4}
+  .mz-stat span{font-size:11px;color:#8B93A5}
+  .mz-barbox{margin:16px 18px 0;background:#131926;border:1.5px solid #232B3D;border-radius:20px;padding:16px}
+  .mz-barbox .bt{font-size:13px;font-weight:900;color:#EDEBE4;margin-bottom:12px}
+  .mzb{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .mzb:last-child{margin-bottom:0}
+  .mzb .n{flex:none;width:56px;font-size:12px;font-weight:800;color:#B9C0CE}
+  .mzb .tr{flex:1;height:9px;border-radius:99px;background:#1A2233;overflow:hidden}
+  .mzb .tr i{display:block;height:100%;border-radius:99px;width:0;transition:width .8s ease}
+  .mzb .v{flex:none;width:26px;text-align:right;font-size:12px;font-weight:800;color:#8B93A5;font-variant-numeric:tabular-nums}
+
+  /* ===== 儿童/成人 双模式差异化主题 ===== */
+  body.kid .qmode{color:#8FEFC0;background:rgba(111,207,142,.14);border-color:rgba(111,207,142,.5)}
+  body.kid .qprog i{background:linear-gradient(90deg,#3E8E5A,#6FCF8E)}
+  body.kid .qcard{border-color:rgba(111,207,142,.45);background:linear-gradient(170deg,#14201A,#131926 60%)}
+  body.kid .qcard::after{background:radial-gradient(circle,rgba(111,207,142,.18),transparent 70%)}
+  body.kid .qtag{color:#8FEFC0;background:rgba(111,207,142,.14)}
+  body.kid .ring .rf{stroke:#6FCF8E}
+  body.kid .qhint .bar i{background:#6FCF8E}
+  body.kid .qa.yes{background:linear-gradient(135deg,#4FAE72,#35824F);box-shadow:0 8px 20px rgba(111,207,142,.35)}
+  body.kid .cheer{background:linear-gradient(135deg,#4FAE72,#35824F);box-shadow:0 10px 26px rgba(111,207,142,.5)}
+  body.kid .undo .uaw b{color:#8FEFC0}
+  body.kid .undo .ubtn{color:#8FEFC0;border-color:rgba(111,207,142,.5)}
+  body.kid .qq::before{content:"🧒 ";font-size:18px}
+
+  /* ===== 未满18岁 · 强提醒弹窗 ===== */
+  .age-mask{position:fixed;inset:0;z-index:80;background:rgba(5,7,12,.82);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:26px}
+  .age-mask.on{display:flex}
+  .age-box{background:#131926;border:2px solid rgba(224,82,82,.65);border-radius:24px;padding:26px 22px 22px;text-align:center;max-width:340px;animation:stin .3s;box-shadow:0 0 0 6px rgba(224,82,82,.10),0 20px 50px rgba(0,0,0,.6)}
+  .age-box .ai{width:64px;height:64px;margin:0 auto 12px;border-radius:50%;background:rgba(224,82,82,.14);border:1.5px solid rgba(224,82,82,.6);display:flex;align-items:center;justify-content:center;font-size:30px}
+  .age-box h3{font-size:19px;font-weight:900;color:#F0A3A3;margin-bottom:10px;line-height:1.5}
+  .age-box p{font-size:13px;color:#C7B9B9;line-height:1.8;margin-bottom:6px}
+  .age-box p b{color:#F0DFB8}
+  .age-ok{margin-top:16px;background:linear-gradient(135deg,#4FAE72,#35824F);color:#fff;border-radius:14px;padding:14px;font-size:15.5px;font-weight:900;cursor:pointer;box-shadow:0 8px 20px rgba(111,207,142,.35)}
+  .age-back{margin-top:10px;font-size:12.5px;color:#8B93A5;cursor:pointer;padding:6px}
+  /* 选择页儿童卡年龄警示条 */
+  .kid-notice{margin:16px 18px 0;background:rgba(224,82,82,.10);border:1.5px solid rgba(224,82,82,.5);border-radius:14px;padding:11px 14px;display:flex;gap:10px;align-items:center}
+  .kid-notice .kn-i{font-size:20px;flex:none}
+  .kid-notice p{font-size:12px;color:#E8B9B9;line-height:1.6}
+  .kid-notice p b{color:#F0A3A3}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt body{background:#ebeef4}html.lt /* ===== 通用 ===== */
+  .step{display:none;animation:stin .35s ease}html.lt .step.on{display:block}@keyframes stin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}html.lt .qbar{display:flex;align-items:center;gap:10px;margin:8px 18px 0}html.lt .qmode{flex:none;font-size:12px;font-weight:800;color:#002570;background:rgba(25,86,209,.14);border:1px solid rgba(25,86,209,.45);border-radius:99px;padding:4px 11px}html.lt .qprog{flex:1;height:7px;border-radius:99px;background:#ccd4e5;overflow:hidden}html.lt .qprog i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#1956d1,#002c85);width:0;transition:width .35s ease}html.lt .qnum{flex:none;font-size:12.5px;font-weight:800;color:#5a6274;font-variant-numeric:tabular-nums}html.lt /* ===== 第0步 · 选择测试对象 ===== */
+  .pick-t{font-size:26px;font-weight:900;color:#1b1912;text-align:center;margin:46px 18px 6px}html.lt .pick-s{font-size:13px;color:#5a6274;text-align:center;margin-bottom:26px}html.lt .pick{display:flex;gap:14px;margin:0 18px}html.lt .pk{flex:1;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:22px;padding:26px 12px 20px;text-align:center;position:relative;overflow:hidden;transition:transform .15s,border-color .2s;cursor:pointer}html.lt .pk:active{transform:scale(.96)}html.lt .pk::before{content:"";position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:130px;height:130px;border-radius:50%;opacity:.14}html.lt .pk.kid::before{background:#30904f}html.lt .pk.adu::before{background:#1956d1}html.lt .pk .pi{width:88px;height:88px;margin:0 auto 12px;border-radius:26px;display:flex;align-items:center;justify-content:center;font-size:46px;position:relative}html.lt .pk.kid .pi{background:linear-gradient(145deg,rgba(48,144,79,.22),rgba(48,144,79,.06));border:1.5px solid rgba(48,144,79,.5);box-shadow:0 8px 22px rgba(48,144,79,.18)}html.lt .pk.adu .pi{background:linear-gradient(145deg,rgba(25,86,209,.26),rgba(25,86,209,.07));border:1.5px solid rgba(25,86,209,.55);box-shadow:0 8px 22px rgba(25,86,209,.22)}html.lt .pk b{display:block;font-size:18px;font-weight:900;color:#1b1912}html.lt .pk span{display:block;font-size:11.5px;color:#5a6274;margin-top:5px}html.lt .pk.kid:hover{border-color:#30904f}html.lt .pk.adu:hover{border-color:#1956d1}html.lt /* ===== 第1步 · 确认 ===== */
+  .cf-card{margin:52px 26px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:26px;padding:38px 24px 30px;text-align:center;position:relative;overflow:hidden}html.lt .cf-card::before{content:"";position:absolute;inset:-60%;background:conic-gradient(from 0deg,transparent 70%,rgba(0,44,133,.14),transparent 92%);animation:cfsw 5s linear infinite}@keyframes cfsw{to{transform:rotate(360deg)}}html.lt .cf-in{position:relative}html.lt .cf-ic{font-size:52px}html.lt .cf-card h2{font-size:24px;font-weight:900;color:#1b1912;margin:14px 0 8px}html.lt .cf-card p{font-size:13.5px;color:#5a6274;line-height:1.8;margin-bottom:8px}html.lt .cf-meta{display:flex;justify-content:center;gap:8px;margin:14px 0 24px}html.lt .cf-meta span{font-size:11px;font-weight:800;color:#002570;background:rgba(25,86,209,.12);border:1px solid rgba(25,86,209,.4);border-radius:8px;padding:4px 10px}html.lt .cf-row{display:flex;gap:12px;position:relative}html.lt .cf-row .later{flex:1;background:#d4dbe9;border:1.5px solid #bfc5d5;border-radius:14px;padding:14px;font-size:15px;font-weight:700;color:#5a6274;text-align:center}html.lt .cf-row .go{flex:1.4;background:linear-gradient(135deg,#0041c5,#2956d1);border-radius:14px;padding:14px;font-size:15px;font-weight:900;color:#141414;text-align:center;box-shadow:0 8px 20px rgba(25,86,209,.4);cursor:pointer}html.lt /* ===== 第2步 · 答题 ===== */
+  .undo{margin:14px 18px 0;background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px;padding:10px 14px;display:none;align-items:center;gap:10px;font-size:12px;color:#5a6274}html.lt .undo.on{display:flex;animation:stin .3s}html.lt .undo .uaw{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.lt .undo .uaw b{color:#002c85}html.lt .undo .ubtn{flex:none;font-size:12px;font-weight:800;color:#002570;border:1px solid rgba(25,86,209,.5);border-radius:9px;padding:4px 10px;cursor:pointer}html.lt .qcard{margin:14px 18px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:26px;padding:24px 20px 22px;position:relative;overflow:hidden}html.lt .qcard::after{content:"";position:absolute;top:-46px;right:-46px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(25,86,209,.16),transparent 70%)}html.lt .qtag{display:inline-block;font-size:12px;font-weight:800;color:#002570;background:rgba(25,86,209,.14);border-radius:8px;padding:3px 10px;margin-bottom:14px}html.lt .qtm{display:flex;align-items:center;gap:12px;margin-bottom:16px}html.lt .ring{width:46px;height:46px;flex:none;position:relative}html.lt .ring svg{width:46px;height:46px;transform:rotate(-90deg)}html.lt .ring .rb{fill:none;stroke:#c2cadc;stroke-width:4}html.lt .ring .rf{fill:none;stroke:#0041c5;stroke-width:4;stroke-linecap:round;stroke-dasharray:125.6;transition:stroke-dashoffset 1s linear,stroke .3s}html.lt .ring.warn .rf{stroke:#ad1f1f}html.lt .ring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#1b1912;font-variant-numeric:tabular-nums}html.lt .qhint{flex:1;font-size:12px;color:#5a6274}html.lt .qhint .bar{height:4px;border-radius:99px;background:#ccd4e5;margin-top:6px;overflow:hidden}html.lt .qhint .bar i{display:block;height:100%;background:#0041c5;width:100%;transition:width 1s linear}html.lt .qq{font-size:20px;font-weight:900;color:#1b1912;line-height:1.65;min-height:100px;position:relative;z-index:1}html.lt .qans{display:flex;gap:12px;margin-top:18px;position:relative;z-index:1}html.lt .qa{flex:1;border-radius:16px;padding:16px 8px;font-size:16px;font-weight:900;text-align:center;cursor:pointer;transition:transform .12s}html.lt .qa:active{transform:scale(.95)}html.lt .qa.yes{background:linear-gradient(135deg,#0041c5,#2956d1);color:#141414;box-shadow:0 8px 20px rgba(25,86,209,.38)}html.lt .qa.no{background:#d4dbe9;border:1.5px solid #bfc5d5;color:#5a6274}html.lt .cheer{position:fixed;left:50%;bottom:110px;transform:translateX(-50%) translateY(20px);background:linear-gradient(135deg,#0041c5,#2956d1);color:#141414;font-size:14px;font-weight:900;border-radius:99px;padding:11px 22px;box-shadow:0 10px 26px rgba(25,86,209,.5);opacity:0;pointer-events:none;transition:all .3s;z-index:60}html.lt .cheer.on{opacity:1;transform:translateX(-50%) translateY(0)}html.lt .robotip{text-align:center;font-size:11.5px;color:#8b93a5;margin-top:16px}html.lt /* ===== 第3步 · 完成 ===== */
+  .done{margin:90px 26px 0;text-align:center}html.lt .done .ck{width:96px;height:96px;margin:0 auto;border-radius:50%;background:linear-gradient(135deg,#0041c5,#2956d1);display:flex;align-items:center;justify-content:center;font-size:46px;color:#141414;box-shadow:0 0 0 12px rgba(25,86,209,.14),0 0 0 26px rgba(25,86,209,.06);animation:ckpop .5s cubic-bezier(.2,1.6,.4,1)}@keyframes ckpop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}html.lt .done h2{font-size:26px;font-weight:900;color:#1b1912;margin:26px 0 8px}html.lt .done p{font-size:13.5px;color:#5a6274;margin-bottom:30px}html.lt .done .go{display:block;background:linear-gradient(135deg,#0041c5,#2956d1);color:#141414;border-radius:16px;padding:16px;font-size:17px;font-weight:900;box-shadow:0 10px 26px rgba(25,86,209,.42);cursor:pointer}html.lt /* ===== 迷者结果 ===== */
+  .mz-warn{margin:20px 18px 0;background:rgba(216,177,54,.09);border:1.5px solid rgba(216,177,54,.55);border-radius:20px;padding:18px;display:flex;gap:13px}html.lt .mz-warn .wi{font-size:30px;flex:none}html.lt .mz-warn b{display:block;font-size:16.5px;font-weight:900;color:#70561c;margin-bottom:6px}html.lt .mz-warn p{font-size:12.5px;color:#6b6046;line-height:1.7}html.lt .mz-re{display:block;margin-top:14px;background:linear-gradient(135deg,#d19a1f,#f0ba46);color:#141414;text-align:center;border-radius:13px;padding:12px;font-size:15px;font-weight:900}html.lt .mz-card{margin:16px 18px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:22px;padding:18px;display:flex;gap:14px;align-items:center}html.lt .mz-card .mz-g{width:64px;height:64px;flex:none;border-radius:18px;background:#ccd4e5;border:1.5px solid #bfc5d5;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900;color:#8b93a5}html.lt .mz-card .mt1{font-size:11.5px;color:#5a6274}html.lt .mz-card .mt1 span{color:#002570;border:1px solid rgba(25,86,209,.4);border-radius:6px;padding:1px 7px;margin-left:6px;font-size:10px}html.lt .mz-card .mt2{font-size:21px;font-weight:900;color:#1b1912;margin:3px 0}html.lt .mz-card .mt3{font-size:12px;color:#5a6274;line-height:1.6}html.lt .mz-stat{margin:14px 18px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:18px;display:flex}html.lt .mz-stat div{flex:1;text-align:center;padding:16px 4px}html.lt .mz-stat div+div{border-left:1px solid #c2cadc}html.lt .mz-stat b{display:block;font-size:19px;font-weight:900;color:#1b1912}html.lt .mz-stat span{font-size:11px;color:#5a6274}html.lt .mz-barbox{margin:16px 18px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:20px;padding:16px}html.lt .mz-barbox .bt{font-size:13px;font-weight:900;color:#1b1912;margin-bottom:12px}html.lt .mzb{display:flex;align-items:center;gap:10px;margin-bottom:10px}html.lt .mzb:last-child{margin-bottom:0}html.lt .mzb .n{flex:none;width:56px;font-size:12px;font-weight:800;color:#313846}html.lt .mzb .tr{flex:1;height:9px;border-radius:99px;background:#ccd4e5;overflow:hidden}html.lt .mzb .tr i{display:block;height:100%;border-radius:99px;width:0;transition:width .8s ease}html.lt .mzb .v{flex:none;width:26px;text-align:right;font-size:12px;font-weight:800;color:#5a6274;font-variant-numeric:tabular-nums}html.lt /* ===== 儿童/成人 双模式差异化主题 ===== */
+  body.kid .qmode{color:#107041;background:rgba(48,144,79,.14);border-color:rgba(48,144,79,.5)}html.lt body.kid .qprog i{background:linear-gradient(90deg,#71c18d,#30904f)}html.lt body.kid .qcard{border-color:rgba(48,144,79,.45);background:linear-gradient(170deg,#dfebe5,#d9dfec 60%)}html.lt body.kid .qcard::after{background:radial-gradient(circle,rgba(48,144,79,.18),transparent 70%)}html.lt body.kid .qtag{color:#107041;background:rgba(48,144,79,.14)}html.lt body.kid .ring .rf{stroke:#30904f}html.lt body.kid .qhint .bar i{background:#30904f}html.lt body.kid .qa.yes{background:linear-gradient(135deg,#51b074,#7dca97);box-shadow:0 8px 20px rgba(48,144,79,.35)}html.lt body.kid .cheer{background:linear-gradient(135deg,#51b074,#7dca97);box-shadow:0 10px 26px rgba(48,144,79,.5)}html.lt body.kid .undo .uaw b{color:#107041}html.lt body.kid .undo .ubtn{color:#107041;border-color:rgba(48,144,79,.5)}html.lt body.kid .qq::before{content:"🧒 ";font-size:18px}html.lt /* ===== 未满18岁 · 强提醒弹窗 ===== */
+  .age-mask{position:fixed;inset:0;z-index:80;background:rgba(243,245,250,.82);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:26px}html.lt .age-mask.on{display:flex}html.lt .age-box{background:#d9dfec;border:2px solid rgba(173,31,31,.65);border-radius:24px;padding:26px 22px 22px;text-align:center;max-width:340px;animation:stin .3s;box-shadow:0 0 0 6px rgba(173,31,31,.10),0 20px 50px rgba(247,247,247,.6)}html.lt .age-box .ai{width:64px;height:64px;margin:0 auto 12px;border-radius:50%;background:rgba(173,31,31,.14);border:1.5px solid rgba(173,31,31,.6);display:flex;align-items:center;justify-content:center;font-size:30px}html.lt .age-box h3{font-size:19px;font-weight:900;color:#5c0f0f;margin-bottom:10px;line-height:1.5}html.lt .age-box p{font-size:13px;color:#463838;line-height:1.8;margin-bottom:6px}html.lt .age-box p b{color:#47360f}html.lt .age-ok{margin-top:16px;background:linear-gradient(135deg,#51b074,#7dca97);color:#141414;border-radius:14px;padding:14px;font-size:15.5px;font-weight:900;cursor:pointer;box-shadow:0 8px 20px rgba(48,144,79,.35)}html.lt .age-back{margin-top:10px;font-size:12.5px;color:#5a6274;cursor:pointer;padding:6px}html.lt /* 选择页儿童卡年龄警示条 */
+  .kid-notice{margin:16px 18px 0;background:rgba(173,31,31,.10);border:1.5px solid rgba(173,31,31,.5);border-radius:14px;padding:11px 14px;display:flex;gap:10px;align-items:center}html.lt .kid-notice .kn-i{font-size:20px;flex:none}html.lt .kid-notice p{font-size:12px;color:#461717;line-height:1.6}html.lt .kid-notice p b{color:#5c0f0f}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="phone">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div><div class="t1">天赋测试</div><div class="t2">TALENT TEST</div></div>
+    </div>
+    <a href="report-v3.html" style="font-size:12.5px;color:#8B93A5">历史报告</a>
+  </div>
+
+  <!-- 第0步 · 测评中心 · 四大板块 -->
+  <div class="step on" id="sPick">
+    <div class="pick-t">天赋测评中心</div>
+    <div class="pick-s">测天赋 · 定规划 · 测关系，都在这里</div>
+    <div class="hub4">
+      <a class="hub" href="javascript:;" id="hubSelf" onclick="toggleSelf()">
+        <div class="hi"><img src="/static/dayu/assets/ic/dna.png" style="width:56px;height:56px;object-fit:contain;vertical-align:middle" alt=""/></div><div class="hm"><b>个人测试</b><span>孩子 · 自己 两个入口</span></div><span class="arr">›</span>
+      </a>
+      <a class="hub" href="plan.html">
+        <div class="hi"><img src="/static/dayu/assets/ic/target.png" style="width:56px;height:56px;object-fit:contain;vertical-align:middle" alt=""/></div><div class="hm"><b>学业规划</b><span>天赋×成绩×时间出方案</span></div><span class="arr">›</span>
+      </a>
+      <a class="hub" href="javascript:;" onclick="gateEnter(&#39;relation.html&#39;)">
+        <div class="hi"><img src="/static/dayu/assets/ic/hearts.png" style="width:56px;height:56px;object-fit:contain;vertical-align:middle" alt=""/></div><div class="hm"><b>关系测试</b><span>发链接给TA测合拍 · 家长专区</span></div><span class="arr">›</span><i class="lock">🔒</i>
+      </a>
+    </div>
+    <a class="recbtn" href="records.html">
+      <span class="ri"><img src="/static/dayu/assets/ic/clipboard.png" style="width:44px;height:44px;object-fit:contain;vertical-align:middle" alt=""/></span><b>测试记录</b><span>孩子 / 成人 / 规划 / 关系 · 随时回看</span>
+    </a>
+    <div id="selfZone" style="display:none">
+      <div class="pick-t" id="pkZone" style="margin-top:26px;font-size:16px">个人测试 · 请选择测试对象</div>
+      <div class="pick-s">35 道快答题 · 约 3 分钟 · 凭第一感觉选择</div>
+      <div class="pick">
+        <div class="pk kid" onclick="pickMode(&#39;kid&#39;)">
+          <div class="pi"><img src="/static/dayu/assets/ic/family.png" style="width:96px;height:96px;object-fit:contain;vertical-align:middle" alt=""/></div>
+          <b>给孩子测</b><span>未满18岁 · 家长代测</span>
+        </div>
+        <div class="pk adu" onclick="gateEnter(null,&#39;adu&#39;)">
+          <div class="pi"><img src="/static/dayu/assets/ic/person.png" style="width:96px;height:96px;object-fit:contain;vertical-align:middle" alt=""/></div>
+          <b>给自己测</b><span>已满18岁 · 本人作答</span>
+        </div>
+      </div>
+      <div class="kid-notice">
+        <div class="kn-i">🛡️</div>
+        <p><b>未满18岁的孩子不能自己测试。</b>儿童测试必须由家长根据孩子的日常真实表现代为作答，孩子本人作答会导致结果失真。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 家长密码门 -->
+  <div class="gate" id="gate" onclick="if(event.target===this)gateNo()">
+    <div class="gb">
+      <h3 id="gateT">家长验证</h3>
+      <p id="gateP"></p>
+      <input id="gateIn" type="password" inputmode="numeric" maxlength="6" placeholder="····" onkeydown="if(event.key===&#39;Enter&#39;)gateOk()"/>
+      <div class="gerr" id="gateErr"></div>
+      <div class="gok" onclick="gateOk()">确认</div>
+      <div class="gno" onclick="gateNo()">取消</div>
+    </div>
+  </div>
+
+  <!-- 第1步 · 确认 -->
+  <div class="step" id="sCf">
+    <div class="cf-card"><div class="cf-in">
+      <div class="cf-ic" id="cfIc">🙌</div>
+      <h2 id="cfT">好的！成人测试</h2>
+      <p id="cfP">接下来是 35 道快答题，凭第一感觉作答，<br/>没有对错，越诚实越准确。</p>
+      <div class="cf-meta"><span>35 题</span><span>每题 60 秒</span><span>可撤回上一题</span></div>
+      <div class="cf-row">
+        <a class="later" href="index.html">稍后再说</a>
+        <a class="go" onclick="startQuiz()">准备好了 · 开始答题</a>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 第2步 · 答题 -->
+  <div class="step" id="sQuiz">
+    <div class="qbar">
+      <span class="qmode" id="qMode">成人测试</span>
+      <div class="qprog"><i id="qBar"></i></div>
+      <span class="qnum" id="qNum">1/35</span>
+    </div>
+    <div class="undo" id="undo"><span class="uaw" id="undoTx"></span><span class="ubtn" onclick="undoLast()">↩︎ 点击撤回</span></div>
+    <div class="qcard">
+      <span class="qtag" id="qTag">第 1 题</span>
+      <div class="qtm">
+        <div class="ring" id="ring"><svg viewBox="0 0 46 46"><circle class="rb" cx="23" cy="23" r="20"></circle><circle class="rf" id="ringF" cx="23" cy="23" r="20"></circle></svg><b id="ringN">59</b></div>
+        <div class="qhint">凭第一感觉选择就好～<div class="bar"><i id="qHintBar"></i></div></div>
+      </div>
+      <div class="qq" id="qQ"></div>
+      <div class="qans">
+        <div class="qa yes" onclick="answer(1)">完全符合</div>
+        <div class="qa no" onclick="answer(0)">有差异</div>
+      </div>
+    </div>
+    <div class="robotip">🤖 凭第一感觉选择就好～</div>
+  </div>
+
+  <!-- 第3步 · 完成 -->
+  <div class="step" id="sDone">
+    <div class="done">
+      <div class="ck">✓</div>
+      <h2>35 题已完成</h2>
+      <p>AI 将为你生成专属天赋解读</p>
+      <a class="go" onclick="makeReport()">生成报告</a>
+      <a class="go" href="plan.html" style="margin-top:10px;background:linear-gradient(135deg,#4FAE72,#35824F);box-shadow:0 10px 26px rgba(111,207,142,.4)">继续 · 生成学业规划 →</a>
+    </div>
+  </div>
+
+  <!-- 迷者结果 -->
+  <div class="step" id="sMz">
+    <div class="mz-warn">
+      <div class="wi">⚠️</div>
+      <div><b>测评结果不明确</b><p>本次天赋测评未得出明确的五者天赋归属，建议重新测试以获得准确结果。</p>
+      <a class="mz-re" onclick="restart()">🔄 重新测试</a></div>
+    </div>
+    <div class="mz-card">
+      <div class="mz-g">迷</div>
+      <div>
+        <div class="mt1">天赋者<span id="mzMode">成人测试</span></div>
+        <div class="mt2">迷者</div>
+        <div class="mt3">我们总会遇到一些事情身不由己而迷失自己，有时会困惑无助、也有时逞强透支。</div>
+      </div>
+    </div>
+    <div class="mz-stat">
+      <div><b id="mzScore">1</b><span>核心天赋值</span></div>
+      <div><b>迷者</b><span>天赋类型</span></div>
+      <div><b>无神</b><span>能量状态</span></div>
+    </div>
+    <div class="mz-barbox">
+      <div class="bt">五者能量分布 · 暂未拉开差距</div>
+      <div id="mzBars"></div>
+    </div>
+  </div>
+
+  <!-- 未满18岁 · 强提醒弹窗 -->
+  <div class="age-mask" id="ageMask">
+    <div class="age-box">
+      <div class="ai">⚠️</div>
+      <h3>注意！请确认您的孩子<br/>是否已满 18 岁</h3>
+      <p>您的孩子<b>未满18岁</b>，请您（家长）帮助孩子完成本次测试。<br/>题目将由<b>家长根据孩子的日常真实表现</b>作答，孩子本人作答或凭想象作答，结果会与事实产生误差。</p>
+      <div class="age-ok" onclick="confirmKid()">我是家长 · 我来帮孩子测</div>
+      <div class="age-back" onclick="closeAge()">返回重选</div>
+    </div>
+  </div>
+
+  <div class="cheer" id="cheer"></div>
+
+  <div class="foot">
+    <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+</div>
+<script>
+/* ================= 题库：7题×5天赋 ================= */
+const QK={
+ adu:[
+  ['act','你是个做得多、说得少的人，认为活好当下远比畅想未来更现实'],
+  ['win','小时候与同伴玩集体游戏时，你经常主动争取成为组织者、领导者'],
+  ['think','你脑子里总装着奇思妙想，说着说着就走神了'],
+  ['virtue','朋友遇到难处时，你很难袖手旁观'],
+  ['study','做事之前，你习惯先收集资料、做足准备再动手'],
+  ['win','面对竞争你会兴奋，而不是紧张'],
+  ['act','认定的事情，你会一条道走到底，不轻言放弃'],
+  ['virtue','你一直遵循传统观念，内心认为家庭比事业更重要'],
+  ['think','相比记住它，你更擅长联想出一个新点子'],
+  ['study','你自律性强，定下的计划基本都能执行到底'],
+  ['win','你很喜欢给自己设定有挑战的目标，并且渴望赢'],
+  ['act','你习惯按计划和规矩办事，不喜欢临时变动'],
+  ['virtue','说话做事，你习惯先照顾别人的感受'],
+  ['think','你常常对既有规则冒出「为什么不能换个做法」的念头'],
+  ['study','你喜欢把知识整理成体系，形成自己的框架'],
+  ['win','在团队中，你常常是那个拍板做决定的人'],
+  ['act','学新东西时，你靠反复练习把它吃透'],
+  ['virtue','被大家信任，是你非常在意的一件事'],
+  ['think','你的兴趣点转移得比较快，新鲜劲过了就想换'],
+  ['study','考试或汇报前，你会反复检查每个细节'],
+  ['win','你很在意别人对你的认可和掌声'],
+  ['act','别人评价你最多的词是「踏实、靠得住」'],
+  ['virtue','你宁愿自己吃点亏，也不愿亏欠别人'],
+  ['think','你喜欢独处时天马行空地想事情'],
+  ['study','你各方面发展比较均衡，没有明显短板'],
+  ['win','输了之后你会很快振作，想着下次赢回来'],
+  ['act','你的动手能力明显强于表达能力'],
+  ['virtue','你能敏锐察觉别人的情绪变化'],
+  ['think','你有点丢三落四，交代的小事转头就忘'],
+  ['study','遇到难题，你先自己钻研而不是马上求助'],
+  ['win','你脑子里经常冒出「造一个大盘子」的念头'],
+  ['act','你不太擅长随机应变，情况一变就容易卡壳'],
+  ['virtue','面对冲突，你倾向先安抚情绪而不是争对错'],
+  ['think','你喜欢用与众不同的方法解决问题'],
+  ['study','你有点完美主义，「先完成再完美」对你很难']
+ ],
+ kid:[
+  ['win','孩子好胜心强，喜欢挑战，输了不服气'],
+  ['think','孩子满脑子奇思妙想，特别爱问「为什么」'],
+  ['virtue','孩子心思细腻，会主动照顾别人的感受'],
+  ['act','孩子做事专注认真，一件事能坚持做完'],
+  ['study','孩子写作业不用催，自己能安排学习'],
+  ['win','孩子在同伴中喜欢当「小领导」，有号召力'],
+  ['think','孩子容易走神，上着课思绪就飘走了'],
+  ['virtue','孩子乐于分享，答应别人的事会做到'],
+  ['act','孩子喜欢动手拆装、做手工，坐得住'],
+  ['study','孩子喜欢看书，常常看得入迷'],
+  ['win','孩子要面子，特别渴望被夸奖和认可'],
+  ['think','孩子有点健忘，交代的事转头就忘'],
+  ['virtue','孩子能察觉大人的情绪，会安慰人'],
+  ['act','孩子练习一样东西能不厌其烦地重复'],
+  ['study','孩子各科发展比较均衡，不偏科'],
+  ['win','孩子情绪来得快去得也快，容易冲动'],
+  ['think','孩子喜欢编故事、画想象中的东西'],
+  ['virtue','孩子不争不抢，和小朋友闹矛盾会先退让'],
+  ['act','孩子认定的方法不太愿意换，有点「死脑筋」'],
+  ['study','孩子做事有计划，书包书桌收拾得整齐'],
+  ['win','孩子喜欢竞争，什么事都想争第一'],
+  ['think','孩子兴趣变得快，喜欢的课记得牢、不喜欢的秒忘'],
+  ['virtue','孩子遵守规矩，重承诺、讲信义'],
+  ['act','孩子生活作息规律，习惯很稳定'],
+  ['study','孩子有点完美主义，写字擦了写、写了擦'],
+  ['win','孩子想象力丰富，常说长大要干一番大事'],
+  ['think','孩子常有出人意料的点子，解题思路很「野」'],
+  ['virtue','孩子对家人贴心，会留意谁需要帮助'],
+  ['act','孩子答应的任务会老老实实完成，不打折扣'],
+  ['study','孩子遇到难题先自己琢磨，不急着问人'],
+  ['win','孩子在舞台上、众人面前不怯场，越大场面越兴奋'],
+  ['think','孩子背东西慢，但创意类作业完成得出奇好'],
+  ['virtue','孩子说话温和，很少与人起冲突'],
+  ['act','孩子体育或技能类学习靠苦练进步明显'],
+  ['study','孩子爱总结，学完喜欢画思维导图整理']
+ ]
+};
+const TN={win:'赢者',think:'思者',virtue:'德者',act:'行者',study:'学者'};
+const TC={win:'#E05252',think:'#3E8E5A',virtue:'#A0754A',act:'#C9A227',study:'#4A7EC2'};
+
+let mode='adu',qs=[],qi=0,ans=[],timer=null,sec=59;
+const $=id=>document.getElementById(id);
+function show(id){document.querySelectorAll('.step').forEach(s=>s.classList.remove('on'));$(id).classList.add('on');window.scrollTo(0,0);}
+
+/* 个人测试：点击展开/收起 孩子·自己 两个入口 */
+function toggleSelf(){
+  const z=$('selfZone'),open=z.style.display!=='none';
+  z.style.display=open?'none':'';
+  $('hubSelf').classList.toggle('cur',!open);
+  if(!open)setTimeout(()=>$('pkZone').scrollIntoView({behavior:'smooth',block:'start'}),60);
+}
+function pickMode(m){
+  try{ localStorage.setItem('dayu_test_mode', m||''); }catch(e){}
+  if(window.__dayuGoTalent){ window.__dayuGoTalent(); return; }
+  if(m==='kid'){ $('ageMask').classList.add('on'); return; }
+  applyMode('adu');
+}
+function closeAge(){ $('ageMask').classList.remove('on'); }
+function confirmKid(){ $('ageMask').classList.remove('on'); applyMode('kid'); }
+function applyMode(m){
+  mode=m;
+  document.body.classList.toggle('kid',m==='kid');
+  $('cfIc').textContent=m==='kid'?'👨‍👧':'🙌';
+  $('cfT').textContent=m==='kid'?'好的！家长代测 · 儿童版':'好的！成人测试';
+  $('cfP').innerHTML=m==='kid'?'请家长放下预判，根据孩子<b>平时的真实表现</b>作答，<br>35 道快答题，凭第一反应选择，越真实越准确。':'接下来是 35 道快答题，凭第一感觉作答，<br>没有对错，越诚实越准确。';
+  $('qMode').textContent=m==='kid'?'家长代测 · 儿童版':'成人测试 · 本人作答';
+  $('mzMode').textContent=m==='kid'?'儿童测试':'成人测试';
+  document.querySelector('.qhint').childNodes[0].textContent=m==='kid'?'家长朋友：想孩子平时的样子，别想要的样子～':'凭第一感觉选择就好～';
+  document.querySelector('.robotip').textContent=m==='kid'?'🧒 按孩子真实表现作答，不美化、不苛求～':'🤖 凭第一感觉选择就好～';
+  show('sCf');
+}
+function startQuiz(){
+  qs=QK[mode].map(q=>({t:q[0],x:q[1]})).sort(()=>Math.random()-.5);
+  qi=0; ans=[]; $('undo').classList.remove('on');
+  show('sQuiz'); paintQ();
+}
+function paintQ(){
+  const q=qs[qi];
+  $('qTag').textContent=`第 ${qi+1} 题`;
+  $('qNum').textContent=`${qi+1}/35`;
+  $('qBar').style.width=(qi/35*100)+'%';
+  $('qQ').textContent=q.x+'。';
+  const qc=$('qQ'); qc.style.animation='none'; void qc.offsetWidth; qc.style.animation='stin .3s ease';
+  sec=59; paintTimer();
+  clearInterval(timer);
+  timer=setInterval(()=>{ if(sec>0){sec--; paintTimer();} },1000);
+}
+function paintTimer(){
+  $('ringN').textContent=sec;
+  $('ringF').style.strokeDashoffset=125.6*(1-sec/59);
+  $('ring').classList.toggle('warn',sec<=10);
+  $('qHintBar').style.width=(sec/59*100)+'%';
+}
+function answer(v){
+  ans[qi]={t:qs[qi].t,v};
+  $('undoTx').innerHTML=`上一题「${qs[qi].x.slice(0,14)}…」 已选 <b>${v?'完全符合':'有差异'}</b>`;
+  $('undo').classList.add('on');
+  clearInterval(timer);
+  const done=ans.filter(a=>a).length;
+  if(done%5===0&&done<35){ cheer(mode==='kid'?`已记录 ${done} 题，继续想孩子的日常～`:`已完成 ${done} 题，加油！`); }
+  setTimeout(()=>{
+    if(qi<34){ qi++; paintQ(); }
+    else{ $('qBar').style.width='100%'; show('sDone'); }
+  },260);
+}
+function undoLast(){
+  const i=ans[qi]===undefined?qi-1:qi;
+  if(i<0)return;
+  ans[i]=undefined; ans.length=i; qi=i;
+  $('undo').classList.remove('on');
+  paintQ();
+}
+function cheer(t){ const c=$('cheer'); c.textContent=t; c.classList.add('on'); setTimeout(()=>c.classList.remove('on'),1600); }
+function makeReport(){
+  const sc={win:0,think:0,virtue:0,act:0,study:0};
+  ans.forEach(a=>{ if(a&&a.v) sc[a.t]+=2; else if(a) sc[a.t]+=0; });
+  const arr=Object.entries(sc).sort((a,b)=>b[1]-a[1]);
+  const top=arr[0],second=arr[1];
+  /* 存档：测试记录 */
+  try{
+    const log=JSON.parse(localStorage.getItem('jn_test_log')||'[]');
+    log.push({mode,top:top[0],second:second[0],sc,ts:Date.now()});
+    localStorage.setItem('jn_test_log',JSON.stringify(log.slice(-50)));
+  }catch(e){}
+  /* 迷者判定：最高分过低 或 前两名拉不开差距 */
+  if(top[1]<8 || top[1]-second[1]<2){
+    $('mzScore').textContent=top[1];
+    $('mzBars').innerHTML=arr.map(([k,v])=>`<div class="mzb"><span class="n">${TN[k]}</span><div class="tr"><i style="background:${TC[k]}" data-w="${v/14*100}"></i></div><span class="v">${v}</span></div>`).join('');
+    show('sMz');
+    requestAnimationFrame(()=>setTimeout(()=>document.querySelectorAll('#mzBars i').forEach(i=>i.style.width=i.dataset.w+'%'),60));
+  }else{
+    if(window.__dayuGoTalent){window.__dayuGoTalent();return;}location.href='/pages/talent/index';
+  }
+}
+function restart(){ show('sPick'); }
+/* ===== 家长密码门：孩子端口进入 成人测试/关系测试 需家长密码 ===== */
+let _gateCb=null;
+function isKidPort(){try{return !!localStorage.getItem('jn_kid_profile');}catch(e){return false;}}
+function gateEnter(url,mode){
+  const go=()=>{ if(url) location.href=url; else if(mode) pickMode(mode); };
+  if(!isKidPort()){ go(); return; }
+  _gateCb=go;
+  const pw=localStorage.getItem('jn_parent_pw');
+  $('gateT').textContent=pw?'家长验证':'请家长设置密码';
+  $('gateP').innerHTML=pw?'当前是孩子账号。<b>成人测试与关系测试</b>需家长输入密码后使用。':'首次使用，请家长设置一个 4~6 位数字密码，<br>以后孩子进入成人/关系测试都需输入。';
+  $('gateIn').value='';$('gateErr').textContent='';
+  $('gate').classList.add('on');
+  setTimeout(()=>$('gateIn').focus(),200);
+}
+function gateOk(){
+  const v=$('gateIn').value.trim(),pw=localStorage.getItem('jn_parent_pw');
+  if(!pw){
+    if(!/^\d{4,6}$/.test(v)){$('gateErr').textContent='请设置 4~6 位数字密码';return;}
+    localStorage.setItem('jn_parent_pw',v);
+  }else if(v!==pw){$('gateErr').textContent='密码不对，请家长再试一次';return;}
+  $('gate').classList.remove('on');
+  const cb=_gateCb;_gateCb=null;cb&&cb();
+}
+function gateNo(){$('gate').classList.remove('on');_gateCb=null;}
+/* 入口参数：?mode=adu 直达成人卷（经家长门）；?mode=kid 家长代测 */
+(function(){const m=new URLSearchParams(location.search).get('mode');if(m==='adu')gateEnter(null,'adu');else if(m==='kid')pickMode('kid');})();
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+</body></html>

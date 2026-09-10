@@ -1,0 +1,473 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>大宇智能体 · 学科答疑</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  body{background:#0B0E14}
+  /* ===== 导师·正在回复你 GIF舞台 ===== */
+  .mstage{margin:10px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/9;background:linear-gradient(140deg,#141C2E,#0B0E14);border:1.5px solid #2A3040}
+  .mstage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .mstage .mgrad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(5,8,14,.82))}
+  .mstage .mlive{position:absolute;top:10px;left:10px;font-size:10px;font-weight:900;color:#6FCF8E;background:rgba(0,0,0,.55);border-radius:6px;padding:4px 9px;display:flex;align-items:center;gap:5px}
+  .mstage .mlive i{width:7px;height:7px;border-radius:50%;background:#6FCF8E;animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.2}}
+  .mstage .mwho{position:absolute;left:12px;bottom:10px;display:flex;align-items:baseline;gap:8px}
+  .mstage .mwho b{font-size:16px;font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+  .mstage .mwho span{font-size:10.5px;color:rgba(255,255,255,.85)}
+  /* ===== 学科·导师切换 ===== */
+  .subs{display:flex;gap:8px;margin:12px 18px 0;overflow-x:auto;padding-bottom:2px}
+  .subs a{flex:none;text-align:center;background:#131926;border:1.5px solid #232B3D;border-radius:14px;padding:7px 14px;font-size:13.5px;font-weight:800;color:#8B93A5;cursor:pointer;white-space:nowrap;line-height:1.3}
+  .subs a small{display:block;font-size:9px;font-weight:700;color:#5E6B84;margin-top:1px}
+  .subs a.on{background:rgba(46,107,230,.16);border-color:#2E6BE6;color:#7FA7EF}
+  .subs a.on small{color:#7FA7EF;opacity:.8}
+  /* ===== 导师卡 ===== */
+  .mentor{margin:10px 18px 0;background:linear-gradient(160deg,#1A2233,#101623 75%);border:1.5px solid #2A3040;border-radius:18px;padding:13px;display:flex;gap:12px;align-items:center;position:relative;overflow:hidden}
+  .mentor .mava{width:54px;height:54px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:26px;border:2.5px solid;position:relative}
+  .mentor .mava .mtb{position:absolute;right:-4px;bottom:-4px;width:22px;height:22px;border-radius:50%;background:#0D111F;border:1.5px solid;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;z-index:2}
+  .mentor .mava.img{width:88px;height:118px;border-radius:16px;font-size:0;background-size:cover;background-position:center top;box-shadow:0 6px 18px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.12) inset;align-self:flex-start}
+  .mentor .mava.img+.minfo .mn{font-size:20px;letter-spacing:1px}
+  html.lt .mentor .mava.img{width:88px;height:118px;border-radius:16px;font-size:0;box-shadow:0 6px 16px rgba(60,80,120,.25)}
+  .mentor .mn{font-size:17px;font-weight:900;color:#EDEBE4}
+  .mentor .mtag{font-size:10px;font-weight:800;border-radius:6px;padding:2px 8px;margin-left:6px}
+  .mentor .msig{font-size:11px;color:#8B93A5;margin-top:3px}
+  .mentor .mknow{font-size:11px;margin-top:5px;line-height:1.5}
+  /* ===== 聊天 ===== */
+  .chat{margin:12px 18px 160px}
+  .msg{display:flex;gap:10px;margin-bottom:14px}
+  .msg .av{width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid}
+  .msg .who{font-size:11.5px;color:#5A6274;margin-bottom:4px}
+  .msg .who i{font-style:normal;font-size:9px;border:1px solid #2A3040;border-radius:5px;padding:1px 6px;margin-left:5px;color:#8B93A5}
+  .msg .tx{background:#161D2B;border:1px solid #2A3040;border-radius:4px 14px 14px 14px;padding:11px 14px;font-size:14px;color:#D8DCE6;line-height:1.7;max-width:85%}
+  .msg .tx b{color:#6FCF8E}
+  .msg .tx .demo{display:inline-block;font-size:9px;color:#5A6274;border:1px dashed #2A3040;border-radius:5px;padding:1px 6px;margin-top:6px}
+  .msg.me{flex-direction:row-reverse}
+  .msg.me .tx{background:#2E6BE6;border:none;border-radius:14px 4px 14px 14px;color:#fff}
+  .msg.me img{max-width:180px;border-radius:10px;display:block}
+  .tipcards{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:4px 0 12px}
+  .tipcards div{background:#131926;border:1.5px dashed #2A3040;border-radius:13px;padding:11px;font-size:12px;color:#8B93A5;text-align:center;line-height:1.5;cursor:pointer}
+  .tipcards b{display:block;color:#D8DCE6;font-size:13px;margin-bottom:2px}
+  /* 设置弹窗 */
+  .setm{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:80;display:none}
+  .setm.on{display:block}
+  .setm .sbox{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;background:#101623;border:1.5px solid #2A3040;border-bottom:none;border-radius:20px 20px 0 0;padding:18px}
+  .setm h3{margin:0 0 4px;font-size:16px;color:#EDEBE4}
+  .setm .ssub{font-size:10.5px;color:#5A6274;margin-bottom:12px}
+  .srow{display:flex;align-items:center;gap:10px;padding:12px 2px;border-top:1px solid #232B3D;font-size:13px;color:#D8DCE6}
+  .srow small{display:block;font-size:10px;color:#5A6274;margin-top:2px}
+  .sw{margin-left:auto;flex:none;width:44px;height:24px;border-radius:12px;background:#232B3D;position:relative;cursor:pointer;transition:.25s}
+  .sw i{position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#5A6274;transition:.25s}
+  .sw.on{background:#2E6BE6}
+  .sw.on i{left:23px;background:#fff}
+  .sclose{margin-top:14px;text-align:center;font-size:13px;font-weight:800;color:#8B93A5;border:1.5px solid #2A3040;border-radius:12px;padding:10px;cursor:pointer}
+  .fsz{display:flex;gap:5px;margin-top:9px}
+  .fsz b{flex:1;text-align:center;font-size:10px;font-weight:800;padding:5px 0;border:1px solid #2A3040;border-radius:7px;color:#8B93A5;cursor:pointer}
+  .fsz b.on{background:rgba(46,107,230,.18);border-color:#2E6BE6;color:#7FA7EF}
+  /* 简洁模式：隐藏学科按钮下方的介绍内容 */
+  body.simple .mentor,body.simple .tipcards{display:none}
+  /* 历史抽屉 */
+  .hist{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:70;display:none}
+  .hist.on{display:block}
+  .hist .hbox{position:absolute;top:0;right:0;bottom:0;width:78%;max-width:320px;background:#101623;border-left:1.5px solid #2A3040;padding:16px;overflow-y:auto}
+  .hist .ht{font-size:15px;font-weight:900;color:#EDEBE4;margin-bottom:12px}
+  .hitem{background:#161D2B;border:1px solid #232B3D;border-radius:12px;padding:10px 12px;margin-bottom:9px;cursor:pointer}
+  .hitem b{display:block;font-size:12.5px;color:#D8DCE6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hitem small{font-size:10px;color:#5A6274}
+  /* 输入栏 */
+  .inputbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:8px 14px;display:flex;gap:9px;align-items:center;background:rgba(11,14,20,.96)}
+  .inputbar .box{flex:1;background:#161D2B;border:1.5px solid #2A3040;border-radius:999px;padding:11px 16px;font-size:14px;color:#EDEBE4;outline:none}
+  .inputbar .box:focus{border-color:#2E6BE6}
+  .inputbar .cam{font-size:21px;cursor:pointer}
+  .inputbar .send{width:42px;height:42px;border-radius:50%;background:#6FCF8E;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;cursor:pointer}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt body{background:#ebeef4}html.lt /* ===== 导师·正在回复你 GIF舞台 ===== */
+  .mstage{margin:10px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/9;background:linear-gradient(140deg,#d1d9eb,#ebeef4);border:1.5px solid #bfc5d5}html.lt .mstage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}html.lt .mstage .mgrad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(241,244,250,.82))}html.lt .mstage .mlive{position:absolute;top:10px;left:10px;font-size:10px;font-weight:900;color:#30904f;background:rgba(247,247,247,.55);border-radius:6px;padding:4px 9px;display:flex;align-items:center;gap:5px}html.lt .mstage .mlive i{width:7px;height:7px;border-radius:50%;background:#30904f;animation:blink 1.2s infinite}@keyframes blink{50%{opacity:.2}}html.lt .mstage .mwho{position:absolute;left:12px;bottom:10px;display:flex;align-items:baseline;gap:8px}html.lt .mstage .mwho b{font-size:16px;font-weight:900;color:#141414;text-shadow:0 2px 8px rgba(247,247,247,.7)}html.lt .mstage .mwho span{font-size:10.5px;color:rgba(20,20,20,.85)}html.lt /* ===== 学科·导师切换 ===== */
+  .subs{display:flex;gap:8px;margin:12px 18px 0;overflow-x:auto;padding-bottom:2px}html.lt .subs a{flex:none;text-align:center;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:14px;padding:7px 14px;font-size:13.5px;font-weight:800;color:#5a6274;cursor:pointer;white-space:nowrap;line-height:1.3}html.lt .subs a small{display:block;font-size:9px;font-weight:700;color:#8b93a5;margin-top:1px}html.lt .subs a.on{background:rgba(25,86,209,.16);border-color:#1956d1;color:#103880}html.lt .subs a.on small{color:#1956d1;opacity:.75}html.lt /* ===== 导师卡 ===== */
+  .mentor{margin:10px 18px 0;background:linear-gradient(160deg,#ccd4e5,#dce2ef 75%);border:1.5px solid #bfc5d5;border-radius:18px;padding:13px;display:flex;gap:12px;align-items:center;position:relative;overflow:hidden}html.lt .mentor .mava{width:54px;height:54px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:26px;border:2.5px solid}html.lt .mentor .mn{font-size:17px;font-weight:900;color:#1b1912}html.lt .mentor .mtag{font-size:10px;font-weight:800;border-radius:6px;padding:2px 8px;margin-left:6px}html.lt .mentor .msig{font-size:11px;color:#5a6274;margin-top:3px}html.lt .mentor .mknow{font-size:11px;margin-top:5px;line-height:1.5}html.lt /* ===== 聊天 ===== */
+  .chat{margin:12px 18px 160px}html.lt .msg{display:flex;gap:10px;margin-bottom:14px}html.lt .msg .av{width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid}html.lt .msg .who{font-size:11.5px;color:#8b93a5;margin-bottom:4px}html.lt .msg .who i{font-style:normal;font-size:9px;border:1px solid #bfc5d5;border-radius:5px;padding:1px 6px;margin-left:5px;color:#5a6274}html.lt .msg .tx{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:4px 14px 14px 14px;padding:11px 14px;font-size:14px;color:#191d27;line-height:1.7;max-width:85%}html.lt .msg .tx b{color:#30904f}html.lt .msg .tx .demo{display:inline-block;font-size:9px;color:#8b93a5;border:1px dashed #bfc5d5;border-radius:5px;padding:1px 6px;margin-top:6px}html.lt .msg.me{flex-direction:row-reverse}html.lt .msg.me .tx{background:#1956d1;border:none;border-radius:14px 4px 14px 14px;color:#141414}html.lt .msg.me img{max-width:180px;border-radius:10px;display:block}html.lt .tipcards{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:4px 0 12px}html.lt .tipcards div{background:#d9dfec;border:1.5px dashed #bfc5d5;border-radius:13px;padding:11px;font-size:12px;color:#5a6274;text-align:center;line-height:1.5;cursor:pointer}html.lt .tipcards b{display:block;color:#191d27;font-size:13px;margin-bottom:2px}html.lt /* 设置弹窗 */
+  .setm{position:fixed;inset:0;background:rgba(247,247,247,.6);z-index:80;display:none}html.lt .setm.on{display:block}html.lt .setm .sbox{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;background:#dce2ef;border:1.5px solid #bfc5d5;border-bottom:none;border-radius:20px 20px 0 0;padding:18px}html.lt .setm h3{margin:0 0 4px;font-size:16px;color:#1b1912}html.lt .setm .ssub{font-size:10.5px;color:#8b93a5;margin-bottom:12px}html.lt .srow{display:flex;align-items:center;gap:10px;padding:12px 2px;border-top:1px solid #c2cadc;font-size:13px;color:#191d27}html.lt .srow small{display:block;font-size:10px;color:#8b93a5;margin-top:2px}html.lt .sw{margin-left:auto;flex:none;width:44px;height:24px;border-radius:12px;background:#c2cadc;position:relative;cursor:pointer;transition:.25s}html.lt .sw i{position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#8b93a5;transition:.25s}html.lt .sw.on{background:#1956d1}html.lt .sw.on i{left:23px;background:#141414}html.lt .sclose{margin-top:14px;text-align:center;font-size:13px;font-weight:800;color:#5a6274;border:1.5px solid #bfc5d5;border-radius:12px;padding:10px;cursor:pointer}html.lt /* 简洁模式：隐藏学科按钮下方的介绍内容 */
+  body.simple .mentor,html.lt body.simple .tipcards{display:none}html.lt /* 历史抽屉 */
+  .hist{position:fixed;inset:0;background:rgba(247,247,247,.6);z-index:70;display:none}html.lt .hist.on{display:block}html.lt .hist .hbox{position:absolute;top:0;right:0;bottom:0;width:78%;max-width:320px;background:#dce2ef;border-left:1.5px solid #bfc5d5;padding:16px;overflow-y:auto}html.lt .hist .ht{font-size:15px;font-weight:900;color:#1b1912;margin-bottom:12px}html.lt .hitem{background:#d4dbe9;border:1px solid #c2cadc;border-radius:12px;padding:10px 12px;margin-bottom:9px;cursor:pointer}html.lt .hitem b{display:block;font-size:12.5px;color:#191d27;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.lt .hitem small{font-size:10px;color:#8b93a5}html.lt /* 输入栏 */
+  .inputbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:8px 14px;display:flex;gap:9px;align-items:center;background:rgba(235,238,244,.96)}html.lt .inputbar .box{flex:1;background:#d4dbe9;border:1.5px solid #bfc5d5;border-radius:999px;padding:11px 16px;font-size:14px;color:#1b1912;outline:none}html.lt .inputbar .box:focus{border-color:#1956d1}html.lt .inputbar .cam{font-size:21px;cursor:pointer}html.lt .inputbar .send{width:42px;height:42px;border-radius:50%;background:#30904f;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;cursor:pointer}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="phone">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div><div class="t1">学科答疑</div><div class="t2">ASK DAYU · 天赋导师在线</div></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="cursor:pointer;font-size:18px;color:#8B93A5;padding:4px 7px" onclick="$(&#39;setm&#39;).classList.add(&#39;on&#39;)" title="设置">⚙</div>
+      <div class="chip-g" style="cursor:pointer" onclick="$(&#39;hist&#39;).classList.add(&#39;on&#39;)">历史</div>
+    </div>
+  </div>
+
+  <!-- 导师·正在回复你（循环GIF舞台） -->
+  <div class="mstage">
+    <img id="mStageImg" src="" alt=""/>
+    <div class="mgrad"></div>
+    <div class="mlive"><i></i>正在回复你…</div>
+    <div class="mwho"><b id="mStageName"></b><span id="mStageTag"></span></div>
+  </div>
+
+  <!-- 学科·导师 -->
+  <div class="subs" id="subs"></div>
+
+  <!-- 导师卡 -->
+  <div class="mentor">
+    <div class="mava" id="mAva"></div>
+    <div class="minfo">
+      <div><span class="mn" id="mName"></span><span class="mtag" id="mTag"></span></div>
+      <div class="msig" id="mSig"></div>
+      <div class="mknow" id="mKnow"></div>
+    </div>
+  </div>
+
+  <!-- 聊天 -->
+  <div class="chat" id="chat"></div>
+
+  <!-- 历史抽屉 -->
+  <div class="hist" id="hist" onclick="if(event.target===this)this.classList.remove(&#39;on&#39;)">
+    <div class="hbox">
+      <div class="ht">📚 答疑历史</div>
+      <div id="histList"></div>
+    </div>
+  </div>
+
+  <div class="inputbar">
+    <input class="box" id="inp" placeholder="输入问题，也可拍照发题…"/>
+    <span class="cam" onclick="$(&#39;file&#39;).click()">📷</span>
+    <input type="file" id="file" accept="image/*" style="display:none" onchange="sendImg(this)"/>
+    <div class="send" onclick="send()">➤</div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div class="setm" id="setm" onclick="if(event.target===this)this.classList.remove(&#39;on&#39;)">
+    <div class="sbox">
+      <h3>⚙ 界面设置</h3>
+      <div class="ssub">看惯的内容可以收起来，界面更清爽</div>
+      <div class="srow">
+        <div>简洁模式<small>收起学科按钮下方的导师介绍与引导（只看一次的内容）</small></div>
+        <div class="sw" id="swSimple" onclick="toggleSimple()"><i></i></div>
+      </div>
+      <div class="srow" onclick="$(&#39;setm&#39;).classList.remove(&#39;on&#39;);editKid()" style="cursor:pointer">
+        <div>🧒 孩子档案<small>名字 · 天赋 · 弱项，导师据此因材施教</small></div>
+        <div style="margin-left:auto;color:#5A6274">›</div>
+      </div>
+      <div class="srow" onclick="$(&#39;setm&#39;).classList.remove(&#39;on&#39;);$(&#39;hist&#39;).classList.add(&#39;on&#39;)" style="cursor:pointer">
+        <div>📚 历史记录<small>回翻每一句答疑对话</small></div>
+        <div style="margin-left:auto;color:#5A6274">›</div>
+      </div>
+      <div class="srow" onclick="configAPI()" style="cursor:pointer">
+        <div>后台接口配置<small>豆包 API 接入地址 / Key / 模型</small></div>
+        <div style="margin-left:auto;color:#5A6274">›</div>
+      </div>
+      <div class="srow" style="display:block">
+        <div>🔠 文字大小<small>图标文字与对话文字同步缩放（标题不变）· 共 10 档</small></div>
+        <div class="fsz" id="fszRow"></div>
+      </div>
+      <div class="sclose" onclick="$(&#39;setm&#39;).classList.remove(&#39;on&#39;)">完成</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a class="on" href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+</div>
+<script>
+const $=id=>document.getElementById(id);
+/* ========== 左：孩子指令集（从全站数据汇总，可编辑） ========== */
+const KKEY='jn_kid_profile';
+function defaultKid(){
+  let name='大宝',talent='思者',grade='四年级';
+  try{const k=JSON.parse(localStorage.getItem('jn_children_v1')||'[]');if(k[0]){name=k[0].name;talent=k[0].talent;grade=k[0].grade;}}catch(e){}
+  return {name,talent,grade,scores:'语文72 数学58 英语91',weak:'数学应用题、计算粗心',note:'上课偶尔发呆，做题畏难'};
+}
+function getKid(){try{return JSON.parse(localStorage.getItem(KKEY))||defaultKid();}catch(e){return defaultKid();}}
+function editKid(){
+  const k=getKid();
+  const name=prompt('孩子名字：',k.name);if(!name)return;
+  const talent=prompt('天赋（思者/赢者/德者/行者/学者）：',k.talent)||k.talent;
+  const weak=prompt('薄弱点/丢分原因（逗号分隔）：',k.weak)||k.weak;
+  const scores=prompt('近期成绩：',k.scores)||k.scores;
+  localStorage.setItem(KKEY,JSON.stringify({...k,name,talent,weak,scores}));
+  paint();
+}
+function kidPrompt(){
+  const k=getKid();
+  return `【孩子指令集】你正在辅导的孩子：${k.name}，${k.grade}，天赋类型「${k.talent}」。近期成绩：${k.scores}。薄弱点与丢分原因：${k.weak}。情况备注：${k.note}。回答时必须：①自然地称呼${k.name}的名字；②结合${k.talent}天赋的性格特征来讲解，让${k.name}感到"这位老师懂我"；③针对其薄弱点给方法，不批评、不比较；④结尾给一个具体可执行的小行动。`;
+}
+/* ========== 右：导师指令集（天赋体系导师人格） ========== */
+const MENTORS={
+ math:{ava:'assets/avatar-math.jpg',gif:'assets/gif/mentor-math.gif',subj:'数学',name:'余峰',e:'📐',c:'#7FA7EF',tag:'严格冷面',guide:'竞赛类/理科',tb:'学',tbc:'#4A7EC2',
+  sig:'话少，但每句都有用。命令式短句，不许跳步。',
+  know:'我看得出来谁在下功夫。底子不牢没关系——在我这儿，步骤对了，分就来。',
+  prompt:`【导师指令集】你是《天赋物语》的数学导师余峰。性格：严格冷面、外冷内热，相信"严是爱"。语言：短句、命令式、不废话，偶尔一句冷幽默。思维：解题如行军——先审题列已知，再定战术（方法），最后执行（计算），绝不许跳步。价值观：步骤对了分自然来；错不怕，怕的是不敢下手。`,
+  tip:'余峰讲法：审题→定战术→执行，一步不许跳'},
+ chinese:{ava:'assets/avatar-chinese.jpg',gif:'assets/gif/mentor-chinese.gif',subj:'语文',name:'秦念国',e:'📜',c:'#C9A227',tag:'国学厚重',guide:'艺术类/外语',tb:'赢',tbc:'#E05252',
+  sig:'引经据典，把作文当修身。温和，但要求极高。',
+  know:'读书如熬汤，火候到了自然香。你的积累，我都看在眼里。',
+  prompt:`【导师指令集】你是《天赋物语》的语文导师秦念国。性格：厚重儒雅、引经据典，常说"古人早就说过"。语言：文白相间、善用典故与比喻。思维：阅读先通其意再究其法，作文先立其诚再谋其篇。价值观：语文不是刷题是修身；字如其人，文如其心。`,
+  tip:'念国讲法：先通其意，再究其法'},
+ english:{ava:'assets/avatar-english.jpg',gif:'assets/gif/mentor-english.gif',subj:'英语',name:'田小静',e:'🌸',c:'#FF9EBB',tag:'温柔共情',guide:'记忆力/文科',tb:'行',tbc:'#C9A227',
+  sig:'别怕开口，说错也算数。单词是一个个新朋友。',
+  know:'我知道开口需要勇气。慢慢来，我陪你，一个词一个词来。',
+  prompt:`【导师指令集】你是《天赋物语》的英语导师田小静。性格：温柔细腻、共情力强，永远先接住情绪再讲知识。语言：软、暖、多用鼓励句式和生活化比喻（单词是新朋友、句子是搭积木）。思维：先兴趣后语法，先开口后完美。价值观：说错也算数；每一步小进步都值得被看见。`,
+  tip:'小静讲法：先敢开口，再求完美'},
+ science:{ava:'assets/avatar-dayu.jpg',gif:'assets/gif/mentor-science.gif',subj:'科学',name:'张宇',e:'🔭',c:'#9AD9FF',tag:'睿智布局',guide:'脑科学/发明',tb:'思',tbc:'#3E8E5A',
+  sig:'退一步看全局。每个科学原理，都是一个案子。',
+  know:'你爱问"为什么"，这比会做题值钱多了。保持住。',
+  prompt:`【导师指令集】你是《天赋物语》的科学导师张宇。性格：沉稳睿智、有布局感。语言：从容不迫，善用"我们退一步看"，把原理讲成破案——先找线索（现象），再锁嫌疑人（原理），最后验证（实验/计算）。思维：现象→原理→验证→应用。价值观：会提问比会答题重要；科学是理解世界的方式。`,
+  tip:'张宇讲法：找线索→锁原理→做验证'},
+ mind:{ava:'assets/avatar-mind.jpg',gif:'assets/gif/mentor-mind.gif',subj:'学习心法',name:'善雨',e:'🍵',c:'#E4D8FF',tag:'温润定心',guide:'大书道/艺术',tb:'德',tbc:'#A0754A',
+  sig:'字不勉强人。心定了，题就顺了。',
+  know:'浮躁的时候别硬学。先站五分钟桩，心定了再来，我等你。',
+  prompt:`【导师指令集】你是《天赋物语》的善雨导师，管学习心法与状态。性格：温润如玉、定，善用书道与站桩打比方。语言：慢、短、留白，常说"一天一笔就好"。思维：状态先于方法，定心先于做题。价值观：不勉强，不比较；心不定，桩皆空。`,
+  tip:'善雨讲法：先定心，再下笔'}
+};
+/* 默认舞台：未选学科时——大宇智能体·张宇老师「因材施教」 */
+const DAYU_STAGE={gif:'assets/gif/mentor-dayu.gif',name:'张宇老师',tag:'因材施教 · 懂你，才能真正解决你学习上的一切问题',e:'🎓',c:'#6FD3A7',ava:'assets/avatar-dayu.jpg',tb:'思',tbc:'#3E8E5A',sig:'不急着讲题。先懂这个孩子，再解决他的问题。',know:'我是大宇智能体。选一门学科，让最懂你的导师来陪你。'};
+let cur=null;
+function mentorPrompt(){return MENTORS[cur?cur:'math'].prompt;}
+/* ========== 双指令集组装 → 豆包API（中转站） ========== */
+function apiConf(){try{return JSON.parse(localStorage.getItem('jn_api_conf')||'{}');}catch(e){return{};}}
+function configAPI(){
+  const c=apiConf();
+  const ep=prompt('豆包API接入地址（OpenAI兼容 /chat/completions）：',c.ep||'');
+  if(ep===null)return;
+  const key=prompt('API Key：',c.key||'')||'';
+  const model=prompt('模型名：',c.model||'doubao-pro-32k')||'doubao-pro-32k';
+  localStorage.setItem('jn_api_conf',JSON.stringify({ep,key,model}));
+  paintAPI();
+}
+function paintAPI(){/* 后台接口状态不在界面呈现 */}
+/* ========== 设置 · 简洁模式 ========== */
+function applySimple(){
+  const on=localStorage.getItem('jn_answer_simple')==='1';
+  document.body.classList.toggle('simple',on);
+  const sw=$('swSimple');if(sw)sw.classList.toggle('on',on);
+}
+function toggleSimple(){
+  localStorage.setItem('jn_answer_simple',localStorage.getItem('jn_answer_simple')==='1'?'0':'1');
+  applySimple();
+}
+/* ========== 设置 · 文字大小（10档：图标文字+对话文字，标题除外） ========== */
+function applyFsz(){
+  let lv=parseInt(localStorage.getItem('jn_fsz')||'5');if(!(lv>=1&&lv<=10))lv=5;
+  const m=0.75+lv*0.05; /* 1档=0.80倍 … 5档=1.00倍 … 10档=1.25倍 */
+  let st=document.getElementById('fszcss');
+  if(!st){st=document.createElement('style');st.id='fszcss';document.head.appendChild(st);}
+  const f=px=>(px*m).toFixed(1)+'px';
+  st.textContent=
+   `.msg .tx{font-size:${f(14)}!important}`+            /* 对话文字 */
+   `.msg .who{font-size:${f(11.5)}!important}`+
+   `.subs a{font-size:${f(13.5)}!important}`+           /* 学科tab文字 */
+   `.subs a small{font-size:${f(9)}!important}`+        /* tab授课标签 */
+   `.foot a{font-size:${f(11)}!important}`+             /* 底部导航文字 */
+   `.tipcards b{font-size:${f(13)}!important}`+
+   `.tipcards div{font-size:${f(12)}!important}`+
+   `.mstage .mwho span{font-size:${f(10.5)}!important}`;/* 舞台标签（标题名字不变） */
+  const row=$('fszRow');
+  if(row)row.innerHTML=Array.from({length:10},(_,i)=>`<b class="${i+1===lv?'on':''}" onclick="setFsz(${i+1});event.stopPropagation()">${i+1}</b>`).join('');
+}
+function setFsz(lv){localStorage.setItem('jn_fsz',String(lv));applyFsz();}
+applyFsz();
+applySimple();
+/* 后台调试用：console 查看发给大模型的完整指令集 */
+function showPrompt(){console.log('①'+kidPrompt()+'\n\n②'+mentorPrompt());}
+/* ========== 聊天 ========== */
+const HKEY='jn_answer_hist';
+function histAll(){try{return JSON.parse(localStorage.getItem(HKEY)||'{}');}catch(e){return{};}}
+function saveHist(q,a){
+  const h=histAll();(h[cur]=h[cur]||[]).unshift({q,a:MENTORS[cur].name,ts:Date.now()});
+  localStorage.setItem(HKEY,JSON.stringify(h));paintHist();
+}
+function paintHist(){
+  const h=histAll();const list=[];
+  for(const k in h)h[k].forEach(x=>list.push({...x,subj:MENTORS[k].subj}));
+  list.sort((a,b)=>b.ts-a.ts);
+  $('histList').innerHTML=list.length?list.slice(0,30).map(x=>
+    `<div class="hitem" onclick="switchSubj('${Object.keys(MENTORS).find(k=>MENTORS[k].subj===x.subj)}');$('hist').classList.remove('on')"><b>${x.q}</b><small>${x.subj} · ${x.a} · ${new Date(x.ts).toLocaleDateString()}</small></div>`
+  ).join(''):'<div style="font-size:12px;color:#5A6274;text-align:center;padding:20px">还没有提问记录</div>';
+}
+function addMsg(role,html,who){
+  const d=document.createElement('div');
+  d.className='msg'+(role==='me'?' me':'');
+  if(role==='me'){d.innerHTML=`<div class="tx">${html}</div>`;}
+  else{const m=MENTORS[cur];
+    d.innerHTML=`<div class="av" style="background:${m.c}22;border-color:${m.c}">${m.e}</div>
+    <div><div class="who">${m.name}老师-智能体<i>懂${getKid().name}</i></div><div class="tx">${html}</div></div>`;}
+  $('chat').appendChild(d);
+  window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+}
+function send(){
+  const t=$('inp').value.trim();if(!t)return;
+  $('inp').value='';addMsg('me',t);
+  if(!cur){switchSubj('math',true);} /* 未选学科时默认由数学导师接题 */
+  answer(t);
+}
+function sendImg(f){
+  if(!f.files||!f.files[0])return;
+  const r=new FileReader();
+  r.onload=e=>{
+    addMsg('me',`<img src="${e.target.result}">`);
+    if(!cur){switchSubj('math',true);}
+    answer('[拍照发题] 孩子拍了一道题（演示版无法识别图片内容，正式版由豆包视觉识别题干）');
+  };
+  r.readAsDataURL(f.files[0]);f.value='';
+}
+async function answer(q){
+  const m=MENTORS[cur],k=getKid();
+  const ty=document.createElement('div');ty.className='msg';
+  ty.innerHTML=`<div class="av" style="background:${m.c}22;border-color:${m.c}">${m.e}</div><div><div class="who">${m.name} 正在想…</div><div class="tx">…</div></div>`;
+  $('chat').appendChild(ty);
+  /* 中转站：双指令集 + 问题 → 豆包 */
+  const c=apiConf();let text=null,demo=true;
+  if(c.ep&&c.key){
+    try{
+      const resp=await fetch(c.ep,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
+        body:JSON.stringify({model:c.model,messages:[
+          {role:'system',content:kidPrompt()+'\n\n'+mentorPrompt()},
+          {role:'user',content:q}
+        ]})});
+      const j=await resp.json();
+      text=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;
+      demo=!text;
+    }catch(e){}
+  }
+  if(!text)text=simulate(q,m,k);
+  ty.remove();
+  addMsg('ai',text+(demo?'<br><span class="demo">演示模式 · 配置豆包API后由大模型按双指令集实时生成</span>':''));
+  saveHist(q,m.name);
+}
+/* ========== 本地演示引擎（模拟双指令集输出） ========== */
+function simulate(q,m,k){
+  const TIP={
+   '思者':`你是思者，${k.name}，你的脑子天生爱找"为什么"——这题我们不急着算，先把它的骨架拆出来，你想通了原理，这类题以后都是你的。`,
+   '赢者':`${k.name}，你是赢者。这道题就是你今天的对手——它看着唬人，其实就三招。拆完这三招，它又在你通缉令上多一个叉。`,
+   '德者':`${k.name}，答应过自己的事，咱俩拉钩——这道题不难为你，我们一步一步来，你陪它走到最后一步就好。`,
+   '行者':`${k.name}，行者的规矩：想十遍不如做一遍。别盯着题发愁，先写下第一步，写着写着路就出来了。`,
+   '学者':`${k.name}，这题正是你错题本上那位"常客"。我们把它拆开登记造册——拆完它第三次就不敢来了。`}[k.talent]||'';
+  const BONES={
+   math:`<b>第一步·审题</b>：把已知条件一条一条圈出来，数字后面跟的单位别漏。<b>第二步·定战术</b>：这题考的是「${k.weak.split('、')[0]||'基础应用'}」这一类——先写关系式，再代数。<b>第三步·执行</b>：计算一步一步来，不许心算跳步（你说过计算容易粗心，那就让笔替脑子站岗）。`,
+   chinese:`<b>先通其意</b>：这段文字讲了什么，用一句自己的话说出来。<b>再究其法</b>：作者用了什么手法？古人云"文以载道"——找到那个"道"，答案就藏在里面。`,
+   english:`<b>别怕，我们搭积木</b>：先找句子的"骨架"——谁+做什么。生词圈出来，它们只是你还没认识的新朋友。语法点我们一个个过，说错也算数。`,
+   science:`<b>找线索</b>：题目给了什么现象？<b>锁原理</b>：哪个科学原理能解释它？<b>做验证</b>：把原理代回去，看说不说得通。`,
+   mind:`先不急着做题。深呼吸三次，肩膀放松——心定了，思路自己会来找你。然后我们一天一笔：今天只把这一道题吃透。`}[cur];
+  return `${k.name}，${m.know}<br><br>${TIP}<br><br>${BONES}<br><br>做完这一步，来跟我说结果——${m.name==='余峰'?'我在。错不怕，怕的是不敢下手。':m.name==='善雨'?'不急，我等你。':'我在这儿等你。'}`;
+}
+/* ========== 界面渲染 ========== */
+function switchSubj(k,silent){
+  cur=k;paint();
+  if(silent)return;
+  const m=MENTORS[k],kid=getKid();
+  addMsg('ai',`${kid.name}，我是${m.name}。${m.know}<br><br><b>${m.subj}</b>的题，拍照发我，或者直接打字——说说你卡在哪一步。`);
+}
+function paint(){
+  const k=getKid();
+  const m=cur?MENTORS[cur]:DAYU_STAGE;
+  const st=$('mStageImg');
+  st.style.display='';st.onerror=()=>{st.style.display='none';};
+  st.src=m.gif;
+  $('mStageName').textContent=m.name;
+  $('mStageTag').textContent=cur?`${m.subj}导师 · ${m.tag}`:m.tag;
+  $('subs').innerHTML=Object.keys(MENTORS).map(key=>
+    `<a class="${key===cur?'on':''}" onclick="switchSubj('${key}')">${MENTORS[key].guide}</a>`).join('');
+  const av=$('mAva');
+  if(m.ava){av.classList.add('img');av.innerHTML=`<span class="mtb" style="border-color:${m.tbc};color:${m.tbc}" title="天赋徽章">${m.tb}</span>`;av.style.background=`url(${m.ava}) center top/cover no-repeat`;}
+  else{av.classList.remove('img');av.innerHTML=m.e+`<span class="mtb" style="border-color:${m.tbc};color:${m.tbc}" title="天赋徽章">${m.tb}</span>`;av.style.background=m.c+'22';}
+  av.style.borderColor=m.tbc||m.c;
+  $('mName').textContent=m.name;$('mTag').textContent=cur?m.tag:'大宇智能体';$('mTag').style.color=m.c;$('mTag').style.border='1px solid '+m.c+'88';
+  $('mSig').textContent=m.sig;
+  $('mKnow').innerHTML=`<span style="color:${m.c}">对${k.name}说：</span><span style="color:#B9C0CF">"${m.know}"</span>`;
+}
+$('inp').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+/* 欢迎区 */
+function welcome(){
+  $('chat').innerHTML='';
+  const kid=getKid();
+  const d=document.createElement('div');d.className='msg';
+  d.innerHTML=`<div class="av" style="background:${DAYU_STAGE.c}22;border-color:${DAYU_STAGE.c}">${DAYU_STAGE.e}</div>
+   <div><div class="who">张宇老师-智能体<i>懂${kid.name}</i></div>
+   <div class="tx">${kid.name}，我是张宇老师-智能体。<b>因材施教</b>——懂你，才能真正解决你学习上的一切问题。<br><br>先在上方选一门方向（竞赛类/理科 / 艺术类/外语 / 记忆力/文科 / 脑科学/发明 / 大书道/艺术），对应的导师马上来陪你；也可以直接打字发题，我让余峰先接着。</div></div>`;
+  $('chat').appendChild(d);
+}
+paint();paintAPI();paintHist();welcome();
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+
+<script>
+(function(){
+  function goQa(q){
+    try{
+      if(window.parent && window.parent!==window){
+        window.parent.postMessage({type:'dayu-nav', path:'/pages/qa/index'+(q?('?q='+encodeURIComponent(q)):'' )}, '*');
+        return;
+      }
+    }catch(e){}
+  }
+  document.addEventListener('click', function(e){
+    var t=e.target;
+    if(t.closest && (t.closest('.send') || t.closest('.cam') || t.closest('.inputbar'))){
+      var inp=document.querySelector('.inputbar input, .box, input.chat-input, .inputbar .box');
+      var q=inp && (inp.value||inp.textContent)||'';
+      goQa(q);
+    }
+  }, true);
+})();
+</script>
+</body></html>

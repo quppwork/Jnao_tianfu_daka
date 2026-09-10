@@ -1,0 +1,611 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>劲脑天赋学院 · 内部频道</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  body{background:#0B0E14}
+  /* ===== 学院头部 ===== */
+  .academy{margin:12px 18px 0;background:linear-gradient(160deg,#1A2233,#0E1420 75%);border:1.5px solid #C9A869;border-radius:20px;padding:16px;position:relative;overflow:hidden}
+  .academy::before{content:"";position:absolute;right:-40px;top:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,105,.18),transparent 70%)}
+  .ac-row{display:flex;align-items:center;gap:12px;position:relative}
+  .ac-badge{width:52px;height:52px;flex:none;border-radius:50%;background:conic-gradient(from 200deg,#C9A869,#8A6BF0,#3E8E5A,#C9A869);padding:2.5px}
+  .ac-badge i{display:flex;width:100%;height:100%;border-radius:50%;background:#0B0E14;align-items:center;justify-content:center;font-style:normal;font-size:24px}
+  .ac-name{font-size:21px;font-weight:900;color:#F0DFB8;letter-spacing:2px}
+  .ac-name small{display:block;font-size:10px;letter-spacing:3px;color:#8B93A5;font-weight:700;margin-top:2px}
+  .ac-lv{margin-left:auto;font-size:11px;font-weight:800;color:#6FCF8E;border:1px solid rgba(111,207,142,.5);border-radius:99px;padding:4px 11px;flex:none}
+  .ac-chan{display:flex;align-items:center;gap:8px;margin-top:13px;background:rgba(11,14,20,.6);border:1px solid #232B3D;border-radius:12px;padding:10px 12px;position:relative}
+  .ac-chan .hash{font-size:16px;font-weight:900;color:#C9A869}
+  .ac-chan b{font-size:14px;font-weight:900;color:#EDEBE4}
+  .ac-chan .online{margin-left:auto;font-size:10.5px;color:#6FCF8E;font-weight:800}
+  .ac-chan .online::before{content:"● ";animation:blink 1.6s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .ac-notice{margin-top:9px;font-size:11.5px;color:#9C8DC4;display:flex;gap:7px;align-items:center;position:relative}
+  .ac-notice .ni{flex:none}
+  /* ===== 视频区 ===== */
+  .vbox{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/9;background:#000;border:1.5px solid #232B3D}
+  .vbox>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .vbox .vshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,8,14,.15),rgba(5,8,14,.72))}
+  .vbox .vplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:#C9A869;color:#101623;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 0 8px rgba(255,255,255,.16),0 10px 24px rgba(0,0,0,.5);animation:vpulse 2s infinite;z-index:3}
+  @keyframes vpulse{0%,100%{box-shadow:0 0 0 8px rgba(255,255,255,.16)}50%{box-shadow:0 0 0 16px rgba(255,255,255,.07)}}
+  .vbox .vtitle{position:absolute;left:14px;bottom:12px;z-index:2}
+  .vbox .vtitle b{display:block;font-size:16px;font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+  .vbox .vtitle span{font-size:11px;color:rgba(255,255,255,.85)}
+  .vbox .vdur{position:absolute;right:12px;top:10px;z-index:2;font-size:10.5px;font-weight:800;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:3px 9px}
+  .vbox .vlive{position:absolute;left:12px;top:10px;z-index:2;font-size:10px;font-weight:900;color:#FFD76F;background:rgba(0,0,0,.5);border-radius:6px;padding:3px 9px}
+  .vprog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.18);z-index:4;display:none}
+  .vprog i{display:block;height:100%;width:0;background:#C9A869}
+  .playing .vprog{display:block}
+  .playing .vplay,.playing .vtitle{display:none}
+  /* 弹幕层 */
+  .dmk{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;display:none}
+  .playing .dmk{display:block}
+  .dm{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.8);animation:dmf linear forwards}
+  .dm b{font-weight:900}
+  @keyframes dmf{from{transform:translateX(430px)}to{transform:translateX(-110%)}}
+  .vend{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,8,14,.72);backdrop-filter:blur(3px)}
+  .vend .ve1{font-size:17px;font-weight:900;color:#F0DFB8}
+  .vend .ve2{font-size:12px;color:#B9C0CE;margin-top:6px}
+  .vend .ve3{margin-top:14px;background:#6FCF8E;color:#0B0E14;font-size:14px;font-weight:900;border-radius:99px;padding:10px 22px;cursor:pointer}
+  /* ===== 场景舞台 ===== */
+  .stage{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/7.5;background:#0E1420;border:1.5px solid #232B3D;display:none}
+  .stage.on{display:block}
+  .stage .scimg{position:absolute;inset:0;width:100%;height:106%;object-fit:cover;animation:kenburns 9s ease-in-out infinite alternate}
+  @keyframes kenburns{from{transform:scale(1) translateY(0)}to{transform:scale(1.09) translateY(-2.5%)}}
+  .stage .scchar{position:absolute;right:8%;bottom:-4%;height:88%;z-index:2;filter:drop-shadow(0 8px 18px rgba(0,0,0,.55));animation:charbob 3.2s ease-in-out infinite}
+  @keyframes charbob{0%,100%{transform:translateY(0) rotate(-.6deg)}50%{transform:translateY(-7px) rotate(.8deg)}}
+  .stage .scchar.vc{height:auto;width:38%;right:6%;bottom:auto;top:12%;border-radius:16px;border:2px solid rgba(201,168,105,.7);box-shadow:0 10px 26px rgba(0,0,0,.6)}
+  .stage .prop{position:absolute;z-index:3;font-size:24px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.5))}
+  .stage .prop.phone{right:24%;bottom:26%;animation:phonetilt 2.4s ease-in-out infinite}
+  @keyframes phonetilt{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(5deg)}}
+  .stage .prop.chips{right:26%;bottom:44%;animation:chipbob 1.6s ease-in-out infinite}
+  @keyframes chipbob{0%,100%{transform:translateY(16px) rotate(-8deg)}50%{transform:translateY(-4px) rotate(8deg)}}
+  .stage .scshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,8,14,.05) 55%,rgba(5,8,14,.82))}
+  .stage .sclive{position:absolute;right:12px;top:10px;z-index:4;font-size:9.5px;font-weight:900;color:#FF7A7A;background:rgba(0,0,0,.5);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:5px}
+  .stage .sclive::before{content:"";width:6px;height:6px;border-radius:50%;background:#FF5252;animation:blink 1.2s infinite}
+  .stage .scwho{position:absolute;left:13px;bottom:11px;z-index:4;display:flex;align-items:center;gap:8px}
+  .stage .scwho .sa{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #C9A869}
+  .stage .scwho b{font-size:14px;font-weight:900;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.8)}
+  .stage .scwho span{font-size:10px;color:#C9A869;font-weight:800}
+  /* ===== 聊天频道 ===== */
+  .chatroom{margin:12px 18px 0;background:#0E1420;border:1.5px solid #232B3D;border-radius:18px;padding:12px 12px 8px;position:relative}
+  .cr-head{display:flex;align-items:center;gap:8px;padding-bottom:9px;border-bottom:1px solid #1A2233;margin-bottom:10px}
+  .cr-head b{font-size:13.5px;font-weight:900;color:#EDEBE4}
+  .cr-head .on9{margin-left:auto;font-size:10px;color:#6FCF8E;font-weight:800}
+  .cr-head .on9::before{content:"●";margin-right:4px}
+  #msgwrap{max-height:430px;overflow-y:auto;position:relative}
+  .msg{display:flex;gap:8px;margin-bottom:12px;animation:stin .3s ease}
+  @keyframes stin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .msg .ma{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none;border:1.5px solid #2A3040}
+  .msg .mc{max-width:78%}
+  .msg .mn{font-size:10.5px;color:#5A6274;font-weight:800;margin-bottom:3px}
+  .msg .mn i{font-style:normal;color:#3E8E5A;border:1px solid rgba(62,142,90,.5);border-radius:5px;padding:0 4px;margin-left:4px;font-size:9px}
+  .msg .mb{background:#1A2233;border-radius:4px 14px 14px 14px;padding:9px 12px;font-size:14px;color:#E4E8F0;line-height:1.6}
+  .msg.me{flex-direction:row-reverse}
+  .msg.me .mb{background:linear-gradient(135deg,#3A7BFF,#2E5BD6);color:#fff;border-radius:14px 4px 14px 14px}
+  .msg.me .mn{text-align:right}
+  .msg.sys{justify-content:center}
+  .msg.sys .mb{background:transparent;color:#5A6274;font-size:11px;padding:2px 10px;border:1px dashed #2A3040;border-radius:99px}
+  .typing{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+  .typing .tdots{background:#1A2233;border-radius:4px 14px 14px 14px;padding:11px 14px;display:flex;gap:4px}
+  .typing .tdots i{width:6px;height:6px;border-radius:50%;background:#8B93A5;animation:tp 1.2s infinite}
+  .typing .tdots i:nth-child(2){animation-delay:.2s}
+  .typing .tdots i:nth-child(3){animation-delay:.4s}
+  @keyframes tp{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+  /* 模糊预告层 */
+  .locked-teaser #msgwrap{filter:blur(5px) saturate(.8);pointer-events:none;user-select:none}
+  .lockov{position:absolute;inset:44px 0 0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+  .locked-teaser .lockov{display:flex}
+  .lockov .lk1{font-size:15px;font-weight:900;color:#EDEBE4;text-shadow:0 2px 8px #000}
+  .lockov .lk2{font-size:11.5px;color:#B9C0CE}
+  .lockov .lk3{margin-top:6px;font-size:11px;font-weight:900;color:#0B0E14;background:#C9A869;border-radius:99px;padding:7px 16px}
+  /* 轻提醒卡（训练归训练，互动归互动） */
+  .nudge{display:flex;gap:10px;align-items:center;margin:4px 0 12px;background:rgba(111,207,142,.07);border:1px dashed rgba(111,207,142,.5);border-radius:13px;padding:10px 12px;animation:stin .4s}
+  .nudge .ng1{font-size:22px;flex:none}
+  .nudge p{flex:1;font-size:12px;color:#B9E5CB;line-height:1.55}
+  .nudge a{flex:none;font-size:11.5px;font-weight:900;color:#0B0E14;background:#6FCF8E;border-radius:9px;padding:7px 11px;text-decoration:none}
+  /* 快捷话题 */
+  .replies{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}
+  .rp{background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:8px 13px;font-size:12px;font-weight:700;color:#D8DCE6;cursor:pointer}
+  .rp:active{transform:scale(.95)}
+  .rp:hover{border-color:#C9A869}
+  /* 输入条 */
+  .inbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:8px 18px;display:flex;gap:10px;align-items:center;background:rgba(11,14,20,.94);z-index:20}
+  .inbar input{flex:1;background:#161D2B;border:1.5px solid #2A3040;border-radius:999px;padding:11px 16px;font-size:13.5px;color:#EDEBE4;outline:none}
+  .inbar input:focus{border-color:#C9A869}
+  .inbar .send{width:42px;height:42px;border-radius:50%;background:#C9A869;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;color:#101623;font-weight:900;cursor:pointer;border:none}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt body{background:#ebeef4}html.lt /* ===== 学院头部 ===== */
+  .academy{margin:12px 18px 0;background:linear-gradient(160deg,#ccd4e5,#dfe5f1 75%);border:1.5px solid #967536;border-radius:20px;padding:16px;position:relative;overflow:hidden}html.lt .academy::before{content:"";position:absolute;right:-40px;top:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(150,117,54,.18),transparent 70%)}html.lt .ac-row{display:flex;align-items:center;gap:12px;position:relative}html.lt .ac-badge{width:52px;height:52px;flex:none;border-radius:50%;background:conic-gradient(from 200deg,#967536,#2e0f94,#71c18d,#967536);padding:2.5px}html.lt .ac-badge i{display:flex;width:100%;height:100%;border-radius:50%;background:#ebeef4;align-items:center;justify-content:center;font-style:normal;font-size:24px}html.lt .ac-name{font-size:21px;font-weight:900;color:#47360f;letter-spacing:2px}html.lt .ac-name small{display:block;font-size:10px;letter-spacing:3px;color:#5a6274;font-weight:700;margin-top:2px}html.lt .ac-lv{margin-left:auto;font-size:11px;font-weight:800;color:#30904f;border:1px solid rgba(48,144,79,.5);border-radius:99px;padding:4px 11px;flex:none}html.lt .ac-chan{display:flex;align-items:center;gap:8px;margin-top:13px;background:rgba(235,238,244,.6);border:1px solid #c2cadc;border-radius:12px;padding:10px 12px;position:relative}html.lt .ac-chan .hash{font-size:16px;font-weight:900;color:#967536}html.lt .ac-chan b{font-size:14px;font-weight:900;color:#1b1912}html.lt .ac-chan .online{margin-left:auto;font-size:10.5px;color:#30904f;font-weight:800}html.lt .ac-chan .online::before{content:"● ";animation:blink 1.6s infinite}@keyframes blink{50%{opacity:.25}}html.lt .ac-notice{margin-top:9px;font-size:11.5px;color:#4a3b72;display:flex;gap:7px;align-items:center;position:relative}html.lt .ac-notice .ni{flex:none}html.lt /* ===== 视频区 ===== */
+  .vbox{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/9;background:#f7f7f7;border:1.5px solid #c2cadc}html.lt .vbox>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}html.lt .vbox .vshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(241,244,250,.15),rgba(241,244,250,.72))}html.lt .vbox .vplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:#967536;color:#dce2ef;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 0 8px rgba(20,20,20,.16),0 10px 24px rgba(247,247,247,.5);animation:vpulse 2s infinite;z-index:3}@keyframes vpulse{0%,100%{box-shadow:0 0 0 8px rgba(20,20,20,.16)}50%{box-shadow:0 0 0 16px rgba(20,20,20,.07)}}html.lt .vbox .vtitle{position:absolute;left:14px;bottom:12px;z-index:2}html.lt .vbox .vtitle b{display:block;font-size:16px;font-weight:900;color:#141414;text-shadow:0 2px 8px rgba(247,247,247,.7)}html.lt .vbox .vtitle span{font-size:11px;color:rgba(20,20,20,.85)}html.lt .vbox .vdur{position:absolute;right:12px;top:10px;z-index:2;font-size:10.5px;font-weight:800;background:rgba(247,247,247,.55);color:#141414;border-radius:6px;padding:3px 9px}html.lt .vbox .vlive{position:absolute;left:12px;top:10px;z-index:2;font-size:10px;font-weight:900;color:#906800;background:rgba(247,247,247,.5);border-radius:6px;padding:3px 9px}html.lt .vprog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(20,20,20,.18);z-index:4;display:none}html.lt .vprog i{display:block;height:100%;width:0;background:#967536}html.lt .playing .vprog{display:block}html.lt .playing .vplay,html.lt .playing .vtitle{display:none}html.lt /* 弹幕层 */
+  .dmk{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;display:none}html.lt .playing .dmk{display:block}html.lt .dm{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:rgba(20,20,20,.92);text-shadow:0 1px 4px rgba(247,247,247,.8);animation:dmf linear forwards}html.lt .dm b{font-weight:900}@keyframes dmf{from{transform:translateX(430px)}to{transform:translateX(-110%)}}html.lt .vend{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(241,244,250,.72);backdrop-filter:blur(3px)}html.lt .vend .ve1{font-size:17px;font-weight:900;color:#47360f}html.lt .vend .ve2{font-size:12px;color:#313846;margin-top:6px}html.lt .vend .ve3{margin-top:14px;background:#30904f;color:#ebeef4;font-size:14px;font-weight:900;border-radius:99px;padding:10px 22px;cursor:pointer}html.lt /* ===== 场景舞台 ===== */
+  .stage{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/7.5;background:#dfe5f1;border:1.5px solid #c2cadc;display:none}html.lt .stage.on{display:block}html.lt .stage .scimg{position:absolute;inset:0;width:100%;height:106%;object-fit:cover;animation:kenburns 9s ease-in-out infinite alternate}@keyframes kenburns{from{transform:scale(1) translateY(0)}to{transform:scale(1.09) translateY(-2.5%)}}html.lt .stage .scchar{position:absolute;right:8%;bottom:-4%;height:88%;z-index:2;filter:drop-shadow(0 8px 18px rgba(247,247,247,.55));animation:charbob 3.2s ease-in-out infinite}@keyframes charbob{0%,100%{transform:translateY(0) rotate(-.6deg)}50%{transform:translateY(-7px) rotate(.8deg)}}html.lt .stage .scchar.vc{height:auto;width:38%;right:6%;bottom:auto;top:12%;border-radius:16px;border:2px solid rgba(150,117,54,.7);box-shadow:0 10px 26px rgba(247,247,247,.6)}html.lt .stage .prop{position:absolute;z-index:3;font-size:24px;filter:drop-shadow(0 3px 5px rgba(247,247,247,.5))}html.lt .stage .prop.phone{right:24%;bottom:26%;animation:phonetilt 2.4s ease-in-out infinite}@keyframes phonetilt{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(5deg)}}html.lt .stage .prop.chips{right:26%;bottom:44%;animation:chipbob 1.6s ease-in-out infinite}@keyframes chipbob{0%,100%{transform:translateY(16px) rotate(-8deg)}50%{transform:translateY(-4px) rotate(8deg)}}html.lt .stage .scshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(241,244,250,.05) 55%,rgba(241,244,250,.82))}html.lt .stage .sclive{position:absolute;right:12px;top:10px;z-index:4;font-size:9.5px;font-weight:900;color:#850000;background:rgba(247,247,247,.5);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:5px}html.lt .stage .sclive::before{content:"";width:6px;height:6px;border-radius:50%;background:#ad0000;animation:blink 1.2s infinite}html.lt .stage .scwho{position:absolute;left:13px;bottom:11px;z-index:4;display:flex;align-items:center;gap:8px}html.lt .stage .scwho .sa{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #967536}html.lt .stage .scwho b{font-size:14px;font-weight:900;color:#141414;text-shadow:0 2px 6px rgba(247,247,247,.8)}html.lt .stage .scwho span{font-size:10px;color:#967536;font-weight:800}html.lt /* ===== 聊天频道 ===== */
+  .chatroom{margin:12px 18px 0;background:#dfe5f1;border:1.5px solid #c2cadc;border-radius:18px;padding:12px 12px 8px;position:relative}html.lt .cr-head{display:flex;align-items:center;gap:8px;padding-bottom:9px;border-bottom:1px solid #ccd4e5;margin-bottom:10px}html.lt .cr-head b{font-size:13.5px;font-weight:900;color:#1b1912}html.lt .cr-head .on9{margin-left:auto;font-size:10px;color:#30904f;font-weight:800}html.lt .cr-head .on9::before{content:"●";margin-right:4px}html.lt #msgwrap{max-height:430px;overflow-y:auto;position:relative}html.lt .msg{display:flex;gap:8px;margin-bottom:12px;animation:stin .3s ease}@keyframes stin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}html.lt .msg .ma{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none;border:1.5px solid #bfc5d5}html.lt .msg .mc{max-width:78%}html.lt .msg .mn{font-size:10.5px;color:#8b93a5;font-weight:800;margin-bottom:3px}html.lt .msg .mn i{font-style:normal;color:#71c18d;border:1px solid rgba(113,193,141,.5);border-radius:5px;padding:0 4px;margin-left:4px;font-size:9px}html.lt .msg .mb{background:#ccd4e5;border-radius:4px 14px 14px 14px;padding:9px 12px;font-size:14px;color:#0f131b;line-height:1.6}html.lt .msg.me{flex-direction:row-reverse}html.lt .msg.me .mb{background:linear-gradient(135deg,#0041c5,#2956d1);color:#141414;border-radius:14px 4px 14px 14px}html.lt .msg.me .mn{text-align:right}html.lt .msg.sys{justify-content:center}html.lt .msg.sys .mb{background:transparent;color:#8b93a5;font-size:11px;padding:2px 10px;border:1px dashed #bfc5d5;border-radius:99px}html.lt .typing{display:flex;gap:8px;margin-bottom:12px;align-items:center}html.lt .typing .tdots{background:#ccd4e5;border-radius:4px 14px 14px 14px;padding:11px 14px;display:flex;gap:4px}html.lt .typing .tdots i{width:6px;height:6px;border-radius:50%;background:#5a6274;animation:tp 1.2s infinite}html.lt .typing .tdots i:nth-child(2){animation-delay:.2s}html.lt .typing .tdots i:nth-child(3){animation-delay:.4s}@keyframes tp{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}html.lt /* 模糊预告层 */
+  .locked-teaser #msgwrap{filter:blur(5px) saturate(.8);pointer-events:none;user-select:none}html.lt .lockov{position:absolute;inset:44px 0 0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px}html.lt .locked-teaser .lockov{display:flex}html.lt .lockov .lk1{font-size:15px;font-weight:900;color:#1b1912;text-shadow:0 2px 8px #f7f7f7}html.lt .lockov .lk2{font-size:11.5px;color:#313846}html.lt .lockov .lk3{margin-top:6px;font-size:11px;font-weight:900;color:#ebeef4;background:#967536;border-radius:99px;padding:7px 16px}html.lt /* 轻提醒卡（训练归训练，互动归互动） */
+  .nudge{display:flex;gap:10px;align-items:center;margin:4px 0 12px;background:rgba(48,144,79,.07);border:1px dashed rgba(48,144,79,.5);border-radius:13px;padding:10px 12px;animation:stin .4s}html.lt .nudge .ng1{font-size:22px;flex:none}html.lt .nudge p{flex:1;font-size:12px;color:#1a462c;line-height:1.55}html.lt .nudge a{flex:none;font-size:11.5px;font-weight:900;color:#ebeef4;background:#30904f;border-radius:9px;padding:7px 11px;text-decoration:none}html.lt /* 快捷话题 */
+  .replies{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}html.lt .rp{background:#d9dfec;border:1.5px solid #bfc5d5;border-radius:99px;padding:8px 13px;font-size:12px;font-weight:700;color:#191d27;cursor:pointer}html.lt .rp:active{transform:scale(.95)}html.lt .rp:hover{border-color:#967536}html.lt /* 输入条 */
+  .inbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:8px 18px;display:flex;gap:10px;align-items:center;background:rgba(235,238,244,.94);z-index:20}html.lt .inbar input{flex:1;background:#d4dbe9;border:1.5px solid #bfc5d5;border-radius:999px;padding:11px 16px;font-size:13.5px;color:#1b1912;outline:none}html.lt .inbar input:focus{border-color:#967536}html.lt .inbar .send{width:42px;height:42px;border-radius:50%;background:#967536;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;color:#dce2ef;font-weight:900;cursor:pointer;border:none}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="phone" style="padding-bottom:150px">
+
+  <!-- ===== 学院头部 ===== -->
+  <div class="academy">
+    <div class="ac-row">
+      <div class="ac-badge"><i>🎓</i></div>
+      <div class="ac-name">劲脑天赋学院<small>JNAO TALENT ACADEMY · 内部频道</small></div>
+      <span class="ac-lv">思者 · Lv.1</span>
+    </div>
+    <div class="ac-chan">
+      <span class="hash">#</span><b id="chanName">E13 · 五兽桩讨论组</b>
+      <span class="online">6人在线</span>
+    </div>
+    <div class="ac-notice"><span class="ni">📢</span><span id="notice">频道公告：今晚全员站桩5分钟，桩上见。——善雨导师</span></div>
+  </div>
+
+  <!-- ===== 视频区 ===== -->
+  <div class="vbox" id="vbox">
+    <img id="vposter" src="/static/dayu/assets/miji/mj-tfsd.jpg" alt="剧集海报"/>
+    <div class="vshade"></div>
+    <div class="vlive">本周新集</div>
+    <div class="vplay" id="vplay" onclick="playEp()">▶</div>
+    <div class="vtitle"><b id="vt">E13 书道Ⅲ · 五兽桩</b><span id="vs">站桩 · 专注力修炼</span></div>
+    <div class="vdur">正片 12:30</div>
+    <div class="vprog"><i id="vprogI"></i></div>
+    <div class="dmk" id="dmk"></div>
+    <div class="vend" id="vend">
+      <div class="ve1">📺 本集已看完</div>
+      <div class="ve2">讨论组正聊得火热，就等你了——</div>
+      <div class="ve3" onclick="joinChat()">加入频道讨论 →</div>
+    </div>
+  </div>
+
+  <!-- ===== 场景舞台 ===== -->
+  <div class="stage" id="stage">
+    <img class="scimg" id="scimg" src="/static/dayu/assets/bg-dorm.png" alt=""/>
+    <img class="scchar" id="scchar" src="/static/dayu/assets/ip/sizhe.png" alt=""/>
+    <span class="prop phone" id="propPhone">📱</span>
+    <span class="prop chips" id="propChips" style="display:none">🍟</span>
+    <div class="scshade"></div>
+    <div class="sclive">频道实况</div>
+    <div class="scwho"><img class="sa" id="scava" src="/static/dayu/assets/ip/sizhe.png"/><div><b id="scname">章宇尘</b><br/><span id="scdesc">宿舍 · 躺床上聊</span></div></div>
+  </div>
+
+  <!-- ===== 频道聊天 ===== -->
+  <div class="chatroom locked-teaser" id="chatroom">
+    <div class="cr-head"><b id="crTitle"># E13 · 五兽桩讨论组</b><span class="on9">实时滚动中</span></div>
+    <div id="msgwrap"><div id="msgs"></div></div>
+    <div class="lockov">
+      <div class="lk1">🔒 讨论组已加密</div>
+      <div class="lk2">他们正在聊本集剧情……</div>
+      <div class="lk3">看完正片即可加入讨论</div>
+    </div>
+    <div class="typing" id="typing" style="display:none"><img class="ma" id="tyava" style="width:30px;height:30px;border-radius:50%"/><div class="tdots"><i></i><i></i><i></i></div></div>
+    <div class="replies" id="replies" style="display:none"></div>
+  </div>
+
+  <div class="inbar">
+    <input id="inp" placeholder="看完正片，即可加入讨论…" disabled=""/>
+    <button class="send" onclick="sendFree()">➤</button>
+  </div>
+
+  <div class="foot">
+    <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a class="on" href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+</div>
+<script>
+/* ============================================================
+   角色人格指令集（Persona Instruction Set）
+   每个人物：天赋 / 性格 / 口头禅 / 话术池（按意图分类）/ 主线牵引方式
+   —— 同一指令集驱动，回复有随机性但不脱离人设与剧情主线
+============================================================ */
+const CHARS={
+  shanyu:{n:'善雨',tag:'导师',av:'assets/avatar_teacher.jpg',bg:'assets/bg-study.png',sp:'assets/avatar_teacher.jpg',vc:true,sd:'书院 · 视频通话中'},
+  yuchen:{n:'章宇尘',tag:'思者',av:'assets/ip/sizhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/sizhe.png',sd:'宿舍 · 躺床上聊',phone:true},
+  dani:{n:'施丹尼',tag:'德者',av:'assets/ip/dezhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/dezhe.png',sd:'宿舍 · 边吃薯片边聊',phone:true,chips:true},
+  limo:{n:'李寞',tag:'行者',av:'assets/ip/xingzhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/xingzhe.png',sd:'宿舍 · 刚下训练'},
+  jiahui:{n:'王家慧',tag:'学者',av:'assets/ip/xuezhe.png',bg:'assets/bg-study.png',sp:'assets/ip/xuezhe.png',sd:'自习室 · 拿着笔记本'},
+  chenxue:{n:'陈雪',tag:'赢者',av:'assets/ip/yingzhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/yingzhe.png',sd:'宿舍 · 刚练完功',phone:true}
+};
+const EP={id:'E13',title:'五兽桩·站桩',task:'站桩5分钟',place:'桩上见'};
+const PERSONAS={
+  yuchen:{
+    catch:['我脑子已经会了','等我用脑子先站一遍','理论上讲……'],
+    ep:['十桩功我连起来看懂了，就是腿还没看懂😏','善雨师父那套桩，行云流水，我回放了三遍——用脑子站的','我觉得站桩的关键是重心，等我想通了再下床'],
+    train:['我在研究"躺着站桩"的可行性……好吧我去站','先站5分钟再想原理，师父说的，我认了','今天打卡我设了三个闹钟，脑内两个手机一个'],
+    feel:['不想练的时候就想：想明白一分钟，顶瞎站十分钟。走，先站','我懂，脑子累比腿累更磨人。喝口水，先站3分钟试试'],
+    off:['这个话题我有800个想法……不过师父说桩上见，咱们先聊桩','哈哈等等，跑题了跑题了，说回站桩'],
+    steer:'用"先想明白再动手"把话题拉回训练'
+  },
+  dani:{
+    catch:['就小小声','拉钩哦','谁偷懒谁是小狗'],
+    ep:['善雨师父好帅……啊不是，好厉害！那个收势我看呆了','站桩的时候真的不能吃东西吗？我保证不出声🍟','我已经和家慧拉钩了，谁也不许偷懒'],
+    train:['我站着站着就饿了……但说好了不偷懒的！','你要是站了，我就把我最后一包薯片让给你','咱们互相盯着，你打卡了我就打'],
+    feel:['没事啦，我上次摔了一屁股墩，大家也没笑我（好吧宇尘笑了）','累的话就先靠一会儿，但别偷偷放弃哦，我会心疼的'],
+    off:['嘿嘿这个好吃……啊不对，我们说好聊站桩的！','嘘——别让师父看见我们聊这个，说训练说训练'],
+    steer:'用"约定和陪伴"把话题拉回训练'
+  },
+  limo:{
+    catch:['桩不骗人','练就是了','我陪你'],
+    ep:['师父打完十桩功，院子里就剩风声了。我站十分钟，腿抖，但没倒','站桩没有捷径，站一分钟是一分钟的功夫','我没什么好说的，练就是了'],
+    train:['今晚5分钟，我陪你站。站完一起打卡','别问难不难，先站上去再说','我加练了一组。你随意，跟上就行'],
+    feel:['累是对的。不累的那叫站着，不叫站桩','摔了就起来。桩上不看天赋，看谁还在'],
+    off:['嗯。聊完记得站。','……我在站桩。回聊。桩上见'],
+    steer:'用"少说多练、我陪你"把话题拉回训练'
+  },
+  jiahui:{
+    catch:['我整理了笔记','按标准来','第3页有图'],
+    ep:['我量了师父的桩架：膝盖不过脚尖，重心落涌泉。笔记我整理好了📒','十桩功每桩对应一兽，我画了结构图，要看吗','标准动作做到了，剩下的只是时间问题'],
+    train:['打卡记得拍侧面照，我帮你看膝盖角度','建议先站3分钟标准桩，比10分钟歪桩有用','笔记发你了，照着站，错着错着就对了'],
+    feel:['状态不好就降难度，不降标准。半桩也行，架子不能歪','别急，把动作拆成三步，一步一步来'],
+    off:['这个我记下来了……不过先把今天的桩站完再聊','话题偏离主线12分钟了，我提醒一下😊'],
+    steer:'用"标准和笔记"把话题拉回训练'
+  },
+  chenxue:{
+    catch:['就这？','谁来跟我比','输了打饭'],
+    ep:['师父那套桩，帅炸了。我熄灯前能站半小时，谁来比？','猿桩我已经有点感觉了，气势不能输','看完就一个想法：我也要打到师父那个境界'],
+    train:['今晚打卡别躲，我可是会查榜的🔥','跟我比一场？你站你的5分钟，我站我的半小时，谁先倒谁打饭','赢不赢另说，你敢站上来就已经赢了一半'],
+    feel:['输了就输了，明天赢回来。怕的是不敢上场','累？累就对了，舒服是留给观众的'],
+    off:['行了行了，闲聊到此为止，桩上见真章','这个话题我认输……但站桩我不会输'],
+    steer:'用"比一场"把话题拉回训练'
+  },
+  shanyu:{
+    catch:['桩不在久，在心','桩上见','想明白再站'],
+    ep:['十桩功走完，落叶才敢落地。看懂的，已经不是动作了','这一集讲的是一个"定"字。心不定，桩都是空的','你们都看到了我的过去。桩，就是这么一年一年站出来的'],
+    train:['今晚的任务：'+EP.task+'。到大宇智能体打卡。记住——桩上见','桩不在久，在心。先站5分钟，再来谈感受','不要求你们像我一样，只要求你们比昨天多站一口气'],
+    feel:['累了就坐下，但别躺下。心一旦躺下，桩就散了','为师小时候也摔过。摔不丢人，躲才丢人'],
+    off:['呵呵，聊得热闹。聊完，桩上见','孩子们，话题跑了，心别跑'],
+    steer:'导师定调：一句话把频道带回主线'
+  }
+};
+/* 意图识别 */
+const INTENTS=[
+ {k:'train',re:/训练|打卡|站桩|练|作业|考试|闯关|提分|学习/},
+ {k:'feel',re:/累|不想|放弃|难|烦|怕|紧张|哭|摆烂|躺平/},
+ {k:'ep',re:/剧情|这一集|师父|十桩功|秘籍|短剧|视频|第.*集|故事/},
+ {k:'greet',re:/^(你好|hi|在吗|大家好|哈喽|嗨)/i}
+];
+/* 弹幕池（播放中围绕剧情的角色碎语） */
+const DANMAKU=[
+ ['chenxue','#FF8A7A','陈雪：师父这套桩帅炸了🔥'],
+ ['yuchen','#8FEFC0','章宇尘：脑子会了，腿还没会'],
+ ['dani','#FFD76F','施丹尼：站桩能吃东西吗（小声）'],
+ ['limo','#E8C87A','李寞：桩不骗人。'],
+ ['jiahui','#9AD9FF','王家慧：膝盖不过脚尖，记笔记📒'],
+ ['shanyu','#E4D8FF','善雨：桩不在久，在心。'],
+ ['chenxue','#FF8A7A','陈雪：我熄灯前站半小时，谁来比？'],
+ ['yuchen','#8FEFC0','章宇尘：落叶落地那一下我鸡皮疙瘩了'],
+ ['dani','#FFD76F','施丹尼：看完就打卡！拉钩！']
+];
+/* 播放中模糊预览的滚动假对话 */
+const TEASER=[
+ ['shanyu','今晚的任务：站桩5分钟，桩上见。'],
+ ['chenxue','就这？我能站半小时😏'],
+ ['yuchen','我先想明白原理再下床……'],
+ ['dani','谁偷懒谁是小狗🐶'],
+ ['limo','我陪你站。'],
+ ['jiahui','笔记第3页是重心图。']
+];
+</script>
+<script src="birthday.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+let joined=false,msgCount=0,nudgeShown=false,lastResponder='';
+
+/* ---------- 场景舞台 ---------- */
+function showScene(key){
+  const c=CHARS[key];
+  $('scimg').src=c.bg;
+  const sp=$('scchar'); sp.src=c.sp; sp.classList.toggle('vc',!!c.vc);
+  $('scava').src=c.av; $('scname').textContent=c.n; $('scdesc').textContent=c.sd;
+  $('propPhone').style.display=c.phone?'block':'none';
+  $('propChips').style.display=c.chips?'block':'none';
+}
+/* ---------- 消息渲染 ---------- */
+function addMsg(who,text){
+  const c=CHARS[who];
+  const d=document.createElement('div');
+  d.className='msg';
+  d.innerHTML=`<img class="ma" src="${c.av}"><div class="mc"><div class="mn">${c.n}<i>${c.tag}</i></div><div class="mb">${text}</div></div>`;
+  $('msgs').appendChild(d); scrollChat();
+}
+function addMe(text){
+  const d=document.createElement('div');
+  d.className='msg me';
+  d.innerHTML=`<div class="mc"><div class="mn">我</div><div class="mb">${text}</div></div>`;
+  $('msgs').appendChild(d); scrollChat();
+}
+function addSys(t){
+  const d=document.createElement('div');
+  d.className='msg sys'; d.innerHTML=`<div class="mb">${t}</div>`;
+  $('msgs').appendChild(d); scrollChat();
+}
+function addNudge(){
+  if(nudgeShown)return; nudgeShown=true;
+  const d=document.createElement('div');
+  d.className='nudge';
+  d.innerHTML=`<div class="ng1">⏰</div><p>善雨导师提醒：聊完记得完成今晚训练——${EP.task}，到大宇智能体打卡。</p><a href="train.html">去打卡</a>`;
+  $('msgs').appendChild(d); scrollChat();
+}
+function scrollChat(){const w=$('msgwrap');w.scrollTop=w.scrollHeight;}
+function showTyping(key,cb,wait){
+  const c=CHARS[key]; showScene(key);
+  $('tyava').src=c.av; $('typing').style.display='flex';
+  setTimeout(()=>{$('typing').style.display='none';cb();},wait||900+Math.random()*700);
+}
+/* ---------- 播放前：模糊滚动预告 ---------- */
+let teaserTm=null;
+function startTeaser(){
+  let i=0;
+  const push=()=>{
+    if(joined)return;
+    const [w,t]=TEASER[i%TEASER.length]; i++;
+    addMsg(w,t);
+    const list=$('msgs').children;
+    if(list.length>7)list[0].remove();
+    teaserTm=setTimeout(push,1700+Math.random()*1200);
+  };
+  push();
+}
+/* ---------- 播放中：弹幕 ---------- */
+let dmTm=null;
+function startDanmaku(){
+  let i=0;
+  const fire=()=>{
+    if(!$('vbox').classList.contains('playing'))return;
+    const [w,c,t]=DANMAKU[i%DANMAKU.length]; i++;
+    const d=document.createElement('div');
+    d.className='dm'; d.style.top=(8+Math.random()*55)+'%';
+    d.innerHTML=`<b style="color:${c}">${t}</b>`;
+    d.style.animationDuration=(6+Math.random()*3)+'s';
+    $('dmk').appendChild(d);
+    setTimeout(()=>d.remove(),9500);
+    dmTm=setTimeout(fire,1300+Math.random()*900);
+  };
+  fire();
+}
+/* ---------- 播放控制 ---------- */
+let playing=false;
+function playEp(){
+  if(playing)return; playing=true;
+  $('vbox').classList.add('playing');
+  startDanmaku();
+  let p=0;
+  const tm=setInterval(()=>{
+    p+=1.2; $('vprogI').style.width=Math.min(100,p)+'%';
+    if(p>=100){
+      clearInterval(tm); playing=false;
+      $('vbox').classList.remove('playing');
+      $('dmk').innerHTML='';
+      $('vend').style.display='flex';
+    }
+  },90); // 演示：约7.5秒模拟正片播完（接真实视频后替换为 ended 事件）
+}
+/* ---------- 加入频道 ---------- */
+function joinChat(){
+  joined=true; clearTimeout(teaserTm);
+  $('vend').style.display='none';
+  $('msgs').innerHTML='';
+  $('chatroom').classList.remove('locked-teaser');
+  $('stage').classList.add('on');
+  $('inp').disabled=false;
+  $('inp').placeholder='说点什么，角色们都在…';
+  $('chatroom').scrollIntoView({behavior:'smooth'});
+  addSys('你加入了 #E13 · 五兽桩讨论组');
+  // 角色围绕本集自然开场（随机3条+导师收尾）
+  const openers=['yuchen','dani','chenxue','limo','jiahui'].sort(()=>Math.random()-.5).slice(0,3);
+  let delay=700;
+  openers.forEach(k=>{
+    setTimeout(()=>showTyping(k,()=>addMsg(k,pick(PERSONAS[k].ep))),delay);
+    delay+=1800+Math.random()*900;
+  });
+  setTimeout(()=>showTyping('shanyu',()=>{
+    addMsg('shanyu',pick(PERSONAS.shanyu.train));
+    setTimeout(()=>{showChips();addNudge();birthdayBeat();parentHookBeat();},700);
+  }),delay+400);
+}
+/* ---------- 家长问题·剧情植入节拍 ---------- */
+const TALENT_CHAR={'思者':'yuchen','赢者':'chenxue','德者':'dani','行者':'limo','学者':'jiahui'};
+const HOOK_LINES={
+ '厌学不想学':[['{t}','说实话，我今天练得也不太情愿。但我后来想通了——我不是因为喜欢才练的，{mot}。'],
+  ['dani','对！而且我们已经拉过钩了🐶'],
+  ['shanyu','孩子，一天一笔就好。字不勉强人，人也别勉强自己。']],
+ '不写作业/磨蹭':[['{t}','我以前能拖到熄灯前一分钟。后来我就跟自己约定：{mot}。结果每次都停不下来。'],
+  ['chenxue','就这？我现在开局就冲线，十分钟收工😏'],
+  ['dani','拉钩！今晚就试一次，骗人是小狗🐶']],
+ '上课发呆走神':[['yuchen','老师又说我上课发呆。可我发现发呆分两种——脑子空白是漏了，脑子在跑是天赋。我现在给每句话配画面，配着配着就没空走神了。'],
+  ['jiahui','画面化记忆，笔记第3页也是这个原理📒'],
+  ['{t}','明天我也试试，就试一节课。']],
+ '不听音频/不打卡':[['limo','桩不骗人。站了就是站了，没站就是没站。打卡不是交差——是每天跟自己见一次面。'],
+  ['{t}','{mot}'],
+  ['dani','我在频道等你今天的打卡！拉钩！']],
+ '畏难怕输':[['chenxue','怕输不丢人，怕说明你真想赢。我的规矩：难题当前，先碰它一下。输了才知道它多重。'],
+  ['{t}','{mot}'],
+  ['limo','我陪你碰。']],
+ '沉迷手机':[['yuchen','手机为什么好玩？因为它每一秒都在给你发奖。看穿了，也就那么回事。'],
+  ['{t}','{mot}'],
+  ['shanyu','看得破，才放得下。']],
+ '玻璃心':[['dani','会难过，说明你在乎"好"呀。眼泪是信使，它在提醒你这里有你在乎的东西。'],
+  ['{t}','{mot}'],
+  ['shanyu','接住它，再问它：你想提醒我什么？']],
+ '不自信':[['jiahui','世上没有"我不行"，只有"还没拆完"。你看我的错题本——错三次的题，我比它还了解它自己。'],
+  ['{t}','{mot}'],
+  ['dani','你上次明明就做到了！我记得！']],
+ '顶嘴叛逆':[['chenxue','我也不爱被人命令。但自己选的，我就做到底。'],
+  ['{t}','{mot}'],
+  ['shanyu','自己的路，自己选，选了便是。']],
+ '作息生活':[['dani','昨晚卧谈会我们说好了，早睡的人才能赢明天！'],
+  ['{t}','{mot}'],
+  ['limo','熄灯。明天见。']]
+};
+const TALENT_MOT={
+ '思者':'因为我想把这里面的门道想明白，脑子这个东西，喂它故事它就加班',
+ '赢者':'因为我们要赢。先超过昨天的自己，再超过那个最瞧不顺眼的家伙——他并不比咱聪明',
+ '德者':'因为说好了的，拉过钩的，拉钩的事不能黄',
+ '行者':'因为做就完了。桩不骗人，我也不骗人',
+ '学者':'因为拆开了就不可怕。没有"学不会"，只有"还没拆完"'
+};
+function parentHookBeat(){
+  let hooks;try{hooks=JSON.parse(localStorage.getItem('jn_parent_hooks')||'[]');}catch(e){return;}
+  if(!hooks||!hooks.length)return;
+  const h=hooks.shift(); /* 取最早一条，生效一次即出队 */
+  localStorage.setItem('jn_parent_hooks',JSON.stringify(hooks));
+  const lines=HOOK_LINES[h.cat]||HOOK_LINES['不写作业/磨蹭'];
+  const tChar=TALENT_CHAR[h.talent]||'dani';
+  const mot=TALENT_MOT[h.talent]||TALENT_MOT['德者'];
+  let dl=1600;
+  lines.forEach(([k,t])=>{
+    const key=k==='{t}'?tChar:k;
+    const text=t.replace('{mot}',mot);
+    setTimeout(()=>showTyping(key,()=>addMsg(key,text)),dl);
+    dl+=1900+Math.random()*500;
+  });
+}
+/* ---------- 生日互动节拍 ---------- */
+function birthdayBeat(){
+  if(typeof BD==='undefined')return;
+  let dl=1400;
+  if(BD.isToday()){
+    /* 生日当天：全组专属剧情祝福+盲盒发放预告 */
+    addSys('🎂 今天是一年中最重要的日子——你的生日！');
+    const seq=[
+      ['shanyu','孩子，生辰快乐。又长一岁，桩功也长了一分。为师为你备了一份礼，去看。'],
+      ['dani','生日快乐！！🎂 拉过钩的，今天许愿一定灵！'],
+      ['chenxue','生日限定盲盒……说实话，我都有点羡慕了。'],
+      ['yuchen','我昨晚就想好祝福了，躺床上想的，想了一整夜🌙'],
+      ['limo','生日快乐。新的一岁，我陪你练。']
+    ];
+    seq.forEach(([k,t])=>{setTimeout(()=>showTyping(k,()=>addMsg(k,t)),dl);dl+=1900;});
+    setTimeout(()=>{
+      const d=document.createElement('div');
+      d.className='msg sys';
+      d.innerHTML=`<div class="mb">🎁 <b>生日限定礼物已送达</b>：「五桩合体 · 武者盲盒」限量小人一枚（带独立编号，仅生日/特殊任务可得）。<br><a href="birthday.html" style="color:#FFD76F;font-weight:900">查看我的生日档案 →</a></div>`;
+      $('msgs').appendChild(d);scrollChat();
+    },dl+300);
+  }else if(BD.isSet()){
+    const n=BD.daysUntil();
+    if(n<=30){
+      setTimeout(()=>showTyping('dani',()=>addMsg('dani',`偷偷告诉你👀 再过 <b>${n}</b> 天就是你生日了，大家已经在准备惊喜了…拉钩，不许说出去！`)),dl);
+      dl+=1900;
+      setTimeout(()=>showTyping('shanyu',()=>addMsg('shanyu','生辰将近。好好练功，生日那天，自有你的礼物。')),dl);
+    }
+  }else{
+    /* 未登记：引导录入（终身一次） */
+    setTimeout(()=>showTyping('dani',()=>addMsg('dani','对了！你登记生日了吗？登记后生日能领<b>限量版武者盲盒</b>，只有生日才拿得到！<br><a href="birthday.html" style="color:#FFD76F;font-weight:900">去登记生日（终身只能登记一次哦）→</a>')),dl);
+  }
+}
+/* ---------- 快捷话题（破冰） ---------- */
+const CHIPS=['这集你印象最深的是什么？','今晚站桩谁跟我一组？','我觉得我站不住怎么办？','师父，十桩功最难的是哪一桩？'];
+function showChips(){
+  $('replies').style.display='flex';
+  $('replies').innerHTML=CHIPS.map(c=>`<div class="rp" onclick="quickSay('${c}')">${c}</div>`).join('');
+}
+function quickSay(t){ $('inp').value=''; addMe(t); respond(t); }
+/* ---------- 自由对话引擎：意图路由 + 人格回复 + 主线牵引 ---------- */
+function detectIntent(t){
+  for(const it of INTENTS)if(it.re.test(t))return it.k;
+  return 'off';
+}
+function pickResponder(intent){
+  // 导师定期定调；其余按意图+随机选人，避免同一人连续说
+  const pool={train:['limo','jiahui','chenxue','dani'],feel:['dani','shanyu','jiahui'],ep:['yuchen','chenxue','jiahui','dani'],greet:['dani','yuchen','chenxue'],off:['yuchen','dani','chenxue','jiahui','limo']}[intent]||['yuchen','dani'];
+  let k=pick(pool),guard=0;
+  while(k===lastResponder&&guard++<5)k=pick(pool);
+  lastResponder=k;
+  return k;
+}
+let chatRounds=0;
+function respond(userText){
+  /* 生日意图：优先接管 */
+  if(/生日|礼物|盲盒/.test(userText)&&typeof BD!=='undefined'){
+    msgCount++;
+    const k=pick(['dani','shanyu','chenxue']);
+    setTimeout(()=>showTyping(k,()=>{
+      let t;
+      if(!BD.isSet())t='你还没登记生日呢！登记后生日能领限量武者盲盒🎁 → <a href="birthday.html" style="color:#FFD76F;font-weight:900">去登记</a>（终身只能登记一次）';
+      else if(BD.isToday())t='今天是你的生日呀！礼物已经送达，去看生日档案🎂';
+      else t=`距离你生日还有 <b>${BD.daysUntil()}</b> 天，礼物已经安排上了，安心练功等着吧😎`;
+      addMsg(k,t);chatRounds++;
+    }),700);
+    return;
+  }
+  const intent=detectIntent(userText);
+  const k=pickResponder(intent);
+  msgCount++;
+  setTimeout(()=>showTyping(k,()=>{
+    addMsg(k,pick(PERSONAS[k][intent]||PERSONAS[k].off));
+    chatRounds++;
+    // 每3-4轮，导师/另一角色把话题轻轻拉回主线（不强制）
+    if(chatRounds%3===0){
+      const steerer=k==='shanyu'?'limo':'shanyu';
+      setTimeout(()=>showTyping(steerer,()=>{
+        addMsg(steerer,pick(PERSONAS[steerer].off));
+        if(chatRounds>=6)addNudge();
+      }),1200+Math.random()*600);
+    }
+  }),600+Math.random()*500);
+}
+function sendFree(){
+  const t=$('inp').value.trim();
+  if(!joined||!t)return;
+  $('inp').value=''; addMe(t); respond(t);
+}
+$('inp').addEventListener('keydown',e=>{if(e.key==='Enter')sendFree();});
+/* ---------- 初始化 ---------- */
+startTeaser();
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+</body></html>

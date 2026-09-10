@@ -17,7 +17,7 @@ export function inferHomeFromSession() {
     const raw = localStorage.getItem('jnao_user')
     const role = raw ? JSON.parse(raw).role : null
     if (role === 'parent') return '/pages/parent/index'
-    if (role === 'student') return '/pages/index'
+    if (role === 'student') return '/pages/dayu/home'
     if (role === 'admin') return '/pages/admin/index'
   } catch (_) { /* ignore */ }
   return '/pages/login/index'

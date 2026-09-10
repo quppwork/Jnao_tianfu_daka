@@ -294,7 +294,7 @@ function tryRedirectIfLoggedIn() {
     const role = raw ? JSON.parse(raw).role : null
     if (loginEntryRole.value === 'student') {
       if (role === 'student') {
-        uni.reLaunch({ url: '/pages/index' })
+        uni.reLaunch({ url: '/pages/dayu/home' })
         return true
       }
       return false
@@ -304,7 +304,7 @@ function tryRedirectIfLoggedIn() {
       return true
     }
     if (role === 'student') {
-      uni.reLaunch({ url: '/pages/index' })
+      uni.reLaunch({ url: '/pages/dayu/home' })
       return true
     }
   } catch (_) { /* ignore */ }
@@ -600,22 +600,22 @@ async function routeStudentHome(data) {
   clearLoginGuard()
   saveAuthSession(data)
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
-  let target = '/pages/index'
+  let target = '/pages/dayu/home'
   try {
     if (await studentNeedsOnboarding(data.child_user_id)) {
       target = '/pages/login/onboarding/index'
     }
   } catch (e) {
     console.error('[login] studentNeedsOnboarding 检查失败，先进首页:', e?.message || e)
-    target = '/pages/index'
+    target = '/pages/dayu/home'
   }
-  if (target === '/pages/index') target = consumePostLoginRoute(target, 'student')
+  if (target === '/pages/dayu/home') target = consumePostLoginRoute(target, 'student')
   uni.reLaunch({ url: target })
 }
 
 function postLoginFallbackUrl() {
   if (form.value.role === 'student' || loginEntryRole.value === 'student') {
-    return '/pages/index'
+    return '/pages/dayu/home'
   }
   return inferHomeFromSession()
 }

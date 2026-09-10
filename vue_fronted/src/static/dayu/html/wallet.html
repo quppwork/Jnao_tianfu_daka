@@ -1,0 +1,172 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>算力中心 · 大宇智能体</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{max-width:430px;margin:0 auto;padding-bottom:40px}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:9px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.back{font-size:11.5px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+/* 额度总览 */
+.qcard{margin:12px 18px 0;background:linear-gradient(150deg,#1A2338,#10162A 60%);border:1.5px solid rgba(245,213,168,.35);border-radius:20px;padding:18px 16px}
+.qcard .qt{font-size:11px;color:#8B93A5;letter-spacing:2px;font-weight:800}
+.qcard .qnum{font-size:34px;font-weight:900;color:#F5D9A8;margin-top:4px}
+.qcard .qnum small{font-size:13px;color:#8B93A5;font-weight:700}
+.qbar{margin-top:10px;height:12px;border-radius:99px;background:#0A0F1C;border:1px solid #2A3040;overflow:hidden}
+.qbar i{display:block;height:100%;width:12%;background:linear-gradient(90deg,#F5D576,#E0863C);border-radius:99px}
+.qmeta{display:flex;justify-content:space-between;font-size:10.5px;color:#8B93A5;margin-top:6px}
+.qmeta b{color:#E0863C}
+.qbal{display:flex;gap:10px;margin-top:14px}
+.qbal div{flex:1;background:#0D1322;border:1px solid #232B3D;border-radius:14px;padding:10px 12px}
+.qbal b{display:block;font-size:16px;font-weight:900;color:#9AD9FF}
+.qbal span{font-size:10px;color:#8B93A5}
+/* 分组 */
+.grp{margin:18px 18px 0}
+.grp .gt{font-size:11px;font-weight:800;color:#5A6274;letter-spacing:2px;margin:0 4px 8px}
+/* 会员档 */
+.vip{display:flex;flex-direction:column;gap:10px}
+.vrow{display:flex;align-items:center;gap:12px;background:#131926;border:1.5px solid #2A3040;border-radius:16px;padding:13px 15px}
+.vrow.hot{border-color:#C9A227;background:linear-gradient(135deg,rgba(201,162,39,.16),rgba(201,162,39,.03))}
+.vrow .vc{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#171E2E;border:1px solid #2A3040;flex:none}
+.vrow .vi b{font-size:14.5px;font-weight:900}
+.vrow .vi span{display:block;font-size:10px;color:#8B93A5;margin-top:2px}
+.vrow .vp{margin-left:auto;text-align:right;flex:none}
+.vrow .vp b{font-size:17px;font-weight:900;color:#F5D9A8}
+.vrow .vp span{display:block;font-size:9.5px;color:#8B93A5}
+.vrow .buy{display:inline-block;margin-top:5px;font-size:10.5px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:4px 13px}
+.vtag{position:relative}
+.vtag::before{content:'推荐';position:absolute;top:-8px;right:12px;font-size:9px;font-weight:900;color:#0D111F;background:#F5D576;border-radius:6px;padding:1px 7px}
+/* 充值档 */
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.cgrid button{background:#131926;border:1.5px solid #2A3040;border-radius:14px;padding:12px 4px;color:#EDEBE4;cursor:pointer;font-family:inherit}
+.cgrid button b{display:block;font-size:16.5px;font-weight:900;color:#9AD9FF}
+.cgrid button span{display:block;font-size:9.5px;color:#8B93A5;margin-top:3px}
+.cgrid button.on{border-color:#2E6BE6;background:rgba(46,107,230,.14)}
+/* 收费标准 */
+.tb{background:#131926;border:1.5px solid #2A3040;border-radius:16px;overflow:hidden}
+.tb .th,.tb .tr{display:flex;align-items:center;padding:11px 15px;font-size:12px}
+.tb .th{background:#171E2E;color:#8B93A5;font-size:10.5px;font-weight:800;letter-spacing:1px}
+.tb .tr{border-top:1px solid #1A2132;font-weight:700}
+.tb .tr span:last-child{margin-left:auto;color:#F5D9A8;font-weight:900}
+.tb .th span:last-child{margin-left:auto}
+.note{margin:14px 18px 0;font-size:10px;color:#5A6274;line-height:1.8}
+.paybtn{display:block;margin:16px 18px 0;text-align:center;font-size:15px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:14px;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">算力中心<small>CREDITS · 额度 / 会员 / 充值</small></div>
+    <a class="back" href="javascript:history.back()">‹ 返回</a>
+  </div>
+
+  <div class="qcard">
+    <div class="qt">本月算力额度</div>
+    <div class="qnum">120<small> / 1000 点</small></div>
+    <div class="qbar"><i></i></div>
+    <div class="qmeta"><span>已消耗 880 点</span><b>剩余 12% · 即将耗尽</b></div>
+    <div class="qbal">
+      <div><b>¥ 126.50</b><span>充值余额（按量扣费）</span></div>
+      <div><b>黄金会员</b><span>每月 1 日重置额度</span></div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">开通会员 · 每月定额算力（参照 Kimi 会员档位）</div>
+    <div class="vip">
+      <div class="vrow">
+        <div class="vc">🌱</div>
+        <div class="vi"><b>轻享会员</b><span>每月 1,000 点算力 · 约 30 次天赋测试/对话</span></div>
+        <div class="vp"><b>¥49</b><span>/月</span><a class="buy" href="javascript:;">开通</a></div>
+      </div>
+      <div class="vrow hot vtag">
+        <div class="vc">🚀</div>
+        <div class="vi"><b>进阶会员</b><span>每月 2,000 点算力 · 训练计划+数据分析全开</span></div>
+        <div class="vp"><b>¥99</b><span>/月</span><a class="buy" href="javascript:;">开通</a></div>
+      </div>
+      <div class="vrow">
+        <div class="vc">💎</div>
+        <div class="vi"><b>专业会员</b><span>每月 5,000 点算力 · 全家多孩子共享</span></div>
+        <div class="vp"><b>¥199</b><span>/月</span><a class="buy" href="javascript:;">开通</a></div>
+      </div>
+      <div class="vrow">
+        <div class="vc">👑</div>
+        <div class="vi"><b>旗舰会员</b><span>每月 12,000 点算力 · 导师优先响应+线下课折扣</span></div>
+        <div class="vp"><b>¥699</b><span>/月</span><a class="buy" href="javascript:;">开通</a></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">算力充值 · 按量扣费（参照 Kimi 充值档位）</div>
+    <div class="cgrid">
+      <button><b>¥5.2</b><span>体验包 · 50点</span></button>
+      <button><b>¥9.9</b><span>加油包 · 100点</span></button>
+      <button class="on"><b>¥28.8</b><span>超值包 · 320点</span></button>
+      <button><b>¥49.9</b><span>畅享包 · 600点</span></button>
+      <button><b>¥99</b><span>家庭包 · 1300点</span></button>
+      <button><b>¥399</b><span>年度包 · 6000点</span></button>
+    </div>
+    <a class="paybtn" href="javascript:;">立即充值 ¥28.8</a>
+  </div>
+
+  <div class="grp">
+    <div class="gt">算力收费标准</div>
+    <div class="tb">
+      <div class="th"><span>功能</span><span>单次消耗</span></div>
+      <div class="tr"><span>🤖 大宇智能对话</span><span>2 点/轮</span></div>
+      <div class="tr"><span>🧭 天赋测试（四宫格完整版）</span><span>30 点/次</span></div>
+      <div class="tr"><span>📊 孩子训练数据深度解读</span><span>15 点/次</span></div>
+      <div class="tr"><span>📋 生成天赋测试报告</span><span>20 点/份</span></div>
+      <div class="tr"><span>🎯 个性化训练计划生成</span><span>25 点/次</span></div>
+      <div class="tr"><span>🖥️ 中央电脑回放分析</span><span>10 点/次</span></div>
+      <div class="tr"><span>👨‍👩‍👧 多孩子账户（每个孩子）</span><span>会员共享额度</span></div>
+      <div class="tr"><span>💬 真人导师咨询</span><span>免费 · 会员专享</span></div>
+    </div>
+  </div>
+
+  <div class="note">
+    · 会员额度每月 1 日重置，当月未用完不结转；充值余额永久有效、可叠加，会员额度耗尽后自动按量扣减充值余额。<br/>
+    · 扣费顺序：先扣会员月度额度，再扣充值余额。<br/>
+    · 价格参照 Kimi 公开收费标准制定（会员 ¥49/99/199/699 四档；充值 5.2~399 元六档）。
+  </div>
+
+</div>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='parent.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+</body></html>
