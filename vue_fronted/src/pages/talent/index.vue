@@ -5,7 +5,7 @@
       <view class="nav-back" @tap="goBack">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
-      <text class="nav-title">天赋测试</text>
+      <text class="nav-title">{{ phase === 'door' ? '个人测试' : '天赋测试' }}</text>
       <view class="nav-right" @tap="showHistory = true">
         <text>历史报告</text>
       </view>
@@ -13,25 +13,27 @@
 
     <!-- ===== PRE-TEST PHASES ===== -->
     <template v-if="isPreTest">
-      <!-- DOOR -->
-      <view v-if="phase === 'door'" class="phase" key="door">
-        <view class="phase-inner">
-          <text class="msg-title" style="font-size:28px;">请选择测试对象</text>
-          <view class="card-row">
-            <view class="pcard pcard-in" style="flex:1.5;animation-delay:0.4s;justify-content:flex-start;padding-top:20px;" @tap="handleChoice('孩子测试')">
-              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
-                <image src="/static/blue-figure.png" mode="aspectFit" style="width:120px;height:190px;" />
-              </view>
-              <text class="pcard-title" style="font-size:20px;">给孩子测</text>
-              <text class="pcard-sub" style="font-size:14px;">请家长操作</text>
+      <!-- DOOR · 大宇图二：选测试对象 -->
+      <view v-if="phase === 'door'" class="phase door-phase" key="door">
+        <view class="phase-inner door-inner">
+          <text class="door-title">个人测试 · 请选择测试对象</text>
+          <text class="door-sub">35 道快答题 · 约 3 分钟 · 凭第一感觉选择</text>
+          <view class="card-row door-cards">
+            <view class="pcard pcard-in door-card door-kid" @tap="handleChoice('孩子测试')">
+              <image class="door-icon" src="/static/dayu/assets/ic/family.png" mode="aspectFit" />
+              <text class="pcard-title">给孩子测</text>
+              <text class="pcard-sub">未满18岁 · 家长代测</text>
             </view>
-            <view class="pcard pcard-in" style="flex:1.5;animation-delay:0.55s" @tap="handleChoice('成人测试')">
-              <image src="/static/self-icon-clean.png" mode="aspectFit" style="width:90px;height:160px;margin-bottom:8px;transform:translateY(-10px);" />
-              <text class="pcard-title" style="font-size:20px;">给自己测</text>
-              <text class="pcard-sub" style="font-size:14px;">成年人使用</text>
+            <view class="pcard pcard-in door-card door-adu" @tap="handleChoice('成人测试')">
+              <image class="door-icon" src="/static/dayu/assets/ic/person.png" mode="aspectFit" />
+              <text class="pcard-title">给自己测</text>
+              <text class="pcard-sub">已满18岁 · 本人作答</text>
             </view>
           </view>
-
+          <view class="door-notice">
+            <text class="door-notice-ic">🛡️</text>
+            <text class="door-notice-text">未满18岁的孩子不能自己测试。儿童测试必须由家长根据孩子的日常真实表现代为作答，孩子本人作答会导致结果失真。</text>
+          </view>
         </view>
       </view>
 
@@ -215,6 +217,7 @@ const submitting = ref(false)
 const submitError = ref('')
 const compPhase = ref(0)
 const showHistory = ref(false)
+const enteredFromHub = ref(false)
 const historyList = ref([])
 
 async function loadHistory() {
@@ -429,10 +432,13 @@ function handleUndo() {
 // ── Pre-test ──
 function handleChoice(choice) {
   if (phase.value === 'door') {
+    // 图二：给孩子测 → 直接儿童卷确认；给自己测 → 成人卷确认（年龄已在文案约定）
     if (choice === '孩子测试') {
-      phase.value = 'ageGate'; testType.value = '孩子'
+      testType.value = '孩子'
+      phase.value = 'confirm'
     } else {
-      testType.value = '成人'; phase.value = 'confirm'
+      testType.value = '成人'
+      phase.value = 'confirm'
     }
   } else if (phase.value === 'ageGate') {
     if (choice === '已满18岁') { testType.value = '成人'; phase.value = 'confirm' }
@@ -443,6 +449,8 @@ function handleChoice(choice) {
   } else if (phase.value === 'confirm') {
     if (choice === '准备好了') startTest()
     else if (fromOnboarding.value) {
+      uni.navigateBack({ delta: 1 })
+    } else if (enteredFromHub.value) {
       uni.navigateBack({ delta: 1 })
     } else {
       phase.value = 'door'; testType.value = null
@@ -530,8 +538,21 @@ function formatHistoryDate(iso) {
 }
 
 function goBack() {
+  if (phase.value === 'door') {
+    if (getCurrentPages().length > 1) uni.navigateBack({ delta: 1 })
+    else uni.reLaunch({ url: '/pages/talent/hub' })
+    return
+  }
   if (phase.value === 'ageGate') { phase.value = 'door'; testType.value = null; return }
-  if (phase.value === 'confirm') { phase.value = testType.value === '成人' ? 'door' : 'ageGate'; return }
+  if (phase.value === 'confirm') {
+    if (enteredFromHub.value || fromOnboarding.value) {
+      uni.navigateBack({ delta: 1 })
+      return
+    }
+    phase.value = 'door'
+    testType.value = null
+    return
+  }
   if (phase.value === 'testing' || phase.value === 'completed') { phase.value = 'confirm'; return }
   if (fromOnboarding.value) {
     uni.navigateBack({ delta: 1 })
@@ -546,6 +567,16 @@ onLoad((opts) => {
   if (opts?.history === '1' || opts?.history === 'true') {
     showHistory.value = true
     loadHistory()
+  }
+  const mode = String(opts?.mode || '').toLowerCase()
+  if (mode === 'kid' || mode === 'child') {
+    enteredFromHub.value = true
+    testType.value = '孩子'
+    phase.value = 'confirm'
+  } else if (mode === 'adult' || mode === 'adu') {
+    enteredFromHub.value = true
+    testType.value = '成人'
+    phase.value = 'confirm'
   }
 })
 
@@ -589,6 +620,34 @@ onBeforeUnmount(() => {
 .pcard-emoji { font-size:28px; }
 .pcard-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; margin-bottom:4px; display:block; }
 .pcard-sub { color:var(--text-dim); font-size:11px; text-align:center; line-height:1.4; display:block; }
+
+/* 图二：个人测试选对象 */
+.door-phase { padding-top: 10vh; padding-top: 10dvh; align-items: flex-start; }
+.door-inner { max-width: 400px; }
+.door-title {
+  color: var(--text); font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 6px;
+}
+.door-sub {
+  color: var(--text-dim); font-size: 13px; text-align: center; margin-bottom: 8px; line-height: 1.45;
+}
+.door-cards { max-width: 100%; margin-top: 18px; }
+.door-card {
+  min-height: 220px; opacity: 1; transform: none; animation: none;
+  justify-content: flex-start; padding-top: 22px; border-width: 1.5px;
+}
+.door-kid { border-color: rgba(111, 207, 142, 0.55); box-shadow: 0 0 16px rgba(111, 207, 142, 0.12); }
+.door-adu { border-color: rgba(46, 107, 230, 0.45); box-shadow: 0 0 16px rgba(46, 107, 230, 0.1); }
+.door-icon { width: 96px; height: 96px; margin-bottom: 12px; }
+.door-notice {
+  margin-top: 18px; width: 100%; max-width: 400px;
+  display: flex; gap: 10px; align-items: flex-start;
+  background: rgba(180, 60, 60, 0.12); border: 1px solid rgba(220, 100, 100, 0.35);
+  border-radius: 12px; padding: 12px 14px; box-sizing: border-box;
+}
+.door-notice-ic { flex-shrink: 0; font-size: 16px; line-height: 1.4; }
+.door-notice-text {
+  color: #e8a0a0; font-size: 12.5px; line-height: 1.55; flex: 1;
+}
 
 .notice-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
 .notice-card { background:var(--bg-card); border-radius:20px; padding:28px 24px; max-width:320px; width:100%; }

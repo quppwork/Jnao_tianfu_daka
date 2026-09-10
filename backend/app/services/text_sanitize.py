@@ -22,7 +22,8 @@ def sanitize_text(value: str | None, *, max_len: int = 4000) -> str:
 def sanitize_subject(value: str | None) -> str | None:
     if not value:
         return None
-    allowed = {"数学", "语文", "英语", "科学"}
+    # 与 agents.qa.subjects.registry 保持同步（含学习心法）
+    allowed = {"数学", "语文", "英语", "科学", "学习心法"}
     text = sanitize_text(value, max_len=20)
     return text if text in allowed else None
 

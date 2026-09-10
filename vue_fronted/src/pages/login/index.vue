@@ -219,8 +219,8 @@ onLoad((opts) => {
   wxPageOpts.value = { ...(opts || {}) }
   const role = (opts?.role || '').trim().toLowerCase()
   if (role === 'student' || role === 'parent') loginEntryRole.value = role
-  if (role === 'student') {
-    prepareRoleLoginEntry('student')
+  if (role === 'student' || role === 'parent') {
+    prepareRoleLoginEntry(role)
     invalidatePageAuthCache()
   }
   if (opts?.phone) form.value.phone = String(opts.phone)

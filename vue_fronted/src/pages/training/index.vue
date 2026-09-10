@@ -4485,7 +4485,10 @@ onUnmounted(() => {
   destroyTrainingAudio()
 })
 function goBack() {
-  uni.navigateBack({ delta: 1 })
+  uni.navigateBack({
+    delta: 1,
+    fail: () => uni.reLaunch({ url: '/pages/dayu/home' }),
+  })
 }
 
 function triggerGlitch() {

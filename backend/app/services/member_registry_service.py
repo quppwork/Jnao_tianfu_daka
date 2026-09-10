@@ -17,6 +17,8 @@ CHANNEL_SMS = "sms"
 CHANNEL_PASSWORD = "password"
 CHANNEL_WECHAT = "wechat"
 CHANNEL_WECHAT_LEGACY = "wechat_legacy"
+CHANNEL_JINNAO = "jinnao"
+REGISTER_SOURCE_JINNAO = "劲脑"
 
 
 def find_daka_member_by_parent(db: Session, parent_id: int) -> DakaMember | None:

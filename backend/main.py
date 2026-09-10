@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import admin, auth, dev, growth, guide, health, meta, parent, qa, resources, talent, training, user, voice
+from app.api import admin, auth, dev, growth, guide, health, meta, parent, partner, qa, resources, talent, training, user, voice
 from app.core.logger import setup_logging
 from app.core.security import get_cors_origins, is_debug_routes_enabled
 from app.db.models import ContentItem
@@ -178,7 +178,7 @@ app.add_middleware(
     allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Child-User-Id", "X-Session-Token", "X-Device-Id", "X-Request-Id"],
+    allow_headers=["Content-Type", "X-Child-User-Id", "X-Session-Token", "X-Device-Id", "X-Request-Id", "X-Api-Key"],
     expose_headers=["X-Request-Id"],
 )
 
@@ -190,6 +190,7 @@ app.include_router(voice.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(parent.router)
+app.include_router(partner.router)
 app.include_router(user.router)
 app.include_router(training.router)
 app.include_router(dev.router)

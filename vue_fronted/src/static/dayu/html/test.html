@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head>
+﻿<!DOCTYPE html><html lang="zh-CN"><head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>大宇智能体 · 天赋测试</title>
@@ -34,9 +34,33 @@
   .recbtn span{font-size:11px;color:#A8946a;margin-left:2px}
   html.lt .hub{background:#d9dfec;border-color:#c2cadc}
   html.lt .hub .hi{background:#e8edf6;border-color:#c2cadc}
-  html.lt .hub b{color:#1b1912}html.lt .hub span{color:#5a6274}
+  html.lt .hub b{color:#1b1912}html.lt .hub span{color:#5a6274}html.lt .hub .arr{color:#8b93a5}
   html.lt .recbtn{background:rgba(201,162,39,.1);border-color:rgba(150,115,25,.5)}
   html.lt .recbtn b{color:#7a5f10}html.lt .recbtn span{color:#97855a}
+  html.lt .pick-t{color:#1b1912}
+  html.lt .pick-s{color:#5a6274}
+  html.lt .topbar .t1{color:#1b1912}
+  html.lt .topbar .t2{color:#8b93a5}
+  html.lt a[href="report-v3.html"],
+  html.lt .topbar > a{color:#5a6274 !important}
+
+  /* 黑白主题布局锁死：间距/宽度一致，浅色只换色不挪位 */
+  .phone{width:100%;max-width:430px;margin:0 auto;box-sizing:border-box}
+  .topbar{padding:14px 18px 4px;box-sizing:border-box;gap:10px}
+  .pick-t{margin:46px 18px 6px;text-align:center}
+  .pick-s{margin:0 18px 26px;text-align:center}
+  .hub4{display:flex;flex-direction:column;gap:10px;margin:16px 18px 4px;box-sizing:border-box;width:auto}
+  .hub{box-sizing:border-box;width:auto;margin:0}
+  .recbtn{margin:14px 18px 0;box-sizing:border-box;width:auto}
+  .pick{margin:0 18px;box-sizing:border-box}
+  html.lt .phone{width:100%;max-width:430px;margin:0 auto;box-sizing:border-box;padding-bottom:96px}
+  html.lt .topbar{padding:14px 18px 4px}
+  html.lt .pick-t{margin:46px 18px 6px;font-size:26px;font-weight:900;text-align:center}
+  html.lt .pick-s{margin:0 18px 26px;font-size:13px;text-align:center}
+  html.lt .hub4{margin:16px 18px 4px;gap:10px;width:auto}
+  html.lt .recbtn{margin:14px 18px 0;width:auto}
+  html.lt .pick{margin:0 18px}
+  html.lt .hub .lock{position:absolute;top:10px;right:12px}
   .gate{position:fixed;inset:0;z-index:90;background:rgba(5,8,14,.72);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:26px}
   .gate.on{display:flex}
   .gate .gb{background:#161D2B;border:1.5px solid #2A3040;border-radius:22px;padding:24px 20px;max-width:330px;width:100%;text-align:center}
@@ -169,7 +193,8 @@
   .kid-notice p b{color:#F0A3A3}
 </style>
 <style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
-*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}
+html.lt .phone{width:100%;max-width:430px;min-height:100vh;margin:0 auto;box-sizing:border-box;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
 .card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
 .dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
@@ -186,12 +211,39 @@ html.lt body{background:#ebeef4}html.lt /* ===== 通用 ===== */
   .age-mask{position:fixed;inset:0;z-index:80;background:rgba(243,245,250,.82);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:26px}html.lt .age-mask.on{display:flex}html.lt .age-box{background:#d9dfec;border:2px solid rgba(173,31,31,.65);border-radius:24px;padding:26px 22px 22px;text-align:center;max-width:340px;animation:stin .3s;box-shadow:0 0 0 6px rgba(173,31,31,.10),0 20px 50px rgba(247,247,247,.6)}html.lt .age-box .ai{width:64px;height:64px;margin:0 auto 12px;border-radius:50%;background:rgba(173,31,31,.14);border:1.5px solid rgba(173,31,31,.6);display:flex;align-items:center;justify-content:center;font-size:30px}html.lt .age-box h3{font-size:19px;font-weight:900;color:#5c0f0f;margin-bottom:10px;line-height:1.5}html.lt .age-box p{font-size:13px;color:#463838;line-height:1.8;margin-bottom:6px}html.lt .age-box p b{color:#47360f}html.lt .age-ok{margin-top:16px;background:linear-gradient(135deg,#51b074,#7dca97);color:#141414;border-radius:14px;padding:14px;font-size:15.5px;font-weight:900;cursor:pointer;box-shadow:0 8px 20px rgba(48,144,79,.35)}html.lt .age-back{margin-top:10px;font-size:12.5px;color:#5a6274;cursor:pointer;padding:6px}html.lt /* 选择页儿童卡年龄警示条 */
   .kid-notice{margin:16px 18px 0;background:rgba(173,31,31,.10);border:1.5px solid rgba(173,31,31,.5);border-radius:14px;padding:11px 14px;display:flex;gap:10px;align-items:center}html.lt .kid-notice .kn-i{font-size:20px;flex:none}html.lt .kid-notice p{font-size:12px;color:#461717;line-height:1.6}html.lt .kid-notice p b{color:#5c0f0f}</style>
 <script>
-(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
-function toggleTheme(){
-  var h=document.documentElement,on=h.classList.toggle('lt');
-  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
-  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
-}
+(function(){
+  function readLight(){
+    try{
+      var t = localStorage.getItem('jnao_theme');
+      if(t === 'dark' || t === 'dk') return false;
+      if(t === 'white' || t === 'lt') return true;
+      var jn = localStorage.getItem('jn_theme');
+      if(jn === 'dk') return false;
+      if(jn === 'lt') return true;
+    }catch(e){}
+    return true;
+  }
+  function applyTheme(light){
+    var h = document.documentElement;
+    if(light) h.classList.add('lt'); else h.classList.remove('lt');
+    try{
+      localStorage.setItem('jn_theme', light ? 'lt' : 'dk');
+      localStorage.setItem('jnao_theme', light ? 'white' : 'dark');
+    }catch(e){}
+    document.querySelectorAll('.themebtn').forEach(function(b){
+      b.textContent = light ? '☀️' : '🌙';
+    });
+  }
+  applyTheme(readLight());
+  window.toggleTheme = function(){
+    applyTheme(!document.documentElement.classList.contains('lt'));
+  };
+  window.addEventListener('message', function(ev){
+    var d = ev && ev.data;
+    if(!d || d.type !== 'dayu-hydrate') return;
+    if(d.theme === 'white' || d.theme === 'dark') applyTheme(d.theme === 'white');
+  });
+})();
 </script>
 </head>
 <body>
@@ -231,7 +283,7 @@ function toggleTheme(){
           <div class="pi"><img src="/static/dayu/assets/ic/family.png" style="width:96px;height:96px;object-fit:contain;vertical-align:middle" alt=""/></div>
           <b>给孩子测</b><span>未满18岁 · 家长代测</span>
         </div>
-        <div class="pk adu" onclick="gateEnter(null,&#39;adu&#39;)">
+        <div class="pk adu" onclick="pickMode(&#39;adu&#39;)">
           <div class="pi"><img src="/static/dayu/assets/ic/person.png" style="width:96px;height:96px;object-fit:contain;vertical-align:middle" alt=""/></div>
           <b>给自己测</b><span>已满18岁 · 本人作答</span>
         </div>
@@ -445,7 +497,8 @@ function toggleSelf(){
 }
 function pickMode(m){
   try{ localStorage.setItem('dayu_test_mode', m||''); }catch(e){}
-  if(window.__dayuGoTalent){ window.__dayuGoTalent(); return; }
+  var mode = (m==='kid') ? 'kid' : 'adult';
+  if(window.__dayuGoTalent){ window.__dayuGoTalent(mode); return; }
   if(m==='kid'){ $('ageMask').classList.add('on'); return; }
   applyMode('adu');
 }
@@ -523,7 +576,7 @@ function makeReport(){
     show('sMz');
     requestAnimationFrame(()=>setTimeout(()=>document.querySelectorAll('#mzBars i').forEach(i=>i.style.width=i.dataset.w+'%'),60));
   }else{
-    if(window.__dayuGoTalent){window.__dayuGoTalent();return;}location.href='/pages/talent/index';
+    if(window.__dayuGoTalent){window.__dayuGoTalent(mode==='kid'?'kid':'adult');return;}location.href='/pages/talent/index?mode='+(mode==='kid'?'kid':'adult');
   }
 }
 function restart(){ show('sPick'); }
@@ -554,7 +607,7 @@ function gateNo(){$('gate').classList.remove('on');_gateCb=null;}
 /* 入口参数：?mode=adu 直达成人卷（经家长门）；?mode=kid 家长代测 */
 (function(){const m=new URLSearchParams(location.search).get('mode');if(m==='adu')gateEnter(null,'adu');else if(m==='kid')pickMode('kid');})();
 </script>
-<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-nav',path:'/pages/dayu/home'},'*');}else if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
 
 
 
@@ -583,7 +636,7 @@ function gateNo(){$('gate').classList.remove('on');_gateCb=null;}
     }
   }, true);
   // personal test expand -> go real talent
-  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+  window.__dayuGoTalent = function(mode){ nav('/pages/talent/index?mode=' + (mode||'adult')); };
 })();
 </script>
 
