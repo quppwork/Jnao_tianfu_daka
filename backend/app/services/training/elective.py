@@ -5,7 +5,7 @@ import json
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import ContentItem, TrainingItem, TrainingPlan, TrainingRecord
+from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.content_meta import parse_item_instruction
 from app.services.training.common import TrainingError, invalidate_plan_cache
 from app.services.training_day import is_plan_globally_cutoff
