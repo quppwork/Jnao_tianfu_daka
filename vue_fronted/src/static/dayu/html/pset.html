@@ -1,0 +1,208 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>我的 · 大宇智能体家长版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{max-width:var(--app-max-width, 480px);margin:0 auto;padding-bottom:96px}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:9px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.acctbtn{display:inline-block;font-size:11.5px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+/* 我的资料 */
+.me{margin:10px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:16px;display:flex;align-items:center;gap:13px}
+.me .av{width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,rgba(201,162,39,.3),rgba(201,162,39,.08));border:2px solid #C9A227;display:flex;align-items:center;justify-content:center;font-size:28px;flex:none}
+.me .inf b{font-size:17px;font-weight:900;display:inline}
+.me .inf span{display:block;font-size:10.5px;color:#8B93A5;margin-top:3px}
+.me .inf span.vip{display:inline-block;font-size:10px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:8px;padding:3px 9px;margin-left:0;vertical-align:3px;width:auto}
+.me .inf .vips{display:flex;gap:6px;margin-top:5px;flex-wrap:nowrap}
+/* 身份徽章行：算力会员+课程身份一目了然 */
+.idrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.idb{font-size:9.5px;font-weight:800;color:#C9CFDC;background:#0D1322;border:1px solid #2A3040;border-radius:99px;padding:4px 10px;text-decoration:none}
+.idb b{color:#F5D9A8}
+.idb.gold{color:#F5D9A8;border-color:rgba(201,162,39,.55);background:rgba(201,162,39,.1)}
+.idtip{font-size:8.5px;color:#5A6274;margin-top:6px}
+/* 孩子管理 */
+.kidrow{margin:12px 18px 0;background:linear-gradient(135deg,rgba(46,107,230,.14),rgba(46,107,230,.03));border:1.5px solid rgba(46,107,230,.4);border-radius:16px;padding:13px 15px;display:flex;align-items:center;gap:12px}
+.kidrow .kav{width:44px;height:44px;border-radius:50%;background:#171E2E;border:2px solid #2E6BE6;display:flex;align-items:center;justify-content:center;font-size:21px;flex:none;position:relative}
+.tb,.kidrow span.tb,.me span.tb{position:absolute;right:-4px;bottom:-4px;width:20px;height:20px;border-radius:50%;background:#0D111F;border:1.5px solid;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:900;line-height:1;z-index:2;padding:0;text-align:center}
+.kidrow b{font-size:14px;font-weight:900}
+.kidrow span{display:block;font-size:10px;color:#8B93A5;margin-top:2px}
+.kidrow .sw{margin-left:auto;flex:none;font-size:11px;font-weight:800;color:#9AD9FF;border:1px solid rgba(46,107,230,.5);border-radius:99px;padding:5px 12px;text-decoration:none}
+/* 分组 */
+.grp{margin:16px 18px 0}
+.grp .gt{font-size:11px;font-weight:800;color:#5A6274;letter-spacing:2px;margin:0 4px 8px}
+.lst{background:#131926;border:1.5px solid #2A3040;border-radius:16px;overflow:hidden}
+.lst a{display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid #1A2132;text-decoration:none;color:#EDEBE4;font-size:13.5px;font-weight:700}
+.lst a:last-child{border-bottom:none}
+.lst a .ic{width:22px;text-align:center;font-size:17px}
+.lst a .ar{margin-left:auto;color:#5A6274;font-weight:900}
+.lst a .vv{margin-left:auto;font-size:11px;color:#8B93A5}
+.lst a .vv+.ar{margin-left:6px}
+/* 事业发展双板块卡 */
+.bizcard{display:block;text-decoration:none;color:#EDEBE4;background:#131926;border:1.5px solid #2A3040;border-radius:18px;overflow:hidden}
+.bizv{position:relative;aspect-ratio:16/7.5;display:flex;align-items:center;justify-content:center;font-size:36px;cursor:pointer}
+.bizv .bply{position:absolute;width:46px;height:46px;border-radius:50%;background:rgba(13,17,31,.72);border:2px solid #F5D9A8;display:flex;align-items:center;justify-content:center;font-size:16px;color:#F5D9A8}
+.bizv .bvt{position:absolute;left:12px;bottom:9px;font-size:11px;font-weight:900;color:#fff;text-shadow:0 1px 5px rgba(0,0,0,.85)}
+.bizv .bdur{position:absolute;right:10px;bottom:9px;font-size:10px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 8px}
+.bizt{padding:12px 14px 13px}
+.bizt b{font-size:14.5px;font-weight:900}
+.bizt p{font-size:10.5px;color:#8B93A5;line-height:1.7;margin-top:5px}
+.bizt .bgo{display:inline-block;margin-top:9px;font-size:11px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:6px 15px}
+/* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:6px 8px;display:flex;justify-content:space-around;z-index:50}
+.foot a{text-align:center;color:#8B93A5;font-size:10px;flex:1;text-decoration:none;padding:2px 0}
+.foot a.on{color:#F5D9A8;font-weight:800}
+.foot a img{width:34px;height:34px;object-fit:contain;display:block;margin:0 auto 1px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">我的<small>SETTINGS · 家长账户</small></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <a href="wallet.html" style="display:inline-flex;align-items:center;gap:5px;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:99px;padding:4px 11px;text-decoration:none"><span style="font-size:11px">⚡</span><b style="font-size:11px;font-weight:900;color:#F5D9A8">120</b></a>
+      <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+    </div>
+  </div>
+
+  <div class="me">
+    <div class="av" style="padding:0;background:none;position:relative"><img src="/static/dayu/assets/avatar-parent.jpg" alt="家长头像" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"/><span class="tb" style="border-color:#C9A227;color:#C9A227" title="行者天赋">行</span></div>
+    <div class="inf">
+      <b id="parentName">家长</b>
+      <div class="vips"><span class="vip">天赋导师</span><span class="vip">合伙人</span><span class="vip" id="kidCountVip">孩子</span></div>
+      <span>家长账户 · 已实名认证</span>
+    </div>
+  </div>
+
+  <!-- 孩子账户：一个家长账户可管多个孩子，孩子账户独立账号密码 -->
+  <div class="grp">
+    <div class="gt">我的孩子账户（家长账户统管 · 孩子各自独立账号密码登录）</div>
+    <div id="kidList">
+      <div class="kidrow">
+        <div class="kav">🧒<span class="tb" style="border-color:#4A7EC2;color:#4A7EC2" title="学者天赋">学</span></div>
+        <div><b>张雨晨（老大）</b><span>筑基期·三段 · 本周 312 分钟</span></div>
+        <a class="sw" href="pdata.html">训练数据 ›</a>
+      </div>
+      <div class="kidrow" style="margin-top:9px">
+        <div class="kav" style="border-color:#C9A227">👧<span class="tb" style="border-color:#C9A227;color:#C9A227" title="行者天赋">行</span></div>
+        <div><b>张小雨（老二）</b><span>筑基期·一段 · 本周 96 分钟</span></div>
+        <a class="sw" href="pdata.html">训练数据 ›</a>
+      </div>
+    </div>
+    <div class="kidrow" style="margin-top:9px;border-style:dashed;background:rgba(46,107,230,.05)">
+      <div class="kav" style="border-color:#5A6274;font-size:16px;color:#8B93A5">＋</div>
+      <div><b style="color:#8B93A5">开通新的孩子账户</b><span>二宝三宝都能管 · 孩子用自己的账号密码登录训练端</span></div>
+      <a class="sw" href="kids-manage.html" style="border-color:#C9A227;color:#F5D9A8">去开通 ›</a>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">事业发展（课程学习请见「家长课堂」）</div>
+    <a class="bizcard" href="share.html">
+      <div class="bizv" style="background:linear-gradient(180deg,rgba(10,8,2,.05) 30%,rgba(10,8,2,.72)),url(/static/dayu/assets/biz-share.jpg) center/cover no-repeat"><span class="bply">▶</span><span class="bvt">《分享推广》板块介绍 · 会分享就有收入</span><span class="bdur">02:16</span></div>
+      <div class="bizt"><b>分享 · 推广素材库</b><p>怎么分享、分享什么、发给谁——海报/文案/打卡条素材库+工具包全配齐，支持满100人支持者领体验课、你得天赋币抵课程费，分享就是收入。</p><span class="bgo">进入板块 ›</span></div>
+    </a>
+    <a class="bizcard" href="career.html" style="margin-top:11px">
+      <div class="bizv" style="background:linear-gradient(180deg,rgba(2,6,14,.05) 30%,rgba(2,6,14,.72)),url(/static/dayu/assets/biz-career.jpg) center/cover no-repeat"><span class="bply">▶</span><span class="bvt">《招贤纳士》板块介绍 · 从家长到职业人</span><span class="bdur">03:05</span></div>
+      <div class="bizt"><b>招贤纳士 · 职业发展</b><p>合伙人（购买业务机会）+电话咨询/私域服务/专业交付/媒体营销/业务管理/企业高管六大职业——学课程、过考试、做实操，全部完成即可上岗。</p><span class="bgo">进入板块 ›</span></div>
+    </a>
+  </div>
+
+  <div class="grp">
+    <div class="gt">学习与服务</div>
+    <div class="lst">
+      <a href="wallet.html"><span class="ic">⚡</span>算力额度 · 会员充值<span class="vv">剩 120 点</span><span class="ar">›</span></a>
+      <a href="records.html"><span class="ic">📋</span>全家测试报告<span class="ar">›</span></a>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">应用设置</div>
+    <div class="lst">
+      <a href="console.html" style="border:1.5px solid rgba(201,162,39,.55);border-radius:14px"><span class="ic">🖥️</span><b style="color:#F5D9A8">业务操作平台</b><span class="vv">按职业身份进入对应工作台</span><span class="ar">›</span></a>
+      <a href="kids-manage.html"><span class="ic">👨‍👩‍👧</span>孩子账户管理<span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">🔔</span>消息通知<span class="vv">训练提醒已开</span><span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">🔒</span>隐私与数据安全<span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">💬</span>意见反馈<span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">ℹ️</span>关于大宇智能体<span class="vv">V1.0</span><span class="ar">›</span></a>
+    </div>
+  </div>
+
+  <div class="foot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a class="on" href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+
+</div>
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  var btnStudent = document.getElementById('btnStudent');
+  if(btnStudent){
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'kids-manage.html': '/pages/parent/index',
+      'index.html': '__student__'
+    };
+    var soon = {
+      'wallet.html': '算力中心即将开放',
+      'records.html': '测试报告即将开放',
+      'share.html': '分享推广即将开放',
+      'career.html': '招贤纳士即将开放',
+      'console.html': '业务平台即将开放'
+    };
+    if(soon[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(!post('dayu-toast', {title: soon[file]})){
+        try{ alert(soon[file]); }catch(err){}
+      }
+      return;
+    }
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      nav(map[file]);
+    }
+  }, true);
+})();
+</script>
+</body></html>

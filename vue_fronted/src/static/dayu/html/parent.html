@@ -5,15 +5,15 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
-.phone{max-width:430px;margin:0 auto;padding-bottom:110px}
+.phone{max-width:var(--app-max-width, 480px);margin:0 auto;padding-bottom:110px}
 /* 顶栏 */
 .ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
 .ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
-.ptop .brand small{display:block;font-size:9px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
-.acctbtn{display:inline-block;font-size:11.5px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+.ptop .brand small{display:block;font-size:12px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.acctbtn{display:inline-block;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
 /* 算力额度条 */
 .qpill{display:inline-flex;align-items:center;gap:6px;background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:4px 11px;text-decoration:none}
-.qpill b{font-size:11px;font-weight:900;color:#F5D9A8}
+.qpill b{font-size:14px;font-weight:900;color:#F5D9A8}
 .qpill .qb{width:34px;height:6px;border-radius:99px;background:#0A0F1C;border:1px solid #2A3040;overflow:hidden}
 .qpill .qb i{display:block;height:100%;width:12%;background:linear-gradient(90deg,#F5D576,#E0863C)}
 /* 算力耗尽弹窗 */
@@ -22,62 +22,62 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 .qpop{background:#131926;border:1.5px solid #C9A227;border-radius:22px;padding:24px 20px;text-align:center;max-width:330px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
 .qpop .qi{font-size:40px}
 .qpop h3{font-size:18px;font-weight:900;color:#F5D9A8;margin:10px 0 8px}
-.qpop p{font-size:12.5px;color:#8B93A5;line-height:1.7}
-.qpop .qgo{display:block;margin-top:16px;background:linear-gradient(90deg,#F5D576,#C9A869);color:#0D111F;font-size:15px;font-weight:900;border-radius:99px;padding:13px;text-decoration:none}
-.qpop .qlater{display:block;margin-top:10px;font-size:11.5px;color:#5A6274;text-decoration:none}
+.qpop p{font-size:16px;color:#8B93A5;line-height:1.7}
+.qpop .qgo{display:block;margin-top:16px;background:linear-gradient(90deg,#F5D576,#C9A869);color:#0D111F;font-size:17px;font-weight:900;border-radius:99px;padding:13px;text-decoration:none}
+.qpop .qlater{display:block;margin-top:10px;font-size:14px;color:#5A6274;text-decoration:none}
 /* 头图 */
 .phero{margin:8px 18px 0;border-radius:20px;overflow:hidden;position:relative;border:1.5px solid #2A3040;height:150px}
 .phero img{width:100%;height:100%;object-fit:cover;object-position:center 28%;display:block}
 .phero .cap{position:absolute;left:0;right:0;bottom:0;padding:40px 16px 13px;background:linear-gradient(180deg,transparent,rgba(8,11,22,.88))}
 .phero .cap b{font-size:19px;font-weight:900;color:#fff}
-.phero .cap span{display:block;font-size:11.5px;color:#C9CFDC;margin-top:3px}
-.phero .teamtag{position:absolute;top:12px;left:12px;font-size:10px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:4px 12px}
+.phero .cap span{display:block;font-size:14px;color:#C9CFDC;margin-top:3px}
+.phero .teamtag{position:absolute;top:12px;left:12px;font-size:14px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:4px 12px}
 /* 大宇气泡 */
 .dchat{margin:14px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:14px}
 .dchat .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .dchat .head .av{width:46px;height:46px;border-radius:50%;background:url("/static/dayu/assets/avatar-dayu.jpg") center 12%/cover;border:2px solid #EDEBE4;flex:none}
-.dchat .head .tag{background:rgba(201,162,39,.15);border:1px solid #C9A227;color:#F5D9A8;font-size:12px;font-weight:800;padding:4px 12px;border-radius:99px}
-.dchat p{font-size:14px;color:#C9CFDC;line-height:1.7}
+.dchat .head .tag{background:rgba(201,162,39,.15);border:1px solid #C9A227;color:#F5D9A8;font-size:16px;font-weight:800;padding:4px 12px;border-radius:99px}
+.dchat p{font-size:17px;color:#C9CFDC;line-height:1.7}
 .dchat p b{color:#F5D9A8}
-.dchat .go{display:inline-block;margin-top:10px;background:linear-gradient(90deg,#C9A227,#967536);color:#0D111F;font-size:14px;font-weight:900;padding:10px 20px;border-radius:99px;text-decoration:none}
+.dchat .go{display:inline-block;margin-top:10px;background:linear-gradient(90deg,#C9A227,#967536);color:#0D111F;font-size:17px;font-weight:900;padding:10px 20px;border-radius:99px;text-decoration:none}
 /* 输入条 */
-.askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:430px;display:flex;gap:8px;padding:8px 14px;z-index:40}
-.askbar .box{flex:1;background:#171E2E;border:1.5px solid #2A3040;border-radius:99px;padding:11px 16px;font-size:13px;color:#EDEBE4;outline:none}
+.askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);display:flex;gap:8px;padding:8px 14px;z-index:40}
+.askbar .box{flex:1;background:#171E2E;border:1.5px solid #2A3040;border-radius:99px;padding:11px 16px;font-size:16px;color:#EDEBE4;outline:none}
 .askbar .send{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#C9A227,#967536);display:flex;align-items:center;justify-content:center;font-size:18px;color:#0D111F;font-weight:900}
 /* 区块 */
 .sec{margin:18px 18px 0}
-.sec-t{font-size:17px;font-weight:900;margin-bottom:10px;display:flex;align-items:baseline;gap:8px}
-.sec-t small{font-size:10px;color:#8B93A5;font-weight:700}
+.sec-t{font-size:18px;font-weight:900;margin-bottom:10px;display:flex;align-items:baseline;gap:8px}
+.sec-t small{font-size:14px;color:#8B93A5;font-weight:700}
 /* 测试入口 */
 .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tgrid a{background:#131926;border:1.5px solid #2A3040;border-radius:16px;padding:14px;text-decoration:none;color:#EDEBE4;display:flex;gap:10px;align-items:center}
 .tgrid a img{width:44px;height:44px;object-fit:contain}
-.tgrid a b{display:block;font-size:14.5px;font-weight:900}
-.tgrid a span{display:block;font-size:10px;color:#8B93A5;margin-top:2px}
+.tgrid a b{display:block;font-size:17px;font-weight:900}
+.tgrid a span{display:block;font-size:14px;color:#8B93A5;margin-top:2px}
 /* 家长课堂 */
 .kcard{background:#131926;border:1.5px solid #2A3040;border-radius:16px;padding:13px 14px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
 .kcard .ki{width:46px;height:46px;border-radius:12px;flex:none;display:flex;align-items:center;justify-content:center;font-size:24px;background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.35)}
 .kcard .kt{flex:1;min-width:0}
-.kcard .kt b{font-size:14.5px;font-weight:900}
-.kcard .kt span{display:block;font-size:10.5px;color:#8B93A5;margin-top:2px}
-.kcard .kp{font-size:10px;color:#C9A869;font-weight:800;flex:none;text-align:right}
+.kcard .kt b{font-size:17px;font-weight:900}
+.kcard .kt span{display:block;font-size:14px;color:#8B93A5;margin-top:2px}
+.kcard .kp{font-size:14px;color:#C9A869;font-weight:800;flex:none;text-align:right}
 .kcard .kp i{display:block;font-style:normal;height:5px;width:64px;border-radius:99px;background:#232B3D;margin-top:5px;overflow:hidden}
 .kcard .kp i em{display:block;height:100%;background:linear-gradient(90deg,#C9A869,#F5D576)}
 /* 三栏目紧凑入口 */
 .tri{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin:12px 18px 0}
 .tri a{background:#131926;border:1.5px solid #2A3040;border-radius:15px;padding:11px 6px 10px;text-decoration:none;color:#EDEBE4;text-align:center;display:block}
 .tri a img{width:42px;height:42px;object-fit:contain;display:block;margin:0 auto 5px}
-.tri a b{display:block;font-size:13.5px;font-weight:900}
-.tri a span{display:block;font-size:9px;color:#8B93A5;margin-top:2px}
+.tri a b{display:block;font-size:16px;font-weight:900}
+.tri a span{display:block;font-size:12px;color:#8B93A5;margin-top:2px}
 .tri a span.lv{color:#3FB950;font-weight:800}
 /* 对话区 */
 .msgs{margin:14px 18px 0}
 .msg{display:flex;gap:9px;margin-bottom:12px}
 .msg .mav{width:38px;height:38px;border-radius:50%;flex:none;background:url("/static/dayu/assets/avatar-dayu.jpg") center 12%/cover;border:2px solid #EDEBE4}
-.msg .mtx{background:#131926;border:1px solid #2A3040;border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:13.5px;color:#C9CFDC;line-height:1.7;max-width:85%}
+.msg .mtx{background:#131926;border:1px solid #2A3040;border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:16px;color:#C9CFDC;line-height:1.7;max-width:85%}
 .msg .mtx b{color:#F5D9A8}
 /* 底栏 */
-.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:6px 8px;display:flex;justify-content:space-around;z-index:50}
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:6px 8px;display:flex;justify-content:space-around;z-index:50}
 .foot a{text-align:center;color:#8B93A5;font-size:10px;flex:1;text-decoration:none;padding:2px 0}
 .foot a.on{color:#F5D9A8;font-weight:800}
 .foot a img{width:34px;height:34px;object-fit:contain;display:block;margin:0 auto 1px}
@@ -88,7 +88,7 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 
   <div class="ptop">
     <div class="brand">大宇智能体<small>PARENT · 家长版</small></div>
-    <a class="acctbtn" href="index.html">训练账户</a>
+    <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
     <a class="qpill" href="wallet.html" style="margin-left:8px" title="算力额度">⚡<b>120</b><span class="qb"><i></i></span></a>
   </div>
 
@@ -121,9 +121,9 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
       <p style="margin-bottom:10px">新学员请<b style="color:#F5D9A8">先扫码进微信群</b>——群里有值班真人导师、打卡提醒和算力福利。</p>
       <img src="/static/dayu/assets/wx-group-qr.png" alt="微信群二维码" style="width:150px;border-radius:12px;border:1.5px solid rgba(245,213,118,.5)"/>
       <p style="margin-top:9px">📣 邀请好友下载大宇App，<b style="color:#F5D9A8">你和好友各得 200 点算力</b>，上不封顶。</p>
-      <a class="qgo" href="javascript:;" onclick="alert(&#39;群号已复制：DAYU-QUN-3（演示）\n请打开微信 → 添加朋友 → 输入群号进群 ✅&#39;)">一键复制群号 · 微信扫码进群</a>
+      <a class="qgo" href="javascript:;" onclick="alert('群号已复制：DAYU-QUN-3（演示）\n请打开微信 → 添加朋友 → 输入群号进群 ✅')">一键复制群号 · 微信扫码进群</a>
       <a class="qgo" href="wallet.html" style="background:#171E2E;color:#9AD9FF;border:1.5px solid #2E6BE6;margin-top:8px">算力不够？去充值/开会员 ›</a>
-      <a class="qlater" href="javascript:document.getElementById(&#39;qmask&#39;).classList.remove(&#39;show&#39;)">今天不再提醒</a>
+      <a class="qlater" href="javascript:document.getElementById('qmask').classList.remove('show')">今天不再提醒</a>
     </div>
   </div>
   <script>
@@ -142,20 +142,30 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   </div>
 
 </div>
-<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{location.href='parent.html';}};document.body.appendChild(b);})();</script>
-
-
-
 <script>
 (function(){
-  function nav(path){
+  function post(type, extra){
     try{
       if(window.parent && window.parent !== window){
-        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
-        return;
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
       }
     }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    if(path.indexOf('/pages/')===0){
+      try{ location.href = '/#' + path; return; }catch(e){}
+    }
     location.href = path;
+  }
+  var btnStudent = document.getElementById('btnStudent');
+  if(btnStudent){
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
   }
   document.addEventListener('click', function(e){
     var a = e.target.closest && e.target.closest('a');
@@ -163,16 +173,44 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
     var href = a.getAttribute('href') || '';
     if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
     var file = href.split('?')[0].split('#')[0].split('/').pop();
-    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
-    if(map[file] || map[href]){
+    // 已对接页面
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'test.html': '/pages/talent/hub', 'plan.html': '/pages/plan/dayu',
+      'index.html': '__student__'
+    };
+    // 演示入口：暂不跳学生页，避免家长 session 被鉴权踢登录
+    var soon = {
+      'wallet.html': '算力中心即将开放'
+    };
+    if(soon[file]){
       e.preventDefault();
       e.stopPropagation();
-      nav(map[file] || map[href]);
+      if(!post('dayu-toast', {title: soon[file]})){
+        try{ alert(soon[file]); }catch(err){}
+      }
+      return;
+    }
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      // iframe 内走 Vue 路由；直接打开静态页时用同目录 html
+      if(window.parent && window.parent !== window){
+        nav(map[file]);
+      } else {
+        location.href = file;
+      }
     }
   }, true);
-  // personal test expand -> go real talent
-  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
 })();
 </script>
-
 </body></html>

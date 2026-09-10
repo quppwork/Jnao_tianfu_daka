@@ -1,0 +1,395 @@
+﻿<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>天赋社区 · 大宇智能体家长版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{max-width:var(--app-max-width, 480px);margin:0 auto;padding-bottom:96px}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:12px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.acctbtn{display:inline-block;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+/* 频道tab */
+.tabs{display:flex;gap:8px;margin:12px 18px 0}
+.tabs div{flex:1;text-align:center;font-size:16px;font-weight:800;padding:9px 0;border-radius:99px;background:#131926;border:1.5px solid #2A3040;color:#8B93A5;cursor:pointer}
+.tabs div.on{color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-color:transparent}
+/* 打卡横幅 */
+.ckin{margin:12px 18px 0;background:linear-gradient(135deg,rgba(201,162,39,.22),rgba(201,162,39,.05));border:1.5px solid rgba(201,162,39,.5);border-radius:16px;padding:13px 15px;display:flex;align-items:center;gap:10px}
+.ckin .ic{font-size:24px}
+.ckin b{font-size:17px;color:#F5D9A8}
+.ckin span{display:block;font-size:14px;color:#B9C0CF;margin-top:2px}
+.ckin .go{margin-left:auto;flex:none;font-size:16px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:7px 14px;cursor:pointer}
+/* 帖子 */
+.post{margin:12px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:14px}
+.post .ph{display:flex;align-items:center;gap:10px}
+.post .ph .av{width:42px;height:42px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid #2A3040;cursor:pointer}
+.post .ph .nm b{font-size:17px;font-weight:900;cursor:pointer}
+.post .ph .nm span{display:block;font-size:14px;color:#8B93A5;margin-top:1px}
+.post .ph .flw{margin-left:auto;flex:none;font-size:14px;font-weight:800;color:#C9A869;border:1px solid rgba(201,162,39,.5);border-radius:99px;padding:4px 12px}
+.post .pt{margin-top:10px;font-size:16px;color:#D8DCE6;line-height:1.7}
+.post .pt b{color:#F5D9A8}
+.achv{margin-top:10px;background:linear-gradient(135deg,rgba(46,107,230,.16),rgba(46,107,230,.04));border:1.5px solid rgba(46,107,230,.4);border-radius:14px;padding:11px 13px;display:flex;align-items:center;gap:12px}
+.achv .duan{font-size:19px;font-weight:900;color:#9AD9FF;white-space:nowrap}
+.achv .duan small{display:block;font-size:12px;color:#8B93A5;font-weight:700}
+.achv .inf{flex:1;font-size:14px;color:#B9C0CF;line-height:1.5}
+.achv .inf b{color:#D8DCE6}
+.pf-kid.fold .kg{display:none}
+.pf-kid .kt .kfold{float:right;font-size:12px;color:#5A6274;font-weight:800}
+.pf-kid.fold{cursor:pointer}
+.pimg{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid #232B3D;display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px}
+.pimg div{aspect-ratio:1;overflow:hidden;background:#171E2E}
+.pimg div img{width:100%;height:100%;object-fit:cover;display:block}
+/* 视频帖 */
+.pvid{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid #232B3D;position:relative;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:44px;cursor:pointer}
+.pvid .ply{position:absolute;width:56px;height:56px;border-radius:50%;background:rgba(13,17,31,.72);border:2px solid #F5D9A8;display:flex;align-items:center;justify-content:center;font-size:20px;color:#F5D9A8;backdrop-filter:blur(4px)}
+.pvid .dur{position:absolute;right:10px;bottom:8px;font-size:14px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 8px}
+.pvid .vtt{position:absolute;left:10px;bottom:8px;font-size:14px;font-weight:800;color:#F5D9A8;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.acts{display:flex;gap:18px;margin-top:11px;padding-top:10px;border-top:1px dashed #232B3D;font-size:14px;color:#8B93A5}
+.acts span b{color:#C9CFDC;font-weight:800}
+/* 热榜 */
+.hot{margin:16px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:14px}
+.hot .ht{font-size:17px;font-weight:900;margin-bottom:10px}
+.hot .hr{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px dashed #232B3D;font-size:16px}
+.hot .hr:last-child{border-bottom:none}
+.hot .hr .rk{flex:none;width:22px;height:22px;border-radius:7px;background:#232B3D;color:#F5D576;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.hot .hr .tt{flex:1;color:#C9CFDC}
+.hot .hr .vv{font-size:14px;color:#8B93A5}
+/* ===== 关注：头像墙 ===== */
+.fgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px 8px;margin:16px 18px 0}
+.fg{text-align:center;cursor:pointer}
+.fg .av{width:62px;height:62px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:29px;border:2px solid;background:#171E2E;transition:transform .15s}
+.fg:active .av{transform:scale(.93)}
+.av{position:relative}
+.av .tb{position:absolute;right:-5px;bottom:-5px;width:19px;height:19px;border-radius:50%;background:#0D111F;border:1.5px solid #232B3D;z-index:2;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;line-height:1}
+.tchip{display:inline-block;font-size:12px;font-weight:900;border-radius:5px;padding:1px 6px;margin-left:5px;vertical-align:2px}
+.fg b{display:block;font-size:14px;font-weight:800;color:#D8DCE6}
+.fg span{display:block;font-size:12px;color:#8B93A5;margin-top:2px}
+.fg .du{  display:inline-block;margin-top:3px;font-size:12px;font-weight:900;color:#F5D576;border:1px solid rgba(245,213,118,.5);border-radius:6px;padding:0 5px}
+.fnote{margin:16px 18px 0;font-size:14px;color:#8B93A5;text-align:center;line-height:1.7}
+/* ===== 打卡榜 ===== */
+.rkcard{margin:12px 18px 0;background:linear-gradient(165deg,#1A1608,#12100A);border:1.5px solid rgba(201,162,39,.55);border-radius:18px;padding:15px}
+.rkcard .rh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.rkcard .rh b{font-size:17px;color:#F5D9A8}
+.rkcard .rh span{font-size:12px;color:#8B93A5}
+.rkcard .rsub{font-size:14px;color:#B9C0CF;line-height:1.6;margin-bottom:8px}
+.rkcard .rsub b{color:#F5D576}
+.rli{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px dashed rgba(201,162,39,.18);cursor:pointer}
+.rli:last-of-type{border-bottom:none}
+.rli .no{flex:none;width:30px;text-align:center;font-weight:900;font-size:16px;color:#8B93A5}
+.rli.top .no{color:#F5D576}
+.rli .av{width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid #2A3040;background:#171E2E}
+.rli .nm{flex:1;min-width:0}
+.rli .nm b{font-size:16px;font-weight:800;color:#D8DCE6;display:block}
+.rli .nm span{font-size:12px;color:#8B93A5}
+.rli .st{flex:none;text-align:right}
+.rli .st b{font-size:17px;font-weight:900;color:#F5D576}
+.rli .st span{display:block;font-size:12px;color:#8B93A5}
+/* 打卡条生成 */
+.dkc{margin:14px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:15px}
+.dkc .dt{font-size:17px;font-weight:900;margin-bottom:4px}
+.dkc .ds{font-size:14px;color:#8B93A5;line-height:1.6;margin-bottom:12px}
+.dkc .ds b{color:#F5D576}
+.ticket{margin:0 auto;width:300px;border-radius:18px;overflow:hidden;background:linear-gradient(165deg,#2A2110,#171208);border:1.5px solid rgba(245,213,118,.7);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.ticket .th{padding:14px 16px 10px;background:linear-gradient(90deg,rgba(245,213,118,.16),transparent)}
+.ticket .th .tt1{font-size:14px;letter-spacing:2px;color:#C9A869;font-weight:800}
+.ticket .th .tt2{font-size:19px;font-weight:900;color:#F5D9A8;margin-top:2px}
+.ticket .tm{padding:0 16px;display:flex;gap:12px;align-items:center}
+.ticket .tm .duan{font-size:22px;font-weight:900;color:#F5D576;text-shadow:0 0 14px rgba(245,213,118,.45)}
+.ticket .tm .duan small{display:block;font-size:12px;color:#8B93A5;font-weight:700}
+.ticket .tm .kv{flex:1;font-size:14px;color:#B9C0CF;line-height:1.7}
+.ticket .tm .kv b{color:#EDEBE4}
+.ticket .tf{margin-top:12px;padding:11px 16px 13px;border-top:1px dashed rgba(245,213,118,.4);display:flex;align-items:center;gap:12px}
+.ticket .qr{width:56px;height:56px;flex:none;border-radius:8px;background:
+  conic-gradient(#F5D576 25%,#171208 0 50%,#F5D576 0 75%,#171208 0);
+  background-size:14px 14px;position:relative;border:3px solid #F5D576}
+.ticket .qr::after{content:"";position:absolute;inset:19px;background:#171208;border-radius:3px}
+.ticket .lk{flex:1;font-size:12px;color:#B9C0CF;line-height:1.6}
+.ticket .lk b{color:#F5D576;font-size:14px}
+.dkbtn{display:block;margin:13px auto 0;width:300px;text-align:center;font-size:17px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A227);border-radius:99px;padding:12px;cursor:pointer;box-shadow:0 8px 22px rgba(201,162,39,.4)}
+/* 天赋币规则 */
+.coinr{margin:14px 18px 0;background:linear-gradient(135deg,rgba(63,185,80,.12),rgba(63,185,80,.03));border:1.5px solid rgba(63,185,80,.4);border-radius:16px;padding:13px 15px;font-size:14px;color:#B9C0CF;line-height:1.75}
+.coinr b{color:#6FCF8E;font-size:16px}
+.coinr i{font-style:normal;color:#F5D576;font-weight:800}
+/* ===== 个人主页 ===== */
+.back{margin:10px 18px 0;font-size:16px;font-weight:800;color:#8B93A5;cursor:pointer;padding:6px 0}
+.pf-hd{margin:6px 18px 0;background:linear-gradient(160deg,#1A2233,#0E1420 75%);border:1.5px solid #2A3040;border-radius:18px;padding:16px;position:relative}
+.pf-hd .row{display:flex;align-items:center;gap:13px}
+.pf-hd .av{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:29px;border:2px solid #C9A227;background:#171E2E;flex:none}
+.pf-hd b{font-size:18px;font-weight:900}
+.pf-hd .sub{font-size:14px;color:#8B93A5;margin-top:3px}
+.pf-hd .fans{margin-top:8px;font-size:14px;color:#C9A869;font-weight:800}
+.pf-hd .flw{position:absolute;top:14px;right:14px;font-size:14px;font-weight:800;color:#C9A869;border:1px solid rgba(201,162,39,.5);border-radius:99px;padding:5px 13px}
+.pf-kid{margin:12px 18px 0;background:linear-gradient(135deg,rgba(46,107,230,.14),rgba(46,107,230,.03));border:1.5px solid rgba(46,107,230,.4);border-radius:16px;padding:13px 15px}
+.pf-kid .kt{font-size:16px;font-weight:900;color:#9AD9FF;margin-bottom:8px}
+.pf-kid .kg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pf-kid .kg div{background:rgba(13,17,31,.5);border-radius:11px;padding:9px 11px}
+.pf-kid .kg b{font-size:17px;font-weight:900;color:#D8DCE6}
+.pf-kid .kg span{display:block;font-size:12px;color:#8B93A5;margin-top:2px}
+.pf-sec{margin:16px 18px 0;font-size:16px;font-weight:900;color:#EDEBE4}
+.pf-sec span{font-size:14px;color:#5E6B84;font-weight:700;margin-left:6px}
+/* fab/foot */
+.fab{position:fixed;right:18px;bottom:86px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#F5D576,#C9A227);color:#0D111F;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(201,162,39,.45);z-index:40}
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:6px 8px;display:flex;justify-content:space-around;z-index:50}
+.foot a{text-align:center;color:#8B93A5;font-size:10px;flex:1;text-decoration:none;padding:2px 0}
+.foot a.on{color:#F5D9A8;font-weight:800}
+.foot a img{width:34px;height:34px;object-fit:contain;display:block;margin:0 auto 1px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">天赋社区<small>TALENT COMMUNITY</small></div>
+    <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <div class="on" data-v="feed">推荐</div><div data-v="follow">关注</div><div data-v="daka">打卡</div><div data-v="qna">问答</div>
+  </div>
+
+  <div id="view"></div>
+
+  <div class="fab" id="fab">＋</div>
+
+  <div class="foot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a class="on" href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+
+</div>
+<script>
+/* ================= 数据 ================= */
+const MOMS={
+ yinuo:{talent:'win',name:'一诺妈妈',ic:'🧑',c:'#9AD9FF',kid:'刘一诺',duan:'融通期·八段',mins:356,rate:94,streak:46,fans:1204,rank:1,
+  posts:[{time:'昨天 · 成果展示',t:'女儿拿下<b>融通期·八段</b>！全国段位榜第4名🎉 等级不算最高，但段位是真的硬。晒一下她的训练日历，密密麻麻都是坚持。',achv:{d:'融通期·八段',x:'<b>刘一诺</b> 通过八段考核<br>全国段位榜 · 第 4 名'},video:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/hall/win2.png) center/cover no-repeat',ic:'🏆',tt:'八段考核现场全记录',dur:'01:18'},likes:1204,cmts:156},
+        {time:'3天前 · 天赋打卡',t:'打卡第44天。今天练影像追忆，她把整页《兰亭序》的帖"拍"进了脑子里，当场默出三分之一。<b>双功法合用真的猛</b>。',likes:863,cmts:92}]},
+ zihan:{talent:'study',name:'梓涵妈妈',ic:'👩',c:'#FF9EBB',kid:'王梓涵',duan:'开窍期·五段',mins:341,rate:92,streak:39,fans:856,rank:2,
+  posts:[{time:'今天 · 天赋打卡',t:'五段考核通过🎉 考"错位取词"的时候我在门外比她还紧张。出来第一句话：妈，<b>我不怕错位了，我会重新排队</b>。',achv:{d:'开窍期·五段',x:'<b>王梓涵</b> 通过五段考核<br>全国段位榜 · 第 7 名'},likes:654,cmts:78}]},
+ keyin:{talent:'think',name:'可欣妈妈',ic:'👩‍🦱',c:'#6FCF8E',kid:'孙可欣',duan:'开窍期·六段',mins:298,rate:90,streak:33,fans:622,rank:3,
+  posts:[{time:'昨天 · 天赋打卡',t:'六段关口"残影调取"卡了五天，今天突然通了。经验：<b>卡住别硬冲，回头复习前一天的内容</b>，残影自己会浮上来。',likes:512,cmts:64}]},
+ yuchen:{talent:'act',name:'雨晨妈妈',ic:'👩',c:'#6FCF8E',kid:'张雨晨',duan:'筑基期·三段',mins:312,rate:91,streak:21,fans:328,rank:4,
+  posts:[{time:'3小时前 · 天赋打卡',t:'坚持扫描速记第21天！今天孩子第一次主动说"妈妈我不用读第二遍了"😭 从一行读三遍到一页吸一遍，<b>段位从一段升到三段</b>，老母亲热泪盈眶。感谢田小静老师的"不许懂"心法！',achv:{d:'筑基期·三段',x:'<b>张雨晨</b> 完成「吸照大法」第6关<br>本周训练 312 分钟 · 有效率 91%'},imgs:['/static/dayu/assets/post-kid1.jpg','/static/dayu/assets/post-kid3.jpg','/static/dayu/assets/post-kid2.jpg'],video:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/hall/study1.png) center/cover no-repeat',ic:'🎬',tt:'孩子扫描速记训练实拍',dur:'00:42'},likes:328,cmts:46},
+        {time:'2天前 · 天赋打卡',t:'第19天。今天翻车了——五秒钟一页，他光顾着"想"，一个字没吸进去。田老师说得对：<b>想，就输了</b>。明天继续练"脑子闭嘴"。',likes:186,cmts:23}]},
+ haoran:{talent:'virtue',name:'浩然妈妈',ic:'👩‍🦰',c:'#F5D576',kid:'吴浩然',duan:'融通期·七段',mins:265,rate:87,streak:18,fans:405,rank:5,
+  posts:[{time:'今天 · 天赋打卡',t:'七段的"极速运算"关，孩子用太极神功的借力思路把进位拆了，<b>40秒做完100题</b>。功法真是越练越通。',likes:289,cmts:31}]},
+ zimo:{talent:'study',name:'子墨爸爸',ic:'👨',c:'#F5D576',kid:'周子墨',duan:'筑基期·三段',mins:276,rate:88,streak:14,fans:215,rank:6,
+  posts:[{time:'5小时前 · 家长课堂',kid:0,t:'听完家长课堂《亲子关系》第4讲"懂孩子的天赋语言"——原来我家<b>思者型</b>孩子不是"磨蹭"，是在脑内推演。换了个问法，今晚作业效率高了一倍。家长们，先懂孩子，再管孩子。',likes:215,cmts:38},
+        {time:'今天 · 天赋打卡',t:'打卡第14天。昨晚试了余峰导师留言教的"三错一讲"游戏，让他当小老师给我讲错题，<b>讲着讲着他自己发现错哪了</b>，神仙方法！',likes:173,cmts:29}]},
+ siyuan:{talent:'win',name:'思远爸爸',ic:'🧔',c:'#B8C0D0',kid:'陈思远',duan:'开窍期·四段',mins:243,rate:85,streak:12,fans:198,rank:7,
+  posts:[{time:'昨天 · 天赋打卡',t:'男孩坐不住？呼吸打坐从3分钟开始，一周后能坐12分钟。<b>静功夫是练出来的，不是骂出来的</b>。',imgs:['/static/dayu/assets/post-kid2.jpg','/static/dayu/assets/post-kid3.jpg'],likes:145,cmts:18}]},
+ zeyan:{talent:'think',name:'泽言妈妈',ic:'👱‍♀️',c:'#9AD9FF',kid:'李泽言',duan:'筑基期·二段',mins:231,rate:83,streak:9,fans:167,rank:8,
+  posts:[{time:'3天前 · 天赋打卡',t:'等级Lv.21全班最高，段位却只有二段——<b>刷时长不等于长段位</b>，这个教训值千金。调整策略：减量提质。',likes:402,cmts:88}]},
+ qiming:{talent:'act',name:'启铭爸爸',ic:'👨‍🦳',c:'#6FCF8E',kid:'赵启铭',duan:'筑基期·一段',mins:198,rate:80,streak:6,fans:89,rank:9,
+  posts:[{time:'今天 · 天赋打卡',t:'新手上路第6天。孩子问"爸爸你为什么也打卡"，我说<b>你练段位，我练耐心</b>。父子局，谁也别输。',likes:96,cmts:12}]},
+ xiaoman:{talent:'virtue',name:'小满妈妈',ic:'👩‍🦳',c:'#FF9EBB',kid:'林小满',duan:'开窍期·五段',mins:210,rate:86,streak:4,fans:134,rank:10,
+  posts:[{time:'昨天 · 天赋打卡',t:'断档归来，重新出发。社区的妈妈们太卷了，<b>但卷得暖心</b>——掉队了有人拉，进步了有人夸。',likes:121,cmts:26}]},
+};
+/* 五者天赋（与成人测试统一）：颜色TC + 图标TP */
+const TC={win:'#E05252',think:'#3E8E5A',virtue:'#A0754A',act:'#C9A227',study:'#4A7EC2'};
+const TN2={win:'赢者',think:'思者',virtue:'德者',act:'行者',study:'学者'};
+const TP={win:'/static/dayu/assets/pixel-win-t.png',think:'/static/dayu/assets/pixel-think-t.png',virtue:'/static/dayu/assets/pixel-virtue-t.png',act:'/static/dayu/assets/pixel-act-t.png',study:'/static/dayu/assets/pixel-study-t.png'};
+const TN1={win:'赢',think:'思',virtue:'德',act:'行',study:'学'};
+function tbadge(m){const tc=TC[m.talent];return `<span class="tb" style="border-color:${tc};color:${tc}" title="${TN2[m.talent]}天赋">${TN1[m.talent]}</span>`}
+function avHTML(m,cls){const tc=TC[m.talent];return `<div class="av ${cls||''}" style="border-color:${tc};background:${tc}14">${m.ic}${tbadge(m)}</div>`}
+/* 我（当前用户） */
+const ME={name:'我（张无忌的家长）',kid:'张无忌',duan:'筑基期·三段',streak:21,support:68,goal:100,coin:136};
+
+/* ================= 视图渲染 ================= */
+const V=document.getElementById('view');
+let curV='feed';
+
+function postHTML(id,p){
+  const m=MOMS[id];
+  return `<div class="post">
+    <div class="ph"><div onclick="goProfile('${id}')" style="display:contents">${avHTML(m)}</div>
+      <div class="nm"><b onclick="goProfile('${id}')">${m.name}</b><span>${p.time}</span></div><span class="flw">+ 关注</span></div>
+    <div class="pt">${p.t}</div>
+    ${p.achv&&p.kid!==0?`<div class="achv"><div class="duan">${p.achv.d}<small>超脑段位</small></div><div class="inf">${p.achv.x}</div></div>`:''}
+    ${p.imgs?`<div class="pimg">${p.imgs.map(e=>`<div><img src="${e}" alt="孩子在家训练照片" loading="lazy"></div>`).join('')}</div>`:''}
+    ${p.video?`<div class="pvid" style="background:${p.video.bg}"><span style="opacity:.9">${p.video.ic}</span><span class="ply">▶</span><span class="vtt">${p.video.tt}</span><span class="dur">${p.video.dur}</span></div>`:''}
+    <div class="acts"><span>👍 <b>${p.likes}</b></span><span>💬 <b>${p.cmts}</b></span><span>↗ 分享</span></div>
+  </div>`;
+}
+
+function vFeed(){
+  V.innerHTML=`
+  <div class="ckin"><span class="ic">📸</span><div><b>今日打卡 · 第 ${ME.streak} 天</b><span>晒晒孩子的训练瞬间，攒天赋值+5</span></div><span class="go" onclick="goV('daka')">去打卡</span></div>
+  ${postHTML('yuchen',MOMS.yuchen.posts[0])}
+  ${postHTML('zimo',MOMS.zimo.posts[0])}
+  <div class="hot"><div class="ht">🔥 社区热榜</div>
+    <div class="hr"><span class="rk">1</span><span class="tt">段位考核现场直击：九段之下皆修行</span><span class="vv">2.1w 围观</span></div>
+    <div class="hr"><span class="rk">2</span><span class="tt">「三错一讲」家庭实操经验合集</span><span class="vv">1.6w 围观</span></div>
+    <div class="hr"><span class="rk">3</span><span class="tt">等级Lv.20却卡在三段？段位才是硬通货</span><span class="vv">1.2w 围观</span></div>
+    <div class="hr"><span class="rk">4</span><span class="tt">大书道体验课：一支笔让孩子静下来</span><span class="vv">9860 围观</span></div>
+  </div>
+  ${postHTML('yinuo',MOMS.yinuo.posts[0])}`;
+}
+
+function vFollow(){
+  V.innerHTML=`<div class="fgrid">`
+    +Object.entries(MOMS).map(([id,m])=>`
+      <div class="fg" onclick="goProfile('${id}')">
+        ${avHTML(m)}
+        <b>${m.name}</b><span>${m.kid} · ${m.fans}粉丝</span><span class="du">${m.duan}</span>
+      </div>`).join('')
+  +`</div><div class="fnote">点头像进入TA的主页——看TA的分享、留言历史<br>和TA家孩子的训练数据</div>`;
+}
+
+function vDaka(){
+  const rows=Object.entries(MOMS).sort((a,b)=>a[1].rank-b[1].rank).map(([id,m],i)=>`
+    <div class="rli ${i<3?'top':''}" onclick="goProfile('${id}')">
+      <span class="no">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</span>
+      ${avHTML(m)}
+      <div class="nm"><b>${m.name}</b><span>${m.kid} · ${m.duan}</span></div>
+      <div class="st"><b>${m.streak}</b><span>连续打卡(天)</span></div>
+    </div>`).join('');
+  V.innerHTML=`
+  <div class="rkcard">
+    <div class="rh"><b>🏆 优秀妈妈打卡榜</b><span>每周一 0 点刷新</span></div>
+    <div class="rsub">完成当日能力训练并认真打卡的妈妈上榜。<b>点任意一位</b>，进她的主页学她的打卡记录——每一位都是一堂课。</div>
+    ${rows}
+  </div>
+  <div class="dkc">
+    <div class="dt">🎫 我的打卡条</div>
+    <div class="ds">完成今日训练即可生成打卡条图片——<b>发朋友圈、发微信群</b>，链接自带你的专属码：</div>
+    <div class="ticket">
+      <div class="th"><div class="tt1">DAYU TALENT · 天赋打卡</div><div class="tt2">坚持打卡 · 第 ${ME.streak} 天</div></div>
+      <div class="tm"><div class="duan">${ME.duan}<small>我家孩子的段位</small></div>
+        <div class="kv"><b>${ME.kid}</b> 今日完成能力训练<br>连续 ${ME.streak} 天 · 邀你为我点赞支持 💪</div></div>
+      <div class="tf"><div class="qr"></div><div class="lk">扫码或点链接支持我<br><b>dayu.ai/k/ZWJ821</b><br>已有 <b>${ME.support}</b> 人支持 · 满 ${ME.goal} 人解锁奖励</div></div>
+    </div>
+    <span class="dkbtn" onclick="alert('打卡条已生成 ✅\\n\\n图片已保存到相册（演示）\\n可分享到微信朋友圈 / 微信群\\n链接：dayu.ai/k/ZWJ821')">📤 生成打卡条 · 分享</span>
+  </div>
+  <div class="coinr">💰 <b>支持奖励规则</b><br>① 朋友点开你的打卡条链接点赞=1个支持；② 支持满 <i>${ME.goal}人</i>：每位支持者<b>免费领 1 节体验课</b>，你获得 <i>200 天赋币</i>；③ 天赋币是平台虚拟货币，<i>1 币 = 1 元</i>，直接抵扣课程费、线下大课门票——分享越多，赚得越多。当前我的天赋币：<i>${ME.coin} 币</i></div>`;
+}
+
+function vQna(){
+  V.innerHTML=`
+  <div class="post"><div class="ph"><div class="av" style="background:rgba(201,162,39,.12)">🎓</div><div class="nm"><b>大宇智能体</b><span>社区问答 · 每日精选</span></div></div>
+    <div class="pt">今日高频问题：<b>"等级高为什么段位低？"</b><br><br>等级=训练量的积累（刷时长就涨）；段位=能力的考核认证（过不了关就不授段）。所以Lv.21可能只有二段，Lv.4也能是九段。<b>段位才是硬通货</b>。</div>
+    <div class="acts"><span>👍 <b>892</b></span><span>💬 <b>134</b></span><span>↗ 分享</span></div></div>
+  <div class="post"><div class="ph"><div class="av" style="background:rgba(111,207,142,.12)">👩</div><div class="nm"><b>泽言妈妈</b><span>提问 · 2小时前</span></div></div>
+    <div class="pt">孩子冲四段，考核要过"开窍期"门槛，最近训练有点急躁怎么办？</div>
+    <div class="pt" style="margin-top:8px;background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.3);border-radius:12px;padding:10px 12px"><b>田小静导师（真人）：</b>不加量，做"减量复习"。考核考的是稳定性不是冲刺，把已过关卡每天过一遍即可。</div>
+    <div class="acts"><span>👍 <b>356</b></span><span>💬 <b>58</b></span><span>↗ 分享</span></div></div>`;
+}
+
+function goProfile(id){
+  const m=MOMS[id];
+  V.innerHTML=`
+  <div class="back" onclick="goV(curV)">‹ 返回</div>
+  <div class="pf-hd">
+    <div class="row">${avHTML(m)}
+      <div><b>${m.name}<span class="tchip" style="color:${TC[m.talent]};border:1px solid ${TC[m.talent]};background:${TC[m.talent]}14">${TN2[m.talent]}天赋</span></b><div class="sub">${m.kid}的家长 · 打卡榜第 ${m.rank} 名</div><div class="fans">粉丝 ${m.fans} · 连续打卡 ${m.streak} 天</div></div></div>
+    <span class="flw">+ 关注</span>
+  </div>
+  <div class="pf-kid fold" onclick="this.classList.toggle('fold')">
+    <div class="kt">📊 TA家孩子的训练数据<span class="kfold">点开查看 ▾</span></div>
+    <div class="kg">
+      <div><b style="color:#F5D576">${m.duan}</b><span>超脑段位</span></div>
+      <div><b>${m.mins}′</b><span>本周训练时长</span></div>
+      <div><b>${m.rate}%</b><span>本周有效率</span></div>
+      <div><b>${m.streak} 天</b><span>连续打卡</span></div>
+    </div>
+  </div>
+  <div class="pf-sec">📒 TA的分享与打卡记录<span>${m.posts.length} 条 · 学习TA的经验</span></div>
+  ${m.posts.map(p=>postHTML(id,p)).join('')}`;
+  window.scrollTo(0,0);
+}
+
+function goV(v){
+  curV=v;
+  document.querySelectorAll('#tabs div').forEach(d=>d.classList.toggle('on',d.dataset.v===v));
+  document.getElementById('fab').style.display=(v==='feed')?'flex':'none';
+  if(v==='feed')vFeed(); else if(v==='follow')vFollow(); else if(v==='daka')vDaka(); else vQna();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('#tabs div').forEach(d=>d.onclick=()=>goV(d.dataset.v));
+vFeed();
+</script>
+
+
+
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  var btnStudent = document.getElementById('btnStudent');
+  if(btnStudent){
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.querySelectorAll('a.acctbtn[href="index.html"]').forEach(function(a){
+    a.setAttribute('href','javascript:;');
+    a.id = a.id || 'btnStudent';
+  });
+  // re-bind if we just set id
+  btnStudent = document.getElementById('btnStudent');
+  if(btnStudent && !btnStudent._bound){
+    btnStudent._bound = 1;
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'kids-manage.html': '/pages/parent/index',
+      'index.html': '__student__'
+    };
+    var soon = {
+      'wallet.html': '算力中心即将开放',
+      'records.html': '测试报告即将开放',
+      'share.html': '分享推广即将开放',
+      'career.html': '招贤纳士即将开放',
+      'console.html': '业务平台即将开放',
+      'test.html': '天赋测试即将开放',
+      'milestone.html': '中央电脑即将开放'
+    };
+    if(soon[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(!post('dayu-toast', {title: soon[file]})){ try{ alert(soon[file]); }catch(err){} }
+      return;
+    }
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      nav(map[file]);
+    }
+  }, true);
+})();
+</script>
+</body></html>

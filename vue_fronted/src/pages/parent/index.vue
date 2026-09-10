@@ -146,9 +146,8 @@ import {
   createParentChild,
   updateParentChild,
   ensureParentAccountReady,
-  invalidatePageAuthCache,
 } from '@/utils/userApi.js'
-import { prepareRoleLoginEntry } from '@/utils/appSession.js'
+import { goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
 import { validatePasswordClient } from '@/utils/passwordPolicy.js'
 
 const showSettings = ref(false)
@@ -366,9 +365,7 @@ function doLogout() {
 }
 
 function goToStudentLogin() {
-  prepareRoleLoginEntry('student')
-  invalidatePageAuthCache()
-  uni.redirectTo({ url: '/pages/login/index?role=student' })
+  goLinkedStudentHome()
 }
 </script>
 

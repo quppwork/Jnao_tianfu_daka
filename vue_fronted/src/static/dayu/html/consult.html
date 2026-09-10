@@ -1,0 +1,276 @@
+﻿<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>在线咨询 · 大宇智能体家长版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{max-width:var(--app-max-width, 480px);margin:0 auto;padding-bottom:130px}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:9px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.acctbtn{display:inline-block;font-size:11.5px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+/* 智能体选择 */
+.agents{display:flex;gap:10px;overflow-x:auto;padding:12px 18px 4px;scrollbar-width:none}
+.agents::-webkit-scrollbar{display:none}
+.ag{flex:none;width:76px;text-align:center;cursor:pointer}
+.ag .av{width:56px;height:56px;border-radius:50%;margin:0 auto 5px;border:2px solid #2A3040;display:flex;align-items:center;justify-content:center;font-size:26px;background:#171E2E;position:relative;transition:border-color .2s}
+.ag.on .av{border-color:#C9A227;box-shadow:0 0 14px rgba(201,162,39,.4)}
+.ag .av i{position:absolute;right:0;bottom:0;width:13px;height:13px;border-radius:50%;background:#3FB950;border:2px solid #0D111F;z-index:2}
+.ag span{font-size:10.5px;color:#8B93A5;font-weight:700;display:block}
+.ag.on span{color:#F5D9A8}
+/* 真人/AI 身份标记 + 擅长领域 */
+.ag .tp{position:absolute;top:-6px;left:-8px;z-index:3;font-size:8px;font-weight:900;border-radius:99px;padding:2px 7px;font-style:normal}
+.ag .tp.ai{color:#9AD9FF;background:rgba(46,107,230,.25);border:1px solid #2E6BE6}
+.ag .tp.rl{color:#0D111F;background:linear-gradient(90deg,#6FCF8E,#3FB950)}
+.ag .sk{display:block;font-size:8.5px;color:#5A6274;margin-top:2px;font-weight:700;line-height:1.3}
+.ag.on .sk{color:#C9A869}
+/* 有留言的头像：闪动+金圈脉冲 */
+.ag.pulse .av{border-color:#F5D576;animation:agp 1.4s ease-in-out infinite}
+.ag.pulse .av::after{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid rgba(245,213,118,.8);animation:ring 1.4s ease-out infinite}
+.ag.pulse .av::before{content:"留言";position:absolute;top:-8px;right:-10px;z-index:3;font-size:8px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:2px 7px;animation:agp 1.4s ease-in-out infinite}
+@keyframes agp{50%{transform:scale(1.07)}}
+@keyframes ring{0%{transform:scale(.85);opacity:1}100%{transform:scale(1.35);opacity:0}}
+/* 群信息条 */
+.gbar{margin:10px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:14px;padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:11px;color:#8B93A5}
+.gbar b{color:#D8DCE6;font-size:12.5px}
+.gbar .live{margin-left:auto;color:#3FB950;font-weight:800}
+/* 值班导师·真人 */
+.duty{margin:10px 18px 0;display:flex;align-items:center;gap:11px;background:linear-gradient(135deg,rgba(224,82,82,.14),rgba(224,82,82,.03));border:1.5px solid rgba(224,82,82,.5);border-radius:16px;padding:11px 13px}
+.duty .dav{width:48px;height:48px;border-radius:50%;border:2px solid #E05252;flex:none;background:#171E2E url('/static/dayu/assets/avatar-chinese.jpg') center/cover;position:relative}
+.duty .dav .tb{position:absolute;right:-4px;bottom:-4px;width:21px;height:21px;border-radius:50%;background:#0D111F;border:1.5px solid #E05252;color:#E05252;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;z-index:2}
+.msg .av{position:relative}
+.msg .av .tb{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:#0D111F;border:1.5px solid;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:900;line-height:1;z-index:2}
+.duty .dinf{flex:1;min-width:0}
+.duty .dinf b{font-size:14px;font-weight:900;color:#D8DCE6}
+.duty .dinf b i{font-style:normal;font-size:9px;color:#F08A8A;border:1px solid rgba(224,82,82,.6);border-radius:5px;padding:1px 6px;margin-left:5px}
+.duty .dinf span{display:block;font-size:10px;color:#8B93A5;margin-top:2px}
+.duty .dbtn{flex:none;font-size:12px;font-weight:900;color:#fff;background:linear-gradient(90deg,#F08A8A,#E05252);border-radius:99px;padding:8px 15px;text-decoration:none}
+/* 对话区标题 */
+.cv-t{margin:14px 18px 8px;font-size:12px;font-weight:800;color:#8B93A5;display:flex;align-items:center;gap:8px}
+.cv-t b{color:#F5D9A8;font-size:13.5px}
+/* 消息流 */
+.msgs{margin:0 18px}
+.msg{display:flex;gap:9px;margin-bottom:14px}
+.msg .av{width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid}
+.msg .bd{max-width:80%}
+.msg .who{font-size:10.5px;color:#8B93A5;margin-bottom:3px}
+.msg .who i{font-style:normal;font-size:9px;border:1px solid;border-radius:5px;padding:0 6px;margin-left:5px}
+.msg .tx{background:#171E2E;border:1px solid #2A3040;border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:13px;color:#D8DCE6;line-height:1.65}
+.msg .tx b{color:#F5D9A8}
+.msg.me{flex-direction:row-reverse}
+.msg.me .tx{background:linear-gradient(135deg,#C9A227,#967536);border:none;border-radius:14px 4px 14px 14px;color:#0D111F}
+.msg.me .who{text-align:right}
+.sys{text-align:center;font-size:10px;color:#5A6274;margin:12px 0}
+.sys i{font-style:normal;background:#131926;border:1px solid #232B3D;border-radius:99px;padding:4px 12px}
+/* 留言板（归属当前智能体） */
+.board{margin:4px 18px 0;background:#131926;border:1.5px solid rgba(201,162,39,.4);border-radius:16px;padding:13px}
+.board .bt{font-size:14px;font-weight:900;margin-bottom:10px;color:#F5D9A8}
+.board .bt span{font-size:10px;color:#8B93A5;font-weight:700;margin-left:6px}
+.bmsg{margin-bottom:10px}
+.bq{font-size:12px;color:#D8DCE6;background:#171E2E;border:1px solid #2A3040;border-radius:4px 12px 12px 12px;padding:9px 12px;line-height:1.6}
+.bq b{color:#9AD9FF}
+.bq small{display:block;font-size:9px;color:#5A6274;margin-top:4px}
+.ba{font-size:12px;color:#E8DFC8;background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.3);border-radius:12px 4px 12px 12px;padding:9px 12px;line-height:1.6;margin-top:6px;margin-left:18px}
+.ba b{color:#F5D9A8}
+.ba small{display:block;font-size:9px;color:#8B93A5;margin-top:4px}
+.bin{display:flex;gap:8px;margin-top:6px}
+.bin input{flex:1;background:#0D111F;border:1.5px solid #2A3040;border-radius:99px;padding:9px 14px;font-size:12px;color:#EDEBE4;outline:none}
+.bin span{flex:none;font-size:12px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:9px 16px}
+/* 快捷问题 */
+.qs{display:flex;gap:8px;overflow-x:auto;padding:14px 18px 10px;scrollbar-width:none}
+.qs::-webkit-scrollbar{display:none}
+.qs span{flex:none;font-size:11.5px;color:#9AD9FF;background:rgba(46,107,230,.12);border:1px solid rgba(46,107,230,.45);border-radius:99px;padding:7px 13px}
+/* 输入条 */
+.inpbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);display:flex;gap:8px;padding:8px 14px;background:rgba(13,17,31,.9);backdrop-filter:blur(10px);z-index:40}
+.inpbar .box{flex:1;background:#171E2E;border:1.5px solid #2A3040;border-radius:99px;padding:11px 16px;font-size:13px;color:#EDEBE4;outline:none}
+.inpbar .send{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#C9A227,#967536);display:flex;align-items:center;justify-content:center;font-size:18px;color:#0D111F;font-weight:900}
+/* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:6px 8px;display:flex;justify-content:space-around;z-index:50}
+.foot a{text-align:center;color:#8B93A5;font-size:10px;flex:1;text-decoration:none;padding:2px 0}
+.foot a.on{color:#F5D9A8;font-weight:800}
+.foot a img{width:34px;height:34px;object-fit:contain;display:block;margin:0 auto 1px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">在线咨询<small>CONSULT · 智能体×社群</small></div>
+    <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+  </div>
+
+  <div class="agents" id="agRow"></div>
+
+  <div class="gbar"><b>天赋家长交流群 · 3群</b><span>群成员 486</span><span class="live">● 128 人在线</span></div>
+
+  <div class="duty">
+    <div class="dav"><span class="tb" title="赢者天赋">赢</span></div>
+    <div class="dinf"><b>秦念国导师 <i>真人 · 今日值班</i></b><span>赢者天赋 · 国学与表达 · 1 对 1 在线</span></div>
+    <a class="dbtn" href="javascript:;" onclick="alert(&#39;正在为你接通 秦念国导师（真人）…\n\n1 对 1 视频/语音通道接入中，敬请期待 ✨&#39;)">直接对话 ›</a>
+  </div>
+
+  <div class="cv-t" id="cvT"></div>
+  <div class="msgs" id="cvMsgs"></div>
+  <div id="cvBoard"></div>
+
+  <div class="qs"><span>段位怎么冲刺？</span><span>孩子不爱训练怎么办？</span><span>家长课程怎么报名？</span><span>天赋报告怎么看？</span></div>
+
+  <div class="inpbar"><input class="box" id="inp" placeholder="发消息…"/><div class="send" onclick="sendMsg()">➤</div></div>
+
+  <div class="foot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a class="on" href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+
+</div>
+<script>
+/* 智能体配置：board=该智能体的留言板（有留言→头像闪动） */
+const AG={
+ dayu:{name:'大宇智能体',tag:'AI·总协调',tp:'AI',sk:'天赋总纲·数据解读',ic:'🎓',c:'#C9A227',board:0,
+  msgs:[
+   {w:'大宇智能体',b:'AI',t:'各位家长晚上好！今晚 20:00 群内有<b>张宇老师团队·真人答疑</b>活动，主题：「段位冲刺期，家长该做什么」。有问题可以提前丢给我汇总。'},
+   {w:'雨晨妈妈',t:'@大宇智能体 孩子三段冲四段，考核要过"开窍期"门槛，最近训练有点急躁怎么办？',c:'#6FCF8E',ic:'👩',tb:'思',tc:'#3E8E5A'},
+   {w:'大宇智能体',b:'AI',t:'@雨晨妈妈 已调取雨晨近14天数据：训练时长稳定但<b>有效率从91%降到83%</b>，属于典型的"冲段焦虑"。建议：① 三天内不加量，只做复习关；② 今晚家长课堂《亲子关系》第6讲正好是"冲段期的情绪陪伴"，推荐您听。'},
+   {me:1,t:'@大宇智能体 帮我分析一下我家孩子最近的训练数据'},
+   {w:'大宇智能体',b:'AI',t:'好的，已为您生成简报：本周训练 <b>286分钟</b>，有效率 <b>89%</b>，超脑阅读进步最快（+18%）。详细图表在「数据分析」页，我已在重点项上做了标注 📊'},
+  ]},
+ sizhe:{name:'思者顾问',tag:'AI·思维与创造',tp:'AI',sk:'思维训练·创造力',ic:'🧠',c:'#9AD9FF',board:0,
+  msgs:[{w:'思者顾问',b:'AI',t:'您好，我是思者顾问 🧠 孩子的<b>思维训练、创造力培养、AI指挥官课程</b>相关问题，都可以问我。'}]},
+ yingzhe:{name:'赢者顾问',tag:'AI·目标与表达',tp:'AI',sk:'目标管理·表达力',ic:'🏆',c:'#F5D576',board:0,
+  msgs:[{w:'赢者顾问',b:'AI',t:'您好，我是赢者顾问 🏆 <b>目标管理、表达力、无界外语、超脑阅读</b>方面的问题，我在这儿等您。'}]},
+ dezhe:{name:'德者顾问',tag:'AI·品德与心性',tp:'AI',sk:'情绪心性·高效作业',ic:'🌿',c:'#6FCF8E',board:0,
+  msgs:[{w:'德者顾问',b:'AI',t:'您好，我是德者顾问 🌿 孩子的<b>情绪、心性、高效作业、大书道</b>相关问题，慢慢来，我们一起看。'}]},
+ xingzhe:{name:'行者顾问',tag:'AI+田小静真人·记忆与行动',tp:'真人',sk:'扫描速记·影像追忆',ic:'🚶',c:'#FF9EBB',board:1,
+  boardBy:'田小静导师（真人）',
+  msgs:[{w:'行者顾问',b:'AI',t:'您好，我是行者顾问 🚶 <b>扫描速记、影像追忆、记忆力训练</b>的问题问我。您有一条<b>田小静导师的留言回复</b>，见下方留言板 👇'}],
+  boardMsgs:[
+   {q:'雨晨妈妈：段位考核前一周，训练要加量吗？',qt:'今天 09:42',
+    a:'不加量，做"减量复习"。考核考的是稳定性不是冲刺，把已过关卡每天过一遍即可。',at:'今天 10:15 回复'}]},
+ xuezhe:{name:'学者顾问',tag:'AI+余峰真人·方法与考核',tp:'真人',sk:'三错一讲·段位考核',ic:'📚',c:'#B8C0D0',board:1,
+  boardBy:'余峰导师（真人）',
+  msgs:[{w:'学者顾问',b:'AI',t:'您好，我是学者顾问 📚 <b>学习方法、三错一讲、段位考核</b>的问题问我。您有一条<b>余峰导师的留言回复</b>，见下方留言板 👇'}],
+  boardMsgs:[
+   {q:'子墨爸爸：孩子睡前不肯复盘错题，一讲就烦，有什么好办法？',qt:'昨天 21:14',
+    a:'把"讲错题"改成"三错一讲"游戏——让孩子当小老师给你讲，讲错你也不纠正，他自己会发现。今晚试试，明晚来留言告诉我效果。',at:'昨天 22:03 回复'}]},
+};
+let cur='dayu';
+const read={}; /* 已读后不再闪动 */
+
+function renderRow(){
+  document.getElementById('agRow').innerHTML=Object.entries(AG).map(([k,a])=>{
+    const pulse=a.board&&!read[k]?' pulse':'';
+    const tp=a.tp==='真人'?'<em class="tp rl">真人</em>':'<em class="tp ai">AI</em>';
+    return `<div class="ag${k===cur?' on':''}${pulse}" onclick="pick('${k}')"><div class="av">${tp}${a.ic}<i></i></div><span>${a.name}</span><span class="sk">${a.sk}</span></div>`;
+  }).join('');
+}
+function renderConv(){
+  const a=AG[cur];
+  document.getElementById('cvT').innerHTML=`正在与 <b>${a.name}</b> 对话 · <span>${a.tag}</span>`;
+  document.getElementById('cvMsgs').innerHTML=a.msgs.map(m=>{
+    if(m.me)return `<div class="msg me"><div class="bd"><div class="who">我</div><div class="tx">${m.t}</div></div></div>`;
+    const c=m.c||(m.b==='AI'?'#EDEBE4':a.c), ic=m.ic||a.ic;
+    return `<div class="msg"><div class="av" style="border-color:${c};background:${c}18">${ic}${m.tb?`<span class="tb" style="border-color:${m.tc||c};color:${m.tc||c}">${m.tb}</span>`:''}</div><div class="bd"><div class="who">${m.w}${m.b?`<i>${m.b}</i>`:''}</div><div class="tx">${m.t}</div></div></div>`;
+  }).join('');
+  const bd=document.getElementById('cvBoard');
+  if(a.board&&a.boardMsgs){
+    bd.innerHTML=`<div class="board"><div class="bt">📝 ${a.name} · 留言板<span>老师看到必回 · 一般 2 小时内</span></div>`
+      +a.boardMsgs.map(m=>`<div class="bmsg"><div class="bq"><b>${m.q.split('：')[0]}：</b>${m.q.split('：').slice(1).join('：')}<small>${m.qt}</small></div><div class="ba"><b>${a.boardBy}：</b>${m.a}<small>${m.at}</small></div></div>`).join('')
+      +`<div class="bin"><input placeholder="给${a.name}留言，看到必回…"><span>提交</span></div></div>`;
+  }else{bd.innerHTML='';}
+  document.getElementById('inp').placeholder=`发消息给 ${a.name}…`;
+}
+function pick(k){cur=k;read[k]=1;renderRow();renderConv();window.scrollTo({top:0,behavior:'smooth'});}
+function sendMsg(){
+  const v=document.getElementById('inp').value.trim();if(!v)return;
+  AG[cur].msgs.push({me:1,t:v});
+  AG[cur].msgs.push({w:AG[cur].name,b:'AI',t:'收到！我先把这条记录下来'+(AG[cur].board?'，如需真人导师回复，也可以写在下方留言板 👇':'，稍后为您详细解答 ✨')});
+  document.getElementById('inp').value='';renderConv();
+}
+renderRow();renderConv();
+</script>
+
+
+
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  var btnStudent = document.getElementById('btnStudent');
+  if(btnStudent){
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.querySelectorAll('a.acctbtn[href="index.html"]').forEach(function(a){
+    a.setAttribute('href','javascript:;');
+    a.id = a.id || 'btnStudent';
+  });
+  // re-bind if we just set id
+  btnStudent = document.getElementById('btnStudent');
+  if(btnStudent && !btnStudent._bound){
+    btnStudent._bound = 1;
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'kids-manage.html': '/pages/parent/index',
+      'index.html': '__student__'
+    };
+    var soon = {
+      'wallet.html': '算力中心即将开放',
+      'records.html': '测试报告即将开放',
+      'share.html': '分享推广即将开放',
+      'career.html': '招贤纳士即将开放',
+      'console.html': '业务平台即将开放',
+      'test.html': '天赋测试即将开放',
+      'milestone.html': '中央电脑即将开放'
+    };
+    if(soon[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(!post('dayu-toast', {title: soon[file]})){ try{ alert(soon[file]); }catch(err){} }
+      return;
+    }
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      nav(map[file]);
+    }
+  }, true);
+})();
+</script>
+</body></html>

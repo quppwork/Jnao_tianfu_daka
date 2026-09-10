@@ -1958,7 +1958,7 @@ onUnmounted(() => {
 <style scoped>
 .phone {
   width: 100%;
-  max-width: 430px;
+  max-width: var(--app-max-width, 480px);
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0 auto;
@@ -2776,12 +2776,13 @@ onUnmounted(() => {
 
 .foot {
   position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 100%; max-width: 430px;
+  width: 100%; max-width: var(--app-max-width, 480px);
   background: rgba(11, 14, 20, 0.94);
   backdrop-filter: blur(12px);
   border-top: 1px solid #232b3d;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   display: flex; justify-content: space-around; z-index: 50;
+  box-sizing: border-box;
 }
 .fi {
   text-align: center; color: #5a6274; font-size: 11px; flex: 1;
@@ -2803,7 +2804,7 @@ onUnmounted(() => {
 }
 .sheet {
   width: 100%;
-  max-width: 430px;
+  max-width: var(--app-max-width, 480px);
   background: #131926;
   border: 1.5px solid #232b3d;
   border-radius: 18px 18px 12px 12px;
@@ -2835,7 +2836,7 @@ onUnmounted(() => {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 430px;
+  max-width: var(--app-max-width, 480px);
   margin: 0 auto;
   background: linear-gradient(180deg, #1a2233 0%, #101623 70%);
   border: 1.5px solid #2a3040;

@@ -1,0 +1,1147 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>您孩子的测评报告 · 五者天赋（儿童版）</title>
+<script src="/static/dayu/assets/js/qrcode.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#FFF4E8;color:#4A3B32;max-width:430px;margin:0 auto;padding-bottom:90px;--c:#D63A3A;--cl:#FFE9E9;--cd:#8F1D1D}
+  .topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(255,244,232,.92);backdrop-filter:blur(8px);border-bottom:2px solid #FFE1C2}
+  .topbar .logo{font-size:17px;font-weight:900;color:#B0482E}
+  .topbar .logo small{display:block;font-size:12px;color:#C99;font-weight:700;letter-spacing:2px}
+  .topbar .versw{display:flex;border:1.5px solid #F0506E;border-radius:99px;overflow:hidden;box-shadow:0 3px 8px rgba(240,80,110,.3)}
+  .topbar .versw span,.topbar .versw a{font-size:14px;font-weight:900;padding:5px 12px;text-decoration:none;color:#F0506E;background:#fff}
+  .topbar .versw .on{background:linear-gradient(135deg,#FF8A5C,#F0506E);color:#fff}
+
+  /* ===== 开篇巨幕：动态天赋视觉 ===== */
+  .kshow{margin:14px 16px 0;border-radius:26px;overflow:hidden;position:relative;aspect-ratio:3/2;background:#2A1A12;border:2px solid #F6E7D8;box-shadow:0 10px 26px rgba(180,60,40,.22)}
+  .kshow img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:kenburns 9s ease-in-out infinite alternate;transition:opacity .8s}
+  .kshow img.fade{opacity:0}
+  .kshow img.slideB{opacity:0}
+  .kshow.showB img.slideB{opacity:1}
+  .kshow.showB img.slideA{opacity:0}
+  @keyframes kenburns{0%{transform:scale(1) translate(0,0)}100%{transform:scale(1.12) translate(-1.5%,1.5%)}}
+  .kshow .kshine{position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.28) 46%,transparent 60%);background-size:250% 100%;animation:kshine 4.5s ease-in-out infinite}
+  @keyframes kshine{0%,20%{background-position:120% 0}60%,100%{background-position:-30% 0}}
+  .kshow .kspark{position:absolute;inset:0;pointer-events:none}
+  .kshow .kspark i{position:absolute;width:6px;height:6px;border-radius:50%;background:#FFF3C9;box-shadow:0 0 8px #FFE9A0;animation:twk 2.6s ease-in-out infinite}
+  @keyframes twk{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.25)}}
+  .kshow .kscap{position:absolute;left:0;right:0;bottom:0;padding:34px 16px 12px;background:linear-gradient(180deg,transparent,rgba(40,20,10,.78))}
+  .kshow .kscap .kt1{font-size:18px;font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.5)}
+  .kshow .kscap .kt2{font-size:14px;color:rgba(255,255,255,.85);margin-top:2px;font-weight:700}
+  .kshow .kslive{position:absolute;right:10px;top:10px;font-size:12px;font-weight:900;color:#fff;background:rgba(0,0,0,.45);border-radius:99px;padding:3px 10px;backdrop-filter:blur(4px)}
+  .kshow .ksdrama{position:absolute;left:10px;top:10px;display:flex;align-items:center;gap:4px;font-size:14px;font-weight:900;color:#7A2E12;background:linear-gradient(135deg,#FFE9B0,#F9C96B);border-radius:99px;padding:5px 12px;text-decoration:none;box-shadow:0 4px 12px rgba(0,0,0,.3);animation:tpulse 2s ease-in-out infinite}
+  @keyframes tpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+  /* 短剧大海报入口（已并入巨幕轮播） */
+
+  /* ===== 头版：奖状卡（海报要素：IP+诀句+三要点） ===== */
+  .hero{margin:12px 16px 0;border-radius:24px;overflow:hidden;position:relative;
+    background:linear-gradient(160deg,var(--c),var(--cd));color:#fff;padding:15px 16px 11px;box-shadow:0 10px 26px rgba(180,60,40,.28);transition:background .5s}
+  .hero::before{content:"";position:absolute;right:-46px;top:-46px;width:170px;height:170px;border-radius:50%;background:rgba(255,255,255,.1)}
+  .hero::after{content:"";position:absolute;right:34px;top:26px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.12)}
+  .hero .h-tag{display:inline-block;font-size:14px;font-weight:800;background:rgba(255,255,255,.22);border-radius:99px;padding:3px 11px;letter-spacing:2px}
+  .hero .h-type{font-size:29px;font-weight:900;margin-top:6px;letter-spacing:4px;text-shadow:0 3px 0 rgba(0,0,0,.12)}
+  .hero .h-quote{font-size:16px;margin-top:4px;line-height:1.55;opacity:.95;font-weight:700;max-width:70%}
+  .hero .h-mantra{margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.28);font-size:16px;font-weight:900;letter-spacing:1px;line-height:1.8;position:relative;z-index:2}
+  .hero .h-mantra small{display:inline;font-size:12px;letter-spacing:2px;opacity:.7;font-weight:700;margin-right:8px}
+  .hero .h-date{display:inline;font-size:12px;margin-left:8px;opacity:.7;font-weight:600}
+  .hero .h-ip{position:absolute;right:12px;top:34px;width:80px;height:80px;border-radius:50%;box-shadow:0 6px 14px rgba(0,0,0,.3);animation:bob 3s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  .medal{position:absolute;right:16px;top:-8px;width:56px;height:76px;background:linear-gradient(180deg,#FFD76E,#F0A83C);clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%);display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 10px rgba(0,0,0,.2)}
+
+  /* 养育三要点（海报图标条） */
+  .keys{display:flex;gap:8px;margin:12px 16px 0}
+  /* 学业规划·极速提分 单入口 */
+  .goaled{margin:14px 16px 0;display:flex;align-items:center;gap:12px;border-radius:20px;padding:15px 16px;text-decoration:none;color:#fff;background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 8px 18px color-mix(in srgb,var(--c) 40%,transparent);position:relative;overflow:hidden;animation:goglow 2.2s ease-in-out infinite}
+  .goaled::before{content:"";position:absolute;inset:-45%;background:conic-gradient(from 0deg,transparent 62%,rgba(255,255,255,.05) 72%,rgba(255,255,255,.65) 82%,rgba(255,255,255,.05) 90%,transparent 96%);animation:gosw 2.6s linear infinite;pointer-events:none}
+  .goaled::after{content:"";position:absolute;right:-30px;top:-30px;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.1)}
+  @keyframes gosw{to{transform:rotate(360deg)}}
+  @keyframes goglow{0%,100%{box-shadow:0 8px 18px color-mix(in srgb,var(--c) 38%,transparent)}50%{box-shadow:0 8px 32px color-mix(in srgb,var(--c) 65%,transparent)}}
+  .goaled .gl,.goaled .gm,.goaled .gr{position:relative;z-index:1}
+  .goaled .gl{font-size:26px;animation:gospark 1.6s ease-in-out infinite}
+  @keyframes gospark{0%,100%{transform:scale(1);filter:drop-shadow(0 0 3px rgba(255,255,255,.5))}50%{transform:scale(1.12) rotate(-6deg);filter:drop-shadow(0 0 9px rgba(255,255,255,.95))}}
+  .goaled .gm{flex:1}
+  .goaled .gm b{display:block;font-size:18px;font-weight:900}
+  .goaled .gm span{display:block;font-size:14px;opacity:.88;margin-top:3px;font-weight:700}
+  .goaled .gr{font-size:16px;font-weight:900;background:rgba(255,255,255,.22);border-radius:99px;padding:7px 13px}
+  /* 职业影响·左图右文海报式 */
+  .jobfx{display:flex;gap:10px;margin-top:12px;align-items:stretch}
+  .jfx-l{width:38%;flex:none;border-radius:16px;overflow:hidden;position:relative;background:#241A12;min-height:300px}
+  .jfx-l img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
+  .jfx-l::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(20,12,6,.88) 82%)}
+  .jfx-lb{position:absolute;left:10px;right:10px;bottom:10px;z-index:2;color:#FFE9C9}
+  .jfx-lb b{display:block;font-size:18px;font-weight:900;letter-spacing:1px}
+  .jfx-lb span{display:block;font-size:14px;margin-top:3px;opacity:.85;line-height:1.5}
+  .jfx-r{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:2px}
+  .jfx-i{display:flex;gap:9px;padding:9px 2px;align-items:flex-start}
+  .jfx-i+.jfx-i{border-top:1px dashed #E3D5C3}
+  .jfx-ic{width:30px;height:30px;flex:none;border-radius:50%;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:17px}
+  .jfx-i b{display:block;font-size:16px;color:#4A3B32;font-weight:900}
+  .jfx-i p{margin:3px 0 0;font-size:14px;color:#8A7663;line-height:1.55}
+  /* 真实见证·三小视频入口 */
+  .trust3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+  .trust3 a{text-decoration:none;display:block}
+  .t3v{position:relative;border-radius:12px;overflow:hidden;aspect-ratio:3/4;background:#241A12;box-shadow:0 4px 10px rgba(120,70,20,.18)}
+  .t3v img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+  .t3v::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(20,12,6,.72))}
+  .t3p{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.92);color:#C0392B;display:flex;align-items:center;justify-content:center;font-size:16px;z-index:2;box-shadow:0 3px 8px rgba(0,0,0,.35)}
+  .t3n{position:absolute;left:7px;bottom:6px;z-index:2;color:#FFE9C9;font-size:14px;font-weight:900}
+  .t3s{display:block;font-size:12px;color:#9A8570;font-weight:700;margin-top:4px;text-align:center;line-height:1.4}
+  /* 九大体系按钮阵·科技舱卡（统一框架+九色差异） */
+  .sysbtns{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+  /* 三排分组：每排一个带暗花的同类底纹带，独立又关联 */
+  .sysrow{position:relative;border-radius:18px;padding:30px 9px 10px;overflow:hidden}
+  .sysrow .sr-tag{position:absolute;left:10px;top:8px;z-index:3;font-size:14px;font-weight:900;letter-spacing:1.5px;color:var(--rc);background:color-mix(in srgb,var(--rc) 16%,#07131B);border:1px solid color-mix(in srgb,var(--rc) 45%,transparent);border-radius:99px;padding:3px 11px}
+  .sysrow .sr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;position:relative;z-index:2}
+  /* 第一排：AI系列 · 冷蓝电路暗花 */
+  .sysrow.r1{--rc:#6FB7FF;background:
+    repeating-linear-gradient(45deg,rgba(111,183,255,.045) 0 2px,transparent 2px 14px),
+    repeating-linear-gradient(-45deg,rgba(111,183,255,.045) 0 2px,transparent 2px 14px),
+    radial-gradient(circle at 20% 0%,rgba(111,183,255,.10),transparent 55%),
+    linear-gradient(165deg,#0A1C2C,#061220 70%);
+    border:1px solid rgba(111,183,255,.30)}
+  /* 第二排：天赋×脑科 · 金绿云纹暗花 */
+  .sysrow.r2{--rc:#E8C87A;background:
+    radial-gradient(circle at 12px 12px,rgba(232,200,122,.06) 3px,transparent 4px),
+    radial-gradient(circle at 36px 30px,rgba(124,245,200,.05) 3px,transparent 4px),
+    radial-gradient(circle at 80% 100%,rgba(232,200,122,.09),transparent 55%),
+    linear-gradient(165deg,#171409,#0E1A12 75%);
+    background-size:48px 40px,48px 40px,auto,auto;border:1px solid rgba(232,200,122,.30)}
+  /* 第三排：赛事背书 · 赤金火焰暗花 */
+  .sysrow.r3{--rc:#FF9A7A;background:
+    repeating-linear-gradient(90deg,rgba(255,154,122,.05) 0 3px,transparent 3px 18px),
+    radial-gradient(circle at 50% 120%,rgba(255,120,80,.14),transparent 60%),
+    linear-gradient(165deg,#221010,#120A14 75%);
+    border:1px solid rgba(255,154,122,.30)}
+  /* 排内卡片之间的连接光带：看似独立、实则同族 */
+  .sysrow::after{content:'';position:absolute;left:4%;right:4%;top:50%;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--rc) 40%,transparent),transparent);z-index:1}
+  .sysrow a{position:relative;aspect-ratio:40/54;border-radius:13px;text-decoration:none;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(168deg,rgba(14,28,40,.92),rgba(6,16,24,.94) 60%);border:1px solid var(--ac);box-shadow:inset 0 0 20px color-mix(in srgb,var(--ac) 22%,transparent),inset 0 -14px 24px color-mix(in srgb,var(--ac) 10%,transparent),0 5px 13px rgba(8,30,42,.4);transition:transform .15s;backdrop-filter:blur(2px)}
+  .sysbtns a:active{transform:scale(.94)}
+  .sysbtns a::before,.sysbtns a::after{content:'';position:absolute;width:11px;height:11px;border:1.5px solid var(--ac);opacity:.95}
+  .sysbtns a::before{left:5px;top:5px;border-right:none;border-bottom:none;border-radius:4px 0 0 0}
+  .sysbtns a::after{right:5px;bottom:5px;border-left:none;border-top:none;border-radius:0 0 4px 0}
+  .sysbtns .sb-ic{width:40px;height:40px;border-radius:50%;border:1.5px solid var(--ac);background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--ac) 30%,transparent),rgba(10,40,52,.2) 72%);display:flex;align-items:center;justify-content:center;font-size:20px;font-style:normal;box-shadow:0 0 14px color-mix(in srgb,var(--ac) 55%,transparent),inset 0 0 8px color-mix(in srgb,var(--ac) 30%,transparent);margin-bottom:9px;filter:saturate(1.15)}
+  .sysbtns b{color:#F2FAFF;font-size:16px;font-weight:900;letter-spacing:.5px;text-align:center;line-height:1.35;padding:0 4px;text-shadow:0 0 10px color-mix(in srgb,var(--ac) 70%,transparent)}
+  .sysbtns .sb-s{margin-top:3px;color:var(--ac);font-size:12px;font-weight:800;letter-spacing:3px;text-indent:3px}
+  .sysbtns .sb-h{margin-top:6px;font-size:12px;font-weight:700;color:color-mix(in srgb,var(--ac) 75%,#fff);background:color-mix(in srgb,var(--ac) 14%,transparent);border:1px solid color-mix(in srgb,var(--ac) 35%,transparent);border-radius:99px;padding:2px 7px;line-height:1.3;text-align:center}
+  .sysbtns .sb-line{width:24px;height:1.5px;background:linear-gradient(90deg,transparent,var(--ac),transparent);margin-top:7px;opacity:.85}
+
+  /* ===== 五者切换 ===== */
+  .tabs{display:flex;gap:8px;margin:16px 16px 0;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-ms-overflow-style:none}
+  .tabs::-webkit-scrollbar{display:none;width:0;height:0}
+  .tabs .tb{flex:1;min-width:64px;border-radius:18px;background:#fff;border:2px solid #F1E2D2;padding:8px 4px 7px;text-align:center;cursor:pointer;transition:.25s;position:relative}
+  .tabs .tb img{width:46px;height:46px;display:block;margin:0 auto 3px;border-radius:50%;box-shadow:0 3px 8px rgba(120,70,20,.15)}
+  .tabs .tb .tn{font-size:16px;font-weight:900;color:#8A7A6E}
+  .tabs .tb.on{border-color:var(--c);background:var(--cl);transform:translateY(-3px);box-shadow:0 6px 14px rgba(180,60,40,.16)}
+  .tabs .tb.on .tn{color:var(--cd)}
+
+  .card{margin:14px 16px 0;background:#fff;border-radius:24px;padding:18px 16px;border:2px solid #F6E7D8;box-shadow:0 4px 14px rgba(190,120,60,.08)}
+  .card .c-h{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .card .c-h .ic{width:30px;height:30px;border-radius:10px;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .card .c-h .ct{font-size:18px;font-weight:900;color:#4A3B32}
+  .card .c-h .ct small{display:block;font-size:14px;color:#B7A493;font-weight:700;margin-top:1px}
+
+  /* 大脑类型：左右脑图 */
+  .brainpics{display:flex;gap:10px;margin-bottom:14px}
+  .brainpics .bp{flex:1;border-radius:16px;border:2px dashed #E5C9A8;padding:8px 8px 9px;text-align:center;
+    background:#FFFDF8 repeating-linear-gradient(0deg,transparent,transparent 19px,rgba(200,170,130,.12) 19px,rgba(200,170,130,.12) 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,rgba(200,170,130,.12) 19px,rgba(200,170,130,.12) 20px)}
+  .brainpics .bp img{width:100%;aspect-ratio:1;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(180,60,40,.15))}
+  .brainpics .bp .bt{display:inline-block;margin-top:6px;font-size:14px;font-weight:900;color:var(--cd);background:var(--cl);border:1.5px solid var(--c);border-radius:99px;padding:4px 12px}
+  .brainrow{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .brainrow .bl{width:44px;font-size:16px;font-weight:900;color:#7A6A5E}
+  .brainrow .bars{display:flex;gap:5px;flex:1}
+  .brainrow .bars i{flex:1;height:16px;border-radius:6px;background:#F3EADF}
+  .brainrow .bars i.on{background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 2px 6px rgba(180,60,40,.25)}
+  .brainrow .bv{font-size:14px;font-weight:800;color:var(--cd);width:56px;text-align:right}
+  .potent{margin-top:6px;border-radius:18px;background:linear-gradient(135deg,var(--cl),#fff);border:2px dashed var(--c);padding:12px 14px;display:flex;align-items:center;gap:12px}
+  .potent .pi{width:44px;height:44px;border-radius:50%;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 10px rgba(180,60,40,.3)}
+  .potent .pn{font-size:16px;font-weight:800;color:#B7A493}
+  .potent .pv{font-size:22px;font-weight:900;color:var(--cd)}
+
+  /* 特点清单 */
+  .traits{display:flex;flex-direction:column;gap:9px}
+  .traits .tr{display:flex;gap:9px;align-items:flex-start;font-size:16px;line-height:1.55;color:#5C4C40;background:#FFFBF5;border:1.5px solid #F6E7D8;border-radius:14px;padding:9px 12px}
+  .traits .tr::before{content:"✔";flex:none;width:20px;height:20px;border-radius:50%;background:var(--c);color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;margin-top:1px;box-shadow:0 2px 5px rgba(180,60,40,.25)}
+  .traits .tr.warn::before{content:"!"}
+
+  /* ===== 家长课堂剧场（学成人版：主视频+分集） ===== */
+  .kscreen{position:relative;border-radius:18px;overflow:hidden;aspect-ratio:16/9;background:#2A1A12;cursor:pointer;margin-bottom:10px}
+  .kscreen img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9}
+  .kscreen .kshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(40,20,10,.05),rgba(40,20,10,.68))}
+  .kscreen .kplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:var(--c);color:#fff;font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px rgba(255,255,255,.28),0 8px 18px rgba(0,0,0,.35);animation:kpulse 2s ease-in-out infinite}
+  @keyframes kpulse{0%,100%{box-shadow:0 0 0 6px rgba(255,255,255,.28),0 8px 18px rgba(0,0,0,.35)}50%{box-shadow:0 0 0 12px rgba(255,255,255,.14),0 8px 18px rgba(0,0,0,.35)}}
+  .kscreen .kdur{position:absolute;right:10px;top:10px;font-size:14px;font-weight:800;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:2px 8px}
+  .kscreen .kept{position:absolute;left:12px;bottom:10px;right:12px}
+  .kscreen .kept .ken{font-size:17px;font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+  .kscreen .kept .kes{font-size:14px;color:rgba(255,255,255,.85);margin-top:2px}
+  .keps{display:flex;gap:8px;margin-bottom:12px}
+  .kep{flex:1;border-radius:12px;overflow:hidden;position:relative;aspect-ratio:16/10;cursor:pointer;border:2px solid transparent}
+  .kep img{width:100%;height:100%;object-fit:cover}
+  .kep .kde{position:absolute;inset:0;background:linear-gradient(180deg,rgba(40,20,10,0),rgba(40,20,10,.78));display:flex;flex-direction:column;justify-content:flex-end;padding:6px 7px}
+  .kep .kde .kt{font-size:14px;font-weight:900;color:#fff;line-height:1.3}
+  .kep .kde .kd{font-size:12px;color:rgba(255,255,255,.8);margin-top:1px}
+  .kep.on{border-color:var(--c);box-shadow:0 4px 10px rgba(180,60,40,.3)}
+  .kep.on::after{content:"连播";position:absolute;left:6px;top:6px;font-size:12px;font-weight:900;color:#fff;background:var(--c);border-radius:5px;padding:1px 6px}
+
+  /* 板块视频条（五大核心板块各带视频） */
+  .kv{display:flex;gap:10px;align-items:center;border-radius:16px;background:linear-gradient(135deg,var(--cl),#fff);border:1.5px solid var(--c);padding:8px;margin-bottom:12px;cursor:pointer}
+  .kv .kvt{position:relative;flex:none;width:104px;aspect-ratio:16/10;border-radius:11px;overflow:hidden}
+  .kv .kvt img{width:100%;height:100%;object-fit:cover}
+  .kv .kvt .kp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.92);color:var(--cd);font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.3)}
+  .kv .kvt .kd{position:absolute;right:5px;bottom:5px;font-size:12px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);border-radius:5px;padding:1px 6px}
+  .kv .kvn{font-size:16px;font-weight:900;color:var(--cd);line-height:1.4}
+  .kv .kvs{font-size:14px;color:#A08B7A;font-weight:700;margin-top:3px}
+
+  /* 教养卡 */
+  .teach{border-radius:18px;background:linear-gradient(160deg,var(--cl),#fff);border:2px solid var(--c);padding:14px;margin-bottom:10px}
+  .teach .tt{font-size:17px;font-weight:900;color:var(--cd);margin-bottom:6px}
+  .teach .tp{font-size:16px;line-height:1.7;color:#5C4C40}
+  .saychips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .saychips span{font-size:16px;font-weight:800;color:var(--cd);background:#fff;border:1.5px solid var(--c);border-radius:99px;padding:6px 13px;box-shadow:0 2px 5px rgba(180,60,40,.12)}
+
+  /* 金句横幅 */
+  .quoteban{margin:14px 16px 0;border-radius:24px;padding:22px 18px;text-align:center;color:#fff;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 8px 20px rgba(180,60,40,.3);transition:background .5s}
+  .quoteban::before{content:"“";position:absolute;left:12px;top:-14px;font-size:80px;opacity:.18;font-family:serif}
+  .quoteban .star{display:inline-block;font-size:14px;font-weight:900;background:#FFD76E;color:#8F5B1D;border-radius:8px;padding:3px 10px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+  .quoteban .qt{font-size:19px;font-weight:900;line-height:1.5;text-shadow:0 2px 0 rgba(0,0,0,.12)}
+
+  .radar-note{text-align:center;font-size:14px;color:#B7A493;font-weight:700;margin-top:6px}
+
+  /* 学习问题 · 标签化图标系统 */
+  .probs{display:flex;flex-direction:column;gap:10px}
+  .pb-core{display:flex;align-items:center;gap:13px;border-radius:20px;padding:13px 15px;background:linear-gradient(135deg,var(--cl),#fff);border:2px solid var(--c);position:relative;overflow:hidden}
+  .pb-core::after{content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;background:var(--c);opacity:.08}
+  .pb-core .bci{width:56px;height:56px;flex:none;border-radius:50%;background:var(--c);display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 5px 14px rgba(0,0,0,.18);border:3px solid #fff}
+  .pb-core .bct{flex:1}
+  .pb-core .bcl{font-size:20px;font-weight:900;color:var(--cd);letter-spacing:1px}
+  .pb-core .bcn{font-size:14px;color:#8A6A4E;margin-top:3px;line-height:1.5}
+  .pb-core .bcb{flex:none;font-size:14px;font-weight:900;color:#fff;background:var(--cd);border-radius:8px;padding:3px 8px;letter-spacing:1px}
+  .pb-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pb-tag{display:flex;align-items:center;gap:9px;border-radius:15px;background:#FFFBF5;border:1.5px solid #F1E2D2;padding:9px 11px;transition:border-color .2s}
+  .pb-tag:active{border-color:var(--c)}
+  .pb-tag .bti{width:36px;height:36px;flex:none;border-radius:11px;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .pb-tag .btt{min-width:0}
+  .pb-tag .btl{font-size:16px;font-weight:900;color:#4A3B32}
+  .pb-tag .btn{font-size:14px;color:#A08B7A;line-height:1.4;margin-top:1px}
+
+  /* 偏科三宫格 */
+  .pianke{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px}
+  .pianke div{border-radius:14px;background:#FFF8EF;border:1.5px dashed #E5C9A8;padding:10px 8px;font-size:14px;line-height:1.6;color:#8A6A4E;text-align:center}
+  .pianke div b{display:block;font-size:16px;color:#B0482E;margin-bottom:3px}
+
+  /* 职业参考 */
+  .jobs{display:flex;flex-direction:column;gap:10px}
+  .jobs .jb{border-radius:18px;border:2px solid #F1E2D2;background:#FFFBF5;padding:12px 14px;position:relative;overflow:hidden}
+  .jobs .jb.first{border-color:var(--c);background:linear-gradient(135deg,var(--cl),#fff)}
+  .jobs .jb .jt{display:flex;align-items:baseline;gap:8px}
+  .jobs .jb .jt .jr{font-size:14px;font-weight:900;color:#fff;background:var(--c);border-radius:7px;padding:2px 8px}
+  .jobs .jb .jt .jn{font-size:17px;font-weight:900;color:#4A3B32}
+  .jobs .jb .jt .js{margin-left:auto;font-size:18px;font-weight:900;color:var(--cd)}
+  .jobs .jb .jd{font-size:14px;color:#A08B7A;margin-top:5px}
+  .jobs .jb .jr2{font-size:16px;font-weight:900;color:#7A6A5E;margin-top:6px}
+
+  /* 特质四卡 */
+  .feat{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  .feat .ft{border-radius:18px;background:#FFFBF5;border:1.5px solid #F1E2D2;padding:12px 14px}
+  .feat .ft .fh{display:flex;align-items:center;gap:7px;font-size:16px;font-weight:900;color:#4A3B32;margin-bottom:5px}
+  .feat .ft .fh i{width:22px;height:22px;border-radius:8px;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:16px;font-style:normal}
+  .feat .ft .fp{font-size:16px;line-height:1.7;color:#7A6A5E}
+
+  /* 素质建议 */
+  .suzi{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .suzi .sz{border-radius:18px;background:linear-gradient(160deg,#EFF4FF,#fff);border:2px solid #D8E4F8;padding:13px 12px}
+  .suzi .sz .sh{display:flex;align-items:center;justify-content:space-between}
+  .suzi .sz .sh b{font-size:17px;color:#2B4A7A}
+  .suzi .sz .sh .se{font-size:22px}
+  .suzi .sz .sr{display:inline-block;font-size:14px;font-weight:900;color:#fff;background:#6B9BD8;border-radius:6px;padding:2px 8px;margin:6px 0}
+  .suzi .sz .sd{font-size:14px;line-height:1.6;color:#6E7B90}
+
+  /* ===== 三大门类：AI脑教育/超脑九段/九大秘籍 ===== */
+  .prods{display:flex;flex-direction:column;gap:10px}
+  .prods .pd{border-radius:18px;border:2px solid #F1E2D2;background:#FFFBF5;padding:12px 14px;display:flex;align-items:center;gap:11px}
+  .prods .pd .di{flex:none;width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:21px;background:linear-gradient(135deg,var(--cl),#fff);border:1.5px solid var(--c)}
+  .prods .pd .dm{flex:1}
+  .prods .pd .dn{font-size:17px;font-weight:900;color:#4A3B32}
+  .prods .pd .dn span{font-size:14px;font-weight:900;color:#fff;background:var(--c);border-radius:6px;padding:2px 7px;margin-left:5px;vertical-align:2px}
+  .prods .pd .dd{font-size:14px;color:#A08B7A;margin-top:3px;line-height:1.5}
+  .prods .pd .dbtn,.dbtn{flex:none;font-size:14px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--c),var(--cd));border-radius:10px;padding:8px 12px;text-decoration:none;box-shadow:0 3px 8px rgba(180,60,40,.25)}
+  .syshot{position:relative;margin-top:12px;border-radius:14px;overflow:hidden;border:1.5px solid #1A3A4A}
+  .syshot img{width:100%;display:block}
+  .syshot a{position:absolute;border-radius:10px;transition:.2s}
+  .syshot a:active{background:rgba(110,224,255,.28);box-shadow:inset 0 0 0 2px #6FE0FF}
+  .systip{margin-top:7px;text-align:center;font-size:14px;color:#A08A6E;font-weight:700}
+  .sysimg{margin-top:12px;border-radius:14px;overflow:hidden;border:2px solid #F6E7D8}
+  .sysimg img{width:100%;display:block}
+
+  .tower{margin-top:12px;border-radius:14px;overflow:hidden;border:2px solid #F6E7D8}
+  .tower img{width:100%;display:block}
+  .duan{display:flex;flex-direction:column;gap:7px;margin-top:12px}
+  .duan .du{display:flex;align-items:center;gap:10px;border-radius:13px;padding:8px 11px;background:#FFFBF5;border:1.5px solid #F1E2D2;font-size:16px;font-weight:800;color:#5C4C40}
+  .duan .du .dn9{flex:none;width:44px;font-size:14px;font-weight:900;color:#fff;text-align:center;border-radius:8px;padding:4px 0}
+  .duan .du .dp{margin-left:auto;font-size:12px;font-weight:900;border-radius:6px;padding:2px 7px}
+  .ph1{background:#C9A227}.ph2{background:#3E8E5A}.ph3{background:#4A9EC2}.ph4{background:#4A7EC2}
+  .duan .du .dp1{background:#FBF2DC;color:#8A6A1D}.duan .du .dp2{background:#E6F4EA;color:#1E5B34}.duan .du .dp3{background:#E8F4FB;color:#2B6A8A}.duan .du .dp4{background:#E8F1FB;color:#2B4A7A}
+
+  .miji{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .miji .mj{border-radius:16px;overflow:hidden;background:#FFFBF3;border:1.5px solid #E9CFA9;cursor:pointer;box-shadow:0 4px 12px rgba(120,70,20,.10);transition:transform .15s}
+  .miji .mj:active{transform:scale(.97)}
+  .miji .mj .mp{position:relative;aspect-ratio:16/9.5;overflow:hidden;background:#2A1A12}
+  .miji .mj .mp img{width:100%;height:100%;object-fit:cover;display:block}
+  .miji .mj .mp i{position:absolute;left:8px;top:8px;font-style:normal;font-size:12px;font-weight:900;color:#FFE9B0;background:rgba(40,20,8,.62);border:1px solid rgba(255,220,150,.55);border-radius:7px;padding:2px 8px;backdrop-filter:blur(3px)}
+  .miji .mj .mm{padding:9px 10px 10px}
+  .miji .mj b{display:block;font-size:16px;font-weight:900;color:#6B3418}
+  .miji .mj small{display:block;font-size:14px;color:#A07850;margin-top:2px;font-weight:700}
+  .miji .mj span{display:inline-block;margin-top:7px;font-size:14px;font-weight:900;color:#fff;background:linear-gradient(135deg,#E8543F,#C23A2A);border-radius:8px;padding:3px 10px}
+
+  .confban{margin-top:12px;border-radius:18px;overflow:hidden;position:relative;padding:16px 14px;color:#fff;
+    background:linear-gradient(135deg,#2B4A7A,#12253F);box-shadow:0 8px 18px rgba(30,60,110,.3)}
+  .confban .cb-t{font-size:17px;font-weight:900}
+  .confban .cb-p{font-size:14px;margin-top:5px;line-height:1.6;opacity:.85}
+  .confban .cb-b{display:inline-block;margin-top:10px;font-size:16px;font-weight:900;color:#2B4A7A;background:#FFD76E;border-radius:10px;padding:8px 16px;text-decoration:none;box-shadow:0 4px 10px rgba(0,0,0,.25)}
+  .dramaban{margin-top:12px;display:flex;align-items:center;gap:10px;border-radius:18px;padding:13px 14px;text-decoration:none;color:#fff;
+    background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 6px 16px rgba(180,60,40,.3)}
+  .dramaban .db-i{font-size:24px}
+  .dramaban .db-t{flex:1;font-size:16px;font-weight:900}
+  .dramaban .db-t small{display:block;font-size:14px;opacity:.85;font-weight:700;margin-top:2px}
+  .dramaban .db-g{font-size:18px;font-weight:900}
+
+  /* 亲子导流 */
+  .family{margin:14px 16px 0;border-radius:24px;overflow:hidden;position:relative;padding:24px 18px;text-align:center;
+    background:linear-gradient(160deg,#FF9A5C,#F0506E);color:#fff;box-shadow:0 8px 20px rgba(240,80,110,.3)}
+  .family .fq{font-size:19px;font-weight:900;text-shadow:0 2px 0 rgba(0,0,0,.1)}
+  .family .fs{font-size:16px;margin-top:6px;opacity:.92;font-weight:600}
+  .family .fbtns{display:flex;gap:10px;margin-top:14px}
+  .family .fbtns a{flex:1;text-decoration:none;font-size:16px;font-weight:900;border-radius:14px;padding:11px;background:#fff;color:#D63A5C;box-shadow:0 4px 10px rgba(0,0,0,.15)}
+  .family .fbtns a+a{background:rgba(255,255,255,.2);color:#fff;border:2px solid #fff}
+
+  .disclaim{margin:14px 16px 0;font-size:14px;color:#B7A493;line-height:1.7;background:#FFFBF5;border:1.5px dashed #EAD9C4;border-radius:14px;padding:10px 12px}
+
+  /* ===== 分享 ===== */
+  .sharefab{position:fixed;right:14px;bottom:86px;z-index:60;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+    background:linear-gradient(135deg,#FF8A5C,#F0506E);color:#fff;font-size:14px;font-weight:900;box-shadow:0 8px 20px rgba(240,80,110,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+  .sharefab .si{font-size:18px}
+  .shmask{position:fixed;inset:0;z-index:80;background:rgba(60,35,25,.5);backdrop-filter:blur(3px);display:none}
+  .shmask.on{display:block}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:90;max-width:430px;margin:0 auto;background:#FFFBF5;border-radius:26px 26px 0 0;padding:20px 18px 30px;transform:translateY(105%);transition:transform .3s;box-shadow:0 -10px 30px rgba(0,0,0,.2)}
+  .sheet.on{transform:translateY(0)}
+  .sheet .sh-t{text-align:center;font-size:18px;font-weight:900;color:#4A3B32;margin-bottom:4px}
+  .sheet .sh-s{text-align:center;font-size:14px;color:#B7A493;font-weight:700;margin-bottom:16px}
+  .shbtns{display:flex;gap:10px}
+  .shbtns button{flex:1;border:none;border-radius:16px;padding:14px 8px;font-size:16px;font-weight:900;cursor:pointer;background:linear-gradient(135deg,var(--c),var(--cd));color:#fff;box-shadow:0 5px 14px rgba(180,60,40,.3)}
+  .shbtns button.ghost{background:#fff;color:var(--cd);border:2px solid var(--c);box-shadow:none}
+  .shprev{display:none;margin-top:14px;text-align:center}
+  .shprev.on{display:block}
+  .shprev img{width:200px;border-radius:16px;box-shadow:0 8px 22px rgba(0,0,0,.25);border:3px solid #fff}
+  .shprev a{display:inline-block;margin-top:10px;font-size:16px;font-weight:900;color:#fff;background:linear-gradient(135deg,#3E8E5A,#1E5B34);border-radius:12px;padding:9px 20px;text-decoration:none}
+  .shtip{margin-top:10px;font-size:14px;color:#B7A493;font-weight:700;text-align:center;min-height:16px}
+
+  /* 底部导航 */
+  .foot{position:fixed;bottom:0;left:0;right:0;z-index:50;max-width:430px;margin:0 auto;display:flex;background:rgba(255,250,244,.96);backdrop-filter:blur(8px);border-top:2px solid #FFE1C2;padding:8px 0 12px}
+  .foot a{flex:1;text-align:center;text-decoration:none;color:#B7A493;font-size:10px;font-weight:700}
+  .foot a .fi{font-size:19px;display:block;margin-bottom:2px}
+  .foot a.on{color:#F0506E;font-weight:900}
+  .adultlink{display:block;margin:14px 16px 0;text-align:center;font-size:14px;font-weight:800;color:#8A6A4E;text-decoration:none;border:1.5px dashed #E5C9A8;border-radius:99px;padding:9px}
+  /* ===== 成长蜕变 · 从平凡到卓越 ===== */
+  .growtl{margin-top:14px;position:relative;padding-left:6px}
+  .growtl::before{content:"";position:absolute;left:25px;top:20px;bottom:20px;width:3px;border-radius:3px;background:linear-gradient(180deg,#E8C27A,#C98A3A,#8A5A2A,#3E2A18)}
+  .growtl .gs{display:flex;gap:12px;margin-bottom:12px;position:relative}
+  .growtl .gs .gage{flex-shrink:0;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#7A5228,#3E2A18);border:2px solid #E8C27A;color:#FFE9B0;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.15;box-shadow:0 3px 8px rgba(120,70,20,.3);position:relative;z-index:1}
+  .growtl .gs .gsc{flex:1;border-radius:16px;background:linear-gradient(160deg,#FFFBF2,#FBF0DC);border:1.5px solid #E9CFA9;padding:10px 12px}
+  .growtl .gs .gsp{font-size:16px;font-weight:900;color:#7A4A18}
+  .growtl .gs .gst{font-size:14px;color:#8A6A4E;margin-top:3px;line-height:1.65;font-weight:600}
+  .growtl .gs:last-child .gsc{background:linear-gradient(135deg,#7A3418,#B0482E);border-color:#E8A03F}
+  .growtl .gs:last-child .gsp{color:#FFE9B0}
+  .growtl .gs:last-child .gst{color:rgba(255,235,200,.9)}
+  .gvals{display:flex;gap:9px;margin-top:4px}
+  .gvals>div{flex:1;border-radius:14px;padding:10px 11px;border:1.5px solid #E9CFA9;background:#fff}
+  .gvals .gvt{font-size:14px;font-weight:900;color:#B08A5E;letter-spacing:1px}
+  .gvals .gvv{font-size:16px;font-weight:900;color:#7A3418;margin-top:4px;line-height:1.5}
+  .gpcap{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:16px;font-weight:900;color:#6B3418}
+  .gpcap::before,.gpcap::after{content:"";flex:1;height:1.5px;background:#E9CFA9}
+  .gpros{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+  .gpros span{font-size:14px;font-weight:900;color:#1E5B34;background:linear-gradient(135deg,#EAF6EC,#D8EDD9);border:1.5px solid #9CC7A8;border-radius:9px;padding:5px 10px}
+  .gcons{margin-top:9px;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .gcons div{border-radius:11px;background:#FFF6F0;border:1.5px solid #F0CDB8;padding:7px 9px;font-size:14px;font-weight:800;color:#A0503A;line-height:1.5}
+  .gcons div b{display:block;color:#1E5B34;font-size:14px;margin-top:2px}
+  /* ===== 核心任务解锁 · 组建天赋小班 ===== */
+  .taskcard{margin:14px 16px 0;border-radius:24px;padding:17px 16px;background:linear-gradient(165deg,#FFF8EC,#FFEFD8);border:2px solid #F3D9A8;box-shadow:0 8px 20px rgba(150,90,20,.14)}
+  .taskcard .tc-h{display:flex;align-items:center;gap:10px}
+  .taskcard .tc-h .ti{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#E8543F,#C23A2A);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 10px rgba(200,60,40,.3)}
+  .taskcard .tc-h .tt{font-size:18px;font-weight:900;color:#6B3418}
+  .taskcard .tc-h .tt small{display:block;font-size:14px;color:#B0784A;font-weight:700;margin-top:1px}
+  .taskcard .tgoal{margin-top:11px;font-size:16px;color:#8A5E3A;line-height:1.75;font-weight:600}
+  .taskcard .tgoal b{color:#C23A2A;font-size:17px}
+  .taskcard .tslots{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+  .taskcard .ts{width:32px;height:32px;border-radius:50%;border:2px dashed #D9B98C;display:flex;align-items:center;justify-content:center;font-size:16px;color:#C9A877;background:#fff;transition:all .3s}
+  .taskcard .ts.done{border:2px solid #E8543F;background:linear-gradient(135deg,#FFE9B0,#F9C96B);color:#7A2E12;box-shadow:0 3px 8px rgba(230,120,40,.35);animation:tpulse .6s}
+  .taskcard .tbar{height:11px;border-radius:99px;background:#F0E2CC;margin-top:12px;overflow:hidden}
+  .taskcard .tbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#F9C96B,#E8543F);border-radius:99px;transition:width .6s}
+  .taskcard .tprog{margin-top:7px;font-size:14px;color:#B08A5E;font-weight:700;text-align:center}
+  .taskcard .tbtn{margin-top:12px;display:block;width:100%;border:none;cursor:pointer;text-align:center;font-size:17px;font-weight:900;color:#fff;border-radius:15px;padding:13px;background:linear-gradient(135deg,#E8543F,#C23A2A);box-shadow:0 6px 14px rgba(200,60,40,.35)}
+  .taskcard .tlock{margin-top:12px;border-radius:16px;padding:13px 14px;background:rgba(255,255,255,.72);border:1.5px dashed #D9B98C}
+  .taskcard .tlock .tl-t{font-size:16px;font-weight:900;color:#8A6A4E}
+  .taskcard .tlock ul{margin:8px 0 0;padding:0;list-style:none}
+  .taskcard .tlock li{font-size:14px;color:#A8896A;line-height:2;font-weight:700}
+  .taskcard .tlock.lockon{border:2px solid #E8A03F;background:linear-gradient(160deg,#FFF6E0,#FFEEC8)}
+  .taskcard .tlock.lockon .tl-t{color:#C23A2A}
+  .taskcard .tid{margin-top:9px;border-radius:12px;background:#fff;border:1.5px solid #F3D9A8;padding:9px 12px;font-size:14px;font-weight:800;color:#8A5E3A;line-height:1.9}
+  .taskcard .tid b{color:#C23A2A}
+  .taskcard .tenter{display:block;margin-top:10px;text-align:center;text-decoration:none;font-size:16px;font-weight:900;color:#7A2E12;border-radius:13px;padding:11px;background:linear-gradient(135deg,#FFE9B0,#F9C96B);box-shadow:0 4px 10px rgba(200,140,40,.4)}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:14px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:16px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:16px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:16px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:17px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:18px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:10px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}html.lt body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#291500;color:#cdbeb5;max-width:430px;margin:0 auto;padding-bottom:90px;--c:#c52929;--cl:#290000;--cd:#e27070}html.lt .topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(41,21,0,.92);backdrop-filter:blur(8px);border-bottom:2px solid #3d1f00}html.lt .topbar .logo{font-size:17px;font-weight:900;color:#d1694f}html.lt .topbar .logo small{display:block;font-size:12px;color:#663333;font-weight:700;letter-spacing:2px}html.lt .topbar .versw{display:flex;border:1.5px solid #af0f2d;border-radius:99px;overflow:hidden;box-shadow:0 3px 8px rgba(175,15,45,.3)}html.lt .topbar .versw span,html.lt .topbar .versw a{font-size:14px;font-weight:900;padding:5px 12px;text-decoration:none;color:#af0f2d;background:#141414}html.lt .topbar .versw .on{background:linear-gradient(135deg,#a32e00,#af0f2d);color:#141414}html.lt /* ===== 开篇巨幕：动态天赋视觉 ===== */
+  .kshow{margin:14px 16px 0;border-radius:26px;overflow:hidden;position:relative;aspect-ratio:3/2;background:#edddd5;border:2px solid #271809;box-shadow:0 10px 26px rgba(215,95,75,.22)}html.lt .kshow img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:kenburns 9s ease-in-out infinite alternate;transition:opacity .8s}html.lt .kshow img.fade{opacity:0}html.lt .kshow img.slideB{opacity:0}html.lt .kshow.showB img.slideB{opacity:1}html.lt .kshow.showB img.slideA{opacity:0}@keyframes kenburns{0%{transform:scale(1) translate(0,0)}100%{transform:scale(1.12) translate(-1.5%,1.5%)}}html.lt .kshow .kshine{position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 30%,rgba(20,20,20,.28) 46%,transparent 60%);background-size:250% 100%;animation:kshine 4.5s ease-in-out infinite}@keyframes kshine{0%,20%{background-position:120% 0}60%,100%{background-position:-30% 0}}html.lt .kshow .kspark{position:absolute;inset:0;pointer-events:none}html.lt .kshow .kspark i{position:absolute;width:6px;height:6px;border-radius:50%;background:#362a00;box-shadow:0 0 8px #5f4900;animation:twk 2.6s ease-in-out infinite}@keyframes twk{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.25)}}html.lt .kshow .kscap{position:absolute;left:0;right:0;bottom:0;padding:34px 16px 12px;background:linear-gradient(180deg,transparent,rgba(245,225,215,.78))}html.lt .kshow .kscap .kt1{font-size:18px;font-weight:900;color:#141414;text-shadow:0 2px 8px rgba(247,247,247,.5)}html.lt .kshow .kscap .kt2{font-size:14px;color:rgba(20,20,20,.85);margin-top:2px;font-weight:700}html.lt .kshow .kslive{position:absolute;right:10px;top:10px;font-size:12px;font-weight:900;color:#141414;background:rgba(247,247,247,.45);border-radius:99px;padding:3px 10px;backdrop-filter:blur(4px)}html.lt .kshow .ksdrama{position:absolute;left:10px;top:10px;display:flex;align-items:center;gap:4px;font-size:14px;font-weight:900;color:#eda185;background:linear-gradient(135deg,#4f3900,#946406);border-radius:99px;padding:5px 12px;text-decoration:none;box-shadow:0 4px 12px rgba(247,247,247,.3);animation:tpulse 2s ease-in-out infinite}@keyframes tpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}html.lt /* 短剧大海报入口（已并入巨幕轮播） */
+
+  /* ===== 头版：奖状卡（海报要素：IP+诀句+三要点） ===== */
+  .hero{margin:12px 16px 0;border-radius:24px;overflow:hidden;position:relative;
+    background:linear-gradient(160deg,var(--c),var(--cd));color:#141414;padding:15px 16px 11px;box-shadow:0 10px 26px rgba(215,95,75,.28);transition:background .5s}html.lt .hero::before{content:"";position:absolute;right:-46px;top:-46px;width:170px;height:170px;border-radius:50%;background:rgba(20,20,20,.1)}html.lt .hero::after{content:"";position:absolute;right:34px;top:26px;width:64px;height:64px;border-radius:50%;background:rgba(20,20,20,.12)}html.lt .hero .h-tag{display:inline-block;font-size:14px;font-weight:800;background:rgba(20,20,20,.22);border-radius:99px;padding:3px 11px;letter-spacing:2px}html.lt .hero .h-type{font-size:29px;font-weight:900;margin-top:6px;letter-spacing:4px;text-shadow:0 3px 0 rgba(247,247,247,.12)}html.lt .hero .h-quote{font-size:16px;margin-top:4px;line-height:1.55;opacity:.95;font-weight:700;max-width:70%}html.lt .hero .h-mantra{margin-top:9px;padding-top:8px;border-top:1px solid rgba(20,20,20,.28);font-size:16px;font-weight:900;letter-spacing:1px;line-height:1.8;position:relative;z-index:2}html.lt .hero .h-mantra small{display:inline;font-size:12px;letter-spacing:2px;opacity:.7;font-weight:700;margin-right:8px}html.lt .hero .h-date{display:inline;font-size:12px;margin-left:8px;opacity:.7;font-weight:600}html.lt .hero .h-ip{position:absolute;right:12px;top:34px;width:80px;height:80px;border-radius:50%;box-shadow:0 6px 14px rgba(247,247,247,.3);animation:bob 3s ease-in-out infinite}@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}html.lt .medal{position:absolute;right:16px;top:-8px;width:56px;height:76px;background:linear-gradient(180deg,#916900,#c37b0f);clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%);display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 10px rgba(247,247,247,.2)}html.lt /* 养育三要点（海报图标条） */
+  .keys{display:flex;gap:8px;margin:12px 16px 0}html.lt /* 学业规划·极速提分 单入口 */
+  .goaled{margin:14px 16px 0;display:flex;align-items:center;gap:12px;border-radius:20px;padding:15px 16px;text-decoration:none;color:#141414;background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 8px 18px color-mix(in srgb,var(--c) 40%,transparent);position:relative;overflow:hidden;animation:goglow 2.2s ease-in-out infinite}html.lt .goaled::before{content:"";position:absolute;inset:-45%;background:conic-gradient(from 0deg,transparent 62%,rgba(20,20,20,.05) 72%,rgba(20,20,20,.65) 82%,rgba(20,20,20,.05) 90%,transparent 96%);animation:gosw 2.6s linear infinite;pointer-events:none}html.lt .goaled::after{content:"";position:absolute;right:-30px;top:-30px;width:110px;height:110px;border-radius:50%;background:rgba(20,20,20,.1)}@keyframes gosw{to{transform:rotate(360deg)}}@keyframes goglow{0%,100%{box-shadow:0 8px 18px color-mix(in srgb,var(--c) 38%,transparent)}50%{box-shadow:0 8px 32px color-mix(in srgb,var(--c) 65%,transparent)}}html.lt .goaled .gl,html.lt .goaled .gm,html.lt .goaled .gr{position:relative;z-index:1}html.lt .goaled .gl{font-size:26px;animation:gospark 1.6s ease-in-out infinite}@keyframes gospark{0%,100%{transform:scale(1);filter:drop-shadow(0 0 3px rgba(20,20,20,.5))}50%{transform:scale(1.12) rotate(-6deg);filter:drop-shadow(0 0 9px rgba(20,20,20,.95))}}html.lt .goaled .gm{flex:1}html.lt .goaled .gm b{display:block;font-size:18px;font-weight:900}html.lt .goaled .gm span{display:block;font-size:14px;opacity:.88;margin-top:3px;font-weight:700}html.lt .goaled .gr{font-size:16px;font-weight:900;background:rgba(20,20,20,.22);border-radius:99px;padding:7px 13px}html.lt /* 职业影响·左图右文海报式 */
+  .jobfx{display:flex;gap:10px;margin-top:12px;align-items:stretch}html.lt .jfx-l{width:38%;flex:none;border-radius:16px;overflow:hidden;position:relative;background:#ede3db;min-height:300px}html.lt .jfx-l img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top}html.lt .jfx-l::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(249,241,235,.88) 82%)}html.lt .jfx-lb{position:absolute;left:10px;right:10px;bottom:10px;z-index:2;color:#362000}html.lt .jfx-lb b{display:block;font-size:18px;font-weight:900;letter-spacing:1px}html.lt .jfx-lb span{display:block;font-size:14px;margin-top:3px;opacity:.85;line-height:1.5}html.lt .jfx-r{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:2px}html.lt .jfx-i{display:flex;gap:9px;padding:9px 2px;align-items:flex-start}html.lt .jfx-i+.jfx-i{border-top:1px dashed #3c2e1c}html.lt .jfx-ic{width:30px;height:30px;flex:none;border-radius:50%;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:17px}html.lt .jfx-i b{display:block;font-size:16px;color:#cdbeb5;font-weight:900}html.lt .jfx-i p{margin:3px 0 0;font-size:14px;color:#9c8875;line-height:1.55}html.lt /* 真实见证·三小视频入口 */
+  .trust3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}html.lt .trust3 a{text-decoration:none;display:block}html.lt .t3v{position:relative;border-radius:12px;overflow:hidden;aspect-ratio:3/4;background:#ede3db;box-shadow:0 4px 10px rgba(235,185,135,.18)}html.lt .t3v img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}html.lt .t3v::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(249,241,235,.72))}html.lt .t3p{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:rgba(20,20,20,.92);color:#d44d3f;display:flex;align-items:center;justify-content:center;font-size:16px;z-index:2;box-shadow:0 3px 8px rgba(247,247,247,.35)}html.lt .t3n{position:absolute;left:7px;bottom:6px;z-index:2;color:#362000;font-size:14px;font-weight:900}html.lt .t3s{display:block;font-size:12px;color:#8f7a65;font-weight:700;margin-top:4px;text-align:center;line-height:1.4}html.lt /* 九大体系按钮阵·科技舱卡（统一框架+九色差异） */
+  .sysbtns{display:flex;flex-direction:column;gap:10px;margin-top:12px}html.lt /* 三排分组：每排一个带暗花的同类底纹带，独立又关联 */
+  .sysrow{position:relative;border-radius:18px;padding:30px 9px 10px;overflow:hidden}html.lt .sysrow .sr-tag{position:absolute;left:10px;top:8px;z-index:3;font-size:14px;font-weight:900;letter-spacing:1.5px;color:var(--rc);background:color-mix(in srgb,var(--rc) 16%,#e4f0f8);border:1px solid color-mix(in srgb,var(--rc) 45%,transparent);border-radius:99px;padding:3px 11px}html.lt .sysrow .sr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;position:relative;z-index:2}html.lt /* 第一排：AI系列 · 冷蓝电路暗花 */
+  .sysrow.r1{--rc:#004890;background:
+    repeating-linear-gradient(45deg,rgba(0,72,144,.045) 0 2px,transparent 2px 14px),
+    repeating-linear-gradient(-45deg,rgba(0,72,144,.045) 0 2px,transparent 2px 14px),
+    radial-gradient(circle at 20% 0%,rgba(0,72,144,.10),transparent 55%),
+    linear-gradient(165deg,#d3e5f5,#dfebf9 70%);
+    border:1px solid rgba(0,72,144,.30)}html.lt /* 第二排：天赋×脑科 · 金绿云纹暗花 */
+  .sysrow.r2{--rc:#856517;background:
+    radial-gradient(circle at 12px 12px,rgba(133,101,23,.06) 3px,transparent 4px),
+    radial-gradient(circle at 36px 30px,rgba(10,131,86,.05) 3px,transparent 4px),
+    radial-gradient(circle at 80% 100%,rgba(133,101,23,.09),transparent 55%),
+    linear-gradient(165deg,#f6f3e8,#e5f1e9 75%);
+    background-size:48px 40px,48px 40px,auto,auto;border:1px solid rgba(133,101,23,.30)}html.lt /* 第三排：赛事背书 · 赤金火焰暗花 */
+  .sysrow.r3{--rc:#852000;background:
+    repeating-linear-gradient(90deg,rgba(133,32,0,.05) 0 3px,transparent 3px 18px),
+    radial-gradient(circle at 50% 120%,rgba(175,40,0,.14),transparent 60%),
+    linear-gradient(165deg,#efdddd,#f3ebf5 75%);
+    border:1px solid rgba(133,32,0,.30)}html.lt /* 排内卡片之间的连接光带：看似独立、实则同族 */
+  .sysrow::after{content:'';position:absolute;left:4%;right:4%;top:50%;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--rc) 40%,transparent),transparent);z-index:1}html.lt .sysrow a{position:relative;aspect-ratio:40/54;border-radius:13px;text-decoration:none;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(168deg,rgba(215,229,241,.92),rgba(231,241,249,.94) 60%);border:1px solid var(--ac);box-shadow:inset 0 0 20px color-mix(in srgb,var(--ac) 22%,transparent),inset 0 -14px 24px color-mix(in srgb,var(--ac) 10%,transparent),0 5px 13px rgba(213,235,247,.4);transition:transform .15s;backdrop-filter:blur(2px)}html.lt .sysbtns a:active{transform:scale(.94)}html.lt .sysbtns a::before,html.lt .sysbtns a::after{content:'';position:absolute;width:11px;height:11px;border:1.5px solid var(--ac);opacity:.95}html.lt .sysbtns a::before{left:5px;top:5px;border-right:none;border-bottom:none;border-radius:4px 0 0 0}html.lt .sysbtns a::after{right:5px;bottom:5px;border-left:none;border-top:none;border-radius:0 0 4px 0}html.lt .sysbtns .sb-ic{width:40px;height:40px;border-radius:50%;border:1.5px solid var(--ac);background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--ac) 30%,transparent),rgba(203,233,245,.2) 72%);display:flex;align-items:center;justify-content:center;font-size:20px;font-style:normal;box-shadow:0 0 14px color-mix(in srgb,var(--ac) 55%,transparent),inset 0 0 8px color-mix(in srgb,var(--ac) 30%,transparent);margin-bottom:9px;filter:saturate(1.15)}html.lt .sysbtns b{color:#001929;font-size:16px;font-weight:900;letter-spacing:.5px;text-align:center;line-height:1.35;padding:0 4px;text-shadow:0 0 10px color-mix(in srgb,var(--ac) 70%,transparent)}html.lt .sysbtns .sb-s{margin-top:3px;color:var(--ac);font-size:12px;font-weight:800;letter-spacing:3px;text-indent:3px}html.lt .sysbtns .sb-h{margin-top:6px;font-size:12px;font-weight:700;color:color-mix(in srgb,var(--ac) 75%,#141414);background:color-mix(in srgb,var(--ac) 14%,transparent);border:1px solid color-mix(in srgb,var(--ac) 35%,transparent);border-radius:99px;padding:2px 7px;line-height:1.3;text-align:center}html.lt .sysbtns .sb-line{width:24px;height:1.5px;background:linear-gradient(90deg,transparent,var(--ac),transparent);margin-top:7px;opacity:.85}html.lt /* ===== 五者切换 ===== */
+  .tabs{display:flex;gap:8px;margin:16px 16px 0;overflow-x:auto;padding-bottom:4px}html.lt .tabs::-webkit-scrollbar{display:none}html.lt .tabs .tb{flex:1;min-width:64px;border-radius:18px;background:#141414;border:2px solid #2d1e0e;padding:8px 4px 7px;text-align:center;cursor:pointer;transition:.25s;position:relative}html.lt .tabs .tb img{width:46px;height:46px;display:block;margin:0 auto 3px;border-radius:50%;box-shadow:0 3px 8px rgba(235,185,135,.15)}html.lt .tabs .tb .tn{font-size:16px;font-weight:900;color:#918175}html.lt .tabs .tb.on{border-color:var(--c);background:var(--cl);transform:translateY(-3px);box-shadow:0 6px 14px rgba(215,95,75,.16)}html.lt .tabs .tb.on .tn{color:var(--cd)}html.lt .card{margin:14px 16px 0;background:#141414;border-radius:24px;padding:18px 16px;border:2px solid #271809;box-shadow:0 4px 14px rgba(195,125,65,.08)}html.lt .card .c-h{display:flex;align-items:center;gap:8px;margin-bottom:12px}html.lt .card .c-h .ic{width:30px;height:30px;border-radius:10px;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:18px}html.lt .card .c-h .ct{font-size:18px;font-weight:900;color:#cdbeb5}html.lt .card .c-h .ct small{display:block;font-size:14px;color:#6c5948;font-weight:700;margin-top:1px}html.lt /* 大脑类型：左右脑图 */
+  .brainpics{display:flex;gap:10px;margin-bottom:14px}html.lt .brainpics .bp{flex:1;border-radius:16px;border:2px dashed #573b1a;padding:8px 8px 9px;text-align:center;
+    background:#291d00 repeating-linear-gradient(0deg,transparent,transparent 19px,rgba(125,95,55,.12) 19px,rgba(125,95,55,.12) 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,rgba(125,95,55,.12) 19px,rgba(125,95,55,.12) 20px)}html.lt .brainpics .bp img{width:100%;aspect-ratio:1;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(215,95,75,.15))}html.lt .brainpics .bp .bt{display:inline-block;margin-top:6px;font-size:14px;font-weight:900;color:var(--cd);background:var(--cl);border:1.5px solid var(--c);border-radius:99px;padding:4px 12px}html.lt .brainrow{display:flex;align-items:center;gap:10px;margin-bottom:12px}html.lt .brainrow .bl{width:44px;font-size:16px;font-weight:900;color:#a19185}html.lt .brainrow .bars{display:flex;gap:5px;flex:1}html.lt .brainrow .bars i{flex:1;height:16px;border-radius:6px;background:#20170c}html.lt .brainrow .bars i.on{background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 2px 6px rgba(215,95,75,.25)}html.lt .brainrow .bv{font-size:14px;font-weight:800;color:var(--cd);width:56px;text-align:right}html.lt .potent{margin-top:6px;border-radius:18px;background:linear-gradient(135deg,var(--cl),#141414);border:2px dashed var(--c);padding:12px 14px;display:flex;align-items:center;gap:12px}html.lt .potent .pi{width:44px;height:44px;border-radius:50%;background:var(--c);color:#141414;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 10px rgba(215,95,75,.3)}html.lt .potent .pn{font-size:16px;font-weight:800;color:#6c5948}html.lt .potent .pv{font-size:22px;font-weight:900;color:var(--cd)}html.lt /* 特点清单 */
+  .traits{display:flex;flex-direction:column;gap:9px}html.lt .traits .tr{display:flex;gap:9px;align-items:flex-start;font-size:16px;line-height:1.55;color:#bfafa3;background:#291800;border:1.5px solid #271809;border-radius:14px;padding:9px 12px}html.lt .traits .tr::before{content:"✔";flex:none;width:20px;height:20px;border-radius:50%;background:var(--c);color:#141414;font-size:14px;display:flex;align-items:center;justify-content:center;margin-top:1px;box-shadow:0 2px 5px rgba(215,95,75,.25)}html.lt .traits .tr.warn::before{content:"!"}html.lt /* ===== 家长课堂剧场（学成人版：主视频+分集） ===== */
+  .kscreen{position:relative;border-radius:18px;overflow:hidden;aspect-ratio:16/9;background:#edddd5;cursor:pointer;margin-bottom:10px}html.lt .kscreen img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9}html.lt .kscreen .kshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(245,225,215,.05),rgba(245,225,215,.68))}html.lt .kscreen .kplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:var(--c);color:#141414;font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px rgba(20,20,20,.28),0 8px 18px rgba(247,247,247,.35);animation:kpulse 2s ease-in-out infinite}@keyframes kpulse{0%,100%{box-shadow:0 0 0 6px rgba(20,20,20,.28),0 8px 18px rgba(247,247,247,.35)}50%{box-shadow:0 0 0 12px rgba(20,20,20,.14),0 8px 18px rgba(247,247,247,.35)}}html.lt .kscreen .kdur{position:absolute;right:10px;top:10px;font-size:14px;font-weight:800;background:rgba(247,247,247,.55);color:#141414;border-radius:6px;padding:2px 8px}html.lt .kscreen .kept{position:absolute;left:12px;bottom:10px;right:12px}html.lt .kscreen .kept .ken{font-size:17px;font-weight:900;color:#141414;text-shadow:0 2px 8px rgba(247,247,247,.6)}html.lt .kscreen .kept .kes{font-size:14px;color:rgba(20,20,20,.85);margin-top:2px}html.lt .keps{display:flex;gap:8px;margin-bottom:12px}html.lt .kep{flex:1;border-radius:12px;overflow:hidden;position:relative;aspect-ratio:16/10;cursor:pointer;border:2px solid transparent}html.lt .kep img{width:100%;height:100%;object-fit:cover}html.lt .kep .kde{position:absolute;inset:0;background:linear-gradient(180deg,rgba(245,225,215,0),rgba(245,225,215,.78));display:flex;flex-direction:column;justify-content:flex-end;padding:6px 7px}html.lt .kep .kde .kt{font-size:14px;font-weight:900;color:#141414;line-height:1.3}html.lt .kep .kde .kd{font-size:12px;color:rgba(20,20,20,.8);margin-top:1px}html.lt .kep.on{border-color:var(--c);box-shadow:0 4px 10px rgba(215,95,75,.3)}html.lt .kep.on::after{content:"连播";position:absolute;left:6px;top:6px;font-size:12px;font-weight:900;color:#141414;background:var(--c);border-radius:5px;padding:1px 6px}html.lt /* 板块视频条（五大核心板块各带视频） */
+  .kv{display:flex;gap:10px;align-items:center;border-radius:16px;background:linear-gradient(135deg,var(--cl),#141414);border:1.5px solid var(--c);padding:8px;margin-bottom:12px;cursor:pointer}html.lt .kv .kvt{position:relative;flex:none;width:104px;aspect-ratio:16/10;border-radius:11px;overflow:hidden}html.lt .kv .kvt img{width:100%;height:100%;object-fit:cover}html.lt .kv .kvt .kp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:rgba(20,20,20,.92);color:var(--cd);font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(247,247,247,.3)}html.lt .kv .kvt .kd{position:absolute;right:5px;bottom:5px;font-size:12px;font-weight:800;color:#141414;background:rgba(247,247,247,.55);border-radius:5px;padding:1px 6px}html.lt .kv .kvn{font-size:16px;font-weight:900;color:var(--cd);line-height:1.4}html.lt .kv .kvs{font-size:14px;color:#85705f;font-weight:700;margin-top:3px}html.lt /* 教养卡 */
+  .teach{border-radius:18px;background:linear-gradient(160deg,var(--cl),#141414);border:2px solid var(--c);padding:14px;margin-bottom:10px}html.lt .teach .tt{font-size:17px;font-weight:900;color:var(--cd);margin-bottom:6px}html.lt .teach .tp{font-size:16px;line-height:1.7;color:#bfafa3}html.lt .saychips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}html.lt .saychips span{font-size:16px;font-weight:800;color:var(--cd);background:#141414;border:1.5px solid var(--c);border-radius:99px;padding:6px 13px;box-shadow:0 2px 5px rgba(215,95,75,.12)}html.lt /* 金句横幅 */
+  .quoteban{margin:14px 16px 0;border-radius:24px;padding:22px 18px;text-align:center;color:#141414;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 8px 20px rgba(215,95,75,.3);transition:background .5s}html.lt .quoteban::before{content:"“";position:absolute;left:12px;top:-14px;font-size:80px;opacity:.18;font-family:serif}html.lt .quoteban .star{display:inline-block;font-size:14px;font-weight:900;background:#916900;color:#e2ae70;border-radius:8px;padding:3px 10px;margin-bottom:8px;box-shadow:0 2px 6px rgba(247,247,247,.15)}html.lt .quoteban .qt{font-size:19px;font-weight:900;line-height:1.5;text-shadow:0 2px 0 rgba(247,247,247,.12)}html.lt .radar-note{text-align:center;font-size:14px;color:#6c5948;font-weight:700;margin-top:6px}html.lt /* 学习问题 · 标签化图标系统 */
+  .probs{display:flex;flex-direction:column;gap:10px}html.lt .pb-core{display:flex;align-items:center;gap:13px;border-radius:20px;padding:13px 15px;background:linear-gradient(135deg,var(--cl),#141414);border:2px solid var(--c);position:relative;overflow:hidden}html.lt .pb-core::after{content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;background:var(--c);opacity:.08}html.lt .pb-core .bci{width:56px;height:56px;flex:none;border-radius:50%;background:var(--c);display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 5px 14px rgba(247,247,247,.18);border:3px solid #141414}html.lt .pb-core .bct{flex:1}html.lt .pb-core .bcl{font-size:20px;font-weight:900;color:var(--cd);letter-spacing:1px}html.lt .pb-core .bcn{font-size:14px;color:#b19175;margin-top:3px;line-height:1.5}html.lt .pb-core .bcb{flex:none;font-size:14px;font-weight:900;color:#141414;background:var(--cd);border-radius:8px;padding:3px 8px;letter-spacing:1px}html.lt .pb-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}html.lt .pb-tag{display:flex;align-items:center;gap:9px;border-radius:15px;background:#291800;border:1.5px solid #2d1e0e;padding:9px 11px;transition:border-color .2s}html.lt .pb-tag:active{border-color:var(--c)}html.lt .pb-tag .bti{width:36px;height:36px;flex:none;border-radius:11px;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:18px}html.lt .pb-tag .btt{min-width:0}html.lt .pb-tag .btl{font-size:16px;font-weight:900;color:#cdbeb5}html.lt .pb-tag .btn{font-size:14px;color:#85705f;line-height:1.4;margin-top:1px}html.lt /* 偏科三宫格 */
+  .pianke{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px}html.lt .pianke div{border-radius:14px;background:#291700;border:1.5px dashed #573b1a;padding:10px 8px;font-size:14px;line-height:1.6;color:#b19175;text-align:center}html.lt .pianke div b{display:block;font-size:16px;color:#d1694f;margin-bottom:3px}html.lt /* 职业参考 */
+  .jobs{display:flex;flex-direction:column;gap:10px}html.lt .jobs .jb{border-radius:18px;border:2px solid #2d1e0e;background:#291800;padding:12px 14px;position:relative;overflow:hidden}html.lt .jobs .jb.first{border-color:var(--c);background:linear-gradient(135deg,var(--cl),#141414)}html.lt .jobs .jb .jt{display:flex;align-items:baseline;gap:8px}html.lt .jobs .jb .jt .jr{font-size:14px;font-weight:900;color:#141414;background:var(--c);border-radius:7px;padding:2px 8px}html.lt .jobs .jb .jt .jn{font-size:17px;font-weight:900;color:#cdbeb5}html.lt .jobs .jb .jt .js{margin-left:auto;font-size:18px;font-weight:900;color:var(--cd)}html.lt .jobs .jb .jd{font-size:14px;color:#85705f;margin-top:5px}html.lt .jobs .jb .jr2{font-size:16px;font-weight:900;color:#a19185;margin-top:6px}html.lt /* 特质四卡 */
+  .feat{display:flex;flex-direction:column;gap:10px;margin-top:14px}html.lt .feat .ft{border-radius:18px;background:#291800;border:1.5px solid #2d1e0e;padding:12px 14px}html.lt .feat .ft .fh{display:flex;align-items:center;gap:7px;font-size:16px;font-weight:900;color:#cdbeb5;margin-bottom:5px}html.lt .feat .ft .fh i{width:22px;height:22px;border-radius:8px;background:var(--cl);display:flex;align-items:center;justify-content:center;font-size:16px;font-style:normal}html.lt .feat .ft .fp{font-size:16px;line-height:1.7;color:#a19185}html.lt /* 素质建议 */
+  .suzi{display:grid;grid-template-columns:1fr 1fr;gap:10px}html.lt .suzi .sz{border-radius:18px;background:linear-gradient(160deg,#000d29,#141414);border:2px solid #071327;padding:13px 12px}html.lt .suzi .sz .sh{display:flex;align-items:center;justify-content:space-between}html.lt .suzi .sz .sh b{font-size:17px;color:#85a4d4}html.lt .suzi .sz .sh .se{font-size:22px}html.lt .suzi .sz .sr{display:inline-block;font-size:14px;font-weight:900;color:#141414;background:#275794;border-radius:6px;padding:2px 8px;margin:6px 0}html.lt .suzi .sz .sd{font-size:14px;line-height:1.6;color:#6f7c91}html.lt /* ===== 三大门类：AI脑教育/超脑九段/九大秘籍 ===== */
+  .prods{display:flex;flex-direction:column;gap:10px}html.lt .prods .pd{border-radius:18px;border:2px solid #2d1e0e;background:#291800;padding:12px 14px;display:flex;align-items:center;gap:11px}html.lt .prods .pd .di{flex:none;width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:21px;background:linear-gradient(135deg,var(--cl),#141414);border:1.5px solid var(--c)}html.lt .prods .pd .dm{flex:1}html.lt .prods .pd .dn{font-size:17px;font-weight:900;color:#cdbeb5}html.lt .prods .pd .dn span{font-size:14px;font-weight:900;color:#141414;background:var(--c);border-radius:6px;padding:2px 7px;margin-left:5px;vertical-align:2px}html.lt .prods .pd .dd{font-size:14px;color:#85705f;margin-top:3px;line-height:1.5}html.lt .prods .pd .dbtn,html.lt .dbtn{flex:none;font-size:14px;font-weight:900;color:#141414;background:linear-gradient(135deg,var(--c),var(--cd));border-radius:10px;padding:8px 12px;text-decoration:none;box-shadow:0 3px 8px rgba(215,95,75,.25)}html.lt .syshot{position:relative;margin-top:12px;border-radius:14px;overflow:hidden;border:1.5px solid #b5d5e5}html.lt .syshot img{width:100%;display:block}html.lt .syshot a{position:absolute;border-radius:10px;transition:.2s}html.lt .syshot a:active{background:rgba(0,114,145,.28);box-shadow:inset 0 0 0 2px #007190}html.lt .systip{margin-top:7px;text-align:center;font-size:14px;color:#917b5f;font-weight:700}html.lt .sysimg{margin-top:12px;border-radius:14px;overflow:hidden;border:2px solid #271809}html.lt .sysimg img{width:100%;display:block}html.lt .tower{margin-top:12px;border-radius:14px;overflow:hidden;border:2px solid #271809}html.lt .tower img{width:100%;display:block}html.lt .duan{display:flex;flex-direction:column;gap:7px;margin-top:12px}html.lt .duan .du{display:flex;align-items:center;gap:10px;border-radius:13px;padding:8px 11px;background:#291800;border:1.5px solid #2d1e0e;font-size:16px;font-weight:800;color:#bfafa3}html.lt .duan .du .dn9{flex:none;width:44px;font-size:14px;font-weight:900;color:#141414;text-align:center;border-radius:8px;padding:4px 0}html.lt .duan .du .dp{margin-left:auto;font-size:12px;font-weight:900;border-radius:6px;padding:2px 7px}html.lt .ph1{background:#d8b136}html.lt .ph2{background:#71c18d}html.lt .ph3{background:#3d91b5}html.lt .ph4{background:#3d71b5}html.lt .duan .du .dp1{background:#251b04;color:#e2c275}html.lt .duan .du .dp2{background:#0c1c11;color:#a4e1ba}html.lt .duan .du .dp3{background:#061823;color:#75b4d4}html.lt .duan .du .dp4{background:#061423;color:#85a4d4}html.lt .miji{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}html.lt .miji .mj{border-radius:16px;overflow:hidden;background:#291b00;border:1.5px solid #563c16;cursor:pointer;box-shadow:0 4px 12px rgba(235,185,135,.10);transition:transform .15s}html.lt .miji .mj:active{transform:scale(.97)}html.lt .miji .mj .mp{position:relative;aspect-ratio:16/9.5;overflow:hidden;background:#edddd5}html.lt .miji .mj .mp img{width:100%;height:100%;object-fit:cover;display:block}html.lt .miji .mj .mp i{position:absolute;left:8px;top:8px;font-style:normal;font-size:12px;font-weight:900;color:#4f3900;background:rgba(247,227,215,.62);border:1px solid rgba(105,70,0,.55);border-radius:7px;padding:2px 8px;backdrop-filter:blur(3px)}html.lt .miji .mj .mm{padding:9px 10px 10px}html.lt .miji .mj b{display:block;font-size:16px;font-weight:900;color:#e7b094}html.lt .miji .mj small{display:block;font-size:14px;color:#af875f;margin-top:2px;font-weight:700}html.lt .miji .mj span{display:inline-block;margin-top:7px;font-size:14px;font-weight:900;color:#141414;background:linear-gradient(135deg,#c02c17,#d54d3d);border-radius:8px;padding:3px 10px}html.lt .confban{margin-top:12px;border-radius:18px;overflow:hidden;position:relative;padding:16px 14px;color:#141414;
+    background:linear-gradient(135deg,#85a4d4,#c0d3ed);box-shadow:0 8px 18px rgba(145,175,225,.3)}html.lt .confban .cb-t{font-size:17px;font-weight:900}html.lt .confban .cb-p{font-size:14px;margin-top:5px;line-height:1.6;opacity:.85}html.lt .confban .cb-b{display:inline-block;margin-top:10px;font-size:16px;font-weight:900;color:#85a4d4;background:#916900;border-radius:10px;padding:8px 16px;text-decoration:none;box-shadow:0 4px 10px rgba(247,247,247,.25)}html.lt .dramaban{margin-top:12px;display:flex;align-items:center;gap:10px;border-radius:18px;padding:13px 14px;text-decoration:none;color:#141414;
+    background:linear-gradient(135deg,var(--c),var(--cd));box-shadow:0 6px 16px rgba(215,95,75,.3)}html.lt .dramaban .db-i{font-size:24px}html.lt .dramaban .db-t{flex:1;font-size:16px;font-weight:900}html.lt .dramaban .db-t small{display:block;font-size:14px;opacity:.85;font-weight:700;margin-top:2px}html.lt .dramaban .db-g{font-size:18px;font-weight:900}html.lt /* 亲子导流 */
+  .family{margin:14px 16px 0;border-radius:24px;overflow:hidden;position:relative;padding:24px 18px;text-align:center;
+    background:linear-gradient(160deg,#a33e00,#af0f2d);color:#141414;box-shadow:0 8px 20px rgba(175,15,45,.3)}html.lt .family .fq{font-size:19px;font-weight:900;text-shadow:0 2px 0 rgba(247,247,247,.1)}html.lt .family .fs{font-size:16px;margin-top:6px;opacity:.92;font-weight:600}html.lt .family .fbtns{display:flex;gap:10px;margin-top:14px}html.lt .family .fbtns a{flex:1;text-decoration:none;font-size:16px;font-weight:900;border-radius:14px;padding:11px;background:#141414;color:#c5294b;box-shadow:0 4px 10px rgba(247,247,247,.15)}html.lt .family .fbtns a+a{background:rgba(20,20,20,.2);color:#141414;border:2px solid #141414}html.lt .disclaim{margin:14px 16px 0;font-size:14px;color:#6c5948;line-height:1.7;background:#291800;border:1.5px dashed #3b2a15;border-radius:14px;padding:10px 12px}html.lt /* ===== 分享 ===== */
+  .sharefab{position:fixed;right:14px;bottom:86px;z-index:60;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+    background:linear-gradient(135deg,#a32e00,#af0f2d);color:#141414;font-size:14px;font-weight:900;box-shadow:0 8px 20px rgba(175,15,45,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}html.lt .sharefab .si{font-size:18px}html.lt .shmask{position:fixed;inset:0;z-index:80;background:rgba(230,205,195,.5);backdrop-filter:blur(3px);display:none}html.lt .shmask.on{display:block}html.lt .sheet{position:fixed;left:0;right:0;bottom:0;z-index:90;max-width:430px;margin:0 auto;background:#291800;border-radius:26px 26px 0 0;padding:20px 18px 30px;transform:translateY(105%);transition:transform .3s;box-shadow:0 -10px 30px rgba(247,247,247,.2)}html.lt .sheet.on{transform:translateY(0)}html.lt .sheet .sh-t{text-align:center;font-size:18px;font-weight:900;color:#cdbeb5;margin-bottom:4px}html.lt .sheet .sh-s{text-align:center;font-size:14px;color:#6c5948;font-weight:700;margin-bottom:16px}html.lt .shbtns{display:flex;gap:10px}html.lt .shbtns button{flex:1;border:none;border-radius:16px;padding:14px 8px;font-size:16px;font-weight:900;cursor:pointer;background:linear-gradient(135deg,var(--c),var(--cd));color:#141414;box-shadow:0 5px 14px rgba(215,95,75,.3)}html.lt .shbtns button.ghost{background:#141414;color:var(--cd);border:2px solid var(--c);box-shadow:none}html.lt .shprev{display:none;margin-top:14px;text-align:center}html.lt .shprev.on{display:block}html.lt .shprev img{width:200px;border-radius:16px;box-shadow:0 8px 22px rgba(247,247,247,.25);border:3px solid #141414}html.lt .shprev a{display:inline-block;margin-top:10px;font-size:16px;font-weight:900;color:#141414;background:linear-gradient(135deg,#71c18d,#a4e1ba);border-radius:12px;padding:9px 20px;text-decoration:none}html.lt .shtip{margin-top:10px;font-size:14px;color:#6c5948;font-weight:700;text-align:center;min-height:16px}html.lt /* 底部导航 */
+  .foot{position:fixed;bottom:0;left:0;right:0;z-index:50;max-width:430px;margin:0 auto;display:flex;background:rgba(41,22,0,.96);backdrop-filter:blur(8px);border-top:2px solid #3d1f00;padding:8px 0 12px}html.lt .foot a{flex:1;text-align:center;text-decoration:none;color:#6c5948;font-size:10px;font-weight:700}html.lt .foot a .fi{font-size:19px;display:block;margin-bottom:2px}html.lt .foot a.on{color:#af0f2d;font-weight:900}html.lt .adultlink{display:block;margin:14px 16px 0;text-align:center;font-size:14px;font-weight:800;color:#b19175;text-decoration:none;border:1.5px dashed #573b1a;border-radius:99px;padding:9px}html.lt /* ===== 成长蜕变 · 从平凡到卓越 ===== */
+  .growtl{margin-top:14px;position:relative;padding-left:6px}html.lt .growtl::before{content:"";position:absolute;left:25px;top:20px;bottom:20px;width:3px;border-radius:3px;background:linear-gradient(180deg,#855f17,#c58636,#d5a575,#e7d3c1)}html.lt .growtl .gs{display:flex;gap:12px;margin-bottom:12px;position:relative}html.lt .growtl .gs .gage{flex-shrink:0;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#d7af85,#e7d3c1);border:2px solid #855f17;color:#4f3900;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.15;box-shadow:0 3px 8px rgba(235,185,135,.3);position:relative;z-index:1}html.lt .growtl .gs .gsc{flex:1;border-radius:16px;background:linear-gradient(160deg,#291c00,#251904);border:1.5px solid #563c16;padding:10px 12px}html.lt .growtl .gs .gsp{font-size:16px;font-weight:900;color:#e7b785}html.lt .growtl .gs .gst{font-size:14px;color:#b19175;margin-top:3px;line-height:1.65;font-weight:600}html.lt .growtl .gs:last-child .gsc{background:linear-gradient(135deg,#e7a185,#d1694f);border-color:#c07817}html.lt .growtl .gs:last-child .gsp{color:#4f3900}html.lt .growtl .gs:last-child .gst{color:rgba(55,35,0,.9)}html.lt .gvals{display:flex;gap:9px;margin-top:4px}html.lt .gvals>div{flex:1;border-radius:14px;padding:10px 11px;border:1.5px solid #563c16;background:#141414}html.lt .gvals .gvt{font-size:14px;font-weight:900;color:#a17b4f;letter-spacing:1px}html.lt .gvals .gvv{font-size:16px;font-weight:900;color:#e7a185;margin-top:4px;line-height:1.5}html.lt .gpcap{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:16px;font-weight:900;color:#e7b094}html.lt .gpcap::before,html.lt .gpcap::after{content:"";flex:1;height:1.5px;background:#563c16}html.lt .gpros{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}html.lt .gpros span{font-size:14px;font-weight:900;color:#a4e1ba;background:linear-gradient(135deg,#0c1d0f,#122713);border:1.5px solid #386344;border-radius:9px;padding:5px 10px}html.lt .gcons{margin-top:9px;display:grid;grid-template-columns:1fr 1fr;gap:7px}html.lt .gcons div{border-radius:11px;background:#291000;border:1.5px solid #47240f;padding:7px 9px;font-size:14px;font-weight:800;color:#c5755f;line-height:1.5}html.lt .gcons div b{display:block;color:#a4e1ba;font-size:14px;margin-top:2px}html.lt /* ===== 核心任务解锁 · 组建天赋小班 ===== */
+  .taskcard{margin:14px 16px 0;border-radius:24px;padding:17px 16px;background:linear-gradient(165deg,#291a00,#291800);border:2px solid #573d0c;box-shadow:0 8px 20px rgba(235,175,105,.14)}html.lt .taskcard .tc-h{display:flex;align-items:center;gap:10px}html.lt .taskcard .tc-h .ti{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#c02c17,#d54d3d);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 10px rgba(215,75,55,.3)}html.lt .taskcard .tc-h .tt{font-size:18px;font-weight:900;color:#e7b094}html.lt .taskcard .tc-h .tt small{display:block;font-size:14px;color:#b57d4f;font-weight:700;margin-top:1px}html.lt .taskcard .tgoal{margin-top:11px;font-size:16px;color:#c59975;line-height:1.75;font-weight:600}html.lt .taskcard .tgoal b{color:#d54d3d;font-size:17px}html.lt .taskcard .tslots{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}html.lt .taskcard .ts{width:32px;height:32px;border-radius:50%;border:2px dashed #735326;display:flex;align-items:center;justify-content:center;font-size:16px;color:#886736;background:#141414;transition:all .3s}html.lt .taskcard .ts.done{border:2px solid #c02c17;background:linear-gradient(135deg,#4f3900,#946406);color:#eda185;box-shadow:0 3px 8px rgba(215,105,25,.35);animation:tpulse .6s}html.lt .taskcard .tbar{height:11px;border-radius:99px;background:#33250f;margin-top:12px;overflow:hidden}html.lt .taskcard .tbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#946406,#c02c17);border-radius:99px;transition:width .6s}html.lt .taskcard .tprog{margin-top:7px;font-size:14px;color:#a17b4f;font-weight:700;text-align:center}html.lt .taskcard .tbtn{margin-top:12px;display:block;width:100%;border:none;cursor:pointer;text-align:center;font-size:17px;font-weight:900;color:#141414;border-radius:15px;padding:13px;background:linear-gradient(135deg,#c02c17,#d54d3d);box-shadow:0 6px 14px rgba(215,75,55,.35)}html.lt .taskcard .tlock{margin-top:12px;border-radius:16px;padding:13px 14px;background:rgba(20,20,20,.72);border:1.5px dashed #735326}html.lt .taskcard .tlock .tl-t{font-size:16px;font-weight:900;color:#b19175}html.lt .taskcard .tlock ul{margin:8px 0 0;padding:0;list-style:none}html.lt .taskcard .tlock li{font-size:14px;color:#957657;line-height:2;font-weight:700}html.lt .taskcard .tlock.lockon{border:2px solid #c07817;background:linear-gradient(160deg,#291d00,#372600)}html.lt .taskcard .tlock.lockon .tl-t{color:#d54d3d}html.lt .taskcard .tid{margin-top:9px;border-radius:12px;background:#141414;border:1.5px solid #573d0c;padding:9px 12px;font-size:14px;font-weight:800;color:#c59975;line-height:1.9}html.lt .taskcard .tid b{color:#d54d3d}html.lt .taskcard .tenter{display:block;margin-top:10px;text-align:center;text-decoration:none;font-size:16px;font-weight:900;color:#eda185;border-radius:13px;padding:11px;background:linear-gradient(135deg,#4f3900,#946406);box-shadow:0 4px 10px rgba(215,155,55,.4)}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">劲脑 · 五者天赋测评<small>JNAO KIDS REPORT</small></div>
+  <div class="versw"><span class="on">儿童版</span><a href="report-v3.html">成人版</a></div>
+</div>
+
+<!-- 开篇巨幕：动态天赋视觉 -->
+<div class="kshow" id="ksBox">
+  <img id="ksHero" class="slideA" src="/static/dayu/assets/kid/hero-win.png" alt="天赋巨幕"/>
+  <img class="slideB" src="/static/dayu/assets/miji/poster-tfwuyu.jpg" alt="天赋物语短剧海报"/>
+  <div class="kshine"></div>
+  <div class="kspark" id="kSpark"></div>
+  <div class="kslive">✨ 天赋巨幕</div>
+  <a class="ksdrama" href="#kidTheater">▶ 看天赋短剧</a>
+  <div class="kscap"><div class="kt1" id="ksT1">赢者 · 梦想领导型</div><div class="kt2" id="ksT2">给他一个舞台，他能征服全场</div></div>
+</div>
+
+<!-- 头版奖状（海报要素：诀句入头版） -->
+<div class="hero" id="heroCard">
+  <div class="medal">🏅</div>
+  <span class="h-tag">您孩子的测评报告</span>
+  <div class="h-type" id="hType">赢者</div>
+  <div class="h-quote" id="hQuote">性格自信勇敢，右脑发达具有更强想象力的孩子</div>
+  <div class="h-mantra"><small>顺应天赋 · 因材施教</small><span id="hMantra"></span><span class="h-date">2026-08-15 · 儿童卷</span></div>
+  <img class="h-ip" id="hIp" src="/static/dayu/assets/ip/ring-win.png" alt=""/>
+</div>
+
+<!-- 学业规划 · 极速提分（单入口，养育要点并入） -->
+<a class="goaled" href="plan.html">
+  <div class="gl">🎓</div>
+  <div class="gm"><b>学业规划 · 极速提分</b><span id="gKeys">守护好胜心 · 给目标给对手 · 多夸多捧</span></div>
+  <div class="gr">进入 →</div>
+</a>
+<div class="keys" id="keys" style="display:none"></div>
+
+<!-- 五者切换 -->
+<div class="tabs" id="tabs"></div>
+
+<!-- 大脑类型：左右脑图+能量条 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🧠</div><div class="ct">您孩子的大脑类型<small>左右脑能量分布</small></div></div>
+  <div class="brainpics">
+    <div class="bp"><img id="brainImg" src="/static/dayu/assets/kid/brain-win.png" alt="左右脑示意"/><span class="bt" id="btL">左脑 · 相对较弱</span></div>
+    <div class="bp"><img id="potImg" src="/static/dayu/assets/kid/pot-win.jpg" alt="天赋潜力"/><span class="bt" id="btR">右脑 · 非常发达</span></div>
+  </div>
+  <div class="brainrow"><div class="bl">左脑</div><div class="bars" id="barL"></div><div class="bv" id="bvL"></div></div>
+  <div class="brainrow"><div class="bl">右脑</div><div class="bars" id="barR"></div><div class="bv" id="bvR"></div></div>
+  <div class="potent"><div class="pi" id="potI">🌟</div><div><div class="pn">天赋潜力</div><div class="pv" id="potV">想象力</div></div></div>
+</div>
+
+<!-- 他是这样的孩子 -->
+<div class="card">
+  <div class="c-h"><div class="ic">👀</div><div class="ct">他是这样的孩子<small>对照印证</small></div></div>
+  <div class="traits" id="traits"></div>
+</div>
+
+<!-- 成长蜕变：从平凡到卓越（四阶段史诗篇章） -->
+<div class="card" id="growCard">
+  <div class="c-h"><div class="ic">🗡️</div><div class="ct">成长蜕变 · 从平凡到卓越<small>《天赋物语》同龄成长线 · 一个孩子到天才的四段路</small></div></div>
+  <div class="kscreen" id="kScrGrow">
+    <img src="/static/dayu/assets/kid/growth.jpg"/>
+    <div class="kshade"></div>
+    <div class="kplay">▶</div>
+    <div class="kdur">04:30</div>
+    <div class="kept"><div class="ken" id="grKen">赢者的成长史诗 · 从平凡到卓越</div><div class="kes">10岁立志 → 15岁磨砺 → 18岁蜕变 → 成年卓越</div></div>
+  </div>
+  <div class="growtl" id="gStage"></div>
+  <div class="gvals">
+    <div><div class="gvt">💎 人生价值观</div><div class="gvv" id="gVal"></div></div>
+    <div><div class="gvt">🧠 大脑能力</div><div class="gvv" id="gBrain"></div></div>
+  </div>
+  <div class="gpcap">十大优点 · 天赋的锋芒</div>
+  <div class="gpros" id="gPros"></div>
+  <div class="gpcap">十大缺点 · 完善与优化<small style="font-weight:700;color:#B08A5E">成长就是把短板炼成铠甲</small></div>
+  <div class="gcons" id="gCons"></div>
+  <a class="dramaban" href="#kidTheater"><span class="db-i">🎬</span><span class="db-t">看《天赋物语》同龄人的成长故事<small>剧中主角与您孩子同天赋 · 同年龄段</small></span><span class="db-g">→</span></a>
+</div>
+
+<!-- 怎么教他：家长课堂剧场（主视频+分集） -->
+<div class="card" id="kidTheater">
+  <div class="c-h"><div class="ic">💗</div><div class="ct">怎么教他<small>家长课堂</small></div></div>
+  <div class="kscreen" id="kScreen">
+    <img id="ksImg" src="/static/dayu/assets/hall/win4.png"/>
+    <div class="kshade"></div>
+    <div class="kplay">▶</div>
+    <div class="kdur" id="ksDur">02:30</div>
+    <div class="kept"><div class="ken" id="ksTitle"></div><div class="kes" id="ksSub"></div></div>
+  </div>
+  <div class="keps" id="kEps"></div>
+  <div class="teach">
+    <div class="tt" id="teachT"></div>
+    <div class="tp" id="teachP"></div>
+    <div class="saychips" id="sayChips"></div>
+  </div>
+  <div class="tp" id="teachP2" style="font-size:16px;line-height:1.7;color:#5C4C40"></div>
+</div>
+
+<!-- 金句 -->
+<div class="quoteban"><span class="star">★ 金句</span><div class="qt" id="quoteTxt"></div></div>
+
+<!-- ① 学习力分析 -->
+<div class="card" id="secLearn">
+  <div class="c-h"><div class="ic">📊</div><div class="ct">学习力分析<small>左右脑特征影响的能力特长</small></div></div>
+  <div class="kv" data-v="0"><div class="kvt"><img id="kvImg0" src="/static/dayu/assets/hall/win1.png"/><span class="kp">▶</span><span class="kd" id="kvDur0">03:20</span></div><div><div class="kvn" id="kvT0"></div><div class="kvs">点开视频 · 看懂五维学习力</div></div></div>
+  <div style="text-align:center"><svg id="kidRadar" width="300" height="240" viewBox="0 0 300 240"></svg></div>
+  <div class="radar-note">想象力 99% · 创造力 64% · 观察力 45% · 记忆力 30% · 专注力 30%</div>
+</div>
+
+<!-- ② 学习问题 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🔍</div><div class="ct">学习问题<small id="probS">速记力高于80%的人，但不感兴趣的记超级慢</small></div></div>
+  <div class="kv" data-v="1"><div class="kvt"><img id="kvImg1" src="/static/dayu/assets/hall/win2.png"/><span class="kp">▶</span><span class="kd" id="kvDur1">02:40</span></div><div><div class="kvn" id="kvT1"></div><div class="kvs">点开视频 · 问题背后的原因</div></div></div>
+  <div class="probs" id="probs"></div>
+</div>
+
+<!-- ③ 偏科分析 -->
+<div class="card">
+  <div class="c-h"><div class="ic">📐</div><div class="ct">偏科分析<small>常见偏科问题对照</small></div></div>
+  <div class="kv" data-v="2"><div class="kvt"><img id="kvImg2" src="/static/dayu/assets/hall/win3.png"/><span class="kp">▶</span><span class="kd" id="kvDur2">02:30</span></div><div><div class="kvn" id="kvT2"></div><div class="kvs">点开视频 · 偏科背后的脑科学</div></div></div>
+  <div class="pianke">
+    <div><b>文科</b>懒得复习<br/>很少总结<br/>被动作业</div>
+    <div><b>理科</b>上课不听<br/>下课不练<br/>基础薄弱</div>
+    <div><b>英语</b>内心抵触<br/>记忆障碍<br/>练习低效</div>
+  </div>
+</div>
+
+<!-- ④ 素质教育 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🎨</div><div class="ct">素质教育<small>根据大脑特征与性格特点</small></div></div>
+  <div class="kv" data-v="3"><div class="kvt"><img id="kvImg3" src="/static/dayu/assets/hall/win4.png"/><span class="kp">▶</span><span class="kd" id="kvDur3">02:50</span></div><div><div class="kvn" id="kvT3"></div><div class="kvs">点开视频 · 素质课怎么选</div></div></div>
+  <div class="suzi">
+    <div class="sz"><div class="sh"><b>首选艺术</b><span class="se">🎹</span></div><span class="sr">首选</span><div class="sd">音乐节奏需要发达右脑接收，表演更需要想象力加创造力，训练可提升右脑想象力天赋。</div></div>
+    <div class="sz"><div class="sh"><b>次选绘画</b><span class="se">🎨</span></div><span class="sr">次选</span><div class="sd">绘画是艺术呈现的最高境界，右脑发达才能理解并创作，训练大脑并绽放想象力天赋。</div></div>
+    <div class="sz"><div class="sh"><b>可选竞技</b><span class="se">🎾</span></div><span class="sr">可选</span><div class="sd">一对一的竞技能提高专注力，运动训练可提升左右脑平衡，提升大脑能力可以适当运动。</div></div>
+    <div class="sz"><div class="sh"><b>备选棋类</b><span class="se">♟️</span></div><span class="sr">备选</span><div class="sd">棋类对专注力训练帮助最大，右脑能力开启前须足够专注，训练大脑离不开专注力训练。</div></div>
+  </div>
+</div>
+
+<!-- ⑤ 职业规划 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🚀</div><div class="ct">职业规划<small>右脑发达 · 性格自信勇敢</small></div></div>
+  <div class="kv" data-v="4"><div class="kvt"><img id="kvImg4" src="/static/dayu/assets/hall/win1.png"/><span class="kp">▶</span><span class="kd" id="kvDur4">03:10</span></div><div><div class="kvn" id="kvT4"></div><div class="kvs">点开视频 · 未来适合什么职业</div></div></div>
+  <div class="jobs">
+    <div class="jb first"><div class="jt"><span class="jr">首选职业</span><span class="jn">商务类</span><span class="js">90分</span></div><div class="jd">天生强大的沟通能力是征服世界的王牌</div><div class="jr2">商业经营人才 · 市场拓展人才</div></div>
+    <div class="jb"><div class="jt"><span class="jr">次选职业</span><span class="jn">艺术类</span><span class="js">80分</span></div><div class="jd">发达的右脑拥有创造一切艺术的天赋</div><div class="jr2">艺术表演人才 · 文艺创作人才</div></div>
+    <div class="jb"><div class="jt"><span class="jr">可选职业</span><span class="jn">管理类</span><span class="js">70分</span></div><div class="jd">从小喜欢统领人的天赋必然拥有管理天赋</div><div class="jr2">企业管理人才 · 技术管理人才</div></div>
+    <div class="jb"><div class="jt"><span class="jr">备选职业</span><span class="jn">营销类</span><span class="js">60分</span></div><div class="jd">总能想到更美妙的主意就是营销的天赋</div><div class="jr2">广告营销人才 · 商务策划人才</div></div>
+  </div>
+  <div style="font-size:16px;font-weight:900;color:#4A3B32;margin:16px 0 0">大脑特征与性格对职业的影响</div>
+  <div class="jobfx">
+    <div class="jfx-l"><img id="jfxImg" src="/static/dayu/assets/kid/hero-win.png" alt=""/><div class="jfx-lb"><b id="jfxName">赢者少年</b><span id="jfxMantra">赢者求礼 · 火急善争<br/>善借营势 · 不勤需学</span></div></div>
+    <div class="jfx-r">
+      <div class="jfx-i"><div class="jfx-ic">🤝</div><div><b>你有「德者」的特质</b><p>热情好客、懂人心、朋友多，重视礼节，能在短时间内赢得关注成为焦点。</p></div></div>
+      <div class="jfx-i"><div class="jfx-ic">💡</div><div><b>你的天赋是想象力</b><p>最擅长造梦也能圆梦，目标感强——适合能力不受限制的职业，安逸的职业绝对不适合你。</p></div></div>
+      <div class="jfx-i"><div class="jfx-ic">💎</div><div><b>你的价值观</b><p>财富价值：追求更大的财富与成就让内心得到满足，保持激情状态。</p></div></div>
+      <div class="jfx-i"><div class="jfx-ic">🏆</div><div><b>你可能想要的</b><p>巅峰成就与财富自由、人生受人瞩目——锁定要超越的对手，立刻行动。</p></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑥ AI脑教育 · 三大产品九大体系 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🎓</div><div class="ct">AI脑教育<small>三大产品 · 九大体系</small></div></div>
+  <div class="kscreen" id="kScrEdu">
+    <img src="/static/dayu/assets/kid/hero-think.png"/>
+    <div class="kshade"></div>
+    <div class="kplay">▶</div>
+    <div class="kdur">03:30</div>
+    <div class="kept"><div class="ken">三分钟看懂 AI 脑教育</div><div class="kes">三大产品如何托举一种天赋</div></div>
+  </div>
+  <div class="sysimg"><img src="/static/dayu/assets/miji/brain-cube.jpg" alt="脑力训练晶髓中枢"/></div>
+  <div class="prods">
+    <div class="pd"><div class="di">🧭</div><div class="dm"><div class="dn">AI指挥官<span>发明专利</span></div><div class="dd">孩子当指挥官，AI当执行团——从小掌握调度人工智能的核心技能</div></div><a class="dbtn" href="answer.html">产品报名</a></div>
+    <div class="pd"><div class="di">🎬</div><div class="dm"><div class="dn">AI剧作家<span>短剧制作</span></div><div class="dd">从天赋故事到AI短剧：写剧本、做分镜、出成片，创意变现一条龙</div></div><a class="dbtn" href="answer.html">产品报名</a></div>
+    <div class="pd"><div class="di">🏅</div><div class="dm"><div class="dn">AI白名单<span>科创大赛</span></div><div class="dd">直通白名单赛事赛道，科创作品孵化+参赛辅导，简历级成果</div></div><a class="dbtn" href="answer.html">产品报名</a></div>
+  </div>
+  <div class="sysbtns">
+    <div class="sysrow r1">
+      <span class="sr-tag">AI 系列 · 三大人工智能产品</span>
+      <div class="sr-grid">
+        <a href="answer.html" style="--ac:#6FE0FF"><i class="sb-ic">🧠</i><b>AI智能体</b><span class="sb-s">教学</span><span class="sb-h">会教课的AI私教</span><span class="sb-line"></span></a>
+        <a href="answer.html" style="--ac:#8EA2FF"><i class="sb-ic">🎯</i><b>AI指挥官</b><span class="sb-s">技能</span><span class="sb-h">孩子指挥AI军团</span><span class="sb-line"></span></a>
+        <a href="answer.html" style="--ac:#FF8ED2"><i class="sb-ic">🎬</i><b>AI短剧</b><span class="sb-s">创意</span><span class="sb-h">写剧本·出成片</span><span class="sb-line"></span></a>
+      </div>
+    </div>
+    <div class="sysrow r2">
+      <span class="sr-tag">天赋 × 脑科学 · 成长基本功</span>
+      <div class="sr-grid">
+        <a href="answer.html" style="--ac:#FFD76F"><i class="sb-ic">⭐</i><b>五者天赋系统</b><span class="sb-s">工具</span><span class="sb-h">测出孩子天赋型</span><span class="sb-line"></span></a>
+        <a href="answer.html" style="--ac:#7CF5C8"><i class="sb-ic">💡</i><b>脑科学训练系统</b><span class="sb-s">教学</span><span class="sb-h">九段脑力路径</span><span class="sb-line"></span></a>
+        <a href="answer.html" style="--ac:#FFB27C"><i class="sb-ic">📖</i><b>天赋大书道</b><span class="sb-s">心智</span><span class="sb-h">练字即练心</span><span class="sb-line"></span></a>
+      </div>
+    </div>
+    <div class="sysrow r3">
+      <span class="sr-tag">白名单赛事 · 升学背书赛道</span>
+      <div class="sr-grid">
+        <a href="answer.html" style="--ac:#FF8A7A"><i class="sb-ic">🤖</i><b>世界机器人<br/>设计大赛</b><span class="sb-s">硬件</span><span class="sb-h">动手造机器人</span><span class="sb-line"></span></a>
+        <a href="answer.html" style="--ac:#C79AFF"><i class="sb-ic">🏆</i><b>青少年AI大赛</b><span class="sb-s">软件</span><span class="sb-h">白名单赛事直通</span><span class="sb-line"></span></a>
+        <a href="answer.html" style="--ac:#9AD9FF"><i class="sb-ic">🚀</i><b>紧缺人才<br/>培养工程</b><span class="sb-s">人才</span><span class="sb-h">国家紧缺方向</span><span class="sb-line"></span></a>
+      </div>
+    </div>
+  </div>
+  <a class="dramaban" href="#kidTheater"><span class="db-i">🎬</span><span class="db-t">看天赋短剧，懂这套系统<small>刷剧即种草 · 合集连播</small></span><span class="db-g">→</span></a>
+  <a class="dramaban" href="drama.html"><span class="db-i">💬</span><span class="db-t">天赋学院 · 剧情互动聊天室<small>看完一集，剧中人上线陪你聊 · 五种天赋五种目标</small></span><span class="db-g">→</span></a>
+</div>
+
+<!-- ⑥++ 学业规划入口 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🎯</div><div class="ct">学业规划<small>天赋 × 成绩 × 时间 · 五行提分方案</small></div></div>
+  <a class="dramaban" href="plan.html"><span class="db-i">🌀</span><span class="db-t">生成孩子的学业规划<small>填各科成绩+可用时间 · 木火土金水五系统自动配比出方案</small></span><span class="db-g">→</span></a>
+</div>
+
+<!-- ⑥+++ 生日档案入口 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🎂</div><div class="ct">生日档案<small>终身登记一次 · 生日限定礼物</small></div></div>
+  <a class="dramaban" href="birthday.html"><span class="db-i">🎁</span><span class="db-t" id="bdEntry">登记生日，领生日盲盒🎁</span><span class="db-g">→</span></a>
+</div>
+
+<!-- ⑥++++ 家长端入口 -->
+<div class="card">
+  <div class="c-h"><div class="ic">👨‍👩‍👧</div><div class="ct">家长端<small>多孩管理 · 训练数据 · AI育儿问答</small></div></div>
+  <a class="dramaban" href="parent.html" style="border-color:#4EA0D8"><span class="db-i">🤖</span><span class="db-t">家长管理中心<small>管多个孩子 · 把问题告诉AI · 剧情植入悄悄引导</small></span><span class="db-g">→</span></a>
+</div>
+
+<!-- ⑥+ 真实见证 · 抖音/视频号三入口 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🎬</div><div class="ct">真实见证<small>抖音 / 视频号 · 官方账号直达</small></div></div>
+  <div class="trust3">
+    <a href="javascript:;" onclick="alert(&#39;抖音 / 视频号 ·「天才少年」栏目\n官方链接接入中，敬请期待&#39;)" title="抖音/视频号 · 天才少年"><div class="t3v"><img src="/static/dayu/assets/kid/hero-win.png" alt="天才少年"/><span class="t3p">▶</span><span class="t3n">天才少年</span></div><span class="t3s">学员天赋成长实录</span></a>
+    <a href="javascript:;" onclick="alert(&#39;抖音 / 视频号 ·「赛场集训」栏目\n官方链接接入中，敬请期待&#39;)" title="抖音/视频号 · 赛场集训"><div class="t3v"><img src="/static/dayu/assets/miji/sys-contest.jpg" alt="赛场集训"/><span class="t3p">▶</span><span class="t3n">赛场集训</span></div><span class="t3s">大赛集训营现场直击</span></a>
+    <a href="javascript:;" onclick="alert(&#39;抖音 / 视频号 ·「导师采访」栏目\n官方链接接入中，敬请期待&#39;)" title="抖音/视频号 · 导师采访"><div class="t3v"><img src="/static/dayu/assets/avatar_teacher.jpg" alt="导师采访"/><span class="t3p">▶</span><span class="t3n">导师采访</span></div><span class="t3s">大宇导师面对面</span></a>
+  </div>
+</div>
+
+<!-- ⑦ 超脑九段 · 光塔九级 -->
+<div class="card">
+  <div class="c-h"><div class="ic">🗼</div><div class="ct">超脑九段<small>光塔九级成长路径</small></div></div>
+  <div class="kscreen" id="kScrDuan">
+    <img src="/static/dayu/assets/kid/hero-study.png"/>
+    <div class="kshade"></div>
+    <div class="kplay">▶</div>
+    <div class="kdur">04:12</div>
+    <div class="kept"><div class="ken">超脑九段 · 光塔九级图</div><div class="kes">从超脑阅读到洞悉万物的九级台阶</div></div>
+  </div>
+  <div class="tower"><img src="/static/dayu/assets/kid/tower9.jpg" alt="光塔九级图"/></div>
+  <div class="duan">
+    <div class="du"><span class="dn9 ph1">一段</span>超脑阅读 · 高效作业 · 精力恢复<span class="dp dp1">铸基期</span></div>
+    <div class="du"><span class="dn9 ph1">二段</span>影像追忆 · AI智慧官 · 天赋书道<span class="dp dp1">铸基期</span></div>
+    <div class="du"><span class="dn9 ph1">三段</span>三错一讲 · 多元感知 · 心灵感应<span class="dp dp1">铸基期</span></div>
+    <div class="du"><span class="dn9 ph2">四段</span>扫描速记 · 极速运算<span class="dp dp2">基柱期</span></div>
+    <div class="du"><span class="dn9 ph2">五段</span>极速学习 · 波动导图<span class="dp dp2">基柱期</span></div>
+    <div class="du"><span class="dn9 ph3">六段</span>音乐灵感 · 天赋绘画<span class="dp dp3">穹顶期</span></div>
+    <div class="du"><span class="dn9 ph3">七段</span>棋类专注 · 一心多用<span class="dp dp3">穹顶期</span></div>
+    <div class="du"><span class="dn9 ph4">八段</span>无界外语 · 无师自通<span class="dp dp4">尖峰期</span></div>
+    <div class="du"><span class="dn9 ph4">九段</span>化繁为简 · 洞悉万物<span class="dp dp4">尖峰期</span></div>
+  </div>
+  <a class="dbtn" href="answer.html" style="display:block;text-align:center;margin-top:12px;padding:12px;font-size:16px;border-radius:14px">超脑九段训练营 · 产品报名 →</a>
+</div>
+
+<!-- ⑧ 九大秘籍 -->
+<div class="card" id="mijiCard">
+  <div class="c-h"><div class="ic">📜</div><div class="ct">九大秘籍<small>九招秘籍 · 九集短剧</small></div></div>
+  <div class="kscreen" id="kScrMj">
+    <img src="/static/dayu/assets/miji/mj-total.jpg"/>
+    <div class="kshade"></div>
+    <div class="kplay">▶</div>
+    <div class="kdur">03:45</div>
+    <div class="kept"><div class="ken">九大秘籍 · 总纲</div><div class="kes">九种超能力，九集短剧看完</div></div>
+  </div>
+  <div class="miji" id="miji"></div>
+  <a class="dramaban" href="#kidTheater"><span class="db-i">▶️</span><span class="db-t">进入短剧入口 · 逐集解锁九大秘籍<small>看一集短剧，会一招秘籍</small></span><span class="db-g">→</span></a>
+  <!-- 会议报名（与成人一致） -->
+  <div class="confban">
+    <div class="cb-t">国庆 · 杭州「最强大脑密训」</div>
+    <div class="cb-p">10月3日-5日 · 6-18岁脑力训练 · 小班1带10 · 无效退全款</div>
+    <a class="cb-b" href="answer.html">会议报名 · 5.9元锁定入门课 →</a>
+  </div>
+</div>
+
+<!-- 核心任务解锁 · 组建天赋小班 -->
+<div class="taskcard" id="taskCard">
+  <div class="tc-h"><div class="ti">🎖️</div><div class="tt">核心任务解锁<small>组建天赋小班 · 正式入学天赋学院</small></div></div>
+  <div class="tgoal">邀请 <b>10 位</b>好友完成测试，组建「天赋小班」——成团当天开通核心课程，正式入学天赋学院！</div>
+  <div class="tslots" id="tSlots"></div>
+  <div class="tbar"><i id="tBar"></i></div>
+  <div class="tprog" id="tProg">已邀请 0/10 位 · 好友完成测试后计入进度</div>
+  <button class="tbtn" id="tInvite">📣 邀请好友测天赋</button>
+  <div class="tlock" id="tLock"></div>
+</div>
+
+<div class="disclaim">测试的准确性有一定概率的误差，家长需要参照测试结论内容描述并以自己对孩子的了解进行印证——家长对孩子的了解程度才是最终判断的核心依据，测试结论仅供参考。</div>
+
+<!-- 亲子导流 -->
+<div class="family">
+  <div class="fq">想知道亲子相处如何吗？</div>
+  <div class="fs">测一测你和身边人的天赋关系</div>
+  <div class="fbtns"><a href="report-v3.html">我已做过成人测试 · 关系测试</a><a href="report-v3.html">我还没有测试过 · 成人测试</a></div>
+</div>
+
+<a class="adultlink" href="report-v3.html">查看成人版报告设计 →</a>
+
+<!-- 分享 -->
+<button class="sharefab" id="shareFab"><span class="si">⤴</span>分享</button>
+<div class="shmask" id="shMask"></div>
+<div class="sheet" id="shSheet">
+  <div class="sh-t">分享孩子的天赋报告</div>
+  <div class="sh-s">一键分享给家人 · 或生成带二维码的分享图片</div>
+  <div class="shbtns">
+    <button id="shLink">🔗 一键分享</button>
+    <button class="ghost" id="shImg">🖼 生成分享图片</button>
+  </div>
+  <div class="shprev" id="shPrev">
+    <img id="shPoster" alt="分享图"/>
+    <br/><a download="孩子天赋报告分享图.png" id="shDown">⬇ 保存分享图片</a>
+  </div>
+  <div class="shtip" id="shTip"></div>
+</div>
+
+<div class="foot">
+  <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+  <a href="answer.html"><span class="fi">🎓</span>学科答疑</a>
+  <a href="drama.html"><span class="fi">💬</span>天赋学院</a>
+  <a href="milestone.html"><span class="fi">🖥️</span>中央电脑</a>
+</div>
+
+<script>
+const TALENT={
+ win:{name:'赢者',type:'梦想领导型',c:'#D63A3A',cl:'#FFE9E9',cd:'#8F1D1D',ip:'/static/dayu/assets/ip/ring-win.png',
+   quote:'性格自信勇敢，右脑发达具有更强想象力的孩子',pot:'想象力',potI:'🌟',bl:2,br:5,blT:'相对较弱',brT:'非常发达',
+   mantra:'赢者求礼 · 火急善争<br>善借营势 · 不勤需学',
+   keys:[['🏆','守护好胜心'],['🎯','给目标给对手'],['💗','多夸多捧']],
+   traits:['好胜心强，喜欢挑战，不服输','想象力丰富，目标感强','要面子，渴望被认可和赞美','喜欢当领导，有号召力','情绪来得快去得也快，容易冲动'],
+   teachT:'赢家要捧着教',teachP:'给他设定目标，让他有对手可以追赶。奖励第一、结果第一——他需要看到成果。',
+   says:['你是最棒的','我以你为荣','我爱你我崇拜你'],teachP2:'赏罚分明、激励成长。守护少年骄傲，收敛冲动锋芒，把争强好胜变成向上的动力。',
+   quoteTxt:'给他一个舞台，他能征服全场',
+   vids:[['E01 捧着教的艺术','夸奖要夸到点子上','02:10'],['E02 目标与奖励怎么设','让他有对手可追赶','01:45'],['E03 冲动锋芒怎么收','把好胜变成动力','02:05']],
+   probS:'速记力高于80%的人，但不感兴趣的记超级慢',
+   probs:[['💥','常粗心','赢者核心问题·思维跳步易马虎'],['⏳','坐不住','45分钟的课只听20分钟'],['🧠','学快忘快','记得快但忘得也快'],['🎯','无目标不学','没对手没动力就提不起兴趣'],['✍️','跳步丢分','审题不细·会做的也丢分']]},
+ think:{name:'思者',type:'创意技术型',c:'#3E8E5A',cl:'#E6F4EA',cd:'#1E5B34',ip:'/static/dayu/assets/ip/ring-think.png',
+   quote:'脑子里装满奇思妙想，创造力是生生不息的力量',pot:'创造力',potI:'💡',bl:1,br:5,blT:'相对较弱',brT:'极度发达',
+   mantra:'思者求仁 · 正木善变<br>心无设限 · 不韧需行',
+   keys:[['🛡️','挑战权威心存善'],['⚡','崇尚效率厌重复'],['🤝','重信任平等沟通']],
+   traits:['脑子里装满了奇思妙想，天马行空','喜欢自由，讨厌被管束','学得快但忘得也快','点子一大堆，但执行能力差','不喜欢的科目一点都不学'],
+   teachT:'思者吃哄不吃骂',teachP:'给他自由空间，让他按自己的方式学。逼他没用——哄着他，他就能创造奇迹。',
+   says:['你一定行','我相信你','我支持你'],teachP2:'严而有理、爱而有度。放大聪慧高效的天赋，补齐健忘、疏于日常积累的短板。',
+   quoteTxt:'给他一片天空，他能画出整个宇宙',
+   vids:[['E01 哄出来的奇迹','为什么逼他没用','02:08'],['E02 自由空间怎么给','边界内的自由','01:52'],['E03 健忘短板怎么补','日常积累小妙招','01:58']],
+   probS:'创造力爆棚，但记忆是他最大的短板',
+   probs:[['🌀','健忘记忆差','思者核心问题·转身就忘'],['💭','易走神','思绪飘飞·神游天外'],['📉','记忆偏科','感兴趣的记牢·不感兴趣的秒忘'],['🎒','丢三落四','作业忘带·交代的事转头空'],['🔁','需反复巩固','一次记住对他几乎不可能']]},
+ act:{name:'行者',type:'实干专注型',c:'#C9A227',cl:'#FBF2DC',cd:'#8A6A1D',ip:'/static/dayu/assets/ip/ring-act.png',
+   quote:'做事专注认真，持之以恒的行动派',pot:'记忆力',potI:'🧠',bl:4,br:2,blT:'发达',brT:'相对均衡',
+   mantra:'行者求义 · 金刚善韧<br>执着坚强 · 不争需赢',
+   keys:[['🎯','专注守序有条理'],['🤗','多拥抱多陪伴'],['🛡️','给足安全感']],
+   traits:['做事专注认真，目标感强，持之以恒','喜欢有计划、有条理，不爱随便变动','不善言辞，不太合群，朋友不多','责任心强，答应的事一定会做到','容易钻牛角尖，遇到挫折会闷在心里'],
+   teachT:'行者要用心暖',teachP:'多给他拥抱，多陪伴他。他天生缺乏安全感——让他知道：无论外面风雨多大，你都会守护他。',
+   says:['我陪着你','我信任你','你做到了'],teachP2:'别跟他硬碰硬，用行动证明你的爱。以行动代替言语，守护少年骨子里的坚毅。',
+   quoteTxt:'给他一份信任，他能用一生去坚守',
+   vids:[['E01 用心暖的孩子','行动派的爱语','02:02'],['E02 安全感这样建','陪伴的三个时刻','01:48'],['E03 钻牛角尖怎么办','带他走出死胡同','02:00']],
+   probS:'勤奋踏实肯下功夫，但方法一条道走到黑',
+   probs:[['🧱','死脑筋','行者核心问题·不知变通'],['🔁','举一反三难','题型一变就卡壳'],['📖','死记硬背','靠功夫堆·缺巧劲'],['🚧','钻牛角尖','认定的方法撞墙也不换'],['🧭','需多示范','换角度演示才开窍']]},
+ virtue:{name:'德者',type:'仁爱包容型',c:'#A0754A',cl:'#F6EDE4',cd:'#6B4A2B',ip:'/static/dayu/assets/ip/ring-virtue.png',
+   quote:'心思细腻敦厚，内心重信义的暖心孩子',pot:'观察力',potI:'💗',bl:4,br:2,blT:'发达',brT:'相对均衡',
+   mantra:'德者求信 · 重土善厚<br>不动如山 · 不变需思',
+   keys:[['💗','重情重义心细'],['👂','倾听他的细腻'],['🌱','温柔坚定督促']],
+   traits:['观察力强，细心敏锐，洞察力高','心地善良，富有同理心，体贴周到','脾气好，情绪稳定，不爱争吵','责任感强，乐于帮助他人','有时过于在意别人，容易委屈自己'],
+   teachT:'德者要陪着走',teachP:'给他安全感，让他知道你会一直在。温柔而坚定地督促他——他需要推一把才能起飞。',
+   says:['我陪伴你','无论你是谁妈妈都爱你','你做得很好'],teachP2:'不追逐速度，重视过程积累。适度提要求、持续监督引导，深藏的潜力会在坚持中慢慢绽放。',
+   quoteTxt:'给他足够的爱，他能温暖整个世界',
+   vids:[['E01 陪着走的节奏','慢孩子的力量','02:06'],['E02 推一把的技巧','温柔而坚定','01:50'],['E03 别让他委屈自己','教会他说“不”','01:56']],
+   probS:'认真敦厚，但课堂反应总是慢半拍',
+   probs:[['🐢','反应慢','德者核心问题·慢半拍'],['😶','不敢答','怕答错·宁可沉默'],['🌱','慢热型','进入状态需要时间'],['😰','越催越慌','一催就紧张更答不出'],['💗','需耐心等待','多等三秒·他能答好']]},
+ study:{name:'学者',type:'严谨钻研型',c:'#4A7EC2',cl:'#E8F1FB',cd:'#2B4A7A',ip:'/static/dayu/assets/ip/ring-study.png',
+   quote:'左右脑均衡，自律独立，热爱学习的小小学者',pot:'专注力',potI:'📚',bl:3,br:3,blT:'左右脑平衡',brT:'左右脑平衡',
+   mantra:'学者求智 · 顺水善勤<br>乐天自律 · 不厚需德',
+   keys:[['📚','自律求知'],['🎯','给方向给路径'],['🏅','赏识他的严谨']],
+   traits:['学习认真，做事一丝不苟，追求完美','理解力强，逻辑清晰，善于思考','自律性高，有计划，目标明确','喜欢安静，独立思考，不爱打扰别人','有时过于追求完美，容易给自己压力'],
+   teachT:'学者要赏识教',teachP:'他需要被认可，需要看到成长的空间。给他明确的目标和路径——他会用自己的方式走到终点。',
+   says:['你做得很严谨','你的规划很棒','我相信你能突破'],teachP2:'给予充分信任，赏识付出、严谨引导；不止追求学识精进，更要涵养内在德行。',
+   quoteTxt:'给他一个方向，他能用勤奋抵达任何地方',
+   vids:[['E01 赏识式教育','夸严谨的学问','02:04'],['E02 目标路径怎么画','他自己走到终点','01:46'],['E03 完美主义怎么松','先完成再完美','01:54']],
+   probS:'各科均衡自律，但尖子突破最难',
+   probs:[['🔒','难突破','学者核心问题·到顶难再上一层'],['📊','瓶颈期','中上徘徊易停滞'],['🛋','舒适区打转','缺挑战·缺高手过招'],['😣','怕输心态','越想完美越不敢冲刺'],['🧗','需点拨','名师一点·捅破窗户纸']]}
+};
+const $=id=>document.getElementById(id);
+const order=['win','think','act','virtue','study'];
+const hallImg={win:'win',think:'think',act:'act',virtue:'virtue',study:'study'};
+/* 五板块视频（标题随天赋联动） */
+const SVIDS=[
+ ['学习力全景 · {n}的五维解读','03:20',1],
+ ['为什么{n}孩子学得快忘得快','02:40',2],
+ ['{n}偏科背后的脑科学','02:30',3],
+ ['最适合{n}的素质课怎么选','02:50',4],
+ ['{n}孩子未来适合什么职业','03:10',1]
+];
+
+$('tabs').innerHTML=order.map(k=>`<div class="tb" data-k="${k}"><img src="${TALENT[k].ip}"><div class="tn">${TALENT[k].name}</div></div>`).join('');
+
+function paintBars(el,n){el.innerHTML=[1,2,3,4,5].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('');}
+
+let curKid='win';
+function switchKid(kk){
+  curKid=kk;
+  const t=TALENT[kk],h=hallImg[kk];
+  document.body.style.setProperty('--c',t.c);
+  document.body.style.setProperty('--cl',t.cl);
+  document.body.style.setProperty('--cd',t.cd);
+  document.querySelectorAll('#tabs .tb').forEach(b=>b.classList.toggle('on',b.dataset.k===kk));
+  $('hType').textContent=t.name; $('hQuote').textContent=t.quote; $('hIp').src=t.ip;
+  $('hMantra').innerHTML=t.mantra;
+  $('keys').innerHTML=t.keys.map(x=>`<div class="kk"><div class="ki">${x[0]}</div><div class="kt">${x[1]}</div></div>`).join('');
+  $('gKeys').textContent=t.keys.map(x=>x[1]).join(' · ');
+  /* 学习问题标签系统 */
+  $('probS').textContent=t.probS;
+  $('probs').innerHTML=`<div class="pb-core"><div class="bci">${t.probs[0][0]}</div><div class="bct"><div class="bcl">${t.probs[0][1]}</div><div class="bcn">${t.probs[0][2]}</div></div><div class="bcb">核心问题</div></div>`
+    +`<div class="pb-grid">`+t.probs.slice(1).map(p=>`<div class="pb-tag"><div class="bti">${p[0]}</div><div class="btt"><div class="btl">${p[1]}</div><div class="btn">${p[2]}</div></div></div>`).join('')+`</div>`;
+  $('brainImg').src=`/static/dayu/assets/kid/brain-${kk}.png`;
+  $('btL').textContent='左脑 · '+t.blT; $('btR').textContent='右脑 · '+t.brT;
+  paintBars($('barL'),t.bl); paintBars($('barR'),t.br);
+  $('bvL').textContent=t.blT; $('bvR').textContent=t.brT;
+  $('potV').textContent=t.pot; $('potI').textContent=t.potI;
+  $('potImg').src={win:'/static/dayu/assets/kid/pot-win.jpg',think:'/static/dayu/assets/kid/pot-think.jpg',act:'/static/dayu/assets/kid/pot-act.jpg',virtue:'/static/dayu/assets/kid/pot-virtue.jpg',study:'/static/dayu/assets/kid/pot-study.jpg'}[kk];
+  $('traits').innerHTML=t.traits.map((x,i)=>`<div class="tr ${i===t.traits.length-1?'warn':''}">${x}</div>`).join('');
+  /* 家长课堂剧场：主视频+分集 */
+  $('ksImg').src=`/static/dayu/assets/hall/${h}4.png`;
+  $('ksTitle').textContent=t.teachT; $('ksSub').textContent=t.name+'家长课堂 · 看完主视频再看分集';
+  $('kEps').innerHTML=t.vids.map((v,i)=>`<div class="kep ${i===0?'on':''}" data-i="${i}"><img src="/static/dayu/assets/hall/${h}${i+1}.png"><div class="kde"><div class="kt">${v[0]}</div><div class="kd">${v[2]}</div></div></div>`).join('');
+  document.querySelectorAll('.kep').forEach(e=>e.onclick=()=>{
+    document.querySelectorAll('.kep').forEach(x=>x.classList.remove('on'));e.classList.add('on');
+    const v=t.vids[+e.dataset.i];
+    $('ksImg').src=`/static/dayu/assets/hall/${h}${+e.dataset.i+1}.png`;
+    $('ksTitle').textContent=v[0]; $('ksSub').textContent=v[1]; $('ksDur').textContent=v[2];
+  });
+  $('teachT').textContent=t.teachT; $('teachP').textContent=t.teachP;
+  $('sayChips').innerHTML=t.says.map(x=>`<span>“${x}”</span>`).join('');
+  $('teachP2').textContent=t.teachP2;
+  $('quoteTxt').textContent=t.quoteTxt;
+  /* 职业影响海报联动 */
+  $('jfxImg').src=`/static/dayu/assets/kid/hero-${kk}.png`; $('jfxName').textContent=t.name+'少年'; $('jfxMantra').innerHTML=t.mantra;
+  /* 开篇巨幕联动 */
+  const kh=$('ksHero');
+  kh.classList.add('fade');
+  setTimeout(()=>{
+    const src=`/static/dayu/assets/kid/hero-${kk}.png`;
+    if(kh.src.endsWith(src)){kh.classList.remove('fade');}
+    else{kh.onload=()=>kh.classList.remove('fade');kh.src=src;}
+    setTimeout(()=>kh.classList.remove('fade'),600);/* 兜底 */
+  },220);
+  $('ksT1').textContent=t.name+' · '+t.type; $('ksT2').textContent=t.quoteTxt;
+  /* 五板块视频 */
+  SVIDS.forEach((s,i)=>{
+    $(('kvT'+i)).textContent=s[0].replace('{n}',t.name);
+    $(('kvImg'+i)).src=`/static/dayu/assets/hall/${h}${s[2]}.png`;
+    $(('kvDur'+i)).textContent=s[1];
+  });
+}
+document.querySelectorAll('#tabs .tb').forEach(b=>b.onclick=()=>switchKid(b.dataset.k));
+
+/* 雷达图（赢者示例） */
+(function(){
+  const svg=$('kidRadar'),cx=150,cy=124,R=86;
+  const data=[['创造力',64],['想象力',99],['观察力',45],['记忆力',30],['专注力',30]];
+  const cols=['#D63A3A','#C9A227','#A0754A','#4A7EC2','#3E8E5A'];
+  const pt=(i,r)=>{const a=(-90+i*72)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)];};
+  let h='';
+  [1,.75,.5,.25].forEach(f=>{h+='<polygon points="'+data.map((_,i)=>pt(i,R*f).join(',')).join(' ')+'" fill="none" stroke="#EAD9C4" stroke-width="1.2"/>';});
+  data.forEach((_,i)=>{const[x,y]=pt(i,R);h+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x+'" y2="'+y+'" stroke="#F1E2D2" stroke-width="1"/>';});
+  h+='<polygon points="'+data.map((d,i)=>pt(i,R*d[1]/100).join(',')).join(' ')+'" fill="rgba(214,58,58,.18)" stroke="#D63A3A" stroke-width="2.5" stroke-linejoin="round"/>';
+  data.forEach((d,i)=>{
+    const[x,y]=pt(i,R*d[1]/100),[lx,ly]=pt(i,R+28);
+    h+='<circle cx="'+x+'" cy="'+y+'" r="5" fill="'+cols[i]+'" stroke="#fff" stroke-width="2"/>';
+    h+='<text x="'+lx+'" y="'+Math.max(14,ly+4)+'" text-anchor="middle" font-size="12" font-weight="900" fill="#7A6A5E">'+d[0]+' <tspan fill="'+cols[i]+'">'+d[1]+'%</tspan></text>';
+  });
+  svg.innerHTML=h;
+})();
+
+/* ===== 分享 ===== */
+const shMask=$('shMask'),shSheet=$('shSheet');
+function openSheet(){shMask.classList.add('on');shSheet.classList.add('on');}
+function closeSheet(){shMask.classList.remove('on');shSheet.classList.remove('on');}
+$('shareFab').onclick=openSheet; shMask.onclick=closeSheet;
+
+$('shLink').onclick=async()=>{
+  const t=TALENT[curKid];
+  const data={title:'您孩子的五者天赋测评报告',text:`我家孩子是「${t.name}」——${t.quoteTxt}！快来看看你家孩子的天赋 →`,url:location.href};
+  try{
+    if(navigator.share){await navigator.share(data);$('shTip').textContent='已唤起系统分享';}
+    else throw 0;
+  }catch(e){
+    try{await navigator.clipboard.writeText(data.text+' '+data.url);$('shTip').textContent='链接已复制，去粘贴给家人吧';}
+    catch(_){$('shTip').textContent='请手动复制地址栏链接分享';}
+  }
+};
+
+function drawQR(ctx,url,x,y,size){
+  const qr=qrcode(0,'M');qr.addData(url);qr.make();
+  const n=qr.getModuleCount(),cell=size/n;
+  ctx.fillStyle='#fff';ctx.fillRect(x-8,y-8,size+16,size+16);
+  ctx.fillStyle='#2B1A12';
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(qr.isDark(r,c))ctx.fillRect(x+c*cell,y+r*cell,Math.ceil(cell),Math.ceil(cell));
+}
+
+$('shImg').onclick=()=>{
+  const t=TALENT[curKid];
+  const cv=document.createElement('canvas');cv.width=750;cv.height=1180;
+  const x=cv.getContext('2d');
+  /* 背景 */
+  const g=x.createLinearGradient(0,0,0,1180);g.addColorStop(0,'#FFF4E8');g.addColorStop(1,'#FFE1C2');
+  x.fillStyle=g;x.fillRect(0,0,750,1180);
+  /* 主卡 */
+  const g2=x.createLinearGradient(0,0,750,420);g2.addColorStop(0,t.c);g2.addColorStop(1,t.cd);
+  x.fillStyle=g2;
+  x.beginPath();x.moveTo(40,40);x.lineTo(710,40);x.lineTo(710,420);x.lineTo(40,420);x.closePath();x.fill();
+  x.fillStyle='rgba(255,255,255,.9)';x.font='900 30px sans-serif';x.textAlign='center';
+  x.fillText('劲脑 · 五者天赋测评',375,105);
+  x.font='700 20px sans-serif';x.fillStyle='rgba(255,255,255,.75)';
+  x.fillText('JNAO KIDS REPORT · 儿童版',375,140);
+  x.font='900 96px sans-serif';x.fillStyle='#fff';
+  x.fillText(t.name,375,258);
+  x.font='700 30px sans-serif';x.fillStyle='rgba(255,255,255,.95)';
+  x.fillText('“'+t.quoteTxt+'”',375,330);
+  x.font='600 22px sans-serif';x.fillStyle='rgba(255,255,255,.8)';
+  x.fillText('天赋潜力 · '+t.pot,375,380);
+  /* 特点条 */
+  x.fillStyle='#4A3B32';x.font='900 28px sans-serif';x.fillText('他是这样的孩子',375,490);
+  x.textAlign='left';x.font='600 23px sans-serif';
+  t.traits.slice(0,4).forEach((s,i)=>{
+    const yy=540+i*56;
+    x.fillStyle=t.c;x.beginPath();x.arc(80,yy-8,15,0,7);x.fill();
+    x.fillStyle='#fff';x.font='900 19px sans-serif';x.textAlign='center';x.fillText('✔',80,yy-1);
+    x.fillStyle='#5C4C40';x.font='600 23px sans-serif';x.textAlign='left';x.fillText(s,112,yy);
+  });
+  /* 二维码区 */
+  x.fillStyle='#fff';
+  x.beginPath();x.moveTo(190,850);x.lineTo(560,850);x.lineTo(560,1080);x.lineTo(190,1080);x.closePath();
+  x.save();x.shadowColor='rgba(180,60,40,.2)';x.shadowBlur=24;x.fill();x.restore();
+  drawQR(x,location.href,280,880,190);
+  x.fillStyle='#8F1D1D';x.font='900 24px sans-serif';x.textAlign='center';
+  x.fillText('扫码测测你家孩子的天赋',375,1130);
+  const url=cv.toDataURL('image/png');
+  $('shPoster').src=url;$('shDown').href=url;
+  $('shPrev').classList.add('on');
+  $('shTip').textContent='长按图片或点按钮保存，发给家人扫一扫';
+};
+
+/* 九大秘籍：武功海报栏目 */
+const MIJI=[
+['mj-cnyd.jpg','吸照大法','超脑阅读','速读如风 · 一目数行'],
+['mj-gxzy.jpg','昙花宝典','高效作业','一息千里 · 唯快不破'],
+['mj-jlhf.jpg','呼吸打坐','精力恢复','静定自然 · 息息归一'],
+['mj-yxzj.jpg','无相神功','影像追忆','记忆如河 · 聚散随心'],
+['mj-tfsd.jpg','书道太极','天赋书道','一笔太极 · 以字养心'],
+['mj-scyj.jpg','心门九剑','三错一讲','以心开门 · 以气运剑'],
+['mj-jsys.jpg','太极神功','极速运算','阴阳相生 · 数随意动'],
+['mj-bddt.jpg','九阳绝学','波动导图','万法归一 · 融会贯通'],
+['mj-yxdy.jpg','左右同搏','一心多用','左手画圆 · 右手画方']];
+$('miji').innerHTML=MIJI.map(m=>`<div class="mj"><div class="mp"><img src="/static/dayu/assets/miji/${m[0]}" alt="${m[1]}"><i>㊙ ${m[1]}</i></div><div class="mm"><b>${m[2]}</b><small>${m[3]}</small><span>看短剧 ▶</span></div></div>`).join('');
+document.querySelectorAll('#miji .mj').forEach(el=>el.onclick=()=>$('kidTheater').scrollIntoView({behavior:'smooth'}));
+
+/* ===== 核心任务解锁 · 组建天赋小班 ===== */
+(function(){
+  const NEED=10,KEY='tf_kid_task';
+  let n=Math.min(NEED,+(localStorage.getItem(KEY)||0));
+  const slots=$('tSlots'),bar=$('tBar'),prog=$('tProg'),lock=$('tLock');
+  function render(){
+    slots.innerHTML=Array.from({length:NEED},(_,i)=>`<div class="ts${i<n?' done':''}">${i<n?'👦':i+1}</div>`).join('');
+    bar.style.width=(n/NEED*100)+'%';
+    if(n>=NEED){
+      prog.textContent='🎉 天赋小班组建完成！核心课程已开通';
+      const nm=TALENT[curKid].name;
+      lock.className='tlock lockon';
+      lock.innerHTML='<div class="tl-t">🎓 天赋学院 · 正式入学</div>'
+        +'<div class="tid">班级：<b>'+nm+'小班</b>（10人已成团）<br>学号：<b>TF-'+String(1000+Math.floor(Math.random()*9000))+'</b> · 核心课程：<b>已开通</b></div>'
+        +'<ul><li>任务一 · 观看《九大秘籍 · 总纲》短剧，选定第一本秘籍</li>'
+        +'<li>任务二 · 每日3分钟亲子天赋对话，连续打卡7天</li>'
+        +'<li>任务三 · 完成核心课程第一课「认识我的天赋」</li></ul>'
+        +'<a class="tenter" href="train.html">进入天赋学院 · 开始今日任务 →</a>';
+    }else{
+      prog.textContent='已邀请 '+n+'/'+NEED+' 位 · 好友完成测试后计入进度';
+      lock.className='tlock';
+      lock.innerHTML='<div class="tl-t">🔒 天赋学院 · 核心课程（小班建成后开通）</div>'
+        +'<ul><li>· 天赋学院正式学籍与专属班级</li>'
+        +'<li>· 核心课程全系列 + 每日成长任务</li>'
+        +'<li>· 九大秘籍逐集解锁 · 班主任带班陪跑</li></ul>';
+    }
+  }
+  $('tInvite').onclick=()=>{openSheet();$('shTip').textContent='分享出去，好友完成测试即算1位';};
+  /* 分享成功后计入1位（演示口径：按成功分享计入） */
+  $('shLink').addEventListener('click',()=>{setTimeout(()=>{if(n<NEED){n++;localStorage.setItem(KEY,n);render();}},700);});
+  render();
+})();
+
+/* 巨幕轮播：天赋场景 ⇄ 天赋物语短剧海报 */
+(function(){
+  const box=$('ksBox');
+  setInterval(()=>{
+    box.classList.toggle('showB');
+    const b=box.classList.contains('showB');
+    $('ksT1').textContent=b?'《天赋物语》天赋短剧 · 热播中':TALENT[curKid].name+' · '+TALENT[curKid].type;
+    $('ksT2').textContent=b?'每个孩子，都是天生的闪耀者 · 点上方「看短剧」':TALENT[curKid].quoteTxt;
+  },4500);
+  box.addEventListener('click',e=>{if(box.classList.contains('showB')&&!e.target.closest('.ksdrama'))$('kidTheater').scrollIntoView({behavior:'smooth'});});
+})();
+
+/* 巨幕星光粒子 */
+$('kSpark').innerHTML=Array.from({length:14},()=>{const l=Math.random()*96,t=Math.random()*88,d=(Math.random()*2.2).toFixed(1);return `<i style="left:${l}%;top:${t}%;animation-delay:${d}s"></i>`;}).join('');
+
+/* ===== 成长蜕变 · 从平凡到卓越 ===== */
+const GROW={
+win:{value:'敢赢，更敢输得起——赢是习惯，更是担当',brain:'目标驱动型大脑 · 竞争决策力与舞台感染力',
+ stages:[['10岁','初入江湖 · 立志','第一次登台就想要第一——好胜心被点燃，天赋初显锋芒。'],['15岁','千锤百炼 · 磨砺','输过、哭过、不服气过——才知道赢的分量，冲动开始炼成果敢。'],['18岁','破茧成蝶 · 蜕变','从一个人赢，到带着一群人赢——领导力真正成型。'],['成年','登峰造极 · 卓越','成为能扛事、能成事的领袖：赢者求礼，大人有大量。']],
+ pros:['自信','果敢','目标感','领导力','抗压强','行动快','感染力','好胜心','敢担当','热情'],
+ cons:[['冲动','果敢'],['要面子','真自信'],['急躁','高效'],['好胜过头','良性竞争'],['独断','善纳谏'],['粗心','胆大心细'],['功利','使命感'],['易怒','情绪力'],['轻细节','抓大放小'],['输不起','越挫越勇']]},
+think:{value:'好奇不死，创造不止——世界因不同而精彩',brain:'想象联想型大脑 · 创意发散力与跨界整合力',
+ stages:[['10岁','初入江湖 · 立志','满脑子「为什么」——好奇心是天赋的火种，想象力天马行空。'],['15岁','千锤百炼 · 磨砺','创意被嘲笑也不停笔，走神与三分钟热度在热爱面前退场。'],['18岁','破茧成蝶 · 蜕变','把想象变成作品——创意开始落地，独特成为标签。'],['成年','登峰造极 · 卓越','用创造解决问题、改变世界：思者求新，万物皆可创。']],
+ pros:['好奇心','想象力','创意多','善提问','灵感旺','爱钻研','审美好','跨界力','有主见','直觉准'],
+ cons:[['走神','心流专注'],['三分钟热度','深度钻研'],['不落地','创意变现'],['怕枯燥','意义感'],['敏感','洞察力'],['拖延','节奏感'],['理想化','务实'],['不合群','独特价值'],['钻牛角尖','批判思维'],['不善表达','会讲创意']]},
+act:{value:'行胜于言，使命必达——把事做成是最大的人品',brain:'执行专注型大脑 · 逻辑条理力与持久耐力',
+ stages:[['10岁','初入江湖 · 立志','一件小事也要做到底——执行力是天赋的第一块基石。'],['15岁','千锤百炼 · 磨砺','千次重复磨出手感，慢热的他成了最稳的那个人。'],['18岁','破茧成蝶 · 蜕变','从执行者到主心骨——可靠，是他最硬的名片。'],['成年','登峰造极 · 卓越','使命必达的顶梁柱：行者求实，行胜于言。']],
+ pros:['踏实','执行力','专注','守时','能坚持','细致','自律','可靠','动手强','耐力足'],
+ cons:[['固执','有原则的灵活'],['慢热','稳启动'],['不变通','程序化创新'],['沉默','行胜于言'],['保守','稳中求进'],['缺想象','经验迁移'],['拒变化','拥抱迭代'],['完美主义','完成大于完美'],['单打独斗','协同作战'],['压抑情绪','健康释放']]},
+virtue:{value:'厚德载物，利他共赢——善良是最长远的聪明',brain:'共情镜像型大脑 · 社交情商力与团队凝聚力',
+ stages:[['10岁','初入江湖 · 立志','天生会照顾人——善良与共情是天赋的底色。'],['15岁','千锤百炼 · 磨砺','学会善良有锋芒：乐于助人，也懂得说「不」。'],['18岁','破茧成蝶 · 蜕变','成为众人的依靠——包容不等于没有原则。'],['成年','登峰造极 · 卓越','厚德载物的大家长：德者求和，利他方能共赢。']],
+ pros:['善良','共情力','包容','责任心','公正','善合作','耐心','懂感恩','诚信','亲和力'],
+ cons:[['讨好','善良有锋芒'],['优柔','仁爱有决断'],['迁就','会说「不」'],['敏感','同理不内耗'],['缺主见','温和而坚定'],['扛太多','学会求助'],['回避冲突','善意直面'],['自我怀疑','认可自己'],['过度负责','边界感'],['情绪受牵连','情绪独立']]},
+study:{value:'格物致知，严谨求真——知识改变命运，深度决定高度',brain:'逻辑分析型大脑 · 深度记忆力与系统思维力',
+ stages:[['10岁','初入江湖 · 立志','在书堆里找到乐园——求知欲是天赋的起点。'],['15岁','千锤百炼 · 磨砺','严谨成为习惯，每一道错题都是向上的台阶。'],['18岁','破茧成蝶 · 蜕变','把知识讲给别人听——从学会到教会，才是真懂。'],['成年','登峰造极 · 卓越','格物致知的大学者：学者求真，严谨成就深度。']],
+ pros:['严谨','专注','逻辑强','记忆好','自律','善总结','爱阅读','求知欲','细致','冷静'],
+ cons:[['死板','灵活求真'],['书呆子气','知行合一'],['不善社交','深度连接'],['怕犯错','试错勇气'],['决策慢','果断'],['缺运动','文武兼修'],['完美主义','快速迭代'],['表达弱','讲清知识'],['易焦虑','平和心态'],['纸上谈兵','实践检验']]}};
+function paintGrow(){
+  const g=GROW[curKid],t=TALENT[curKid];
+  $('grKen').textContent=t.name+'的成长史诗 · 从平凡到卓越';
+  $('gStage').innerHTML=g.stages.map(s=>`<div class="gs"><div class="gage">${s[0]}</div><div class="gsc"><div class="gsp">${s[1]}</div><div class="gst">${s[2]}</div></div></div>`).join('');
+  $('gVal').textContent=g.value; $('gBrain').textContent=g.brain;
+  $('gPros').innerHTML=g.pros.map(p=>`<span>${p}</span>`).join('');
+  $('gCons').innerHTML=g.cons.map(c=>`<div>✗ ${c[0]}<b>✓ 炼成${c[1]}</b></div>`).join('');
+}
+const _swk=switchKid;
+switchKid=function(k,i){_swk(k,i);paintGrow();};
+
+switchKid('win');
+</script>
+<script src="birthday.js"></script>
+<script>
+/* 生日入口卡文案随档案状态变化 */
+(function(){
+  if(typeof BD==='undefined')return;
+  const el=document.getElementById('bdEntry');
+  if(!el)return;
+  if(BD.isToday()){
+    el.innerHTML='🎉 今天是孩子的生日！查看生日档案<small>生日限定礼物已送达 · 聊天室有专属祝福</small>';
+  }else if(BD.isSet()){
+    el.innerHTML=`生日已登记（${BD.fmt()}）· 倒计时 ${BD.daysUntil()} 天<small>🔒档案已锁定 · 生日临近聊天室会提前提醒</small>`;
+  }
+})();
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:17px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){try{if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-back'},'*');return;}}catch(e){}if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script id="jn-dayu-bridge">
+(function(){
+  var ROUTE = {"index.html": "/pages/dayu/home", "train.html": "/pages/training/dayu", "answer.html": "/pages/qa/dayu", "drama.html": "/pages/hub/academy", "milestone.html": "/pages/hub/console", "test.html": "/pages/talent/hub", "history.html": "/pages/hub/story", "courses.html": "/pages/hub/courses", "parent.html": "/pages/parent/dayu", "wallet.html": "/pages/hub/console", "records.html": "/pages/talent/index?history=1", "report-v3.html": "/pages/report/index?mode=adult", "report-kid.html": "/pages/report/index?mode=kid", "plan.html": "/pages/plan/dayu", "relation.html": "/pages/talent/hub?stub=relation", "birthday.html": "/pages/hub/console"};
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){ if(post('dayu-nav',{path:path})) return; location.href=path; }
+  window.__dayuNav = nav;
+  document.addEventListener('click', function(e){
+    var a=e.target.closest&&e.target.closest('a'); if(!a) return;
+    var href=(a.getAttribute('href')||'').trim();
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file=href.split('?')[0].split('#')[0].split('/').pop();
+    if(ROUTE[file]){ e.preventDefault(); e.stopPropagation(); nav(ROUTE[file]); }
+  }, true);
+})();
+</script>
+
+</body></html>

@@ -218,7 +218,7 @@ document.getElementById('mj').innerHTML=MJ.map(([n,f,d])=>
     var href = a.getAttribute('href') || '';
     if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
     var file = href.split('?')[0].split('#')[0].split('/').pop();
-    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/report/index?mode=adult', 'report-kid.html': '/pages/report/index?mode=kid', 'plan.html': '/pages/plan/dayu', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
     if(map[file] || map[href]){
       e.preventDefault();
       e.stopPropagation();

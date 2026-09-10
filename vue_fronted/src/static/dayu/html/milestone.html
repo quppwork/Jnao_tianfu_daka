@@ -734,7 +734,7 @@ function SKL_GET(n){return SKL_ALL[n]!=null?SKL_ALL[n]:0;}
     +'<span style="margin-top:5px">▸ 下次训练建议</span><b style="font-weight:700;font-size:10.5px;line-height:1.7;color:#F5D576">'+adv+'</b></div></div>';
 })();
 /* 修行回放舱：已练训练 → 2D 动态小剧场（镜头推拉 + 面部特写） */
-const PIX={think:'assets/pixel-think-t.png',win:'assets/pixel-win-t.png',virtue:'assets/pixel-virtue-t.png',act:'assets/pixel-act-t.png',study:'assets/pixel-study-t.png'};
+const PIX={think:'/static/dayu/assets/pixel-think-t.png',win:'/static/dayu/assets/pixel-win-t.png',virtue:'/static/dayu/assets/pixel-virtue-t.png',act:'/static/dayu/assets/pixel-act-t.png',study:'/static/dayu/assets/pixel-study-t.png'};
 (function(){
   let t='think';
   try{
@@ -841,10 +841,10 @@ function lvlNeed(n){
 /* ================= ② 四境之锁 · 青铜锁 · 九段四阶 ================= */
 /* segs=该境包含的段位名（筑基=一二三段、开窍=四五六段、融通=七八段、尖峰=九段） */
 const LOCKS=[
-  {name:'筑基期',img:'assets/lock-t.png',segs:['一段','二段','三段'],got:3,open:true,c:'gold', boon:'🎉 <b>筑基期已圆满！</b>正式解锁：<b>小助教全部权限</b> · 张宇老师入门弟子<b>「拜师帖」</b> · <b>会场小助教</b>身份 · <b>传承特使</b>勋章 🏅'},
-  {name:'开窍期',img:'assets/lock2-t.png',segs:['四段','五段','六段'],got:1,open:false,c:'blue',rwd:'圆满得：盲盒×2＋传承勋章 🏅'},
-  {name:'融通期',img:'assets/lock3-t.png',segs:['七段','八段'],got:0,open:false,c:'teal',rwd:'圆满得：终身免门票＋盲盒×5＋学神勋章 🎖️'},
-  {name:'尖峰期',img:'assets/lock4-t.png',segs:['九段'],got:0,open:false,c:'purple',rwd:'圆满得：张宇老师内门弟子＋盲盒×10＋最高身份勋章 👑'},
+  {name:'筑基期',img:'/static/dayu/assets/lock-t.png',segs:['一段','二段','三段'],got:3,open:true,c:'gold', boon:'🎉 <b>筑基期已圆满！</b>正式解锁：<b>小助教全部权限</b> · 张宇老师入门弟子<b>「拜师帖」</b> · <b>会场小助教</b>身份 · <b>传承特使</b>勋章 🏅'},
+  {name:'开窍期',img:'/static/dayu/assets/lock2-t.png',segs:['四段','五段','六段'],got:1,open:false,c:'blue',rwd:'圆满得：盲盒×2＋传承勋章 🏅'},
+  {name:'融通期',img:'/static/dayu/assets/lock3-t.png',segs:['七段','八段'],got:0,open:false,c:'teal',rwd:'圆满得：终身免门票＋盲盒×5＋学神勋章 🎖️'},
+  {name:'尖峰期',img:'/static/dayu/assets/lock4-t.png',segs:['九段'],got:0,open:false,c:'purple',rwd:'圆满得：张宇老师内门弟子＋盲盒×10＋最高身份勋章 👑'},
 ];
 (function(){
   $('locks').innerHTML=LOCKS.map((L,i)=>{
@@ -870,11 +870,11 @@ $('skills').innerHTML=SKILLS.map(([n,e])=>{
 }).join('');
 /* ================= ④ 五态成长图 ================= */
 const STATES=[
- {img:'assets/state-1.jpg',badge:'第一境 · 完全荒废',cap:'<b>太久没有训练，前功尽弃。</b>大脑的能量团已经熄灭——别自责，中央电脑随时等你重新点火。哪怕今天只练 10 分钟，也是重启。'},
- {img:'assets/state-2.jpg',badge:'第二境 · 三天打鱼',cap:'<b>三天打鱼，两天晒网。</b>训练不持久，进步缓慢——能量波一闪一闪，时有时无。你有能力，缺的是连续。先定个小目标：连打 3 天。'},
- {img:'assets/state-3.jpg',badge:'第三境 · 尽力训练',cap:'<b>尽力训练，早日突破。</b>端坐专注，能量波稳定充盈，是第二境的三倍。照这个节奏练下去，突破只是时间问题。'},
- {img:'assets/state-4.jpg',badge:'第四境 · 锋芒初现',cap:'<b>双眼炯炯有神，能量环外放无形符号。</b>九大秘籍的影像开始在你身边浮现——你已站在突破的门口，保持强度，别松劲！'},
- {img:'assets/state-5.jpg',badge:'第五境 · 万法归一',cap:'<b>漂浮半空，九大秘籍环绕。</b>气血自转、能量自生，你本身已成为巨大的发光体。这是所有学员仰望的境界——传说，真的有人练到过。'},
+ {img:'/static/dayu/assets/state-1.jpg',badge:'第一境 · 完全荒废',cap:'<b>太久没有训练，前功尽弃。</b>大脑的能量团已经熄灭——别自责，中央电脑随时等你重新点火。哪怕今天只练 10 分钟，也是重启。'},
+ {img:'/static/dayu/assets/state-2.jpg',badge:'第二境 · 三天打鱼',cap:'<b>三天打鱼，两天晒网。</b>训练不持久，进步缓慢——能量波一闪一闪，时有时无。你有能力，缺的是连续。先定个小目标：连打 3 天。'},
+ {img:'/static/dayu/assets/state-3.jpg',badge:'第三境 · 尽力训练',cap:'<b>尽力训练，早日突破。</b>端坐专注，能量波稳定充盈，是第二境的三倍。照这个节奏练下去，突破只是时间问题。'},
+ {img:'/static/dayu/assets/state-4.jpg',badge:'第四境 · 锋芒初现',cap:'<b>双眼炯炯有神，能量环外放无形符号。</b>九大秘籍的影像开始在你身边浮现——你已站在突破的门口，保持强度，别松劲！'},
+ {img:'/static/dayu/assets/state-5.jpg',badge:'第五境 · 万法归一',cap:'<b>漂浮半空，九大秘籍环绕。</b>气血自转、能量自生，你本身已成为巨大的发光体。这是所有学员仰望的境界——传说，真的有人练到过。'},
 ];
 function myState(){
   const now=today();let d30=0;
@@ -930,7 +930,7 @@ paintState(CUR_ST);
   function duanShort(d){return CN[d]+'段';}
   const myDuan=3; /* 演示：张雨晨 筑基期三段（与四境之锁·筑基期圆满一致） */
   /* 全国榜（演示数据）：段位为纲——等级高≠段位高 */
-  const TPI={win:'assets/pixel-win-t.png',think:'assets/pixel-think-t.png',virtue:'assets/pixel-virtue-t.png',act:'assets/pixel-act-t.png',study:'assets/pixel-study-t.png'};
+  const TPI={win:'/static/dayu/assets/pixel-win-t.png',think:'/static/dayu/assets/pixel-think-t.png',virtue:'/static/dayu/assets/pixel-virtue-t.png',act:'/static/dayu/assets/pixel-act-t.png',study:'/static/dayu/assets/pixel-study-t.png'};
   const TNI={win:'赢者',think:'思者',virtue:'德者',act:'行者',study:'学者'};
   const TN1={win:'赢',think:'思',virtue:'德',act:'行',study:'学'};
   const TCI={win:'#E05252',think:'#3E8E5A',virtue:'#A0754A',act:'#C9A227',study:'#4A7EC2'};
@@ -961,11 +961,11 @@ function toggleLadder(){
 }
 /* ================= ⑥ 荣誉勋章 · 开两锁拿首枚 ================= */
 const MEDALS=[
- {img:'assets/medal1.png',name:'传承特使',need:2,sub:'开启两把境锁获得',
+ {img:'/static/dayu/assets/medal1.png',name:'传承特使',need:2,sub:'开启两把境锁获得',
   rule:'开启 <b>2 把</b>四境之锁（筑基期+开窍期圆满）即可点亮。<br>或参加一次<b>线下大会</b>：在会场录制视频 + 拍摄会场照片上传，审核通过直接授予。'},
- {img:'assets/medal2.png',name:'劲脑学神',need:3,sub:'开启三把境锁获得',
+ {img:'/static/dayu/assets/medal2.png',name:'劲脑学神',need:3,sub:'开启三把境锁获得',
   rule:'开启 <b>3 把</b>四境之锁（修到融通期圆满）即可点亮。<br>或累计参加 <b>2 次</b>线下大会并完成会场任务（视频+照片上传）授予。'},
- {img:'assets/medal3.png',name:'专利精英',need:4,sub:'开启全部四锁获得',
+ {img:'/static/dayu/assets/medal3.png',name:'专利精英',need:4,sub:'开启全部四锁获得',
   rule:'开启 <b>全部 4 把</b>四境之锁（登临尖峰期）即可点亮。<br>或携带自己的创新作品参加线下大会展示，由导师团现场评审授予。'},
 ];
 (function(){
@@ -1008,7 +1008,7 @@ function openMedal(i){
     var href = a.getAttribute('href') || '';
     if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
     var file = href.split('?')[0].split('#')[0].split('/').pop();
-    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/report/index?mode=adult', 'report-kid.html': '/pages/report/index?mode=kid', 'plan.html': '/pages/plan/dayu', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
     if(map[file] || map[href]){
       e.preventDefault();
       e.stopPropagation();

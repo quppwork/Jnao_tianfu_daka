@@ -806,24 +806,9 @@ async function copyShare() {
   sharing.value = false
 }
 
-// 打开学业规划报告
-async function openAcademicPlan(refresh = false) {
-  showPlanModal.value = true
-  if (academicPlan.value && !refresh) return
-  
-  planLoading.value = true
-  try {
-    const uid = await ensureChildUser()
-    const plan = await fetchAcademicPlan(uid, refresh)
-    academicPlan.value = plan
-    expandedNotes.value = {}
-    expandedTiers.value = {}
-    showFullReport.value = false
-  } catch (e) {
-    console.error('Failed to load academic plan:', e)
-    uni.showToast({ title: '加载失败，请重试', icon: 'none' })
-  }
-  planLoading.value = false
+// 打开学业规划 → 大宇 plan.html 复刻页（旧 Modal 前端已下线）
+async function openAcademicPlan(_refresh = false) {
+  uni.navigateTo({ url: '/pages/plan/dayu' })
 }
 
 function closePlanModal() {

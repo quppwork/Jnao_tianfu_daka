@@ -632,7 +632,7 @@ onMounted(async () => {
   height: 100vh;
   height: 100dvh;
   width: 100%;
-  max-width: 430px;
+  max-width: var(--app-max-width, 480px);
   margin: 0 auto;
   background: #0b0e14;
   color: #edebe4;
@@ -649,7 +649,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 4px;
+  padding: 14px 18px 4px;
   gap: 8px;
   min-width: 0;
 }
@@ -677,12 +677,12 @@ onMounted(async () => {
 
 .mstage {
   flex-shrink: 0;
-  margin: 8px 14px 0;
+  margin: 8px 18px 0;
   border-radius: 18px;
   overflow: hidden;
   position: relative;
   aspect-ratio: 16 / 9;
-  max-height: 28vh;
+  max-height: min(28vh, 220px);
   background: linear-gradient(140deg, #141c2e, #0b0e14);
   border: 1.5px solid #2a3040;
 }
@@ -690,7 +690,21 @@ onMounted(async () => {
   background: linear-gradient(140deg, #d1d9eb, #ebeef4);
   border-color: #bfc5d5;
 }
-.mstage-img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mstage-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* 合影/人像靠上：避免 cover 裁掉头顶 */
+  object-fit: cover;
+  object-position: center top;
+}
+/* H5 uni-image 内部 img */
+.mstage-img :deep(img),
+.mstage :deep(img) {
+  object-fit: cover !important;
+  object-position: center top !important;
+}
 .mgrad {
   position: absolute; inset: 0;
   background: linear-gradient(180deg, transparent 55%, rgba(5, 8, 14, 0.82));
@@ -746,7 +760,7 @@ onMounted(async () => {
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 18px;
   width: max-content;
   min-width: 100%;
   box-sizing: border-box;
@@ -780,7 +794,7 @@ onMounted(async () => {
 
 .mentor {
   flex-shrink: 0;
-  margin: 8px 14px 0;
+  margin: 8px 18px 0;
   background: linear-gradient(160deg, #1a2233, #101623 75%);
   border: 1.5px solid #2a3040;
   border-radius: 18px;
@@ -827,7 +841,7 @@ onMounted(async () => {
 
 .banner {
   flex-shrink: 0;
-  margin: 8px 14px 0;
+  margin: 8px 18px 0;
   padding: 8px 10px;
   border-radius: 12px;
   background: rgba(46, 107, 230, 0.12);
@@ -859,7 +873,7 @@ onMounted(async () => {
 .chat-stack {
   width: 100%;
   max-width: 100%;
-  padding: 4px 14px 10px;
+  padding: 4px 18px 10px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -935,7 +949,7 @@ onMounted(async () => {
 
 .inputbar {
   flex-shrink: 0;
-  padding: 8px 14px;
+  padding: 8px 18px;
   display: flex; gap: 9px; align-items: center;
   background: rgba(11, 14, 20, 0.96);
   border-top: 1px solid #232b3d;
@@ -959,20 +973,36 @@ onMounted(async () => {
 
 .foot {
   flex-shrink: 0;
+  width: 100%;
+  max-width: var(--app-max-width, 480px);
+  margin: 0 auto;
   background: rgba(11, 14, 20, 0.94);
-  border-top: 1px solid #2a3040;
-  padding: 8px 10px;
-  display: flex; justify-content: space-around;
+  backdrop-filter: blur(12px);
+  border-top: 1px solid #232b3d;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  justify-content: space-around;
+  box-sizing: border-box;
 }
 .app.lt .foot { background: rgba(235, 238, 244, 0.94); border-top-color: #c2cadc; }
-.foot-item { text-align: center; color: #8b93a5; font-size: 11px; flex: 1; }
+.foot-item {
+  text-align: center;
+  color: #5a6274;
+  font-size: 11px;
+  flex: 1;
+}
 .foot-item.on { color: #6fcf8e; font-weight: 700; }
 .app.lt .foot-item.on { color: #30904f; }
-.fic { width: 22px; height: 22px; display: block; margin: 0 auto 2px; }
+.fic {
+  display: block;
+  width: 38px;
+  height: 38px;
+  margin: 0 auto 1px;
+}
 
 .hist, .setm {
   position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 70;
-  max-width: 430px; margin: 0 auto;
+  max-width: var(--app-max-width, 480px); margin: 0 auto;
 }
 .hbox {
   position: absolute; top: 0; right: 0; bottom: 0;
@@ -1005,9 +1035,10 @@ onMounted(async () => {
 
 .sbox {
   position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
-  width: 100%; max-width: 430px;
+  width: 100%; max-width: var(--app-max-width, 480px);
   background: #101623; border: 1.5px solid #2a3040; border-bottom: none;
   border-radius: 20px 20px 0 0; padding: 18px;
+  box-sizing: border-box;
 }
 .app.lt .sbox { background: #dce2ef; border-color: #bfc5d5; }
 .stitle { display: block; font-size: 16px; font-weight: 900; }

@@ -13,3 +13,18 @@ export async function switchChildAccount(userId, targetChildId) {
     method: 'POST',
   })
 }
+
+export async function switchParentAccount(userId) {
+  return apiJson(withUser('/api/auth/switch-parent', userId), {
+    method: 'POST',
+  })
+}
+
+export async function switchStudentAccount(parentId, targetChildId) {
+  const q = targetChildId
+    ? `?target_child_id=${encodeURIComponent(targetChildId)}`
+    : ''
+  return apiJson(withUser(`/api/auth/switch-student${q}`, parentId), {
+    method: 'POST',
+  })
+}

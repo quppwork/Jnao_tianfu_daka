@@ -1,0 +1,532 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>大宇智能体 · 学业规划</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  body{background:#0B0E14}
+  .step{display:none;animation:stin .35s ease}
+  .step.on{display:block}
+  @keyframes stin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .sec-t{font-size:24px;font-weight:900;color:#EDEBE4;margin:20px 18px 4px}
+  .sec-s{font-size:16px;color:#8B93A5;margin:0 18px 16px;line-height:1.6}
+  .pbar{display:flex;gap:5px;margin:14px 18px 4px}
+  .pbar i{flex:1;height:5px;border-radius:99px;background:#1A2233}
+  .pbar i.on{background:linear-gradient(90deg,#C9A869,#8A6BF0)}
+
+  .fld{margin:0 18px 14px}
+  .fld .fl{font-size:16px;font-weight:800;color:#C9A869;margin-bottom:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:#131926;border:1.5px solid #232B3D;border-radius:12px;padding:10px 14px;font-size:17px;font-weight:700;color:#B9C0CE;cursor:pointer;transition:.15s}
+  .chip.on{border-color:#C9A869;color:#F0DFB8;background:rgba(201,168,105,.12)}
+  .chip.blue.on{border-color:#2E6BE6;color:#8FB4FF;background:rgba(46,107,230,.12)}
+  .inp{width:100%;background:#131926;border:1.5px solid #232B3D;border-radius:12px;padding:12px 14px;font-size:17px;color:#EDEBE4;outline:none;box-sizing:border-box}
+  .inp:focus{border-color:#C9A869}
+
+  /* 学科卡 */
+  .subj{margin:0 18px 14px;background:#131926;border:1.5px solid #232B3D;border-radius:18px;padding:14px}
+  .subj.on{border-color:#C9A869}
+  .subj .sh{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .subj .sh .si{width:36px;height:36px;border-radius:11px;background:#1A2233;display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+  .subj .sh b{font-size:18px;font-weight:900;color:#EDEBE4}
+  .subj .sh .ck{margin-left:auto;width:26px;height:26px;border-radius:8px;border:1.5px solid #2A3040;display:flex;align-items:center;justify-content:center;font-size:17px;color:transparent}
+  .subj.on .sh .ck{background:#C9A869;border-color:#C9A869;color:#101623}
+  .subj .sb{display:none;margin-top:12px;border-top:1px dashed #232B3D;padding-top:12px}
+  .subj.on .sb{display:block}
+  .srow{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .srow label{flex:none;width:86px;font-size:16px;color:#8B93A5;font-weight:700}
+  .srow .inp{padding:9px 10px;font-size:17px;text-align:center}
+  .srow .unit{flex:none;font-size:14px;color:#5A6274}
+  .mini{display:flex;gap:8px}
+  .mini .chip{flex:1;text-align:center;padding:9px 4px;font-size:16px}
+  .rate{margin-top:4px;font-size:14px;color:#5A6274}
+  .rate b{color:#C9A869}
+
+  /* 丢分归类 */
+  .lose{margin:0 18px 14px;background:#131926;border:1.5px solid #232B3D;border-radius:18px;padding:14px}
+  .lose b{font-size:17px;font-weight:900;color:#EDEBE4;display:block;margin-bottom:10px}
+  .lose .chips .chip{font-size:16px;padding:8px 12px}
+
+  .next{margin:18px;background:linear-gradient(135deg,#C9A869,#A8874A);color:#101623;border-radius:16px;padding:16px;font-size:18px;font-weight:900;text-align:center;cursor:pointer}
+  .prev{margin:-6px 18px 14px;text-align:center;font-size:16px;color:#5A6274;cursor:pointer}
+
+  /* ===== 方案页 ===== */
+  .diag{margin:14px 18px 0;background:#131926;border:1.5px solid #232B3D;border-radius:18px;padding:16px}
+  .diag .dt{font-size:18px;font-weight:900;color:#EDEBE4;margin-bottom:12px}
+  .drow{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+  .drow .dn{flex:none;width:52px;font-size:16px;font-weight:800;color:#B9C0CE}
+  .drow .dtr{flex:1;height:11px;border-radius:99px;background:#1A2233;overflow:hidden;position:relative}
+  .drow .dtr i{display:block;height:100%;border-radius:99px}
+  .drow .dv{flex:none;width:70px;text-align:right;font-size:14px;font-weight:800;color:#8B93A5;font-variant-numeric:tabular-nums}
+  .wuxing{margin:16px 18px 0;background:linear-gradient(160deg,#1A1626,#101623 70%);border:1.5px solid #6B4FA0;border-radius:20px;padding:16px}
+  .wuxing .wt{font-size:18px;font-weight:900;color:#E4D8FF;margin-bottom:4px}
+  .wuxing .ws{font-size:14px;color:#9C8DC4;margin-bottom:14px}
+  .wx{display:flex;align-items:center;gap:11px;margin-bottom:13px}
+  .wx:last-of-type{margin-bottom:0}
+  .wx .wi{width:42px;height:42px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;border:2px solid var(--wc);color:var(--wc);box-shadow:0 0 14px color-mix(in srgb,var(--wc) 45%,transparent)}
+  .wx .wm{flex:1}
+  .wx .wm b{font-size:17px;font-weight:900;color:#EDEBE4}
+  .wx .wm .wp{font-size:14px;color:#8B93A5;margin-top:2px;line-height:1.5}
+  .wx .wbar{height:6px;border-radius:99px;background:#1A2233;margin-top:6px;overflow:hidden}
+  .wx .wbar i{display:block;height:100%;background:var(--wc);border-radius:99px}
+  .wx .wpc{flex:none;width:38px;text-align:right;font-size:17px;font-weight:900;color:var(--wc)}
+  .wxflow{text-align:center;font-size:14px;color:#6B5E92;margin-top:10px;letter-spacing:2px}
+  .day{margin:16px 18px 0;background:#131926;border:1.5px solid #232B3D;border-radius:18px;padding:16px}
+  .day .dt{font-size:18px;font-weight:900;color:#EDEBE4;margin-bottom:4px}
+  .day .ds{font-size:14px;color:#8B93A5;margin-bottom:12px}
+  .slot{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-top:1px dashed #232B3D}
+  .slot .stm{flex:none;width:58px;font-size:14px;font-weight:800;color:#C9A869;padding-top:2px;text-align:right}
+  .slot .sc{flex:1}
+  .slot .sc b{font-size:17px;font-weight:900;color:#EDEBE4}
+  .slot .sc p{font-size:14px;color:#8B93A5;margin-top:2px;line-height:1.55}
+  .slot .swx{flex:none;font-size:14px;font-weight:900;border-radius:7px;padding:3px 8px;border:1px solid var(--wc);color:var(--wc)}
+  .camp{margin:16px 18px 0;background:linear-gradient(135deg,rgba(224,82,82,.12),rgba(201,168,105,.08));border:1.5px solid rgba(224,82,82,.5);border-radius:18px;padding:16px}
+  .camp b{font-size:18px;font-weight:900;color:#F0A3A3;display:block;margin-bottom:6px}
+  .camp p{font-size:16px;color:#C7B9B9;line-height:1.7}
+  .camp .cb{display:block;margin-top:12px;background:linear-gradient(135deg,#E05252,#B03A3A);color:#fff;text-align:center;border-radius:13px;padding:13px;font-size:17px;font-weight:900;text-decoration:none}
+  .talentline{margin:16px 18px 0;background:rgba(111,207,142,.07);border:1.5px solid rgba(111,207,142,.4);border-radius:16px;padding:13px 15px;font-size:16px;color:#B9E5CB;line-height:1.7}
+  .talentline b{color:#8FEFC0}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:14px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:16px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:16px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:16px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:17px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:18px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:10px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt body{background:#ebeef4}html.lt .step{display:none;animation:stin .35s ease}html.lt .step.on{display:block}@keyframes stin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}html.lt .sec-t{font-size:24px;font-weight:900;color:#1b1912;margin:20px 18px 4px}html.lt .sec-s{font-size:16px;color:#5a6274;margin:0 18px 16px;line-height:1.6}html.lt .pbar{display:flex;gap:5px;margin:14px 18px 4px}html.lt .pbar i{flex:1;height:5px;border-radius:99px;background:#ccd4e5}html.lt .pbar i.on{background:linear-gradient(90deg,#967536,#2e0f94)}html.lt .fld{margin:0 18px 14px}html.lt .fld .fl{font-size:16px;font-weight:800;color:#967536;margin-bottom:8px}html.lt .chips{display:flex;flex-wrap:wrap;gap:8px}html.lt .chip{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:12px;padding:10px 14px;font-size:17px;font-weight:700;color:#313846;cursor:pointer;transition:.15s}html.lt .chip.on{border-color:#967536;color:#47360f;background:rgba(150,117,54,.12)}html.lt .chip.blue.on{border-color:#1956d1;color:#002570;background:rgba(25,86,209,.12)}html.lt .inp{width:100%;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:12px;padding:12px 14px;font-size:17px;color:#1b1912;outline:none;box-sizing:border-box}html.lt .inp:focus{border-color:#967536}html.lt /* 学科卡 */
+  .subj{margin:0 18px 14px;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:18px;padding:14px}html.lt .subj.on{border-color:#967536}html.lt .subj .sh{display:flex;align-items:center;gap:10px;cursor:pointer}html.lt .subj .sh .si{width:36px;height:36px;border-radius:11px;background:#ccd4e5;display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}html.lt .subj .sh b{font-size:18px;font-weight:900;color:#1b1912}html.lt .subj .sh .ck{margin-left:auto;width:26px;height:26px;border-radius:8px;border:1.5px solid #bfc5d5;display:flex;align-items:center;justify-content:center;font-size:17px;color:transparent}html.lt .subj.on .sh .ck{background:#967536;border-color:#967536;color:#dce2ef}html.lt .subj .sb{display:none;margin-top:12px;border-top:1px dashed #c2cadc;padding-top:12px}html.lt .subj.on .sb{display:block}html.lt .srow{display:flex;align-items:center;gap:8px;margin-bottom:10px}html.lt .srow label{flex:none;width:86px;font-size:16px;color:#5a6274;font-weight:700}html.lt .srow .inp{padding:9px 10px;font-size:17px;text-align:center}html.lt .srow .unit{flex:none;font-size:14px;color:#8b93a5}html.lt .mini{display:flex;gap:8px}html.lt .mini .chip{flex:1;text-align:center;padding:9px 4px;font-size:16px}html.lt .rate{margin-top:4px;font-size:14px;color:#8b93a5}html.lt .rate b{color:#967536}html.lt /* 丢分归类 */
+  .lose{margin:0 18px 14px;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:18px;padding:14px}html.lt .lose b{font-size:17px;font-weight:900;color:#1b1912;display:block;margin-bottom:10px}html.lt .lose .chips .chip{font-size:16px;padding:8px 12px}html.lt .next{margin:18px;background:linear-gradient(135deg,#967536,#b59457);color:#dce2ef;border-radius:16px;padding:16px;font-size:18px;font-weight:900;text-align:center;cursor:pointer}html.lt .prev{margin:-6px 18px 14px;text-align:center;font-size:16px;color:#8b93a5;cursor:pointer}html.lt /* ===== 方案页 ===== */
+  .diag{margin:14px 18px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:18px;padding:16px}html.lt .diag .dt{font-size:18px;font-weight:900;color:#1b1912;margin-bottom:12px}html.lt .drow{display:flex;align-items:center;gap:10px;margin-bottom:11px}html.lt .drow .dn{flex:none;width:52px;font-size:16px;font-weight:800;color:#313846}html.lt .drow .dtr{flex:1;height:11px;border-radius:99px;background:#ccd4e5;overflow:hidden;position:relative}html.lt .drow .dtr i{display:block;height:100%;border-radius:99px}html.lt .drow .dv{flex:none;width:70px;text-align:right;font-size:14px;font-weight:800;color:#5a6274;font-variant-numeric:tabular-nums}html.lt .wuxing{margin:16px 18px 0;background:linear-gradient(160deg,#ddd9e9,#dce2ef 70%);border:1.5px solid #7b5fb0;border-radius:20px;padding:16px}html.lt .wuxing .wt{font-size:18px;font-weight:900;color:#0d0029;margin-bottom:4px}html.lt .wuxing .ws{font-size:14px;color:#4a3b72;margin-bottom:14px}html.lt .wx{display:flex;align-items:center;gap:11px;margin-bottom:13px}html.lt .wx:last-of-type{margin-bottom:0}html.lt .wx .wi{width:42px;height:42px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;border:2px solid var(--wc);color:var(--wc);box-shadow:0 0 14px color-mix(in srgb,var(--wc) 45%,transparent)}html.lt .wx .wm{flex:1}html.lt .wx .wm b{font-size:17px;font-weight:900;color:#1b1912}html.lt .wx .wm .wp{font-size:14px;color:#5a6274;margin-top:2px;line-height:1.5}html.lt .wx .wbar{height:6px;border-radius:99px;background:#ccd4e5;margin-top:6px;overflow:hidden}html.lt .wx .wbar i{display:block;height:100%;background:var(--wc);border-radius:99px}html.lt .wx .wpc{flex:none;width:38px;text-align:right;font-size:17px;font-weight:900;color:var(--wc)}html.lt .wxflow{text-align:center;font-size:14px;color:#7a6da1;margin-top:10px;letter-spacing:2px}html.lt .day{margin:16px 18px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:18px;padding:16px}html.lt .day .dt{font-size:18px;font-weight:900;color:#1b1912;margin-bottom:4px}html.lt .day .ds{font-size:14px;color:#5a6274;margin-bottom:12px}html.lt .slot{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-top:1px dashed #c2cadc}html.lt .slot .stm{flex:none;width:58px;font-size:14px;font-weight:800;color:#967536;padding-top:2px;text-align:right}html.lt .slot .sc{flex:1}html.lt .slot .sc b{font-size:17px;font-weight:900;color:#1b1912}html.lt .slot .sc p{font-size:14px;color:#5a6274;margin-top:2px;line-height:1.55}html.lt .slot .swx{flex:none;font-size:14px;font-weight:900;border-radius:7px;padding:3px 8px;border:1px solid var(--wc);color:var(--wc)}html.lt .camp{margin:16px 18px 0;background:linear-gradient(135deg,rgba(173,31,31,.12),rgba(150,117,54,.08));border:1.5px solid rgba(173,31,31,.5);border-radius:18px;padding:16px}html.lt .camp b{font-size:18px;font-weight:900;color:#5c0f0f;display:block;margin-bottom:6px}html.lt .camp p{font-size:16px;color:#463838;line-height:1.7}html.lt .camp .cb{display:block;margin-top:12px;background:linear-gradient(135deg,#ad1f1f,#c54f4f);color:#141414;text-align:center;border-radius:13px;padding:13px;font-size:17px;font-weight:900;text-decoration:none}html.lt .talentline{margin:16px 18px 0;background:rgba(48,144,79,.07);border:1.5px solid rgba(48,144,79,.4);border-radius:16px;padding:13px 15px;font-size:16px;color:#1a462c;line-height:1.7}html.lt .talentline b{color:#107041}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="phone">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div><div class="t1">学业规划</div><div class="t2">五者天赋 × 五行提分系统</div></div>
+    </div>
+    <a href="report-kid.html" style="font-size:16px;color:#8B93A5">返回报告</a>
+  </div>
+
+  <div class="pbar"><i class="on" id="pb1"></i><i id="pb2"></i><i id="pb3"></i><i id="pb4"></i><i id="pb5"></i></div>
+
+  <!-- ========== 第1步 · 学员信息 ========== -->
+  <div class="step on" id="p1">
+    <div class="sec-t">第 1 步 · 学员信息</div>
+    <div class="sec-s">天赋与大脑特征，决定他该怎么学；年级与省份，决定他要考什么。</div>
+    <div class="fld"><div class="fl">孩子的五者天赋（测完自动带入，可改）</div>
+      <div class="chips" id="fTalent">
+        <div class="chip on" data-v="思者">🧠 思者</div><div class="chip" data-v="赢者">🔥 赢者</div><div class="chip" data-v="德者">🤝 德者</div><div class="chip" data-v="行者">⛰️ 行者</div><div class="chip" data-v="学者">📚 学者</div>
+      </div>
+    </div>
+    <div class="fld"><div class="fl">大脑类型</div>
+      <div class="chips" id="fBrain">
+        <div class="chip on" data-v="均衡型">⚖️ 均衡型</div><div class="chip" data-v="左脑型">🔢 左脑型（逻辑）</div><div class="chip" data-v="右脑型">🎨 右脑型（图像）</div>
+      </div>
+    </div>
+    <div class="fld"><div class="fl">学段</div>
+      <div class="chips" id="fStage">
+        <div class="chip blue on" data-v="小学">小学</div><div class="chip blue" data-v="初中">初中</div><div class="chip blue" data-v="高中">高中</div>
+      </div>
+    </div>
+    <div class="fld"><div class="fl">所在省份（决定学科与分值结构）</div>
+      <select class="inp" id="fProv" style="appearance:auto">
+        <option>北京</option><option>上海</option><option>天津</option><option>重庆</option><option>河北</option><option>山西</option><option>辽宁</option><option>吉林</option><option>黑龙江</option><option>江苏</option><option selected="">浙江</option><option>安徽</option><option>福建</option><option>江西</option><option>山东</option><option>河南</option><option>湖北</option><option>湖南</option><option>广东</option><option>海南</option><option>四川</option><option>贵州</option><option>云南</option><option>陕西</option><option>甘肃</option><option>青海</option><option>内蒙古</option><option>广西</option><option>西藏</option><option>宁夏</option><option>新疆</option><option>香港</option><option>澳门</option><option>台湾</option>
+      </select>
+    </div>
+    <div class="fld"><div class="fl">年级</div>
+      <div class="chips" id="fGrade"></div>
+    </div>
+    <div class="next" onclick="goStep(2)">下一步 · 填写各科成绩 →</div>
+  </div>
+
+  <!-- ========== 第2步 · 学科成绩 ========== -->
+  <div class="step" id="p2">
+    <div class="sec-t">第 2 步 · 各科成绩</div>
+    <div class="sec-s">全国各省市学科结构不同——先勾选孩子实际考的科目（含选科），再逐科填写：满分、得分、试卷规定时长、实际用时。语文/英语请补填作文与听力情况，没做的部分我们会从分析基数中扣除。</div>
+    <div id="subjList"></div>
+    <div class="next" onclick="goStep(3)">下一步 · 圈出丢分题型 →</div>
+    <div class="prev" onclick="goStep(1)">← 返回上一步</div>
+  </div>
+
+  <!-- ========== 第3步 · 丢分归类 ========== -->
+  <div class="step" id="p3">
+    <div class="sec-t">第 3 步 · 丢分题型归类</div>
+    <div class="sec-s">逐科圈出主要丢分门类。题型×天赋的关联度，决定训练主攻方向。</div>
+    <div id="loseList"></div>
+    <div class="next" onclick="goStep(4)">下一步 · 可投入时间 →</div>
+    <div class="prev" onclick="goStep(2)">← 返回上一步</div>
+  </div>
+
+  <!-- ========== 第4步 · 时间采集 ========== -->
+  <div class="step" id="p4">
+    <div class="sec-t">第 4 步 · 他能拿出多少时间</div>
+    <div class="sec-s">时间决定打法。住校与走读，是两套完全不同的训练节奏。</div>
+    <div class="fld"><div class="fl">住宿情况</div>
+      <div class="chips" id="fBoard">
+        <div class="chip on" data-v="走读">🏠 走读（每天回家）</div><div class="chip" data-v="住校">🏫 住校生</div>
+      </div>
+    </div>
+    <div class="fld" id="fDayBox">
+      <div class="fl">每天回家可投入训练时长</div>
+      <div class="chips" id="fDaily">
+        <div class="chip" data-v="30">30分钟</div><div class="chip on" data-v="60">1小时</div><div class="chip" data-v="120">2小时</div><div class="chip" data-v="180">3小时</div>
+      </div>
+    </div>
+    <div id="fBoardBox" style="display:none">
+      <div class="fld"><div class="fl">多久回一次家</div>
+        <div class="chips" id="fHome">
+          <div class="chip on" data-v="每周">每周都回</div><div class="chip" data-v="两周">两周一回</div><div class="chip" data-v="每月">每月一回</div>
+        </div>
+      </div>
+      <div class="fld"><div class="fl">可参加的集训形式（可多选）</div>
+        <div class="chips" id="fCamp">
+          <div class="chip on" data-v="周末训练">周六日集中训练</div>
+          <div class="chip" data-v="火箭营">5天火箭提分营（可请假3天）</div>
+          <div class="chip" data-v="黑马营">1个月黑马营（高强度封闭）</div>
+        </div>
+      </div>
+    </div>
+    <div class="next" onclick="genPlan()">⚡ 生成我的学业规划</div>
+    <div class="prev" onclick="goStep(3)">← 返回上一步</div>
+  </div>
+
+  <!-- ========== 第5步 · 规划方案 ========== -->
+  <div class="step" id="p5">
+    <div class="sec-t" id="planTitle">学业规划方案</div>
+    <div class="sec-s" id="planSub"></div>
+
+    <div class="talentline" id="planTalent"></div>
+
+    <div class="diag">
+      <div class="dt">📊 学科诊断 · 得分率全景</div>
+      <div id="diagRows"></div>
+    </div>
+
+    <div class="wuxing">
+      <div class="wt">🌀 五行提分系统 · 配比</div>
+      <div class="ws">木生火 · 火生土 · 土生金 · 金生水 · 水生木——按得分率自动配比，环环相扣</div>
+      <div id="wxRows"></div>
+      <div class="wxflow">木 → 火 → 土 → 金 → 水 →（循环相生）</div>
+    </div>
+
+    <div class="day">
+      <div class="dt">🗓️ 每日训练时刻表</div>
+      <div class="ds" id="daySub"></div>
+      <div id="daySlots"></div>
+    </div>
+
+    <div class="camp" id="campBox" style="display:none">
+      <b id="campT">🚀 集训建议</b>
+      <p id="campP"></p>
+      <a class="cb" href="answer.html">咨询集训名额 →</a>
+    </div>
+
+    <div class="next" onclick="goStep(1)">重新测算</div>
+  </div>
+
+  <div class="foot">
+    <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+</div>
+<script>
+/* ================= 数据结构 ================= */
+const SUBJ={
+ 小学:[
+  {k:'语文',ic:'📖',full:120,essay:true},
+  {k:'数学',ic:'🔢',full:100},
+  {k:'英语',ic:'🔤',full:100,listen:true},
+  {k:'科学',ic:'🔬',full:100},
+  {k:'道德与法治',ic:'⚖️',full:100}
+ ],
+ 初中:[
+  {k:'语文',ic:'📖',full:120,essay:true},
+  {k:'数学',ic:'🔢',full:120},
+  {k:'英语',ic:'🔤',full:120,listen:true},
+  {k:'物理',ic:'🧲',full:100},
+  {k:'化学',ic:'⚗️',full:100},
+  {k:'生物',ic:'🧬',full:100},
+  {k:'历史',ic:'🏺',full:100},
+  {k:'地理',ic:'🌍',full:100},
+  {k:'道德与法治',ic:'⚖️',full:100}
+ ],
+ 高中:[
+  {k:'语文',ic:'📖',full:150,essay:true},
+  {k:'数学',ic:'🔢',full:150},
+  {k:'英语',ic:'🔤',full:150,listen:true},
+  {k:'物理',ic:'🧲',full:100},
+  {k:'化学',ic:'⚗️',full:100},
+  {k:'生物',ic:'🧬',full:100},
+  {k:'历史',ic:'🏺',full:100},
+  {k:'地理',ic:'🌍',full:100},
+  {k:'思想政治',ic:'⚖️',full:100},
+  {k:'信息技术',ic:'💻',full:100},
+  {k:'通用技术',ic:'🛠️',full:100}
+ ]
+};
+const LOSE={
+ 语文:['基础知识','阅读理解','古文/文言文','作文'],
+ 数学:['基础题','计算题','中档应用题','压轴题'],
+ 英语:['听力','基础知识','完形填空','阅读理解','作文'],
+ 物理:['概念辨析','公式计算','实验题','综合大题'],
+ 化学:['概念记忆','方程式计算','实验探究','推断大题'],
+ 生物:['概念记忆','图表分析','实验设计','综合应用'],
+ 历史:['时间线记忆','材料分析','论述题'],
+ 地理:['地图判读','概念记忆','综合分析'],
+ 道德与法治:['概念记忆','材料分析','时政结合'],
+ 思想政治:['概念记忆','材料分析','时政论述'],
+ 科学:['概念记忆','实验探究','综合应用'],
+ 信息技术:['操作题','理论题','编程题'],
+ 通用技术:['设计题','理论题','实操题']
+};
+const GRADES={小学:['一年级','二年级','三年级','四年级','五年级','六年级'],初中:['初一','初二','初三'],高中:['高一','高二','高三']};
+
+const S={talent:'思者',brain:'均衡型',stage:'小学',prov:'浙江',grade:'三年级',board:'走读',daily:60,home:'每周',camps:['周末训练'],subs:{}};
+
+const $=id=>document.getElementById(id);
+function chipGroup(id,key,multi){
+  $(id).querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    if(multi){
+      c.classList.toggle('on');
+      const v=c.dataset.v;
+      S[key]=S[key].includes(v)?S[key].filter(x=>x!==v):[...S[key],v];
+    }else{
+      $(id).querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));
+      c.classList.add('on'); S[key]=c.dataset.v;
+      if(key==='stage'){renderGrades();renderSubjects();}
+      if(key==='board'){const b=S.board==='住校';$('fBoardBox').style.display=b?'block':'none';$('fDayBox').style.display=b?'none':'block';}
+    }
+  });
+}
+function renderGrades(){
+  $('fGrade').innerHTML=GRADES[S.stage].map((g,i)=>`<div class="chip blue${i===(S.stage==='小学'?2:0)?' on':''}" data-v="${g}">${g}</div>`).join('');
+  S.grade=GRADES[S.stage][S.stage==='小学'?2:0];
+  chipGroup('fGrade','grade');
+}
+function renderSubjects(){
+  $('subjList').innerHTML=SUBJ[S.stage].map((s,i)=>{
+    const on=i<3;
+    S.subs[s.k]=on?(S.subs[s.k]||{full:s.full,score:'',limit:'',used:'',essay:'',listen:'',essayDone:true,listenDone:true}):S.subs[s.k];
+    return `<div class="subj${on?' on':''}" id="sub-${i}">
+      <div class="sh" onclick="toggleSubj(${i})">
+        <div class="si">${s.ic}</div><b>${s.k}</b>
+        <span style="font-size:14px;color:#5A6274">${s.essay?'含作文':''}${s.listen?'含听力':''}</span>
+        <div class="ck">✓</div>
+      </div>
+      <div class="sb">
+        <div class="srow"><label>满分 / 得分</label><input class="inp" placeholder="满分 ${s.full}" value="${s.full}" oninput="setV('${s.k}','full',this.value)"><span class="unit">分</span><input class="inp" placeholder="考了多少" oninput="setV('${s.k}','score',this.value)"><span class="unit">分</span></div>
+        <div class="srow"><label>规定 / 实际用时</label><input class="inp" placeholder="规定分钟" oninput="setV('${s.k}','limit',this.value)"><span class="unit">分钟</span><input class="inp" placeholder="实际用了" oninput="setV('${s.k}','used',this.value)"><span class="unit">分钟</span></div>
+        ${s.essay?`<div class="srow"><label>作文</label><div class="mini" id="es-${s.k}"><div class="chip on" onclick="setDone('${s.k}','essay',true,this)">做了</div><div class="chip" onclick="setDone('${s.k}','essay',false,this)">没做</div></div><input class="inp" placeholder="作文得分（做了填）" oninput="setV('${s.k}','essay',this.value)"></div>`:''}
+        ${s.listen?`<div class="srow"><label>听力</label><div class="mini" id="li-${s.k}"><div class="chip on" onclick="setDone('${s.k}','listen',true,this)">做了</div><div class="chip" onclick="setDone('${s.k}','listen',false,this)">没做</div></div><input class="inp" placeholder="听力得分（做了填）" oninput="setV('${s.k}','listen',this.value)"></div>`:''}
+        <div class="rate" id="rate-${s.k}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleSubj(i){
+  const el=$('sub-'+i); el.classList.toggle('on');
+  const k=SUBJ[S.stage][i].k;
+  if(el.classList.contains('on')&&!S.subs[k])S.subs[k]={full:SUBJ[S.stage][i].full,score:'',limit:'',used:'',essay:'',listen:'',essayDone:true,listenDone:true};
+}
+function setV(k,f,v){S.subs[k][f]=v;paintRate(k);}
+function setDone(k,f,v,el){
+  S.subs[k][f+'Done']=v;
+  el.parentElement.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));
+  el.classList.add('on');
+}
+function paintRate(k){
+  const d=S.subs[k],f=+d.full||0,s=+d.score||0;
+  const el=$('rate-'+k); if(!el)return;
+  if(f>0&&s>0){
+    let base=f;
+    if(d.essayDone===false&&d.essayBase)base-=0; // 没做作文/听力：提示已在算法中扣除
+    const r=Math.round(s/f*100);
+    let tip=r<60?'木火为主 · 能力+过书':r<85?'火土结合 · 应用+难题':'土金攻坚 · 难题+专项';
+    el.innerHTML=`得分率 <b>${r}%</b> → ${tip}`;
+  }else el.textContent='';
+}
+function goStep(n){
+  if(n===3)renderLose();
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('on'));
+  $('p'+n).classList.add('on');
+  for(let i=1;i<=5;i++)$('pb'+i).classList.toggle('on',i<=n);
+  window.scrollTo(0,0);
+}
+function renderLose(){
+  const on=Object.keys(S.subs).filter(k=>$('sub-'+SUBJ[S.stage].findIndex(x=>x.k===k))?.classList.contains('on'));
+  $('loseList').innerHTML=on.map(k=>`<div class="lose"><b>${k} · 主要丢分在哪？</b><div class="chips" data-k="${k}">${(LOSE[k]||['基础','中档','拔高']).map(t=>`<div class="chip" data-v="${t}">${t}</div>`).join('')}</div></div>`).join('');
+  $('loseList').querySelectorAll('.chips').forEach(g=>{
+    const k=g.dataset.k; S.subs[k].lose=S.subs[k].lose||[];
+    g.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+      c.classList.toggle('on');
+      const v=c.dataset.v;
+      S.subs[k].lose=S.subs[k].lose.includes(v)?S.subs[k].lose.filter(x=>x!==v):[...S.subs[k].lose,v];
+    });
+  });
+}
+
+/* ================= 五行提分算法 ================= */
+const WXC={'木':'#4FAE72','火':'#E05252','土':'#C9A227','金':'#C9A869','水':'#4EA0D8'};
+const WXINFO={
+ 木:{n:'能力训练',d:'速读 · 速记 · 速算 · 速学 · 多元感知 · 波动导图——大脑能力生生不息，一切提分的根'},
+ 火:{n:'应用训练',d:'一天一本文科书 · 七天一本理科书——能力入学科，快速过完知识完成训练'},
+ 土:{n:'难题训练',d:'针对难题与知识点的能力攻坚，活学活用，解得出、调得动'},
+ 金:{n:'专项训练',d:'作文 / 完形 / 听力等单一题型的集中刻意练习，精准补短板'},
+ 水:{n:'考试训练',d:'以考代练刷试卷——速度面前多读两遍、多审两遍，稳定发挥到超常发挥'}
+};
+function calc(){
+  const list=Object.entries(S.subs).filter(([k,d])=>{
+    const idx=SUBJ[S.stage].findIndex(x=>x.k===k);
+    return $('sub-'+idx)?.classList.contains('on') && +d.score>0 && +d.full>0;
+  }).map(([k,d])=>{
+    // 没做听力/作文：从满分基数扣除对应题型分（英语听力按满分20%估、语文作文按40%估，可用实际填值校正）
+    let base=+d.full;
+    if(d.listenDone===false) base=Math.max(1,base-Math.round(+d.full*0.2));
+    if(d.essayDone===false) base=Math.max(1,base-Math.round(+d.full*0.33));
+    const rate=Math.round(+d.score/base*100);
+    const speed=(+d.limit>0&&+d.used>0)?Math.round(+d.used/+d.limit*100):null;
+    return {k,rate,lose:d.lose||[],speed,used:+d.used||0,limit:+d.limit||0,score:+d.score,full:+d.full,base};
+  });
+  // 五行配比：水=以考代练恒定入门20%；其余按各科学段分布
+  let w={木:0,火:0,土:0,金:0,水:0};
+  list.forEach(s=>{
+    if(s.rate<60){w.木+=2;w.火+=2;}
+    else if(s.rate<85){w.火+=1.5;w.土+=2;}
+    else{w.土+=2;w.金+=1.5;}
+    (s.lose||[]).forEach(t=>{
+      if(/作文|听力|完形|基础知识|概念记忆|方程式|计算/.test(t))w.金+=1;
+      if(/压轴|综合|大题|推断|论述|探究|设计/.test(t))w.土+=1;
+      if(/阅读|材料/.test(t))w.火+=0.7,w.木+=0.5;
+    });
+  });
+  w.水+=list.length*1.2; // 以考代练·入门必配
+  const tot=w.木+w.火+w.土+w.金+w.水||1;
+  Object.keys(w).forEach(k=>w[k]=Math.round(w[k]/tot*100));
+  // 微调凑整100
+  const diff=100-Object.values(w).reduce((a,b)=>a+b,0);
+  w.水+=diff;
+  return {list,w};
+}
+const TALENT_TIP={
+ 思者:'<b>思者</b>脑洞大、走神快：训练切小段、多变换，用「闯关计时」拴住注意力；丢分多在粗心与审题，水系统（以考代练）让他多读两遍天然对症。',
+ 赢者:'<b>赢者</b>好胜、越比越强：所有训练配「排行榜+对手目标」，金系统专项训练设置打擂机制，效果最好。',
+ 德者:'<b>德者</b>重承诺、怕让人失望：用「师生约定+打卡盖章」驱动，火系统过书任务签军令状，完成率最高。',
+ 行者:'<b>行者</b>坐得住、靠苦练：木系统能力训练可以上量加码，重复性训练他的耐受度全场最强。',
+ 学者:'<b>学者</b>一板一眼、体系强：土系统难题训练配思维导图，先建框架再攻坚，避免灵动不足卡死在一道题上。'
+};
+function genPlan(){
+  const {list,w}=calc();
+  if(!list.length){alert('请至少勾选一门学科并填写满分与得分');return;}
+  /* 存档：学业规划记录 */
+  try{
+    const log=JSON.parse(localStorage.getItem('jn_plan_log')||'[]');
+    log.push({grade:S.grade,talent:S.talent,prov:S.prov,subs:list.map(s=>s.k),ts:Date.now()});
+    localStorage.setItem('jn_plan_log',JSON.stringify(log.slice(-30)));
+  }catch(e){}
+  goStep(5);
+  $('planTitle').textContent=`${S.grade} · ${S.talent} · 学业规划方案`;
+  $('planSub').textContent=`${S.prov} · ${S.brain} · ${S.board}${S.board==='走读'?` · 每日可投入 ${S.daily>=60?(S.daily/60)+'小时':S.daily+'分钟'}`:''}`;
+  $('planTalent').innerHTML=TALENT_TIP[S.talent]+(S.brain!=='均衡型'?` ${S.brain==='左脑型'?'左脑型：图像与记忆类训练（木）需加量，把水系统刷卷作为平衡杠杆。':'右脑型：计算与步骤类易丢分，金系统专项（计算/基础）优先。'}`:' 左右脑均衡：水系统以考代练作为入门起手式，准没错。');
+  // 诊断
+  $('diagRows').innerHTML=list.map(s=>{
+    const c=s.rate<60?'#E05252':s.rate<85?'#C9A227':'#4FAE72';
+    const spd=s.speed!==null?(s.speed>100?` · 用时超了${s.speed-100}%`:s.speed<75?` · 余量充足（${s.speed}%时长做完）`:` · 用时正常`):'';
+    return `<div class="drow"><span class="dn">${s.k}</span><div class="dtr"><i style="width:${Math.min(100,s.rate)}%;background:${c}"></i></div><span class="dv">${s.score}/${s.base}分 · ${s.rate}%${spd}</span></div>
+    ${s.lose.length?`<div style="margin:-6px 0 10px 62px;font-size:14px;color:#5A6274">丢分：${s.lose.join('、')}</div>`:''}`;
+  }).join('');
+  // 五行
+  $('wxRows').innerHTML=['木','火','土','金','水'].map(k=>`
+    <div class="wx" style="--wc:${WXC[k]}">
+      <div class="wi">${k}</div>
+      <div class="wm"><b>${WXINFO[k].n}</b><div class="wp">${WXINFO[k].d}</div><div class="wbar"><i style="width:${w[k]}%"></i></div></div>
+      <div class="wpc">${w[k]}%</div>
+    </div>`).join('');
+  // 每日时刻表
+  const mins=S.board==='走读'?+S.daily:(S.home==='每周'?120:S.home==='两周'?90:60);
+  const alloc=['木','火','土','金','水'].filter(k=>w[k]>8);
+  const slots=alloc.map(k=>({k,m:Math.max(10,Math.round(mins*w[k]/100))}));
+  const order={'水':0,'木':1,'火':2,'土':3,'金':4};
+  slots.sort((a,b)=>order[a.k]-order[b.k]);
+  let t=S.board==='走读'?19*60:6*60+30; // 走读晚7点开始；住校按周末早6:30
+  const fmt=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  $('daySub').textContent=S.board==='走读'?`每晚 ${fmt(t)} 开始 · 共 ${mins} 分钟 · 顺序：水(热场刷卷)→木(能力)→火(过书)→土(难题)→金(专项)`:`${S.home}回家 · 回家日集中 ${mins} 分钟 · 在校日只做「木」10分钟能力微训练`;
+  $('daySlots').innerHTML=slots.map(s=>{
+    const t1=fmt(t); t+=s.m;
+    const subjWorst=list.slice().sort((a,b)=>a.rate-b.rate)[0];
+    const focus=s.k==='木'?'速读+速记+多元感知（大宇智能体音频闯关）'
+      :s.k==='火'?`过书：${subjWorst.rate<60?subjWorst.k+'课本（文科一天一本/理科七天一本）':'文科一本/理科章节推进'}`
+      :s.k==='土'?`难题攻坚：${list.filter(x=>x.rate>=60).map(x=>x.k).join('、')||'优势学科'}的压轴/综合题`
+      :s.k==='金'?`专项刻意练习：${[...new Set(list.flatMap(x=>x.lose))].slice(0,3).join('、')||'作文/听力/计算'}`
+      :'以考代练：限时刷卷一份（速读审题两遍法）';
+    return `<div class="slot" style="--wc:${WXC[s.k]}"><div class="stm">${t1}<br>${s.m}分钟</div><div class="sc"><b>${WXINFO[s.k].n}</b><p>${focus}</p></div><div class="swx">${s.k}</div></div>`;
+  }).join('');
+  // 集训建议
+  const worst=list.slice().sort((a,b)=>a.rate-b.rate)[0];
+  if(S.board==='住校'){
+    $('campBox').style.display='block';
+    const canRocket=S.camps.includes('火箭营'),canDark=S.camps.includes('黑马营');
+    $('campP').textContent=canDark?`住校${S.home}回家，平日在校难以系统训练。建议直接进入「1个月黑马营」高强度封闭训练：木火土金水五系统全量运转，${worst.k}（得分率${worst.rate}%）作为主攻学科，出营即完成一轮质变。`
+      :canRocket?`住校${S.home}回家，建议请3天假连上周末参加「5天火箭提分营」：主打水系统以考代练，5天高密度刷卷+极速学习，先把考试速度提上来。`
+      :`住校${S.home}回家，先执行周末集中训练方案；寒暑假可升级火箭提分营/黑马营。`;
+  }else if(worst.rate<60){
+    $('campBox').style.display='block';
+    $('campP').textContent=`${worst.k}得分率仅${worst.rate}%，基础知识缺口大，日常木火训练之外，强烈建议假期参加「5天火箭提分营」集中过书+刷卷，短期把地基补齐。`;
+  }else{
+    $('campBox').style.display='none';
+  }
+}
+/* ================= 初始化 ================= */
+chipGroup('fTalent','talent');
+chipGroup('fBrain','brain');
+chipGroup('fStage','stage');
+chipGroup('fBoard','board');
+chipGroup('fDaily','daily');
+chipGroup('fHome','home');
+chipGroup('fCamp','camps',true);
+renderGrades();
+renderSubjects();
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:17px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){try{if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-back'},'*');return;}}catch(e){}if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script id="jn-dayu-bridge">
+(function(){
+  var ROUTE = {"index.html": "/pages/dayu/home", "train.html": "/pages/training/dayu", "answer.html": "/pages/qa/dayu", "drama.html": "/pages/hub/academy", "milestone.html": "/pages/hub/console", "test.html": "/pages/talent/hub", "history.html": "/pages/hub/story", "courses.html": "/pages/hub/courses", "parent.html": "/pages/parent/dayu", "wallet.html": "/pages/hub/console", "records.html": "/pages/talent/index?history=1", "report-v3.html": "/pages/report/index?mode=adult", "report-kid.html": "/pages/report/index?mode=kid", "plan.html": "/pages/plan/dayu", "relation.html": "/pages/talent/hub?stub=relation", "birthday.html": "/pages/hub/console"};
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){ if(post('dayu-nav',{path:path})) return; location.href=path; }
+  window.__dayuNav = nav;
+  document.addEventListener('click', function(e){
+    var a=e.target.closest&&e.target.closest('a'); if(!a) return;
+    var href=(a.getAttribute('href')||'').trim();
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file=href.split('?')[0].split('#')[0].split('/').pop();
+    if(ROUTE[file]){ e.preventDefault(); e.stopPropagation(); nav(ROUTE[file]); }
+  }, true);
+})();
+</script>
+
+</body></html>

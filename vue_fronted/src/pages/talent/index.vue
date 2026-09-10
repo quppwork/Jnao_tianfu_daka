@@ -1,20 +1,21 @@
 <template>
-  <view class="app">
-    <!-- Nav -->
-    <view class="nav">
-      <view class="nav-back" @tap="goBack">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+  <view class="app" :class="{ 'is-kid': isKidMode, 'is-quiz': phase === 'testing' || phase === 'confirm' || phase === 'completed' }">
+    <!-- Dayu brand topbar（对齐 test.html） -->
+    <view class="dy-top">
+      <view class="dy-brand" @tap="goBack">
+        <view class="dy-logo"></view>
+        <view>
+          <text class="dy-t1">天赋测试</text>
+          <text class="dy-t2">TALENT TEST</text>
+        </view>
       </view>
-      <text class="nav-title">{{ phase === 'door' ? '个人测试' : '天赋测试' }}</text>
-      <view class="nav-right" @tap="showHistory = true">
-        <text>历史报告</text>
-      </view>
+      <text class="dy-hist" @tap="showHistory = true">历史报告</text>
     </view>
 
     <!-- ===== PRE-TEST PHASES ===== -->
     <template v-if="isPreTest">
-      <!-- DOOR · 大宇图二：选测试对象 -->
-      <view v-if="phase === 'door'" class="phase door-phase" key="door">
+      <!-- DOOR · 选测试对象 -->
+      <view v-if="phase === 'door' || phase === 'ageGate'" class="phase door-phase" key="door">
         <view class="phase-inner door-inner">
           <text class="door-title">个人测试 · 请选择测试对象</text>
           <text class="door-sub">35 道快答题 · 约 3 分钟 · 凭第一感觉选择</text>
@@ -62,135 +63,111 @@
       </view>
 
       <!-- AGE GATE -->
-      <view v-if="phase === 'ageGate'" class="phase" key="ageGate">
-        <view class="phase-inner">
-          <text class="msg-title">注意！请确认您的孩子是否满18岁</text>
-          <view class="card-row">
-            <view class="pcard pcard-in" @tap="handleChoice('已满18岁')">
-              <image src="/static/adult-icon-clean.png" mode="aspectFit" style="width:110px;height:190px;margin-bottom:8px;transform:translateY(-10px);" />
-              <text class="pcard-title">已满18岁</text>
-              <text class="pcard-sub">进入成人测试</text>
-            </view>
-            <view class="pcard pcard-in" @tap="handleChoice('未满18岁')">
-              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;"><image src="/static/kid-icon-clean.png" mode="aspectFit" style="width:120px;height:190px;" /></view>
-              <text class="pcard-title">未满18岁</text>
-              <text class="pcard-sub">家长辅助完成孩子测试</text>
-            </view>
-          </view>
-        </view>
-        <view v-if="ageGateNotice" class="notice-overlay" @tap="dismissNotice">
-          <view class="notice-card"><text class="notice-text">您的孩子未满18岁，请您帮助您的孩子完成测试，否则测试可能会与事实产生误差</text></view>
+      <view v-if="phase === 'ageGate'" class="age-overlay" key="ageGate">
+        <view class="age-box">
+          <text class="age-ic">⚠️</text>
+          <text class="age-title">注意！请确认您的孩子<text class="age-em">是否已满 18 岁</text></text>
+          <text class="age-p">您的孩子未满18岁，请您（家长）帮助孩子完成本次测试。题目将由家长根据孩子的日常真实表现作答，孩子本人作答或凭想象作答，结果会与事实产生误差。</text>
+          <view class="age-ok" @tap="handleChoice('未满18岁')"><text>我是家长 · 我来帮孩子测</text></view>
+          <view class="age-back" @tap="handleChoice('返回')"><text>返回重选</text></view>
         </view>
       </view>
 
-      <!-- CONFIRM -->
-      <view v-if="phase === 'confirm'" class="phase" key="confirm">
-        <view class="phase-inner">
-          <text class="msg-title" style="font-size:28px;">好的！{{ testType || '成人' }}测试</text>
-          <view class="card-row">
-            <view class="pcard pcard-in" @tap="handleChoice('准备好了')">
-              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
-                <image src="/static/confirm-hero.png" mode="aspectFit" style="width:120px;height:190px;" />
-              </view>
-              <view style="flex:1;"></view>
-              <text class="pcard-title" style="font-size:20px;">准备好了</text>
-              <text class="pcard-sub">开始答题</text>
-              <view style="height:28px;flex-shrink:0;"></view>
+      <!-- CONFIRM · 准备页 -->
+      <view v-if="phase === 'confirm'" class="phase confirm-phase" key="confirm">
+        <view class="phase-inner confirm-inner">
+          <view class="confirm-card">
+            <text class="confirm-emoji">{{ testType === '孩子' ? '👨‍👧' : '🙌' }}</text>
+            <text class="confirm-title">{{ testType === '孩子' ? '好的！家长代测 · 儿童版' : '好的！成人测试' }}</text>
+            <text class="confirm-desc">
+              {{ testType === '孩子'
+                ? '请家长放下预判，根据孩子平时的真实表现作答，35道快答题，凭第一反应选择，越真实越准确。'
+                : '接下来是 35 道快答题，凭第一感觉作答，没有对错，越诚实越准确。' }}
+            </text>
+            <view class="confirm-tags">
+              <text class="confirm-tag">35 题</text>
+              <text class="confirm-tag">每题 60 秒</text>
+              <text class="confirm-tag">可撤回上一题</text>
             </view>
-            <view class="pcard pcard-in" @tap="handleChoice('稍后再说')">
-              <view class="pcard-icon-wrap" style="background:transparent;width:auto;height:auto;">
-                <image src="/static/confirm-later.png" mode="aspectFit" style="width:150px;height:210px;margin-top:-6px;" />
-              </view>
-              <view style="flex:1;"></view>
-              <text class="pcard-title" style="font-size:20px;">稍后再说</text>
-              <text class="pcard-sub">返回首页</text>
-              <view style="height:28px;flex-shrink:0;"></view>
+            <view class="confirm-actions">
+              <view class="confirm-later" @tap="handleChoice('稍后再说')"><text>稍后再说</text></view>
+              <view class="confirm-go" @tap="handleChoice('准备好了')"><text>准备好了 · 开始答题</text></view>
             </view>
           </view>
         </view>
       </view>
     </template>
 
-    <!-- ===== TESTING PHASE ===== -->
+    <!-- ===== TESTING · 对齐 jnao10 test.html 答题卡 ===== -->
     <template v-if="phase === 'testing' && currentQuestion">
-      <!-- Top bar -->
-      <view class="test-top">
-        <text class="test-type-tag">{{ testType === '成人' ? '成人测试' : '孩子测试' }}</text>
-        <view class="progress-bar">
-          <view class="progress-fill" :style="{ width: ((currentQIndex + 1) / 35 * 100) + '%' }"></view>
-        </view>
-        <text class="progress-text">{{ currentQIndex + 1 }}/35</text>
+      <view class="qbar">
+        <text class="qmode">{{ modeLabel }}</text>
+        <view class="qprog"><view class="qprog-i" :style="{ width: ((currentQIndex + 1) / TOTAL * 100) + '%' }"></view></view>
+        <text class="qnum">{{ currentQIndex + 1 }}/{{ TOTAL }}</text>
       </view>
 
-      <!-- Background + Card -->
-      <view class="test-body" :style="{ background: currentBg }">
-        <view class="test-body-inner">
-          <!-- Undo card -->
-          <view v-if="prevCard && !undoMode" class="undo-card" @tap="handleUndo">
-            <view class="undo-info">
-              <text class="undo-label">第 {{ prevCard.idx }} 题</text>
-              <text class="undo-answer">已答：{{ prevCard.answer }}</text>
-            </view>
-            <text class="undo-text">{{ prevCard.text }}</text>
-            <view class="undo-overlay" :style="{ background: isLightTheme ? 'rgba(255,255,255,0.6)' : 'rgba(13,17,23,0.7)' }"><text>↩ 点击撤回</text></view>
-          </view>
+      <view v-if="prevCard && !undoMode" class="undo on" @tap="handleUndo">
+        <text class="uaw">上一题「{{ (prevCard.text || '').slice(0, 14) }}…」 已选 <text class="uaw-b">{{ prevCard.answer }}</text></text>
+        <text class="ubtn">↩︎ 点击撤回</text>
+      </view>
 
-          <!-- Question Card -->
-          <view class="q-card">
-            <text class="q-badge">第 {{ currentQIndex + 1 }} 题</text>
-            <view class="countdown-row">
-              <view class="cd-ring-wrap">
-                <svg viewBox="0 0 36 36" class="cd-svg">
-                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(88,166,255,0.12)" stroke-width="2.5"/>
-                  <circle cx="18" cy="18" r="15.5" fill="none" :stroke="cdUrgent ? '#ff6b6b' : '#286bea'" stroke-width="2.5" stroke-linecap="round"
-                    :stroke-dasharray="cdPct + ' 100'" pathLength="100"/>
-                </svg>
-                <text class="cd-num" :class="{ 'cd-urgent': cdUrgent }">{{ cdLeft }}</text>
-              </view>
-              <view class="cd-info">
-                <text class="cd-hint" :class="{ 'cd-urgent': cdUrgent }">{{ cdHint }}</text>
-                <view class="cd-bar"><view class="cd-bar-fill" :class="{ 'cd-warn': cdLeft <= 5, 'cd-danger': cdLeft <= 3 }" :style="{ width: cdPct + '%' }"></view></view>
-              </view>
-            </view>
-            <text class="q-text">{{ currentQuestion.text }}</text>
-            <view v-if="undoMode && currentQuestion.previous_answer" class="q-prev">
-              <text>上次选择：{{ currentQuestion.previous_answer }}</text>
-            </view>
-            <view class="q-choices">
-              <view class="q-btn q-btn-yes" @tap="handleAnswer('完全符合')"><text>完全符合</text></view>
-              <view class="q-btn q-btn-no" @tap="handleAnswer('有差异')"><text>有差异</text></view>
-            </view>
+      <view class="qcard">
+        <text class="qtag">第 {{ currentQIndex + 1 }} 题</text>
+        <view class="qtm">
+          <view class="ring" :class="{ warn: cdUrgent }">
+            <svg viewBox="0 0 46 46" class="ring-svg">
+              <circle class="rb" cx="23" cy="23" r="20" />
+              <circle
+                class="rf"
+                cx="23" cy="23" r="20"
+                :stroke-dasharray="RING_C"
+                :stroke-dashoffset="ringOffset"
+              />
+            </svg>
+            <text class="ring-n">{{ cdLeft }}</text>
           </view>
-
-          <view class="ai-hint"><text>🤖 {{ '凭第一感觉选择就好～' }}</text></view>
+          <view class="qhint">
+            <text class="qhint-tx" :class="{ urgent: cdUrgent }">{{ quizHint }}</text>
+            <view class="qhint-bar"><view class="qhint-i" :style="{ width: cdPct + '%' }"></view></view>
+          </view>
+        </view>
+        <text class="qq">{{ isKidMode ? '🧒 ' : '' }}{{ currentQuestion.text }}</text>
+        <view v-if="undoMode && currentQuestion.previous_answer" class="q-prev">
+          <text>上次选择：{{ currentQuestion.previous_answer }}</text>
+        </view>
+        <view class="qans">
+          <view class="qa yes" @tap="handleAnswer('完全符合')"><text>完全符合</text></view>
+          <view class="qa no" @tap="handleAnswer('有差异')"><text>有差异</text></view>
         </view>
       </view>
+      <text class="robotip">{{ robotTip }}</text>
     </template>
 
     <!-- ===== COMPLETED ===== -->
-    <view v-if="phase === 'completed'" class="phase" key="completed">
-      <view class="phase-inner" style="padding-top:20vh; padding-top:20dvh;">
-        <!-- Animation -->
-        <view class="complete-anim">
-          <view class="ca-check">✓</view>
-        </view>
-        <text v-if="compPhase >= 1" class="msg-title ca-fade">35 题已完成</text>
-        <text v-if="compPhase >= 1" class="msg-sub ca-fade" style="animation-delay:0.15s">AI 将为你生成专属天赋解读</text>
-
-        <!-- Error -->
+    <view v-if="phase === 'completed'" class="done-wrap" key="completed">
+      <view class="done">
+        <view class="ck">✓</view>
+        <text v-if="compPhase >= 1" class="done-h2">35 题已完成</text>
+        <text v-if="compPhase >= 1" class="done-p">AI 将为你生成专属天赋解读</text>
         <text v-if="submitError" class="submit-err">{{ submitError }}</text>
-
-        <view v-if="compPhase >= 2" class="ca-fade" style="animation-delay:0.3s;margin-top:24px;">
-          <view class="gen-btn" @click="doSubmitReport">
-            <text>{{ submitting ? '生成中...' : '生成报告' }}</text>
-          </view>
+        <view v-if="compPhase >= 2" class="done-go" @tap="doSubmitReport">
+          <text>{{ submitting ? '生成中...' : '生成报告' }}</text>
         </view>
       </view>
     </view>
 
-    <!-- Toast -->
-    <view v-if="toast.text" class="toast" :class="'toast-' + toast.variant">
+    <!-- Cheer toast（对齐 test.html） -->
+    <view v-if="toast.text" class="cheer on" :class="{ 'cheer-mile': toast.variant === 'milestone' }">
       <text>{{ toast.text }}</text>
+    </view>
+
+    <!-- Bottom nav -->
+    <view class="dy-foot">
+      <view class="dy-fa" @tap="goFoot('/pages/dayu/home')"><image class="dy-fic" src="/static/dayu/assets/ic/robot.png" mode="aspectFit" /><text>大宇AI</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/training/index')"><image class="dy-fic" src="/static/dayu/assets/ic/map.png" mode="aspectFit" /><text>今日修炼</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/qa/index')"><image class="dy-fic" src="/static/dayu/assets/ic/cap.png" mode="aspectFit" /><text>学科答疑</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/hub/academy')"><image class="dy-fic" src="/static/dayu/assets/ic/bubble.png" mode="aspectFit" /><text>天赋学院</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/hub/console')"><image class="dy-fic" src="/static/dayu/assets/ic/computer.png" mode="aspectFit" /><text>中央电脑</text></view>
     </view>
   </view>
 </template>
@@ -229,7 +206,10 @@ async function loadHistory() {
 
 function viewHistory(h) {
   showHistory.value = false
-  if (h.id) uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}` })
+  if (h.id) {
+    const modeQ = (h.type === 0 || h.report_type === 0 || h.mode === 'adult') ? 'adult' : 'kid'
+    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}&mode=${modeQ}` })
+  }
 }
 
 function confirmDeleteHistory(h) {
@@ -285,16 +265,6 @@ function getQuestions(set) {
   return questions.filter(q => q.set === set)
 }
 
-// ── Background themes ──
-const BG_DARK = ['#1a1530','#15202b','#1f2233','#1e1a2e','#221a28','#1a2528','#2a1a24','#1a2a24','#25201a','#202528','#1e2420','#1c2330','#23201e','#242026','#26221a','#1a2630','#1e242a','#281e24','#24221c','#1e2820','#202820','#262028','#1c2428','#2a1e1e','#28201c','#202228','#22221e','#241e28','#1e2822','#281a1a','#201a28','#1a2826','#261c20','#2a2020','#202628']
-const BG_LIGHT = ['#f0e6ff','#e6f0ff','#ffe6f0','#e6ffe6','#fff5e6','#e6f5ff','#f5e6ff','#f0ffe6','#ffe6e6','#e6fff5','#f0e6f0','#e6e6ff','#fff0e6','#e6fff0','#ffe6ff','#f5f0e6','#e6f0f0','#ffefe6','#eff0e6','#e6efff','#f5e6e6','#e0f0e8','#f0e8f0','#e8f0f0','#f2e8e0','#e0e8f2','#f0f0e8','#e8e0f0','#e8f0e0','#f0e0e0','#e0e0f5','#e8f2f0','#f5e8f0','#e8f0f8','#f8f0e8']
-function getBg(idx) {
-  const isLight = document.documentElement.getAttribute('data-theme') === 'white'
-  const arr = isLight ? BG_LIGHT : BG_DARK
-  return 'linear-gradient(135deg,' + (isLight ? '#f8f9fa' : '#0d1117') + ',' + arr[idx % arr.length] + ')'
-}
-const currentBg = computed(() => getBg(currentQIndex.value))
-
 // ── Current question ──
 const currentQuestion = computed(() => {
   const qid = questionOrder.value[currentQIndex.value]
@@ -309,16 +279,30 @@ const currentQuestion = computed(() => {
 })
 
 const isPreTest = computed(() => ['door','ageGate','confirm'].includes(phase.value))
-const isLightTheme = computed(() => document.documentElement.getAttribute('data-theme') === 'white')
+const isKidMode = computed(() => testType.value === '孩子')
+const modeLabel = computed(() => isKidMode.value ? '家长代测 · 儿童版' : '成人测试 · 本人作答')
+const robotTip = computed(() =>
+  isKidMode.value ? '🧒 按孩子真实表现作答，不美化、不苛求～' : '🤖 凭第一感觉选择就好～'
+)
+
+const RING_C = 125.6
 
 // ── Countdown ──
 const cdPct = computed(() => (cdLeft.value / QUESTION_SEC) * 100)
 const cdUrgent = computed(() => cdLeft.value <= 5)
-const cdHint = computed(() => {
+const ringOffset = computed(() => RING_C * (1 - cdLeft.value / QUESTION_SEC))
+const quizHint = computed(() => {
   if (cdLeft.value <= 3) return '快选一个，凭直觉就好'
   if (cdLeft.value <= 5) return '时间不多了'
-  return '凭第一感觉选择就好～'
+  return isKidMode.value
+    ? '家长朋友：想孩子平时的样子，别想要的样子～'
+    : '凭第一感觉选择就好～'
 })
+
+function goFoot(url) {
+  if (!url) return
+  uni.reLaunch({ url })
+}
 
 function startCd() {
   stopCd()
@@ -372,8 +356,15 @@ function handleAnswer(choice) {
   prevCard.value = { idx: qi, text: currentQuestion.value?.text || '', answer: choice }
 
   showToast(ACKS[Math.floor(Math.random() * ACKS.length)], 'ack')
-  const ms = MILESTONES[qi]
-  if (ms) setTimeout(() => showToast(ms, 'milestone'), 1000)
+  if (qi % 5 === 0 && qi < TOTAL) {
+    const mile = isKidMode.value
+      ? `已记录 ${qi} 题，继续想孩子的日常～`
+      : (MILESTONES[qi] || `已完成 ${qi} 题，加油！`)
+    setTimeout(() => showToast(mile, 'milestone'), 1000)
+  } else {
+    const ms = MILESTONES[qi]
+    if (ms) setTimeout(() => showToast(ms, 'milestone'), 1000)
+  }
 
   const next = currentQIndex.value + 1
   if (next >= TOTAL) {
@@ -432,20 +423,22 @@ function handleUndo() {
 // ── Pre-test ──
 function handleChoice(choice) {
   if (phase.value === 'door') {
-    // 图二：给孩子测 → 直接儿童卷确认；给自己测 → 成人卷确认（年龄已在文案约定）
+    // 图一：给孩子测先弹年龄确认；给自己测直接成人确认
     if (choice === '孩子测试') {
-      testType.value = '孩子'
-      phase.value = 'confirm'
+      phase.value = 'ageGate'
     } else {
       testType.value = '成人'
       phase.value = 'confirm'
     }
   } else if (phase.value === 'ageGate') {
-    if (choice === '已满18岁') { testType.value = '成人'; phase.value = 'confirm' }
-    else {
-      testType.value = '孩子'; ageGateNotice.value = true
-      noticeTimer = setTimeout(() => { ageGateNotice.value = false; phase.value = 'confirm' }, 2200)
+    if (choice === '返回' || choice === '已满18岁') {
+      phase.value = 'door'
+      testType.value = null
+      return
     }
+    // 我是家长 · 我来帮孩子测
+    testType.value = '孩子'
+    phase.value = 'confirm'
   } else if (phase.value === 'confirm') {
     if (choice === '准备好了') startTest()
     else if (fromOnboarding.value) {
@@ -498,7 +491,8 @@ async function doSubmitReport() {
     if (json.code !== 1) throw new Error('报告生成失败')
     await loadHistory()
     const aid = json.assessment_id
-    let url = `/pages/report/index?assessment_id=${aid}`
+    const modeQ = testType.value === '成人' ? 'adult' : 'kid'
+    let url = `/pages/report/index?assessment_id=${aid}&mode=${modeQ}`
     if (json.talent_conflict) {
       url += `&talent_conflict=1&current_talent=${encodeURIComponent(json.current_talent || '')}`
     }
@@ -569,14 +563,17 @@ onLoad((opts) => {
     loadHistory()
   }
   const mode = String(opts?.mode || '').toLowerCase()
+  const autoStart = opts?.start === '1' || opts?.start === 'true'
   if (mode === 'kid' || mode === 'child') {
     enteredFromHub.value = true
     testType.value = '孩子'
-    phase.value = 'confirm'
+    if (autoStart) startTest()
+    else phase.value = 'confirm'
   } else if (mode === 'adult' || mode === 'adu') {
     enteredFromHub.value = true
     testType.value = '成人'
-    phase.value = 'confirm'
+    if (autoStart) startTest()
+    else phase.value = 'confirm'
   }
 })
 
@@ -593,48 +590,61 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.app { display:flex; flex-direction:column; height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
+.app {
+  display: flex; flex-direction: column;
+  min-height: 100vh; min-height: 100dvh;
+  max-width: var(--app-max-width, 480px); margin: 0 auto;
+  background: #0B0E14; font-family: "PingFang SC", "MiSans", -apple-system, sans-serif;
+  position: relative; overflow-x: hidden; padding-bottom: 96px; box-sizing: border-box;
+}
 
-/* Nav */
-.nav { display:flex; align-items:center; padding:14px 24px 0; }
-.nav-back { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.nav-title { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
-.nav-right { cursor: pointer; }
-.nav-right text { color: var(--text-dim); font-size: 14px; }
+/* Brand topbar */
+.dy-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 4px; flex-shrink: 0;
+}
+.dy-brand { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.dy-logo {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  background: url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;
+  border: 2px solid #6FCF8E; box-shadow: 0 0 10px rgba(111, 207, 142, 0.4);
+}
+.dy-t1 { display: block; font-size: 19px; font-weight: 800; color: #EDEBE4; line-height: 1.2; }
+.dy-t2 { display: block; font-size: 11px; color: #8B93A5; letter-spacing: 2px; }
+.dy-hist { font-size: 14px; color: #8B93A5; font-weight: 700; }
+
+/* Foot */
+.dy-foot {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px;
+  background: rgba(11, 14, 20, 0.96); backdrop-filter: blur(12px);
+  border-top: 1px solid #232B3D; padding: 6px 8px;
+  display: flex; justify-content: space-around; z-index: 50;
+}
+.dy-fa {
+  flex: 1; text-align: center; color: #8B93A5; font-size: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 2px 0;
+}
+.dy-fic { width: 34px; height: 34px; }
 
 /* Pre-test */
-.phase { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:18vh 24px 0; padding:18dvh 24px 0; }
-.phase-inner { display:flex; flex-direction:column; align-items:center; width:100%; }
-.msg-title { color:var(--text); font-size:19px; font-weight:600; text-align:center; line-height:1.5; margin-bottom:8px; }
-.msg-sub { color:var(--text-dim); font-size:14px; text-align:center; line-height:1.6; max-width:300px; }
-.msg-ready { color:var(--text); font-size:16px; font-weight:500; text-align:center; margin:14px 0 20px; }
-.card-row { display:flex; gap:14px; width:100%; max-width:340px; margin-top:24px; }
-.pcard { flex:1; min-height:260px; background:var(--bg-card); border-radius:18px; border:2px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 10px; cursor:pointer; transition:all 0.15s; opacity:0; transform:scale(0.9) translateY(12px); }
-.pcard:active { transform:scale(0.95) !important; }
-.pcard-in { animation:cardSpring 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-.pcard-gold { border-color:rgba(240,160,64,0.3); background:rgba(240,160,64,0.06); }
-.pcard-gray { border-color:var(--border); opacity:0.6; }
-.pcard-gray:active { opacity:1; }
-.pcard-icon-wrap { width:52px; height:52px; border-radius:14px; background:var(--accent-bg); display:flex; align-items:center; justify-content:center; margin-bottom:8px; }
-.pcard-icon-gold { background:rgba(240,160,64,0.12); }
-.pcard-emoji { font-size:28px; }
-.pcard-title { color:var(--text); font-size:16px; font-weight:700; text-align:center; margin-bottom:4px; display:block; }
-.pcard-sub { color:var(--text-dim); font-size:11px; text-align:center; line-height:1.4; display:block; }
+.phase { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 18px 0; padding: 8dvh 18px 0; }
+.phase-inner { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.card-row { display: flex; gap: 14px; width: 100%; max-width: 340px; margin-top: 24px; }
+.pcard {
+  flex: 1; min-height: 260px; background: #131926; border-radius: 18px; border: 2px solid #232B3D;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 28px 10px; cursor: pointer;
+}
+.pcard-title { color: #EDEBE4; font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 4px; display: block; }
+.pcard-sub { color: #8B93A5; font-size: 11px; text-align: center; line-height: 1.4; display: block; }
 
-/* 图二：个人测试选对象 */
-.door-phase { padding-top: 10vh; padding-top: 10dvh; align-items: flex-start; }
+.door-phase { padding-top: 4vh; padding-top: 4dvh; }
 .door-inner { max-width: 400px; }
-.door-title {
-  color: var(--text); font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 6px;
-}
-.door-sub {
-  color: var(--text-dim); font-size: 13px; text-align: center; margin-bottom: 8px; line-height: 1.45;
-}
+.door-title { color: #EDEBE4; font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 6px; }
+.door-sub { color: #8B93A5; font-size: 13px; text-align: center; margin-bottom: 8px; line-height: 1.45; }
 .door-cards { max-width: 100%; margin-top: 18px; }
-.door-card {
-  min-height: 220px; opacity: 1; transform: none; animation: none;
-  justify-content: flex-start; padding-top: 22px; border-width: 1.5px;
-}
+.door-card { min-height: 220px; justify-content: flex-start; padding-top: 22px; border-width: 1.5px; }
 .door-kid { border-color: rgba(111, 207, 142, 0.55); box-shadow: 0 0 16px rgba(111, 207, 142, 0.12); }
 .door-adu { border-color: rgba(46, 107, 230, 0.45); box-shadow: 0 0 16px rgba(46, 107, 230, 0.1); }
 .door-icon { width: 96px; height: 96px; margin-bottom: 12px; }
@@ -645,100 +655,199 @@ onBeforeUnmount(() => {
   border-radius: 12px; padding: 12px 14px; box-sizing: border-box;
 }
 .door-notice-ic { flex-shrink: 0; font-size: 16px; line-height: 1.4; }
-.door-notice-text {
-  color: #e8a0a0; font-size: 12.5px; line-height: 1.55; flex: 1;
+.door-notice-text { color: #e8a0a0; font-size: 12.5px; line-height: 1.55; flex: 1; }
+
+.age-overlay {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(5, 8, 16, 0.72);
+  display: flex; align-items: center; justify-content: center; padding: 28px 22px;
+}
+.age-box {
+  width: 100%; max-width: 340px;
+  background: #131926; border: 1.5px solid rgba(224, 82, 82, 0.55);
+  border-radius: 22px; padding: 22px 18px 16px; text-align: center;
+}
+.age-ic { font-size: 34px; display: block; margin-bottom: 8px; }
+.age-title { display: block; color: #fff; font-size: 18px; font-weight: 900; line-height: 1.45; margin-bottom: 10px; }
+.age-em { color: #F5A3A3; }
+.age-p { display: block; color: #C9CFDC; font-size: 13px; line-height: 1.7; text-align: left; margin-bottom: 16px; }
+.age-ok { background: #3E8E5A; border-radius: 99px; padding: 13px 16px; cursor: pointer; }
+.age-ok text { color: #fff; font-size: 15px; font-weight: 900; }
+.age-back { margin-top: 12px; cursor: pointer; }
+.age-back text { color: #8B93A5; font-size: 13px; font-weight: 700; }
+
+.confirm-phase { padding-top: 6vh; padding-top: 6dvh; }
+.confirm-inner { max-width: 400px; }
+.confirm-card {
+  width: 100%; background: #131926; border: 1.5px solid #2A3040; border-radius: 26px;
+  padding: 32px 22px 24px; text-align: center;
+  box-shadow: 0 16px 40px rgba(46, 107, 230, 0.18);
+}
+.confirm-emoji { font-size: 48px; display: block; margin-bottom: 8px; }
+.confirm-title { display: block; color: #EDEBE4; font-size: 22px; font-weight: 900; margin-bottom: 10px; }
+.confirm-desc { display: block; color: #8B93A5; font-size: 15px; line-height: 1.75; margin-bottom: 14px; }
+.confirm-tags { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+.confirm-tag {
+  font-size: 13px; font-weight: 800; color: #8FB4FF;
+  background: rgba(46, 107, 230, 0.12); border: 1px solid rgba(46, 107, 230, 0.4);
+  border-radius: 8px; padding: 4px 10px;
+}
+.confirm-actions { display: flex; gap: 12px; }
+.confirm-later, .confirm-go {
+  border-radius: 14px; padding: 14px 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-later { flex: 1; background: #161D2B; border: 1.5px solid #2A3040; }
+.confirm-later text { color: #8B93A5; font-size: 15px; font-weight: 700; }
+.confirm-go { flex: 1.4; background: linear-gradient(135deg, #3A7BFF, #2E5BD6); box-shadow: 0 8px 20px rgba(46, 107, 230, 0.4); }
+.confirm-go text { color: #fff; font-size: 15px; font-weight: 900; }
+
+.history-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; padding: 40px; }
+.history-panel { width: 100%; max-width: 320px; background: #131926; border-radius: 16px; padding: 20px 16px; max-height: 60vh; max-height: 60dvh; overflow-y: auto; border: 1px solid #232B3D; }
+.history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.history-title { font-size: 17px; font-weight: 700; color: #EDEBE4; }
+.history-header-close { width: 28px; height: 28px; border-radius: 50%; background: #1A2233; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.history-header-close text { font-size: 14px; color: #8B93A5; }
+.history-grid { display: flex; flex-direction: column; gap: 8px; }
+.history-box { background: #161D2B; border-radius: 14px; padding: 14px; cursor: pointer; }
+.history-box-row { display: flex; align-items: center; gap: 10px; }
+.history-box-icon { width: 36px; height: 36px; border-radius: 50%; background: #0D1119; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+.history-box-icon text { font-size: 18px; }
+.history-box-talent { font-size: 14px; font-weight: 600; color: #EDEBE4; }
+.history-box-time { font-size: 12px; color: #8B93A5; margin-left: auto; }
+.history-box-del { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.history-box-del text { color: #8B93A5; font-size: 9px; }
+.history-empty { text-align: center; padding: 32px 0; color: #8B93A5; font-size: 14px; }
+
+/* ===== Quiz (test.html sQuiz) ===== */
+.qbar { display: flex; align-items: center; gap: 10px; margin: 8px 18px 0; }
+.qmode {
+  flex: none; font-size: 14px; font-weight: 800; color: #8FB4FF;
+  background: rgba(46, 107, 230, 0.14); border: 1px solid rgba(46, 107, 230, 0.45);
+  border-radius: 99px; padding: 4px 11px;
+}
+.qprog { flex: 1; height: 7px; border-radius: 99px; background: #1A2233; overflow: hidden; }
+.qprog-i {
+  display: block; height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, #2E6BE6, #7AA6FF); transition: width 0.35s ease;
+}
+.qnum { flex: none; font-size: 14px; font-weight: 800; color: #8B93A5; font-variant-numeric: tabular-nums; }
+
+.undo {
+  margin: 14px 18px 0; background: #161D2B; border: 1px solid #2A3040; border-radius: 14px;
+  padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #8B93A5;
+}
+.uaw { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uaw-b { color: #7AA6FF; font-weight: 800; }
+.ubtn {
+  flex: none; font-size: 14px; font-weight: 800; color: #8FB4FF;
+  border: 1px solid rgba(46, 107, 230, 0.5); border-radius: 9px; padding: 4px 10px;
 }
 
-.notice-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
-.notice-card { background:var(--bg-card); border-radius:20px; padding:28px 24px; max-width:320px; width:100%; }
-.notice-text { color:var(--text); font-size:15px; line-height:1.7; text-align:center; }
+.qcard {
+  margin: 14px 18px 0; background: #131926; border: 1.5px solid #232B3D;
+  border-radius: 26px; padding: 24px 20px 22px; position: relative; overflow: hidden;
+}
+.qcard::after {
+  content: ""; position: absolute; top: -46px; right: -46px; width: 140px; height: 140px;
+  border-radius: 50%; background: radial-gradient(circle, rgba(46, 107, 230, 0.16), transparent 70%);
+  pointer-events: none;
+}
+.qtag {
+  display: inline-block; font-size: 14px; font-weight: 800; color: #8FB4FF;
+  background: rgba(46, 107, 230, 0.14); border-radius: 8px; padding: 3px 10px; margin-bottom: 14px;
+}
+.qtm { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; position: relative; z-index: 1; }
+.ring { width: 46px; height: 46px; flex: none; position: relative; }
+.ring-svg { width: 46px; height: 46px; transform: rotate(-90deg); display: block; }
+.ring .rb { fill: none; stroke: #232B3D; stroke-width: 4; }
+.ring .rf {
+  fill: none; stroke: #3A7BFF; stroke-width: 4; stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear, stroke 0.3s;
+}
+.ring.warn .rf { stroke: #E05252; }
+.ring-n {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 900; color: #EDEBE4; font-variant-numeric: tabular-nums;
+}
+.qhint { flex: 1; min-width: 0; }
+.qhint-tx { font-size: 14px; color: #8B93A5; display: block; line-height: 1.35; }
+.qhint-tx.urgent { color: #E05252; }
+.qhint-bar { height: 4px; border-radius: 99px; background: #1A2233; margin-top: 6px; overflow: hidden; }
+.qhint-i {
+  display: block; height: 100%; background: #3A7BFF; border-radius: 99px;
+  transition: width 1s linear;
+}
+.qq {
+  font-size: 20px; font-weight: 900; color: #EDEBE4; line-height: 1.65;
+  min-height: 100px; position: relative; z-index: 1; display: block;
+}
+.q-prev { text-align: center; margin: 8px 0; position: relative; z-index: 1; }
+.q-prev text { font-size: 12px; color: #8B93A5; background: #1A2233; padding: 3px 10px; border-radius: 8px; }
+.qans { display: flex; gap: 12px; margin-top: 18px; position: relative; z-index: 1; }
+.qa {
+  flex: 1; border-radius: 16px; padding: 16px 8px; text-align: center; cursor: pointer;
+}
+.qa:active { transform: scale(0.95); }
+.qa text { font-size: 18px; font-weight: 900; }
+.qa.yes {
+  background: linear-gradient(135deg, #3A7BFF, #2E5BD6);
+  box-shadow: 0 8px 20px rgba(46, 107, 230, 0.38);
+}
+.qa.yes text { color: #fff; }
+.qa.no { background: #161D2B; border: 1.5px solid #2A3040; }
+.qa.no text { color: #8B93A5; }
+.robotip {
+  display: block; text-align: center; font-size: 14px; color: #5A6274;
+  margin: 16px 18px 0;
+}
 
-.history-hint { text-align:center; margin-bottom:8px; cursor:pointer; }
-.history-hint text { color:var(--text-dim); font-size:13px; }
-.history-overlay { position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:40px; }
-.history-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px 16px; max-height:60vh; max-height:60dvh; overflow-y:auto; }
-.history-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-.history-title { font-size:17px; font-weight:700; color:var(--text); }
-.history-header-close { width:28px; height:28px; border-radius:50%; background:var(--bg-input); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.history-header-close text { font-size:14px; color:var(--text-dim); }
-.history-grid { display:flex; flex-direction:column; gap:8px; }
-.history-box { background:var(--bg-input); border-radius:14px; padding:14px; cursor:pointer; transition:background 0.15s; }
-.history-box:active { opacity:0.7; }
-.history-box-row { display:flex; align-items:center; gap:10px; }
-.history-box-icon { width:36px; height:36px; border-radius:50%; background:var(--bg-card); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.history-box-icon text { font-size:18px; }
-.history-box-talent { font-size:14px; font-weight:600; color:var(--text); }
-.history-box-time { font-size:12px; color:var(--text-dim); margin-left:auto; }
-.history-box-del { width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
-.history-box-del text { color:var(--text-dim); font-size:9px; }
-.history-empty { text-align:center; padding:32px 0; color:var(--text-dim); font-size:14px; }
+/* Kid theme */
+.is-kid .qmode {
+  color: #8FEFC0; background: rgba(111, 207, 142, 0.14); border-color: rgba(111, 207, 142, 0.5);
+}
+.is-kid .qprog-i { background: linear-gradient(90deg, #3E8E5A, #6FCF8E); }
+.is-kid .qcard {
+  border-color: rgba(111, 207, 142, 0.45);
+  background: linear-gradient(170deg, #14201A, #131926 60%);
+}
+.is-kid .qcard::after { background: radial-gradient(circle, rgba(111, 207, 142, 0.18), transparent 70%); }
+.is-kid .qtag { color: #8FEFC0; background: rgba(111, 207, 142, 0.14); }
+.is-kid .ring .rf { stroke: #6FCF8E; }
+.is-kid .qhint-i { background: #6FCF8E; }
+.is-kid .qa.yes {
+  background: linear-gradient(135deg, #4FAE72, #35824F);
+  box-shadow: 0 8px 20px rgba(111, 207, 142, 0.35);
+}
+.is-kid .uaw-b { color: #8FEFC0; }
+.is-kid .ubtn { color: #8FEFC0; border-color: rgba(111, 207, 142, 0.5); }
+.is-kid .cheer { background: linear-gradient(135deg, #4FAE72, #35824F); box-shadow: 0 10px 26px rgba(111, 207, 142, 0.5); }
 
-/* Testing */
-.test-top { display:flex; align-items:center; gap:10px; padding:12px 24px; }
-.test-type-tag { color:var(--text-dim); font-size:12px; background:var(--bg-card); padding:3px 10px; border-radius:10px; flex-shrink:0; }
-.progress-bar { flex:1; height:6px; background:var(--bg-card); border-radius:3px; overflow:hidden; }
-.progress-fill { height:100%; background:linear-gradient(90deg,var(--accent),#a78bfa); border-radius:3px; transition:width 0.4s ease-out; }
-.progress-text { color:var(--text-dim); font-size:12px; flex-shrink:0; }
+.cheer {
+  position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%);
+  background: linear-gradient(135deg, #3A7BFF, #2E5BD6); color: #fff;
+  font-size: 17px; font-weight: 900; border-radius: 99px; padding: 11px 22px;
+  box-shadow: 0 10px 26px rgba(46, 107, 230, 0.5); z-index: 60; pointer-events: none;
+}
+.cheer text { color: #fff; font-size: 16px; font-weight: 900; }
 
-.test-body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 24px; overflow-y:auto; transition:background 0.5s; }
-.test-body-inner { width:100%; max-width:340px; }
-
-/* Undo */
-.undo-card { background:var(--bg-card); border-radius:16px; padding:14px; margin-bottom:8px; position:relative; overflow:hidden; cursor:pointer; border:1px solid var(--border); box-shadow:0 4px 20px rgba(0,0,0,0.2); }
-.undo-info { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-.undo-label { font-size:12px; color:var(--text-dim); background:rgba(88,166,255,0.1); padding:2px 8px; border-radius:8px; }
-.undo-answer { font-size:12px; color:var(--text-dim); }
-.undo-text { font-size:14px; color:var(--text-dim); line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.undo-overlay { position:absolute; inset:0; backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; border-radius:16px; }
-.undo-overlay text { color:var(--text); font-size:13px; font-weight:600; }
-
-/* Question Card */
-.q-card { background:var(--bg-card); border-radius:24px; padding:24px 20px; border:1px solid var(--border); box-shadow:0 8px 40px rgba(0,0,0,0.3); }
-.q-badge { display:inline-block; color:var(--accent); font-size:13px; font-weight:600; background:var(--accent-bg); padding:4px 12px; border-radius:8px; margin-bottom:16px; }
-
-.countdown-row { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
-.cd-ring-wrap { position:relative; width:40px; height:40px; flex-shrink:0; }
-.cd-svg { width:100%; height:100%; }
-.cd-num { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--accent); }
-.cd-num.cd-urgent { color:#ff6b6b; }
-.cd-info { flex:1; min-width:0; }
-.cd-hint { font-size:13px; color:var(--text-dim); display:block; }
-.cd-hint.cd-urgent { color:#ff6b6b; }
-.cd-bar { height:3px; background:var(--bg-input); border-radius:1px; margin-top:4px; }
-.cd-bar-fill { height:100%; background:var(--accent); border-radius:1px; transition:width 0.3s; }
-.cd-bar-fill.cd-warn { background:#ff9800; }
-.cd-bar-fill.cd-danger { background:#ff6b6b; }
-
-.q-text { color:var(--text); font-size:18px; font-weight:500; line-height:1.6; margin-bottom:20px; display:block; }
-.q-prev { text-align:center; margin-bottom:10px; }
-.q-prev text { font-size:12px; color:var(--text-dim); background:var(--bg-input); padding:3px 10px; border-radius:8px; }
-
-.q-choices { display:flex; gap:12px; }
-.q-btn { flex:1; padding:16px; border-radius:14px; text-align:center; cursor:pointer; transition:all 0.15s; }
-.q-btn:active { transform:scale(0.96); }
-.q-btn-yes { background:linear-gradient(135deg,var(--accent),#3b8bff); }
-.q-btn-yes text { color:#fff; font-size:16px; font-weight:600; }
-.q-btn-no { background:transparent; border:2px solid var(--border); }
-.q-btn-no text { color:var(--text-dim); font-size:16px; font-weight:500; }
-
-.ai-hint { margin-top:12px; text-align:center; }
-.ai-hint text { font-size:12px; color:var(--text-dim); }
-
-/* Toast */
-.toast { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:600; padding:12px 24px; border-radius:20px; pointer-events:none; }
-.toast-ack { background:var(--bg-card); color:var(--text); font-size:15px; font-weight:600; }
-.toast-milestone { background:var(--accent); color:#fff; font-size:16px; font-weight:700; padding:16px 28px; }
-.toast-info { background:var(--bg-card); color:var(--text-dim); font-size:14px; }
-
-/* Completion */
-.complete-anim { width:120px; height:120px; margin:0 auto 20px; display:flex; align-items:center; justify-content:center; }
-.ca-check { width:80px; height:80px; border-radius:50%; background:var(--accent); color:#fff; font-size:40px; font-weight:700; display:flex; align-items:center; justify-content:center; animation:caPop 0.5s 0.1s cubic-bezier(0.34,1.56,0.64,1) both; }
-.ca-fade { animation:caFade 0.5s ease-out both; }
-.submit-err { color:#ff6b6b; font-size:13px; text-align:center; margin-top:12px; display:block; }
-.gen-btn { padding:14px 40px; background:linear-gradient(135deg,var(--accent),#3b8bff); border-radius:16px; text-align:center; display:inline-block; cursor:pointer; }
-.gen-btn text { color:#fff; font-size:16px; font-weight:600; }
-.gen-btn:active { opacity:0.85; transform:scale(0.97); }
-@keyframes caPop { 0%{transform:scale(0)} 60%{transform:scale(1.1)} 100%{transform:scale(1)} }
-@keyframes caFade { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-@keyframes cardSpring { 0%{opacity:0;transform:scale(0.9) translateY(12px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
+/* Done */
+.done-wrap { padding: 60px 26px 0; text-align: center; }
+.done { display: flex; flex-direction: column; align-items: center; }
+.ck {
+  width: 96px; height: 96px; border-radius: 50%;
+  background: linear-gradient(135deg, #3A7BFF, #2E5BD6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 46px; color: #fff;
+  box-shadow: 0 0 0 12px rgba(46, 107, 230, 0.14), 0 0 0 26px rgba(46, 107, 230, 0.06);
+}
+.done-h2 { display: block; font-size: 26px; font-weight: 900; color: #EDEBE4; margin: 26px 0 8px; }
+.done-p { display: block; font-size: 16px; color: #8B93A5; margin-bottom: 30px; }
+.submit-err { color: #E05252; font-size: 13px; text-align: center; margin-bottom: 12px; display: block; }
+.done-go {
+  width: 100%; max-width: 320px;
+  background: linear-gradient(135deg, #3A7BFF, #2E5BD6); border-radius: 16px; padding: 16px;
+  box-shadow: 0 10px 26px rgba(46, 107, 230, 0.42); cursor: pointer;
+}
+.done-go text { color: #fff; font-size: 18px; font-weight: 900; }
 </style>

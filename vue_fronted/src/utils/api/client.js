@@ -24,7 +24,6 @@ import {
   clearSessionsExcept,
   migrateAuthStorage,
   clearAllAuthSessions,
-  prepareRoleLoginEntry,
 } from '../appSession.js'
 
 const CHILD_KEY = 'jnao_child_user_id'
@@ -236,8 +235,8 @@ export async function requirePageAuth(kind) {
 
   if (!session?.userId) {
     if (kind === 'student' && snap.parent?.userId) {
-      prepareRoleLoginEntry('student')
-      try { uni.reLaunch({ url: '/pages/login/index?role=student' }) } catch (_) { /* ignore */ }
+      // 家长 session 误入学生页：回家长版，切勿清登录态
+      try { uni.reLaunch({ url: '/pages/parent/dayu' }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
     if (kind === 'parent' && snap.student?.userId) {
@@ -292,7 +291,7 @@ export async function requirePageAuth(kind) {
         if (raw) role = JSON.parse(raw).role || role
       } catch (_) { /* ignore */ }
       if (kind === 'student' && (role === 'parent' || snap.parent?.userId)) {
-        try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (_) { /* ignore */ }
+        try { uni.reLaunch({ url: '/pages/parent/dayu' }) } catch (_) { /* ignore */ }
         return { ok: false, reason: 'wrong_role' }
       }
       if (kind === 'parent' && role === 'student') {

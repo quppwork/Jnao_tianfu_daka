@@ -220,12 +220,12 @@ function toggleTheme(){
    —— 同一指令集驱动，回复有随机性但不脱离人设与剧情主线
 ============================================================ */
 const CHARS={
-  shanyu:{n:'善雨',tag:'导师',av:'assets/avatar_teacher.jpg',bg:'assets/bg-study.png',sp:'assets/avatar_teacher.jpg',vc:true,sd:'书院 · 视频通话中'},
-  yuchen:{n:'章宇尘',tag:'思者',av:'assets/ip/sizhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/sizhe.png',sd:'宿舍 · 躺床上聊',phone:true},
-  dani:{n:'施丹尼',tag:'德者',av:'assets/ip/dezhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/dezhe.png',sd:'宿舍 · 边吃薯片边聊',phone:true,chips:true},
-  limo:{n:'李寞',tag:'行者',av:'assets/ip/xingzhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/xingzhe.png',sd:'宿舍 · 刚下训练'},
-  jiahui:{n:'王家慧',tag:'学者',av:'assets/ip/xuezhe.png',bg:'assets/bg-study.png',sp:'assets/ip/xuezhe.png',sd:'自习室 · 拿着笔记本'},
-  chenxue:{n:'陈雪',tag:'赢者',av:'assets/ip/yingzhe.png',bg:'assets/bg-dorm.png',sp:'assets/ip/yingzhe.png',sd:'宿舍 · 刚练完功',phone:true}
+  shanyu:{n:'善雨',tag:'导师',av:'/static/dayu/assets/avatar_teacher.jpg',bg:'/static/dayu/assets/bg-study.png',sp:'/static/dayu/assets/avatar_teacher.jpg',vc:true,sd:'书院 · 视频通话中'},
+  yuchen:{n:'章宇尘',tag:'思者',av:'/static/dayu/assets/ip/sizhe.png',bg:'/static/dayu/assets/bg-dorm.png',sp:'/static/dayu/assets/ip/sizhe.png',sd:'宿舍 · 躺床上聊',phone:true},
+  dani:{n:'施丹尼',tag:'德者',av:'/static/dayu/assets/ip/dezhe.png',bg:'/static/dayu/assets/bg-dorm.png',sp:'/static/dayu/assets/ip/dezhe.png',sd:'宿舍 · 边吃薯片边聊',phone:true,chips:true},
+  limo:{n:'李寞',tag:'行者',av:'/static/dayu/assets/ip/xingzhe.png',bg:'/static/dayu/assets/bg-dorm.png',sp:'/static/dayu/assets/ip/xingzhe.png',sd:'宿舍 · 刚下训练'},
+  jiahui:{n:'王家慧',tag:'学者',av:'/static/dayu/assets/ip/xuezhe.png',bg:'/static/dayu/assets/bg-study.png',sp:'/static/dayu/assets/ip/xuezhe.png',sd:'自习室 · 拿着笔记本'},
+  chenxue:{n:'陈雪',tag:'赢者',av:'/static/dayu/assets/ip/yingzhe.png',bg:'/static/dayu/assets/bg-dorm.png',sp:'/static/dayu/assets/ip/yingzhe.png',sd:'宿舍 · 刚练完功',phone:true}
 };
 const EP={id:'E13',title:'五兽桩·站桩',task:'站桩5分钟',place:'桩上见'};
 const PERSONAS={
@@ -596,7 +596,7 @@ startTeaser();
     var href = a.getAttribute('href') || '';
     if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
     var file = href.split('?')[0].split('#')[0].split('/').pop();
-    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/talent/index', 'report-kid.html': '/pages/talent/index', 'plan.html': '/pages/talent/hub?stub=plan', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/report/index?mode=adult', 'report-kid.html': '/pages/report/index?mode=kid', 'plan.html': '/pages/plan/dayu', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
     if(map[file] || map[href]){
       e.preventDefault();
       e.stopPropagation();

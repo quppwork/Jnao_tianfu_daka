@@ -17,8 +17,9 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { switchMainTab } from '@/utils/mainTabs.js'
+import { goLinkedParentHome, goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
 
 const props = defineProps({
   page: { type: String, required: true },
@@ -29,9 +30,9 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['parent', 'account', 'theme'])
+const emit = defineEmits(['parent', 'student', 'account', 'theme'])
 
-const src = `/static/dayu/html/${props.page}`
+const src = computed(() => `/static/dayu/html/${props.page}`)
 const iframeRef = ref(null)
 let frameReady = false
 
@@ -70,6 +71,16 @@ function handleMessage(ev) {
 
   if (data.type === 'dayu-parent') {
     emit('parent')
+    goLinkedParentHome()
+    return
+  }
+  if (data.type === 'dayu-student') {
+    emit('student')
+    goLinkedStudentHome()
+    return
+  }
+  if (data.type === 'dayu-toast') {
+    uni.showToast({ title: data.title || '功能即将开放', icon: 'none' })
     return
   }
   if (data.type === 'dayu-account') {
@@ -92,6 +103,29 @@ function handleMessage(ev) {
     pushHydrate()
     return
   }
+  if (data.type === 'dayu-back') {
+    const pages = getCurrentPages()
+    if (pages.length > 1) uni.navigateBack({ delta: 1 })
+    else uni.reLaunch({ url: '/pages/dayu/home' })
+    return
+  }
+
+  const parentShellPages = new Set([
+    'parent.html',
+    'pset.html',
+    'pdata.html',
+    'consult.html',
+    'community.html',
+    'pcourse.html',
+  ])
+  const parentShellRoutes = {
+    '/pages/parent/dayu': true,
+    '/pages/parent/pset': true,
+    '/pages/parent/pdata': true,
+    '/pages/parent/consult': true,
+    '/pages/parent/community': true,
+    '/pages/parent/pcourse': true,
+  }
 
   if (data.type !== 'dayu-nav' || !data.path) return
   let path = String(data.path)
@@ -103,11 +137,54 @@ function handleMessage(ev) {
   }
   if (base === '/pages/training/index') path = '/pages/training/dayu'
   if (base === '/pages/qa/index' && !path.includes('?')) path = '/pages/qa/dayu'
-  // 家长账户 → 家长登录（学生 session 无法直进家长中心）
-  if (base === '/pages/parent/index' || path.includes('role=parent')) {
+  // 家长账户登录入口 / 切到关联家长版
+  if (path.includes('role=parent')) {
     emit('parent')
+    goLinkedParentHome()
     return
   }
+  if (parentShellRoutes[base]) {
+    // 底栏页用 reLaunch；子页（家长课堂）用 navigateTo，失败再 reLaunch
+    const stackOnly = base === '/pages/parent/pcourse'
+    if (stackOnly) {
+      uni.navigateTo({
+        url: path,
+        fail: () => uni.reLaunch({ url: path }),
+      })
+    } else {
+      uni.reLaunch({ url: base })
+    }
+    return
+  }
+  if (base === '/pages/parent/index') {
+    // 学生侧旧映射：改为切家长版；家长壳内「孩子账户管理」进管理中心
+    if (parentShellPages.has(props.page)) {
+      uni.navigateTo({ url: path })
+    } else {
+      emit('parent')
+      goLinkedParentHome()
+    }
+    return
+  }
+
+  // 家长版壳内：学生业务页尚未对家长开放，留在本页提示，避免鉴权踢登录
+  // 天赋测试 hub/index 允许进入（测评页会按角色处理）
+  if (parentShellPages.has(props.page)) {
+    const studentOnly = [
+      '/pages/dayu/home',
+      '/pages/training/dayu',
+      '/pages/qa/dayu',
+      '/pages/hub/academy',
+      '/pages/hub/console',
+      '/pages/hub/courses',
+      '/pages/hub/story',
+    ]
+    if (studentOnly.includes(base)) {
+      uni.showToast({ title: '功能即将开放', icon: 'none' })
+      return
+    }
+  }
+
   const tabBases = [
     '/pages/dayu/home',
     '/pages/training/dayu',

@@ -74,7 +74,7 @@ export async function ensureParentUser() {
 export async function ensureChildUser(nickname = '学员') {
   const role = _readStoredRole()
   if (role === 'parent') {
-    try { uni.reLaunch({ url: '/pages/parent/index' }) } catch (e) { /* ignore */ }
+    try { uni.reLaunch({ url: '/pages/parent/dayu' }) } catch (e) { /* ignore */ }
     throw new NeedLoginError('请使用学生账号登录')
   }
 

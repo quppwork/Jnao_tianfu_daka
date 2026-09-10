@@ -204,17 +204,16 @@ import {
   fetchProfile,
   fetchSiblings,
   getChildUserId,
-  invalidatePageAuthCache,
   markChildUserSessionValid,
   requirePageAuth,
   sendGuideMessageStream,
   switchChildAccount,
   withUser,
 } from '@/utils/userApi.js'
-import { prepareRoleLoginEntry } from '@/utils/appSession.js'
 import { formatGuideRichHtml } from '@/utils/chatRichText.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 import { MAIN_TABS, HOME_CHIPS, switchMainTab } from '@/utils/mainTabs.js'
+import { goLinkedParentHome } from '@/utils/switchLinkedAccount.js'
 import {
   ACTION_LABEL_FALLBACK,
   GUIDE_NAV_ROUTES,
@@ -273,9 +272,7 @@ function toggleTheme() {
 }
 
 function goParentLogin() {
-  prepareRoleLoginEntry('parent')
-  invalidatePageAuthCache()
-  uni.reLaunch({ url: '/pages/login/index?role=parent' })
+  goLinkedParentHome()
 }
 
 function toggleAccountSwitcher() {
@@ -345,7 +342,7 @@ async function openPage(name, query) {
         if (aid && Number(aid) > 0) assessmentId.value = Number(aid)
       }
       if (aid && Number(aid) > 0) {
-        uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}` })
+        uni.navigateTo({ url: `/pages/report/index?assessment_id=${aid}&mode=kid` })
         return
       }
       uni.showToast({ title: '暂无正式报告，请先测评', icon: 'none' })

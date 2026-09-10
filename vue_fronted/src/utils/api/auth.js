@@ -173,12 +173,21 @@ export function resolveParentAuthTarget(data) {
   if (parentNeedsProfileComplete(data)) {
     return '/pages/login/complete-parent'
   }
-  return '/pages/parent/index'
+  return '/pages/parent/dayu'
 }
 
 /** 同家长下切换孩子账户后写入 session（Cookie 模式） */
 export function applySwitchChildSession(data) {
   saveAuthSession({ ...data, role: 'student' })
+  invalidatePageAuthCache('student')
+  invalidatePageAuthCache('parent')
+  invalidatePageAuthCache('admin')
+  try { invalidateChildUserSession() } catch (_) { /* ignore */ }
+}
+
+/** 学生切到关联家长后写入 session */
+export function applySwitchParentSession(data) {
+  saveAuthSession({ ...data, role: 'parent' })
   invalidatePageAuthCache('student')
   invalidatePageAuthCache('parent')
   invalidatePageAuthCache('admin')

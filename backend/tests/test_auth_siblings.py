@@ -61,6 +61,33 @@ class TestAuthSiblings:
         assert data["nickname"] == "切换童二"
         assert data["role"] == "student"
 
+        # 学生 → 关联家长
+        to_parent = client.post(
+            "/api/auth/switch-parent",
+            params={
+                "user_id": kid2["id"],
+                "session_token": switched.json().get("session_token", ""),
+            },
+        )
+        assert to_parent.status_code == 200, to_parent.text
+        pdata = to_parent.json()
+        assert pdata["child_user_id"] == parent["child_user_id"]
+        assert pdata["role"] == "parent"
+
+        # 家长 → 切回上次孩子（显式指定 kid1）
+        to_student = client.post(
+            "/api/auth/switch-student",
+            params={
+                "user_id": pdata["child_user_id"],
+                "session_token": pdata.get("session_token", ""),
+                "target_child_id": kid1["id"],
+            },
+        )
+        assert to_student.status_code == 200, to_student.text
+        sdata = to_student.json()
+        assert sdata["child_user_id"] == kid1["id"]
+        assert sdata["role"] == "student"
+
     def test_switch_child_rejects_other_parent(self, client: TestClient):
         parent_a = _register_parent(client, "13900007702", password=STRONG_PWD, nickname="家长A")
         parent_b = _register_parent(client, "13900007703", password=STRONG_PWD, nickname="家长B")

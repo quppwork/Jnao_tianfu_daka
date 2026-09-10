@@ -1,0 +1,187 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>家长课堂 · 大宇智能体家长版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{scrollbar-width:none;-ms-overflow-style:none;background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{max-width:var(--app-max-width, 480px);margin:0 auto;padding-bottom:96px}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:12px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.acctbtn{display:inline-block;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+.hd{margin:12px 18px 0;background:linear-gradient(160deg,#1A2233,#0E1420 75%);border:1.5px solid #C9A869;border-radius:20px;padding:16px;position:relative;overflow:hidden}
+.hd::before{content:"";position:absolute;right:-40px;top:-50px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,105,.18),transparent 70%)}
+.hd b{font-size:20px;letter-spacing:3px;color:#F0DFB8}
+.hd small{display:block;font-size:14px;color:#8B93A5;margin-top:4px;letter-spacing:1px}
+.sec{margin:16px 18px 0;font-size:16px;font-weight:900;color:#EDEBE4;display:flex;justify-content:space-between;align-items:baseline}
+.sec span{font-size:14px;color:#5E6B84;font-weight:700}
+/* 课程卡（同孩子版课程设计） */
+.my{margin:10px 18px 0;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:16px;padding:13px;position:relative}
+.my .row{display:flex;align-items:center;gap:10px}
+.my .ic{width:44px;height:44px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(135deg,#2A2410,#141008);border:1px solid rgba(245,213,118,.4)}
+.my h3{margin:0;font-size:17px;color:#EDEBE4}
+.my .sub{font-size:14px;color:#8B96AB;margin-top:2px}
+.my .go{flex:none;margin-left:auto;font-size:14px;font-weight:800;color:#231a04;background:linear-gradient(135deg,#FFE9A8,#C9A227);border-radius:99px;padding:6px 12px;text-decoration:none}
+.pbar{margin-top:10px;height:6px;border-radius:3px;background:#0C0F16;overflow:hidden}
+.pbar i{display:block;height:100%;background:linear-gradient(90deg,#C9A227,#FFE9A8);border-radius:3px}
+.ptxt{margin-top:5px;font-size:12px;color:#C9A869;font-weight:800}
+.chaps{margin-top:10px;border-top:1px dashed #232B3D;padding-top:8px}
+/* 课程系列介绍片 */
+.cintro{margin:0 0 12px;border-radius:14px;overflow:hidden;position:relative;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:42px;cursor:pointer;border:1px solid #232B3D}
+.cintro .ply{position:absolute;width:54px;height:54px;border-radius:50%;background:rgba(13,17,31,.72);border:2px solid #F5D9A8;display:flex;align-items:center;justify-content:center;font-size:19px;color:#F5D9A8}
+.cintro .vtt{position:absolute;left:12px;bottom:9px;font-size:14px;font-weight:900;color:#fff;text-shadow:0 1px 5px rgba(0,0,0,.85)}
+.cintro .dur{position:absolute;right:10px;bottom:9px;font-size:14px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 8px}
+.chap{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:14px;color:#B8C0D0}
+.chap .dot{width:16px;height:16px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
+.chap.done .dot{background:rgba(111,207,142,.2);color:#6FCF8E;border:1px solid rgba(111,207,142,.5)}
+.chap.done{color:#8B96AB}
+.chap.now .dot{background:rgba(245,213,118,.15);color:#F5D576;border:1px solid rgba(245,213,118,.6)}
+.chap.todo .dot{border:1px dashed #3A4458;color:#5E6B84}
+.chap .tm{margin-left:auto;font-size:12px;color:#5E6B84}
+/* 一键咨询条 */
+.consult{margin:16px 18px 0;display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(46,107,230,.18),rgba(46,107,230,.04));border:1.5px solid rgba(46,107,230,.5);border-radius:16px;padding:13px 15px;text-decoration:none;color:#EDEBE4}
+.consult .ci{width:42px;height:42px;border-radius:50%;background:rgba(46,107,230,.15);border:1.5px solid rgba(46,107,230,.5);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+.consult b{font-size:17px;font-weight:900;color:#9AD9FF}
+.consult span{display:block;font-size:14px;color:#8B93A5;margin-top:2px}
+.consult .st{margin-left:auto;flex:none;font-size:14px;font-weight:800;color:#3FB950}
+/* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:6px 8px;display:flex;justify-content:space-around;z-index:50}
+.foot a{text-align:center;color:#8B93A5;font-size:10px;flex:1;text-decoration:none;padding:2px 0}
+.foot a.on{color:#F5D9A8;font-weight:800}
+.foot a img{width:34px;height:34px;object-fit:contain;display:block;margin:0 auto 1px}
+body::-webkit-scrollbar{display:none;width:0;height:0}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">家长课堂<small>PARENT CLASS · 先懂孩子再懂教育</small></div>
+    <a class="acctbtn" href="index.html">训练账户</a>
+  </div>
+
+  <div class="hd"><b>家长课堂</b><small>张无忌家长的课程体系 · 6 门必修课 · 学了就会用</small></div>
+
+  <a class="consult" href="consult.html">
+    <div class="ci">📞</div>
+    <div><b>听课卡住了？一键咨询</b><span>值班导师真人 1 对 1 · 留言必回</span></div>
+    <span class="st">● 在线</span>
+  </a>
+
+  <div class="sec">🎓 我的课程 <span>已开通 6 门</span></div>
+  <div id="clist"></div>
+
+  <div class="foot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+
+</div>
+<script>
+/* st: done=已学讲数, now=当前讲(0起,-1无), list=章节目录 */
+const COURSES=[
+ {ic:'💞',name:'亲子关系',sub:'懂孩子的天赋语言 · 12讲',done:4,now:4,nowTm:'学到 08:32',v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/adv/love-together.png) center/cover no-repeat',tt:'《亲子关系》系列介绍 · 张宇老师主讲',dur:'03:12'},
+  list:['懂孩子的天赋语言','五者天赋亲子密码','倾听：先接住情绪','冲段期的情绪陪伴','赞美的话怎么说','孩子发脾气时的三句话','青春期前的关系存款','孩子说谎怎么办','和思者型孩子聊未来','和赢者型孩子定规则','和德者型孩子谈感受','开一场家庭会议']},
+ {ic:'🏠',name:'家庭教育',sub:'家庭环境的隐形课程 · 10讲',done:2,now:2,nowTm:'学到 03:15',v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/bg-study.png) center/cover no-repeat',tt:'《家庭教育》系列介绍 · 善雨老师主讲',dur:'02:48'},
+  list:['家庭是隐形课程','书房里的仪式感','屏幕时间的约定','全家作息与训练时段','家务里的责任感','奖励与惩罚的边界','二胎家庭的天赋差异','隔代教育怎么借力','家庭会议实操','父母的自我成长']},
+ {ic:'📜',name:'传统文化',sub:'五道智慧 · 立德树人 · 16讲',done:0,now:0,nowTm:'未开始',v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/mentor-chinese.png) center/cover no-repeat',tt:'《传统文化》系列介绍 · 秦念国老师主讲',dur:'04:05'},
+  list:['五道智慧开篇','德者：厚德载物','思者：思接千载','赢者：赢在格局','行者：行稳致远','学者：学而不厌','《论语》里的学习观','《大学》与修身','阳明心学与知行合一','汉字里的教育智慧','节气里的家风','古人的专注力训练','书道与心性','孝道新解','家国情怀','结业：写一封家书']},
+ {ic:'🧬',name:'天赋导师技能',sub:'五者天赋解读 · 成为孩子的伯乐 · 20讲',done:0,now:-1,v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/parent-team.jpg) center/cover no-repeat',tt:'《天赋导师技能》系列介绍 · 导师团联合主讲',dur:'05:20'},
+  list:['天赋导师的角色','五者天赋总览','思者行为观察清单','赢者行为观察清单','德者行为观察清单','行者行为观察清单','学者行为观察清单','天赋报告逐页解读','段位体系与家长配合','训练数据的读法','有效率下降的信号','冲段期陪伴手册','常见问题答疑（上）','常见问题答疑（下）','家庭训练角搭建','记录与反馈话术','案例课：思者型家庭','案例课：赢者型家庭','案例课：德者型家庭','结业考核与认证']},
+ {ic:'🚀',name:'事业指导',sub: '如何开展天赋教育事业 · 蓝海路径 · 8讲',done:0,now:-1,v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/biz-share.jpg) center/cover no-repeat',tt:'《事业指导》系列介绍 · 把经验变成事业',dur:'03:40'},
+  list:['天赋教育蓝海全景','从家长到推广者','第一场分享会怎么开','社群运营基本功','老带新的转介绍设计','线下活动落地手册','收益体系与合规','事业规划一对一']},
+ {ic:'🧰',name:'天赋测试工具培训',sub:'测评工具实操 · 报告解读 · 6讲',done:0,now:-1,v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/pcourse-tools.jpg) center/cover no-repeat',tt:'《工具培训》系列介绍 · 测评工具上手演示',dur:'02:30'},
+  list:['测评工具总览与开通','孩子测试·代作答实操','成人自测与关系测试','报告解读三步法','用报告定制训练计划','工具考核与授权']},
+];
+document.getElementById('clist').innerHTML=COURSES.map(c=>{
+  const total=c.list.length, pct=Math.round(c.done/total*100);
+  const chaps=c.list.map((t,i)=>{
+    if(i<c.done)return `<div class="chap done"><span class="dot">✓</span>第 ${i+1} 讲 · ${t}<span class="tm">已学</span></div>`;
+    if(i===c.now&&c.now>=c.done)return `<div class="chap now"><span class="dot">▶</span>第 ${i+1} 讲 · ${t}<span class="tm">${c.nowTm||'待开始'}</span></div>`;
+    return `<div class="chap todo"><span class="dot">·</span>第 ${i+1} 讲 · ${t}<span class="tm">未学</span></div>`;
+  }).join('');
+  const goTxt=c.done>0?`继续听课 ›`:`开始学习 ›`;
+  const goMsg=c.done>0?`快捷听课入口：继续《${c.list[Math.min(c.done,total-1)]}》\n\n播放器接入中，敬请期待 ✨`:`《${c.name}》第 1 讲：${c.list[0]}\n\n播放器接入中，敬请期待 ✨`;
+  const intro=c.v?`<div class="cintro" style="background:${c.v.bg}" onclick="alert('${c.v.tt}\n\n介绍片播放中…（演示）')"><span style="opacity:.85">${c.ic}</span><span class="ply">▶</span><span class="vtt">${c.v.tt}</span><span class="dur">${c.v.dur}</span></div>`:'';
+  return `<div class="my">
+    ${intro}
+    <div class="row">
+      <div class="ic">${c.ic}</div>
+      <div><h3>${c.name}</h3><div class="sub">${c.sub}（已开通）</div></div>
+      <a class="go" href="javascript:;" onclick="alert('${goMsg}')">${goTxt}</a>
+    </div>
+    <div class="pbar"><i style="width:${pct}%"></i></div>
+    <div class="ptxt">已学 ${c.done} / ${total} 讲 · ${pct}%</div>
+    <div class="chaps">${chaps}</div>
+  </div>`;
+}).join('');
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:17px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{try{if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-back'},'*');return;}}catch(e){}location.href='parent.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  // back button → dayu-back or parent home
+  document.querySelectorAll('.jn-back').forEach(function(b){
+    b.onclick = function(){
+      if(post('dayu-back')) return;
+      if(window.history.length>1) window.history.back();
+      else nav('/pages/parent/dayu');
+    };
+  });
+  document.querySelectorAll('a.acctbtn[href="index.html"]').forEach(function(a){
+    a.setAttribute('href','javascript:;');
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) nav('/pages/dayu/home');
+    });
+  });
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'kids-manage.html': '/pages/parent/index',
+      'index.html': '__student__'
+    };
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      nav(map[file]);
+    }
+  }, true);
+  // hide foot scrollbar chrome consistency
+  try{ post('dayu-ready'); }catch(e){}
+})();
+</script>
+</body></html>

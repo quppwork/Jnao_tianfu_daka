@@ -440,6 +440,65 @@ def switch_child(
     return _issue_and_respond(db, target, response)
 
 
+@router.post("/switch-parent", response_model=AuthResponse)
+def switch_parent(
+    response: Response,
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """学生切到关联家长账户：校验绑定后签发家长 session。"""
+    from app.db.models import ChildUser, ParentChildBind
+    from app.services.auth_service import is_account_active
+
+    bind = db.scalar(select(ParentChildBind).where(ParentChildBind.child_id == child_user_id))
+    if not bind:
+        raise HTTPException(403, "未绑定家长账户")
+    parent = auth_service.get_parent_for_login(db, bind.parent_id)
+    if not parent:
+        parent = db.get(ChildUser, bind.parent_id)
+    if not parent or (parent.role or "") != "parent":
+        raise HTTPException(404, "家长账户不存在")
+    if not is_account_active(parent):
+        raise HTTPException(404, "家长账号已停用")
+    return _issue_and_respond(db, parent, response)
+
+
+@router.post("/switch-student", response_model=AuthResponse)
+def switch_student(
+    response: Response,
+    target_child_id: int | None = Query(None, ge=1, description="要切回的孩子 ID，缺省则取绑定下第一个活跃孩子"),
+    parent_user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """家长切回训练账户（孩子）：校验归属后签发学生 session。"""
+    from app.db.models import ChildUser, ParentChildBind
+    from app.services.auth_service import is_account_active
+
+    parent = db.get(ChildUser, parent_user_id)
+    if not parent or (parent.role or "") != "parent":
+        raise HTTPException(403, "需要家长账号")
+
+    target: ChildUser | None = None
+    if target_child_id:
+        target = db.get(ChildUser, target_child_id)
+        if not target or (target.role or "") == "parent":
+            raise HTTPException(404, "孩子账户不存在")
+        bind = auth_service.get_parent_child_bind(db, parent_user_id, target_child_id)
+        if not bind:
+            raise HTTPException(403, "不能切换到未绑定的孩子")
+    else:
+        children = auth_service.list_parent_children(db, parent_user_id)
+        for child in children:
+            if child and (child.role or "") != "parent" and is_account_active(child):
+                target = child
+                break
+    if not target:
+        raise HTTPException(404, "暂无可用的训练账户")
+    if not is_account_active(target):
+        raise HTTPException(404, "该账号已删除")
+    return _issue_and_respond(db, target, response)
+
+
 @router.get("/siblings")
 def list_siblings(
     child_user_id: int = Depends(get_authenticated_student),

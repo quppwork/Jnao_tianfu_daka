@@ -8,6 +8,48 @@
       }
     },
     {
+      "path": "pages/parent/dayu",
+      "style": {
+        "navigationBarTitleText": "大宇智能体 · 家长版",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/parent/pset",
+      "style": {
+        "navigationBarTitleText": "我的 · 家长版",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/parent/pdata",
+      "style": {
+        "navigationBarTitleText": "数据分析 · 家长版",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/parent/consult",
+      "style": {
+        "navigationBarTitleText": "在线咨询 · 家长版",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/parent/community",
+      "style": {
+        "navigationBarTitleText": "天赋社区 · 家长版",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/parent/pcourse",
+      "style": {
+        "navigationBarTitleText": "家长课堂 · 家长版",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/parent/index",
       "style": {
         "navigationBarTitleText": "家长中心",
@@ -110,6 +152,13 @@
       "path": "pages/report/index",
       "style": {
         "navigationBarTitleText": "天赋报告",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/plan/dayu",
+      "style": {
+        "navigationBarTitleText": "学业规划",
         "navigationStyle": "custom"
       }
     },
