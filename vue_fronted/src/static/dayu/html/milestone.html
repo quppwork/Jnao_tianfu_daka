@@ -4,7 +4,9 @@
 <title>中央电脑 · 大宇智能体</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{background:#07090F;color:#E8EAF0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:86px}
+  body{background:#07090F;color:#E8EAF0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:140px;scrollbar-width:none;-ms-overflow-style:none}
+  body::-webkit-scrollbar,html::-webkit-scrollbar,.wrap::-webkit-scrollbar{display:none;width:0;height:0}
+  .wrap{max-width:430px;margin:0 auto;padding-bottom:24px;box-sizing:border-box}
   .wrap{max-width:430px;margin:0 auto}
   b{font-weight:900}
 
@@ -405,8 +407,8 @@
   .decay{margin-top:10px;font-size:10.5px;color:#7C8AA5;line-height:1.9;border-top:1px dashed #232B3D;padding-top:9px}
   .decay b{color:#F0A3A3}
 
-  .foot{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;background:rgba(8,10,16,.94);backdrop-filter:blur(10px);border-top:1px solid #1D2432;max-width:430px;margin:0 auto}
-  .foot a{flex:1;text-decoration:none;color:#6B7488;font-size:10px;font-weight:800;text-align:center;padding:9px 0 12px;display:flex;flex-direction:column;gap:3px}
+  .foot{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;background:rgba(8,10,16,.96);backdrop-filter:blur(10px);border-top:1px solid #1D2432;max-width:430px;margin:0 auto;width:100%;box-sizing:border-box;padding:6px 4px calc(8px + env(safe-area-inset-bottom,0px))}
+  .foot a{flex:1;min-width:0;text-decoration:none;color:#6B7488;font-size:10px;font-weight:800;text-align:center;padding:6px 0 8px;display:flex;flex-direction:column;align-items:center;gap:2px}
   .foot a span{font-size:19px}
   .foot a.on{color:#7FA7EF}
 </style>
@@ -419,13 +421,13 @@ function toggleTheme(){
 }
 </script>
 <style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
-*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh;padding-bottom:140px;scrollbar-width:none;-ms-overflow-style:none}html.lt body::-webkit-scrollbar,html.lt html::-webkit-scrollbar,html.lt .wrap::-webkit-scrollbar{display:none;width:0;height:0}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:140px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
 .card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
 .dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
 .cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
-.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
-html.lt *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}html.lt body{background:#f0f2f8;color:#101219;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:86px}html.lt .wrap{max-width:430px;margin:0 auto}html.lt b{font-weight:900}html.lt /* ===== 顶栏 ===== */
+.foot{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:430px;margin:0 auto;background:rgba(235,238,244,.96);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:6px 4px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1;min-width:0}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}html.lt body{background:#f0f2f8;color:#101219;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:140px}html.lt .wrap{max-width:430px;margin:0 auto;width:100%;padding-bottom:28px;box-sizing:border-box}html.lt b{font-weight:900}html.lt /* ===== 顶栏 ===== */
   .hd{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 6px}html.lt .hd .ttl b{font-size:16px;display:block;letter-spacing:.06em}html.lt .hd .ttl span{font-size:8px;color:#7b88a1;letter-spacing:.24em}html.lt .vipjump{flex:none;text-decoration:none;background:linear-gradient(135deg,#89690a,#d8b136);color:#fbf2dc;font-size:13px;font-weight:900;border-radius:12px;padding:11px 16px;box-shadow:0 4px 16px rgba(216,177,54,.5),inset 0 1px 0 rgba(20,20,20,.55);animation:vippulse 2.4s infinite}@keyframes vippulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}html.lt /* ===== 张雨晨手搓中央电脑 · 外壳 ===== */
   .cc{margin:12px 14px 0;border-radius:20px;padding:12px 12px 14px;position:relative;
     background:linear-gradient(160deg,#cfd5e3,#e8ebf2 60%,#d9dfeb);
