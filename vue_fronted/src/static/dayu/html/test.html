@@ -169,12 +169,12 @@
   .kid-notice p b{color:#F0A3A3}
 </style>
 <style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
-*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:var(--app-max-width, 480px);min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:14px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:16px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:16px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
 .card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:16px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
 .dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:17px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
 .cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:18px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
-.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}html.lt .foot a{text-align:center;color:#8b93a5;font-size:10px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}html.lt .foot a{text-align:center;color:#8b93a5;font-size:10px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
 html.lt body{background:#ebeef4}html.lt /* ===== 通用 ===== */
   .step{display:none;animation:stin .35s ease}html.lt .step.on{display:block}@keyframes stin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}html.lt .qbar{display:flex;align-items:center;gap:10px;margin:8px 18px 0}html.lt .qmode{flex:none;font-size:16px;font-weight:800;color:#002570;background:rgba(25,86,209,.14);border:1px solid rgba(25,86,209,.45);border-radius:99px;padding:4px 11px}html.lt .qprog{flex:1;height:7px;border-radius:99px;background:#ccd4e5;overflow:hidden}html.lt .qprog i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#1956d1,#002c85);width:0;transition:width .35s ease}html.lt .qnum{flex:none;font-size:16px;font-weight:800;color:#5a6274;font-variant-numeric:tabular-nums}html.lt /* ===== 第0步 · 选择测试对象 ===== */
   .pick-t{font-size:26px;font-weight:900;color:#1b1912;text-align:center;margin:46px 18px 6px}html.lt .pick-s{font-size:16px;color:#5a6274;text-align:center;margin-bottom:26px}html.lt .pick{display:flex;gap:14px;margin:0 18px}html.lt .pk{flex:1;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:22px;padding:26px 12px 20px;text-align:center;position:relative;overflow:hidden;transition:transform .15s,border-color .2s;cursor:pointer}html.lt .pk:active{transform:scale(.96)}html.lt .pk::before{content:"";position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:130px;height:130px;border-radius:50%;opacity:.14}html.lt .pk.kid::before{background:#30904f}html.lt .pk.adu::before{background:#1956d1}html.lt .pk .pi{width:88px;height:88px;margin:0 auto 12px;border-radius:26px;display:flex;align-items:center;justify-content:center;font-size:46px;position:relative}html.lt .pk.kid .pi{background:linear-gradient(145deg,rgba(48,144,79,.22),rgba(48,144,79,.06));border:1.5px solid rgba(48,144,79,.5);box-shadow:0 8px 22px rgba(48,144,79,.18)}html.lt .pk.adu .pi{background:linear-gradient(145deg,rgba(25,86,209,.26),rgba(25,86,209,.07));border:1.5px solid rgba(25,86,209,.55);box-shadow:0 8px 22px rgba(25,86,209,.22)}html.lt .pk b{display:block;font-size:18px;font-weight:900;color:#1b1912}html.lt .pk span{display:block;font-size:14px;color:#5a6274;margin-top:5px}html.lt .pk.kid:hover{border-color:#30904f}html.lt .pk.adu:hover{border-color:#1956d1}html.lt /* ===== 第1步 · 确认 ===== */
@@ -207,17 +207,18 @@ function toggleTheme(){
   .topbar > a, .topbar .hist-link{font-size:14px;color:#8B93A5;text-decoration:none;font-weight:700}
   .foot{
     position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-    width:100%;max-width:430px;
-    background:rgba(11,14,20,.96);backdrop-filter:blur(12px);
-    border-top:1px solid #232B3D;padding:6px 8px;
-    display:flex;justify-content:space-around;z-index:50
+    width:100%;max-width:var(--app-max-width, 480px);
+    background:rgba(11,14,20,.94);backdrop-filter:blur(12px);
+    border-top:1px solid #232B3D;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    display:flex;justify-content:space-around;z-index:50;box-sizing:border-box
   }
   .foot a{
-    text-align:center;color:#8B93A5;font-size:10px;flex:1;
-    text-decoration:none;padding:2px 0
+    text-align:center;color:#5A6274;font-size:11px;flex:1;
+    text-decoration:none;padding:0
   }
-  .foot a.on{color:#6FCF8E;font-weight:800}
-  .foot a img,.foot .fic img{width:34px;height:34px;object-fit:contain;display:block;margin:0 auto 1px}
+  .foot a.on{color:#6FCF8E;font-weight:700}
+  .foot a img,.foot .fic img,.fic{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}
   .phone{padding-bottom:96px}
   html.lt .brand .logo{border-color:#30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}
   html.lt .brand .t1{color:#1b1912}

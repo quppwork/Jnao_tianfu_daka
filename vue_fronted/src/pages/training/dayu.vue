@@ -1959,15 +1959,21 @@ onUnmounted(() => {
 .phone {
   width: 100%;
   max-width: var(--app-max-width, 480px);
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   margin: 0 auto;
   background: linear-gradient(180deg, #101623 0%, #0b0e14 30%);
   position: relative;
   padding-bottom: 96px;
   box-sizing: border-box;
   color: #edebe4;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.phone::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .block { padding-bottom: 8px; }
 
 .topbar {
@@ -2775,13 +2781,20 @@ onUnmounted(() => {
 .vs { display: block; font-size: 9.5px; color: #5a6274; margin-top: 1px; font-weight: 600; }
 
 .foot {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 100%; max-width: var(--app-max-width, 480px);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: var(--app-max-width, 480px);
+  margin: 0 auto;
   background: rgba(11, 14, 20, 0.94);
   backdrop-filter: blur(12px);
   border-top: 1px solid #232b3d;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
-  display: flex; justify-content: space-around; z-index: 50;
+  display: flex;
+  justify-content: space-around;
+  z-index: 50;
   box-sizing: border-box;
 }
 .fi {
@@ -2789,7 +2802,7 @@ onUnmounted(() => {
   display: flex; flex-direction: column; align-items: center;
 }
 .fi.on { color: #6fcf8e; font-weight: 700; }
-.fic { width: 38px; height: 38px; margin-bottom: 1px; }
+.fic { display: block; width: 38px; height: 38px; margin: 0 auto 1px; }
 
 .overlay {
   position: fixed;

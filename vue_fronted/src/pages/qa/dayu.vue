@@ -15,7 +15,7 @@
     </view>
 
     <view class="mstage">
-      <image class="mstage-img" :src="activeMentor.ava" mode="aspectFill" />
+      <image class="mstage-img" :src="activeMentor.gif || activeMentor.ava" mode="aspectFill" />
       <view class="mgrad" />
       <view v-if="loading" class="mlive"><view class="dot" /><text>正在回复你…</text></view>
       <view class="mwho">
@@ -44,8 +44,12 @@
     </view>
 
     <view class="mentor">
-      <view class="mava" :style="{ borderColor: activeMentor.color || '#6FD3A7' }">
-        <text class="mava-emoji">{{ activeMentor.emoji || '🎓' }}</text>
+      <view
+        class="mava"
+        :class="{ img: !!activeMentor.ava }"
+        :style="mavaStyle"
+      >
+        <text v-if="!activeMentor.ava" class="mava-emoji">{{ activeMentor.emoji || '🎓' }}</text>
         <view
           class="mtb"
           :style="{ borderColor: activeMentor.badgeColor || '#3E8E5A', color: activeMentor.badgeColor || '#3E8E5A' }"
@@ -255,6 +259,20 @@ const knowLine = computed(() => {
     return `对大宝说：'${activeMentor.value.know}'`
   }
   return activeMentor.value.know
+})
+const mavaStyle = computed(() => {
+  const m = activeMentor.value || {}
+  const border = m.color || '#6FD3A7'
+  if (m.ava) {
+    return {
+      borderColor: border,
+      backgroundImage: `url(${m.ava})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center top',
+      backgroundRepeat: 'no-repeat',
+    }
+  }
+  return { borderColor: border, background: `${border}22` }
 })
 const canSend = computed(() => !loading.value && !!(inputText.value.trim() || pendingImage.value))
 
@@ -641,6 +659,7 @@ onMounted(async () => {
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 }
 .app.lt { background: linear-gradient(180deg, #dce2ef 0%, #ebeef4 30%); color: #1b1912; }
 
@@ -820,6 +839,18 @@ onMounted(async () => {
   font-size: 26px; border: 2.5px solid; position: relative;
   background: #0d111f;
 }
+.mava.img {
+  width: 88px;
+  height: 118px;
+  border-radius: 16px;
+  font-size: 0;
+  align-self: flex-start;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+.mava.img + .minfo .mn { font-size: 20px; letter-spacing: 1px; }
+.app.lt .mava.img {
+  box-shadow: 0 6px 16px rgba(60, 80, 120, 0.25);
+}
 .mava-emoji { line-height: 1; }
 .mtb {
   position: absolute; right: -4px; bottom: -4px;
@@ -972,16 +1003,19 @@ onMounted(async () => {
 .app.lt .send { background: #30904f; color: #fff; }
 
 .foot {
-  flex-shrink: 0;
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
   width: 100%;
   max-width: var(--app-max-width, 480px);
-  margin: 0 auto;
   background: rgba(11, 14, 20, 0.94);
   backdrop-filter: blur(12px);
   border-top: 1px solid #232b3d;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   display: flex;
   justify-content: space-around;
+  z-index: 50;
   box-sizing: border-box;
 }
 .app.lt .foot { background: rgba(235, 238, 244, 0.94); border-top-color: #c2cadc; }

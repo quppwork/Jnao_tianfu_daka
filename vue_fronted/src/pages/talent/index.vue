@@ -613,19 +613,21 @@ onBeforeUnmount(() => {
 .dy-t2 { display: block; font-size: 11px; color: #8B93A5; letter-spacing: 2px; }
 .dy-hist { font-size: 14px; color: #8B93A5; font-weight: 700; }
 
-/* Foot */
+/* Foot — 与大宇首页底栏对齐 */
 .dy-foot {
   position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 100%; max-width: 430px;
-  background: rgba(11, 14, 20, 0.96); backdrop-filter: blur(12px);
-  border-top: 1px solid #232B3D; padding: 6px 8px;
+  width: 100%; max-width: var(--app-max-width, 480px);
+  background: rgba(11, 14, 20, 0.94); backdrop-filter: blur(12px);
+  border-top: 1px solid #232B3D;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   display: flex; justify-content: space-around; z-index: 50;
+  box-sizing: border-box;
 }
 .dy-fa {
-  flex: 1; text-align: center; color: #8B93A5; font-size: 10px;
-  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 2px 0;
+  flex: 1; text-align: center; color: #5A6274; font-size: 11px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 0;
 }
-.dy-fic { width: 34px; height: 34px; }
+.dy-fic { display: block; width: 38px; height: 38px; margin: 0 auto 1px; }
 
 /* Pre-test */
 .phase { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 18px 0; padding: 8dvh 18px 0; }

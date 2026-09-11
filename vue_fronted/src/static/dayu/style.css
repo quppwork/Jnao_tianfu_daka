@@ -1,7 +1,13 @@
 /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
-*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}
-body{background:#07090E;display:flex;justify-content:center;min-height:100vh}
-.phone{width:100%;max-width:430px;min-height:100vh;background:linear-gradient(180deg,#101623 0%,#0B0E14 30%);position:relative;padding-bottom:96px}
+:root{--app-max-width:480px}
+@media (orientation:landscape) and (max-height:500px){:root{--app-max-width:100%}}
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif;scrollbar-width:none;-ms-overflow-style:none}
+*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}
+html,body{width:100%;max-width:100%;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}
+body{background:#07090E;display:flex;justify-content:center;min-height:100vh;min-height:100dvh}
+.phone{width:100%;max-width:var(--app-max-width, 480px);min-height:100vh;background:linear-gradient(180deg,#101623 0%,#0B0E14 30%);position:relative;padding-bottom:96px;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.phone::-webkit-scrollbar{display:none;width:0;height:0}
 a{text-decoration:none;color:inherit}
 
 /* 顶栏 */
@@ -30,7 +36,9 @@ a{text-decoration:none;color:inherit}
 .cta.gold{background:linear-gradient(90deg,#C9A869,#E3C98F);color:#1A1408}
 
 /* 底栏 */
-.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(11,14,20,.94);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px;display:flex;justify-content:space-around;z-index:50}
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(11,14,20,.94);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}
 .foot a{text-align:center;color:#5A6274;font-size:11px;flex:1}
 .foot a.on{color:#6FCF8E;font-weight:700}
 .foot a span{display:block;font-size:19px;margin-bottom:1px}
+.foot a .fic,.fic{display:block;width:38px;height:38px;margin:0 auto 1px;object-fit:contain}
+.foot a img{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}

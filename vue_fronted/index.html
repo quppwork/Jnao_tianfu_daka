@@ -23,6 +23,10 @@
     <link rel="preload" href="/static/teacher-avatar.png" as="image" />
     <!--app-context-->
     <style>
+      /* 全局隐藏滚动条并占满宽度 */
+      html, body { width:100%; max-width:100%; overflow-x:hidden; scrollbar-width:none; -ms-overflow-style:none; }
+      html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { display:none!important; width:0!important; height:0!important; }
+      * { scrollbar-width:none; -ms-overflow-style:none; }
       /* ===== Theme CSS Variables ===== */
       :root, [data-theme="dark"] {
         --bg: #070b14; --bg-card: #0f1a2e; --bg-input: #0d1525;

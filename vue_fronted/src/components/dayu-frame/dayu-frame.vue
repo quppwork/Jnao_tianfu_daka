@@ -6,6 +6,7 @@
       class="dayu-iframe"
       :src="src"
       frameborder="0"
+      scrolling="no"
       allow="autoplay; fullscreen"
       @load="onFrameLoad"
     />
@@ -53,8 +54,81 @@ function postToFrame(payload) {
   // #endif
 }
 
+function syncFrameLayoutVars() {
+  // #ifdef H5
+  try {
+    let win = null
+    const el = iframeRef.value
+    if (el) win = el.contentWindow || el.$el?.contentWindow || null
+    if (!win) {
+      const node = document.querySelector('.dayu-iframe')
+      win = node?.contentWindow || null
+    }
+    if (!win?.document?.documentElement) return
+    const maxW =
+      getComputedStyle(document.documentElement).getPropertyValue('--app-max-width').trim() ||
+      '480px'
+    win.document.documentElement.style.setProperty('--app-max-width', maxW)
+
+    // iframe 内 env(safe-area-*) 常为 0，用父页实测值对齐底栏高度
+    let sab = '0px'
+    try {
+      const probe = document.createElement('div')
+      probe.style.cssText =
+        'position:fixed;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px)'
+      document.body.appendChild(probe)
+      sab = getComputedStyle(probe).paddingBottom || '0px'
+      probe.remove()
+    } catch (_) { /* ignore */ }
+
+    const parentPages = new Set([
+      'parent.html',
+      'pset.html',
+      'pdata.html',
+      'consult.html',
+      'community.html',
+      'pcourse.html',
+    ])
+    const isParent = parentPages.has(String(props.page || ''))
+    const mute = isParent ? '#8B93A5' : '#5A6274'
+    const on = isParent ? '#F5D9A8' : '#6FCF8E'
+    const ltMute = '#8b93a5'
+    const ltOn = isParent ? '#967536' : '#30904f'
+
+    const style = win.document.getElementById('dayu-foot-sync') || win.document.createElement('style')
+    style.id = 'dayu-foot-sync'
+    style.textContent = [
+      `.foot{left:0!important;right:0!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;margin:0!important;`,
+      `padding:8px 10px calc(8px + ${sab})!important;`,
+      `box-sizing:border-box!important}`,
+      `.foot a{padding:0!important;gap:0!important;font-size:11px!important;font-weight:400!important;`,
+      `color:${mute}!important;display:block!important;min-width:0!important}`,
+      `.foot a.on{color:${on}!important;font-weight:700!important}`,
+      `html.lt .foot a{color:${ltMute}!important}`,
+      `html.lt .foot a.on{color:${ltOn}!important}`,
+      `.foot a img,.foot .fic,.foot a .fic,.fic{width:38px!important;height:38px!important;`,
+      `display:block!important;margin:0 auto 1px!important;object-fit:contain!important}`,
+      `.askbar{left:0!important;right:0!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;margin:0 auto!important;`,
+      `bottom:calc(72px + ${sab})!important;box-sizing:border-box!important}`,
+      `html,body{height:100%!important;overflow:hidden!important;overflow-x:hidden!important;`,
+      `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
+      `html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
+      `*{scrollbar-width:none!important;-ms-overflow-style:none!important}`,
+      `.phone,.wrap{overflow-x:hidden!important;overflow-y:auto!important;`,
+      `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
+      `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
+      `.phone::-webkit-scrollbar,.wrap::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
+    ].join('')
+    if (!style.parentNode) win.document.head.appendChild(style)
+  } catch (_) { /* ignore */ }
+  // #endif
+}
+
 function pushHydrate() {
   if (!frameReady) return
+  syncFrameLayoutVars()
   const h = props.hydrate || {}
   postToFrame({
     type: 'dayu-hydrate',
@@ -201,6 +275,7 @@ function handleMessage(ev) {
 
 function onFrameLoad() {
   frameReady = true
+  syncFrameLayoutVars()
   pushHydrate()
 }
 
@@ -224,14 +299,21 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 与 Vue 页 fixed 底栏同一视口盒，避免切换时底栏上下/宽窄跳动 */
 .dayu-frame-wrap {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
   max-width: var(--app-max-width, 480px);
-  margin: 0 auto;
   background: #07090e;
   overflow: hidden;
+  z-index: 1;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 .dayu-iframe {
   width: 100%;
@@ -239,5 +321,13 @@ onUnmounted(() => {
   border: 0;
   display: block;
   background: #07090e;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.dayu-iframe::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 </style>
