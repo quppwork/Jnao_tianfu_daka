@@ -162,14 +162,16 @@ describe('ensureAuthQuery — URL 拼接 user_id', () => {
 describe('mergeAuthHeaders — 请求头构造', () => {
   function mergeAuthHeaders(options = {}, userId = null) {
     const headers = { ...(options.headers || {}), 'X-Device-Id': 'dev-001' }
-    const token = mockLocalStorage.getItem('jnao_session_token')
-    if (token) headers['X-Session-Token'] = token
+    const token = mockLocalStorage.getItem('jnao_access_token')
+      || mockLocalStorage.getItem('jnao_session_token')
+    if (token) headers['Authorization'] = `Bearer ${token}`
     const uid = userId || null
     if (uid) headers['X-Child-User-Id'] = String(uid)
     return headers
   }
 
   beforeEach(() => {
+    delete store['jnao_access_token']
     delete store['jnao_session_token']
     delete store['jnao_child_user_id']
   })
@@ -177,14 +179,14 @@ describe('mergeAuthHeaders — 请求头构造', () => {
   it('无 token 无 userId → 仅 Device-Id', () => {
     const h = mergeAuthHeaders({}, null)
     expect(h['X-Device-Id']).toBe('dev-001')
-    expect(h['X-Session-Token']).toBeUndefined()
+    expect(h['Authorization']).toBeUndefined()
     expect(h['X-Child-User-Id']).toBeUndefined()
   })
 
-  it('有 token → 附加 X-Session-Token', () => {
-    store['jnao_session_token'] = 'abc123'
+  it('有 token → 附加 Authorization Bearer', () => {
+    store['jnao_access_token'] = 'abc123'
     const h = mergeAuthHeaders({}, null)
-    expect(h['X-Session-Token']).toBe('abc123')
+    expect(h['Authorization']).toBe('Bearer abc123')
   })
 
   it('有 userId → 附加 X-Child-User-Id', () => {
@@ -193,9 +195,9 @@ describe('mergeAuthHeaders — 请求头构造', () => {
   })
 
   it('同时有 token + userId → 两个 header 都有', () => {
-    store['jnao_session_token'] = 'tok'
+    store['jnao_access_token'] = 'tok'
     const h = mergeAuthHeaders({}, 5)
-    expect(h['X-Session-Token']).toBe('tok')
+    expect(h['Authorization']).toBe('Bearer tok')
     expect(h['X-Child-User-Id']).toBe('5')
   })
 
@@ -205,10 +207,10 @@ describe('mergeAuthHeaders — 请求头构造', () => {
   })
 
   it('用户自定义 header 不覆盖认证 header', () => {
-    store['jnao_session_token'] = 'tok'
-    const h = mergeAuthHeaders({ headers: { 'X-Session-Token': 'malicious' } }, null)
+    store['jnao_access_token'] = 'tok'
+    const h = mergeAuthHeaders({ headers: { Authorization: 'Bearer malicious' } }, null)
     // 自定义先展开，auth 后覆盖
-    expect(h['X-Session-Token']).toBe('tok')
+    expect(h['Authorization']).toBe('Bearer tok')
   })
 })
 
@@ -231,8 +233,8 @@ describe('apiJson — HTTP 200/401/500/Network Error', () => {
 
   async function callApi(url) {
     const headers = {}
-    const token = store['jnao_session_token']
-    if (token) headers['X-Session-Token'] = token
+    const token = store['jnao_access_token'] || store['jnao_session_token']
+    if (token) headers['Authorization'] = `Bearer ${token}`
     const uid = store['jnao_child_user_id']
     if (uid) headers['X-Child-User-Id'] = uid
 
@@ -332,15 +334,26 @@ describe('getChildUserId / getSessionToken — localStorage 读写', () => {
     } catch (_) { return null }
   }
   function getSessionToken() {
-    try { return localStorage.getItem('jnao_session_token') || '' } catch (_) { return '' }
+    try {
+      return (
+        localStorage.getItem('jnao_access_token')
+        || localStorage.getItem('jnao_session_token')
+        || ''
+      )
+    } catch (_) { return '' }
   }
   function setChildUserId(id) {
     try { localStorage.setItem('jnao_child_user_id', String(id)) } catch (_) {}
   }
   function setSessionToken(token) {
     try {
-      if (token) localStorage.setItem('jnao_session_token', token)
-      else localStorage.removeItem('jnao_session_token')
+      if (token) {
+        localStorage.setItem('jnao_access_token', token)
+        localStorage.setItem('jnao_session_token', token)
+      } else {
+        localStorage.removeItem('jnao_access_token')
+        localStorage.removeItem('jnao_session_token')
+      }
     } catch (_) {}
   }
   function clearChildUserId() {
@@ -349,6 +362,7 @@ describe('getChildUserId / getSessionToken — localStorage 读写', () => {
 
   beforeEach(() => {
     delete store['jnao_child_user_id']
+    delete store['jnao_access_token']
     delete store['jnao_session_token']
   })
 

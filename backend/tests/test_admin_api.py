@@ -260,8 +260,8 @@ class TestAdminApi:
         assert res.status_code == 200
         policy = res.json()["login_policy"]
         assert policy["admin_max_devices"] == 3
-        assert policy["parent_max_devices"] == 1
-        assert policy["student_max_devices"] == 1
+        assert policy["parent_max_devices"] == 5
+        assert policy["student_max_devices"] == 5
 
     def test_admin_settings_update(self, client: TestClient):
         admin = _admin_login(client)
@@ -296,27 +296,28 @@ class TestAdminApi:
         assert cdata["login_name"] == "kid_detail"
         assert cdata["parent_id"] == pid
 
-    def test_student_single_device_login(self, client: TestClient, db_session):
+    def test_student_multi_device_login(self, client: TestClient, db_session):
         from app.db.models import UserSession
         from sqlalchemy import select
 
         pid = _seed_parent(db_session, "13900009906", "家长己")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_single", "nickname": "单端童", "password": "XiaoMing1"},
+            json={"login_name": "kid_multi", "nickname": "多端童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
 
         login1 = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_single", "password": "XiaoMing1"},
+            json={"login_name": "kid_multi", "password": "XiaoMing1"},
         )
         assert login1.status_code == 200
         token1 = login1.json()["session_token"]
+        assert login1.json().get("access_token") == token1
 
         login2 = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_single", "password": "XiaoMing1"},
+            json={"login_name": "kid_multi", "password": "XiaoMing1"},
         )
         assert login2.status_code == 200
         token2 = login2.json()["session_token"]
@@ -324,10 +325,10 @@ class TestAdminApi:
 
         from app.services.session_service import validate_session
 
-        assert not validate_session(db_session, cid, token1)
+        assert validate_session(db_session, cid, token1)
         assert validate_session(db_session, cid, token2)
 
         sessions = db_session.scalars(
             select(UserSession).where(UserSession.user_id == cid)
         ).all()
-        assert len(sessions) == 1
+        assert len(sessions) == 2

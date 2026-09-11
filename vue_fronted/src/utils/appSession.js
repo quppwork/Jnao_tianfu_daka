@@ -60,6 +60,7 @@ export function sessionKeysForKind(kind) {
     return [
       'jnao_parent_user_id',
       'jnao_child_user_id',
+      'jnao_access_token',
       'jnao_session_token',
       'jnao_user',
       'jnao_logged_in',
@@ -72,6 +73,7 @@ export function sessionKeysForKind(kind) {
   return [
     'jnao_student_user_id',
     'jnao_child_user_id',
+    'jnao_access_token',
     'jnao_session_token',
     'jnao_user',
     'jnao_logged_in',
@@ -137,7 +139,7 @@ export function repairAuthStorage() {
     fixed.push('orphan_admin_user')
   }
 
-  const userTok = defaultGetItem('jnao_session_token')
+  const userTok = defaultGetItem('jnao_access_token') || defaultGetItem('jnao_session_token')
   const loggedIn = defaultGetItem('jnao_logged_in') === '1'
   const schemaV3 = parseInt(defaultGetItem(STORAGE_VERSION_KEY) || '0', 10) >= STORAGE_SCHEMA_VERSION
   let role = snap.role
@@ -214,7 +216,7 @@ export function migrateAuthStorage() {
       if (prev < STORAGE_SCHEMA_VERSION) {
         purgeLegacyRouteSnapshots()
         try {
-          localStorage.removeItem('jnao_session_token')
+          // 用户端现改回本地 JWT；升级时勿清 jnao_access_token / jnao_session_token
           localStorage.removeItem('jnao_admin_token')
         } catch (_) { /* ignore */ }
         if (prev === 0) {
@@ -440,7 +442,7 @@ export function prepareRoleLoginEntry(targetRole) {
       try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
     }
   }
-  for (const key of ['jnao_user', 'jnao_session_token', 'jnao_logged_in', 'jnao_child_user_id', 'jnao_login_channel']) {
+  for (const key of ['jnao_user', 'jnao_access_token', 'jnao_session_token', 'jnao_logged_in', 'jnao_child_user_id', 'jnao_login_channel']) {
     try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
   }
   purgeLegacyRouteSnapshots()

@@ -11,8 +11,8 @@ from app.services import auth_service
 
 DEFAULT_LOGIN_POLICY = {
     "admin_max_devices": 3,
-    "parent_max_devices": 1,
-    "student_max_devices": 1,
+    "parent_max_devices": 5,
+    "student_max_devices": 5,
 }
 
 

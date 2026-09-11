@@ -1,4 +1,4 @@
-"""FastAPI 依赖注入"""
+"""FastAPI 依赖注入 — 用户端 JWT Bearer + 兼容 Cookie/X-Session-Token；Admin Cookie opaque"""
 
 import logging
 import os
@@ -15,12 +15,27 @@ def get_db():
     yield from _get_db()
 
 
+def _bearer_token(request: Request) -> str | None:
+    auth = request.headers.get("Authorization") or request.headers.get("authorization")
+    if not auth:
+        return None
+    parts = auth.strip().split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    token = parts[1].strip()
+    return token or None
+
+
 def _resolve_session_token(
     request: Request,
     x_session_token: str | None,
     session_token: str | None,
 ) -> str | None:
-    """优先 Header；其次 HttpOnly Cookie；图片等少数路径允许 query（兼容旧客户端）。"""
+    """优先 Authorization Bearer；其次 X-Session-Token；再 HttpOnly Cookie；少数路径允许 query。"""
+    bearer = _bearer_token(request)
+    if bearer:
+        return bearer
+
     if x_session_token and x_session_token.strip():
         return x_session_token.strip()
 
@@ -61,7 +76,7 @@ def get_authenticated_user(
     session_token: str | None = Query(None, description="会话令牌（已弃用，请用 Header）"),
     db: Session = Depends(get_db),
 ) -> int:
-    """验证 user_id + session_token。"""
+    """验证 user_id + JWT/session_token。"""
     uid = user_id or x_child_user_id
     if not uid or uid < 1:
         raise HTTPException(401, "需要有效的 user_id 参数或 X-Child-User-Id 请求头")
@@ -85,7 +100,10 @@ def get_authenticated_user(
 
     token = _resolve_session_token(request, x_session_token, session_token)
     if not token:
-        raise HTTPException(401, "需要有效的 session_token（请重新登录）")
+        raise HTTPException(401, "需要有效的 access_token（请重新登录）")
+
+    # 把解析到的 token 挂到 request，供 logout 单端撤销
+    request.state.access_token = token
 
     if not validate_session(db, uid, token):
         logger.warning(
@@ -133,7 +151,20 @@ def get_admin_user(
     if not uid or uid < 1:
         raise HTTPException(401, "管理员会话无效，请重新登录")
 
-    token = _resolve_session_token(request, x_session_token, session_token)
+    # Admin：只读 Cookie / X-Session-Token，忽略用户端 Bearer JWT，避免串权
+    token = None
+    if x_session_token and x_session_token.strip():
+        token = x_session_token.strip()
+    if not token:
+        from app.core.session_cookie import cookies_enabled, read_session_cookie
+
+        if cookies_enabled():
+            token = read_session_cookie(request)
+    if not token and session_token and session_token.strip():
+        path = request.url.path
+        if path.startswith("/api/admin/") or os.getenv("ALLOW_SESSION_TOKEN_QUERY", "0") == "1":
+            token = session_token.strip()
+
     if not token:
         raise HTTPException(401, "管理员会话无效，请重新登录")
 
@@ -142,6 +173,11 @@ def get_admin_user(
     from app.services.auth_service import is_account_active
     from app.services.session_service import validate_session
     from app.core.biz_log import bind_user
+    from app.core.jwt_tokens import looks_like_jwt
+
+    # Admin 应为 opaque；若误传 JWT 也按 validate_session 处理（不会对用户 JWT 的 sub 匹配 admin）
+    if looks_like_jwt(token):
+        raise HTTPException(401, "管理员会话无效，请重新登录")
 
     user = db.get(ChildUser, uid)
     if not user or not is_account_active(user):

@@ -27,6 +27,7 @@ class AuthResponse(BaseModel):
     role: str = "student"
     login_name: str | None = None
     session_token: str | None = None
+    access_token: str | None = None
     profile_complete: bool = True
     missing_fields: list[str] = Field(default_factory=list)
     login_channel: str = "standard"

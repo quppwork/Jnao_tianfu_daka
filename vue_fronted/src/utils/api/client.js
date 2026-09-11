@@ -31,7 +31,8 @@ const PARENT_SLOT_KEY = 'jnao_parent_user_id'
 const STUDENT_SLOT_KEY = 'jnao_student_user_id'
 const GUEST_PHONE_KEY = 'jnao_guest_phone'
 const GUEST_NICKNAME_KEY = 'jnao_guest_nickname'
-const SESSION_TOKEN_KEY = 'jnao_session_token' // legacy，迁移后不再写入
+const SESSION_TOKEN_KEY = 'jnao_session_token' // 兼容旧键；用户 JWT 同时写入
+const ACCESS_TOKEN_KEY = 'jnao_access_token'
 const ADMIN_USER_KEY = 'jnao_admin_user'
 const ADMIN_LOGGED_IN_KEY = 'jnao_admin_logged_in'
 const FRESH_LOGIN_KEY = 'jnao_fresh_login_until'
@@ -358,14 +359,30 @@ export function hasUserSession() {
   } catch (e) { return false }
 }
 
-/** 读取 session_token（HttpOnly Cookie 模式下恒为空，保留兼容） */
+/** 读取用户端 JWT access_token */
 export function getSessionToken() {
-  return ''
+  try {
+    return (
+      localStorage.getItem(ACCESS_TOKEN_KEY)
+      || localStorage.getItem(SESSION_TOKEN_KEY)
+      || ''
+    )
+  } catch (_) {
+    return ''
+  }
 }
 
-/** 不再向 localStorage 存 token */
-export function setSessionToken(_token) {
-  /* HttpOnly Cookie 由服务端 Set-Cookie */
+/** 持久化用户端 JWT（家长/学生）；Admin 不走此路径 */
+export function setSessionToken(token) {
+  try {
+    if (token) {
+      localStorage.setItem(ACCESS_TOKEN_KEY, token)
+      localStorage.setItem(SESSION_TOKEN_KEY, token)
+    } else {
+      localStorage.removeItem(ACCESS_TOKEN_KEY)
+      localStorage.removeItem(SESSION_TOKEN_KEY)
+    }
+  } catch (_) { /* ignore */ }
 }
 
 /** 会话内已验证 uid，避免重复 ping /api/user/profile */
@@ -577,6 +594,8 @@ function mergeAuthHeaders(options = {}, userId = null) {
     const aid = userId || getAdminUserId()
     if (aid) headers['X-Child-User-Id'] = String(aid)
   } else {
+    const token = getSessionToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
     const uid = userId || extractUserIdFromUrl(url) || getChildUserId()
     if (uid) headers['X-Child-User-Id'] = String(uid)
   }

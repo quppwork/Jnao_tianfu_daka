@@ -32,8 +32,9 @@ function _storeAuth(data) {
     clearSessionsExcept('student')
     invalidatePageAuthCache('admin')
   }
-  if (data.session_token) {
-    setSessionToken(data.session_token)
+  const token = data.access_token || data.session_token
+  if (token) {
+    setSessionToken(token)
   }
   try {
     localStorage.setItem('jnao_user', JSON.stringify({
@@ -297,8 +298,9 @@ export async function updateParentProfile(parentId, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (data.session_token) {
-    setSessionToken(data.session_token)
+  const token = data.access_token || data.session_token
+  if (token) {
+    setSessionToken(token)
   }
   saveParentGateCache({ role: 'parent', ...data })
   return data

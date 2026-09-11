@@ -90,6 +90,7 @@ def _to_response(
     *,
     bind_ticket: str | None = None,
     db: Session | None = None,
+    access_token: str | None = None,
 ) -> AuthResponse:
     from app.core.session_cookie import maybe_strip_token
     from app.services.parent_profile_service import parent_auth_flags
@@ -99,7 +100,8 @@ def _to_response(
     gate_passed = True
     ready = True
     step = "home"
-    if (user.role or auth_service.ROLE_STUDENT) == auth_service.ROLE_PARENT:
+    role = user.role or auth_service.ROLE_STUDENT
+    if role == auth_service.ROLE_PARENT:
         channel = get_login_channel(user)
         if channel == LOGIN_CHANNEL_WECHAT:
             missing = parent_wechat_missing_fields(user)
@@ -113,13 +115,22 @@ def _to_response(
             step = parent_next_step(user) if channel == LOGIN_CHANNEL_WECHAT else (
                 "home" if complete else "complete-profile"
             )
+
+    # 用户端始终回传 JWT（access_token / session_token 同值）；Admin 仍可按开关剥离
+    if role == auth_service.ROLE_ADMIN:
+        exposed = maybe_strip_token(access_token or user.session_token)
+        token_out = exposed
+    else:
+        token_out = access_token or None
+
     return AuthResponse(
         child_user_id=user.id,
         parent_phone=user.parent_phone,
         nickname=user.nickname,
-        role=user.role or auth_service.ROLE_STUDENT,
+        role=role,
         login_name=user.login_name,
-        session_token=maybe_strip_token(user.session_token),
+        session_token=token_out,
+        access_token=token_out,
         profile_complete=complete,
         missing_fields=missing,
         login_channel=channel,
@@ -140,10 +151,10 @@ def _issue_and_respond(
     from app.core.session_cookie import set_session_cookie
     from app.services.session_service import issue_session
 
-    issue_session(db, user)
+    access = issue_session(db, user)
     db.refresh(user)
     role = user.role or auth_service.ROLE_STUDENT
-    set_session_cookie(response, user.session_token or "", role=role)
+    set_session_cookie(response, access, role=role)
     from app.core.biz_log import bind_user, biz_event
 
     bind_user(user.id, role=role)
@@ -165,15 +176,23 @@ def _issue_and_respond(
         user,
         bind_ticket=bind_ticket,
         db=db,
+        access_token=access,
     )
 
 
-def _attach_cookie_for_user(response: Response, user, db: Session | None = None) -> AuthResponse:
+def _attach_cookie_for_user(
+    response: Response,
+    user,
+    db: Session | None = None,
+    *,
+    access_token: str | None = None,
+) -> AuthResponse:
     from app.core.session_cookie import set_session_cookie
 
     role = user.role or auth_service.ROLE_STUDENT
-    set_session_cookie(response, user.session_token or "", role=role)
-    return _to_response(user, db=db)
+    token = access_token or user.session_token or ""
+    set_session_cookie(response, token, role=role)
+    return _to_response(user, db=db, access_token=access_token or (token if role != auth_service.ROLE_ADMIN else None))
 
 
 @router.get("/captcha", response_model=CaptchaResponse)
@@ -367,17 +386,19 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
 
 @router.post("/logout")
 def logout(
+    request: Request,
     response: Response,
     user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
     from app.core.session_cookie import clear_session_cookie
     from app.db.models import ChildUser
-    from app.services.session_service import revoke_all_sessions
+    from app.services.session_service import revoke_session_token
 
     user = db.get(ChildUser, user_id)
     role = (user.role if user else None) or auth_service.ROLE_STUDENT
-    revoke_all_sessions(db, user_id)
+    token = getattr(request.state, "access_token", None)
+    revoke_session_token(db, user_id, token)
     db.commit()
     clear_session_cookie(response, role=role)
     from app.core.biz_log import biz_event
@@ -393,13 +414,13 @@ def change_password(
     user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    user = auth_service.change_user_password(
+    user, access = auth_service.change_user_password(
         db,
         user_id,
         old_password=req.old_password,
         new_password=req.new_password,
     )
-    return _attach_cookie_for_user(response, user, db=db)
+    return _attach_cookie_for_user(response, user, db=db, access_token=access)
 
 
 @router.post("/switch-child", response_model=AuthResponse)
@@ -622,7 +643,7 @@ def wechat_callback(
             from app.core.session_cookie import set_session_cookie
             from app.services.session_service import issue_session
 
-            issue_session(db, user)
+            access = issue_session(db, user)
             db.refresh(user)
             params["login_ticket"] = create_login_exchange_ticket(
                 user_id=user.id,
@@ -633,7 +654,7 @@ def wechat_callback(
             redirect_resp = RedirectResponse(url=frontend_login_url(**params), status_code=302)
             set_session_cookie(
                 redirect_resp,
-                user.session_token or "",
+                access,
                 role=user.role or auth_service.ROLE_PARENT,
             )
         if bind_ticket:

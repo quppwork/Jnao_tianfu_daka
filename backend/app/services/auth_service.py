@@ -395,7 +395,7 @@ def change_user_password(
     *,
     old_password: str,
     new_password: str,
-) -> ChildUser:
+) -> tuple[ChildUser, str]:
     from fastapi import HTTPException
 
     from app.core.password import hash_password, verify_password
@@ -413,10 +413,10 @@ def change_user_password(
     pwd = validate_password_strength((new_password or "").strip())
     user.password_hash = hash_password(pwd)
     revoke_all_sessions(db, user.id)
-    issue_session(db, user)
+    access = issue_session(db, user)
     db.commit()
     db.refresh(user)
-    return user
+    return user, access
 
 
 def retire_other_admin_accounts(db: Session, *, keep_id: int) -> int:

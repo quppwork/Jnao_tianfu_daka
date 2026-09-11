@@ -181,6 +181,7 @@ describe('mergeAuthHeaders — admin 隔离', () => {
     await fetchAdminParents(getAdminUserId())
     const headers = global.fetch.mock.calls[0][1].headers
     expect(headers['X-Child-User-Id']).toBe('1')
+    expect(headers['Authorization']).toBeUndefined()
     expect(headers['X-Session-Token']).toBeUndefined()
   })
 })
