@@ -180,19 +180,17 @@ export function resolveParentAuthTarget(data) {
 /** 同家长下切换孩子账户后写入 session（Cookie 模式） */
 export function applySwitchChildSession(data) {
   saveAuthSession({ ...data, role: 'student' })
-  invalidatePageAuthCache('student')
+  // saveAuthSession 已 mark student 鉴权缓存；勿再全量 invalidate，否则首页又打 /profile
   invalidatePageAuthCache('parent')
   invalidatePageAuthCache('admin')
-  try { invalidateChildUserSession() } catch (_) { /* ignore */ }
 }
 
 /** 学生切到关联家长后写入 session */
 export function applySwitchParentSession(data) {
   saveAuthSession({ ...data, role: 'parent' })
+  // 保留 parent 鉴权缓存，仅清学生/管理槽
   invalidatePageAuthCache('student')
-  invalidatePageAuthCache('parent')
   invalidatePageAuthCache('admin')
-  try { invalidateChildUserSession() } catch (_) { /* ignore */ }
 }
 
 const PARENT_GATE_KEY = 'jnao_parent_gate'

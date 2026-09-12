@@ -137,7 +137,7 @@ const parentTabs = [
   { key: 'pset', label: '我的', path: '/pages/parent/pset', icon: '/static/dayu/assets/ic/person.png' },
 ]
 
-const pageLoading = ref(true)
+const pageLoading = ref(false)
 const messages = ref([])
 const inputText = ref('')
 const loading = ref(false)
@@ -311,19 +311,15 @@ function stopStream() {
 }
 
 onMounted(async () => {
+  // 家长首页 intro 可先出壳；会话后台加载，避免切换账号后整页转圈
   const auth = await requirePageAuth('parent')
-  if (!auth.ok) {
-    pageLoading.value = false
-    return
-  }
+  if (!auth.ok) return
   try {
     const data = await fetchParentGuideSession(auth.userId)
     applyGuideMessages(data)
     scrollChat()
   } catch (e) {
     console.error('[parent-dayu] session', e)
-  } finally {
-    pageLoading.value = false
   }
 })
 </script>

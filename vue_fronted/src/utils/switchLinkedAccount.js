@@ -41,15 +41,17 @@ export async function goLinkedParentHome() {
     rememberLastStudentId(uid)
     const data = await switchParentAccount(uid)
     applySwitchParentSession(data)
-    uni.reLaunch({ url: '/pages/parent/dayu' })
+    uni.reLaunch({
+      url: '/pages/parent/dayu',
+      complete: () => { try { uni.hideLoading() } catch (_) { /* ignore */ } },
+    })
   } catch (e) {
+    try { uni.hideLoading() } catch (_) { /* ignore */ }
     const msg = e?.message || '切换失败'
     uni.showToast({
       title: e?.status === 403 || /绑定|家长/.test(msg) ? '未绑定家长账户' : msg,
       icon: 'none',
     })
-  } finally {
-    try { uni.hideLoading() } catch (_) { /* ignore */ }
   }
 }
 
@@ -65,10 +67,12 @@ export async function goLinkedStudentHome() {
     const target = readLastStudentId()
     const data = await switchStudentAccount(parentId, target || undefined)
     applySwitchChildSession(data)
-    uni.reLaunch({ url: '/pages/dayu/home' })
+    uni.reLaunch({
+      url: '/pages/dayu/home',
+      complete: () => { try { uni.hideLoading() } catch (_) { /* ignore */ } },
+    })
   } catch (e) {
-    uni.showToast({ title: e?.message || '暂无可用训练账户', icon: 'none' })
-  } finally {
     try { uni.hideLoading() } catch (_) { /* ignore */ }
+    uni.showToast({ title: e?.message || '暂无可用训练账户', icon: 'none' })
   }
 }

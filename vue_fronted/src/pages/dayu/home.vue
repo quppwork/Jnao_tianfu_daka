@@ -121,7 +121,6 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import DayuChatPanel from '@/components/dayu-chat-panel/dayu-chat-panel.vue'
 import {
-  apiJson,
   applySwitchChildSession,
   confirmGuideWrite,
   ensureChildUser,
@@ -135,7 +134,6 @@ import {
   requirePageAuth,
   sendGuideMessageStream,
   switchChildAccount,
-  withUser,
 } from '@/utils/userApi.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 import { MAIN_TABS, HOME_CHIPS, switchMainTab } from '@/utils/mainTabs.js'
@@ -221,21 +219,17 @@ async function switchToChild(targetId) {
   try {
     const uid = getChildUserId()
     if (!uid) return
-    try {
-      await apiJson(withUser('/api/user/profile', uid))
-    } catch (e) {
-      uni.showToast({
-        title: e.status === 401 ? '登录已过期，请重新登录后再切换' : '网络异常，请稍后重试',
-        icon: 'none',
-      })
-      showAccountSwitcher.value = false
-      return
-    }
+    uni.showLoading({ title: '切换中…', mask: true })
     const data = await switchChildAccount(uid, targetId)
     showAccountSwitcher.value = false
     applySwitchChildSession(data)
-    setTimeout(() => { location.reload() }, 400)
+    if (data?.nickname) currentUserDisplay.value = String(data.nickname).trim()
+    uni.reLaunch({
+      url: '/pages/dayu/home',
+      complete: () => { try { uni.hideLoading() } catch (_) { /* ignore */ } },
+    })
   } catch (e) {
+    try { uni.hideLoading() } catch (_) { /* ignore */ }
     uni.showToast({ title: e.message || '切换失败', icon: 'none' })
   }
 }
@@ -468,34 +462,47 @@ function hydrateFromLocal() {
 }
 
 async function initHome(uid) {
-  const [profileData, guideData, bootstrapData] = await Promise.all([
-    fetchProfile(uid),
+  // 首屏只等档案 + 会话（快）；bootstrap（可能含 LLM）后台补，不挡转圈
+  const [profileData, guideData] = await Promise.all([
+    fetchProfile(uid).catch(() => null),
     fetchGuideSession(uid).catch(() => null),
-    fetchGuideBootstrap(uid).catch(() => null),
   ])
   markChildUserSessionValid(uid)
   if (profileData?.nickname) currentUserDisplay.value = String(profileData.nickname).trim()
   const aid = profileData?.profile_json?.latest_assessment_id
   if (aid && Number(aid) > 0) assessmentId.value = Number(aid)
   applyGuideMessages(guideData)
-  applyBootstrap(bootstrapData)
   scrollChat()
+
+  fetchGuideBootstrap(uid, { use_llm: true, timeoutMs: 6000 })
+    .then((bootstrapData) => {
+      applyBootstrap(bootstrapData)
+      scrollChat()
+    })
+    .catch(() => {
+      if (!welcomeText.value || welcomeText.value === '正在了解你的训练状态…') {
+        applyBootstrap(null)
+      }
+    })
 }
 
 onMounted(async () => {
   hydrateFromLocal()
+  // 本地已有昵称时立刻出壳，不再整页转圈等网络
+  if (currentUserDisplay.value && currentUserDisplay.value !== '学员') {
+    pageLoading.value = false
+  }
   const auth = await requirePageAuth('student')
   if (!auth.ok) {
     pageLoading.value = false
     return
   }
+  pageLoading.value = false
   try {
     await initHome(auth.userId)
   } catch (e) {
     console.error('[dayu-home] init failed', e)
     welcomeText.value = FALLBACK_WELCOME
-  } finally {
-    pageLoading.value = false
   }
 })
 </script>
