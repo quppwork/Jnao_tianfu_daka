@@ -258,16 +258,32 @@ def knowledge_chat_sync(
     docs = parsed.get("retrieved_docs") or []
     usage = parsed.get("usage")
     try:
-        from app.services.usage_recorder import record_usage
+        from app.services.bailian.token_estimate import estimate_retrieve_tokens
+        from app.services.usage_recorder import _parse_usage_dict, record_usage
 
+        # 知识问答 = 检索侧（估）+ 问答模型（有 usage 则用官方）
+        est = estimate_retrieve_tokens(
+            q,
+            chunk_texts=[getattr(d, "text", "") or "" for d in docs],
+            enable_reranking=True,
+            prelim_top_k=max(50, int(c.dense_top_k or 50)),
+            index_count=1,
+        )
+        p_llm, c_llm, t_llm = _parse_usage_dict(usage if isinstance(usage, dict) else None)
+        prompt = est.query_embed_tokens + p_llm
+        completion = est.rerank_tokens + c_llm
+        total = est.total_tokens + (t_llm if t_llm else (p_llm + c_llm))
         record_usage(
             provider="bailian",
             api="knowledge_chat",
             model=agent_id,
-            usage=usage if isinstance(usage, dict) else None,
-            metric_kind="mixed" if usage else "call",
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            total_tokens=total,
+            metric_kind="mixed" if (p_llm or c_llm or t_llm) else "est_rag",
             call_count=1,
             doc_count=len(docs),
+            estimated=True,
             feature="rag",
             request_id=parsed.get("request_id"),
             ok=bool(reply),

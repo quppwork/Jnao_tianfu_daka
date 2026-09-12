@@ -99,18 +99,28 @@ def search_sync(
         request_id=str(data.get("request_id") or "") or None,
     )
     try:
+        from app.services.bailian.token_estimate import estimate_retrieve_tokens
         from app.services.usage_recorder import record_usage
 
+        # Search 路径不暴露 dense_top_k；按官方默认初步 TopK≈50 估 Rerank
+        est = estimate_retrieve_tokens(
+            query,
+            chunk_texts=[n.text for n in nodes],
+            enable_reranking=True,
+            prelim_top_k=max(50, int(c.dense_top_k or 50)),
+            index_count=1,
+        )
         record_usage(
             provider="bailian",
             api="search",
             model=str(c.agent_id or ""),
-            metric_kind="call",
+            metric_kind="est_rag",
             call_count=1,
             doc_count=len(nodes),
-            prompt_tokens=0,
-            completion_tokens=0,
-            total_tokens=0,
+            prompt_tokens=est.query_embed_tokens,
+            completion_tokens=est.rerank_tokens,
+            total_tokens=est.total_tokens,
+            estimated=True,
             feature="rag",
             ok=True,
         )

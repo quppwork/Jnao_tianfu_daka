@@ -106,18 +106,30 @@ def retrieve_sync(
         request_id=str(request_id) if request_id else None,
     )
     try:
+        from app.services.bailian.token_estimate import estimate_retrieve_tokens
         from app.services.usage_recorder import record_usage
 
+        # 官方：Query 向量化 +（可选）初步召回×均长；API 无 usage → 估算
+        # prelim 用本次请求的 dense_top_k（控制台默认常为 50，可能更大）
+        est = estimate_retrieve_tokens(
+            query,
+            chunk_texts=[n.text for n in nodes],
+            enable_reranking=bool(c.enable_reranking),
+            prelim_top_k=int(c.dense_top_k),
+            index_count=1,
+        )
         record_usage(
             provider="bailian",
             api="retrieve",
             model=idx,
-            metric_kind="call",
+            metric_kind="est_rag",
             call_count=1,
             doc_count=len(nodes),
-            prompt_tokens=0,
-            completion_tokens=0,
-            total_tokens=0,
+            # prompt=Query 向量化；completion=Rerank 输入（均为官方「输入 Token」）
+            prompt_tokens=est.query_embed_tokens,
+            completion_tokens=est.rerank_tokens,
+            total_tokens=est.total_tokens,
+            estimated=True,
             feature="rag",
             ok=True,
         )
