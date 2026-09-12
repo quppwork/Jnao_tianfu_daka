@@ -64,4 +64,12 @@ describe('chatRichText', () => {
     expect(html).toContain('gd-ol')
     expect(html).toContain('思者')
   })
+
+  it('formatGuideRichHtml 渲染 #### 四级标题（不露 # 号）', () => {
+    const html = formatGuideRichHtml('#### 1. 火\n\n说明文字')
+    expect(html).toContain('gd-h4')
+    expect(html).toContain('1. 火')
+    expect(html).not.toContain('####')
+    expect(html).not.toMatch(/#+\s*1/)
+  })
 })

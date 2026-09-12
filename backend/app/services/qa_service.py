@@ -69,6 +69,7 @@ def assistant_meta_for_storage(
     *,
     rag_used: bool = False,
     rag_sources: list[str] | None = None,
+    rag_source: str | None = None,
 ) -> dict | None:
     """仅持久化跨轮复用所需的内部字段，不存 coach_hint 等可重算数据。"""
     meta: dict = {}
@@ -79,6 +80,8 @@ def assistant_meta_for_storage(
         meta["rag_used"] = True
         if rag_sources:
             meta["rag_sources"] = rag_sources
+        if rag_source:
+            meta["rag_source"] = rag_source
     return meta or None
 
 

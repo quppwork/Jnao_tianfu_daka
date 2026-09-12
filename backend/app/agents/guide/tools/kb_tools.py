@@ -20,8 +20,14 @@ def list_knowledge_sources(
     _child_user_id: int,
     _args: dict | None = None,
 ) -> dict[str, Any]:
+    from app.services.kb_policy import active_kb_source_key, kb_single_source
+
     reg = get_kb_registry()
-    return {"sources": reg.list_sources(), "count": len(reg.sources)}
+    sources = reg.list_sources()
+    if kb_single_source():
+        key = active_kb_source_key()
+        sources = [s for s in sources if s.get("key") == key]
+    return {"sources": sources, "count": len(sources)}
 
 
 @register("query_knowledge")
@@ -30,6 +36,8 @@ def query_knowledge(
     _child_user_id: int,
     args: dict | None = None,
 ) -> dict[str, Any]:
+    from app.services.kb_policy import active_kb_source_key, kb_single_source
+
     a = args or {}
     query = str(a.get("query") or "").strip()
     source_key = str(a.get("source_key") or "").strip()
@@ -39,6 +47,10 @@ def query_knowledge(
 
     if not query:
         return {"ok": False, "error": "query 不能为空"}
+
+    if kb_single_source():
+        source_key = active_kb_source_key()
+        aid = ""
 
     reg = get_kb_registry()
     src = reg.resolve(source_key=source_key or None, aid=aid or None)

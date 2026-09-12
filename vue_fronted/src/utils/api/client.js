@@ -499,7 +499,12 @@ export async function apiJson(url, options = {}) {
 }
 
 /** POST + SSE 流式读取（首页引导 / 学科答疑） */
-export async function streamPostSse(url, body, { onToken, onDone, onError, signal } = {}) {
+export async function streamPostSse(url, body, handlers = {}) {
+  const onToken = handlers.onToken
+  const onDone = handlers.onDone
+  const onError = handlers.onError
+  const onStatus = handlers.onStatus
+  const signal = handlers.signal
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders(
     {
@@ -557,13 +562,15 @@ export async function streamPostSse(url, body, { onToken, onDone, onError, signa
         evt = { type: 'token', content: raw }
       }
       if (evt.type === 'token' && evt.content) {
-        onToken?.(evt.content, evt)
+        if (typeof onToken === 'function') onToken(evt.content, evt)
+      } else if (evt.type === 'status' && (evt.message || evt.content)) {
+        if (typeof onStatus === 'function') onStatus(evt.message || evt.content, evt)
       } else if (evt.type === 'done') {
         finalPayload = evt
-        onDone?.(evt)
+        if (typeof onDone === 'function') onDone(evt)
       } else if (evt.type === 'error') {
         const msg = evt.message || '流式请求失败'
-        onError?.(msg)
+        if (typeof onError === 'function') onError(msg)
         throw new Error(msg)
       }
     }

@@ -11,6 +11,7 @@ import {
   withUser,
   requirePageAuth,
   NeedLoginError,
+  streamPostSse,
 } from './client.js'
 import { _readStoredRole } from './auth.js'
 
@@ -56,6 +57,47 @@ export async function deleteParentChild(parentId, childId) {
   return apiJson(withUser(`/api/parent/children/${childId}`, parentId), {
     method: 'DELETE',
   })
+}
+
+/** 家长查看绑定孩子的天赋测试记录 */
+export async function fetchParentAssessmentHistory(parentId, { childId, limit } = {}) {
+  let path = '/api/parent/assessments/history'
+  const qs = []
+  if (childId) qs.push(`child_id=${encodeURIComponent(childId)}`)
+  if (limit) qs.push(`limit=${encodeURIComponent(limit)}`)
+  if (qs.length) path += `?${qs.join('&')}`
+  const data = await apiJson(withUser(path, parentId))
+  return data.items || []
+}
+
+export async function deleteParentAssessment(parentId, assessmentId) {
+  return apiJson(withUser(`/api/parent/assessments/${assessmentId}`, parentId), {
+    method: 'DELETE',
+  })
+}
+
+/** 家长大宇会话回放 */
+export async function fetchParentGuideSession(parentId) {
+  return apiJson(withUser('/api/parent/guide/session', parentId))
+}
+
+/** 家长大宇流式对话（与孩子端 SSE 形态对齐） */
+export function sendParentGuideMessageStream(
+  parentId,
+  message,
+  sessionId = null,
+  handlers = {},
+  { childId } = {},
+) {
+  const controller = new AbortController()
+  const body = { message, session_id: sessionId }
+  if (childId) body.child_id = childId
+  const promise = streamPostSse(
+    withUser('/api/parent/guide/chat/stream', parentId),
+    body,
+    { ...handlers, signal: controller.signal },
+  )
+  return { promise, abort: () => controller.abort() }
 }
 
 /**

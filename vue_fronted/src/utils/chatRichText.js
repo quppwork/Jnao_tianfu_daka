@@ -150,7 +150,7 @@ function isGuideBlockStart(line) {
   const t = String(line || '').trim()
   if (!t) return false
   if (/^(-{3,}|\*{3,})$/.test(t)) return true
-  if (/^#{1,3}\s+/.test(t)) return true
+  if (/^#{1,6}\s+/.test(t)) return true
   if (/^[-*•]\s+/.test(t)) return true
   if (/^\d+[.、)\]]\s+/.test(t)) return true
   if (t.startsWith('>')) return true
@@ -178,9 +178,10 @@ export function formatGuideRichHtml(raw) {
       continue
     }
 
-    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/)
+    const heading = trimmed.match(/^(#{1,6})\s+(.+)$/)
     if (heading) {
-      const level = heading[1].length
+      // 气泡里 h1–h6 都支持；样式档位压到 1–4，避免字号过大
+      const level = Math.min(heading[1].length, 4)
       out.push(`<h${level} class="gd-h gd-h${level}">${guideInline(heading[2])}</h${level}>`)
       i += 1
       continue

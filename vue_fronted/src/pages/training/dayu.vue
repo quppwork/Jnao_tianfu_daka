@@ -3,7 +3,7 @@
     <!-- 顶栏 -->
     <view class="topbar">
       <view class="brand">
-        <view class="logo" />
+        <view class="logo" :style="avatarStyle" />
         <view>
           <text class="t1">大宇智能体</text>
           <text class="t2">DAYU · 今日通关挑战</text>
@@ -16,7 +16,7 @@
           :class="{ active: devMode }"
           @click.stop="toggleDevMode"
         >{{ devMode ? 'DEV ✓' : 'DEV' }}</view>
-        <view class="chip-g">{{ chipText }}</view>
+        <view class="chip-g" :style="chipStyle">{{ chipText }}</view>
       </view>
     </view>
 
@@ -50,10 +50,22 @@
       <text class="dev-panel-hint">重置今日 = 删今日方案与计时 · 需后端 JNAO_DEV_MODE=1</text>
     </view>
 
+    <!-- 启动态：有今日方案时不闪选时长页 -->
+    <view v-if="!bootReady" class="block boot-loading">
+      <view class="boot-card" :class="{ expired: phase === 'expired' }">
+        <view class="boot-row">
+          <text class="boot-t">今日修炼挑战</text>
+          <text v-if="phase === 'expired'" class="boot-chip">已结束</text>
+          <text v-else-if="phase === 'running'" class="boot-chip on">进行中</text>
+        </view>
+        <text class="boot-hint">{{ bootHint }}</text>
+      </view>
+    </view>
+
     <!-- 需测评 -->
-    <view v-if="phase === 'need_assessment'" class="block">
+    <view v-else-if="phase === 'need_assessment'" class="block">
       <view class="dayu">
-        <view class="bear" />
+        <view class="bear" :style="avatarStyle" />
         <view class="bubble"><text class="b">需要先完成天赋测评</text>，再回来生成今日方案。</view>
       </view>
       <view class="goPlan" @click="goTalent">去测评</view>
@@ -107,7 +119,7 @@
         <text class="sub">按 {{ Math.floor(mins / 60) }} 小时 {{ mins % 60 }} 分排课</text>
       </view>
       <view class="dayu">
-        <view class="bear" />
+        <view class="bear" :style="avatarStyle" />
         <view class="bubble"><text class="b">练多久，排多少关。</text>按所选时长由后端真实排课。</view>
       </view>
     </view>
@@ -217,7 +229,7 @@
       </view>
 
       <view class="dayu">
-        <view class="bear" />
+        <view class="bear" :style="avatarStyle" />
         <view class="bubble">
           <text class="b">{{ phase === 'expired' ? '计时已结束' : '先过当前关' }}</text>
           {{ phase === 'expired' ? '，音视频已锁定，仍可补打卡。' : '，再继续下一关。点卡片可播放或打卡。' }}
@@ -525,7 +537,7 @@ import {
   fetchUsageSummary,
   formatTokenCount,
 } from '@/utils/userApi.js'
-import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
+import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState, talentAvatarUrl, talentThemeColor } from '@/utils/talentState.js'
 import { resolvePlanItemSkill, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
 import { MAIN_TABS, switchMainTab } from '@/utils/mainTabs.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
@@ -564,8 +576,31 @@ const DEFAULT_META = { emoji: '⚔️', img: '/static/dayu/assets/miji/mj-tfsd.j
 
 const mins = ref(40)
 const plan = ref(null)
+const PHASE_CACHE_KEY = 'jnao_train_dayu_phase_v1'
 const phase = ref('setup') // setup | confirm | running | expired | need_assessment
+const bootReady = ref(false)
 const talentLabel = ref('')
+const talentPrimary = ref('')
+
+const avatarStyle = computed(() => {
+  const name = talentPrimary.value
+  const url = talentAvatarUrl(name)
+  const color = talentThemeColor(name, '#6fcf8e')
+  return {
+    backgroundImage: `url(${url})`,
+    borderColor: color,
+    boxShadow: `0 0 12px ${color}66`,
+  }
+})
+
+const chipStyle = computed(() => {
+  const color = talentThemeColor(talentPrimary.value, '#6fcf8e')
+  return {
+    borderColor: color,
+    color,
+    background: `${color}1f`,
+  }
+})
 const dayNum = ref(1)
 const scheduleBusy = ref(false)
 const confirmBusy = ref(false)
@@ -576,6 +611,55 @@ const showCustomizeConfirm = ref(false)
 const editorSkills = ref([])
 const pendingCustomize = ref(null)
 const allReplacableSkills = ['超脑阅读', '影像追忆', '扫描速记', '极速运算', '极速学习']
+
+function readPhaseCache() {
+  try {
+    const raw = sessionStorage.getItem(PHASE_CACHE_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw)
+    if (!o || typeof o !== 'object') return null
+    return o
+  } catch (_) {
+    return null
+  }
+}
+
+function rememberPhase(p, extra = {}) {
+  try {
+    const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' })
+    sessionStorage.setItem(PHASE_CACHE_KEY, JSON.stringify({
+      phase: p,
+      day,
+      dayNum: dayNum.value,
+      at: Date.now(),
+      ...extra,
+    }))
+  } catch (_) { /* ignore */ }
+}
+
+function restorePhaseHint() {
+  const cached = readPhaseCache()
+  if (!cached) return
+  const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' })
+  if (cached.day && cached.day !== day) {
+    try { sessionStorage.removeItem(PHASE_CACHE_KEY) } catch (_) { /* ignore */ }
+    return
+  }
+  const p = cached.phase
+  if (p === 'running' || p === 'expired' || p === 'confirm' || p === 'need_assessment') {
+    phase.value = p
+  }
+  if (Number(cached.dayNum) > 0) dayNum.value = Number(cached.dayNum)
+}
+
+restorePhaseHint()
+
+const bootHint = computed(() => {
+  if (phase.value === 'expired') return '正在同步今日进度…'
+  if (phase.value === 'running') return '正在恢复今日挑战…'
+  if (phase.value === 'confirm') return '正在加载今日方案…'
+  return '加载今日修炼…'
+})
 
 /** 训练窗倒计时（仅 UI / 本地 tick，不改媒体锁等规则） */
 const remainingSeconds = ref(0)
@@ -727,7 +811,10 @@ function expireLocalTimer(silent = false) {
   clearTimerTick()
   remainingSeconds.value = 0
   timerEndAtMs = 0
-  if (phase.value === 'running') phase.value = 'expired'
+  if (phase.value === 'running') {
+    phase.value = 'expired'
+    rememberPhase('expired')
+  }
   // 立刻关掉正在播的音视频
   try { closeMedia() } catch (_) { /* ignore */ }
   if (plan.value) plan.value.media_exhausted = true
@@ -1209,6 +1296,7 @@ function applyPlan(data) {
     dayNum.value = data.training_day_number || data.lesson_day || 1
   }
   syncTimerFromPlan(data)
+  rememberPhase(phase.value, { planId: data?.plan_id || null })
 }
 
 async function hydrateCheckins(uid) {
@@ -1247,39 +1335,58 @@ function fillCheckinFormFromRecord(record, fallbackItem) {
 
 async function bootstrap() {
   const auth = await requirePageAuth('student')
-  if (!auth) return
+  if (!auth.ok) {
+    bootReady.value = true
+    return
+  }
   const uid = await ensureChildUser()
   let needAssessment = false
   try {
     const talent = await ensureTalentState(uid)
     talentLabel.value = talent?.talent_tag || ''
+    talentPrimary.value = talent?.talent_primary
+      || ({ 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }[talent?.talent_tag] || '')
     if (!hasEffectiveTalent(talent) || talent.needs_assessment) {
       const entry = await fetchTrainingEntry(uid).catch(() => null)
       if (!entry || entry.needs_assessment) needAssessment = true
       if (entry?.talent_tag) talentLabel.value = entry.talent_tag
+      if (entry?.talent_primary) talentPrimary.value = entry.talent_primary
+      else if (entry?.talent_tag && !talentPrimary.value) {
+        talentPrimary.value = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }[entry.talent_tag] || ''
+      }
     }
   } catch (_) {
     const entry = await fetchTrainingEntry(uid).catch(() => null)
     if (entry?.needs_assessment) needAssessment = true
     if (entry?.talent_tag) talentLabel.value = entry.talent_tag
+    if (entry?.talent_primary) talentPrimary.value = entry.talent_primary
+    else if (entry?.talent_tag) {
+      talentPrimary.value = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }[entry.talent_tag] || ''
+    }
   }
 
   if (needAssessment) {
     phase.value = 'need_assessment'
+    rememberPhase('need_assessment')
+    bootReady.value = true
     return
   }
 
   const result = await fetchTrainingToday(uid, { skipAi: true })
   if (result.error === 'assessment') {
     phase.value = 'need_assessment'
+    rememberPhase('need_assessment')
+    bootReady.value = true
     return
   }
   if (result.error) {
     uni.showToast({ title: result.message || '加载失败', icon: 'none' })
+    bootReady.value = true
     return
   }
   applyPlan(result.data)
   if (result.data?.plan_id) await hydrateCheckins(uid)
+  bootReady.value = true
 }
 
 /** 对应老页 startTrainingWithPrefer：只排课，不开计时 */
@@ -1355,7 +1462,8 @@ async function confirmPlan() {
 }
 
 function goTalent() {
-  uni.navigateTo({ url: '/pages/talent/index' })
+  // 孩子训练页只走儿童测评 → 儿童报告；返回仍回训练页
+  uni.navigateTo({ url: '/pages/talent/index?mode=kid&from=training' })
 }
 
 function destroyInnerAudio() {
@@ -1800,6 +1908,8 @@ async function devResetToday() {
     try { await clearTrainingWindow(uid) } catch (_) { /* ignore */ }
     plan.value = null
     phase.value = 'setup'
+    bootReady.value = false
+    try { sessionStorage.removeItem(PHASE_CACHE_KEY) } catch (_) { /* ignore */ }
     closeCheckin()
     closeMedia()
     await bootstrap()
@@ -1834,6 +1944,7 @@ function devSimulateExpire() {
   }
   expireLocalTimer(true)
   phase.value = 'expired'
+  rememberPhase('expired')
   uni.showToast({ title: '已模拟计时结束', icon: 'none' })
 }
 
@@ -1966,6 +2077,7 @@ onMounted(() => {
 })
 onShow(() => {
   if (checkinOpen.value || mediaOpen.value) return
+  // 已有今日方案时静默刷新，勿先把 bootReady 打回 false（避免闪选时长）
   if (plan.value && (phase.value === 'running' || phase.value === 'expired' || phase.value === 'confirm')) {
     bootstrap()
   }
@@ -1997,6 +2109,44 @@ onUnmounted(() => {
 }
 .phone::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .block { padding-bottom: 8px; }
+.boot-loading { padding: 24px 18px 8px; }
+.boot-card {
+  background: #131926;
+  border: 1.5px solid #232b3d;
+  border-radius: 18px;
+  padding: 18px 16px;
+}
+.boot-card.expired { border-color: rgba(201, 162, 39, 0.45); }
+.boot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.boot-t { font-size: 18px; font-weight: 900; color: #edebe4; }
+.boot-chip {
+  font-size: 12px;
+  font-weight: 800;
+  color: #a8946a;
+  border: 1px solid rgba(201, 162, 39, 0.55);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.boot-chip.on {
+  color: #8fefc0;
+  border-color: rgba(111, 207, 142, 0.55);
+}
+.boot-hint {
+  display: block;
+  margin-top: 12px;
+  font-size: 14px;
+  color: #8b93a5;
+  animation: bootPulse 1.2s ease-in-out infinite;
+}
+@keyframes bootPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
 
 .topbar {
   display: flex;
@@ -2084,9 +2234,10 @@ onUnmounted(() => {
 .brand { display: flex; align-items: center; gap: 10px; }
 .logo {
   width: 44px; height: 44px; border-radius: 50%;
-  background: url('/static/dayu/assets/avatar_sizhe.jpg') center/cover;
+  background: url('/static/dayu/assets/ip/ring-study.png') center/cover;
   border: 2px solid #6fcf8e;
   box-shadow: 0 0 10px rgba(111, 207, 142, 0.4);
+  flex: none;
 }
 .t1 { display: block; font-size: 19px; font-weight: 800; color: #edebe4; }
 .t2 { display: block; font-size: 10px; color: #5a6274; letter-spacing: 2px; }
@@ -2215,7 +2366,7 @@ onUnmounted(() => {
 }
 .bear {
   width: 52px; height: 52px; border-radius: 50%;
-  background: url('/static/dayu/assets/avatar_sizhe.jpg') center/cover;
+  background: url('/static/dayu/assets/ip/ring-study.png') center/cover;
   border: 2px solid #6fcf8e;
   box-shadow: 0 0 14px rgba(111, 207, 142, 0.45);
   flex: none;

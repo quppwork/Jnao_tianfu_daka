@@ -745,6 +745,7 @@ async def run_chat_stream(
     from app.agents.guide.pipeline import GuidePath, resolve_guide_path
 
     path = resolve_guide_path(message, kb_agent_ready=guide_kb_agent_ready())
+    yield ("status", "正在理解问题…")
 
     if path is GuidePath.QA_HANDOFF:
         text = await _qa_handoff_reply(message, history=hist)
@@ -770,6 +771,7 @@ async def run_chat_stream(
         return
 
     if path is GuidePath.KB_AGENT:
+        yield ("status", "知识库助手处理中，稍候…")
         kb_result = await run_guide_kb_turn(
             db, child_user_id, message, history=hist, ctx=ctx
         )
@@ -834,6 +836,10 @@ async def run_chat_stream(
     cfg = load_bailian_config()
     rag_route_hit = should_guide_use_rag(message)
 
+    yield (
+        "status",
+        "正在检索知识库与整理材料…" if rag_route_hit else "正在准备回答…",
+    )
     tools_used, tool_block, bailian_reply, rag_block, rag_sources = (
         await _legacy_tools_and_knowledge(
             db,
@@ -941,6 +947,7 @@ async def run_chat_stream(
     if rag_route_hit or rag_sources:
         yield ("meta", meta)
 
+    yield ("status", "正在生成回复…")
     parts: list[str] = []
     async for token in chat_completion_stream(
         system_prompt=system,

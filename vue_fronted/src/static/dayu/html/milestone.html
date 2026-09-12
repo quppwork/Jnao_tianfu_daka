@@ -499,7 +499,7 @@ html.lt *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:t
   <!-- 顶栏 + 直接晋级 -->
   <div class="hd">
     <div class="ttl"><b>中央电脑</b><span>CENTRAL COMPUTER</span></div>
-    <a href="wallet.html" style="display:inline-flex;align-items:center;gap:6px;background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:0 14px;text-decoration:none;margin-right:8px;height:30px;box-sizing:border-box"><span style="font-size:12px">⚡</span><b style="font-size:12px;font-weight:900;color:#F5D9A8">120</b><span style="width:34px;height:6px;border-radius:99px;background:#0A0F1C;border:1px solid #2A3040;overflow:hidden;display:inline-block"><i style="display:block;height:100%;width:12%;background:linear-gradient(90deg,#F5D576,#E0863C)"></i></span></a>
+    <a href="wallet.html" id="enLink" style="display:inline-flex;align-items:center;gap:6px;background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:0 14px;text-decoration:none;margin-right:8px;height:30px;box-sizing:border-box"><span style="font-size:12px">⚡</span><b id="enVal" style="font-size:12px;font-weight:900;color:#F5D9A8">--</b><span style="width:34px;height:6px;border-radius:99px;background:#0A0F1C;border:1px solid #2A3040;overflow:hidden;display:inline-block"><i id="enBar" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,#F5D576,#E0863C)"></i></span></a>
     <a class="vipjump" href="javascript:;" onclick="$(&#39;vip&#39;).classList.add(&#39;on&#39;)" style="height:30px;box-sizing:border-box;display:inline-flex;align-items:center;padding:0 16px;font-size:12px">⚡ 直接晋级</a>
   </div>
 
@@ -579,8 +579,8 @@ html.lt *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:t
     <div class="medals" id="medals"></div>
   </div>
 
-  <!-- 15 技能墙 -->
-  <div class="card">
+  <!-- 15 技能墙（第一期暂不接后端，动态数据到达后隐藏） -->
+  <div class="card" id="skillsCard">
     <div class="ch"><b>🥋 十五技能墙</b></div>
     <div class="skills" id="skills"></div>
   </div>
@@ -603,7 +603,7 @@ html.lt *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:t
     <div class="tvals">
       <div class="tv"><b id="tvRate">0%</b><small>本月有效率</small></div>
       <div class="tv"><b id="tvMins">0</b><small>本月训练(分钟)</small></div>
-      <div class="tv gold"><b id="tvTalent">0</b><small>当前天赋值</small></div>
+      <div class="tv gold"><b id="tvTalent">0</b><small>当前经验 XP</small></div>
     </div>
     <div class="decay" id="decayTip"></div>
   </div>
@@ -668,7 +668,9 @@ html.lt *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:t
 </div>
 <script>
 const $=id=>document.getElementById(id);
+const IN_DAYU_FRAME=(function(){try{return !!(window.parent&&window.parent!==window);}catch(e){return true;}})();
 /* ================= 数据层（演示数据 + 真实训练流程可写入） =================
+   iframe 内由 Vue 注入 /api/growth/console，不再用本地种子污染天梯/液晶/四境。
    jn_train_log: {"YYYY-MM-DD": {m:分钟, r:有效率0-100}}  训练/打卡流程按日写入
    jn_skill_prog: {技能名: 完成度0-100}  今日闯关 SKL.set() 写入（与本页共用） */
 function today(){return new Date();}
@@ -719,6 +721,10 @@ const SKL_ALL=(()=>{let s={};try{s=JSON.parse(localStorage.getItem('jn_skill_pro
 function SKL_GET(n){return SKL_ALL[n]!=null?SKL_ALL[n]:0;}
 /* ================= ① 液晶屏 ================= */
 (function(){
+  if(IN_DAYU_FRAME){
+    $('lcdData').innerHTML='<div class="lcd-grid"><div class="lg full"><span>▸ 中央电脑</span><b>正在同步训练数据…</b></div></div>';
+    return;
+  }
   const litSkills=Object.keys(SKL_ALL).filter(n=>SKL_GET(n)>=100).length;
   const rows=[
     ['今日训练时长', S.todayM? S.todayM+' MIN':'未开始'],
@@ -792,8 +798,8 @@ const RP_SCENES=[
     f.innerHTML=h;
   }},
 ];
-/* 按技能完成度选场：练过（>0）才上演，完成度高的排前；保底 3 场 */
-const RP_LIST=(()=>{
+/* 按技能完成度选场：练过（>0）才上演，完成度高的排前；Dayu 壳内由 console.replay 覆盖 */
+let RP_LIST=(()=>{
   const scored=RP_SCENES.map(sc=>{
     let best=0,sk=sc.cand[0];
     sc.cand.forEach(n=>{const v=SKL_GET(n);if(v>best){best=v;sk=n;}});
@@ -802,11 +808,13 @@ const RP_LIST=(()=>{
   return scored;
 })();
 let rpIdx=0,rpTimer=null;
+let _rpStateLine=null;
 function rpPlay(i){
+  if(!RP_LIST.length)return;
   rpIdx=i;const it=RP_LIST[i],rp=$('rp');
   rp.setAttribute('data-sc',it.sc.key);
-  $('rpTitle').textContent='▶ 回放 · '+it.sc.title;
-  $('rpMeta').textContent=it.pct>0?it.sk+' · 完成度 '+it.pct+'%':it.sk+' · 今日未开练';
+  $('rpTitle').textContent='▶ 回放 · '+(it.sc.title||it.sk||'');
+  $('rpMeta').textContent=it.meta||(it.pct>0?it.sk+' · 完成度 '+it.pct+'%':it.sk+' · 今日未开练');
   const cam=$('rpCam');
   cam.className='rp-cam';void cam.offsetWidth;cam.classList.add(it.sc.cam); /* 重播镜头动画 */
   it.sc.build($('rpProps'),$('rpFx'));
@@ -815,9 +823,18 @@ function rpPlay(i){
 }
 function rpJump(i){rpPlay(i);}
 function paintSim(st){
+  if(_rpStateLine){$('rpState').textContent=_rpStateLine;return;}
+  if(IN_DAYU_FRAME)return;
   $('rpState').textContent=['','第一境·完全荒废','第二境·三天打鱼','第三境·尽力训练','第四境·锋芒初现','第五境·万法归一'][st]+' · 天赋值 '+S.talent;
 }
-rpPlay(0);
+if(IN_DAYU_FRAME){
+  $('rpTitle').textContent='▶ 回放 · 同步中';
+  $('rpMeta').textContent='';
+  $('rpState').textContent='同步修行数据…';
+  $('rpDots').innerHTML='';
+}else{
+  rpPlay(0);
+}
 /* ================= ①.5 天赋等级（累计天赋值，满级 99）================= */
 /* 升级所需：1级500；2~10级每级×1.10；11~20级×1.08；21~50级×1.05；51~99级×1.02 */
 function lvlNeed(n){
@@ -826,6 +843,12 @@ function lvlNeed(n){
   return Math.round(lvlNeed(n-1)*r);
 }
 (function(){
+  if(IN_DAYU_FRAME){
+    $('lvNo').textContent='Lv.--';
+    $('lvCum').innerHTML='等待同步…';
+    $('lvNext').textContent='';
+    return;
+  }
   /* 累计天赋值=历史沉淀(演示1180)+训练日志全部获得（不衰减） */
   let gain=0;
   Object.values(LOG).forEach(r=>{gain+=r.m*r.r/100;});
@@ -847,6 +870,11 @@ const LOCKS=[
   {name:'尖峰期',img:'/static/dayu/assets/lock4-t.png',segs:['九段'],got:0,open:false,c:'purple',rwd:'圆满得：张宇老师内门弟子＋盲盒×10＋最高身份勋章 👑'},
 ];
 (function(){
+  if(IN_DAYU_FRAME){
+    $('locks').innerHTML='<div class="lkcell" style="grid-column:1/-1;justify-content:center;opacity:.7"><div class="lkinfo"><div class="ln">四境之锁同步中…</div></div></div>';
+    $('boon').innerHTML='';
+    return;
+  }
   $('locks').innerHTML=LOCKS.map((L,i)=>{
     const n=L.segs.length, cls=L.open?'open':(L.got>0?'ing':'');
     const segsHtml=L.segs.map((sn,k)=>{
@@ -864,10 +892,14 @@ const LOCKS=[
   $('boon').innerHTML=LOCKS[0].boon;
 })();
 /* ================= ③ 十五技能墙 ================= */
+if(IN_DAYU_FRAME){
+  var skc=$('skillsCard'); if(skc) skc.style.display='none';
+}else{
 $('skills').innerHTML=SKILLS.map(([n,e])=>{
   const p=SKL_GET(n),lit=p>=100;
   return `<div class="sk ${lit?'lit':''}"><span class="e">${e}</span><small>${n}</small><span class="pct">${lit?'已点亮':p+'%'}</span></div>`;
 }).join('');
+}
 /* ================= ④ 五态成长图 ================= */
 const STATES=[
  {img:'/static/dayu/assets/state-1.jpg',badge:'第一境 · 完全荒废',cap:'<b>太久没有训练，前功尽弃。</b>大脑的能量团已经熄灭——别自责，中央电脑随时等你重新点火。哪怕今天只练 10 分钟，也是重启。'},
@@ -896,6 +928,15 @@ function jumpState(i){
 paintState(CUR_ST);
 /* ================= ⑤ 训练数据查询 · 小日历 ================= */
 (function(){
+  if(IN_DAYU_FRAME){
+    $('calMonth').textContent='同步中…';
+    $('cal').innerHTML='<div class="d" style="grid-column:1/-1;opacity:.65;padding:12px;text-align:center">训练日历同步中…</div>';
+    $('tvRate').textContent='--';
+    $('tvMins').textContent='--';
+    $('tvTalent').textContent='--';
+    $('decayTip').innerHTML='⚡ 等待训练数据同步…';
+    return;
+  }
   const now=today(),y=now.getFullYear(),m=now.getMonth();
   $('calMonth').textContent=y+' 年 '+(m+1)+' 月';
   const first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
@@ -916,6 +957,13 @@ paintState(CUR_ST);
 })();
 /* ================= ⑤ 天梯 · 全国天赋榜 ================= */
 (function(){
+  if(IN_DAYU_FRAME){
+    $('ldDuan').textContent='同步中…';
+    $('ldDuanSub').textContent='正在读取超脑段位';
+    $('ldRank').textContent='--';
+    $('ldLv').textContent='等级 Lv.--';
+    return;
+  }
   let gain=0;
   Object.values(LOG).forEach(r=>{gain+=r.m*r.r/100;});
   const total=Math.round(1180+gain);
@@ -1017,6 +1065,354 @@ function openMedal(i){
   }, true);
   // personal test expand -> go real talent
   window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+<script>
+/** 接入 GET /api/growth/console — 动态刷新天梯 / 液晶 / 四境 / 经验 */
+(function () {
+  var LOCK_META = {
+    zhuji: {
+      img: '/static/dayu/assets/lock-t.png',
+      c: 'gold',
+      boon: '🎉 <b>筑基期已圆满！</b>正式解锁：<b>小助教全部权限</b> · 张宇老师入门弟子<b>「拜师帖」</b> · <b>会场小助教</b>身份 · <b>传承特使</b>勋章 🏅',
+      rwd: ''
+    },
+    kaiqiao: {
+      img: '/static/dayu/assets/lock2-t.png',
+      c: 'blue',
+      rwd: '圆满得：盲盒×2＋传承勋章 🏅'
+    },
+    rongtong: {
+      img: '/static/dayu/assets/lock3-t.png',
+      c: 'teal',
+      rwd: '圆满得：终身免门票＋盲盒×5＋学神勋章 🎖️'
+    },
+    jianfeng: {
+      img: '/static/dayu/assets/lock4-t.png',
+      c: 'purple',
+      rwd: '圆满得：张宇老师内门弟子＋盲盒×10＋最高身份勋章 👑'
+    }
+  };
+  var TCI = { 赢者: '#E05252', 思者: '#3E8E5A', 德者: '#A0754A', 行者: '#C9A227', 学者: '#4A7EC2' };
+  var TN1 = { 赢者: '赢', 思者: '思', 德者: '德', 行者: '行', 学者: '学' };
+
+  function el(id) { return document.getElementById(id); }
+
+  function applyEnergy(data) {
+    var xp = data.xp || {};
+    var en = data.energy || {};
+    var val = en.label != null ? en.label : String(Math.round(xp.total_xp || 0));
+    var pct = Math.max(0, Math.min(100, Number(xp.bar_pct || 0)));
+    if (el('enVal')) el('enVal').textContent = val;
+    if (el('enBar')) el('enBar').style.width = pct + '%';
+  }
+
+  function applyLcd(data) {
+    var lcd = data.lcd || {};
+    var xp = data.xp || lcd.xp || {};
+    var tier = data.tier || {};
+    var rows = [
+      ['今日训练时长', lcd.today_minutes_label || '未开始'],
+      ['今日训练内容', lcd.today_content || '待闯关'],
+      ['今日数据打分', lcd.today_score_label || '— —'],
+      ['累计打卡', (lcd.total_checkin_days != null ? lcd.total_checkin_days : 0) + ' 天'],
+      ['连续天数', (lcd.streak_days != null ? lcd.streak_days : 0) + ' 天'],
+      ['已点亮技能', (lcd.lit_skills != null ? lcd.lit_skills : 0) + ' / ' + (lcd.lit_skills_total || 5)]
+    ];
+    var levelLabel = lcd.current_label || ('Lv.' + (tier.level || 1) + ' · ' + (tier.duan_label || ''));
+    var adv = lcd.advice || '';
+    var box = el('lcdData');
+    if (!box) return;
+    box.innerHTML = '<div class="lcd-grid">' + rows.map(function (r) {
+      return '<div class="lg"><span>▸ ' + r[0] + '</span><b>' + r[1] + '</b></div>';
+    }).join('') +
+      '<div class="lg full hot"><span>▸ 当前段位</span><b>' + levelLabel + '</b>' +
+      '<span style="margin-top:5px">▸ 经验条 ' + Math.round(xp.bar_pct || 0) + '%</span>' +
+      '<b style="font-weight:700;font-size:10.5px;line-height:1.7;color:#F5D576">' +
+      '过程 ' + Math.round(xp.process_xp || 0) + ' · 结果 ' + Math.round(xp.result_xp || 0) +
+      '</b>' +
+      '<span style="margin-top:5px">▸ 下次训练建议</span>' +
+      '<b style="font-weight:700;font-size:10.5px;line-height:1.7;color:#F5D576">' + adv + '</b></div></div>';
+
+    if (el('lvNo')) el('lvNo').textContent = 'Lv.' + (tier.level || 1);
+    if (el('lvBar')) el('lvBar').style.width = Math.max(0, Math.min(100, Number(xp.bar_pct || 0))) + '%';
+    if (el('lvCum')) el('lvCum').innerHTML = '经验累计 <b>' + Math.round(xp.total_xp || 0) + '</b>';
+    if (el('lvNext')) {
+      el('lvNext').innerHTML = (tier.level >= 9)
+        ? '已满段'
+        : ('升段靠连续达标 · 当前 ' + (tier.duan_label || ''));
+    }
+  }
+
+  function applyLocks(data) {
+    var locks = data.locks || [];
+    var host = el('locks');
+    if (!host || !locks.length) return;
+    var openBoon = '';
+    host.innerHTML = locks.map(function (L) {
+      var meta = LOCK_META[L.key] || LOCK_META.zhuji;
+      var n = L.total || (L.segs && L.segs.length) || 1;
+      var got = L.filled || 0;
+      var cls = L.open ? 'open' : (got > 0 ? 'ing' : '');
+      var segs = L.segs || [];
+      var segsHtml = segs.map(function (sn, k) {
+        var on = k < got;
+        return '<div class="lkseg ' + (on ? 'got' : 'miss') + '" style="top:' + (100 * k / n).toFixed(2) + '%;height:' + (100 / n).toFixed(2) + '%">' +
+          '<div class="lkimg" style="height:' + (n * 100) + '%;top:' + (-k * 100) + '%;background-image:url(' + meta.img + ')"></div></div>';
+      }).join('');
+      var pills = segs.map(function (sn, k) {
+        return '<span class="sg ' + (k < got ? 'g' : 'm') + '">' + sn + (k < got ? ' ✓' : '') + '</span>';
+      }).join('');
+      if (L.open && meta.boon) openBoon = meta.boon;
+      return '<div class="lkcell ' + cls + '" data-c="' + meta.c + '"><div class="lkstack">' + segsHtml + '</div>' +
+        '<div class="lkinfo"><div class="ln">' + (L.name || '') + '</div>' +
+        '<div class="lksegs">' + pills + '</div>' +
+        (meta.rwd && !L.open ? '<div class="lkrwd">' + meta.rwd + '</div>' : '') +
+        '</div></div>';
+    }).join('');
+    if (el('boon')) el('boon').innerHTML = openBoon || '';
+
+    // 同步勋章点亮（开锁数量）
+    var openN = locks.filter(function (x) { return x.open; }).length;
+    if (typeof MEDALS !== 'undefined' && el('medals')) {
+      el('medals').innerHTML = MEDALS.map(function (m, i) {
+        var won = openN >= m.need, almost = !won && openN === m.need - 1;
+        return '<div class="medal ' + (won ? 'won' : almost ? 'almost' : '') + '" onclick="openMedal(' + i + ')">' +
+          '<img src="' + m.img + '" alt="' + m.name + '"><b>' + m.name + '</b>' +
+          '<small>' + (won ? '已获得 · 点看权益' : almost ? '再开 1 锁点亮' : m.sub) + '</small></div>';
+      }).join('');
+    }
+    // 覆盖 LOCKS 供 openMedal 使用
+    if (typeof LOCKS !== 'undefined') {
+      locks.forEach(function (L, i) {
+        if (LOCKS[i]) {
+          LOCKS[i].open = !!L.open;
+          LOCKS[i].got = L.filled || 0;
+          LOCKS[i].segs = L.segs || LOCKS[i].segs;
+        }
+      });
+    }
+  }
+
+  function applyLadder(data) {
+    var ladder = data.ladder || {};
+    var me = ladder.me || {};
+    var tier = data.tier || {};
+    if (el('ldDuan')) el('ldDuan').textContent = me.duan_label || tier.duan_label || '筑基期·一段';
+    if (el('ldDuanSub')) el('ldDuanSub').textContent = me.subtitle || '我的超脑段位';
+    if (el('ldRank')) el('ldRank').textContent = me.rank != null ? ('第 ' + me.rank + ' 名') : '--';
+    if (el('ldLv')) el('ldLv').textContent = '等级 Lv.' + (me.level || tier.level || 1);
+
+    var list = ladder.top10 || [];
+    var refresh = ladder.refresh || {};
+    var html = list.map(function (x, i) {
+      var talent = x.talent || '';
+      var tc = TCI[talent] || '#8B93A5';
+      var tn = TN1[talent] || '·';
+      return '<div class="li ' + (i < 3 ? 'top' : '') + ' ' + (x.me ? 'me' : '') + '">' +
+        '<span class="rk">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (x.rank || i + 1)) + '</span>' +
+        '<span class="nm">' + (x.name || '') + (x.me ? '（我）' : '') + '</span>' +
+        '<span class="tmid"><span class="tc" style="border-color:' + tc + ';color:' + tc + '">' + tn + '</span>' +
+        (talent || '学员') + ' · <b>' + (x.level || 1) + ' 级</b></span>' +
+        '<span class="duan">' + (x.duan_short || '') + '</span></div>';
+    }).join('');
+    html += '<div style="text-align:center;font-size:9.5px;color:#5A6274;margin-top:8px">本机榜 · 每天 24:00 刷新' +
+      (refresh.as_of ? ' · 基准 ' + String(refresh.as_of).slice(0, 16).replace('T', ' ') : '') +
+      ' · 同分同名次</div>';
+    html += '<div style="margin-top:12px"><img src="/static/dayu/assets/ladder-reward.jpg" alt="月度天梯榜盲盒奖励" style="width:100%;border-radius:14px;display:block;border:1px solid rgba(245,213,118,.25)"><div style="text-align:center;font-size:9.5px;color:#8B93A5;margin-top:6px">🎁 每月前十名奖励盲盒 · 第一名 3 个 · 第二名 2 个 · 第三名与第 4-10 名各 1 个</div></div>';
+    if (el('ldList')) el('ldList').innerHTML = html;
+  }
+
+  function applyMonth(data) {
+    var month = data.month || {};
+    var xp = data.xp || {};
+    var y = month.year || (new Date()).getFullYear();
+    var m = (month.month || ((new Date()).getMonth() + 1)) - 1;
+    var dayMap = {};
+    (month.days || []).forEach(function (d) {
+      if (d && d.date) dayMap[d.date] = d;
+    });
+    if (el('calMonth')) el('calMonth').textContent = y + ' 年 ' + (m + 1) + ' 月';
+    var first = new Date(y, m, 1).getDay();
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    var today = new Date();
+    var html = ['日', '一', '二', '三', '四', '五', '六'].map(function (d) {
+      return '<div class="dow">' + d + '</div>';
+    }).join('');
+    var i;
+    for (i = 0; i < first; i++) html += '<div class="d"></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+      var key = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      var rec = dayMap[key];
+      var isToday = (today.getFullYear() === y && today.getMonth() === m && today.getDate() === d);
+      html += '<div class="d ' + (rec ? 'on' : '') + ' ' + (isToday ? 'today' : '') + '">' + d +
+        (rec && rec.minutes ? ('<em>' + rec.minutes + '′</em>') : '') + '</div>';
+    }
+    if (el('cal')) el('cal').innerHTML = html;
+    if (el('tvRate')) el('tvRate').textContent = (month.month_rate != null ? month.month_rate : 0) + '%';
+    if (el('tvMins')) el('tvMins').textContent = String(month.month_minutes != null ? month.month_minutes : 0);
+    var xpTotal = month.xp_total != null ? month.xp_total : Math.round(xp.total_xp || 0);
+    if (el('tvTalent')) el('tvTalent').textContent = String(xpTotal);
+    if (el('decayTip')) {
+      el('decayTip').innerHTML = '⚡ <b>经验条</b>：过程来自规划训练分钟，结果来自打卡；' +
+        '<b>升段仍以连续达标为准</b>。当前条 ' + Math.round(xp.bar_pct || month.bar_pct || 0) +
+        '% · 累计 ' + xpTotal + ' XP。' +
+        (month.checkin_days ? (' 本月打卡 ' + month.checkin_days + ' 天。') : ' 本月尚无打卡记录。');
+    }
+  }
+
+  function applyReplay(data) {
+    var rp = data && data.replay;
+    if (!rp || typeof rp !== 'object') return;
+    _rpStateLine = rp.state_line || '';
+    if (el('rpState') && _rpStateLine) el('rpState').textContent = _rpStateLine;
+
+    var scenes = rp.scenes || [];
+    if (!scenes.length || typeof RP_SCENES === 'undefined') return;
+    var byKey = {};
+    RP_SCENES.forEach(function (sc) { byKey[sc.key] = sc; });
+    RP_LIST = scenes.map(function (s) {
+      var base = byKey[s.scene_key] || byKey.read || RP_SCENES[0];
+      var sc = {
+        key: s.scene_key || base.key,
+        title: s.title || s.skill || base.title,
+        cand: base.cand,
+        cam: base.cam,
+        build: base.build,
+      };
+      return {
+        sc: sc,
+        pct: Number(s.pct || 0),
+        sk: s.skill || s.title || sc.title,
+        meta: s.meta || '',
+        rule_text: s.rule_text || '',
+        status: s.status || '',
+      };
+    });
+    if (typeof rpPlay === 'function') rpPlay(0);
+
+    // 同步五态成长图当前境（近 30 天打卡）
+    if (rp.realm && rp.realm.index && typeof paintState === 'function') {
+      try { paintState(Number(rp.realm.index)); } catch (e) { /* ignore */ }
+    }
+  }
+
+  function applyConsole(data) {
+    if (!data || typeof data !== 'object') return;
+    window.__dayuConsoleApplied = true;
+    applyEnergy(data);
+    applyLcd(data);
+    applyLocks(data);
+    applyLadder(data);
+    applyMonth(data);
+    applyReplay(data);
+    var sk = el('skillsCard');
+    if (sk) sk.style.display = 'none';
+  }
+
+  function showSyncFail(msg) {
+    if (window.__dayuConsoleApplied) return;
+    if (el('ldDuan')) el('ldDuan').textContent = '同步失败';
+    if (el('ldDuanSub')) el('ldDuanSub').textContent = msg || '请重新进入本页或重新登录';
+    if (el('lcdData')) {
+      el('lcdData').innerHTML = '<div class="lcd-grid"><div class="lg full"><span>▸ 中央电脑</span><b>' +
+        (msg || '数据同步失败') + '</b></div></div>';
+    }
+  }
+
+  /** 同源直拉 API（不依赖 postMessage，解决一直「同步中」） */
+  function fetchConsoleSelf() {
+    var uid = '';
+    var token = '';
+    try {
+      uid = localStorage.getItem('jnao_child_user_id') ||
+        localStorage.getItem('jnao_student_user_id') || '';
+      token = localStorage.getItem('jnao_access_token') ||
+        localStorage.getItem('jnao_session_token') || '';
+      if (!uid) {
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if (snap) {
+          var o = JSON.parse(snap);
+          uid = String((o.student && o.student.userId) || (o.role === 'student' && o.userId) || '') || '';
+          if (!token && o.student && o.student.token) token = o.student.token;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    if (!uid) {
+      showSyncFail('未登录学生账号');
+      return Promise.resolve(false);
+    }
+    var headers = { Accept: 'application/json' };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    return fetch('/api/growth/console?user_id=' + encodeURIComponent(uid), {
+      credentials: 'include',
+      headers: headers,
+    }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      applyConsole(data);
+      return true;
+    }).catch(function (err) {
+      console.warn('[milestone] console fetch failed', err);
+      return false;
+    });
+  }
+
+  function tryParentPayload() {
+    try {
+      if (window.parent && window.parent.__DAYU_CONSOLE__) {
+        applyConsole(window.parent.__DAYU_CONSOLE__);
+        return true;
+      }
+    } catch (e) { /* ignore */ }
+    return false;
+  }
+
+  window.applyDayuConsole = applyConsole;
+  var timer = null;
+  window.addEventListener('message', function (ev) {
+    var d = ev && ev.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.type === 'dayu-console' && d.console) {
+      applyConsole(d.console);
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+    if (d.type === 'dayu-hydrate' && d.console) {
+      applyConsole(d.console);
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+  });
+  function askParent() {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'dayu-ready' }, '*');
+        window.parent.postMessage({ type: 'dayu-console-request' }, '*');
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // 立刻：父页缓存 → 自己拉 API → 再握手
+  if (!tryParentPayload()) {
+    fetchConsoleSelf().then(function (ok) {
+      if (!ok) askParent();
+    });
+  }
+  askParent();
+  var tries = 0;
+  timer = setInterval(function () {
+    if (window.__dayuConsoleApplied) { clearInterval(timer); timer = null; return; }
+    tries += 1;
+    if (tryParentPayload()) { clearInterval(timer); timer = null; return; }
+    if (tries === 2 || tries === 5) fetchConsoleSelf();
+    askParent();
+    if (tries >= 12) {
+      clearInterval(timer);
+      timer = null;
+      showSyncFail('同步超时，请下拉刷新或重新进入');
+    }
+  }, 500);
 })();
 </script>
 

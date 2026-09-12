@@ -586,6 +586,7 @@ def get_tier_brief(db: Session, child_user_id: int) -> dict:
 
     return {
         "overall_tier": overall_tier,
+        "level": overall_tier,  # 与中央电脑 Lv.N 同一字段
         "tier_percent": round(overall_tier / 9 * 100),
         "honor_level": honor,
         "title": title,
@@ -594,6 +595,19 @@ def get_tier_brief(db: Session, child_user_id: int) -> dict:
         "advance_pass": advance_pass,
         "skills": skills,
         "path": path,
+        **_tier_period_fields(overall_tier),
+    }
+
+
+def _tier_period_fields(overall_tier: int) -> dict:
+    from app.services.growth_tier_period import tier_view
+
+    tv = tier_view(overall_tier)
+    return {
+        "period_key": tv["period_key"],
+        "period_name": tv["period_name"],
+        "duan_label": tv["duan_label"],
+        "duan_short": tv["duan_short"],
     }
 
 

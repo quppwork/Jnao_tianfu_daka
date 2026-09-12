@@ -1,20 +1,8 @@
-"""学科答疑 — 是否调用 RAG 知识库"""
+"""学科答疑 RAG 路由 — 兼容旧接口，内部委托 qa_kb_router。"""
 
 from __future__ import annotations
 
-from app.agents.qa.prompt_builder import RAG_KEYWORDS
-
-TEACHING_PATTERNS = (
-    "怎么教",
-    "如何教",
-    "怎么引导",
-    "如何引导",
-    "教学法",
-    "课标",
-    "教案",
-    "教学建议",
-    "课程标准",
-)
+from app.services.qa_kb_router import QaKbPath, resolve_qa_kb_path
 
 
 def should_use_rag(
@@ -24,19 +12,12 @@ def should_use_rag(
     has_image: bool = False,
     use_rag: bool | None = None,
 ) -> bool:
-    if use_rag is False:
-        return False
-    if use_rag is True:
-        return True
-    if has_image:
-        return False
-    text = (message or "").strip()
-    if not text:
-        return False
-    if any(k in text for k in RAG_KEYWORDS):
-        return True
-    if any(p in text for p in TEACHING_PATTERNS):
-        return True
-    if subject and ("怎么" in text or "如何" in text) and len(text) > 12:
-        return True
-    return False
+    return (
+        resolve_qa_kb_path(
+            message,
+            subject=subject,
+            has_image=has_image,
+            use_rag=use_rag,
+        )
+        is not QaKbPath.NONE
+    )

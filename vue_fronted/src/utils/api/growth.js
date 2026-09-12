@@ -38,6 +38,11 @@ export async function fetchGrowthShare(userId) {
   return apiJson(withUser('/api/growth/share', userId))
 }
 
+/** 中央电脑一页汇总：段位/经验/液晶/四境/本机天梯 */
+export async function fetchGrowthConsole(userId) {
+  return apiJson(withUser('/api/growth/console', userId))
+}
+
 export async function fetchAcademicPlan(userId, refresh = false) {
   return apiJson(withUser('/api/growth/academic-plan' + (refresh ? '?refresh=true' : ''), userId))
 }

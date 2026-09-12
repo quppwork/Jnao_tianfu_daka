@@ -6,10 +6,12 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
 .phone{width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;min-height:100vh;min-height:100dvh;height:100vh;height:100dvh;padding-bottom:110px;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}.phone::-webkit-scrollbar{display:none;width:0;height:0}
-.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
-.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8;min-width:0}
 .ptop .brand small{display:block;font-size:12px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
-.acctbtn{display:inline-block;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+.kid-switch{flex:1;min-width:0;max-width:140px;margin:0 4px;background:#131926;border:1.5px solid #2A3040;border-radius:99px;color:#F5D9A8;font-size:13px;font-weight:800;padding:6px 10px;outline:none;appearance:none;text-align:center}
+.kid-switch:disabled{opacity:.55}
+.acctbtn{display:inline-block;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none;flex:none}
 /* 孩子卡 */
 .kid{margin:10px 18px 0;background:linear-gradient(135deg,rgba(201,162,39,.18),rgba(201,162,39,.04));border:1.5px solid rgba(201,162,39,.5);border-radius:18px;padding:14px;display:flex;align-items:center;gap:13px}
 .kid .av{width:54px;height:54px;border-radius:50%;background:#171E2E;border:2px solid #C9A227;display:flex;align-items:center;justify-content:center;font-size:27px;flex:none;position:relative}
@@ -63,34 +65,27 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 
   <div class="ptop">
     <div class="brand">数据分析<small>KID DATA · 训练看板</small></div>
+    <select class="kid-switch" id="kidSwitch" aria-label="切换孩子" hidden></select>
     <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
   </div>
 
-  <div class="kid">
-    <div class="av">🧒<span class="tb" title="行者天赋">行</span></div>
-    <div class="inf"><b>张雨晨</b><span>训练账户已绑定 · 数据每天 0 点同步</span></div>
-    <div class="duan"><b>筑基期·三段</b><span>全国段位榜 第9名</span></div>
+  <div class="kid" id="kidCard">
+    <div class="av" id="kidAv">🧒<span class="tb" id="kidTalent" title="">·</span></div>
+    <div class="inf"><b id="kidName">同步中…</b><span id="kidSync">训练账户已绑定 · 正在同步</span></div>
+    <div class="duan"><b id="kidDuan">--</b><span id="kidRank">本机段位榜</span></div>
   </div>
 
-  <div class="ov">
-    <div><b>286′<em>+12%</em></b><span>本周训练时长</span></div>
-    <div><b>89%<em>+4%</em></b><span>本周有效率</span></div>
-    <div><b>1920<em>+86</em></b><span>累计天赋值</span></div>
-    <div><b>83%<em class="dn">-8%</em></b><span>冲段焦虑预警·近3日效率</span></div>
+  <div class="ov" id="metricsOv">
+    <div><b id="mWeekMin">--</b><span>本周训练时长</span></div>
+    <div><b id="mWeekEff">--</b><span>本周有效率</span></div>
+    <div><b id="mXp">--</b><span>累计经验</span></div>
+    <div><b id="mAnxiety">--</b><span id="mAnxietyLab">冲段焦虑预警·近3日效率</span></div>
   </div>
 
   <div class="card">
     <div class="ct">📈 本周训练时长趋势</div>
     <div class="cs">单位：分钟 · 蓝色为今天</div>
-    <div class="bars">
-      <div class="b"><i style="height:45%"></i><span>周一</span></div>
-      <div class="b"><i style="height:62%"></i><span>周二</span></div>
-      <div class="b dn"><i style="height:38%"></i><span>周三</span></div>
-      <div class="b"><i style="height:74%"></i><span>周四</span></div>
-      <div class="b dn"><i style="height:55%"></i><span>周五</span></div>
-      <div class="b"><i style="height:88%"></i><span>周六</span></div>
-      <div class="b today"><i style="height:66%"></i><span>今天</span></div>
-    </div>
+    <div class="bars" id="weekBars"></div>
   </div>
 
   <div class="card">
@@ -108,7 +103,7 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 
   <div class="card">
     <div class="ct">🧠 大宇解读</div>
-    <div class="note">📌 近3日有效率从 <b>91% → 83%</b>，大宇判断为「冲段焦虑」：建议三天内不加新关，只做复习巩固；周四训练峰值 <b>88分钟</b> 出现在下午 16-17 点，这是孩子的黄金时段，重要训练可固定在这个时间。</div>
+    <div class="note" id="insightNote">📌 正在根据本周训练数据生成解读…</div>
   </div>
 
   <a class="cclink" href="milestone.html">
@@ -205,6 +200,184 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
       nav(map[file]);
     }
   }, true);
+
+  var FOCUS_KEY = 'jnao_parent_focus_child_id';
+  function $(id){ return document.getElementById(id); }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        return (o.parent && o.parent.userId) || (o.role === 'parent' && o.userId) || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function authHeaders(){
+    var h = { Accept: 'application/json' };
+    try{
+      var tok = localStorage.getItem('jnao_access_token') ||
+        localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){
+          var o = JSON.parse(snap);
+          if(o.parent && o.parent.token) tok = o.parent.token;
+          else if(o.token) tok = o.token;
+        }
+      }
+      if(tok) h.Authorization = 'Bearer ' + tok;
+    }catch(e){}
+    return h;
+  }
+  function queryChildId(){
+    try{
+      var u = new URL(location.href);
+      var q = u.searchParams.get('child_id');
+      if(q) return parseInt(q, 10) || 0;
+    }catch(e){}
+    try{
+      var saved = localStorage.getItem(FOCUS_KEY);
+      if(saved) return parseInt(saved, 10) || 0;
+    }catch(e){}
+    return 0;
+  }
+  function fmtDelta(n){
+    if(n == null || n === '') return '';
+    var cls = n < 0 ? 'dn' : '';
+    return '<em class="' + cls + '">' + (n > 0 ? '+' : '') + n + '</em>';
+  }
+  function setMetric(el, mainHtml, delta){
+    if(!el) return;
+    if(mainHtml == null){ el.innerHTML = '--'; return; }
+    el.innerHTML = mainHtml + fmtDelta(delta);
+  }
+  function applyDashboard(data){
+    if(!data) return;
+    var child = data.child || {};
+    var tier = data.tier || {};
+    var m = data.metrics || {};
+    if($('kidName')) $('kidName').textContent = child.nickname || '学员';
+    if($('kidSync')) $('kidSync').textContent = data.sync_hint || '实时更新';
+    if($('kidDuan')) $('kidDuan').textContent = tier.duan_label || ('Lv.' + (tier.level || 1));
+    if($('kidRank')) $('kidRank').textContent = tier.rank_label || '本机段位榜';
+    var tc = $('kidTalent');
+    if(tc){ tc.textContent = child.talent_char || '·'; tc.title = child.talent || ''; }
+    var wm = m.week_minutes || {};
+    var we = m.week_efficiency || {};
+    var xp = m.xp_total || {};
+    var ax = m.anxiety || {};
+    setMetric($('mWeekMin'), wm.value != null ? (wm.value + '′') : null, wm.delta_pct);
+    setMetric($('mWeekEff'), we.value != null ? (we.value + '%') : null, we.delta_pct);
+    setMetric($('mXp'), xp.value != null ? String(xp.value) : null, xp.delta);
+    setMetric($('mAnxiety'), ax.value != null ? (ax.value + '%') : (ax.active ? '预警' : null), ax.delta_pct);
+    if($('mAnxietyLab')){
+      $('mAnxietyLab').textContent = ax.active
+        ? (ax.label || '冲段焦虑预警·近3日效率')
+        : '近3日效率';
+    }
+    var anxCell = $('mAnxiety') && $('mAnxiety').parentElement;
+    if(anxCell){
+      anxCell.style.borderColor = ax.active ? 'rgba(229,83,75,.55)' : '';
+      anxCell.style.boxShadow = ax.active ? '0 0 0 1px rgba(229,83,75,.25)' : '';
+    }
+    var bars = data.week_bars || [];
+    var host = $('weekBars');
+    if(host){
+      host.innerHTML = bars.length ? bars.map(function(b){
+        var h = Math.max(b.height_pct || 0, b.minutes ? 8 : 4);
+        var cls = 'b' + (b.is_today ? ' today' : '') + (!b.has_checkin ? ' dn' : '');
+        return '<div class="' + cls + '"><i style="height:' + h + '%"></i><span>' + (b.label || '') + '</span></div>';
+      }).join('') : '<div class="b dn"><i style="height:8%"></i><span>暂无</span></div>';
+    }
+    var insight = (data.insight && data.insight.text) || '';
+    if($('insightNote')){
+      $('insightNote').innerHTML = insight
+        ? ('📌 ' + String(insight).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br/>'))
+        : '📌 本周暂无足够数据生成解读，完成几次打卡后再来看。';
+    }
+    var list = data.children || [];
+    var sw = $('kidSwitch');
+    if(sw && list.length > 1){
+      sw.hidden = false;
+      sw.innerHTML = list.map(function(c){
+        var sel = String(c.id) === String(child.id) ? ' selected' : '';
+        return '<option value="' + c.id + '"' + sel + '>' + (c.nickname || '学员') + '</option>';
+      }).join('');
+    } else if(sw){ sw.hidden = true; }
+    try{ localStorage.setItem(FOCUS_KEY, String(child.id)); }catch(e){}
+  }
+  async function loadDashboard(childId){
+    var pid = parentUserId();
+    if(!pid){
+      if($('kidName')) $('kidName').textContent = '未登录';
+      if($('insightNote')) $('insightNote').textContent = '请先登录家长账号。';
+      return;
+    }
+    if(!childId){
+      try{
+        var lr = await fetch('/api/parent/children?user_id=' + encodeURIComponent(pid), {
+          credentials: 'include', headers: authHeaders(),
+        });
+        if(lr.ok){
+          var lb = await lr.json();
+          var kids = lb.children || [];
+          if(kids.length) childId = kids[0].id;
+        }
+      }catch(e){}
+    }
+    if(!childId){
+      if($('kidName')) $('kidName').textContent = '暂无孩子';
+      if($('insightNote')) $('insightNote').textContent = '请先绑定孩子训练账户。';
+      return;
+    }
+    try{
+      // 先拉指标（快），解读单独补（豆包可能数秒）——不必为首屏上 Redis
+      var base =
+        '/api/parent/children/' + encodeURIComponent(childId) +
+        '/dashboard?user_id=' + encodeURIComponent(pid);
+      var res = await fetch(base + '&insight=false', {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      applyDashboard(data);
+      if($('insightNote')) $('insightNote').textContent = '📌 大宇正在解读本周数据…';
+      fetch(base + '&insight=true', { credentials: 'include', headers: authHeaders() })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(full){
+          if(!full) return;
+          if(full.insight) data.insight = full.insight;
+          // 指标可能已在首包；只刷新解读与可能更新的字段
+          applyDashboard(Object.assign({}, data, {
+            insight: full.insight || data.insight,
+            metrics: full.metrics || data.metrics,
+            week_bars: full.week_bars || data.week_bars,
+            tier: full.tier || data.tier,
+            child: full.child || data.child,
+            sync_hint: full.sync_hint || data.sync_hint,
+          }));
+        })
+        .catch(function(){
+          if($('insightNote') && (!$('insightNote').textContent || $('insightNote').textContent.indexOf('正在解读') >= 0)){
+            $('insightNote').textContent = '📌 本周数据已同步，解读稍后可再试。';
+          }
+        });
+    }catch(err){
+      if($('kidName')) $('kidName').textContent = '同步失败';
+      if($('insightNote')) $('insightNote').textContent = '看板暂时不可用，请稍后重试。';
+    }
+  }
+  var swEl = $('kidSwitch');
+  if(swEl){
+    swEl.addEventListener('change', function(){
+      var id = parseInt(swEl.value, 10);
+      if(id) loadDashboard(id);
+    });
+  }
+  loadDashboard(queryChildId());
 })();
 </script>
 </body></html>

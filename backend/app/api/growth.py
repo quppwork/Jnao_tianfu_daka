@@ -92,6 +92,21 @@ def get_tier(
     )
 
 
+@router.get("/console")
+def get_console(
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """中央电脑一页汇总：段位/经验条/液晶/四境锁/本机天梯。技能墙第一期不返回。"""
+    from app.services import growth_console_service
+
+    return _cached_growth(
+        child_user_id,
+        "console",
+        lambda: growth_console_service.get_console(db, child_user_id),
+    )
+
+
 @router.get("/summary")
 def get_summary(
     child_user_id: int = Depends(get_authenticated_student),

@@ -292,6 +292,9 @@ async def chat_stream(
         if kind == "meta":
             meta = payload if isinstance(payload, dict) else {}
             continue
+        if kind == "status":
+            yield ("status", payload)
+            continue
         if kind == "error":
             yield ("error", payload)
             return

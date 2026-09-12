@@ -48,6 +48,16 @@ def build_qa_user_message(message: str, learner_context: str) -> str:
     return message
 
 
+_METHOD_KB_HEADER = (
+    "—— 平台特殊训练方法（知识库）——\n"
+    "以下为平台知识库检索到的练法/学法资料。回答学法或训练相关问题时："
+    "必须优先用这些方法组织建议，强调系统训练与正确步骤，不要改成普通刷题/题海套路；"
+    "资料不足时再补充简短学科步骤。用适合学员学段的语言改写，不要照抄原文。"
+)
+
+_LEGACY_RAG_HEADER = "以下参考资料供你核对后，用适合学员学段的语言改写回答（不要照抄）："
+
+
 def build_qa_system_prompt(
     *,
     school_stage: str = "primary_high",
@@ -61,8 +71,12 @@ def build_qa_system_prompt(
     coach_context: str | None = None,
     memory_digest: str | None = None,
     strategy_block: str | None = None,
+    rag_kind: str | None = None,
 ) -> str:
-    """公开系统提示 — 不含学员 PII；grade/age/talent 等请用 build_learner_context_block。"""
+    """公开系统提示 — 不含学员 PII；grade/age/talent 等请用 build_learner_context_block。
+
+    rag_kind: \"method\" | \"legacy\" | None — 控制知识库注入口吻。
+    """
     del grade, age, talent_primary, report_json, ocr_preview, coach_context
 
     lines = [BASE_PERSONA, STAGE_RULES.get(school_stage, STAGE_RULES["primary_high"])]
@@ -86,6 +100,10 @@ def build_qa_system_prompt(
     if memory_digest:
         lines.append(memory_digest)
     if rag_context:
-        lines.append("以下参考资料供你核对后，用适合学员学段的语言改写回答（不要照抄）：")
+        kind = (rag_kind or "legacy").strip().lower()
+        if kind == "method":
+            lines.append(_METHOD_KB_HEADER)
+        else:
+            lines.append(_LEGACY_RAG_HEADER)
         lines.append(rag_context)
     return "\n".join(lines)

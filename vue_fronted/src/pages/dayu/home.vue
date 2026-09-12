@@ -64,115 +64,41 @@
         <view v-else class="asd-empty"><text>暂无其他账户</text></view>
       </view>
 
-      <!-- 对话独立滚动框 -->
-      <view class="chat-panel">
-        <scroll-view
-          class="chat-scroll"
-          scroll-y
-          :scroll-into-view="scrollInto"
-          scroll-with-animation
-          :enable-flex="true"
-          :show-scrollbar="false"
-          :enhanced="true"
-        >
-          <view class="chat-stack">
-            <view v-if="showBootstrapCard" class="chat-card">
-              <view class="chat-head">
-                <view class="av" />
-                <view v-if="situationLabel" class="tag">今日：{{ situationLabel }}</view>
-              </view>
-              <text class="welcome">{{ welcomeText }}</text>
-              <view class="warn">⚠️ 训练为「{{ currentUserDisplay }}」准备。不是本人？点顶部「{{ currentUserDisplay }} ▾」切换账号，别混了数据。</view>
-              <view
-                v-for="(act, ai) in welcomeActions"
-                :key="'w' + ai"
-                class="go"
-                @tap="runNavigateAction(act)"
-              >
-                <text>{{ act.label || actionLabel(act.target) }}</text>
-              </view>
+      <!-- 对话独立滚动框（与家长端共用 DayuChatPanel） -->
+      <DayuChatPanel
+        accent="green"
+        :light="isLight"
+        v-model="inputText"
+        :messages="messages"
+        :loading="loading"
+        :thinking-hint="thinkingHint"
+        :scroll-into="scrollInto"
+        placeholder="输入问题…"
+        @send="sendMsg"
+        @stop="stopStream"
+        @navigate="runNavigateAction"
+        @confirm="onConfirmFromPanel"
+        @dismiss="onDismissFromPanel"
+      >
+        <template #intro>
+          <view v-if="showBootstrapCard" class="chat-card">
+            <view class="chat-head">
+              <view class="av" />
+              <view v-if="situationLabel" class="tag">今日：{{ situationLabel }}</view>
             </view>
-
+            <text class="welcome">{{ welcomeText }}</text>
+            <view class="warn">⚠️ 训练为「{{ currentUserDisplay }}」准备。不是本人？点顶部「{{ currentUserDisplay }} ▾」切换账号，别混了数据。</view>
             <view
-              v-for="(m, i) in messages"
-              :id="'msg' + i"
-              :key="i"
-              class="msg-row"
-              :class="{ user: m.role === 'user' }"
+              v-for="(act, ai) in welcomeActions"
+              :key="'w' + ai"
+              class="go"
+              @tap="runNavigateAction(act)"
             >
-              <view v-if="m.role !== 'user'" class="av sm" />
-              <view class="bubble" :class="m.role === 'user' ? 'me' : 'ai'">
-                <view
-                  v-if="m.role === 'ai' && loading && i === messages.length - 1 && !m.text"
-                  class="thinking"
-                >
-                  <text>agent思考中…</text>
-                </view>
-                <view
-                  v-else-if="m.role === 'ai' && m.text"
-                  class="rich"
-                  v-html="formatGuideRichHtml(m.text)"
-                />
-                <text v-else-if="m.text">{{ m.text }}</text>
-                <view v-if="m.role === 'ai' && m.actions?.length" class="act-row">
-                  <template v-for="(act, ai) in m.actions" :key="ai">
-                    <view
-                      v-if="act.type === 'navigate'"
-                      class="go sm"
-                      @tap="runNavigateAction(act)"
-                    >
-                      <text>{{ act.label || actionLabel(act.target) }}</text>
-                    </view>
-                    <view v-else-if="act.type === 'confirm'" class="confirm-wrap">
-                      <text v-if="act.preview" class="preview">{{ act.preview }}</text>
-                      <view class="act-row">
-                        <view
-                          class="go sm"
-                          :class="{ muted: act._done || act._dismissed }"
-                          @tap="runConfirmAction(m, ai, act)"
-                        >
-                          <text>{{ act._done ? '已记下 ✓' : (act.label || '确认记下') }}</text>
-                        </view>
-                        <view
-                          v-if="!act._done && !act._dismissed"
-                          class="go sm ghost"
-                          @tap="dismissConfirmAction(m, ai)"
-                        >
-                          <text>{{ act.cancel_label || '暂不' }}</text>
-                        </view>
-                      </view>
-                    </view>
-                  </template>
-                </view>
-              </view>
+              <text>{{ act.label || actionLabel(act.target) }}</text>
             </view>
-            <view id="chatEnd" class="chat-end" />
           </view>
-        </scroll-view>
-
-        <!-- 提问条：贴在对话框底部，与后端 guide chat 同步 -->
-        <view class="chat-ask">
-          <input
-            class="box"
-            v-model="inputText"
-            type="text"
-            placeholder="输入问题…"
-            :disabled="loading"
-            confirm-type="send"
-            :adjust-position="true"
-            :hold-keyboard="true"
-            maxlength="2000"
-            @confirm="sendMsg"
-          />
-          <view
-            class="send"
-            :class="{ stop: loading, disabled: !canSend && !loading }"
-            @tap="loading ? stopStream() : sendMsg()"
-          >
-            <text>{{ loading ? '■' : '➤' }}</text>
-          </view>
-        </view>
-      </view>
+        </template>
+      </DayuChatPanel>
 
       <!-- 底栏 -->
       <view class="foot">
@@ -193,6 +119,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
+import DayuChatPanel from '@/components/dayu-chat-panel/dayu-chat-panel.vue'
 import {
   apiJson,
   applySwitchChildSession,
@@ -210,7 +137,6 @@ import {
   switchChildAccount,
   withUser,
 } from '@/utils/userApi.js'
-import { formatGuideRichHtml } from '@/utils/chatRichText.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 import { MAIN_TABS, HOME_CHIPS, switchMainTab } from '@/utils/mainTabs.js'
 import { goLinkedParentHome } from '@/utils/switchLinkedAccount.js'
@@ -222,7 +148,6 @@ import {
   normalizeNavigateActions,
   trimGuideMessages,
 } from '@/utils/guideUi.js'
-import 'katex/dist/katex.min.css'
 
 const FALLBACK_WELCOME = '你好！我是张宇老师的智能体——大宇智能体，你的专属 AI 教练。点上方入口开始，或直接问我。'
 
@@ -238,6 +163,7 @@ const welcomeActions = ref([])
 const messages = ref([])
 const inputText = ref('')
 const loading = ref(false)
+const thinkingHint = ref('agent思考中…')
 const guideSessionId = ref(null)
 const scrollInto = ref('')
 const assessmentId = ref(null)
@@ -258,8 +184,6 @@ const showBootstrapCard = computed(() => {
   const hasUser = messages.value.some((m) => m.role === 'user')
   return !hasUser
 })
-
-const canSend = computed(() => !!inputText.value.trim() && !loading.value)
 
 function toggleTheme() {
   isLight.value = !isLight.value
@@ -375,6 +299,11 @@ async function openPage(name, query) {
 
 function runNavigateAction(act) {
   if (act?.type === 'confirm') return
+  if (act?.path) {
+    const url = act.path
+    uni.navigateTo({ url, fail: () => uni.reLaunch({ url }) })
+    return
+  }
   if (act?.target) openPage(act.target, act?.query)
 }
 
@@ -397,6 +326,14 @@ function dismissConfirmAction(msg, actIndex) {
   const act = msg?.actions?.[actIndex]
   if (!act || act.type !== 'confirm') return
   act._dismissed = true
+}
+
+function onConfirmFromPanel({ message, index, action }) {
+  runConfirmAction(message, index, action)
+}
+
+function onDismissFromPanel({ message, index }) {
+  dismissConfirmAction(message, index)
 }
 
 function applyBootstrap(data) {
@@ -458,6 +395,7 @@ async function sendMsg() {
   const aiIdx = messages.value.length
   messages.value.push({ role: 'ai', text: '', actions: [] })
   loading.value = true
+  thinkingHint.value = 'agent思考中…'
   abortRequested = false
   scrollChat()
   try {
@@ -471,6 +409,10 @@ async function sendMsg() {
       text,
       guideSessionId.value,
       {
+        onStatus(msg) {
+          if (abortRequested || !msg) return
+          thinkingHint.value = String(msg)
+        },
         onToken(chunk) {
           if (abortRequested) return
           messages.value[aiIdx].text += chunk
@@ -506,6 +448,7 @@ async function sendMsg() {
     chatAbort = null
     abortRequested = false
     loading.value = false
+    thinkingHint.value = 'agent思考中…'
   }
   scrollChat()
 }
@@ -962,7 +905,45 @@ onMounted(async () => {
   border-color: #1956d1;
   color: #103880;
 }
-.thinking { color: #8b93a5; font-size: 13px; }
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 2px 0;
+}
+.thinking-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6fcf8e;
+  opacity: 0.35;
+  animation: thinkingBounce 1.15s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.3s; }
+.thinking-label {
+  color: #8b93a5;
+  font-size: 13px;
+  font-weight: 600;
+  animation: thinkingPulse 1.4s ease-in-out infinite;
+}
+.app.lt .thinking-dot { background: #30904f; }
+.app.lt .thinking-label { color: #5a6274; }
+@keyframes thinkingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes thinkingPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
 .act-row { display: flex; flex-wrap: wrap; align-items: center; }
 .confirm-wrap { width: 100%; }
 .preview {

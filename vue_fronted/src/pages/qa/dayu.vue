@@ -17,7 +17,13 @@
     <view class="mstage">
       <image class="mstage-img" :src="activeMentor.gif || activeMentor.ava" mode="aspectFill" />
       <view class="mgrad" />
-      <view v-if="loading" class="mlive"><view class="dot" /><text>正在回复你…</text></view>
+      <view v-if="loading" class="mlive">
+        <view class="dot" />
+        <text class="mlive-t">正在回复你</text>
+        <text class="mlive-dots" aria-hidden="true">
+          <text class="mlive-dot">.</text><text class="mlive-dot">.</text><text class="mlive-dot">.</text>
+        </text>
+      </view>
       <view class="mwho">
         <text class="mwho-name">{{ displayName }}</text>
         <text v-if="activeMentor.tag" class="mwho-tag">{{ activeMentor.tag }}</text>
@@ -112,7 +118,16 @@
                 :nodes="formatHtml(m.text)"
               />
               <text v-else-if="m.text" class="tx-text">{{ m.text }}</text>
-              <text v-else-if="loading && i === messages.length - 1 && m.role !== 'user'" class="thinking">…</text>
+              <view
+                v-else-if="loading && i === messages.length - 1 && m.role !== 'user'"
+                class="thinking"
+              >
+                <view class="thinking-dot" />
+                <text class="thinking-t">正在回复你</text>
+                <text class="thinking-ellipsis" aria-hidden="true">
+                  <text class="te">.</text><text class="te">.</text><text class="te">.</text>
+                </text>
+              </view>
             </view>
           </view>
         </view>
@@ -557,10 +572,11 @@ async function sendMsg() {
   inputText.value = ''
   pendingImage.value = null
   loading.value = true
+  const aiIdx = messages.value.length
+  messages.value.push({ role: 'assistant', text: '' })
   await nextTick()
   scrollChat()
 
-  let aiIdx = -1
   try {
     const uid = await ensureChildUser()
     let imageId = null
@@ -572,11 +588,6 @@ async function sendMsg() {
         putQaImageLocal(imageId, displayImageUrl)
       }
     }
-
-    aiIdx = messages.value.length
-    messages.value.push({ role: 'assistant', text: '' })
-    await nextTick()
-    scrollChat()
 
     const { promise, abort } = sendQaMessageStream(
       uid,
@@ -604,11 +615,11 @@ async function sendMsg() {
     await promise
   } catch (e) {
     if (isStreamAborted(e)) {
-      if (aiIdx >= 0) applyStreamStoppedHint(messages, aiIdx)
+      applyStreamStoppedHint(messages, aiIdx)
       return
     }
     const errText = e?.message || '请求失败，请稍后再试'
-    if (aiIdx >= 0 && !messages.value[aiIdx].text) {
+    if (!messages.value[aiIdx]?.text) {
       messages.value[aiIdx].text = `出错了：${errText}`
     } else {
       messages.value.push({ role: 'assistant', text: `出错了：${errText}` })
@@ -731,16 +742,40 @@ onMounted(async () => {
 .app.lt .mgrad { background: linear-gradient(180deg, transparent 55%, rgba(241, 244, 250, 0.82)); }
 .mlive {
   position: absolute; top: 10px; left: 10px;
-  font-size: 10px; font-weight: 900; color: #6fcf8e;
-  background: rgba(0, 0, 0, 0.55); border-radius: 6px; padding: 4px 9px;
-  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 900; color: #6fcf8e;
+  background: rgba(0, 0, 0, 0.55); border-radius: 8px; padding: 5px 10px;
+  display: flex; align-items: center; gap: 6px;
+  z-index: 2;
+  animation: mlivePulse 1.6s ease-in-out infinite;
 }
-.app.lt .mlive { color: #30904f; background: rgba(247, 247, 247, 0.55); }
+.app.lt .mlive { color: #30904f; background: rgba(247, 247, 247, 0.7); }
+.mlive-t { line-height: 1; }
+.mlive-dots { display: inline-flex; width: 14px; letter-spacing: 0; }
+.mlive-dot {
+  display: inline-block;
+  animation: mliveDot 1.2s ease-in-out infinite;
+  opacity: 0.25;
+}
+.mlive-dot:nth-child(2) { animation-delay: 0.2s; }
+.mlive-dot:nth-child(3) { animation-delay: 0.4s; }
 .dot {
   width: 7px; height: 7px; border-radius: 50%; background: currentColor;
-  animation: blink 1.2s infinite;
+  flex: none;
+  box-shadow: 0 0 0 0 rgba(111, 207, 142, 0.55);
+  animation: mliveBlink 1.2s ease-in-out infinite;
 }
-@keyframes blink { 50% { opacity: 0.2; } }
+@keyframes mliveBlink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(111, 207, 142, 0.45); }
+  50% { opacity: 0.35; box-shadow: 0 0 0 5px rgba(111, 207, 142, 0); }
+}
+@keyframes mlivePulse {
+  0%, 100% { opacity: 0.88; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
+}
+@keyframes mliveDot {
+  0%, 80%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
 .mwho {
   position: absolute; left: 12px; bottom: 10px;
   display: flex; align-items: baseline; gap: 8px;
@@ -976,7 +1011,36 @@ onMounted(async () => {
   display: block;
   margin-bottom: 6px;
 }
-.thinking { color: #8b93a5; }
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  color: #6fcf8e;
+  font-size: 13px;
+  font-weight: 700;
+}
+.app.lt .thinking { color: #30904f; }
+.thinking-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+  animation: mliveBlink 1.2s ease-in-out infinite;
+}
+.thinking-t { line-height: 1; }
+.thinking-ellipsis {
+  display: inline-flex;
+  width: 14px;
+}
+.thinking-ellipsis .te {
+  display: inline-block;
+  animation: mliveDot 1.2s ease-in-out infinite;
+  opacity: 0.25;
+}
+.thinking-ellipsis .te:nth-child(2) { animation-delay: 0.2s; }
+.thinking-ellipsis .te:nth-child(3) { animation-delay: 0.4s; }
 
 .inputbar {
   flex-shrink: 0;

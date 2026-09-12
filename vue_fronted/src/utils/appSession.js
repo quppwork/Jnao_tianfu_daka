@@ -42,6 +42,21 @@ export function isPublicPath(path) {
 }
 
 /** @returns {'admin'|'parent'|'student'|null} */
+/** 家长/学生共用页：按当前登录角色鉴权，避免家长进天赋测试被踢回登录 */
+const SHARED_AUTH_PREFIXES = ['/pages/talent/', '/pages/report/', '/pages/plan/']
+
+function inferSharedAuthKind() {
+  try {
+    const snap = readAuthSnapshot()
+    if (snap.role === 'parent' && snap.parent?.userId) return 'parent'
+    if (snap.role === 'student' && snap.student?.userId) return 'student'
+    if (snap.parent?.userId && !snap.student?.userId) return 'parent'
+    if (snap.student?.userId) return 'student'
+    if (snap.parent?.userId) return 'parent'
+  } catch (_) { /* ignore */ }
+  return 'student'
+}
+
 export function inferAuthKindFromPath(path) {
   const p = normalizePath(path)
   // 冷启动常见 route=/ 或空：勿当成学生业务页去鉴权（会误弹「请先登录孩子账号」）
@@ -49,6 +64,9 @@ export function inferAuthKindFromPath(path) {
   if (!p.startsWith('/pages/')) return null
   if (p.startsWith('/pages/admin/')) return 'admin'
   if (p.startsWith('/pages/parent/')) return 'parent'
+  if (SHARED_AUTH_PREFIXES.some((prefix) => p.startsWith(prefix))) {
+    return inferSharedAuthKind()
+  }
   return 'student'
 }
 

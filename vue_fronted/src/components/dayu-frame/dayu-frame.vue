@@ -32,6 +32,11 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  /** 有值时 dayu-back 直达该页（做什么报告回什么页） */
+  backPath: {
+    type: String,
+    default: '',
+  },
 })
 
 const emit = defineEmits(['parent', 'student', 'account', 'theme'])
@@ -43,6 +48,9 @@ let frameReady = false
 function postToFrame(payload) {
   // #ifdef H5
   try {
+    if (payload && payload.type === 'dayu-console' && payload.console) {
+      window.__DAYU_CONSOLE__ = payload.console
+    }
     let win = null
     const el = iframeRef.value
     if (el) {
@@ -140,6 +148,9 @@ function pushHydrate() {
     situationLabel: h.situationLabel || '',
     welcome: h.welcome || '',
   })
+  if (h.console) {
+    postToFrame({ type: 'dayu-console', console: h.console })
+  }
   pushUsage()
 }
 
@@ -204,7 +215,17 @@ function handleMessage(ev) {
     pushUsage()
     return
   }
+  if (data.type === 'dayu-console-request') {
+    frameReady = true
+    pushHydrate()
+    return
+  }
   if (data.type === 'dayu-back') {
+    const target = String(props.backPath || '').trim()
+    if (target) {
+      uni.reLaunch({ url: target })
+      return
+    }
     const pages = getCurrentPages()
     if (pages.length > 1) uni.navigateBack({ delta: 1 })
     else uni.reLaunch({ url: '/pages/dayu/home' })

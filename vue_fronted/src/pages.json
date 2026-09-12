@@ -172,7 +172,7 @@
     {
       "path": "pages/training/index",
       "style": {
-        "navigationBarTitleText": "今日训练",
+        "navigationBarTitleText": "今日修炼",
         "navigationStyle": "custom"
       }
     },

@@ -3,7 +3,7 @@
     <!-- Dayu brand topbar（对齐 test.html） -->
     <view class="dy-top">
       <view class="dy-brand" @tap="goBack">
-        <view class="dy-logo"></view>
+        <view class="dy-logo" :style="brandLogoStyle"></view>
         <view>
           <text class="dy-t1">天赋测试</text>
           <text class="dy-t2">TALENT TEST</text>
@@ -42,7 +42,7 @@
       <view v-if="showHistory" class="history-overlay" @tap="showHistory = false">
         <view class="history-panel" @tap.stop>
           <view class="history-header">
-            <text class="history-title">历史报告</text>
+            <text class="history-title">{{ isParentViewer ? '测试记录' : '历史报告' }}</text>
             <view class="history-header-close" @tap="showHistory = false"><text>✕</text></view>
           </view>
           <view v-if="historyList.length" class="history-grid">
@@ -52,13 +52,16 @@
                   <image v-if="talentAvatar[h.talent_primary]" :src="talentAvatar[h.talent_primary]" mode="aspectFill" style="width:100%;height:100%;border-radius:50%;" />
                   <text v-else>{{ talentEmoji[h.talent_primary] || '🧬' }}</text>
                 </view>
-                <text class="history-box-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+                <view class="history-box-main">
+                  <text class="history-box-talent">{{ h.talent_primary || h.talent || '--' }}</text>
+                  <text v-if="isParentViewer && h.child_nickname" class="history-box-child">{{ h.child_nickname }} · {{ h.mode === 'adult' ? '成人' : '孩子' }}</text>
+                </view>
                 <text class="history-box-time">{{ formatHistoryDate(h.create_time || h.assessed_at) }}</text>
                 <view class="history-box-del" @tap.stop="confirmDeleteHistory(h)"><text>✕</text></view>
               </view>
             </view>
           </view>
-          <text v-else class="history-empty">暂无历史报告</text>
+          <text v-else class="history-empty">{{ isParentViewer ? '暂无孩子的测试记录' : '暂无历史报告' }}</text>
         </view>
       </view>
 
@@ -162,12 +165,19 @@
     </view>
 
     <!-- Bottom nav -->
-    <view class="dy-foot">
+    <view class="dy-foot" v-if="!isParentViewer">
       <view class="dy-fa" @tap="goFoot('/pages/dayu/home')"><image class="dy-fic" src="/static/dayu/assets/ic/robot.png" mode="aspectFit" /><text>大宇AI</text></view>
-      <view class="dy-fa" @tap="goFoot('/pages/training/index')"><image class="dy-fic" src="/static/dayu/assets/ic/map.png" mode="aspectFit" /><text>今日修炼</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/training/dayu')"><image class="dy-fic" src="/static/dayu/assets/ic/map.png" mode="aspectFit" /><text>今日修炼</text></view>
       <view class="dy-fa" @tap="goFoot('/pages/qa/index')"><image class="dy-fic" src="/static/dayu/assets/ic/cap.png" mode="aspectFit" /><text>学科答疑</text></view>
       <view class="dy-fa" @tap="goFoot('/pages/hub/academy')"><image class="dy-fic" src="/static/dayu/assets/ic/bubble.png" mode="aspectFit" /><text>天赋学院</text></view>
       <view class="dy-fa" @tap="goFoot('/pages/hub/console')"><image class="dy-fic" src="/static/dayu/assets/ic/computer.png" mode="aspectFit" /><text>中央电脑</text></view>
+    </view>
+    <view class="dy-foot" v-else>
+      <view class="dy-fa" @tap="goFoot('/pages/parent/dayu')"><image class="dy-fic" src="/static/dayu/assets/ic/robot.png" mode="aspectFit" /><text>大宇</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/parent/community')"><image class="dy-fic" src="/static/dayu/assets/ic/family.png" mode="aspectFit" /><text>天赋社区</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/parent/consult')"><image class="dy-fic" src="/static/dayu/assets/ic/bubble.png" mode="aspectFit" /><text>在线咨询</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/parent/pdata')"><image class="dy-fic" src="/static/dayu/assets/ic/target.png" mode="aspectFit" /><text>数据分析</text></view>
+      <view class="dy-fa" @tap="goFoot('/pages/parent/pset')"><image class="dy-fic" src="/static/dayu/assets/ic/person.png" mode="aspectFit" /><text>我的</text></view>
     </view>
   </view>
 </template>
@@ -178,15 +188,31 @@ import { onShow, onLoad } from '@dcloudio/uni-app'
 import {
   ensureChildUser,
   ensureJnaoUid,
+  ensureParentUser,
   fetchAssessmentHistory,
+  fetchParentAssessmentHistory,
+  fetchParentChildren,
+  fetchProfile,
+  getParentUserId,
   deleteAssessmentReport,
+  deleteParentAssessment,
   submitTalentReport,
 } from '@/utils/userApi.js'
-import { clearTalentState, refreshTalentState, TALENT_AVATAR } from '@/utils/talentState.js'
+import { _readStoredRole } from '@/utils/api/auth.js'
+import {
+  clearTalentState,
+  refreshTalentState,
+  TALENT_AVATAR,
+  talentAvatarUrl,
+  talentThemeColor,
+  getTalentState,
+} from '@/utils/talentState.js'
 
 // ── State ──
 const fromOnboarding = ref(false)
 const studentTypeFromOnboarding = ref('new')
+/** 入口来源：training | hub | onboarding | '' —— 决定报告返回页 */
+const entryFrom = ref('')
 const phase = ref('door')
 const testType = ref(null)
 const ageGateNotice = ref(false)
@@ -196,9 +222,54 @@ const compPhase = ref(0)
 const showHistory = ref(false)
 const enteredFromHub = ref(false)
 const historyList = ref([])
+const isParentViewer = ref(false)
+const brandTalent = ref('')
+
+const brandLogoStyle = computed(() => {
+  const name = brandTalent.value
+  const url = talentAvatarUrl(name)
+  const color = talentThemeColor(name, '#6FCF8E')
+  return {
+    backgroundImage: `url(${url})`,
+    borderColor: color,
+    boxShadow: `0 0 10px ${color}66`,
+  }
+})
+
+async function loadBrandTalent() {
+  try {
+    if (isParentViewer.value || _readStoredRole() === 'parent') {
+      isParentViewer.value = true
+      const pid = getParentUserId() || (await ensureParentUser())
+      const kids = await fetchParentChildren(pid)
+      let focus = 0
+      try { focus = parseInt(localStorage.getItem('jnao_parent_focus_child_id') || '', 10) || 0 } catch (_) {}
+      const kid = (kids || []).find((c) => Number(c.id) === focus) || (kids || [])[0]
+      brandTalent.value = kid?.talent ? String(kid.talent) : ''
+      return
+    }
+    const uid = await ensureChildUser()
+    await refreshTalentState(uid)
+    const st = getTalentState()
+    if (st?.talent_primary) {
+      brandTalent.value = st.talent_primary
+      return
+    }
+    const profile = await fetchProfile(uid)
+    brandTalent.value = profile?.talent_primary || profile?.profile_json?.talent_primary || ''
+  } catch (e) {
+    brandTalent.value = ''
+  }
+}
 
 async function loadHistory() {
   try {
+    if (isParentViewer.value || _readStoredRole() === 'parent') {
+      isParentViewer.value = true
+      const pid = await ensureParentUser()
+      historyList.value = await fetchParentAssessmentHistory(pid)
+      return
+    }
     const uid = await ensureChildUser()
     historyList.value = await fetchAssessmentHistory(uid)
   } catch (_) { historyList.value = [] }
@@ -207,8 +278,9 @@ async function loadHistory() {
 function viewHistory(h) {
   showHistory.value = false
   if (h.id) {
-    const modeQ = (h.type === 0 || h.report_type === 0 || h.mode === 'adult') ? 'adult' : 'kid'
-    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}&mode=${modeQ}` })
+    const modeQ = (h.type === 0 || h.report_type === 0 || h.mode === 'adult' || h.test_type === 0) ? 'adult' : 'kid'
+    const fromQ = modeQ === 'adult' ? 'hub' : (entryFrom.value || 'training')
+    uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}&mode=${modeQ}&from=${fromQ}` })
   }
 }
 
@@ -225,8 +297,13 @@ function confirmDeleteHistory(h) {
 
 async function deleteHistory(assessmentId) {
   try {
-    const uid = await ensureChildUser()
-    await deleteAssessmentReport(uid, assessmentId)
+    if (isParentViewer.value) {
+      const pid = await ensureParentUser()
+      await deleteParentAssessment(pid, assessmentId)
+    } else {
+      const uid = await ensureChildUser()
+      await deleteAssessmentReport(uid, assessmentId)
+    }
     historyList.value = historyList.value.filter(h => h.id !== assessmentId)
     uni.showToast({ title: '已删除', icon: 'none' })
   } catch (e) {
@@ -234,8 +311,14 @@ async function deleteHistory(assessmentId) {
   }
 }
 
-onMounted(loadHistory)
-onShow(loadHistory)
+onMounted(() => {
+  loadHistory()
+  loadBrandTalent()
+})
+onShow(() => {
+  loadHistory()
+  loadBrandTalent()
+})
 
 const toast = ref({ text: '', variant: 'ack' })
 
@@ -443,7 +526,7 @@ function handleChoice(choice) {
     if (choice === '准备好了') startTest()
     else if (fromOnboarding.value) {
       uni.navigateBack({ delta: 1 })
-    } else if (enteredFromHub.value) {
+    } else if (enteredFromHub.value || entryFrom.value === 'training') {
       uni.navigateBack({ delta: 1 })
     } else {
       phase.value = 'door'; testType.value = null
@@ -502,11 +585,17 @@ async function doSubmitReport() {
     if (json.talent_last_chance) {
       url += `&talent_last_chance=1&current_talent=${encodeURIComponent(json.current_talent || '')}&new_talent=${encodeURIComponent(json.data?.talent || '')}`
     }
+    const fromQ = fromOnboarding.value
+      ? 'onboarding'
+      : (entryFrom.value || (enteredFromHub.value ? 'hub' : (modeQ === 'kid' ? 'training' : 'hub')))
+    url += `&from=${encodeURIComponent(fromQ)}`
     if (fromOnboarding.value) {
-      url += `&from=onboarding&student_type=${encodeURIComponent(studentTypeFromOnboarding.value || 'new')}`
+      url += `&student_type=${encodeURIComponent(studentTypeFromOnboarding.value || 'new')}`
     }
     clearTalentState()
     await refreshTalentState(childUserId)
+    const st = getTalentState()
+    if (st?.talent_primary) brandTalent.value = st.talent_primary
     uni.navigateTo({ url })
   } catch (e) {
     submitError.value = '提交失败：' + (e.message || '请稍后重试')
@@ -534,12 +623,12 @@ function formatHistoryDate(iso) {
 function goBack() {
   if (phase.value === 'door') {
     if (getCurrentPages().length > 1) uni.navigateBack({ delta: 1 })
-    else uni.reLaunch({ url: '/pages/talent/hub' })
+    else uni.reLaunch({ url: isParentViewer.value ? '/pages/parent/dayu' : '/pages/talent/hub' })
     return
   }
   if (phase.value === 'ageGate') { phase.value = 'door'; testType.value = null; return }
   if (phase.value === 'confirm') {
-    if (enteredFromHub.value || fromOnboarding.value) {
+    if (enteredFromHub.value || fromOnboarding.value || entryFrom.value === 'training') {
       uni.navigateBack({ delta: 1 })
       return
     }
@@ -547,8 +636,16 @@ function goBack() {
     testType.value = null
     return
   }
-  if (phase.value === 'testing' || phase.value === 'completed') { phase.value = 'confirm'; return }
-  if (fromOnboarding.value) {
+  if (phase.value === 'testing' || phase.value === 'completed') {
+    // 训练入口儿童卷：不可退回双选门
+    if (entryFrom.value === 'training' || (testType.value === '孩子' && entryFrom.value)) {
+      phase.value = 'confirm'
+      return
+    }
+    phase.value = 'confirm'
+    return
+  }
+  if (fromOnboarding.value || entryFrom.value === 'training') {
     uni.navigateBack({ delta: 1 })
     return
   }
@@ -556,8 +653,10 @@ function goBack() {
 }
 
 onLoad((opts) => {
+  isParentViewer.value = _readStoredRole() === 'parent'
   fromOnboarding.value = opts?.from === 'onboarding'
   studentTypeFromOnboarding.value = opts?.student_type || 'new'
+  entryFrom.value = String(opts?.from || '').toLowerCase()
   if (opts?.history === '1' || opts?.history === 'true') {
     showHistory.value = true
     loadHistory()
@@ -565,13 +664,15 @@ onLoad((opts) => {
   const mode = String(opts?.mode || '').toLowerCase()
   const autoStart = opts?.start === '1' || opts?.start === 'true'
   if (mode === 'kid' || mode === 'child') {
-    enteredFromHub.value = true
+    enteredFromHub.value = entryFrom.value !== 'training'
     testType.value = '孩子'
+    if (!entryFrom.value) entryFrom.value = 'training'
     if (autoStart) startTest()
     else phase.value = 'confirm'
   } else if (mode === 'adult' || mode === 'adu') {
     enteredFromHub.value = true
     testType.value = '成人'
+    if (!entryFrom.value) entryFrom.value = 'hub'
     if (autoStart) startTest()
     else phase.value = 'confirm'
   }
@@ -606,7 +707,7 @@ onBeforeUnmount(() => {
 .dy-brand { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .dy-logo {
   width: 44px; height: 44px; border-radius: 50%; flex: none;
-  background: url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;
+  background: url("/static/dayu/assets/ip/ring-study.png") center/cover;
   border: 2px solid #6FCF8E; box-shadow: 0 0 10px rgba(111, 207, 142, 0.4);
 }
 .dy-t1 { display: block; font-size: 19px; font-weight: 800; color: #EDEBE4; line-height: 1.2; }
@@ -716,6 +817,8 @@ onBeforeUnmount(() => {
 .history-box-icon { width: 36px; height: 36px; border-radius: 50%; background: #0D1119; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
 .history-box-icon text { font-size: 18px; }
 .history-box-talent { font-size: 14px; font-weight: 600; color: #EDEBE4; }
+.history-box-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.history-box-child { font-size: 11px; color: #8B93A5; }
 .history-box-time { font-size: 12px; color: #8B93A5; margin-left: auto; }
 .history-box-del { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 .history-box-del text { color: #8B93A5; font-size: 9px; }

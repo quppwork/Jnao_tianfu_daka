@@ -40,3 +40,21 @@ class TestBuildPrompt:
     def test_includes_subject(self):
         prompt = build_qa_system_prompt(subject="数学")
         assert "数学" in prompt
+
+    def test_method_kb_header_and_context(self):
+        prompt = build_qa_system_prompt(
+            subject="数学",
+            rag_context="系统训练先打基础再专题",
+            rag_kind="method",
+        )
+        assert "平台特殊训练方法" in prompt
+        assert "系统训练" in prompt
+        assert "不要改成普通刷题" in prompt or "题海" in prompt
+
+    def test_legacy_rag_header(self):
+        prompt = build_qa_system_prompt(
+            rag_context="先通分再相加",
+            rag_kind="legacy",
+        )
+        assert "参考资料" in prompt
+        assert "平台特殊训练方法" not in prompt

@@ -9,6 +9,9 @@ export const ACTION_LABEL_FALLBACK = {
   qa: '去学科答疑 ›',
   growth: '去中央电脑 ›',
   history: '去历史记录 ›',
+  parent_pdata: '看数据分析 ›',
+  parent_pcourse: '进家长课堂 ›',
+  talent_hub: '去天赋测试 ›',
 }
 
 export const GUIDE_DIALOG_MESSAGE_LIMIT = 20
@@ -36,11 +39,17 @@ export function normalizeGuideActions(raw) {
       })
       continue
     }
-    if (a.type === 'navigate' && ACTION_LABEL_FALLBACK[a.target]) {
+    if (a.type === 'navigate') {
+      const target = a.target || ''
+      const path = a.path || GUIDE_NAV_ROUTES[target] || null
+      // 已知目标、或带显式 path（家长端多孩跳转等）
+      if (!path && !ACTION_LABEL_FALLBACK[target] && !a.path) continue
       out.push({
         type: 'navigate',
-        target: a.target,
-        label: a.label || actionLabel(a.target),
+        target,
+        label: a.label || actionLabel(target),
+        path: a.path || path || undefined,
+        child_id: a.child_id != null ? Number(a.child_id) : undefined,
         query: (a.query && typeof a.query === 'object') ? a.query : undefined,
       })
     }
@@ -74,6 +83,7 @@ export function trimGuideMessages(msgs) {
 /** 引导行动跳转目标（大宇改版路由） */
 export const GUIDE_NAV_ROUTES = {
   talent: '/pages/talent/hub',
+  talent_hub: '/pages/talent/hub',
   train: '/pages/training/dayu',
   qa: '/pages/qa/dayu',
   growth: '/pages/hub/console',
@@ -81,4 +91,6 @@ export const GUIDE_NAV_ROUTES = {
   academy: '/pages/hub/academy',
   console: '/pages/hub/console',
   report: '/pages/report/index',
+  parent_pdata: '/pages/parent/pdata',
+  parent_pcourse: '/pages/parent/pcourse',
 }

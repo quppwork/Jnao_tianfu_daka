@@ -463,7 +463,7 @@ function toggleTheme(){
 
 <div class="topbar">
   <div class="logo">劲脑 · 五者天赋测评<small>JNAO KIDS REPORT</small></div>
-  <div class="versw"><span class="on">儿童版</span><a href="report-v3.html">成人版</a></div>
+  <div class="versw"><span class="on">儿童版</span><a href="report-v3.html" data-versw="adult">成人版</a></div>
 </div>
 
 <!-- 开篇巨幕：动态天赋视觉 -->
@@ -756,10 +756,10 @@ function toggleTheme(){
 <div class="family">
   <div class="fq">想知道亲子相处如何吗？</div>
   <div class="fs">测一测你和身边人的天赋关系</div>
-  <div class="fbtns"><a href="report-v3.html">我已做过成人测试 · 关系测试</a><a href="report-v3.html">我还没有测试过 · 成人测试</a></div>
+  <div class="fbtns"><a href="test.html?mode=adu">我已做过成人测试 · 关系测试</a><a href="test.html?mode=adu">我还没有测试过 · 成人测试</a></div>
 </div>
 
-<a class="adultlink" href="report-v3.html">查看成人版报告设计 →</a>
+<a class="adultlink" href="test.html?mode=adu" data-versw="adult">去做成人测试 →</a>
 
 <!-- 分享 -->
 <button class="sharefab" id="shareFab"><span class="si">⤴</span>分享</button>
@@ -1134,11 +1134,30 @@ switchKid('win');
   }
   function nav(path){ if(post('dayu-nav',{path:path})) return; location.href=path; }
   window.__dayuNav = nav;
+  // lock=1：当前报告卷锁定，禁止顶栏切到另一版报告
+  (function lockVersw(){
+    try{
+      var q = new URLSearchParams(location.search || '');
+      if(q.get('lock') !== '1') return;
+      document.querySelectorAll('[data-versw], .versw a').forEach(function(a){
+        var sp = document.createElement('span');
+        sp.textContent = a.textContent;
+        sp.style.cssText = a.getAttribute('style') || '';
+        a.replaceWith(sp);
+      });
+    }catch(e){}
+  })();
   document.addEventListener('click', function(e){
     var a=e.target.closest&&e.target.closest('a'); if(!a) return;
     var href=(a.getAttribute('href')||'').trim();
     if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
     var file=href.split('?')[0].split('#')[0].split('/').pop();
+    var qs=(href.split('?')[1]||'');
+    if(file==='test.html' && /mode=adu|mode=adult/.test(qs)){
+      e.preventDefault(); e.stopPropagation();
+      nav('/pages/talent/index?mode=adult&from=hub');
+      return;
+    }
     if(ROUTE[file]){ e.preventDefault(); e.stopPropagation(); nav(ROUTE[file]); }
   }, true);
 })();

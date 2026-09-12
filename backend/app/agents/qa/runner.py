@@ -31,8 +31,63 @@ from app.services.doubao_client import chat_completion, vision_chat_completion
 from app.services.qa_coach import build_coach_metadata, fetch_recent_coach_context_for_prompt
 from app.services.qa_image_store import image_data_url
 from app.services.qa_rag_client import rag_chat
-from app.services.qa_rag_router import should_use_rag
+from app.services.qa_kb_router import QaKbPath, resolve_qa_kb_path
+from app.services.qa_kb_retrieve import retrieve_qa_method_kb
 from app.services.text_sanitize import sanitize_subject, sanitize_text, session_title_from_message
+
+
+async def _fetch_qa_rag_bundle(
+    message: str,
+    *,
+    child_user_id: int,
+    subject: str | None,
+    has_image: bool,
+    use_rag: bool | None,
+) -> dict[str, Any]:
+    """按路径取知识库上下文：METHOD(百炼多轮) / LEGACY(旧 RAG) / 空。"""
+    empty = {
+        "rag_used": False,
+        "rag_sources": [],
+        "rag_context": None,
+        "rag_kind": None,
+        "rag_source": None,
+    }
+    path = resolve_qa_kb_path(
+        message,
+        subject=subject,
+        has_image=has_image,
+        use_rag=use_rag,
+    )
+    if path is QaKbPath.NONE:
+        return empty
+
+    if path is QaKbPath.METHOD:
+        hit = await retrieve_qa_method_kb(message, subject=subject)
+        if hit and hit.get("answer"):
+            return {
+                "rag_used": True,
+                "rag_sources": list(hit.get("sources") or []),
+                "rag_context": hit["answer"],
+                "rag_kind": "method",
+                "rag_source": hit.get("rag_source") or "bailian_method",
+            }
+        return empty
+
+    if path is QaKbPath.LEGACY_TEACHING:
+        rag = await rag_chat(
+            message,
+            user_id=f"child_{child_user_id}",
+            subject=subject,
+        )
+        if rag and rag.get("answer"):
+            return {
+                "rag_used": True,
+                "rag_sources": list(rag.get("sources") or []),
+                "rag_context": rag["answer"],
+                "rag_kind": "legacy",
+                "rag_source": "tianfu_rag",
+            }
+    return empty
 
 
 def _confirmed_talent_bundle(db: Session, child_user_id: int) -> tuple[str | None, dict | None]:
@@ -260,19 +315,18 @@ async def run_chat(
             max_tokens=400,
         )
 
-    rag_used = False
-    rag_sources: list[str] = []
-    rag_context = None
-    if should_use_rag(message, subject=subject or session.subject, has_image=has_image, use_rag=use_rag):
-        rag = await rag_chat(
-            message,
-            user_id=f"child_{child_user_id}",
-            subject=subject or session.subject,
-        )
-        if rag and rag.get("answer"):
-            rag_used = True
-            rag_sources = list(rag.get("sources") or [])
-            rag_context = rag["answer"]
+    rag_bundle = await _fetch_qa_rag_bundle(
+        message,
+        child_user_id=child_user_id,
+        subject=subject or session.subject,
+        has_image=has_image,
+        use_rag=use_rag,
+    )
+    rag_used = bool(rag_bundle["rag_used"])
+    rag_sources = list(rag_bundle["rag_sources"] or [])
+    rag_context = rag_bundle["rag_context"]
+    rag_kind = rag_bundle["rag_kind"]
+    rag_source = rag_bundle["rag_source"]
 
     coach_context = fetch_recent_coach_context_for_prompt(
         db, child_user_id, session_id=session.id
@@ -291,6 +345,7 @@ async def run_chat(
         rag_context=rag_context,
         memory_digest=memory_digest or None,
         strategy_block=strategy_block or None,
+        rag_kind=rag_kind,
     )
     learner_context = build_learner_context_block(
         grade=profile.get("grade"),
@@ -339,6 +394,7 @@ async def run_chat(
         coach_meta,
         rag_used=rag_used,
         rag_sources=rag_sources,
+        rag_source=rag_source,
     )
     db.add(
         QaMessage(
@@ -604,19 +660,18 @@ async def run_chat_stream(
             max_tokens=400,
         )
 
-    rag_used = False
-    rag_sources: list[str] = []
-    rag_context = None
-    if should_use_rag(message, subject=subject or session.subject, has_image=has_image, use_rag=use_rag):
-        rag = await rag_chat(
-            message,
-            user_id=f"child_{child_user_id}",
-            subject=subject or session.subject,
-        )
-        if rag and rag.get("answer"):
-            rag_used = True
-            rag_sources = list(rag.get("sources") or [])
-            rag_context = rag["answer"]
+    rag_bundle = await _fetch_qa_rag_bundle(
+        message,
+        child_user_id=child_user_id,
+        subject=subject or session.subject,
+        has_image=has_image,
+        use_rag=use_rag,
+    )
+    rag_used = bool(rag_bundle["rag_used"])
+    rag_sources = list(rag_bundle["rag_sources"] or [])
+    rag_context = rag_bundle["rag_context"]
+    rag_kind = rag_bundle["rag_kind"]
+    rag_source = rag_bundle["rag_source"]
 
     coach_context = fetch_recent_coach_context_for_prompt(db, child_user_id, session_id=session.id)
     strategy_block = strategy_to_prompt_block(
@@ -632,6 +687,7 @@ async def run_chat_stream(
         rag_context=rag_context,
         memory_digest=memory_digest or None,
         strategy_block=strategy_block or None,
+        rag_kind=rag_kind,
     )
     learner_context = build_learner_context_block(
         grade=profile.get("grade"),
@@ -686,6 +742,7 @@ async def run_chat_stream(
         coach_meta,
         rag_used=rag_used,
         rag_sources=rag_sources,
+        rag_source=rag_source,
     )
     db.add(
         QaMessage(

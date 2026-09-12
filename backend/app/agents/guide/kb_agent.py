@@ -18,10 +18,7 @@ logger = get_logger("guide.kb_agent")
 KB_FC_SYSTEM = (
     "你是首页引导的工具调度器，只负责选择知识源并调用工具，不要生成给用户的最终回答。"
     "可先 list_knowledge_sources，再必须调用 query_knowledge 查库。"
-    "练法、怎么练、开口窍、超脑阅读、影像追忆、扫描速记、示范视频 → source_key=video_practice。"
-    "其余知识问答默认 source_key=talent_doc："
-    "天赋/五者/年级/晋级、平台说明、课程/产品/营期（如火箭提分营）、"
-    "为什么要系统训练、什么是某某营/课 等。"
+    "当前仅启用一个知识库：source_key=talent_doc（天赋/练法/课程/平台说明/家长课堂均查此库）。"
     "仅当用户在问今日训练进度、打招呼闲聊、或学科具体解题时，不要调用 query_knowledge。"
 )
 
@@ -48,7 +45,7 @@ KB_TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "properties": {
                     "source_key": {
                         "type": "string",
-                        "description": "video_practice 或 talent_doc",
+                        "description": "当前仅 talent_doc",
                     },
                     "query": {
                         "type": "string",
@@ -121,6 +118,10 @@ _DOC_KNOWLEDGE_HINTS = (
     "单点刷题",
     "平台说明",
     "学习规律",
+    "家长课程",
+    "家长课堂",
+    "报告解读",
+    "72讲",
 )
 _SKIP_KB_HINTS = (
     "今日训练如何",
@@ -220,11 +221,19 @@ def _should_skip_kb_query(message: str) -> bool:
 
 
 def pick_source_by_tags(message: str) -> KnowledgeSource | None:
-    """标签命中或启发式选库；非练法知识问默认 talent_doc。"""
+    """标签命中或启发式选库。
+
+    单库模式（默认）：一律 talent_doc（x1micrdmjq）。
+    """
+    from app.services.kb_policy import active_kb_source_key, kb_single_source
+
     reg = get_kb_registry()
     text = (message or "").strip()
     if not text or _should_skip_kb_query(text):
         return None
+
+    if kb_single_source():
+        return reg.get(active_kb_source_key()) or reg.get("talent_doc")
 
     best: KnowledgeSource | None = None
     best_score = 0
@@ -241,7 +250,6 @@ def pick_source_by_tags(message: str) -> KnowledgeSource | None:
         return reg.get("video_practice")
     if _looks_like_doc_knowledge(text):
         return reg.get("talent_doc")
-    # 非练法：默认文档库（新入库主题未进 tags 时仍可查到）
     if not _looks_like_practice(text):
         return reg.get("talent_doc")
     return None

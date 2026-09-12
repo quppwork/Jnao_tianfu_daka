@@ -295,7 +295,8 @@ Query：`target_child_id`（必填）→ **AuthResponse**（切换后的孩子�
 | GET | `/badges` | `{ items: [{name, icon, cond, earned, ...}] }` |
 | GET | `/timeline` | 成长时间线 |
 | GET | `/calendar` | 日历打点 |
-| GET | `/tier` | 段位：`overall_tier`, `honor_level`, `title`, `next_title`, `need`, `skills[]`… |
+| GET | `/tier` | 段位：`overall_tier`/`level`（同一）、`duan_label`、`honor_level`、`title`、`skills[]`… |
+| GET | `/console` | **中央电脑**一页汇总：`tier`、`xp`、`lcd`、`locks`、`ladder`（本机榜）；`skills_wall` 第一期为 `null` |
 | GET | `/summary` | 汇总卡片数据 |
 | GET | `/milestones` | 里程碑 |
 | GET | `/share` | `{ title, text, highlights[] }` |

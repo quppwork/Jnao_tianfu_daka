@@ -26,11 +26,15 @@ async def emit_event_stream(
 ) -> AsyncIterator[str]:
     """将 (kind, payload) 生成器转为 SSE 文本流。
 
-    kind: token | done | error
+    kind: token | done | error | status
     """
     async for kind, payload in gen:
         if kind == "token":
             yield sse_json({"type": "token", "content": payload})
+        elif kind == "status":
+            msg = payload if isinstance(payload, str) else str(payload or "")
+            if msg:
+                yield sse_json({"type": "status", "message": msg})
         elif kind == "done":
             meta = payload if isinstance(payload, dict) else {}
             yield sse_json({"type": "done", **meta})

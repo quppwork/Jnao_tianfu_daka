@@ -708,7 +708,7 @@ const goalCards = computed(() =>
   goalEvents.value.map((e) => {
     const g = { ...e, route: '', pct: null, progressText: '' }
     if (/打卡/.test(e.title)) {
-      g.route = '/pages/training/index'
+      g.route = '/pages/training/dayu'
       const m = e.title.match(/(\d+)/)
       if (m) {
         const target = +m[1]
@@ -717,7 +717,7 @@ const goalCards = computed(() =>
         g.progressText = `${Math.min(cur, target)}/${target}`
       }
     } else if (/核心能力/.test(e.title)) {
-      g.route = '/pages/training/index'
+      g.route = '/pages/training/dayu'
       const total = masteryChips.value.length
       if (total) {
         g.pct = Math.round((masteryDoneCount.value / total) * 100)
@@ -736,7 +736,7 @@ function goGoal(g) {
 }
 
 function goTrain() {
-  uni.navigateTo({ url: '/pages/training/index' })
+  uni.navigateTo({ url: '/pages/training/dayu' })
 }
 
 function badgeProgress(b) {

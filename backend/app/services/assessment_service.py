@@ -568,21 +568,68 @@ def list_assessments(db: Session, child_user_id: int, limit: int = 30) -> list[d
         .order_by(TalentAssessment.id.desc())
         .limit(limit)
     ).all()
-    return [
-        {
-            "id": r.id,
-            "talent": r.talent_primary,
-            "talent_primary": r.talent_primary,
-            "talent_tag": r.talent_tag,
-            "create_time": (
-                r.assessed_at.strftime("%Y-%m-%d %H:%M")
-                if r.assessed_at
-                else (r.report_json or {}).get("create_time")
-            ),
-            "assessed_at": r.assessed_at.isoformat() if r.assessed_at else None,
-        }
-        for r in rows
-    ]
+    return [_assessment_list_item(r) for r in rows]
+
+
+def _assessment_list_item(
+    r: TalentAssessment,
+    *,
+    child_nickname: str | None = None,
+) -> dict:
+    item = {
+        "id": r.id,
+        "talent": r.talent_primary,
+        "talent_primary": r.talent_primary,
+        "talent_tag": r.talent_tag,
+        "test_type": r.test_type,
+        "mode": "adult" if (0 if r.test_type is None else int(r.test_type)) == 0 else "kid",
+        "create_time": (
+            r.assessed_at.strftime("%Y-%m-%d %H:%M")
+            if r.assessed_at
+            else (r.report_json or {}).get("create_time")
+        ),
+        "assessed_at": r.assessed_at.isoformat() if r.assessed_at else None,
+        "child_user_id": r.child_user_id,
+    }
+    if child_nickname is not None:
+        item["child_id"] = r.child_user_id
+        item["child_nickname"] = child_nickname
+    return item
+
+
+def list_assessments_for_parent(
+    db: Session,
+    parent_id: int,
+    *,
+    child_id: int | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """家长查看绑定孩子的测评记录（可按孩子过滤）。"""
+    from app.services import parent_service
+
+    children = parent_service.list_children(db, parent_id)
+    if not children:
+        return []
+    by_id = {int(c["id"]): c for c in children}
+    if child_id is not None:
+        cid = int(child_id)
+        if cid not in by_id:
+            raise AssessmentError("无权查看该孩子", 403)
+        ids = [cid]
+    else:
+        ids = list(by_id.keys())
+
+    rows = db.scalars(
+        select(TalentAssessment)
+        .where(TalentAssessment.child_user_id.in_(ids))
+        .order_by(TalentAssessment.id.desc())
+        .limit(max(1, min(limit, 100)))
+    ).all()
+    out: list[dict] = []
+    for r in rows:
+        nick = (by_id.get(r.child_user_id) or {}).get("nickname") or "学员"
+        out.append(_assessment_list_item(r, child_nickname=nick))
+    return out
 
 
 def get_assessment_by_id(db: Session, assessment_id: int, child_user_id: int) -> TalentAssessment | None:

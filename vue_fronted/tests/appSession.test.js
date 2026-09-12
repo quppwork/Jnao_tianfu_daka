@@ -29,6 +29,25 @@ describe('normalizePath / inferAuthKindFromPath', () => {
     expect(inferAuthKindFromPath('/pages/training/index')).toBe('student')
   })
 
+  it('天赋/报告共用页：家长登录时按 parent 鉴权', () => {
+    const mem = {}
+    const ls = {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null),
+      setItem: (k, v) => { mem[k] = String(v) },
+      removeItem: (k) => { delete mem[k] },
+      clear: () => { Object.keys(mem).forEach((k) => delete mem[k]) },
+    }
+    globalThis.localStorage = ls
+    localStorage.setItem('jnao_logged_in', '1')
+    localStorage.setItem('jnao_user', JSON.stringify({ id: 9, role: 'parent' }))
+    localStorage.setItem('jnao_parent_user_id', '9')
+    expect(inferAuthKindFromPath('/pages/talent/hub')).toBe('parent')
+    expect(inferAuthKindFromPath('/pages/talent/index')).toBe('parent')
+    expect(inferAuthKindFromPath('/pages/report/index')).toBe('parent')
+    localStorage.clear()
+    expect(inferAuthKindFromPath('/pages/talent/hub')).toBe('student')
+  })
+
   it('登录页 → null', () => {
     expect(inferAuthKindFromPath('/pages/login/index')).toBeNull()
     expect(isPublicPath('/pages/login/register-parent')).toBe(true)

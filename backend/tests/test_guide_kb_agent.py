@@ -11,12 +11,14 @@ from app.agents.guide.kb_agent import (
 
 
 def test_pick_source_video_practice():
+    """单库阶段：练法问句也落 talent_doc（x1micrdmjq）。"""
     from app.services.kb_registry import get_kb_registry
 
     get_kb_registry.cache_clear()
     src = pick_source_by_tags("开口窍怎么练")
     assert src is not None
-    assert src.key == "video_practice"
+    assert src.key == "talent_doc"
+    assert src.index_id == "x1micrdmjq"
 
 
 def test_pick_source_talent_doc():

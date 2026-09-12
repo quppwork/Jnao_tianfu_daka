@@ -77,6 +77,16 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 .msg .mav{width:38px;height:38px;border-radius:50%;flex:none;background:url("/static/dayu/assets/avatar-dayu.jpg") center 12%/cover;border:2px solid #EDEBE4}
 .msg .mtx{background:#131926;border:1px solid #2A3040;border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:16px;color:#C9CFDC;line-height:1.7;max-width:85%}
 .msg .mtx b{color:#F5D9A8}
+.msg.me{flex-direction:row-reverse}
+.msg.me .mav{display:none}
+.msg.me .mtx{background:#1a2438;border-color:#3a4a66;border-radius:14px 4px 14px 14px;color:#EDEBE4}
+.msg .mtx .acts{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.msg .mtx .acts a{display:inline-block;font-size:13px;font-weight:800;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:6px 12px;text-decoration:none}
+.msg .mtx.thinking{color:#8B93A5;font-style:italic}
+.guide-intro{margin-bottom:4px}
+.suggest{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px 47px}
+.suggest button{appearance:none;border:1.5px solid rgba(201,162,39,.45);background:rgba(201,162,39,.1);color:#F5D9A8;font-size:13px;font-weight:800;border-radius:99px;padding:7px 12px;cursor:pointer;font-family:inherit}
+.suggest button:active{opacity:.85}
 /* 底栏 */
 .foot{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}.foot a{text-align:center;color:#8B93A5;font-size:11px;flex:1;text-decoration:none;padding:0}.foot a.on{color:#F5D9A8;font-weight:700}.foot a img{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}
 </style>
@@ -104,13 +114,22 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
     <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/><b>一键咨询</b><span class="lv">● 真人导师在线</span></a>
   </div>
 
-  <!-- 大宇对话区：直接在首页对话 -->
-  <div class="msgs">
-    <div class="msg"><div class="mav"></div><div class="mtx">家长您好！我是张宇老师的智能体——<b>大宇智能体</b>。孩子的天赋报告、训练数据、家长课程，都可以直接问我。</div></div>
-    <div class="msg"><div class="mav"></div><div class="mtx">想测天赋点上方<b>「天赋测试」</b>；想学习进<b>「家长课堂」</b>；想找真人老师点<b>「一键咨询」</b>——今天想先从哪件事开始？</div></div>
+  <!-- 大宇对话区：引导词仅展示、不入库；真实对话写在 chatThread -->
+  <div class="msgs" id="chatMsgs">
+    <div class="guide-intro" id="guideIntro">
+      <div class="msg"><div class="mav"></div><div class="mtx">家长您好！我是张宇老师的智能体——<b>大宇智能体</b>。孩子的天赋报告、训练数据、家长课程，都可以直接问我。</div></div>
+      <div class="msg"><div class="mav"></div><div class="mtx">想测天赋点上方<b>「天赋测试」</b>；想学习进<b>「家长课堂」</b>；想找真人老师点<b>「一键咨询」</b>——也可以点下面快捷问法，或直接打字问我。今天想先从哪件事开始？</div></div>
+      <div class="suggest" id="askSuggest" aria-label="快捷提问">
+        <button type="button" data-q="帮我看看孩子最近训练怎么样">孩子训练怎么样</button>
+        <button type="button" data-q="帮我解读一下孩子的天赋报告">解读天赋报告</button>
+        <button type="button" data-q="家长课程有哪些，怎么学">家长课程怎么学</button>
+        <button type="button" data-q="先看哪个孩子的数据分析">先看哪个孩子</button>
+      </div>
+    </div>
+    <div id="chatThread"></div>
   </div>
 
-  <div class="askbar"><input class="box" placeholder="问大宇：孩子训练 / 家长课程 / 报告解读…"/><div class="send">➤</div></div>
+  <div class="askbar"><input class="box" id="askInput" placeholder="问大宇：孩子训练 / 家长课程 / 报告解读…"/><div class="send" id="askSend">➤</div></div>
 
   <!-- 每日弹窗：先进群 · 推广奖算力 · 充值（每侧每天一次） -->
   <div class="qmask" id="qmask">
@@ -250,6 +269,224 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   });
   post('dayu-usage-request');
   post('dayu-ready');
+
+  /* ── 家长大宇对话 → /api/parent/guide/chat/stream（知识库 + 孩子实况）── */
+  var guideSessionId = null;
+  var chatBusy = false;
+  var msgsEl = document.getElementById('chatMsgs');
+  var threadEl = document.getElementById('chatThread') || msgsEl;
+  var suggestEl = document.getElementById('askSuggest');
+  var inpEl = document.getElementById('askInput');
+  var sendEl = document.getElementById('askSend');
+
+  function esc(s){
+    return String(s || '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\n/g,'<br/>');
+  }
+  function authHeaders(){
+    var h = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+    try{
+      var tok = localStorage.getItem('jnao_access_token') ||
+        localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){
+          var o = JSON.parse(snap);
+          if(o.parent && o.parent.token) tok = o.parent.token;
+          else if(o.token) tok = o.token;
+        }
+      }
+      if(tok) h.Authorization = 'Bearer ' + tok;
+    }catch(e){}
+    return h;
+  }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') ||
+        localStorage.getItem('jnao_child_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        return (o.parent && o.parent.userId) || (o.role === 'parent' && o.userId) || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function appendMsg(role, html, opts){
+    opts = opts || {};
+    var row = document.createElement('div');
+    row.className = 'msg' + (role === 'user' ? ' me' : '');
+    var av = role === 'user' ? '' : '<div class="mav"></div>';
+    row.innerHTML = av + '<div class="mtx' + (opts.thinking ? ' thinking' : '') + '">' + html + '</div>';
+    threadEl.appendChild(row);
+    try{ row.scrollIntoView({ behavior: 'smooth', block: 'end' }); }catch(e){}
+    return row.querySelector('.mtx');
+  }
+  function renderActions(box, actions){
+    if(!box || !actions || !actions.length) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'acts';
+    actions.forEach(function(a){
+      if(!a || !a.path) return;
+      var link = document.createElement('a');
+      link.href = 'javascript:;';
+      link.textContent = a.label || '查看 ›';
+      link.addEventListener('click', function(ev){
+        ev.preventDefault();
+        if(a.child_id){
+          try{ localStorage.setItem('jnao_parent_focus_child_id', String(a.child_id)); }catch(e){}
+        }
+        nav(a.path);
+      });
+      wrap.appendChild(link);
+    });
+    if(wrap.childNodes.length) box.appendChild(wrap);
+  }
+  function setSuggestVisible(on){
+    if(!suggestEl) return;
+    suggestEl.style.display = on ? '' : 'none';
+  }
+  async function restoreGuideSession(){
+    var uid = parentUserId();
+    if(!uid || !threadEl) return;
+    try{
+      var res = await fetch('/api/parent/guide/session?user_id=' + encodeURIComponent(uid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) return;
+      var data = await res.json();
+      if(data.session_id) guideSessionId = data.session_id;
+      var msgs = data.messages || [];
+      // 引导词在 #guideIntro，永不清空、不入库；只回放真实对话
+      threadEl.innerHTML = '';
+      if(!msgs.length){
+        setSuggestVisible(true);
+        return;
+      }
+      setSuggestVisible(false);
+      msgs.forEach(function(m){
+        if(!m || !m.content) return;
+        var role = m.role === 'user' ? 'user' : 'assistant';
+        var box = appendMsg(role, esc(m.content));
+        if(role === 'assistant' && m.actions){
+          renderActions(box, m.actions);
+        }
+      });
+    }catch(e){}
+  }
+  restoreGuideSession();
+  if(suggestEl){
+    suggestEl.addEventListener('click', function(ev){
+      var btn = ev.target && ev.target.closest && ev.target.closest('button[data-q]');
+      if(!btn || chatBusy) return;
+      var q = btn.getAttribute('data-q') || '';
+      if(!q) return;
+      if(inpEl) inpEl.value = q;
+      sendParentChat();
+    });
+  }
+  async function sendParentChat(){
+    if(chatBusy) return;
+    var text = (inpEl && inpEl.value || '').trim();
+    if(!text) return;
+    var uid = parentUserId();
+    if(!uid){
+      appendMsg('assistant', '请先登录家长账号后再问我。');
+      return;
+    }
+    chatBusy = true;
+    if(inpEl) inpEl.value = '';
+    setSuggestVisible(false);
+    appendMsg('user', esc(text));
+    var aiBox = appendMsg('assistant', '大宇正在查阅…', { thinking: true });
+
+    try{
+      var url = '/api/parent/guide/chat/stream?user_id=' + encodeURIComponent(uid);
+      var focusChild = null;
+      try{ focusChild = parseInt(localStorage.getItem('jnao_parent_focus_child_id')||'',10)||null; }catch(e){}
+      var body = { message: text, session_id: guideSessionId };
+      if(focusChild) body.child_id = focusChild;
+      var res = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      });
+      if(!res.ok){
+        var errBody = await res.json().catch(function(){ return {}; });
+        var detail = errBody.detail || errBody.message || '';
+        if(res.status === 404){
+          throw new Error('对话服务未更新，请稍后重试或联系管理员重启后端');
+        }
+        if(res.status === 401 || res.status === 403){
+          throw new Error(typeof detail === 'string' && detail ? detail : '请重新登录家长账号后再问');
+        }
+        if(res.status === 400){
+          throw new Error(typeof detail === 'string' && detail ? detail : '请先绑定孩子训练账户');
+        }
+        throw new Error((typeof detail === 'string' && detail) || ('请求失败（' + res.status + '）'));
+      }
+      var reader = res.body && res.body.getReader();
+      if(!reader) throw new Error('流式不可用');
+      var decoder = new TextDecoder();
+      var buffer = '';
+      var full = '';
+      var actions = [];
+      while(true){
+        var chunk = await reader.read();
+        if(chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        var sep;
+        while((sep = buffer.indexOf('\n\n')) >= 0){
+          var block = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          var line = block.split('\n').find(function(l){ return l.indexOf('data: ') === 0; });
+          if(!line) continue;
+          var raw = line.slice(6).trim();
+          if(raw === '[DONE]') continue;
+          var evt;
+          try{ evt = JSON.parse(raw); }catch(e){ evt = { type: 'token', content: raw }; }
+          if(evt.type === 'status' && (evt.message || evt.content)){
+            aiBox.classList.add('thinking');
+            aiBox.innerHTML = esc(evt.message || evt.content);
+          } else if(evt.type === 'token' && evt.content){
+            full += evt.content;
+            aiBox.classList.remove('thinking');
+            aiBox.innerHTML = esc(full);
+          } else if(evt.type === 'done'){
+            if(evt.session_id) guideSessionId = evt.session_id;
+            if(evt.focus_child_id){
+              try{ localStorage.setItem('jnao_parent_focus_child_id', String(evt.focus_child_id)); }catch(e){}
+            }
+            if(evt.reply && !full){
+              full = evt.reply;
+              aiBox.classList.remove('thinking');
+              aiBox.innerHTML = esc(full);
+            }
+            actions = evt.actions || [];
+          } else if(evt.type === 'error'){
+            throw new Error(evt.message || '对话失败');
+          }
+        }
+      }
+      if(!full){
+        aiBox.classList.remove('thinking');
+        aiBox.innerHTML = '暂时没有回复，请稍后再试。';
+      }
+      renderActions(aiBox, actions);
+    }catch(err){
+      aiBox.classList.remove('thinking');
+      aiBox.innerHTML = esc((err && err.message) || '对话失败，请稍后再试');
+    }finally{
+      chatBusy = false;
+    }
+  }
+  if(sendEl) sendEl.addEventListener('click', sendParentChat);
+  if(inpEl) inpEl.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); sendParentChat(); }
+  });
 })();
 </script>
 </body></html>
