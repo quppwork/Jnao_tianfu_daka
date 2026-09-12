@@ -181,6 +181,7 @@ Query：`target_child_id`（必填）→ **AuthResponse**（切换后的孩子�
 | POST | `/children` | `login_name`, `nickname`, `password`(≥8)；`grade?`, `age?`, `region?` | 单个 child 摘要 |
 | PUT | `/children/{child_id}` | 可选 nickname/password/grade/age/region | 摘要 |
 | DELETE | `/children/{child_id}` | — | `{ ok: true }` |
+| GET | `/suggest-prompts` | `limit?`、`visit_key?` | `{ audience: parent, items: [{label, text}] }` 大宇进页提问引导 |
 
 ---
 
@@ -205,7 +206,8 @@ Query：`target_child_id`（必填）→ **AuthResponse**（切换后的孩子�
 | GET | `/sessions` | — | `{ items: [{id, title, message_count, updated_at?, created_at?}] }` |
 | GET | `/sessions/{id}` | — | `{ session_id, title, messages }` |
 | DELETE | `/sessions/{id}` | — | `{ ok: true }` |
-| POST | `/bootstrap` | `{ force?: false, use_llm?: true }` | 欢迎语、`situation`, `next_action`, `actions?` 等 |
+| POST | `/bootstrap` | `{ force?: false, use_llm?: true }` | 欢迎语、`situation`, `next_action`, `actions?`、`suggest_prompts?` 等 |
+| GET | `/suggest-prompts` | `audience=student\|qa`、`limit?`、`visit_key?` | `{ audience, items: [{label, text}] }` 进页知识库提问引导 |
 | POST | `/clear` | — | `{ cleared }` |
 | POST | `/confirm` | `{ write_op, args? }` | 受控写确认 |
 | POST | `/chat` | `{ message` (1–4000), `session_id? }` | `{ session_id, reply, actions[], situation?, next_action?, tools_used?, blocks? }` |

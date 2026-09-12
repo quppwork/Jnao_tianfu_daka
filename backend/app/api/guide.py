@@ -188,11 +188,39 @@ async def guide_bootstrap(
         )
         ctx["fields"]["situation"] = result.get("situation")
         ctx["fields"]["source"] = result.get("source")
+        from app.services.guide_suggest_prompts import pick_suggest_prompts
+        import time
+
+        result["suggest_prompts"] = pick_suggest_prompts(
+            "student",
+            limit=3,
+            user_id=child_user_id,
+            visit_key=f"boot-{child_user_id}-{time.time_ns()}",
+        )
         logger.info(
             f"Guide bootstrap uid={child_user_id} situation={result.get('situation')} "
             f"source={result.get('source')}"
         )
         return result
+
+
+@router.get("/suggest-prompts")
+def guide_suggest_prompts(
+    audience: str = "student",
+    limit: int = 3,
+    visit_key: str | None = None,
+    child_user_id: int = Depends(get_authenticated_student),
+):
+    """进页提问引导 chips（知识库主题，无 LLM）。"""
+    from app.services.guide_suggest_prompts import suggest_prompts_payload
+    import time
+
+    return suggest_prompts_payload(
+        audience if audience in ("student", "qa") else "student",
+        limit=limit,
+        user_id=child_user_id,
+        visit_key=visit_key,
+    )
 
 
 @router.post("/clear")

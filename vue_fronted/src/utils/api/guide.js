@@ -22,7 +22,7 @@ export async function deleteGuideSession(userId, sessionId) {
   return apiJson(withUser(`/api/guide/sessions/${sessionId}`, userId), { method: 'DELETE' })
 }
 
-/** 进首页开场 Agent：按情境返回欢迎语 */
+/** 进页开场 Agent：按情境返回欢迎语 */
 export async function fetchGuideBootstrap(userId, { force = false, use_llm = true, timeoutMs = 6000 } = {}) {
   return apiJson(withUser('/api/guide/bootstrap', userId), {
     method: 'POST',
@@ -30,6 +30,13 @@ export async function fetchGuideBootstrap(userId, { force = false, use_llm = tru
     body: JSON.stringify({ force, use_llm }),
     timeoutMs,
   })
+}
+
+/** 进页知识库提问引导 chips（毫秒级，无 LLM）；visitKey 每次进页换一批 */
+export async function fetchGuideSuggestPrompts(userId, { audience = 'student', limit = 3, visitKey } = {}) {
+  const vk = visitKey || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const q = `audience=${encodeURIComponent(audience)}&limit=${limit}&visit_key=${encodeURIComponent(vk)}`
+  return apiJson(withUser(`/api/guide/suggest-prompts?${q}`, userId))
 }
 
 export async function clearGuideSession(userId) {

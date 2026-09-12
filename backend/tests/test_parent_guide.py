@@ -10,6 +10,7 @@ from app.services import auth_service
 from app.services.parent_guide_service import (
     wants_course_kb,
     wants_live_child_data,
+    wants_platform_kb,
 )
 
 
@@ -26,6 +27,62 @@ def test_intent_live_report():
 def test_intent_course_kb():
     assert wants_course_kb("家长课程有哪些")
     assert wants_course_kb("家长课堂怎么学")
+
+
+def test_intent_platform_kb_chips():
+    """进页 chips 概念问应走知识库，不能当成孩子实况。"""
+    assert wants_platform_kb("赢者天赋是什么")
+    assert wants_platform_kb("思者天赋是什么")
+    assert wants_platform_kb("极速运算怎么练")
+    assert wants_platform_kb("什么是火箭提分营")
+    assert not wants_live_child_data("赢者天赋是什么")
+    assert not wants_live_child_data("极速运算怎么练")
+
+
+@pytest.mark.asyncio
+async def test_run_parent_turn_routes_talent_concept_to_kb(db_session: Session):
+    from app.services import parent_guide_service
+
+    parent = auth_service.register_child(
+        db_session,
+        parent_phone="13900008803",
+        nickname="家长丙",
+        role=auth_service.ROLE_PARENT,
+        password="Passw0rd!",
+    )
+    child = auth_service.register_child(
+        db_session,
+        parent_phone="13900008803",
+        nickname="孩子丙",
+        role=auth_service.ROLE_STUDENT,
+        password="Passw0rd!",
+    )
+    auth_service.bind_parent_child(db_session, parent.id, child.id)
+    db_session.commit()
+
+    with patch(
+        "app.services.parent_guide_service._kb_or_minimal_reply",
+        new=AsyncMock(
+            return_value={
+                "reply": "赢者释义",
+                "actions": [],
+                "tools_used": [],
+                "rag_used": True,
+                "rag_source": "kb_qa_agent",
+                "focus_child_id": child.id,
+            }
+        ),
+    ) as kb_mock, patch(
+        "app.services.parent_guide_service._live_child_reply",
+        new=AsyncMock(),
+    ) as live_mock:
+        out = await parent_guide_service.run_parent_turn(
+            db_session, parent.id, "赢者天赋是什么"
+        )
+
+    assert out["reply"] == "赢者释义"
+    assert kb_mock.await_count == 1
+    assert live_mock.await_count == 0
 
 
 def test_pick_source_parent_course():

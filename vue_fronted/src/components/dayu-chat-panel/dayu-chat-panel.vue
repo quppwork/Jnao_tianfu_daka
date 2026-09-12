@@ -74,6 +74,17 @@
       </view>
     </scroll-view>
 
+    <view v-if="showSuggests" class="suggest-row">
+      <view
+        v-for="(c, i) in displaySuggests"
+        :key="'sg' + i"
+        class="suggest-chip"
+        @tap="$emit('suggest', c.text || c.label)"
+      >
+        <text>{{ c.label || c.text }}</text>
+      </view>
+    </view>
+
     <view class="chat-ask">
       <input
         class="box"
@@ -115,11 +126,16 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   placeholder: { type: String, default: '输入问题…' },
   scrollInto: { type: String, default: '' },
+  /** 知识库提问引导 chips：[{label,text}] */
+  suggests: { type: Array, default: () => [] },
+  /** 是否展示引导 chips（有历史也可展示，引导继续提问） */
+  showSuggests: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'send', 'stop', 'navigate', 'confirm', 'dismiss'])
+const emit = defineEmits(['update:modelValue', 'send', 'stop', 'navigate', 'confirm', 'dismiss', 'suggest'])
 
 const canSend = computed(() => !!String(props.modelValue || '').trim() && !props.loading)
+const displaySuggests = computed(() => (Array.isArray(props.suggests) ? props.suggests.slice(0, 3) : []))
 
 function onInput(e) {
   const v = e?.detail?.value ?? e?.target?.value ?? ''
@@ -150,6 +166,58 @@ function onInput(e) {
 .chat-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .chat-stack { padding: 12px 12px 10px; }
 .chat-end { height: 8px; }
+
+.suggest-row {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 8px 10px 0;
+  border-top: 1px solid #232b3d;
+  overflow: hidden;
+}
+.suggest-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  border: 1.5px solid rgba(111, 207, 142, 0.45);
+  background: rgba(111, 207, 142, 0.1);
+  color: #8fefc0;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 99px;
+  padding: 7px 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.theme-gold .suggest-chip {
+  border-color: rgba(201, 162, 39, 0.45);
+  background: rgba(201, 162, 39, 0.1);
+  color: #f5d9a8;
+}
+.theme-green .suggest-chip {
+  border-color: rgba(111, 207, 142, 0.45);
+  background: rgba(111, 207, 142, 0.1);
+  color: #8fefc0;
+}
+.chat-panel.lt .suggest-row { border-top-color: #c2cadc; }
+.chat-panel.lt .suggest-chip {
+  border-color: rgba(46, 107, 230, 0.4);
+  background: #e8eefc;
+  color: #2e5bd6;
+}
+.chat-panel.lt.theme-green .suggest-chip {
+  border-color: rgba(48, 144, 79, 0.45);
+  background: #e5f5ea;
+  color: #247a42;
+}
+.chat-panel.lt.theme-gold .suggest-chip {
+  border-color: rgba(150, 117, 54, 0.5);
+  background: rgba(201, 162, 39, 0.14);
+  color: #967536;
+}
 
 .chat-ask {
   flex-shrink: 0;

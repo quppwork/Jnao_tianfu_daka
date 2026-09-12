@@ -254,6 +254,24 @@ def parent_guide_session(
     return parent_guide_service.load_session_payload(db, user_id)
 
 
+@router.get("/suggest-prompts")
+def parent_suggest_prompts(
+    limit: int = 3,
+    visit_key: str | None = None,
+    user_id: int = Depends(_require_parent_id),
+):
+    """家长大宇进页提问引导（知识库主题）。"""
+    from app.services.guide_suggest_prompts import suggest_prompts_payload
+    import time
+
+    return suggest_prompts_payload(
+        "parent",
+        limit=limit,
+        user_id=user_id,
+        visit_key=visit_key,
+    )
+
+
 @router.post("/guide/chat")
 async def parent_guide_chat(
     req: ParentGuideChatRequest,

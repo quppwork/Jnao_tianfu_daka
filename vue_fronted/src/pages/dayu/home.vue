@@ -73,9 +73,12 @@
         :loading="loading"
         :thinking-hint="thinkingHint"
         :scroll-into="scrollInto"
+        :suggests="suggestChips"
+        :show-suggests="showSuggestChips"
         placeholder="输入问题…"
         @send="sendMsg"
         @stop="stopStream"
+        @suggest="onSuggestChip"
         @navigate="runNavigateAction"
         @confirm="onConfirmFromPanel"
         @dismiss="onDismissFromPanel"
@@ -126,6 +129,7 @@ import {
   ensureChildUser,
   fetchGuideBootstrap,
   fetchGuideSession,
+  fetchGuideSuggestPrompts,
   fetchLatestAssessment,
   fetchProfile,
   fetchSiblings,
@@ -149,6 +153,12 @@ import {
 
 const FALLBACK_WELCOME = '你好！我是张宇老师的智能体——大宇智能体，你的专属 AI 教练。点上方入口开始，或直接问我。'
 
+const FALLBACK_SUGGESTS = [
+  { label: '学者天赋是什么', text: '学者天赋是什么' },
+  { label: '什么是火箭提分营', text: '什么是火箭提分营' },
+  { label: '提分营适合谁', text: '火箭提分营适合什么样的孩子' },
+]
+
 const tabs = MAIN_TABS
 const pageLoading = ref(true)
 const isLight = ref(true)
@@ -158,6 +168,7 @@ const siblings = ref([])
 const situationLabel = ref('')
 const welcomeText = ref('正在了解你的训练状态…')
 const welcomeActions = ref([])
+const suggestChips = ref([...FALLBACK_SUGGESTS])
 const messages = ref([])
 const inputText = ref('')
 const loading = ref(false)
@@ -182,6 +193,16 @@ const showBootstrapCard = computed(() => {
   const hasUser = messages.value.some((m) => m.role === 'user')
   return !hasUser
 })
+
+const showSuggestChips = computed(() => (
+  !loading.value && suggestChips.value.length > 0
+))
+
+function onSuggestChip(text) {
+  if (!text || loading.value) return
+  inputText.value = text
+  sendMsg()
+}
 
 function toggleTheme() {
   isLight.value = !isLight.value
@@ -330,29 +351,6 @@ function onDismissFromPanel({ message, index }) {
   dismissConfirmAction(message, index)
 }
 
-function applyBootstrap(data) {
-  if (!data || data.error) {
-    welcomeText.value = FALLBACK_WELCOME
-    welcomeActions.value = []
-    situationLabel.value = ''
-    return
-  }
-  welcomeText.value = data.welcome || FALLBACK_WELCOME
-  const fromActions = normalizeNavigateActions(data.actions)
-  if (fromActions.length) {
-    welcomeActions.value = fromActions
-  } else if (ACTION_LABEL_FALLBACK[data.next_action]) {
-    welcomeActions.value = [{
-      type: 'navigate',
-      target: data.next_action,
-      label: actionLabel(data.next_action),
-    }]
-  } else {
-    welcomeActions.value = []
-  }
-  situationLabel.value = data.situation_label || ''
-}
-
 function applyGuideMessages(guideData, { trim = true } = {}) {
   if (!guideData) {
     guideSessionId.value = null
@@ -409,7 +407,8 @@ async function sendMsg() {
         },
         onToken(chunk) {
           if (abortRequested) return
-          messages.value[aiIdx].text += chunk
+          const cur = messages.value[aiIdx]
+          messages.value[aiIdx] = { ...cur, text: (cur?.text || '') + chunk }
           scrollChat()
         },
         onDone(data) {
@@ -461,8 +460,43 @@ function hydrateFromLocal() {
   } catch (_) { /* ignore */ }
 }
 
+function applyBootstrap(data) {
+  if (!data || data.error) {
+    welcomeText.value = FALLBACK_WELCOME
+    welcomeActions.value = []
+    situationLabel.value = ''
+    return
+  }
+  welcomeText.value = data.welcome || FALLBACK_WELCOME
+  const fromActions = normalizeNavigateActions(data.actions)
+  if (fromActions.length) {
+    welcomeActions.value = fromActions
+  } else if (data.next_action) {
+    welcomeActions.value = [{
+      type: 'navigate',
+      target: data.next_action,
+      label: actionLabel(data.next_action) || ACTION_LABEL_FALLBACK[data.next_action] || '前往 ›',
+    }]
+  } else {
+    welcomeActions.value = []
+  }
+  situationLabel.value = data.situation_label || ''
+  if (Array.isArray(data.suggest_prompts) && data.suggest_prompts.length) {
+    suggestChips.value = data.suggest_prompts.slice(0, 3)
+  }
+}
+
+async function loadSuggestChips(uid) {
+  try {
+    const data = await fetchGuideSuggestPrompts(uid, { audience: 'student', limit: 3 })
+    const items = data?.items || data?.suggest_prompts
+    if (Array.isArray(items) && items.length) suggestChips.value = items.slice(0, 3)
+  } catch (_) { /* keep fallback */ }
+}
+
 async function initHome(uid) {
-  // 首屏只等档案 + 会话（快）；bootstrap（可能含 LLM）后台补，不挡转圈
+  // 提问引导先行（毫秒级），与档案/会话并行
+  const suggestPromise = loadSuggestChips(uid)
   const [profileData, guideData] = await Promise.all([
     fetchProfile(uid).catch(() => null),
     fetchGuideSession(uid).catch(() => null),
@@ -473,6 +507,7 @@ async function initHome(uid) {
   if (aid && Number(aid) > 0) assessmentId.value = Number(aid)
   applyGuideMessages(guideData)
   scrollChat()
+  await suggestPromise
 
   fetchGuideBootstrap(uid, { use_llm: true, timeoutMs: 6000 })
     .then((bootstrapData) => {

@@ -45,12 +45,11 @@ _LIVE_REPORT_HINTS = (
     "什么天赋",
     "哪种天赋",
     "主导天赋",
-    "五者",
-    "学者",
-    "思者",
-    "赢者",
-    "德者",
-    "行者",
+    "是学者",
+    "是思者",
+    "是赢者",
+    "是德者",
+    "是行者",
 )
 _COURSE_HINTS = (
     "家长课程",
@@ -60,6 +59,43 @@ _COURSE_HINTS = (
     "6门课",
     "课程怎么",
     "怎么上课",
+)
+# 与进页 chips / 入库文档一致：概念问法走知识库，不要当成「孩子是哪种天赋」
+_KB_TOPIC_HINTS = (
+    "火箭提分营",
+    "提分营",
+    "超脑阅读",
+    "开口窍",
+    "开口穹",
+    "影像追忆",
+    "扫描速记",
+    "极速运算",
+    "五者天赋",
+    "学者天赋",
+    "思者天赋",
+    "行者天赋",
+    "德者天赋",
+    "赢者天赋",
+)
+_KB_CONCEPT_HINTS = (
+    "怎么练",
+    "怎么划分",
+    "怎么分的",
+    "适合谁",
+    "怎么收费",
+    "怎么解读",
+    "服务周期",
+)
+_OWN_CHILD_HINTS = (
+    "孩子",
+    "小孩",
+    "宝贝",
+    "我家",
+    "娃",
+    "他",
+    "她",
+    "儿子",
+    "女儿",
 )
 
 
@@ -114,7 +150,7 @@ def needs_child_clarification(
         return False
     if match_child_from_message(message, children) is not None:
         return False
-    if wants_course_kb(message) and not wants_live_child_data(message):
+    if wants_platform_kb(message) and not asks_about_own_child(message):
         return False
     return wants_live_child_data(message)
 
@@ -165,6 +201,28 @@ def wants_live_child_data(message: str) -> bool:
 def wants_course_kb(message: str) -> bool:
     text = (message or "").strip()
     return any(h in text for h in _COURSE_HINTS)
+
+
+def asks_about_own_child(message: str) -> bool:
+    text = (message or "").strip()
+    return any(h in text for h in _OWN_CHILD_HINTS)
+
+
+def wants_platform_kb(message: str) -> bool:
+    """平台/课程/五者等概念问 → 知识库（与 suggest chips 对齐）。"""
+    text = (message or "").strip()
+    if not text:
+        return False
+    if wants_course_kb(text):
+        return True
+    if any(h in text for h in _KB_TOPIC_HINTS):
+        return True
+    if any(h in text for h in _KB_CONCEPT_HINTS):
+        return True
+    # 「…是什么」「什么是…」释义问
+    if text.startswith("什么是") or text.endswith("是什么") or "是什么？" in text:
+        return True
+    return False
 
 
 def _get_or_create_parent_session(
@@ -395,7 +453,12 @@ async def run_parent_turn(
     focus_child = resolve_focus_child_id(
         db, parent_id, child_id if child_id is not None else matched
     )
-    if wants_live_child_data(message) and not wants_course_kb(message):
+    # 概念/课程问优先走知识库；带「孩子/他」的实况问再走工具
+    if wants_platform_kb(message) and not asks_about_own_child(message):
+        return await _kb_or_minimal_reply(
+            db, focus_child, message, history=history
+        )
+    if wants_live_child_data(message):
         return await _live_child_reply(
             db, focus_child, message, history=history
         )
@@ -474,12 +537,12 @@ async def chat_stream(
     children = parent_service.list_children(db, parent_id)
     if needs_child_clarification(message, children, child_id=child_id):
         yield ("status", "发现多位孩子，正在确认…")
+    elif wants_platform_kb(message) and not asks_about_own_child(message):
+        yield ("status", "正在查询知识库…")
     elif wants_live_child_data(message):
         yield ("status", "正在查阅孩子训练与报告…")
-    elif wants_course_kb(message):
-        yield ("status", "正在查询家长课程知识库…")
     else:
-        yield ("status", "正在组织回复…")
+        yield ("status", "正在查询知识库…")
 
     result = await chat(
         db,

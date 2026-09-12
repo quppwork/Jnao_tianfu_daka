@@ -54,6 +54,12 @@ export function renderLatexInPlainText(text) {
     if (matched) continue
 
     const nextSpecial = findNextDelimiterIndex(src, i)
+    // 未闭合定界符：当作普通字符吐出并前进，避免死循环卡死流式渲染
+    if (nextSpecial === i) {
+      out += escapeHtml(src[i])
+      i += 1
+      continue
+    }
     const chunkEnd = nextSpecial === -1 ? src.length : nextSpecial
     out += escapeHtml(src.slice(i, chunkEnd))
     i = chunkEnd

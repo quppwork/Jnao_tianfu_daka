@@ -596,7 +596,8 @@ async function sendMsg() {
       { subject: subject.value, image_id: imageId },
       {
         onToken(chunk) {
-          messages.value[aiIdx].text += chunk
+          const cur = messages.value[aiIdx]
+          messages.value[aiIdx] = { ...cur, text: (cur?.text || '') + chunk }
           scrollChat()
         },
         onDone(data) {
@@ -650,7 +651,7 @@ onMounted(async () => {
   readTheme()
   readSimple()
   const auth = await requirePageAuth('student')
-  if (!auth) return
+  if (!auth?.ok) return
   pushWelcome()
   scrollChat()
 })

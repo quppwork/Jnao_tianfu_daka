@@ -81,6 +81,13 @@ export async function fetchParentGuideSession(parentId) {
   return apiJson(withUser('/api/parent/guide/session', parentId))
 }
 
+/** 家长大宇进页知识库提问引导（与学生同池，每次进页随机） */
+export async function fetchParentSuggestPrompts(parentId, { limit = 3, visitKey } = {}) {
+  const vk = visitKey || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const q = `limit=${limit}&visit_key=${encodeURIComponent(vk)}`
+  return apiJson(withUser(`/api/parent/suggest-prompts?${q}`, parentId))
+}
+
 /** 家长大宇流式对话（与孩子端 SSE 形态对齐） */
 export function sendParentGuideMessageStream(
   parentId,

@@ -49,9 +49,12 @@
         :loading="loading"
         :thinking-hint="thinkingHint"
         :scroll-into="scrollInto"
+        :suggests="suggestChips"
+        :show-suggests="showSuggest"
         placeholder="问大宇：孩子训练 / 家长课程 / 报告解读…"
         @send="sendMsg"
         @stop="stopStream"
+        @suggest="sendSuggest"
         @navigate="runNavigate"
       >
         <template #intro>
@@ -66,16 +69,6 @@
               <view class="av sm" />
               <view class="bubble ai">
                 <view class="rich" v-html="introHtml2" />
-              </view>
-            </view>
-            <view v-if="showSuggest" class="suggest">
-              <view
-                v-for="(c, i) in suggestChips"
-                :key="i"
-                class="chip"
-                @tap="sendSuggest(c.text)"
-              >
-                <text>{{ c.label }}</text>
               </view>
             </view>
           </view>
@@ -104,6 +97,7 @@ import DayuChatPanel from '@/components/dayu-chat-panel/dayu-chat-panel.vue'
 import {
   ensureParentUser,
   fetchParentGuideSession,
+  fetchParentSuggestPrompts,
   requirePageAuth,
   sendParentGuideMessageStream,
 } from '@/utils/userApi.js'
@@ -122,12 +116,11 @@ const introHtml1 =
 const introHtml2 =
   '想测天赋点上方<b>「天赋测试」</b>；想学习进<b>「家长课堂」</b>；想找真人老师点<b>「一键咨询」</b>——也可以点下面快捷问法，或直接打字问我。今天想先从哪件事开始？'
 
-const suggestChips = [
-  { label: '孩子训练怎么样', text: '帮我看看孩子最近训练怎么样' },
-  { label: '解读天赋报告', text: '帮我解读一下孩子的天赋报告' },
-  { label: '家长课程怎么学', text: '家长课程有哪些，怎么学' },
-  { label: '先看哪个孩子', text: '先看哪个孩子的数据分析' },
-]
+const suggestChips = ref([
+  { label: '学者天赋是什么', text: '学者天赋是什么' },
+  { label: '什么是火箭提分营', text: '什么是火箭提分营' },
+  { label: '提分营适合谁', text: '火箭提分营适合什么样的孩子' },
+])
 
 const parentTabs = [
   { key: 'dayu', label: '大宇', path: '/pages/parent/dayu', icon: '/static/dayu/assets/ic/robot.png' },
@@ -148,7 +141,17 @@ const scrollInto = ref('')
 let chatAbort = null
 let abortRequested = false
 
-const showSuggest = computed(() => !messages.value.some((m) => m.role === 'user'))
+const showSuggest = computed(() => (
+  !loading.value && suggestChips.value.length > 0
+))
+
+async function loadSuggestChips(uid) {
+  try {
+    const data = await fetchParentSuggestPrompts(uid, { limit: 3 })
+    const items = data?.items
+    if (Array.isArray(items) && items.length) suggestChips.value = items.slice(0, 3)
+  } catch (_) { /* keep fallback */ }
+}
 
 function go(url) {
   if (!url) return
@@ -266,7 +269,8 @@ async function sendMsg() {
         },
         onToken(chunk) {
           if (abortRequested) return
-          messages.value[aiIdx].text += chunk
+          const cur = messages.value[aiIdx]
+          messages.value[aiIdx] = { ...cur, text: (cur?.text || '') + chunk }
           scrollChat()
         },
         onDone(data) {
@@ -314,6 +318,7 @@ onMounted(async () => {
   // 家长首页 intro 可先出壳；会话后台加载，避免切换账号后整页转圈
   const auth = await requirePageAuth('parent')
   if (!auth.ok) return
+  loadSuggestChips(auth.userId)
   try {
     const data = await fetchParentGuideSession(auth.userId)
     applyGuideMessages(data)

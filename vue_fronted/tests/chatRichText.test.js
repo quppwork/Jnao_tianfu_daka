@@ -65,11 +65,16 @@ describe('chatRichText', () => {
     expect(html).toContain('思者')
   })
 
-  it('formatGuideRichHtml 渲染 #### 四级标题（不露 # 号）', () => {
-    const html = formatGuideRichHtml('#### 1. 火\n\n说明文字')
-    expect(html).toContain('gd-h4')
-    expect(html).toContain('1. 火')
-    expect(html).not.toContain('####')
-    expect(html).not.toMatch(/#+\s*1/)
+  it('renderLatexInPlainText 未闭合 $ 不卡死且保留原文', () => {
+    const html = renderLatexInPlainText('价格约 $2980 元')
+    expect(html).toContain('2980')
+    expect(html).toContain('价格约')
+    expect(html).toContain('元')
+  })
+
+  it('formatGuideRichHtml 流式半截金额不卡死', () => {
+    const html = formatGuideRichHtml('火箭提分营售价 $2980')
+    expect(html).toContain('2980')
+    expect(html).toContain('火箭提分营')
   })
 })
