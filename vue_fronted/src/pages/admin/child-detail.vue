@@ -29,6 +29,22 @@
       </view>
 
       <view class="card" style="margin-top:12px;">
+        <text class="card-title">⚡ 上游 Token 用量</text>
+        <view class="row-line">
+          <text class="label">本孩子</text>
+          <text class="val" style="font-weight:700;color:#f5d9a8;">{{ fmtTok(detail.usage_me?.total_tokens ?? detail.usage_total_tokens) }} tok · {{ detail.usage_me?.call_count ?? detail.usage_call_count ?? 0 }} 次</text>
+        </view>
+        <view v-if="detail.usage_billing" class="row-line">
+          <text class="label">家计合计</text>
+          <text class="val">{{ fmtTok(detail.usage_billing.total_tokens) }} tok · {{ detail.usage_billing.call_count || 0 }} 次</text>
+        </view>
+        <view v-if="childProviders.length" class="prov-row">
+          <text v-for="p in childProviders" :key="p.provider" class="prov-chip">{{ p.provider }} {{ fmtTok(p.total_tokens) }}</text>
+        </view>
+        <text class="usage-hint">含豆包官方 token + 百炼估算</text>
+      </view>
+
+      <view class="card" style="margin-top:12px;">
         <view class="row-line" style="justify-content:space-between;">
           <text class="label">🧪 天赋测试配额</text>
           <view style="display:flex;align-items:center;gap:8px;">
@@ -187,7 +203,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
   requirePageAuth,
@@ -200,6 +216,7 @@ import {
   updateChildTalentQuota,
   fetchAdminChildAssessments,
 } from '@/utils/userApi.js'
+import { formatTokenCount } from '@/utils/api/usage.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 import { miniCardSummary, cardsFromRecord, attitudeEmoji } from '@/utils/trainingCardDisplay.js'
 
@@ -217,6 +234,12 @@ const detailCards = ref([])
 const detailAttitude = ref(null)
 const showPlanDetail = ref(false)
 const planDetail = ref(null)
+
+const childProviders = computed(() => detail.value?.usage_me?.by_provider || [])
+
+function fmtTok(n) {
+  return formatTokenCount(n)
+}
 
 function recordTitle(rec) {
   const cards = cardsFromRecord(rec)
@@ -406,6 +429,9 @@ function confirmDelete() {
 .card-title { display:block; font-size:18px; font-weight:700; color:var(--text); margin-bottom:12px; }
 .row-line { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); }
 .row-line:last-child { border-bottom:none; }
+.usage-hint { display:block; margin-top:8px; font-size:11px; color:var(--text-dim); line-height:1.4; }
+.prov-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.prov-chip { font-size:11px; color:#c9cfdc; background:rgba(245,217,168,0.08); border:1px solid rgba(201,168,105,0.35); border-radius:99px; padding:3px 8px; }
 .label { color:var(--text-dim); font-size:13px; }
 .val { color:var(--text); font-size:13px; max-width:60%; text-align:right; }
 .stats { display:flex; gap:8px; margin-bottom:16px; }

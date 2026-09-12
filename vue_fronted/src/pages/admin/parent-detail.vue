@@ -19,6 +19,22 @@
         <view class="row-line"><text class="label">注册时间</text><text class="val">{{ formatTime(detail.created_at) }}</text></view>
       </view>
 
+      <view class="card">
+        <text class="card-title">⚡ 上游 Token 用量</text>
+        <view class="row-line">
+          <text class="label">家计合计</text>
+          <text class="val usage-strong">{{ fmtTok(detail.usage_billing?.total_tokens) }} tok · {{ detail.usage_billing?.call_count || 0 }} 次</text>
+        </view>
+        <view class="row-line">
+          <text class="label">家长本人</text>
+          <text class="val">{{ fmtTok(detail.usage_me?.total_tokens) }} tok · {{ detail.usage_me?.call_count || 0 }} 次</text>
+        </view>
+        <view v-if="billingProviders.length" class="prov-row">
+          <text v-for="p in billingProviders" :key="p.provider" class="prov-chip">{{ p.provider }} {{ fmtTok(p.total_tokens) }}</text>
+        </view>
+        <text class="usage-hint">含豆包官方 token + 百炼估算；规格费不在此列</text>
+      </view>
+
       <view v-if="detail.is_duplicate_account" class="warn-box">
         <text class="warn-title">重复家长账号</text>
         <text class="warn-text">该手机号存在多个家长账号，孩子列表已合并显示自主账号（ID {{ detail.canonical_parent_id }}）。</text>
@@ -66,6 +82,7 @@
           <view class="main">
             <text class="name">{{ c.nickname }}（{{ c.login_name || '—' }}）</text>
             <text class="sub">训练 {{ c.training_days || 0 }} 天 · 打卡 {{ c.checkins || 0 }} 次</text>
+            <text class="sub usage-line">⚡ 已用 {{ fmtTok(c.usage_total_tokens) }} tok · {{ c.usage_call_count || 0 }} 次</text>
           </view>
           <text class="act">查看</text>
         </view>
@@ -91,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
   requirePageAuth,
@@ -101,6 +118,7 @@ import {
   deleteAdminParent,
   restoreAdminParent,
 } from '@/utils/userApi.js'
+import { formatTokenCount } from '@/utils/api/usage.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 
 const adminId = ref(null)
@@ -110,6 +128,12 @@ const detail = ref(null)
 const showEdit = ref(false)
 const form = ref({})
 const reconcileMsg = ref('')
+
+const billingProviders = computed(() => detail.value?.usage_billing?.by_provider || [])
+
+function fmtTok(n) {
+  return formatTokenCount(n)
+}
 
 onLoad((q) => {
   parentId.value = Number(q.id)
@@ -221,6 +245,11 @@ function confirmDelete() {
 .row-line:last-child { border-bottom:none; }
 .label { color:var(--text-dim); font-size:13px; }
 .val { color:var(--text); font-size:13px; }
+.usage-strong { color:#f5d9a8; font-weight:700; }
+.usage-line { color:#c9a869 !important; }
+.usage-hint { display:block; margin-top:8px; font-size:11px; color:var(--text-dim); line-height:1.4; }
+.prov-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.prov-chip { font-size:11px; color:#c9cfdc; background:rgba(245,217,168,0.08); border:1px solid rgba(201,168,105,0.35); border-radius:99px; padding:3px 8px; }
 .section { margin-bottom:20px; }
 .section-title { display:block; color:var(--text); font-size:15px; font-weight:600; margin-bottom:10px; }
 .hint { color:var(--text-dim); font-size:12px; padding:8px 0; }

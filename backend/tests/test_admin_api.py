@@ -289,12 +289,43 @@ class TestAdminApi:
         pdata = pres.json()
         assert pdata["parent_phone"] == "13900009905"
         assert any(c["id"] == cid for c in pdata["children"])
+        assert "usage_billing" in pdata
+        assert "usage_me" in pdata
+        assert pdata["usage_billing"]["total_tokens"] == 0
+        kid = next(c for c in pdata["children"] if c["id"] == cid)
+        assert kid.get("usage_total_tokens", 0) == 0
+
+        from app.db.models import UpstreamUsageEvent
+
+        db_session.add(
+            UpstreamUsageEvent(
+                user_id=cid,
+                billing_parent_id=pid,
+                provider="doubao",
+                api="chat.completions",
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                call_count=1,
+                ok=1,
+            )
+        )
+        db_session.commit()
+
+        pres2 = client.get(f"/api/admin/parents/{pid}/detail", **auth)
+        assert pres2.status_code == 200
+        pdata2 = pres2.json()
+        assert pdata2["usage_billing"]["total_tokens"] == 15
+        kid2 = next(c for c in pdata2["children"] if c["id"] == cid)
+        assert kid2["usage_total_tokens"] == 15
 
         cres = client.get(f"/api/admin/children/{cid}/detail", **auth)
         assert cres.status_code == 200
         cdata = cres.json()
         assert cdata["login_name"] == "kid_detail"
         assert cdata["parent_id"] == pid
+        assert cdata["usage_me"]["total_tokens"] == 15
+        assert cdata["usage_billing"]["total_tokens"] == 15
 
     def test_student_multi_device_login(self, client: TestClient, db_session):
         from app.db.models import UserSession

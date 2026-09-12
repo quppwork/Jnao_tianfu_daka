@@ -17,6 +17,9 @@ class AdminParentOut(BaseModel):
     created_at: str | None = None
     account_status: str | None = None
     display_phone: str | None = None
+    # 家计上游用量（家长本人 + 名下孩子）
+    usage_total_tokens: int = 0
+    usage_call_count: int = 0
 
 
 class AdminCreateParentRequest(BaseModel):
@@ -47,6 +50,9 @@ class AdminChildOut(BaseModel):
     parent_id: int | None = None
     parent_phone: str | None = None
     parent_nickname: str | None = None
+    # 该孩子账户上游用量
+    usage_total_tokens: int = 0
+    usage_call_count: int = 0
 
 
 class AdminChildListResponse(BaseModel):
@@ -108,6 +114,18 @@ class AdminSessionOut(BaseModel):
     last_active_at: str | None = None
 
 
+class AdminUsageBrief(BaseModel):
+    """上游用量摘要（豆包官方 + 百炼估算等合计）。"""
+
+    user_id: int | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    call_count: int = 0
+    event_count: int = 0
+    by_provider: list[dict] = []
+
+
 class AdminParentDetailResponse(BaseModel):
     id: int
     parent_phone: str
@@ -125,6 +143,9 @@ class AdminParentDetailResponse(BaseModel):
     is_duplicate_account: bool = False
     account_status: str | None = "active"
     removed_at: str | None = None
+    # 家长本人用量 / 家计汇总（含家长+全部孩子）
+    usage_me: AdminUsageBrief | None = None
+    usage_billing: AdminUsageBrief | None = None
 
 
 class AdminReconcileResponse(BaseModel):
@@ -159,6 +180,8 @@ class AdminChildDetailResponse(BaseModel):
     active_sessions: list[AdminSessionOut] = []
     account_status: str | None = "active"
     removed_at: str | None = None
+    usage_me: AdminUsageBrief | None = None
+    usage_billing: AdminUsageBrief | None = None
 
 
 class BlacklistEntryOut(BaseModel):

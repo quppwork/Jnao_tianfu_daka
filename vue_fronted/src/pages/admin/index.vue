@@ -34,7 +34,7 @@
             <text class="name">{{ p.nickname }}</text>
             <text v-if="p.account_status && p.account_status !== 'active'" class="badge">{{ statusLabel(p.account_status) }}</text>
           </view>
-          <text class="sub">{{ p.display_phone || p.parent_phone }} · 名额 {{ p.children_count }}/{{ p.child_quota }}</text>
+          <text class="sub">{{ p.display_phone || p.parent_phone }} · 名额 {{ p.children_count }}/{{ p.child_quota }} · ⚡{{ fmtTok(p.usage_total_tokens) }}</text>
         </view>
         <text v-if="parentSubTab === 'removed'" class="act" @click.stop="doRestoreParent(p)">恢复</text>
         <text v-else class="act">详情</text>
@@ -56,7 +56,7 @@
       <view v-for="c in children" :key="c.id" class="row" @click="goChild(c.id)">
         <view class="main">
           <text class="name">{{ c.nickname }}（{{ c.login_name || '—' }}）</text>
-          <text class="sub">家长：{{ c.parent_nickname || '未绑定' }} · 训练{{ c.training_days || 0 }}天</text>
+          <text class="sub">家长：{{ c.parent_nickname || '未绑定' }} · 训练{{ c.training_days || 0 }}天 · ⚡{{ fmtTok(c.usage_total_tokens) }}</text>
         </view>
         <text class="act">详情</text>
       </view>
@@ -171,6 +171,11 @@ import {
   removeAdminBlacklist,
   batchUpdateTalentQuota,
 } from '@/utils/userApi.js'
+import { formatTokenCount } from '@/utils/api/usage.js'
+
+function fmtTok(n) {
+  return formatTokenCount(n)
+}
 
 const adminId = ref(null)
 const tab = ref('parents')

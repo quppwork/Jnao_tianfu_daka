@@ -160,6 +160,144 @@ def record_usage(
                 pass
 
 
+def sum_tokens_by_user_ids(db: Session, user_ids: list[int]) -> dict[int, dict[str, Any]]:
+    """批量：多个 user_id → 用量合计（缺省为 0）。"""
+    from app.db.models import UpstreamUsageEvent
+
+    ids = [int(x) for x in user_ids if x is not None]
+    empty = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "call_count": 0,
+        "event_count": 0,
+    }
+    out: dict[int, dict[str, Any]] = {uid: {**empty, "user_id": uid} for uid in ids}
+    if not ids:
+        return out
+    rows = db.execute(
+        select(
+            UpstreamUsageEvent.user_id,
+            func.coalesce(func.sum(UpstreamUsageEvent.prompt_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.completion_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.total_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.call_count), 0),
+            func.count(UpstreamUsageEvent.id),
+        )
+        .where(UpstreamUsageEvent.user_id.in_(ids), UpstreamUsageEvent.ok == 1)
+        .group_by(UpstreamUsageEvent.user_id)
+    ).all()
+    for r in rows:
+        uid = int(r[0])
+        out[uid] = {
+            "user_id": uid,
+            "prompt_tokens": int(r[1] or 0),
+            "completion_tokens": int(r[2] or 0),
+            "total_tokens": int(r[3] or 0),
+            "call_count": int(r[4] or 0),
+            "event_count": int(r[5] or 0),
+        }
+    return out
+
+
+def sum_tokens_by_billing_parent_ids(
+    db: Session, parent_ids: list[int]
+) -> dict[int, dict[str, Any]]:
+    """批量：多个 billing_parent_id → 家计用量合计。"""
+    from app.db.models import UpstreamUsageEvent
+
+    ids = [int(x) for x in parent_ids if x is not None]
+    empty = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "call_count": 0,
+        "event_count": 0,
+    }
+    out: dict[int, dict[str, Any]] = {pid: {**empty, "billing_parent_id": pid} for pid in ids}
+    if not ids:
+        return out
+    rows = db.execute(
+        select(
+            UpstreamUsageEvent.billing_parent_id,
+            func.coalesce(func.sum(UpstreamUsageEvent.prompt_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.completion_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.total_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.call_count), 0),
+            func.count(UpstreamUsageEvent.id),
+        )
+        .where(
+            UpstreamUsageEvent.billing_parent_id.in_(ids),
+            UpstreamUsageEvent.ok == 1,
+        )
+        .group_by(UpstreamUsageEvent.billing_parent_id)
+    ).all()
+    for r in rows:
+        if r[0] is None:
+            continue
+        pid = int(r[0])
+        out[pid] = {
+            "billing_parent_id": pid,
+            "prompt_tokens": int(r[1] or 0),
+            "completion_tokens": int(r[2] or 0),
+            "total_tokens": int(r[3] or 0),
+            "call_count": int(r[4] or 0),
+            "event_count": int(r[5] or 0),
+        }
+    return out
+
+
+def usage_by_provider_for_user(db: Session, user_id: int) -> list[dict[str, Any]]:
+    from app.db.models import UpstreamUsageEvent
+
+    rows = db.execute(
+        select(
+            UpstreamUsageEvent.provider,
+            func.coalesce(func.sum(UpstreamUsageEvent.total_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.call_count), 0),
+            func.count(UpstreamUsageEvent.id),
+        )
+        .where(UpstreamUsageEvent.user_id == int(user_id), UpstreamUsageEvent.ok == 1)
+        .group_by(UpstreamUsageEvent.provider)
+    ).all()
+    return [
+        {
+            "provider": str(r[0]),
+            "total_tokens": int(r[1] or 0),
+            "call_count": int(r[2] or 0),
+            "event_count": int(r[3] or 0),
+        }
+        for r in rows
+    ]
+
+
+def usage_by_provider_for_billing_parent(db: Session, parent_id: int) -> list[dict[str, Any]]:
+    from app.db.models import UpstreamUsageEvent
+
+    rows = db.execute(
+        select(
+            UpstreamUsageEvent.provider,
+            func.coalesce(func.sum(UpstreamUsageEvent.total_tokens), 0),
+            func.coalesce(func.sum(UpstreamUsageEvent.call_count), 0),
+            func.count(UpstreamUsageEvent.id),
+        )
+        .where(
+            UpstreamUsageEvent.billing_parent_id == int(parent_id),
+            UpstreamUsageEvent.ok == 1,
+        )
+        .group_by(UpstreamUsageEvent.provider)
+    ).all()
+    return [
+        {
+            "provider": str(r[0]),
+            "total_tokens": int(r[1] or 0),
+            "call_count": int(r[2] or 0),
+            "event_count": int(r[3] or 0),
+        }
+        for r in rows
+    ]
+
+
 def sum_tokens_for_user(db: Session, user_id: int) -> dict[str, Any]:
     """单个账户（家长或某一个孩子）的用量合计。"""
     from app.db.models import UpstreamUsageEvent

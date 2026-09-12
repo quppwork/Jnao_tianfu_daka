@@ -29,6 +29,49 @@ from app.services.datetime_fmt import format_cst
 TZ = timezone(timedelta(hours=8))
 
 
+def _attach_user_usage(db: Session, items: list[dict]) -> list[dict]:
+    from app.services.usage_recorder import sum_tokens_by_user_ids
+
+    ids = [int(it["id"]) for it in items if it.get("id") is not None]
+    usage_map = sum_tokens_by_user_ids(db, ids)
+    for it in items:
+        u = usage_map.get(int(it["id"]), {})
+        it["usage_total_tokens"] = int(u.get("total_tokens") or 0)
+        it["usage_call_count"] = int(u.get("call_count") or 0)
+    return items
+
+
+def _attach_billing_usage(db: Session, parents: list[dict]) -> list[dict]:
+    from app.services.usage_recorder import sum_tokens_by_billing_parent_ids
+
+    ids = [int(p["id"]) for p in parents if p.get("id") is not None]
+    usage_map = sum_tokens_by_billing_parent_ids(db, ids)
+    for p in parents:
+        u = usage_map.get(int(p["id"]), {})
+        p["usage_total_tokens"] = int(u.get("total_tokens") or 0)
+        p["usage_call_count"] = int(u.get("call_count") or 0)
+    return parents
+
+
+def _usage_brief_user(db: Session, user_id: int) -> dict:
+    from app.services.usage_recorder import sum_tokens_for_user, usage_by_provider_for_user
+
+    me = sum_tokens_for_user(db, user_id)
+    me["by_provider"] = usage_by_provider_for_user(db, user_id)
+    return me
+
+
+def _usage_brief_billing(db: Session, parent_id: int) -> dict:
+    from app.services.usage_recorder import (
+        sum_tokens_for_billing_parent,
+        usage_by_provider_for_billing_parent,
+    )
+
+    bill = sum_tokens_for_billing_parent(db, parent_id)
+    bill["by_provider"] = usage_by_provider_for_billing_parent(db, parent_id)
+    return bill
+
+
 def _require_admin(db: Session, admin_id: int) -> ChildUser:
     user = db.get(ChildUser, admin_id)
     if not user or user.role != auth_service.ROLE_ADMIN:
@@ -143,7 +186,7 @@ def list_parents(db: Session, admin_id: int, *, q: str | None = None) -> list[di
             if key in (p["nickname"] or "").lower()
             or key in (p["display_phone"] or p["parent_phone"] or "")
         ]
-    return out
+    return _attach_billing_usage(db, out)
 
 
 def list_removed_parents(db: Session, admin_id: int, *, q: str | None = None) -> list[dict]:
@@ -171,7 +214,7 @@ def list_removed_parents(db: Session, admin_id: int, *, q: str | None = None) ->
             if key in (p["nickname"] or "").lower()
             or key in (p["display_phone"] or p["parent_phone"] or "")
         ]
-    return out
+    return _attach_billing_usage(db, out)
 
 
 def create_parent(
@@ -294,7 +337,7 @@ def list_children(db: Session, admin_id: int, *, parent_id: int | None = None, q
             or key in (c.get("parent_phone") or "")
             or key in (c.get("parent_nickname") or "").lower()
         ]
-    return out
+    return _attach_user_usage(db, out)
 
 
 def update_parent(
@@ -527,6 +570,14 @@ def get_parent_detail(db: Session, admin_id: int, parent_id: int) -> dict:
     unbound = find_unbound_students_by_phone(db, display_phone) if active else []
     dupes = duplicate_parent_summaries(db, display_phone, exclude_id=parent.id) if active else []
 
+    children = _attach_user_usage(db, children)
+    unbound_out = _attach_user_usage(
+        db, [auth_service.child_summary(db, c) for c in unbound]
+    )
+    bill_id = canonical.id if active else parent.id
+    usage_me = _usage_brief_user(db, parent.id)
+    usage_billing = _usage_brief_billing(db, bill_id)
+
     return {
         "id": parent.id,
         "parent_phone": display_phone,
@@ -538,12 +589,14 @@ def get_parent_detail(db: Session, admin_id: int, parent_id: int) -> dict:
         "active_sessions": list_user_sessions(db, parent.id) if active else [],
         "reconciled_count": 0,
         "pending_unbound_count": len(unbound),
-        "unbound_children": [auth_service.child_summary(db, c) for c in unbound],
+        "unbound_children": unbound_out,
         "duplicate_parents": dupes,
         "canonical_parent_id": canonical.id,
         "is_duplicate_account": active and canonical.id != parent.id,
         "account_status": parent.account_status or auth_service.ACCOUNT_ACTIVE,
         "removed_at": format_cst(parent.deleted_at) if parent.deleted_at else None,
+        "usage_me": usage_me,
+        "usage_billing": usage_billing,
     }
 
 
@@ -621,6 +674,17 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
     base = auth_service.child_summary(db, child)
     login_name = auth_service.effective_student_login_name(child) or base.get("login_name")
 
+    usage_me = _usage_brief_user(db, child_id)
+    usage_billing = None
+    if parent:
+        usage_billing = _usage_brief_billing(db, parent.id)
+    else:
+        from app.services.usage_recorder import resolve_billing_parent_id
+
+        bp = resolve_billing_parent_id(db, child_id)
+        if bp:
+            usage_billing = _usage_brief_billing(db, bp)
+
     return {
         **base,
         "login_name": login_name,
@@ -636,4 +700,8 @@ def get_child_detail(db: Session, admin_id: int, child_id: int) -> dict:
         "training_history_days": history_days[:30],
         "recent_plans": recent_plans,
         "active_sessions": list_user_sessions(db, child_id) if active else [],
+        "usage_total_tokens": int(usage_me.get("total_tokens") or 0),
+        "usage_call_count": int(usage_me.get("call_count") or 0),
+        "usage_me": usage_me,
+        "usage_billing": usage_billing,
     }
