@@ -91,13 +91,32 @@ def search_sync(
     except (TypeError, ValueError):
         cost_ms = None
 
-    return RagResult(
+    result = RagResult(
         nodes=nodes,
         mode="search",
         query=query,
         cost_time_ms=cost_ms,
         request_id=str(data.get("request_id") or "") or None,
     )
+    try:
+        from app.services.usage_recorder import record_usage
+
+        record_usage(
+            provider="bailian",
+            api="search",
+            model=str(c.agent_id or ""),
+            metric_kind="call",
+            call_count=1,
+            doc_count=len(nodes),
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            feature="rag",
+            ok=True,
+        )
+    except Exception as e:
+        logger.warning("bailian search usage record skipped: %s", e)
+    return result
 
 
 def list_indices_sync(cfg: BailianConfig | None = None) -> list[dict[str, Any]]:

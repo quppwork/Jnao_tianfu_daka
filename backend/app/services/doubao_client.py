@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 import httpx
 from config.loader import load_settings
 from app.core.logger import get_logger
+from app.services.usage_recorder import record_usage
 
 logger = get_logger("doubao")
 
@@ -72,6 +73,31 @@ def _build_messages(
     return messages
 
 
+def _record_doubao(
+    *,
+    api: str,
+    model: str | None,
+    usage: dict | None,
+    stream: bool = False,
+    ok: bool = True,
+    feature: str | None = None,
+) -> None:
+    try:
+        record_usage(
+            provider="doubao",
+            api=api,
+            model=model,
+            feature=feature,
+            usage=usage if isinstance(usage, dict) else None,
+            metric_kind="tokens",
+            stream=stream,
+            ok=ok,
+            call_count=1,
+        )
+    except Exception as e:
+        logger.warning("doubao usage record skipped: %s", e)
+
+
 async def chat_completion(
     *,
     system_prompt: str,
@@ -79,6 +105,7 @@ async def chat_completion(
     history: list[dict] | None = None,
     max_tokens: int = 500,
     timeout: float = 30,
+    feature: str | None = None,
 ) -> str | None:
     cfg = _cfg()
     if not cfg["api_key"]:
@@ -103,8 +130,15 @@ async def chat_completion(
         )
         if resp.status_code != 200:
             logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
+            _record_doubao(api="chat.completions", model=cfg["model"], usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
+        _record_doubao(
+            api="chat.completions",
+            model=cfg["model"],
+            usage=data.get("usage"),
+            feature=feature,
+        )
         return data["choices"][0]["message"]["content"]
     except httpx.HTTPError as e:
         logger.warning(f"Doubao request failed: {e}")
@@ -121,6 +155,7 @@ async def chat_completion_message(
     tool_choice: str | dict | None = "auto",
     max_tokens: int = 400,
     timeout: float = 30,
+    feature: str | None = None,
 ) -> dict | None:
     """Ark /chat/completions：返回 assistant message（可含 tool_calls）。
 
@@ -157,8 +192,15 @@ async def chat_completion_message(
             logger.error(
                 f"Doubao tools error {resp.status_code}: {resp.text[:300]}"
             )
+            _record_doubao(api="chat.completions.tools", model=cfg["model"], usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
+        _record_doubao(
+            api="chat.completions.tools",
+            model=cfg["model"],
+            usage=data.get("usage"),
+            feature=feature,
+        )
         msg = data["choices"][0]["message"]
         return msg if isinstance(msg, dict) else None
     except httpx.HTTPError as e:
@@ -182,6 +224,7 @@ async def vision_chat_completion(
     history: list[dict] | None = None,
     max_tokens: int = 800,
     timeout: float = 60,
+    feature: str | None = None,
 ) -> str | None:
     """多模态识题 + 解答（OpenAI 兼容 image_url 格式）"""
     cfg = _cfg()
@@ -221,8 +264,15 @@ async def vision_chat_completion(
             )
         if resp.status_code != 200:
             logger.error(f"Doubao vision error {resp.status_code}: {resp.text[:200]}")
+            _record_doubao(api="chat.completions.vision", model=cfg["vision_model"], usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
+        _record_doubao(
+            api="chat.completions.vision",
+            model=cfg["vision_model"],
+            usage=data.get("usage"),
+            feature=feature,
+        )
         return data["choices"][0]["message"]["content"]
     except httpx.HTTPError as e:
         logger.warning(f"Doubao vision request failed: {e}")
@@ -238,6 +288,7 @@ async def chat_completion_stream(
     user_message: str,
     history: list[dict] | None = None,
     max_tokens: int = 500,
+    feature: str | None = None,
 ) -> AsyncIterator[str]:
     """流式输出：优先真流式，失败则整段回退"""
     cfg = _cfg()
@@ -251,7 +302,10 @@ async def chat_completion_stream(
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
+    usage_acc: dict | None = None
+    yielded_any = False
 
     try:
         async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
@@ -267,6 +321,14 @@ async def chat_completion_stream(
                 if resp.status_code != 200:
                     body = await resp.aread()
                     logger.error(f"Doubao stream error {resp.status_code}: {body[:200]}")
+                    _record_doubao(
+                        api="chat.completions.stream",
+                        model=cfg["model"],
+                        usage=None,
+                        stream=True,
+                        ok=False,
+                        feature=feature,
+                    )
                     yield "[ERROR] 豆包服务异常"
                     return
                 async for line in resp.aiter_lines():
@@ -279,12 +341,26 @@ async def chat_completion_stream(
                         import json
 
                         data = json.loads(chunk)
-                        delta = data["choices"][0].get("delta", {})
+                        if isinstance(data.get("usage"), dict):
+                            usage_acc = data["usage"]
+                        choices = data.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {}) or {}
                         text = delta.get("content", "")
                         if text:
+                            yielded_any = True
                             yield text
                     except Exception:
                         continue
+        if yielded_any or usage_acc:
+            _record_doubao(
+                api="chat.completions.stream",
+                model=cfg["model"],
+                usage=usage_acc,
+                stream=True,
+                feature=feature,
+            )
     except Exception as e:
         logger.error(f"Doubao stream failed: {e}")
         full = await chat_completion(
@@ -292,6 +368,7 @@ async def chat_completion_stream(
             user_message=user_message,
             history=history,
             max_tokens=max_tokens,
+            feature=feature,
         )
         if full:
             yield full
@@ -306,6 +383,7 @@ async def vision_chat_completion_stream(
     image_data_url: str,
     history: list[dict] | None = None,
     max_tokens: int = 800,
+    feature: str | None = None,
 ) -> AsyncIterator[str]:
     """多模态流式输出"""
     cfg = _cfg()
@@ -334,7 +412,10 @@ async def vision_chat_completion_stream(
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
+    usage_acc: dict | None = None
+    yielded_any = False
 
     try:
         async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
@@ -350,6 +431,14 @@ async def vision_chat_completion_stream(
                 if resp.status_code != 200:
                     body = await resp.aread()
                     logger.error(f"Doubao vision stream error {resp.status_code}: {body[:200]}")
+                    _record_doubao(
+                        api="chat.completions.vision.stream",
+                        model=cfg["vision_model"],
+                        usage=None,
+                        stream=True,
+                        ok=False,
+                        feature=feature,
+                    )
                     yield "[ERROR] 豆包识图服务异常"
                     return
                 async for line in resp.aiter_lines():
@@ -362,12 +451,26 @@ async def vision_chat_completion_stream(
                         import json
 
                         data = json.loads(chunk)
-                        delta = data["choices"][0].get("delta", {})
+                        if isinstance(data.get("usage"), dict):
+                            usage_acc = data["usage"]
+                        choices = data.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {}) or {}
                         text = delta.get("content", "")
                         if text:
+                            yielded_any = True
                             yield text
                     except Exception:
                         continue
+        if yielded_any or usage_acc:
+            _record_doubao(
+                api="chat.completions.vision.stream",
+                model=cfg["vision_model"],
+                usage=usage_acc,
+                stream=True,
+                feature=feature,
+            )
     except Exception as e:
         logger.error(f"Doubao vision stream failed: {e}")
         full = await vision_chat_completion(
@@ -376,6 +479,7 @@ async def vision_chat_completion_stream(
             image_data_url=image_data_url,
             history=history,
             max_tokens=max_tokens,
+            feature=feature,
         )
         if full:
             yield full

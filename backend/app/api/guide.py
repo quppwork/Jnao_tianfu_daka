@@ -230,6 +230,9 @@ async def guide_chat(
     db: Session = Depends(get_db),
 ):
     check_guide_chat_limits(child_user_id)
+    from app.services.usage_recorder import bind_usage_feature
+
+    bind_usage_feature("guide")
     if not is_configured():
         biz_event("guide.chat", result="no_ai_config")
         return {"reply": "AI 服务未配置，请先设置豆包 API Key。", "session_id": req.session_id}
@@ -256,6 +259,9 @@ async def guide_chat_stream(
 ):
     """SSE 流式引导对话"""
     check_guide_chat_limits(child_user_id)
+    from app.services.usage_recorder import bind_usage_feature
+
+    bind_usage_feature("guide")
     biz_event(
         "guide.chat_stream",
         result="start",

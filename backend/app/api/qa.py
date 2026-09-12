@@ -60,6 +60,9 @@ async def qa_chat(
     db: Session = Depends(get_db),
 ):
     check_qa_chat_limits(child_user_id)
+    from app.services.usage_recorder import bind_usage_feature
+
+    bind_usage_feature("qa")
     with biz_timer(
         "qa.chat",
         session_id=req.session_id,
@@ -91,6 +94,9 @@ async def qa_chat_stream(
 ):
     """SSE 流式学科答疑"""
     check_qa_chat_limits(child_user_id)
+    from app.services.usage_recorder import bind_usage_feature
+
+    bind_usage_feature("qa")
     biz_event(
         "qa.chat_stream",
         result="start",

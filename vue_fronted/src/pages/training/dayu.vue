@@ -24,6 +24,7 @@
     <view v-if="devMode" class="dev-panel">
       <text class="dev-panel-label">🔧 开发者测试</text>
       <view v-if="devStatusText" class="dev-status"><text>{{ devStatusText }}</text></view>
+      <view v-if="usageLine" class="dev-status"><text>{{ usageLine }}</text></view>
       <text class="dev-section-label">今日操作</text>
       <view class="dev-actions">
         <view class="dev-action primary" @click="devResetToday"><text>🔄 重置今日</text></view>
@@ -521,6 +522,8 @@ import {
   refreshTrainingReport,
   toggleElectiveItem,
   customizePlan,
+  fetchUsageSummary,
+  formatTokenCount,
 } from '@/utils/userApi.js'
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
 import { resolvePlanItemSkill, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
@@ -583,6 +586,7 @@ let timerTickId = null
 const devToolsAvailable = isDevToolsAvailable()
 const devMode = ref(getDevMode())
 const devStatusText = ref('')
+const usageLine = ref('')
 
 const mediaOpen = ref(false)
 const mediaSrc = ref('')
@@ -1751,7 +1755,10 @@ function toggleDevMode() {
     icon: 'none',
   })
   if (devMode.value) loadDevStatus()
-  else devStatusText.value = ''
+  else {
+    devStatusText.value = ''
+    usageLine.value = ''
+  }
 }
 
 async function loadDevStatus() {
@@ -1766,6 +1773,21 @@ async function loadDevStatus() {
     devStatusText.value = `主线 ${s.main_line ?? 'A'} · 第 ${s.training_day_number ?? 1} 天 · ${tag} · 计划 ${s.plan_count} 条 · 打卡 ${s.record_count} 条${clock}`
   } catch (_) {
     devStatusText.value = 'dev 状态拉取失败（检查后端 JNAO_DEV_MODE=1）'
+  }
+  try {
+    const u = await fetchUsageSummary()
+    const me = u?.me || {}
+    const fam = u?.billing?.total_tokens
+    const parts = [
+      `⚡ 已用 ${formatTokenCount(me.total_tokens || 0)} tok`,
+      `${me.call_count || 0} 次`,
+    ]
+    if (fam != null) parts.push(`家计 ${formatTokenCount(fam)}`)
+    const by = (me.by_provider || []).map((p) => `${p.provider}:${formatTokenCount(p.total_tokens)}`).join(' ')
+    if (by) parts.push(by)
+    usageLine.value = parts.join(' · ')
+  } catch (_) {
+    usageLine.value = '⚡ 用量拉取失败（需登录）'
   }
 }
 

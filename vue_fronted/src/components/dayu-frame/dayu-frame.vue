@@ -21,6 +21,9 @@
 import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { switchMainTab } from '@/utils/mainTabs.js'
 import { goLinkedParentHome, goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
+import { fetchUsageSummary, formatTokenCount } from '@/utils/api/usage.js'
+
+const USAGE_PILL_PAGES = new Set(['parent.html', 'pset.html'])
 
 const props = defineProps({
   page: { type: String, required: true },
@@ -137,6 +140,26 @@ function pushHydrate() {
     situationLabel: h.situationLabel || '',
     welcome: h.welcome || '',
   })
+  pushUsage()
+}
+
+async function pushUsage() {
+  if (!frameReady) return
+  if (!USAGE_PILL_PAGES.has(String(props.page || ''))) return
+  try {
+    const data = await fetchUsageSummary()
+    const total = Number(data?.display_total_tokens) || 0
+    postToFrame({
+      type: 'dayu-usage',
+      display_total_tokens: total,
+      label: formatTokenCount(total),
+      role: data?.role || '',
+      me: data?.me || null,
+      billing: data?.billing || null,
+    })
+  } catch (_) {
+    /* 未登录或暂无用量时保持占位 */
+  }
 }
 
 function handleMessage(ev) {
@@ -175,6 +198,10 @@ function handleMessage(ev) {
   if (data.type === 'dayu-ready') {
     frameReady = true
     pushHydrate()
+    return
+  }
+  if (data.type === 'dayu-usage-request') {
+    pushUsage()
     return
   }
   if (data.type === 'dayu-back') {

@@ -60,7 +60,8 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   <div class="ptop">
     <div class="brand">我的<small>SETTINGS · 家长账户</small></div>
     <div style="display:flex;align-items:center;gap:8px">
-      <a href="wallet.html" style="display:inline-flex;align-items:center;gap:5px;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:99px;padding:4px 11px;text-decoration:none"><span style="font-size:11px">⚡</span><b style="font-size:11px;font-weight:900;color:#F5D9A8">120</b></a>
+      <a id="qpill" href="wallet.html" style="display:inline-flex;align-items:center;gap:5px;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:99px;padding:4px 11px;text-decoration:none" title="已用上游 token"><span style="font-size:11px">⚡</span><b id="qpillNum" style="font-size:11px;font-weight:900;color:#F5D9A8">—</b></a>
+      <span id="tokDev" style="font-size:10px;font-weight:700;color:#8B93A5;white-space:nowrap">tok …</span>
       <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
     </div>
   </div>
@@ -111,7 +112,7 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   <div class="grp">
     <div class="gt">学习与服务</div>
     <div class="lst">
-      <a href="wallet.html"><span class="ic">⚡</span>算力额度 · 会员充值<span class="vv">剩 120 点</span><span class="ar">›</span></a>
+      <a href="wallet.html"><span class="ic">⚡</span>算力额度 · 会员充值<span class="vv" id="walletTokHint">查看已用 token</span><span class="ar">›</span></a>
       <a href="records.html"><span class="ic">📋</span>全家测试报告<span class="ar">›</span></a>
     </div>
   </div>
@@ -200,6 +201,36 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
       nav(map[file]);
     }
   }, true);
+  function fmtTok(n){
+    n = Number(n) || 0;
+    if(n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if(n >= 1e4) return Math.round(n/1000) + 'k';
+    if(n >= 1000) return (n/1000).toFixed(1) + 'k';
+    return String(n);
+  }
+  function applyUsage(d){
+    if(!d) return;
+    var total = d.display_total_tokens != null ? Number(d.display_total_tokens) : 0;
+    var label = d.label || fmtTok(total);
+    var num = document.getElementById('qpillNum');
+    var chip = document.getElementById('tokDev');
+    var hint = document.getElementById('walletTokHint');
+    var meTok = (d.me && d.me.total_tokens) || 0;
+    var famTok = (d.billing && d.billing.total_tokens != null) ? d.billing.total_tokens : meTok;
+    var calls = (d.me && d.me.call_count) || 0;
+    if(num) num.textContent = label;
+    if(chip){
+      chip.textContent = '已用 ' + fmtTok(total) + ' · ' + calls + '次';
+      chip.title = '本人 ' + meTok + ' / 家计 ' + famTok;
+    }
+    if(hint) hint.textContent = '已用 ' + fmtTok(total) + ' tok';
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if(data && data.type === 'dayu-usage') applyUsage(data);
+  });
+  post('dayu-usage-request');
+  post('dayu-ready');
 })();
 </script>
 </body></html>

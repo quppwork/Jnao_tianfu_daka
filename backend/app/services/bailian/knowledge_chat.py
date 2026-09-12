@@ -255,12 +255,32 @@ def knowledge_chat_sync(
     if not reply:
         logger.warning("knowledge_chat empty reply aid=%s stages=%s", agent_id, parsed.get("stages"))
 
+    docs = parsed.get("retrieved_docs") or []
+    usage = parsed.get("usage")
+    try:
+        from app.services.usage_recorder import record_usage
+
+        record_usage(
+            provider="bailian",
+            api="knowledge_chat",
+            model=agent_id,
+            usage=usage if isinstance(usage, dict) else None,
+            metric_kind="mixed" if usage else "call",
+            call_count=1,
+            doc_count=len(docs),
+            feature="rag",
+            request_id=parsed.get("request_id"),
+            ok=bool(reply),
+        )
+    except Exception as e:
+        logger.warning("bailian knowledge_chat usage record skipped: %s", e)
+
     return KnowledgeChatResult(
         reply=reply,
         aid=agent_id,
         request_id=parsed.get("request_id"),
-        usage=parsed.get("usage"),
-        retrieved_docs=parsed.get("retrieved_docs") or [],
+        usage=usage,
+        retrieved_docs=docs,
         planning_text=parsed.get("planning_text") or "",
         stages=parsed.get("stages") or [],
     )

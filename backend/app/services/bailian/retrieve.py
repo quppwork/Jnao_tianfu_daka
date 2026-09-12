@@ -99,9 +99,28 @@ def retrieve_sync(
             break
 
     request_id = getattr(body, "request_id", None) if body else None
-    return RagResult(
+    result = RagResult(
         nodes=nodes,
         mode="retrieve",
         query=query,
         request_id=str(request_id) if request_id else None,
     )
+    try:
+        from app.services.usage_recorder import record_usage
+
+        record_usage(
+            provider="bailian",
+            api="retrieve",
+            model=idx,
+            metric_kind="call",
+            call_count=1,
+            doc_count=len(nodes),
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            feature="rag",
+            ok=True,
+        )
+    except Exception as e:
+        logger.warning("bailian retrieve usage record skipped: %s", e)
+    return result

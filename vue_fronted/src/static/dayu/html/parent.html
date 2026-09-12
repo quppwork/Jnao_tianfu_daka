@@ -16,6 +16,7 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 .qpill b{font-size:14px;font-weight:900;color:#F5D9A8}
 .qpill .qb{width:34px;height:6px;border-radius:99px;background:#0A0F1C;border:1px solid #2A3040;overflow:hidden}
 .qpill .qb i{display:block;height:100%;width:12%;background:linear-gradient(90deg,#F5D576,#E0863C)}
+.tokdev{font-size:10px;font-weight:700;color:#8B93A5;margin-left:6px;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis}
 /* 算力耗尽弹窗 */
 .qmask{position:fixed;inset:0;background:rgba(5,8,16,.72);z-index:200;display:none;align-items:center;justify-content:center;padding:30px}
 .qmask.show{display:flex}
@@ -86,7 +87,8 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   <div class="ptop">
     <div class="brand">大宇智能体<small>PARENT · 家长版</small></div>
     <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
-    <a class="qpill" href="wallet.html" style="margin-left:8px" title="算力额度">⚡<b>120</b><span class="qb"><i></i></span></a>
+    <a class="qpill" id="qpill" href="wallet.html" style="margin-left:8px" title="已用上游 token（开发可视化）">⚡<b id="qpillNum">—</b><span class="qb"><i id="qpillBar"></i></span></a>
+    <span class="tokdev" id="tokDev" title="上游用量">tok …</span>
   </div>
 
   <div class="phero">
@@ -208,6 +210,46 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
       }
     }
   }, true);
+  // 上游 token 用量：宿主 dayu-frame 拉取后 postMessage
+  function fmtTok(n){
+    n = Number(n) || 0;
+    if(n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if(n >= 1e4) return Math.round(n/1000) + 'k';
+    if(n >= 1000) return (n/1000).toFixed(1) + 'k';
+    return String(n);
+  }
+  function applyUsage(d){
+    if(!d) return;
+    var total = d.display_total_tokens != null ? Number(d.display_total_tokens) : 0;
+    var num = document.getElementById('qpillNum');
+    var bar = document.getElementById('qpillBar');
+    var pill = document.getElementById('qpill');
+    var chip = document.getElementById('tokDev');
+    var label = d.label || fmtTok(total);
+    if(num) num.textContent = label;
+    // 可视化软刻度（非充值额度）：0–100k → 0–100%
+    if(bar){
+      var pct = Math.min(100, Math.round(total / 100000 * 100));
+      if(total > 0 && pct < 4) pct = 4;
+      bar.style.width = pct + '%';
+    }
+    var meTok = (d.me && d.me.total_tokens) || 0;
+    var famTok = (d.billing && d.billing.total_tokens != null) ? d.billing.total_tokens : meTok;
+    var calls = (d.me && d.me.call_count) || 0;
+    if(pill){
+      pill.title = '已用上游 token · 本人 ' + meTok + ' / 家计 ' + famTok + '（非算力剩余）';
+    }
+    if(chip){
+      chip.textContent = '已用 ' + fmtTok(total) + ' · ' + calls + '次';
+      chip.title = '本人 ' + meTok + ' tok / 家计 ' + famTok + ' tok';
+    }
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if(data && data.type === 'dayu-usage') applyUsage(data);
+  });
+  post('dayu-usage-request');
+  post('dayu-ready');
 })();
 </script>
 </body></html>

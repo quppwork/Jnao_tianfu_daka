@@ -391,3 +391,33 @@ class UserSession(Base):
     device_label: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_active_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class UpstreamUsageEvent(Base):
+    """上游用量明细 — 按操作者 user_id 分计；billing_parent_id 供家长汇总算账"""
+
+    __tablename__ = "upstream_usage_event"
+    __table_args__ = (
+        Index("idx_usage_user_created", "user_id", "created_at"),
+        Index("idx_usage_billing_parent_created", "billing_parent_id", "created_at"),
+        Index("idx_usage_provider_created", "provider", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    api: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(128))
+    feature: Mapped[str | None] = mapped_column(String(64))
+    user_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    billing_parent_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(64))
+    metric_kind: Mapped[str] = mapped_column(String(16), default="tokens")
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    call_count: Mapped[int] = mapped_column(Integer, default=1)
+    doc_count: Mapped[int] = mapped_column(Integer, default=0)
+    stream: Mapped[int] = mapped_column(Integer, default=0)
+    estimated: Mapped[int] = mapped_column(Integer, default=0)
+    ok: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

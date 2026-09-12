@@ -57,6 +57,8 @@
 - `chat_completion_message`（原生 function-calling）
 - `vision_chat_completion`（拍图）
 
+用量记录落地（规划，含豆包 LLM + 百炼 RAG）：见 [LLM用量记录落地步骤.md](./LLM用量记录落地步骤.md)。
+
 ### 2.2 DeepSeek（备用）— 配置位存在
 
 | 项 | 说明 |
