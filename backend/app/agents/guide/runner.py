@@ -741,7 +741,7 @@ async def run_chat_stream(
         db, child_user_id, message, history
     )
 
-    from app.agents.guide.kb_agent import guide_kb_agent_ready, run_guide_kb_turn
+    from app.agents.guide.kb_agent import guide_kb_agent_ready
     from app.agents.guide.pipeline import GuidePath, resolve_guide_path
 
     path = resolve_guide_path(message, kb_agent_ready=guide_kb_agent_ready())
@@ -772,11 +772,21 @@ async def run_chat_stream(
 
     if path is GuidePath.KB_AGENT:
         yield ("status", "知识库助手处理中，稍候…")
-        kb_result = await run_guide_kb_turn(
+        from app.agents.guide.kb_agent import run_guide_kb_turn_stream
+
+        parts: list[str] = []
+        kb_result: dict | None = None
+        async for kind, payload in run_guide_kb_turn_stream(
             db, child_user_id, message, history=hist, ctx=ctx
-        )
+        ):
+            if kind == "token" and payload:
+                parts.append(str(payload))
+                yield ("token", str(payload))
+            elif kind == "result":
+                kb_result = payload if isinstance(payload, dict) else None
+
         if kb_result is not None:
-            text = (kb_result.get("reply") or "").strip()
+            text = (kb_result.get("reply") or "".join(parts) or "").strip()
             tools_used = list(kb_result.get("tools_used") or [])
             meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
             for k, v in kb_result.items():
@@ -792,7 +802,9 @@ async def run_chat_stream(
                     meta[k] = v
             meta["pipeline_path"] = path.value
             yield ("meta", meta)
-            yield ("token", text)
+            # token 已在流中发出；若意外无增量则补整段
+            if not parts and text:
+                yield ("token", text)
             leak_hits = scan_guide_leaks(text)
             emit_guide_trace(
                 build_turn_trace(

@@ -15,7 +15,7 @@
         </view>
 
         <view class="phero">
-          <image class="phero-img" src="/static/dayu/assets/parent-team.jpg" mode="aspectFill" />
+          <image class="phero-img" src="/static/dayu/assets/parent-team.jpg" mode="aspectFit" />
           <text class="teamtag">天赋导师团</text>
           <view class="cap">
             <text class="cap-t">张宇老师 · 天赋导师团</text>
@@ -366,24 +366,24 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px 6px;
+  padding: 8px 14px 4px;
 }
 .brand .t1 {
   display: block;
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 900;
   color: #f5d9a8;
 }
 .brand .t2 {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: #8b93a5;
   letter-spacing: 2px;
   font-weight: 700;
   margin-top: 1px;
 }
 .acctbtn {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 800;
   color: #9ad9ff;
   background: rgba(46, 107, 230, 0.18);
@@ -393,53 +393,71 @@ onMounted(async () => {
 }
 
 .phero {
-  margin: 8px 18px 0;
-  border-radius: 20px;
+  margin: 4px 14px 0;
+  width: auto;
+  /* 与孩子页 .hero 同尺寸 */
+  aspect-ratio: 1125 / 360;
+  border-radius: 14px;
   overflow: hidden;
   position: relative;
   border: 1.5px solid #2a3040;
-  height: 150px;
+  background: #0d111f;
+  box-sizing: border-box;
 }
-.phero-img { width: 100%; height: 100%; display: block; }
+.phero-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* 框内等比完整显示，不裁头顶 */
+  object-fit: contain;
+  object-position: center center;
+}
 .teamtag {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  font-size: 14px;
+  top: 8px;
+  left: 10px;
+  font-size: 12px;
   font-weight: 900;
   color: #0d111f;
   background: linear-gradient(90deg, #f5d576, #c9a869);
   border-radius: 99px;
-  padding: 4px 12px;
+  padding: 3px 10px;
 }
 .cap {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 40px 16px 13px;
+  padding: 28px 12px 10px;
   background: linear-gradient(180deg, transparent, rgba(8, 11, 22, 0.88));
 }
-.cap-t { display: block; font-size: 19px; font-weight: 900; color: #fff; }
-.cap-s { display: block; font-size: 14px; color: #c9cfdc; margin-top: 3px; }
+.cap-t { display: block; font-size: 15px; font-weight: 900; color: #fff; }
+.cap-s { display: block; font-size: 12px; color: #c9cfdc; margin-top: 2px; }
 
 .tri {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 9px;
-  margin: 12px 18px 8px;
+  gap: 6px;
+  margin: 8px 14px 6px;
 }
 .tri-item {
   background: #131926;
   border: 1.5px solid #2a3040;
-  border-radius: 15px;
-  padding: 11px 6px 10px;
+  border-radius: 12px;
+  padding: 6px 4px 7px;
   text-align: center;
 }
-.tri-ic { width: 42px; height: 42px; display: block; margin: 0 auto 5px; }
-.tri-n { display: block; font-size: 16px; font-weight: 900; color: #edebe4; }
-.tri-s { display: block; font-size: 12px; color: #8b93a5; margin-top: 2px; }
+.tri-ic { width: 32px; height: 32px; display: block; margin: 0 auto 3px; }
+.tri-n { display: block; font-size: 12px; font-weight: 900; color: #edebe4; }
+.tri-s { display: none; }
 .tri-s.live { color: #3fb950; font-weight: 800; }
+
+@media (max-height: 740px) {
+  .phero { aspect-ratio: 1125 / 300; }
+  .tri-ic { width: 28px; height: 28px; }
+  .tri-n { font-size: 11px; }
+  .ptop { padding: 6px 12px 2px; }
+}
 
 /* intro 复用对话气泡视觉（引导词不入库） */
 .intro { margin-bottom: 4px; }

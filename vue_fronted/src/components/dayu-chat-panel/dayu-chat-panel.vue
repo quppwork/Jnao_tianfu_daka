@@ -147,12 +147,12 @@ function onInput(e) {
 .chat-panel {
   flex: 1;
   min-height: 0;
-  margin: 0 14px 8px;
+  margin: 0 10px 6px;
   display: flex;
   flex-direction: column;
   background: rgba(19, 25, 38, 0.55);
   border: 1.5px solid #232b3d;
-  border-radius: 18px;
+  border-radius: 16px;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -172,22 +172,27 @@ function onInput(e) {
   display: flex;
   flex-wrap: nowrap;
   gap: 8px;
-  padding: 8px 10px 0;
+  padding: 8px 10px 6px;
   border-top: 1px solid #232b3d;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.suggest-row::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .suggest-chip {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
+  max-width: min(46vw, 168px);
   text-align: center;
   border: 1.5px solid rgba(111, 207, 142, 0.45);
   background: rgba(111, 207, 142, 0.1);
   color: #8fefc0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   border-radius: 99px;
-  padding: 7px 10px;
-  line-height: 1.2;
+  padding: 6px 12px;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -373,6 +378,34 @@ function onInput(e) {
 .rich :deep(strong) { color: #f5d9a8; font-weight: 800; }
 .theme-green .rich :deep(b),
 .theme-green .rich :deep(strong) { color: #9ad9ff; }
+.rich :deep(.gd-table-wrap) {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 8px 0 4px;
+}
+.rich :deep(.gd-table) {
+  width: 100%;
+  min-width: 240px;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.rich :deep(.gd-table th),
+.rich :deep(.gd-table td) {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.rich :deep(.gd-table th) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5d9a8;
+  font-weight: 800;
+}
+.theme-green .rich :deep(.gd-table th) { color: #9ad9ff; }
+.theme-gold .rich :deep(.gd-table th) { color: #f5d576; }
 
 .chat-panel.lt {
   background: rgba(217, 223, 236, 0.72);
@@ -404,4 +437,12 @@ function onInput(e) {
 .chat-panel.lt.theme-green .go { background: #1956d1; color: #141414; }
 .chat-panel.lt .rich :deep(b),
 .chat-panel.lt .rich :deep(strong) { color: #103880; }
+.chat-panel.lt .rich :deep(.gd-table th),
+.chat-panel.lt .rich :deep(.gd-table td) {
+  border-color: rgba(16, 56, 128, 0.18);
+}
+.chat-panel.lt .rich :deep(.gd-table th) {
+  background: rgba(16, 56, 128, 0.08);
+  color: #103880;
+}
 </style>

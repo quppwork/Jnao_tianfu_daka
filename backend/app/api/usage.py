@@ -1,4 +1,4 @@
-"""上游用量查询 — 供开发/算力条展示"""
+"""上游用量查询 — 供开发/算力条展示；算力中心聚合家计。"""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_user, get_db
 from app.db.models import ChildUser, UpstreamUsageEvent
+from app.services.credit_service import build_wallet_payload
 from app.services.usage_recorder import (
     resolve_billing_parent_id,
     sum_tokens_for_billing_parent,
@@ -69,3 +70,12 @@ def usage_summary(
         # 顶栏主数字：家长看家计；学生看自己（旁边可再看家计）
         "display_total_tokens": display_total,
     }
+
+
+@router.get("/wallet")
+def usage_wallet(
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """算力中心：家长+孩子本月 token 汇总 + 会员额度/充值余额账本。"""
+    return build_wallet_payload(db, user_id)

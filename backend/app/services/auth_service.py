@@ -593,16 +593,44 @@ def _checkin_count(db: Session, child_id: int) -> int:
 def child_summary(db: Session, child: ChildUser) -> dict:
     profile = child.profile_json or {}
     learner = profile.get("learner") or {}
+    talent = _latest_talent(db, child.id)
+    talent_char = None
+    if talent:
+        for ch in ("赢", "思", "德", "行", "学"):
+            if ch in str(talent):
+                talent_char = ch
+                break
+        if not talent_char:
+            talent_char = str(talent)[0]
+
+    overall_tier = 1
+    duan = None
+    week_minutes = 0
+    try:
+        from app.services.child_training_state import display_overall_tier
+        from app.services.growth_tier_period import duan_label
+        from app.services.parent_dashboard_service import week_minutes_value
+
+        overall_tier = int(display_overall_tier(db, child) or 1)
+        duan = duan_label(overall_tier)
+        week_minutes = int(week_minutes_value(db, child.id) or 0)
+    except Exception:
+        pass
+
     return {
         "id": child.id,
         "login_name": child.login_name,
         "nickname": child.nickname,
-        "talent": _latest_talent(db, child.id),
+        "talent": talent,
+        "talent_char": talent_char,
         "training_days": _training_days(db, child.id),
         "checkins": _checkin_count(db, child.id),
         "grade": learner.get("grade"),
         "age": learner.get("age"),
         "region": learner.get("region"),
+        "overall_tier": overall_tier,
+        "duan_label": duan,
+        "week_minutes": week_minutes,
     }
 
 

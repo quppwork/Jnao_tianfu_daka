@@ -228,5 +228,5 @@ export function redirectParentNextStep(nextStep, bindTicket = '') {
     uni.reLaunch({ url: '/pages/login/complete-parent?from=wechat' })
     return
   }
-  uni.reLaunch({ url: '/pages/parent/index' })
+  uni.reLaunch({ url: '/pages/parent/dayu' })
 }

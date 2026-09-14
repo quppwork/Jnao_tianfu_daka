@@ -258,6 +258,19 @@ def _week_bundle(
     }
 
 
+def week_minutes_value(
+    db: Session,
+    child_user_id: int,
+    *,
+    today: date | None = None,
+) -> int:
+    """家长「我的」孩子卡片：本周训练分钟（轻量）。"""
+    today = today or _now_cst().date()
+    week_start = _week_monday(today)
+    week = _week_bundle(db, child_user_id, week_start=week_start, today=today)
+    return int((week.get("week_minutes") or {}).get("value") or 0)
+
+
 async def build_insight_text(dashboard: dict[str, Any]) -> str:
     from app.services.doubao_client import chat_completion, is_configured
 

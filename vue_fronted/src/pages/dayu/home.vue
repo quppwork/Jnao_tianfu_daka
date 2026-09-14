@@ -583,14 +583,14 @@ onMounted(async () => {
   flex-shrink: 0;
   z-index: 20;
   background: inherit;
-  padding-bottom: 2px;
+  padding-bottom: 0;
 }
 
 .hometop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px 6px;
+  padding: 8px 14px 4px;
   gap: 8px;
 }
 .hometop .sp { flex: 1; min-width: 0; display: flex; align-items: center; }
@@ -673,12 +673,13 @@ onMounted(async () => {
 
 .hero {
   position: relative;
-  margin: 6px 18px 0;
+  margin: 4px 14px 0;
   width: auto;
-  aspect-ratio: 1125 / 480;
-  border-radius: 18px;
+  /* 全宽略扁：避免 max-height 与 aspect-ratio 打架导致头图变窄、两侧露黑边 */
+  aspect-ratio: 1125 / 360;
+  border-radius: 14px;
   border: 1.5px solid #232b3d;
-  background: url('/static/dayu/assets/hero_bg.jpg') center / cover;
+  background: url('/static/dayu/assets/hero_bg.jpg') left center / cover no-repeat;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -727,113 +728,50 @@ onMounted(async () => {
 .nav4 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin: 12px 18px 8px;
+  gap: 6px;
+  margin: 8px 14px 6px;
 }
 .nav4-item {
   background: #131926;
   border: 1.5px solid #232b3d;
-  border-radius: 14px;
-  padding: 12px 2px;
+  border-radius: 12px;
+  padding: 6px 2px 7px;
   text-align: center;
 }
 .app.lt .nav4-item {
   background: #d9dfec;
   border-color: #c2cadc;
 }
-.nav4-ic { width: 60px; height: 60px; display: block; margin: 0 auto; }
+.nav4-ic { width: 36px; height: 36px; display: block; margin: 0 auto; }
 .nav4-n {
   display: block;
-  font-size: 12.5px;
+  font-size: 11px;
   font-weight: 800;
   color: #edebe4;
-  margin-top: 4px;
+  margin-top: 2px;
+  line-height: 1.2;
 }
 .app.lt .nav4-n { color: #1b1912; }
 
-/* 对话独立框：仅此处上下滑 */
-.chat-panel {
-  flex: 1;
-  min-height: 0;
-  margin: 0 14px 8px;
-  display: flex;
-  flex-direction: column;
-  background: rgba(19, 25, 38, 0.55);
-  border: 1.5px solid #232b3d;
-  border-radius: 18px;
-  overflow: hidden;
-  box-sizing: border-box;
+/* 矮屏：再扁一点，仍保持全宽 */
+@media (max-height: 740px) {
+  .hero {
+    aspect-ratio: 1125 / 300;
+    margin-top: 2px;
+  }
+  .nav4 { margin: 6px 12px 4px; gap: 5px; }
+  .nav4-ic { width: 30px; height: 30px; }
+  .nav4-item { padding: 4px 2px 5px; }
+  .nav4-n { font-size: 10.5px; }
+  .hometop { padding: 6px 12px 2px; }
 }
-.app.lt .chat-panel {
+
+/* 对话独立框样式已迁移到 DayuChatPanel */
+.app.lt :deep(.chat-panel) {
   background: rgba(217, 223, 236, 0.72);
   border-color: #c2cadc;
 }
-.chat-scroll {
-  flex: 1;
-  height: 0;
-  min-height: 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.chat-scroll::-webkit-scrollbar,
-:deep(uni-scroll-view)::-webkit-scrollbar,
-:deep(.uni-scroll-view)::-webkit-scrollbar,
-:deep(.uni-scroll-view-content)::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-.chat-stack { padding: 12px 12px 10px; }
-.chat-end { height: 8px; }
 
-.chat-ask {
-  flex-shrink: 0;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 10px 10px;
-  border-top: 1px solid #232b3d;
-  background: rgba(11, 14, 20, 0.72);
-  box-sizing: border-box;
-}
-.app.lt .chat-ask {
-  border-top-color: #c2cadc;
-  background: rgba(235, 238, 244, 0.88);
-}
-.chat-ask .box {
-  flex: 1;
-  min-width: 0;
-  height: 42px;
-  line-height: 42px;
-  background: #161d2b;
-  border: 1.5px solid #2a3040;
-  border-radius: 999px;
-  padding: 0 16px;
-  font-size: 14px;
-  color: #edebe4;
-  box-sizing: border-box;
-}
-.app.lt .chat-ask .box {
-  background: #d4dbe9;
-  border-color: #bfc5d5;
-  color: #1b1912;
-}
-.chat-ask .send {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: #6fcf8e;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex: none;
-  color: #0b0e14;
-  font-weight: 900;
-}
-.chat-ask .send.stop { background: #e05252; color: #fff; }
-.chat-ask .send.disabled { opacity: 0.45; }
-.app.lt .chat-ask .send { background: #30904f; color: #fff; }
 .chat-card {
   background: #131926;
   border: 1.5px solid #232b3d;

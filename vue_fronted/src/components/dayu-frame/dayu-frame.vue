@@ -25,6 +25,10 @@ import { fetchUsageSummary, formatTokenCount } from '@/utils/api/usage.js'
 
 const USAGE_PILL_PAGES = new Set(['parent.html', 'pset.html'])
 
+function pageFile(p) {
+  return String(p || '').split('?')[0].split('#')[0]
+}
+
 const props = defineProps({
   page: { type: String, required: true },
   /** 注入 iframe：昵称 / 主题 / 今日状态文案 */
@@ -99,8 +103,9 @@ function syncFrameLayoutVars() {
       'consult.html',
       'community.html',
       'pcourse.html',
+      'wallet.html',
     ])
-    const isParent = parentPages.has(String(props.page || ''))
+    const isParent = parentPages.has(pageFile(props.page))
     const mute = isParent ? '#8B93A5' : '#5A6274'
     const on = isParent ? '#F5D9A8' : '#6FCF8E'
     const ltMute = '#8b93a5'
@@ -156,7 +161,7 @@ function pushHydrate() {
 
 async function pushUsage() {
   if (!frameReady) return
-  if (!USAGE_PILL_PAGES.has(String(props.page || ''))) return
+  if (!USAGE_PILL_PAGES.has(pageFile(props.page))) return
   try {
     const data = await fetchUsageSummary()
     const total = Number(data?.display_total_tokens) || 0
@@ -239,6 +244,7 @@ function handleMessage(ev) {
     'consult.html',
     'community.html',
     'pcourse.html',
+    'wallet.html',
   ])
   const parentShellRoutes = {
     '/pages/parent/dayu': true,
@@ -247,6 +253,7 @@ function handleMessage(ev) {
     '/pages/parent/consult': true,
     '/pages/parent/community': true,
     '/pages/parent/pcourse': true,
+    '/pages/parent/wallet': true,
   }
 
   if (data.type !== 'dayu-nav' || !data.path) return
@@ -267,7 +274,7 @@ function handleMessage(ev) {
   }
   if (parentShellRoutes[base]) {
     // 底栏页用 reLaunch；子页（家长课堂）用 navigateTo，失败再 reLaunch
-    const stackOnly = base === '/pages/parent/pcourse'
+    const stackOnly = base === '/pages/parent/pcourse' || base === '/pages/parent/wallet'
     if (stackOnly) {
       uni.navigateTo({
         url: path,
@@ -279,19 +286,21 @@ function handleMessage(ev) {
     return
   }
   if (base === '/pages/parent/index') {
-    // 学生侧旧映射：改为切家长版；家长壳内「孩子账户管理」进管理中心
-    if (parentShellPages.has(props.page)) {
-      uni.navigateTo({ url: path })
+    // 「我的 → 孩子账户管理」：栈内打开管理页；其它入口勿再当家长首页
+    if (parentShellPages.has(pageFile(props.page))) {
+      uni.navigateTo({
+        url: path,
+        fail: () => uni.reLaunch({ url: path }),
+      })
     } else {
-      emit('parent')
-      goLinkedParentHome()
+      uni.reLaunch({ url: '/pages/parent/dayu' })
     }
     return
   }
 
   // 家长版壳内：学生业务页尚未对家长开放，留在本页提示，避免鉴权踢登录
   // 天赋测试 hub/index 允许进入（测评页会按角色处理）
-  if (parentShellPages.has(props.page)) {
+  if (parentShellPages.has(pageFile(props.page))) {
     const studentOnly = [
       '/pages/dayu/home',
       '/pages/training/dayu',

@@ -421,3 +421,77 @@ class UpstreamUsageEvent(Base):
     estimated: Mapped[int] = mapped_column(Integer, default=0)
     ok: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CreditAccount(Base):
+    """算力账本（挂在家长账户）— 会员月度额度 + 充值余额。
+
+    用量明细仍在 upstream_usage_event；本表管「可消耗额度 / 余额」。
+    """
+
+    __tablename__ = "credit_account"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", name="uq_credit_account_owner"),
+        Index("idx_credit_account_owner", "owner_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 充值余额，单位：分
+    balance_cents: Mapped[int] = mapped_column(Integer, default=0)
+    # free | lite | plus | pro | flagship
+    plan_code: Mapped[str] = mapped_column(String(32), default="free")
+    monthly_quota_points: Mapped[int] = mapped_column(Integer, default=1000)
+    # 当前计费月 YYYY-MM（CST）；换月时重置额度占用
+    period_yyyy_mm: Mapped[str] = mapped_column(String(7), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CreditLedger(Base):
+    """算力账变明细 — 充值 / 消耗 / 赠送 / 月重置 / 调账。"""
+
+    __tablename__ = "credit_ledger"
+    __table_args__ = (
+        Index("idx_credit_ledger_owner_created", "owner_user_id", "created_at"),
+        Index("idx_credit_ledger_kind_created", "kind", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # topup | consume | grant | reset | adjust | membership
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    points_delta: Mapped[int] = mapped_column(Integer, default=0)
+    cents_delta: Mapped[int] = mapped_column(Integer, default=0)
+    balance_cents_after: Mapped[int] = mapped_column(Integer, default=0)
+    note: Mapped[str | None] = mapped_column(String(200))
+    ref_type: Mapped[str | None] = mapped_column(String(32))
+    ref_id: Mapped[str | None] = mapped_column(String(64))
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CreditProductOrder(Base):
+    """算力商品订单（会员 / 充值包）— 支付通道后置，先落单。"""
+
+    __tablename__ = "credit_product_order"
+    __table_args__ = (
+        Index("idx_credit_order_owner_created", "owner_user_id", "created_at"),
+        Index("idx_credit_order_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    product_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    # membership | topup
+    product_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    points: Mapped[int] = mapped_column(Integer, default=0)
+    # pending | paid | cancelled | failed
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    pay_channel: Mapped[str | None] = mapped_column(String(32))
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)

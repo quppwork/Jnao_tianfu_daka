@@ -161,7 +161,53 @@ function isGuideBlockStart(line) {
   if (/^\d+[.、)\]]\s+/.test(t)) return true
   if (t.startsWith('>')) return true
   if (/^\*\*.+\*\*\s*[:：]?$/.test(t)) return true
+  if (isGuideTableRow(t)) return true
   return false
+}
+
+function isGuideTableRow(line) {
+  const t = String(line || '').trim()
+  if (!t.startsWith('|')) return false
+  // 至少两根竖线，避免误伤普通句子
+  return (t.match(/\|/g) || []).length >= 2
+}
+
+function isGuideTableSeparator(line) {
+  const t = String(line || '').trim()
+  if (!isGuideTableRow(t)) return false
+  const cells = t.replace(/^\|/, '').replace(/\|$/, '').split('|')
+  return cells.length > 0 && cells.every((c) => /^:?-{3,}:?$/.test(c.trim()))
+}
+
+function splitGuideTableCells(line) {
+  let t = String(line || '').trim()
+  if (t.startsWith('|')) t = t.slice(1)
+  if (t.endsWith('|')) t = t.slice(0, -1)
+  return t.split('|').map((c) => c.trim())
+}
+
+function renderGuideTable(rows) {
+  if (!rows.length) return ''
+  const bodyRows = rows.filter((r) => !isGuideTableSeparator(r))
+  if (!bodyRows.length) return ''
+  const headCells = splitGuideTableCells(bodyRows[0])
+  const dataRows = bodyRows.slice(1)
+  const thead = `<thead><tr>${headCells
+    .map((c) => `<th>${guideInline(c)}</th>`)
+    .join('')}</tr></thead>`
+  const tbody = dataRows.length
+    ? `<tbody>${dataRows
+        .map((r) => {
+          const cells = splitGuideTableCells(r)
+          while (cells.length < headCells.length) cells.push('')
+          return `<tr>${cells
+            .slice(0, headCells.length)
+            .map((c) => `<td>${guideInline(c)}</td>`)
+            .join('')}</tr>`
+        })
+        .join('')}</tbody>`
+    : ''
+  return `<div class="gd-table-wrap"><table class="gd-table">${thead}${tbody}</table></div>`
 }
 
 /** 首页引导 AI 回复 → DeepSeek 风格 HTML */
@@ -211,6 +257,16 @@ export function formatGuideRichHtml(raw) {
           .map((l) => `<p>${guideInline(l)}</p>`)
           .join('')}</blockquote>`,
       )
+      continue
+    }
+
+    if (isGuideTableRow(trimmed)) {
+      const tableRows = []
+      while (i < lines.length && isGuideTableRow(lines[i].trim())) {
+        tableRows.push(lines[i].trim())
+        i += 1
+      }
+      out.push(renderGuideTable(tableRows))
       continue
     }
 

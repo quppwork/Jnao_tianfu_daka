@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any
 
 import httpx
 
@@ -46,6 +47,17 @@ class KnowledgeChatResult:
             "stages": self.stages,
             "planning_len": len(self.planning_text or ""),
         }
+
+
+@dataclass
+class _SseAccum:
+    reply_parts: list[str] = field(default_factory=list)
+    planning_parts: list[str] = field(default_factory=list)
+    stages: list[str] = field(default_factory=list)
+    docs: list[RetrievedDoc] = field(default_factory=list)
+    request_id: str | None = None
+    usage: dict[str, Any] | None = None
+    error: str | None = None
 
 
 def knowledge_chat_url(cfg: BailianConfig | None = None) -> str:
@@ -111,168 +123,153 @@ def _extract_docs(extra_json: Any) -> list[RetrievedDoc]:
     return out
 
 
-def parse_knowledge_chat_sse(lines: Iterator[str]) -> dict[str, Any]:
-    """解析 SSE 行，返回 reply / docs / meta（供单测）。"""
-    reply_parts: list[str] = []
-    planning_parts: list[str] = []
-    stages: list[str] = []
-    docs: list[RetrievedDoc] = []
-    request_id: str | None = None
-    usage: dict[str, Any] | None = None
-    error: str | None = None
+def _ingest_sse_line(accum: _SseAccum, raw_line: str) -> str | None:
+    """吃掉一行 SSE；若是 generating 增量则返回该段文本，否则 None。"""
+    line = raw_line.strip()
+    if not line:
+        return None
+    if line.startswith("event:"):
+        if "error" in line.lower():
+            accum.error = accum.error or "sse_error_event"
+        return None
+    if not line.startswith("data:"):
+        return None
+    payload = line[5:].strip()
+    if not payload or payload == "[DONE]":
+        return None
+    try:
+        event = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
 
-    for raw_line in lines:
-        line = raw_line.strip()
-        if not line:
+    if isinstance(event, dict) and event.get("code") and str(event.get("code")) != "200":
+        accum.error = str(event.get("message") or event.get("code"))
+        return None
+
+    accum.request_id = str(event.get("request_id") or accum.request_id or "") or accum.request_id
+    if event.get("usage"):
+        accum.usage = event.get("usage")
+
+    output = event.get("output") or {}
+    if isinstance(output, dict) and output.get("request_id"):
+        accum.request_id = str(output.get("request_id"))
+
+    choices = []
+    if isinstance(output, dict):
+        choices = output.get("choices") or []
+    if not choices and event.get("choices"):
+        choices = event.get("choices") or []
+
+    token_out: str | None = None
+    for choice in choices:
+        if not isinstance(choice, dict):
             continue
-        if line.startswith("event:"):
-            if "error" in line.lower():
-                error = error or "sse_error_event"
+        msg = choice.get("message") or {}
+        if not isinstance(msg, dict):
             continue
-        if not line.startswith("data:"):
+        extra = msg.get("extra") or {}
+        if not isinstance(extra, dict):
+            extra = {}
+        step = str(extra.get("step") or "")
+        group = str(extra.get("group") or "")
+        step_change = str(extra.get("step_change") or "")
+        if step_change:
+            accum.stages.append(step_change)
+
+        add_kw = msg.get("additional_kwargs") or {}
+        if isinstance(add_kw, dict):
+            extra_json = add_kw.get("extra_json")
+            accum.docs.extend(_extract_docs(extra_json))
+
+        text = _content_text(msg.get("content"))
+        if not text:
             continue
-        payload = line[5:].strip()
-        if not payload or payload == "[DONE]":
-            continue
-        try:
-            event = json.loads(payload)
-        except json.JSONDecodeError:
-            continue
+        if step == "generating" or group == "generating":
+            accum.reply_parts.append(text)
+            token_out = (token_out or "") + text
+        elif step == "planning" or group == "planning":
+            accum.planning_parts.append(text)
+    return token_out
 
-        if isinstance(event, dict) and event.get("code") and str(event.get("code")) != "200":
-            error = str(event.get("message") or event.get("code"))
-            continue
 
-        request_id = str(event.get("request_id") or request_id or "") or request_id
-        if event.get("usage"):
-            usage = event.get("usage")
-
-        output = event.get("output") or {}
-        if isinstance(output, dict) and output.get("request_id"):
-            request_id = str(output.get("request_id"))
-
-        choices = []
-        if isinstance(output, dict):
-            choices = output.get("choices") or []
-        if not choices and event.get("choices"):
-            choices = event.get("choices") or []
-
-        for choice in choices:
-            if not isinstance(choice, dict):
-                continue
-            msg = choice.get("message") or {}
-            if not isinstance(msg, dict):
-                continue
-            extra = msg.get("extra") or {}
-            if not isinstance(extra, dict):
-                extra = {}
-            step = str(extra.get("step") or "")
-            group = str(extra.get("group") or "")
-            step_change = str(extra.get("step_change") or "")
-            if step_change:
-                stages.append(step_change)
-
-            add_kw = msg.get("additional_kwargs") or {}
-            if isinstance(add_kw, dict):
-                extra_json = add_kw.get("extra_json")
-                docs.extend(_extract_docs(extra_json))
-
-            text = _content_text(msg.get("content"))
-            if not text:
-                continue
-            if step == "generating" or group == "generating":
-                reply_parts.append(text)
-            elif step == "planning" or group == "planning":
-                planning_parts.append(text)
-
+def _accum_to_parsed(accum: _SseAccum) -> dict[str, Any]:
     return {
-        "reply": "".join(reply_parts).strip(),
-        "planning_text": "".join(planning_parts).strip(),
-        "retrieved_docs": docs,
-        "request_id": request_id,
-        "usage": usage,
-        "stages": stages,
-        "error": error,
+        "reply": "".join(accum.reply_parts).strip(),
+        "planning_text": "".join(accum.planning_parts).strip(),
+        "retrieved_docs": list(accum.docs),
+        "request_id": accum.request_id,
+        "usage": accum.usage,
+        "stages": list(accum.stages),
+        "error": accum.error,
     }
 
 
-def knowledge_chat_sync(
+def parse_knowledge_chat_sse(lines: Iterator[str]) -> dict[str, Any]:
+    """解析 SSE 行，返回 reply / docs / meta（供单测）。"""
+    accum = _SseAccum()
+    for raw_line in lines:
+        _ingest_sse_line(accum, raw_line)
+    return _accum_to_parsed(accum)
+
+
+def iter_knowledge_chat_sse_tokens(lines: Iterator[str]) -> Iterator[tuple[str, Any]]:
+    """解析 SSE：yield ('token', str) 增量；最后 yield ('parsed', dict)。"""
+    accum = _SseAccum()
+    for raw_line in lines:
+        token = _ingest_sse_line(accum, raw_line)
+        if token:
+            yield ("token", token)
+    yield ("parsed", _accum_to_parsed(accum))
+
+
+def _build_payload(
     query: str,
     *,
     aid: str,
-    cfg: BailianConfig | None = None,
     messages: list[dict[str, Any]] | None = None,
-    timeout: float = 90,
-) -> KnowledgeChatResult | None:
-    """同步调用知识问答；仅传用户问题，不附加代码侧 instructions。"""
-    c = cfg or load_bailian_config()
+) -> dict[str, Any]:
     q = (query or "").strip()
-    agent_id = (aid or "").strip()
-    if not q or not agent_id:
-        return None
-    if not (c.workspace_id and c.dashscope_api_key):
-        logger.warning("knowledge_chat not configured (workspace/dashscope key)")
-        return None
-
     msgs = messages or [{"role": "user", "content": [{"type": "text", "text": q}]}]
-    payload = {
+    return {
         "input": {"messages": msgs},
-        "parameters": {"agent_options": {"agent_id": agent_id}},
+        "parameters": {"agent_options": {"agent_id": aid}},
         "stream": True,
     }
-    headers = {
-        "Authorization": f"Bearer {c.dashscope_api_key}",
+
+
+def _auth_headers(cfg: BailianConfig) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {cfg.dashscope_api_key}",
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
     }
-    url = knowledge_chat_url(c)
 
-    try:
-        with httpx.Client(timeout=timeout, trust_env=False) as client:
-            with client.stream("POST", url, headers=headers, json=payload) as resp:
-                if resp.status_code != 200:
-                    body = resp.read().decode("utf-8", errors="replace")
-                    logger.warning(
-                        "knowledge_chat HTTP %s aid=%s body=%s",
-                        resp.status_code,
-                        agent_id,
-                        body[:400],
-                    )
-                    return None
-                parsed = parse_knowledge_chat_sse(resp.iter_lines())
-    except httpx.TimeoutException as e:
-        logger.warning("knowledge_chat timeout aid=%s err=%s", agent_id, e)
-        return None
-    except Exception as e:
-        logger.warning("knowledge_chat failed aid=%s err=%s", agent_id, e)
-        return None
 
-    if parsed.get("error"):
-        logger.warning("knowledge_chat sse error aid=%s err=%s", agent_id, parsed["error"])
-        return None
-
-    reply = parsed.get("reply") or ""
-    if not reply:
-        logger.warning("knowledge_chat empty reply aid=%s stages=%s", agent_id, parsed.get("stages"))
-
-    docs = parsed.get("retrieved_docs") or []
-    usage = parsed.get("usage")
+def _record_usage(
+    *,
+    query: str,
+    agent_id: str,
+    parsed: dict[str, Any],
+    cfg: BailianConfig,
+) -> None:
     try:
         from app.services.bailian.token_estimate import estimate_retrieve_tokens
         from app.services.usage_recorder import _parse_usage_dict, record_usage
 
-        # 知识问答 = 检索侧（估）+ 问答模型（有 usage 则用官方）
+        docs = parsed.get("retrieved_docs") or []
+        usage = parsed.get("usage")
         est = estimate_retrieve_tokens(
-            q,
+            query,
             chunk_texts=[getattr(d, "text", "") or "" for d in docs],
             enable_reranking=True,
-            prelim_top_k=max(50, int(c.dense_top_k or 50)),
+            prelim_top_k=max(50, int(cfg.dense_top_k or 50)),
             index_count=1,
         )
         p_llm, c_llm, t_llm = _parse_usage_dict(usage if isinstance(usage, dict) else None)
         prompt = est.query_embed_tokens + p_llm
         completion = est.rerank_tokens + c_llm
         total = est.total_tokens + (t_llm if t_llm else (p_llm + c_llm))
+        reply = parsed.get("reply") or ""
         record_usage(
             provider="bailian",
             api="knowledge_chat",
@@ -291,12 +288,135 @@ def knowledge_chat_sync(
     except Exception as e:
         logger.warning("bailian knowledge_chat usage record skipped: %s", e)
 
+
+def _result_from_parsed(
+    parsed: dict[str, Any],
+    *,
+    agent_id: str,
+) -> KnowledgeChatResult | None:
+    if parsed.get("error"):
+        logger.warning("knowledge_chat sse error aid=%s err=%s", agent_id, parsed["error"])
+        return None
+    reply = parsed.get("reply") or ""
+    if not reply:
+        logger.warning(
+            "knowledge_chat empty reply aid=%s stages=%s",
+            agent_id,
+            parsed.get("stages"),
+        )
     return KnowledgeChatResult(
         reply=reply,
         aid=agent_id,
         request_id=parsed.get("request_id"),
-        usage=usage,
-        retrieved_docs=docs,
+        usage=parsed.get("usage"),
+        retrieved_docs=parsed.get("retrieved_docs") or [],
         planning_text=parsed.get("planning_text") or "",
         stages=parsed.get("stages") or [],
     )
+
+
+def knowledge_chat_sync(
+    query: str,
+    *,
+    aid: str,
+    cfg: BailianConfig | None = None,
+    messages: list[dict[str, Any]] | None = None,
+    timeout: float = 90,
+) -> KnowledgeChatResult | None:
+    """同步调用知识问答；内部仍走 SSE，结束后返回整段 reply。"""
+    c = cfg or load_bailian_config()
+    q = (query or "").strip()
+    agent_id = (aid or "").strip()
+    if not q or not agent_id:
+        return None
+    if not (c.workspace_id and c.dashscope_api_key):
+        logger.warning("knowledge_chat not configured (workspace/dashscope key)")
+        return None
+
+    payload = _build_payload(q, aid=agent_id, messages=messages)
+    headers = _auth_headers(c)
+    url = knowledge_chat_url(c)
+    parsed: dict[str, Any] | None = None
+
+    try:
+        with httpx.Client(timeout=timeout, trust_env=False) as client:
+            with client.stream("POST", url, headers=headers, json=payload) as resp:
+                if resp.status_code != 200:
+                    body = resp.read().decode("utf-8", errors="replace")
+                    logger.warning(
+                        "knowledge_chat HTTP %s aid=%s body=%s",
+                        resp.status_code,
+                        agent_id,
+                        body[:400],
+                    )
+                    return None
+                for kind, payload_evt in iter_knowledge_chat_sse_tokens(resp.iter_lines()):
+                    if kind == "parsed":
+                        parsed = payload_evt
+    except httpx.TimeoutException as e:
+        logger.warning("knowledge_chat timeout aid=%s err=%s", agent_id, e)
+        return None
+    except Exception as e:
+        logger.warning("knowledge_chat failed aid=%s err=%s", agent_id, e)
+        return None
+
+    if not parsed:
+        return None
+    _record_usage(query=q, agent_id=agent_id, parsed=parsed, cfg=c)
+    return _result_from_parsed(parsed, agent_id=agent_id)
+
+
+async def knowledge_chat_stream(
+    query: str,
+    *,
+    aid: str,
+    cfg: BailianConfig | None = None,
+    messages: list[dict[str, Any]] | None = None,
+    timeout: float = 90,
+) -> AsyncIterator[tuple[str, Any]]:
+    """异步流式：yield ('token', str) 增量，最后 yield ('result', KnowledgeChatResult|None)。"""
+    c = cfg or load_bailian_config()
+    q = (query or "").strip()
+    agent_id = (aid or "").strip()
+    if not q or not agent_id:
+        yield ("result", None)
+        return
+    if not (c.workspace_id and c.dashscope_api_key):
+        logger.warning("knowledge_chat not configured (workspace/dashscope key)")
+        yield ("result", None)
+        return
+
+    payload = _build_payload(q, aid=agent_id, messages=messages)
+    headers = _auth_headers(c)
+    url = knowledge_chat_url(c)
+    accum = _SseAccum()
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                if resp.status_code != 200:
+                    body = (await resp.aread()).decode("utf-8", errors="replace")
+                    logger.warning(
+                        "knowledge_chat HTTP %s aid=%s body=%s",
+                        resp.status_code,
+                        agent_id,
+                        body[:400],
+                    )
+                    yield ("result", None)
+                    return
+                async for line in resp.aiter_lines():
+                    token = _ingest_sse_line(accum, line)
+                    if token:
+                        yield ("token", token)
+    except httpx.TimeoutException as e:
+        logger.warning("knowledge_chat timeout aid=%s err=%s", agent_id, e)
+        yield ("result", None)
+        return
+    except Exception as e:
+        logger.warning("knowledge_chat failed aid=%s err=%s", agent_id, e)
+        yield ("result", None)
+        return
+
+    parsed = _accum_to_parsed(accum)
+    _record_usage(query=q, agent_id=agent_id, parsed=parsed, cfg=c)
+    yield ("result", _result_from_parsed(parsed, agent_id=agent_id))

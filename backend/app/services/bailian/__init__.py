@@ -24,6 +24,7 @@ from app.services.bailian.config import (
 from app.services.bailian.generate import generate_stream_sync, generate_sync
 from app.services.bailian.knowledge_chat import (
     KnowledgeChatResult,
+    knowledge_chat_stream,
     knowledge_chat_sync,
     knowledge_chat_url,
 )

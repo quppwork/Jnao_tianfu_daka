@@ -166,7 +166,7 @@ export function parentNeedsAccountReady(data) {
 
 /** 家长登录/注册后统一跳转目标；`__bind_phone__` 表示需走绑手机注册流 */
 export function resolveParentAuthTarget(data) {
-  if (data?.role !== 'parent') return '/pages/parent/index'
+  if (data?.role !== 'parent') return '/pages/parent/dayu'
   if (parentNeedsAccountReady(data)) {
     if (data.next_step === 'bind-phone') return '__bind_phone__'
     return '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')

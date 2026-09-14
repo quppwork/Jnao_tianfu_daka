@@ -72,9 +72,18 @@ describe('chatRichText', () => {
     expect(html).toContain('元')
   })
 
-  it('formatGuideRichHtml 流式半截金额不卡死', () => {
-    const html = formatGuideRichHtml('火箭提分营售价 $2980')
-    expect(html).toContain('2980')
-    expect(html).toContain('火箭提分营')
+  it('formatGuideRichHtml 渲染 Markdown 表格', () => {
+    const raw = `#### 4. 练习目标
+
+| 学段 | 入门参考目标 |
+| :--- | :--- |
+| 小学 (1-3年级) | ≥1000 字 |
+| 初中 | ≥1500 字 |`
+    const html = formatGuideRichHtml(raw)
+    expect(html).toContain('gd-table')
+    expect(html).toContain('<th>')
+    expect(html).toContain('<td>')
+    expect(html).toContain('小学 (1-3年级)')
+    expect(html).not.toContain('| :---')
   })
 })

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import AsyncIterator
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.agents.guide.context import GuideContext
 from app.agents.guide.tools import call_tool, list_tools
 from app.core.logger import get_logger
-from app.services.kb_registry import KnowledgeSource, get_kb_registry
+from app.services.kb_registry import get_kb_registry
 
 logger = get_logger("guide.kb_agent")
 
@@ -420,6 +421,170 @@ async def run_guide_kb_turn(
     return {"reply": reply, **meta}
 
 
+def _build_kb_result_meta(
+    ctx: GuideContext | None,
+    *,
+    text: str,
+    reply: str,
+    audit: list[dict[str, Any]],
+    kb_meta: dict[str, Any] | None,
+) -> dict[str, Any]:
+    from app.agents.guide.runner import _meta_from_ctx
+
+    meta = _meta_from_ctx(ctx, message=text, tools_used=audit, reply=reply) if ctx else {}
+    meta["rag_used"] = True
+    meta["rag_source"] = "kb_qa_agent"
+    if kb_meta:
+        meta["kb_source_key"] = kb_meta.get("source_key")
+        meta["kb_aid"] = kb_meta.get("aid")
+        meta["kb_request_id"] = kb_meta.get("request_id")
+    return {"reply": reply, **meta}
+
+
+async def run_guide_kb_turn_stream(
+    db: Session,
+    child_user_id: int,
+    message: str,
+    *,
+    history: list[dict] | None = None,
+    ctx: GuideContext | None = None,
+) -> AsyncIterator[tuple[str, Any]]:
+    """流式 KB：yield ('token', str) 增量，最后 yield ('result', dict|None)。
+
+    None 表示交回普通对话兜底。作业跳转等短回复仍一次 token。
+    """
+    if not guide_kb_agent_ready():
+        yield ("result", None)
+        return
+
+    text = (message or "").strip()
+    if not text or len(text) < 2:
+        yield ("result", None)
+        return
+
+    if is_homework_message(text):
+        payload = await run_guide_kb_turn(
+            db, child_user_id, message, history=history, ctx=ctx
+        )
+        if payload and payload.get("reply"):
+            yield ("token", payload["reply"])
+        yield ("result", payload)
+        return
+
+    from app.services.bailian.knowledge_chat import knowledge_chat_stream
+    from app.services.kb_policy import active_kb_source_key, kb_single_source
+
+    picks = await plan_kb_tool_calls(text, history=history)
+    audit: list[dict[str, Any]] = []
+
+    # 先跑 list_knowledge_sources（若有）
+    query_args: dict[str, Any] | None = None
+    for pick in picks:
+        name = pick.get("name")
+        args = dict(pick.get("args") or {})
+        if name == "list_knowledge_sources":
+            try:
+                result = call_tool(db, child_user_id, name, args)
+                ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+                audit.append({"name": name, "ok": ok, "args": args, "result": result})
+            except Exception as e:
+                audit.append({"name": name, "ok": False, "args": args, "error": str(e)})
+            continue
+        if name == "query_knowledge" and query_args is None:
+            if not args.get("query"):
+                args["query"] = text
+            query_args = args
+
+    if query_args is None:
+        src = pick_source_by_tags(text)
+        if src:
+            query_args = {"source_key": src.key, "query": text}
+
+    if not query_args:
+        logger.info("guide kb agent stream no query pick uid=%s", child_user_id)
+        yield ("result", None)
+        return
+
+    if kb_single_source():
+        query_args["source_key"] = active_kb_source_key()
+
+    query = str(query_args.get("query") or text).strip()
+    source_key = str(query_args.get("source_key") or "").strip()
+    aid = str(query_args.get("aid") or "").strip()
+    timeout = float(query_args.get("timeout") or 90)
+
+    reg = get_kb_registry()
+    src = reg.resolve(source_key=source_key or None, aid=aid or None)
+    if not src:
+        audit.append({
+            "name": "query_knowledge",
+            "ok": False,
+            "args": query_args,
+            "error": "未知知识源",
+        })
+        yield ("result", None)
+        return
+
+    reply_parts: list[str] = []
+    chat = None
+    async for kind, payload in knowledge_chat_stream(
+        query, aid=src.aid, timeout=timeout
+    ):
+        if kind == "token" and payload:
+            reply_parts.append(str(payload))
+            yield ("token", str(payload))
+        elif kind == "result":
+            chat = payload
+
+    reply = ("".join(reply_parts) or (chat.reply if chat else "") or "").strip()
+    ok = bool(reply)
+    audit.append({
+        "name": "query_knowledge",
+        "ok": ok,
+        "args": {"source_key": src.key, "query": query},
+        "result": {
+            "ok": ok,
+            "reply": reply,
+            "source_key": src.key,
+            "aid": src.aid,
+            "request_id": chat.request_id if chat else None,
+            "reply_len": len(reply),
+        },
+    })
+    if not ok:
+        # 兜底：标签源再试一次（非流式整段，极少走到）
+        fb_src = pick_source_by_tags(text)
+        if fb_src and fb_src.key != src.key:
+            fb_audit, fb_reply, kb_meta = _execute_kb_picks(
+                db,
+                child_user_id,
+                [{"name": "query_knowledge", "args": {"source_key": fb_src.key, "query": text}}],
+            )
+            audit.extend(fb_audit)
+            if fb_reply:
+                yield ("token", fb_reply)
+                yield (
+                    "result",
+                    _build_kb_result_meta(
+                        ctx, text=text, reply=fb_reply, audit=audit, kb_meta=kb_meta
+                    ),
+                )
+                return
+        logger.info("guide kb agent stream empty uid=%s", child_user_id)
+        yield ("result", None)
+        return
+
+    kb_meta = {
+        "source_key": src.key,
+        "aid": src.aid,
+        "request_id": chat.request_id if chat else None,
+    }
+    yield (
+        "result",
+        _build_kb_result_meta(ctx, text=text, reply=reply, audit=audit, kb_meta=kb_meta),
+    )
+
+
 async def run_guide_kb_turn_stream_payload(
     db: Session,
     child_user_id: int,
@@ -428,7 +593,11 @@ async def run_guide_kb_turn_stream_payload(
     history: list[dict] | None = None,
     ctx: GuideContext | None = None,
 ) -> dict[str, Any] | None:
-    """流式：与 run_guide_kb_turn 相同，整段 reply 一次输出。"""
-    return await run_guide_kb_turn(
+    """兼容旧名：消费流式生成器，返回最终 payload（测试/脚本用）。"""
+    result: dict[str, Any] | None = None
+    async for kind, payload in run_guide_kb_turn_stream(
         db, child_user_id, message, history=history, ctx=ctx
-    )
+    ):
+        if kind == "result":
+            result = payload if isinstance(payload, dict) else None
+    return result

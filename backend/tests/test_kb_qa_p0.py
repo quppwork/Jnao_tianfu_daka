@@ -28,6 +28,20 @@ def test_parse_knowledge_chat_sse_generating_only():
     assert parsed["planning_text"] == "规划思考"
 
 
+def test_iter_knowledge_chat_sse_tokens_incremental():
+    from app.services.bailian.knowledge_chat import iter_knowledge_chat_sse_tokens
+
+    lines = [
+        'data: {"output":{"choices":[{"message":{"role":"assistant","content":"开口窍可以从","extra":{"group":"generating","step":"generating"}}}]}}',
+        'data: {"output":{"choices":[{"message":{"role":"assistant","content":"慢到快练起。","extra":{"group":"generating","step":"generating"}}}]}}',
+    ]
+    events = list(iter_knowledge_chat_sse_tokens(lines))
+    tokens = [p for k, p in events if k == "token"]
+    assert tokens == ["开口窍可以从", "慢到快练起。"]
+    parsed = next(p for k, p in events if k == "parsed")
+    assert parsed["reply"] == "开口窍可以从慢到快练起。"
+
+
 def test_parse_knowledge_chat_sse_tool_docs():
     docs_payload = {
         "docs": [

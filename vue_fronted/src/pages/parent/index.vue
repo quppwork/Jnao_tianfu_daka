@@ -1,10 +1,10 @@
 <template>
   <view class="app">
     <view class="nav-bar">
-      <view class="nav-back" @click="goToStudentLogin">
+      <view class="nav-back" @click="goBack">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       </view>
-      <text class="nav-center">家长中心</text>
+      <text class="nav-center">孩子账户管理</text>
       <view class="nav-actions">
         <view class="nav-icon-btn" @click="toggleTheme">
           <svg v-if="isLight" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -147,7 +147,6 @@ import {
   updateParentChild,
   ensureParentAccountReady,
 } from '@/utils/userApi.js'
-import { goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
 import { validatePasswordClient } from '@/utils/passwordPolicy.js'
 
 const showSettings = ref(false)
@@ -364,8 +363,16 @@ function doLogout() {
   logoutAndGoLogin()
 }
 
-function goToStudentLogin() {
-  goLinkedStudentHome()
+/** 从「我的 → 孩子账户管理」进入：返回家长「我的」；无栈时回 pset */
+function goBack() {
+  try {
+    const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+    if (pages && pages.length > 1) {
+      uni.navigateBack({ delta: 1 })
+      return
+    }
+  } catch (_) { /* ignore */ }
+  uni.reLaunch({ url: '/pages/parent/pset' })
 }
 </script>
 

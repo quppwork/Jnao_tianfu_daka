@@ -102,10 +102,19 @@ onUnmounted(() => {
   }
 }
 
-/* 全面屏 / 刘海屏 / 底部 Home Indicator 安全区 */
+/* 全面屏 / 刘海屏 / 底部 Home Indicator 安全区
+ * 微信内置浏览器顶部白条（域名栏）是微信原生 UI，网页无法隐藏；
+ * 这里不再额外叠加 padding-top，避免再挤占对话高度。
+ */
 body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: 0;
+}
+/* 仅非微信、且真正有刘海安全区时再补顶距（如 iOS 独立 PWA） */
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (display-mode: standalone) {
+    body { padding-top: env(safe-area-inset-top, 0px); }
+  }
 }
 
 /* 隐藏滚动条，仍可滚动；收回滚动条占位，避免右侧缺一块 */

@@ -116,7 +116,7 @@ onMounted(async () => {
     form.value.realName = p.real_name || ''
     form.value.nickname = p.nickname || ''
     if (p.account_ready || (p.profile_complete && !isWechat.value)) {
-      uni.redirectTo({ url: '/pages/parent/index' })
+      uni.redirectTo({ url: '/pages/parent/dayu' })
     }
   } catch (_) {
     goBack()
@@ -170,7 +170,7 @@ async function submit() {
       return
     }
     saveParentGateCache({ role: 'parent', ...p })
-    uni.redirectTo({ url: '/pages/parent/index' })
+    uni.redirectTo({ url: '/pages/parent/dayu' })
   } catch (e) {
     uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {

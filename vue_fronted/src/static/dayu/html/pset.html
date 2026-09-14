@@ -75,19 +75,13 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
     </div>
   </div>
 
-  <!-- 孩子账户：一个家长账户可管多个孩子，孩子账户独立账号密码 -->
+  <!-- 孩子账户：数据来自 /api/parent/children -->
   <div class="grp">
     <div class="gt">我的孩子账户（家长账户统管 · 孩子各自独立账号密码登录）</div>
     <div id="kidList">
-      <div class="kidrow">
-        <div class="kav">🧒<span class="tb" style="border-color:#4A7EC2;color:#4A7EC2" title="学者天赋">学</span></div>
-        <div><b>张雨晨（老大）</b><span>筑基期·三段 · 本周 312 分钟</span></div>
-        <a class="sw" href="pdata.html">训练数据 ›</a>
-      </div>
-      <div class="kidrow" style="margin-top:9px">
-        <div class="kav" style="border-color:#C9A227">👧<span class="tb" style="border-color:#C9A227;color:#C9A227" title="行者天赋">行</span></div>
-        <div><b>张小雨（老二）</b><span>筑基期·一段 · 本周 96 分钟</span></div>
-        <a class="sw" href="pdata.html">训练数据 ›</a>
+      <div class="kidrow" id="kidListLoading" style="opacity:.7">
+        <div class="kav" style="border-color:#5A6274;font-size:14px;color:#8B93A5">…</div>
+        <div><b style="color:#8B93A5">加载孩子账户…</b><span>正在同步训练数据</span></div>
       </div>
     </div>
     <div class="kidrow" style="margin-top:9px;border-style:dashed;background:rgba(46,107,230,.05)">
@@ -174,10 +168,10 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
       'community.html': '/pages/parent/community',
       'pcourse.html': '/pages/parent/pcourse',
       'kids-manage.html': '/pages/parent/index',
+      'wallet.html': '/pages/parent/wallet',
       'index.html': '__student__'
     };
     var soon = {
-      'wallet.html': '算力中心即将开放',
       'records.html': '测试报告即将开放',
       'share.html': '分享推广即将开放',
       'career.html': '招贤纳士即将开放',
@@ -198,7 +192,10 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
         if(!post('dayu-student')) nav('/pages/dayu/home');
         return;
       }
-      nav(map[file]);
+      var path = map[file];
+      var qIdx = href.indexOf('?');
+      if(qIdx >= 0 && path.indexOf('?') < 0) path += href.slice(qIdx);
+      nav(path);
     }
   }, true);
   function fmtTok(n){
@@ -225,12 +222,119 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
     }
     if(hint) hint.textContent = '已用 ' + fmtTok(total) + ' tok';
   }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        return (o.parent && o.parent.userId) || (o.role === 'parent' && o.userId) || 0;
+      }
+      var u = localStorage.getItem('jnao_user');
+      if(u){
+        var ju = JSON.parse(u);
+        if(ju.role === 'parent') return ju.user_id || ju.id || ju.child_user_id || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function authHeaders(){
+    var h = { Accept: 'application/json' };
+    try{
+      var tok = localStorage.getItem('jnao_access_token') ||
+        localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){
+          var o = JSON.parse(snap);
+          if(o.parent && o.parent.token) tok = o.parent.token;
+          else if(o.token) tok = o.token;
+        }
+      }
+      if(tok) h['Authorization'] = 'Bearer ' + tok;
+      var pid = parentUserId();
+      if(pid) h['X-Child-User-Id'] = String(pid);
+    }catch(e){}
+    return h;
+  }
+  var TALENT_COLOR = {
+    '学': '#4A7EC2', '思': '#3E8E5A', '赢': '#E05252', '德': '#A0754A', '行': '#C9A869'
+  };
+  var ORD = ['老大', '老二', '老三', '老四', '老五'];
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function renderKids(list){
+    var host = document.getElementById('kidList');
+    var vip = document.getElementById('kidCountVip');
+    if(vip) vip.textContent = list.length ? ('孩子×' + list.length) : '孩子';
+    if(!host) return;
+    if(!list.length){
+      host.innerHTML = '<div class="kidrow" style="opacity:.85">' +
+        '<div class="kav" style="border-color:#5A6274;font-size:16px;color:#8B93A5">∅</div>' +
+        '<div><b style="color:#8B93A5">暂无孩子账户</b><span>点下方「去开通」添加训练账号</span></div></div>';
+      return;
+    }
+    host.innerHTML = list.map(function(c, i){
+      var nick = c.nickname || '学员';
+      var ord = ORD[i] ? '（' + ORD[i] + '）' : '';
+      var ch = c.talent_char || (c.talent ? String(c.talent).charAt(0) : '·');
+      var color = TALENT_COLOR[ch] || '#2E6BE6';
+      var duan = c.duan_label || '筑基期·一段';
+      var mins = c.week_minutes != null ? Number(c.week_minutes) : 0;
+      var sub = duan + ' · 本周 ' + mins + ' 分钟';
+      if(!mins && c.training_days) sub = duan + ' · 已练 ' + c.training_days + ' 天';
+      var margin = i ? ' style="margin-top:9px;border-color:' + color + '"' : ' style="border-color:' + color + '"';
+      return '<div class="kidrow"' + margin + '>' +
+        '<div class="kav" style="border-color:' + color + '">🧒' +
+          '<span class="tb" style="border-color:' + color + ';color:' + color + '" title="' + esc(c.talent || '') + '">' + esc(ch) + '</span></div>' +
+        '<div><b>' + esc(nick) + esc(ord) + '</b><span>' + esc(sub) + '</span></div>' +
+        '<a class="sw" href="pdata.html?child_id=' + encodeURIComponent(c.id) + '">训练数据 ›</a></div>';
+    }).join('');
+  }
+  async function loadKids(){
+    var pid = parentUserId();
+    var host = document.getElementById('kidList');
+    if(!pid){
+      if(host) host.innerHTML = '<div class="kidrow"><div class="kav" style="border-color:#5A6274">!</div>' +
+        '<div><b style="color:#8B93A5">未登录家长账号</b><span>请先登录后再查看孩子</span></div></div>';
+      return;
+    }
+    try{
+      var res = await fetch('/api/parent/children?user_id=' + encodeURIComponent(pid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      var body = await res.json();
+      renderKids(body.children || []);
+    }catch(err){
+      if(host) host.innerHTML = '<div class="kidrow"><div class="kav" style="border-color:#E05252">!</div>' +
+        '<div><b style="color:#E05252">同步失败</b><span>请下拉刷新或稍后重试</span></div></div>';
+    }
+    try{
+      var pr = await fetch('/api/parent/profile?user_id=' + encodeURIComponent(pid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(pr.ok){
+        var p = await pr.json();
+        var nameEl = document.getElementById('parentName');
+        if(nameEl && (p.nickname || p.real_name)) nameEl.textContent = p.nickname || p.real_name;
+      }
+    }catch(e){}
+  }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if(data && data.type === 'dayu-usage') applyUsage(data);
+    if(data && data.type === 'dayu-hydrate' && data.nickname){
+      var nameEl = document.getElementById('parentName');
+      if(nameEl && data.nickname) nameEl.textContent = data.nickname;
+    }
   });
   post('dayu-usage-request');
   post('dayu-ready');
+  loadKids();
 })();
 </script>
 </body></html>

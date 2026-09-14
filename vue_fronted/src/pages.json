@@ -50,9 +50,16 @@
       }
     },
     {
+      "path": "pages/parent/wallet",
+      "style": {
+        "navigationBarTitleText": "算力中心",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/parent/index",
       "style": {
-        "navigationBarTitleText": "家长中心",
+        "navigationBarTitleText": "孩子账户管理",
         "navigationStyle": "custom"
       }
     },

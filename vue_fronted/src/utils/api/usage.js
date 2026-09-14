@@ -7,6 +7,12 @@ export async function fetchUsageSummary(userId) {
   return apiJson(withUser('/api/usage/summary', uid))
 }
 
+export async function fetchUsageWallet(userId) {
+  const uid = userId || getChildUserId()
+  if (!uid) throw new Error('缺少 user_id')
+  return apiJson(withUser('/api/usage/wallet', uid))
+}
+
 export function formatTokenCount(n) {
   const v = Number(n) || 0
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`

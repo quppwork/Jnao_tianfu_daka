@@ -195,11 +195,15 @@ class ChildSummaryOut(BaseModel):
     login_name: str | None
     nickname: str
     talent: str | None = None
+    talent_char: str | None = None
     training_days: int = 0
     checkins: int = 0
     grade: str | None = None
     age: int | None = None                                 # 🆕
     region: str | None = None                               # 🆕
+    overall_tier: int = 1
+    duan_label: str | None = None
+    week_minutes: int = 0
 
 
 class ParentChildrenResponse(BaseModel):

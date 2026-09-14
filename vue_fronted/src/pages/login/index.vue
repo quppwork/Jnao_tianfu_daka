@@ -300,7 +300,7 @@ function tryRedirectIfLoggedIn() {
       return false
     }
     if (role === 'parent') {
-      uni.reLaunch({ url: '/pages/parent/index' })
+      uni.reLaunch({ url: '/pages/parent/dayu' })
       return true
     }
     if (role === 'student') {
@@ -592,7 +592,7 @@ async function routeParentHome(data) {
     goRegister(form.value.phone.trim(), data.bind_ticket || pendingBindTicket.value)
     return
   }
-  if (target === '/pages/parent/index') target = consumePostLoginRoute(target, 'parent')
+  if (target === '/pages/parent/dayu') target = consumePostLoginRoute(target, 'parent')
   uni.redirectTo({ url: target })
 }
 
