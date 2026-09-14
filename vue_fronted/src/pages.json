@@ -57,6 +57,13 @@
       }
     },
     {
+      "path": "pages/parent/console",
+      "style": {
+        "navigationBarTitleText": "业务操作平台",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/parent/index",
       "style": {
         "navigationBarTitleText": "孩子账户管理",

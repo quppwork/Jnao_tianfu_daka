@@ -1,0 +1,704 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>业务操作台 · 大宇智能体工作台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{max-width:var(--app-max-width, 480px);margin:0 auto;padding-bottom:90px;min-height:100vh;min-height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:12px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.back{font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none;cursor:pointer;border:none;font-family:inherit}
+.stats{display:flex;gap:8px;margin:14px 18px 0}
+.stats div{flex:1;background:#131926;border:1.5px solid #2A3040;border-radius:14px;padding:9px 4px;text-align:center}
+.stats b{display:block;font-size:18px;font-weight:900;color:#F5D9A8}
+.stats span{font-size:12px;color:#8B93A5;font-weight:700}
+.notice{margin:12px 18px 0;background:rgba(46,107,230,.08);border:1.5px solid rgba(46,107,230,.4);border-radius:14px;padding:10px 13px;font-size:14px;color:#9AD9FF;line-height:1.8}
+.grp{margin:16px 18px 0}
+.grp .gt{font-size:14px;font-weight:800;color:#5A6274;letter-spacing:2px;margin:0 4px 8px}
+.card{background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:14px}
+.f{margin-bottom:11px}
+.f label{display:block;font-size:14px;font-weight:800;color:#8B93A5;margin-bottom:6px}
+.f label i{font-style:normal;color:#E06C75}
+.f input[type=text],.f input[type=datetime-local],.f select,.f textarea{width:100%;background:#0D111F;border:1.5px solid #2A3040;border-radius:11px;padding:10px 12px;color:#EDEBE4;font-size:16px;outline:none;font-family:inherit}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:#C9A227}
+.f textarea{min-height:64px;resize:vertical;line-height:1.6}
+.row2{display:flex;gap:9px}
+.row2 .f{flex:1}
+.tal{display:flex;gap:6px}
+.tal span{flex:1;text-align:center;font-size:14px;font-weight:900;border-radius:10px;padding:9px 0;border:1.5px solid #2A3040;color:#8B93A5;cursor:pointer;user-select:none}
+.tal span.on{color:#F5D576;border-color:#C9A227;background:rgba(201,162,39,.13)}
+.save{display:block;width:100%;margin-top:4px;text-align:center;font-size:17px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border:none;border-radius:99px;padding:13px;cursor:pointer}
+.save:active{opacity:.85}
+.save.blu{background:linear-gradient(90deg,#9AD9FF,#2E6BE6)}
+.newbtn{display:block;margin:16px 18px 0;text-align:center;font-size:17px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border:none;border-radius:99px;padding:14px;cursor:pointer;width:calc(100% - 36px)}
+/* 页签 */
+.tabs{display:flex;gap:6px;margin:0 0 10px}
+.tabs span{flex:1;text-align:center;font-size:14px;font-weight:900;border-radius:10px;padding:8px 0;border:1.5px solid #2A3040;color:#8B93A5;cursor:pointer}
+.tabs span.on{color:#F5D9A8;border-color:#C9A227;background:rgba(201,162,39,.12)}
+/* 排单卡 */
+.cust{background:#131926;border:1.5px solid #2A3040;border-radius:16px;padding:12px 13px;margin-bottom:10px;cursor:pointer}
+.cust.urgent{border-color:#E0564B;box-shadow:0 0 0 1px rgba(224,86,75,.35)}
+.cust .ch{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cust .ch b{font-size:17px;font-weight:900}
+.tag{font-size:12px;font-weight:900;border-radius:99px;padding:3px 8px;color:#F5D9A8;border:1px solid rgba(201,162,39,.55)}
+.tag.red{color:#FF9D9D;border-color:#E0564B;background:rgba(224,86,75,.12)}
+.tag.grn{color:#7BE3A8;border-color:#3FB950;background:rgba(63,185,80,.1)}
+.tag.blu{color:#9AD9FF;border-color:#2E6BE6;background:rgba(46,107,230,.12)}
+.tag.big{font-size:13px;padding:5px 11px}
+.tag.hot{color:#FFD9D9;border-color:#E0564B;background:rgba(224,86,75,.3)}
+.tag.org{color:#FFC98A;border-color:#D98E2B;background:rgba(217,142,43,.15)}
+.tag.gry{color:#8B93A5;border-color:#2A3040;background:rgba(90,98,116,.12)}
+.tag.prp{color:#D9A8FF;border-color:#9B59D0;background:rgba(155,89,208,.12)}
+.cust .cb{font-size:14px;color:#8B93A5;line-height:1.8;margin-top:6px}
+.cust .cb i{font-style:normal;color:#C9CFDC}
+.nowtask{margin-top:8px;display:flex;align-items:center;gap:8px;background:#0D111F;border:1px solid #2A3040;border-radius:10px;padding:8px 10px;font-size:14px}
+.nowtask .ti{flex:none;font-size:12px;font-weight:900;border-radius:99px;padding:3px 8px}
+.ti.now{color:#F5D576;border:1px solid #C9A227;animation:blink 1.4s infinite}
+.ti.late{color:#FF9D9D;border:1px solid #E0564B;animation:blink 1s infinite}
+.ti.do{color:#7BE3A8;border:1px solid #3FB950}
+.nowtask span{flex:1;color:#8B93A5;line-height:1.5}
+.nowtask b{color:#C9CFDC}
+@keyframes blink{50%{opacity:.45}}
+.empty{text-align:center;font-size:14px;color:#5A6274;padding:22px 0}
+.tip{font-size:14px;color:#5A6274;text-align:center;margin-top:10px;line-height:1.6}
+/* —— 客户工作间 —— */
+.roomHead{margin:12px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:16px;padding:12px 13px}
+.roomHead .ch{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.roomHead .ch b{font-size:17px;font-weight:900}
+.roomHead .cb{font-size:14px;color:#8B93A5;line-height:1.8;margin-top:6px}
+.roomHead .cb i{font-style:normal;color:#C9CFDC}
+.need{margin-top:7px;font-size:14px;color:#F5D9A8;background:rgba(201,162,39,.08);border-left:3px solid #C9A227;border-radius:0 9px 9px 0;padding:7px 10px;line-height:1.6}
+.racts{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
+.racts button{flex:1;min-width:29%;text-align:center;font-size:14px;font-weight:900;border-radius:10px;padding:8px 4px;border:1.5px solid #2A3040;background:#0D111F;color:#C9CFDC;cursor:pointer}
+.racts .pri{color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border:none}
+/* 对话区 */
+.chat{margin:12px 18px 0;display:flex;flex-direction:column;gap:9px}
+.msg{max-width:88%;border-radius:14px;padding:10px 12px;font-size:16px;line-height:1.8;white-space:pre-wrap;word-break:break-word}
+.msg.ai{align-self:flex-start;background:#131926;border:1.5px solid #2E6BE6;border-bottom-left-radius:4px;color:#C9CFDC}
+.msg.ai .who{display:block;font-size:12px;font-weight:900;color:#9AD9FF;margin-bottom:4px;letter-spacing:1px}
+.msg.me{align-self:flex-end;background:rgba(201,162,39,.15);border:1.5px solid rgba(201,162,39,.5);border-bottom-right-radius:4px;color:#F5D9A8}
+.msg .acts{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}
+.msg .acts button{font-size:14px;font-weight:900;border-radius:99px;padding:6px 12px;border:none;cursor:pointer;color:#0D111F;background:linear-gradient(90deg,#9AD9FF,#2E6BE6)}
+.msg .acts button.gold{background:linear-gradient(90deg,#F5D576,#C9A869)}
+.matref{margin-top:8px;background:#0D111F;border:1px solid #2A3040;border-radius:10px;padding:8px 10px;display:flex;align-items:center;gap:8px}
+.matref div{flex:1}
+.matref b{display:block;font-size:14px;font-weight:900;color:#C9CFDC}
+.matref span{font-size:12px;color:#5A6274}
+.matref button{flex:none;font-size:14px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border:none;border-radius:99px;padding:6px 12px;cursor:pointer}
+/* 关键词chips */
+.chips{display:flex;gap:7px;overflow-x:auto;padding:2px 18px 8px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips span{flex:none;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.14);border:1.5px solid rgba(46,107,230,.5);border-radius:99px;padding:7px 13px;cursor:pointer;user-select:none}
+.chips span:active{opacity:.7}
+/* 输入条 */
+.inbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(13,17,31,.97);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:9px 12px;display:flex;gap:8px;z-index:60}
+.inbar input{flex:1;background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:11px 15px;color:#EDEBE4;font-size:16px;outline:none;font-family:inherit}
+.inbar input:focus{border-color:#C9A227}
+.inbar button{flex:none;font-size:16px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border:none;border-radius:99px;padding:0 20px;cursor:pointer}
+/* 弹层 */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:flex-end;justify-content:center}
+.mask.show{display:flex}
+.sheet{width:100%;max-width:var(--app-max-width, 480px);max-height:82vh;overflow-y:auto;background:#131926;border-radius:20px 20px 0 0;padding:18px 16px 26px;border-top:1.5px solid #C9A227}
+.sheet h3{font-size:17px;font-weight:900;color:#F5D9A8;margin-bottom:12px}
+.sheet .x{float:right;font-size:16px;color:#8B93A5;font-weight:900;cursor:pointer;padding:4px 8px}
+.script{font-size:14px;color:#C9CFDC;line-height:1.9;background:#0D111F;border-radius:12px;padding:11px 12px;margin-bottom:10px;white-space:pre-wrap}
+.copybtn{display:block;width:100%;text-align:center;font-size:16px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#9AD9FF,#2E6BE6);border:none;border-radius:99px;padding:11px;cursor:pointer;margin-top:6px}
+.log{font-size:14px;color:#8B93A5;line-height:1.8;border-left:2px solid #2A3040;padding-left:10px;margin:8px 0}
+.log i{font-style:normal;color:#C9CFDC}
+/* 关键记录凸显 */
+.log.imp{border-left:4px solid #E0564B;background:rgba(224,86,75,.1);border-radius:0 10px 10px 0;padding:9px 12px}
+.log.imp i{color:#FFD9D9;font-weight:800}
+.impTag{display:inline-block;font-size:12px;font-weight:900;color:#FF9D9D;border:1px solid #E0564B;background:rgba(224,86,75,.15);border-radius:99px;padding:2px 9px;margin-right:6px}
+.pinImp{margin-top:9px;font-size:14px;color:#FFD9D9;background:rgba(224,86,75,.12);border:1.5px solid #E0564B;border-radius:12px;padding:10px 12px;line-height:1.8}
+.pinImp b{color:#FF9D9D}
+/* 解决方案 */
+.solbox{background:#0D111F;border:2px solid #C9A227;border-radius:14px;padding:13px 14px;font-size:14px;color:#C9CFDC;line-height:1.9;white-space:pre-wrap;margin-top:10px}
+.solbox b{color:#F5D9A8}
+.wordbtn{display:block;width:100%;text-align:center;font-size:14px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border:none;border-radius:99px;padding:12px;cursor:pointer;margin-top:10px}
+.mlink{display:flex;align-items:center;gap:7px;margin-top:6px;background:#131926;border:1px dashed rgba(46,107,230,.6);border-radius:9px;padding:7px 9px}
+.mlink span{flex:1;font-size:13px;color:#9AD9FF;word-break:break-all}
+.mlink button{flex:none;font-size:12px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#9AD9FF,#2E6BE6);border:none;border-radius:99px;padding:5px 11px;cursor:pointer}
+.impCk{display:flex;align-items:center;gap:8px;margin:4px 0 11px;font-size:14px;font-weight:800;color:#FF9D9D;cursor:pointer}
+.impCk input{width:18px;height:18px;accent-color:#E0564B}
+.prod{display:flex;gap:7px}
+.prod span{flex:1;text-align:center;font-size:14px;font-weight:900;border-radius:10px;padding:9px 2px;border:1.5px solid #2A3040;color:#8B93A5;cursor:pointer;line-height:1.5}
+.prod span.on{color:#7BE3A8;border-color:#3FB950;background:rgba(63,185,80,.12)}
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:6px 8px;display:flex;justify-content:space-around;z-index:50}
+.foot a{text-align:center;color:#8B93A5;font-size:10px;flex:1;text-decoration:none;padding:2px 0}
+.foot a img{width:34px;height:34px;object-fit:contain;display:block;margin:0 auto 1px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">业务操作台<small>SALES WORKBENCH · 大宇智能体</small></div>
+    <a class="back" href="pset.html" id="backBtn">‹ 返回</a>
+  </div>
+
+  <!-- ═══ 视图一：排单首页 ═══ -->
+  <div id="vHome">
+    <div class="stats">
+      <div><b id="stT">0</b><span>今天接单</span></div>
+      <div><b id="stW">0</b><span>本周接单</span></div>
+      <div><b id="stM">0</b><span>本月接单</span></div>
+      <div><b id="stA">0</b><span>历史客户</span></div>
+    </div>
+    <div class="notice">📡 名单由<b>流量部门上传系统</b>按算法自动分配。请严格按<b>时效任务流</b>执行：2小时建联 → 48小时深聊 → 3天二次触达 → 7天追单。排单已按<b>重要程度+时间顺序</b>自动排列（红框=已超时，最优先）。<b>点开客户卡片</b>，进入该客户专属的智能体对话间，一个一个解决。</div>
+    <button class="newbtn" onclick="showView(&#39;form&#39;)">＋ 录入新客户（名单到，立档）</button>
+    <button class="newbtn" style="background:linear-gradient(90deg,#9AD9FF,#2E6BE6);margin-top:10px" onclick="showView(&#39;data&#39;)">📊 数据分析（成交率 · 天赋匹配）</button>
+    <div class="grp">
+      <div class="gt">📋 今日排单（点卡片进入客户对话间）</div>
+      <div class="tabs" id="tabs">
+        <span class="on" data-f="today">今天接单</span><span data-f="week">本周接单</span><span data-f="month">本月接单</span><span data-f="all">历史客户</span>
+      </div>
+      <div id="list"></div>
+    </div>
+  </div>
+
+  <!-- ═══ 视图二：录入 ═══ -->
+  <div id="vForm" style="display:none">
+    <div class="grp">
+      <div class="gt">① 客户信息（家长）</div>
+      <div class="card">
+        <div class="f"><label>客户称呼 <i>*</i></label><input type="text" id="cName" placeholder="如：王女士"/></div>
+        <div class="row2">
+          <div class="f"><label>所在城市 <i>*</i></label><input type="text" id="cCity" placeholder="如：杭州"/></div>
+          <div class="f"><label>身份 <i>*</i></label>
+            <select id="cRole"><option value="">请选择</option><option>妈妈</option><option>爸爸</option><option>姥姥</option><option>奶奶</option><option>爷爷</option><option>姥爷</option><option>其他监护人</option></select>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="f"><label>电话（一键拨打）</label><input type="text" id="cTel" placeholder="如：13800000000"/></div>
+          <div class="f"><label>微信号（一键复制）</label><input type="text" id="cWx" placeholder="如：wang2026"/></div>
+        </div>
+        <div class="f"><label>家长天赋类型（五型×四偏向·共20细分）</label>
+          <select id="cTalent"><option value="">请选择</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="gt">② 孩子信息</div>
+      <div class="card">
+        <div class="row2">
+          <div class="f"><label>孩子年级 <i>*</i></label>
+            <select id="kGrade"><option value="">请选择</option><option>一年级</option><option>二年级</option><option>三年级</option><option>四年级</option><option>五年级</option><option>六年级</option><option>初一</option><option>初二</option><option>初三</option><option>高一</option><option>高二</option><option>高三</option></select>
+          </div>
+          <div class="f"><label>孩子性别 <i>*</i></label>
+            <select id="kGender"><option value="">请选择</option><option>女</option><option>男</option></select>
+          </div>
+        </div>
+        <div class="f"><label>孩子天赋类型</label>
+          <div class="tal" id="kTalent"><span>学者</span><span>思者</span><span>赢者</span><span>德者</span><span>行者</span></div>
+        </div>
+        <div class="row2">
+          <div class="f"><label>学校类型</label>
+            <select id="kSchool"><option value="">请选择</option><option>重点</option><option>普通</option><option>民办</option><option>国际学校</option></select>
+          </div>
+          <div class="f"><label>住校情况</label>
+            <select id="kBoard"><option value="">请选择</option><option>走读</option><option>住校</option></select>
+          </div>
+        </div>
+        <div class="f"><label>学业规划（选择学情，自动生成业务指导信息）</label>
+          <select id="kPlan" onchange="genPlan()">
+            <option value="">请选择学情</option>
+            <option value="优秀拔高">成绩优秀·需拔高培优</option>
+            <option value="中等提效">成绩中等·效率低耗时长</option>
+            <option value="偏弱补差">成绩偏弱·基础不牢</option>
+            <option value="严重偏科">严重偏科·单科拖后腿</option>
+            <option value="走神拖拉">上课走神·作业拖拉</option>
+            <option value="记忆困难">背诵记忆困难</option>
+          </select>
+        </div>
+        <div class="need" id="planOut" style="display:none"></div>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="gt">③ 需求诊断</div>
+      <div class="card">
+        <div class="f"><label>目前急需解决的问题 <i>*</i></label>
+          <textarea id="cNeed" placeholder="如：写作业拖拉到11点；上课走神发呆；背诵记不住……"></textarea>
+        </div>
+        <button class="save" onclick="saveCust()">✓ 保存档案，进入该客户对话间（启动2小时建联倒计时）</button>
+        <div class="tip">数据保存在本机浏览器 · 正式环境名单由流量部门系统统一分发</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 视图四：数据分析 ═══ -->
+  <div id="vData" style="display:none">
+    <div class="grp">
+      <div class="gt">🧭 我的天赋（匹配算法基准）</div>
+      <div class="card">
+        <div class="f"><label>我（业务员）的天赋类型 · 五型×四偏向</label><select id="meTalent"><option value="">请选择</option></select></div>
+        <button class="save" onclick="saveMe()">保存我的天赋（所有客户匹配分自动重算）</button>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="gt">📈 成交率分析</div>
+      <div class="card" id="dataBox"></div>
+    </div>
+    <div class="grp">
+      <div class="gt">📖 九级匹配评分规则（内部规则·不展开）</div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:14px;color:#8B93A5;line-height:1.8;margin-bottom:10px">匹配分由「我的天赋 × 成年客户天赋」逐客生成（0-8分九级），规则属内部资料，平时不展示。</div>
+        <button class="save blu" onclick="openLvMask()">🔍 查看九级评分规则</button>
+      </div>
+      <div class="tip">每个客户对话间头部都有🧭匹配快捷键，智能体也会按此推送所需信息与资料；配套课程在「家长课堂」按身份与学习权限开放。</div>
+    </div>
+  </div>
+
+  <!-- ═══ 视图三：客户专属对话间 ═══ -->
+  <div id="vRoom" style="display:none;padding-bottom:70px">
+    <div class="roomHead" id="roomHead"></div>
+    <div class="chat" id="chat"></div>
+  </div>
+
+  <div class="foot" id="mainFoot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+</div>
+
+<!-- 对话间底部：关键词 + 输入条 -->
+<div id="roomBar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:60">
+  <div style="max-width:var(--app-max-width, 480px);margin:0 auto">
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="inbar askbar">
+    <input type="text" id="askIn" placeholder="客户说了什么？直接问智能体……" onkeydown="if(event.key===&#39;Enter&#39;)sendMsg()"/>
+    <button onclick="sendMsg()">发送</button>
+  </div>
+</div>
+
+<!-- 弹层 -->
+<div class="mask" id="mask"><div class="sheet"><span class="x" onclick="closeMask()">✕ 关闭</span><div id="maskBody"></div></div></div>
+
+<script>
+var KEY='jn_console_v2';
+function load(){try{var a=JSON.parse(localStorage.getItem(KEY))||[];a.forEach(function(c){if(!c.msgs)c.msgs=[]});return a}catch(e){return[]}}
+function store(a){localStorage.setItem(KEY,JSON.stringify(a))}
+function esc(s){return (s||'').replace(/</g,'&lt;')}
+function fmt(ts){var d=new Date(ts);return(d.getMonth()+1)+'月'+d.getDate()+'日 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+/* ══ 天赋20细分 ══ */
+var T5=['思','学','赢','德','行'],sel=document.getElementById('cTalent');
+T5.forEach(function(b){T5.forEach(function(p){if(b!==p){var o=document.createElement('option');o.textContent=b+'者·'+b+'偏'+p;sel.appendChild(o)}})});
+var meSel=document.getElementById('meTalent');
+T5.forEach(function(b){T5.forEach(function(p){if(b!==p){var o=document.createElement('option');o.textContent=b+'者·'+b+'偏'+p;meSel.appendChild(o)}})});
+document.getElementById('kTalent').addEventListener('click',function(e){var s=e.target.closest('span');if(!s)return;this.querySelectorAll('span').forEach(function(x){x.classList.remove('on')});s.classList.add('on')});
+/* ══ 学业规划→业务指导 ══ */
+var PLANS={
+'优秀拔高':'业务指导：家长期待高、付费意愿强。切入天赋测评→菁英/领袖班，主打985芯片实验室+工信部背书，往高客单价产品引导。',
+'中等提效':'业务指导：最大痛点是学得苦、见效慢。切入超脑阅读+三错一讲体验课，用800字/分钟数据冲击，先推线上体验课。',
+'偏弱补差':'业务指导：家长焦虑重。先共情不推销，用脑科学开窍案例建立信心，首推近期会议门票，现场转化。',
+'严重偏科':'业务指导：问清偏哪科，对应推导师（数学理化→余峰线）。用木桶理论补短板vs延长长板做话术支点。',
+'走神拖拉':'业务指导：正中眼是心非/无是心非课程靶心。发《学习三重境界》短片，邀约开口窍体验课。',
+'记忆困难':'业务指导：对应吸照大法·扫描速记。用300字→800字→5000字速度分级案例，推记忆专项课。'};
+function genPlan(){var v=document.getElementById('kPlan').value;var o=document.getElementById('planOut');if(v&&PLANS[v]){o.textContent=PLANS[v];o.style.display='block'}else{o.style.display='none'}}
+/* ══ 时效任务流 ══ */
+var STAGES=[
+ {t:'2小时建联',h:2,guide:'拿到名单2小时内首次建联：自报家门（大宇天赋教育×老师）→确认孩子年级学校→约正式电话时间。只建立联系，不讲产品。'},
+ {t:'48小时深聊',h:48,guide:'48小时内深度电话：以学业规划诊断为切入点，深挖痛点（围绕客户急需解决的问题），全程不报价，结束时抛「我帮您申请天赋测评名额」。'},
+ {t:'3天二次触达',h:72,guide:'3天内二次触达：针对痛点从资料库挑1-2份资料发送+邀约（会议门票或线上体验课）。'},
+ {t:'7天追单',h:168,guide:'7天内收口：推崇导师（身份+稀缺性）→预约试课→叮嘱准时→限时政策促单。'},
+ {t:'已成交/暂缓',h:0,guide:'已成交：转交服务导师，7日内回访体验反馈。暂缓：标记原因，14天后重新激活。'}];
+function taskState(c,idx){
+  if(idx<c.stage)return'do';if(idx>c.stage)return'wait';
+  var deadline=c.ts+STAGES[idx].h*36e5;
+  if(STAGES[idx].h&&Date.now()>deadline)return'late';
+  return'now'}
+/* ══ 客户标签体系（自动判定+手动改标） ══ */
+var TAGS={
+'紧急重要':{cls:'hot',ord:0,desc:'建联最佳窗口内且客户质量高（已测天赋/高意向）——最容易成交，系统分析匹配度高、消费力够，排第一优先处理'},
+'紧急':{cls:'red',ord:1,desc:'正处于与客户建联的最佳时间窗，错过这个时间段成交率明显下降——立即处理'},
+'重要':{cls:'org',ord:2,desc:'客户精准度高、符合画像，但当前不在建联窗口期——不紧急但要的客户，按任务流节奏推进'},
+'未服务':{cls:'prp',ord:3,desc:'已成交已交接服务团队，但还没开始服务或未到预约正式开始时间——保持轻量关注'},
+'已服务':{cls:'grn',ord:4,desc:'正在接受服务或已完成服务——非必要不打扰，节日关怀即可'},
+'过期客户':{cls:'gry',ord:5,desc:'超过一周未成交且已移交服务团队。交接完成后，非必要或客户主动联系，否则无需再跟进'}};
+function tagOf(c){
+  if(c.tag)return c.tag;
+  var age=Date.now()-c.ts;
+  if(c.stage>=4||c.products.length)return c.served?'已服务':'未服务';
+  if(age>7*864e5)return '过期客户';
+  var st=taskState(c,c.stage);
+  if(st==='now'||st==='late'){
+    var quality=c.ct||c.plan==='优秀拔高'||(c.products&&c.products.length);
+    return quality?'紧急重要':'紧急'}
+  return '重要'}
+function priority(c){return TAGS[tagOf(c)].ord*10+(taskState(c,c.stage)==='late'?0:1)}
+function setTag(id){var a=load(),c=a.find(x=>x.id===id);
+  openMask('<h3>🏷️ 修改客户标签 · '+esc(c.name)+'</h3>'
+  +Object.keys(TAGS).map(function(t){var cur=tagOf(c)===t;return '<div class="log'+(cur?' imp':'')+'" style="cursor:pointer" onclick="pickTag('+id+',\''+t+'\')"><span class="tag big '+TAGS[t].cls+'">'+t+'</span>'+(cur?' ✓当前':'')+'<br><i style="font-size:13px">'+TAGS[t].desc+'</i></div>'}).join('')
+  +'<button class="copybtn" style="background:#2A3040;color:#C9CFDC" onclick="pickTag('+id+',\'\')">恢复系统自动判定</button>')}
+function pickTag(id,t){var a=load(),c=a.find(x=>x.id===id);c.tag=t;store(a);closeMask();renderRoom()}
+/* ══ 智能体知识库：话术 ══ */
+var QA=[
+ {k:['价格','多少钱','费用','贵'],a:'【价格口径】启航19800／天赋导师班29800／AI指挥官49800／菁英69800／领袖99800。\n话术：不主动报价。先问「您更关心效果还是预算？」→用五个数字铺垫（300+校区验证/128分提分/200个名额/2026计划/3-5年跟踪），再报对应档位。'},
+ {k:['考虑','想想','商量','再说'],a:'【异议处理·考虑】\n「理解，教育投入确实要慎重。这样，我先帮您把测评名额锁定（名额有限），您和家人商量的同时不损失机会。另外我把针对孩子情况的资料发您，您看完咱们约15分钟再定？」\n要点：不逼单，给台阶，留钩子，定下次时间。'},
+ {k:['建联','开场','第一句','陌生','第一次'],a:'【2小时建联话术】\n「您好，是XX家长吗？我是大宇天赋教育的×老师，您之前留过关于孩子天赋培养的咨询信息，系统把您分配给我做专属顾问。只占用您2分钟：先确认下孩子几年级、在哪个学校？方便的话，咱们约个正式的时间，我给您做一次免费的学业规划诊断。」'},
+ {k:['推崇','导师','老师介绍','名师'],a:'【推崇导师要点】\n①身份：头衔+专长一句话（如天赋大书道创始人）②稀缺：名额限量（本期仅12名/每月4个名额）③对口：强调与孩子天赋类型匹配④动作：当场预约试课时间+叮嘱准时+课前提醒。\n在对话间顶部点「推崇导师」可自动生成全套话术与任务。'},
+ {k:['不愿意','抗拒','不配合','不想学'],a:'【孩子抗拒】\n「太正常了——咱们这套课第一节就是解决「不愿意学」的。费曼学习法+开口窍训练，孩子是玩着练的。您可以先让孩子看一段3分钟的《学习三重境界》短片，看他自己感不感兴趣，咱们不勉强。」'},
+ {k:['效果','有用吗','保证','管用'],a:'【效果承诺口径】\n不做绝对承诺。用数据与案例：「我们的开口窍训练，合格线是一分钟800-1000字，学员里有从150字到5000字当晚突破的案例。但每个孩子的天赋类型不同，所以第一步一定是先做天赋测评，因材施教。」'},
+ {k:['走神','发呆','拖拉','注意力'],a:'【走神拖拉】\n正中「学习三重境界」课程靶心：无是心非（发呆）→眼是心非（走神）→口是心非（专注）。\n建议：发《学习三重境界》短片+邀约开口窍体验课。'},
+ {k:['记忆','背','记不住'],a:'【记忆痛点】\n对应吸照大法·扫描速记。话术：「普通孩子阅读150字/分钟，我们的合格线是800-1000字，高手5000字以上。记忆不是天赋差异，是方法差异。」推记忆专项课。'},
+ {k:['没时间','忙','顾不上'],a:'【时间异议】\n「正因为忙，才更要一次诊断清楚。咱们先约15分钟，我把孩子的情况一次性问透，后续方案精准，反而省您的时间。您看今晚8点还是明早10点方便？」'}];
+/* ══ 智能体知识库：资料（只在被问到/匹配时推荐） ══ */
+var MATS=[
+ {n:'九大秘籍合集海报',k:'秘籍 神功 海报 课程有哪些',c:'图片',u:'https://dayu.ai/m/9mj'},
+ {n:'课程价格表',k:'价格 多少钱 费用 价目',c:'文档',u:'https://dayu.ai/m/price'},
+ {n:'《学习三重境界》授课短片（走神/发呆/开口窍）',k:'走神 发呆 拖拉 开口窍 短片 视频',c:'视频',u:'https://dayu.ai/m/3jj'},
+ {n:'800字突破案例集（丹尼1200→陈雪5000）',k:'案例 效果 见证 速度 提分',c:'文档',u:'https://dayu.ai/m/case800'},
+ {n:'近期会议门票邀约话术',k:'会议 门票 邀约 讲座',c:'话术',u:'https://dayu.ai/m/ticket'},
+ {n:'线上体验课介绍单页',k:'体验课 试课 试听',c:'文档',u:'https://dayu.ai/m/try'},
+ {n:'学业规划诊断模板',k:'规划 学业 诊断 模板',c:'文档',u:'https://dayu.ai/m/plan'},
+ {n:'30秒预告片（文化矩阵入口）',k:'预告 宣传 介绍 了解',c:'视频',u:'https://dayu.ai/m/intro'}];
+var TEACHERS={'善雨':'书法/音乐/功夫 · 天赋大书道创始人 · 本期仅带12名学员','秦念国':'语言/美术/演讲 · 表达力训练王牌 · 试课名额每周限量','余峰':'数学/理化/自学 · 理科提效专家 · 985芯片实验室教研组','田小静':'体育/记忆/品德 · 感知力特训导师 · 示范课一票难求','张宇':'语文/历史/科学 · 院长亲授 · 每月仅开放4个名额'};
+var CHIPS=['开场建联怎么说','客户说再考虑','价格怎么说','孩子不愿意学','效果有保证吗','没时间怎么办','发一份资料','怎么推崇导师','走神拖拉','记不住'];
+/* ══ 天赋匹配（业务员×成年客户，0-8分九级） ══ */
+function meTalent(){try{return localStorage.getItem('jn_me_talent')||''}catch(e){return''}}
+function mainType(ct){return ct?ct.charAt(0):''}
+function subType(ct){var m=ct&&ct.match(/偏(.)/);return m?m[1]:''}
+function matchScore(me,ct){
+  if(ct&&typeof ct==='object')ct=ct.ct;
+  var m=mainType(me),t=mainType(ct);if(!m||!t)return null;
+  var d=(T5.indexOf(t)-T5.indexOf(m)+5)%5;
+  var base=d===0?8:(d===1?6:(d===4?5:(d===2?4:2)));
+  if(subType(ct)===m&&base<8)base+=1;
+  return base}
+var LEVELS=[
+'零级·错位：天赋频谱几乎相反。沟通要点：少讲理念多讲结果，用第三方案例开口，避免正面说服，借助导师背书。',
+'一级·偏离：底层逻辑差异大。沟通要点：全程数据与见证说话，不谈感觉；每次沟通只推进一个小动作。',
+'二级·相冲：容易引发异议。沟通要点：先处理情绪再处理事情，多用「您说得对」接话，把决定权交给客户。',
+'三级·相斥：理解成本高。沟通要点：资料先行、电话从简，用短片和案例集代替口头解释。',
+'四级·相磨：能沟通但易卡壳。沟通要点：每次只谈一个痛点，谈透即止；约定明确的下次时间。',
+'五级·相承：客户能给你反馈。沟通要点：多问开放式问题，让客户说孩子，你听需求，顺势邀约。',
+'六级·相生：你的天赋能生助客户。沟通要点：你是天然的给予者——大胆给方案、给资料、给名额，成交顺其自然。',
+'七级·相融：同频度高。沟通要点：可以讲愿景讲体系，推长期规划与高客单价产品。',
+'八级·同源：天赋同型，天然信任。沟通要点：开门见山谈结果与排期，稀缺性话术直接上，最容易当场成交。'];
+function openLvMask(){openMask('<h3>📖 九级匹配评分规则（内部资料）</h3>'+LEVELS.map(function(l){return '<div class="log"><i>'+l+'</i></div>'}).join(''))}
+function openMatch(id){var c=load().find(x=>x.id===id);var me=meTalent(),ms=matchScore(me,c);
+  if(ms===null){openMask('<h3>🧭 天赋匹配</h3><div class="script">请先在操作台顶部「📊 数据分析」里设置<b style="color:#F5D9A8">我的天赋</b>，并给客户填写家长天赋类型，系统才能计算匹配分。</div>');return}
+  var d=(T5.indexOf(mainType(c.ct))-T5.indexOf(me)+5)%5;
+  var rel=d===0?'同源同型':(d===1?'我生客户（相生）':(d===4?'客户生我（相承）':(d===2?'相磨':'相冲')));
+  openMask('<h3>🧭 天赋匹配 · '+esc(c.name)+'</h3>'
+  +'<div class="script">我的天赋：<b style="color:#F5D9A8">'+esc(me)+'</b>\n客户天赋：<b style="color:#F5D9A8">'+esc(c.ct)+'</b>\n匹配关系：<b style="color:#F5D9A8">'+rel+'</b>　匹配分：<b style="color:#F5D9A8">'+ms+'分 · '+['零','一','二','三','四','五','六','七','八'][ms]+'级</b>'+(subType(c.ct)===mainType(me)?'\n客户偏向恰好是我的主型，+1分加成':'')+'</div>'
+  +'<div class="script" style="border-left:3px solid #C9A227">'+LEVELS[ms]+'</div>'
+  +'<button class="copybtn" style="background:#2A3040;color:#C9CFDC" onclick="openLvMask()">🔍 查看九级全规则</button>')}
+/* ══ 视图切换 ══ */
+var CUR=null;
+function showView(v){
+  document.getElementById('vHome').style.display=v==='home'?'block':'none';
+  document.getElementById('vForm').style.display=v==='form'?'block':'none';
+  document.getElementById('vRoom').style.display=v==='room'?'block':'none';
+  document.getElementById('vData').style.display=v==='data'?'block':'none';
+  document.getElementById('roomBar').style.display=v==='room'?'block':'none';
+  document.getElementById('mainFoot').style.display=v==='room'?'none':'flex';
+  var bb=document.getElementById('backBtn');
+  if(v==='home'){bb.textContent='‹ 返回';bb.onclick=function(){goBackToMine()};render()}
+  else if(v==='form'){bb.textContent='‹ 排单';bb.onclick=function(){showView('home')}}
+  else if(v==='data'){bb.textContent='‹ 排单';bb.onclick=function(){showView('home')};renderData()}
+  else{bb.textContent='‹ 排单';bb.onclick=function(){CUR=null;showView('home')}}
+  window.scrollTo(0,0)}
+/* ══ 数据分析 ══ */
+function saveMe(){var v=document.getElementById('meTalent').value;if(!v){alert('请先选择我的天赋类型');return}localStorage.setItem('jn_me_talent',v);renderData();alert('已保存！所有客户的天赋匹配分已按此重算。')}
+function renderData(){
+  document.getElementById('meTalent').value=meTalent();
+  var a=load(),done=a.filter(c=>c.products.length);
+  var rate=a.length?Math.round(done.length/a.length*100):0;
+  function dist(arr,fn){var m={};arr.forEach(c=>{var k=fn(c)||'未填';m[k]=(m[k]||0)+1});return Object.keys(m).sort((x,y)=>m[y]-m[x]).map(k=>{var pct=Math.round(m[k]/arr.length*100);return '<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:14px"><b style="color:#C9CFDC">'+k+'</b><span style="color:#8B93A5">'+m[k]+'人 · '+pct+'%</span></div><div style="height:9px;background:#0D111F;border-radius:99px;margin-top:4px"><div style="height:9px;width:'+pct+'%;border-radius:99px;background:linear-gradient(90deg,#F5D576,#C9A869)"></div></div></div>'}).join('')}
+  var me=meTalent(),msArr=done.map(c=>matchScore(me,c)).filter(x=>x!==null);
+  var avg=msArr.length?(msArr.reduce((s,x)=>s+x,0)/msArr.length).toFixed(1):null;
+  var h='<div style="display:flex;gap:8px;text-align:center;margin-bottom:12px">'
+    +'<div style="flex:1;background:#0D111F;border-radius:12px;padding:11px 4px"><b style="font-size:22px;color:#F5D9A8">'+a.length+'</b><br><span style="font-size:12px;color:#8B93A5">总客户</span></div>'
+    +'<div style="flex:1;background:#0D111F;border-radius:12px;padding:11px 4px"><b style="font-size:22px;color:#7BE3A8">'+done.length+'</b><br><span style="font-size:12px;color:#8B93A5">成交</span></div>'
+    +'<div style="flex:1;background:#0D111F;border-radius:12px;padding:11px 4px"><b style="font-size:22px;color:#9AD9FF">'+rate+'%</b><br><span style="font-size:12px;color:#8B93A5">成交率</span></div></div>';
+  if(!done.length){h+='<div class="empty">暂无成交数据——成交后这里自动生成分析</div>'}
+  else{
+    h+='<div style="font-size:14px;font-weight:900;color:#F5D9A8;margin:10px 0 4px">我擅长成交的成年客户天赋（成交客户家长主型分布）</div>'+dist(done,c=>mainType(c.ct)?mainType(c.ct)+'者':'');
+    h+='<div style="font-size:14px;font-weight:900;color:#F5D9A8;margin:14px 0 4px">成交家庭的孩子天赋分布</div>'+dist(done,c=>c.kt);
+    h+='<div style="font-size:14px;font-weight:900;color:#F5D9A8;margin:14px 0 4px">成交产品分布</div>'+dist(done.flatMap?done.map(c=>({p:c.products[0]})):[],c=>c.p);
+    if(avg!==null)h+='<div class="guide" style="margin-top:12px">我与成交客户家长的平均天赋匹配分：<b style="color:#F5D9A8">'+avg+'分</b>——匹配分越高的客户群，就是你的主战场，排单时可优先处理。</div>';
+    else if(!me)h+='<div class="guide" style="margin-top:12px">先在上方设置「我的天赋」，即可看到我与各类客户的匹配分析。</div>'}
+  document.getElementById('dataBox').innerHTML=h}
+/* ══ 保存客户→直接进入对话间 ══ */
+function saveCust(){
+  var g=function(id){return document.getElementById(id).value.trim()};
+  var name=g('cName'),city=g('cCity'),need=g('cNeed');
+  if(!name||!city||!document.getElementById('cRole').value||!document.getElementById('kGrade').value||!document.getElementById('kGender').value||!need){alert('请把带 * 的必填项填完整');return}
+  var kt=(document.querySelector('#kTalent span.on')||{}).textContent||'';
+  var c={id:Date.now(),name:name,city:city,role:document.getElementById('cRole').value,ct:document.getElementById('cTalent').value,
+    tel:g('cTel'),wx:g('cWx'),
+    grade:document.getElementById('kGrade').value,kg:document.getElementById('kGender').value,kt:kt,
+    school:document.getElementById('kSchool').value,board:document.getElementById('kBoard').value,
+    plan:document.getElementById('kPlan').value,need:need,ts:Date.now(),
+    stage:0,products:[],prodNote:'',tag:'',logs:[],teacher:'',tryAt:'',msgs:[]};
+  var a=load();a.unshift(c);store(a);
+  ['cName','cCity','cNeed','cTel','cWx'].forEach(function(i){document.getElementById(i).value=''});
+  document.getElementById('planOut').style.display='none';
+  openRoom(c.id)}
+/* ══ 排单首页 ══ */
+var FILTER='today';
+document.getElementById('tabs').addEventListener('click',function(e){var s=e.target.closest('span');if(!s)return;this.querySelectorAll('span').forEach(function(x){x.classList.remove('on')});s.classList.add('on');FILTER=s.dataset.f;render()});
+function inFilter(ts){
+  var n=new Date(),d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
+  if(FILTER==='today')return ts>=d0;
+  if(FILTER==='week')return ts>=d0-6*864e5;
+  if(FILTER==='month')return ts>=d0-29*864e5;
+  return true}
+function render(){
+  var a=load(),n=new Date(),d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
+  document.getElementById('stT').textContent=a.filter(c=>c.ts>=d0).length;
+  document.getElementById('stW').textContent=a.filter(c=>c.ts>=d0-6*864e5).length;
+  document.getElementById('stM').textContent=a.filter(c=>c.ts>=d0-29*864e5).length;
+  document.getElementById('stA').textContent=a.length;
+  var arr=a.filter(c=>inFilter(c.ts)).slice().sort(function(x,y){var p=priority(x)-priority(y);return p!==0?p:x.ts-y.ts});
+  var list=document.getElementById('list');
+  if(!arr.length){list.innerHTML='<div class="empty">该范围暂无客户<br>点上方「＋ 录入新客户」立档</div>';return}
+  list.innerHTML=arr.map(function(c){
+    var tg=tagOf(c),urgent=tg==='紧急重要',s=STAGES[c.stage],st=taskState(c,c.stage);
+    var ti=st==='late'?'<span class="ti late">已超时</span>':(st==='now'?'<span class="ti now">进行中</span>':'<span class="ti do">'+s.t+'</span>');
+    var prod=c.products.length?'<div style="margin-top:7px">'+c.products.map(p=>'<span class="tag grn">'+p+(p==='大会门票'&&c.prodNote?'·'+esc(c.prodNote):'')+'</span>').join(' ')+'</div>':'';
+    return '<div class="cust'+(urgent?' urgent':'')+'" onclick="openRoom('+c.id+')">'
+      +'<div class="ch"><span class="tag big '+TAGS[tg].cls+'">'+tg+'</span><b>'+esc(c.name)+'</b><span class="tag">'+c.role+'</span>'+(c.kt?'<span class="tag blu">娃·'+c.kt+'</span>':'')+(st==='late'?'<span class="tag red">已超时</span>':'')+'</div>'
+      +'<div class="cb">'+fmt(c.ts)+' · '+esc(c.city)+' · 孩子<i>'+c.grade+'</i><br>急需解决：<i>'+esc(c.need.slice(0,30))+(c.need.length>30?'…':'')+'</i></div>'
+      +prod
+      +'<div class="nowtask">'+ti+'<span>当前任务：<b>'+s.t+'</b></span></div>'
+      +'</div>'}).join('')}
+/* ══ 客户对话间 ══ */
+function openRoom(id){
+  CUR=id;
+  var a=load(),c=a.find(x=>x.id===id);if(!c)return;
+  /* 首次进入：智能体开场 */
+  if(!c.msgs.length){
+    var s=STAGES[c.stage],ms=matchScore(meTalent(),c);
+    c.msgs.push({r:'ai',ts:Date.now(),t:'顾问你好，我是大宇智能体。这是【'+c.name+'】的专属对话间，这位客户的所有沟通、话术、资料都在这里，和其他客户完全隔离。\n\n当前任务【'+s.t+'】：'+s.guide+(ms!==null?'\n\n🧭 天赋匹配：'+ms+'分（'+['零','一','二','三','四','五','六','七','八'][ms]+'级）——'+LEVELS[ms]:'')+'\n\n客户随时可能抛问题——把客户的话发给我，或点下方关键词，我立刻给你话术和资料。'});
+    store(a)}
+  renderRoom();showView('room')}
+function renderRoom(){
+  var c=load().find(x=>x.id===CUR);if(!c)return;
+  var s=STAGES[c.stage],st=taskState(c,c.stage),tg=tagOf(c);
+  var ti=st==='late'?'<span class="ti late">已超时</span>':(st==='now'?'<span class="ti now">进行中</span>':'<span class="ti do">✓</span>');
+  var ms=matchScore(meTalent(),c);
+  document.getElementById('roomHead').innerHTML=
+    '<div class="ch"><span class="tag big '+TAGS[tg].cls+'" style="cursor:pointer" onclick="setTag('+c.id+')" title="点击修改标签">'+tg+' ✎</span><b>'+esc(c.name)+'</b><span class="tag">'+c.role+'</span>'+(c.ct?'<span class="tag">'+c.ct+'</span>':'')+(c.kt?'<span class="tag blu">娃·'+c.kt+'</span>':'')+'</div>'
+    +'<div class="cb">'+fmt(c.ts)+' · '+esc(c.city)+' · 孩子 <i>'+c.grade+' · '+c.kg+'</i>'+(c.school?' · <i>'+c.school+'</i>':'')+(c.board?' · <i>'+c.board+'</i>':'')+(c.plan?'<br>学情：<i>'+c.plan+'</i>':'')+(PLANS[c.plan]?'<br>'+PLANS[c.plan]:'')+'</div>'
+    +'<div class="racts" style="margin-top:8px">'
+    +(c.tel?'<a href="tel:'+esc(c.tel)+'" style="flex:1;text-align:center;font-size:13px;font-weight:900;border-radius:10px;padding:9px 4px;border:1.5px solid #3FB950;background:rgba(63,185,80,.12);color:#7BE3A8;text-decoration:none">📞 '+esc(c.tel)+'</a>':'')
+    +(c.wx?'<button style="flex:1;font-size:13px;font-weight:900;border-radius:10px;padding:9px 4px;border:1.5px solid #2E6BE6;background:rgba(46,107,230,.12);color:#9AD9FF;cursor:pointer" onclick="copyStr(\''+esc(c.wx)+'\');alert(\'微信号已复制：'+esc(c.wx)+'\')">💬 复制微信号</button>':'')
+    +'</div>'
+    +(c.products.length?'<div style="margin-top:8px">'+c.products.map(p=>'<span class="tag grn">'+p+(p==='大会门票'&&c.prodNote?'·'+esc(c.prodNote):'')+'</span>').join(' ')+'</div>':'')
+    +(ms!==null?'<div class="racts" style="margin-top:8px"><button style="flex:1;border-color:#C9A227;color:#F5D9A8" onclick="openMatch('+c.id+')">🧭 天赋匹配 '+ms+'分 · '+['零','一','二','三','四','五','六','七','八'][ms]+'级（点击查看九级详解与话术）</button></div>':'')
+    +'<div class="need">急需解决：'+esc(c.need)+'</div>'
+    +(function(){var imps=c.logs.filter(function(l){return l.imp});if(!imps.length)return '';var l=imps[imps.length-1];return '<div class="pinImp"><b>🔴 关键记录（'+fmt(l.ts)+'）：</b>'+esc(l.txt)+(l.sol?'<br>→ 解决方案已生成，点下方「📝 跟进记录」可另存Word':'')+'</div>'})()
+    +'<div class="nowtask" style="margin-top:8px">'+ti+'<span>当前任务：<b>'+s.t+'</b>　'+s.guide+'</span></div>'
+    +'<div class="racts">'
+    +(c.stage<4?'<button class="pri" onclick="advStage('+c.id+')">✓ 完成本阶段</button>':'')
+    +'<button onclick="openLog('+c.id+')">📝 跟进记录</button>'
+    +'<button onclick="openProd('+c.id+')">🛒 购买登记</button>'
+    +'<button onclick="openTeacher('+c.id+')">🎓 推崇导师</button>'
+    +'<button onclick="delCust('+c.id+')">删除</button>'
+    +'</div>';
+  document.getElementById('chips').innerHTML=CHIPS.map(function(k){return '<span onclick="askChip(this)">'+k+'</span>'}).join('');
+  document.getElementById('chat').innerHTML=c.msgs.map(function(m){
+    if(m.r==='me')return '<div class="msg me">'+esc(m.t)+'</div>';
+    var h='<div class="msg ai"><span class="who">大宇智能体</span>'+esc(m.t);
+    if(m.mats&&m.mats.length)h+=m.mats.map(function(i){var mt=MATS[i];return '<div class="matref"><div><b>'+mt.n+'</b><span>'+mt.c+'</span></div><button onclick="pushMat('+i+')">一键转发</button></div><div class="mlink"><span>'+mt.u+'</span><button onclick="copyStr(\''+mt.u+'\');alert(\'链接已复制，直接粘贴发给客户\')">复制链接</button></div>'}).join('');
+    if(m.copy)h+='<div class="acts"><button onclick="copyStr(this.parentNode.parentNode.childNodes[1].textContent);alert(\'话术已复制，可直接发给客户\')">📋 复制话术</button></div>';
+    return h+'</div>'}).join('');
+  var chat=document.getElementById('chat');
+  setTimeout(function(){window.scrollTo(0,document.body.scrollHeight)},50)}
+function askChip(el){document.getElementById('askIn').value=el.textContent;sendMsg()}
+function sendMsg(){
+  var q=document.getElementById('askIn').value.trim();if(!q)return;
+  var a=load(),c=a.find(x=>x.id===CUR);if(!c)return;
+  c.msgs.push({r:'me',ts:Date.now(),t:q});
+  /* 智能体应答：话术 + 资料 */
+  var hit=QA.filter(x=>x.k.some(k=>q.includes(k)));
+  var mats=MATS.map((m,i)=>i).filter(i=>{var m=MATS[i];return m.n.includes(q)||m.k.split(' ').some(k=>q.includes(k)||(k.length>1&&k.includes(q)))});
+  var t,copy=false;
+  if(hit.length){t=hit.map(x=>x.a).join('\n\n');copy=true}
+  else if(/资料|发.*(图|视频|文档)|转发/.test(q)&&mats.length){t='根据你的需要，为你推荐以下资料，点「一键转发」即可发给客户：'}
+  else if(mats.length){t='这个问题没有现成话术，但我为你匹配到相关资料，可直接转发；通用沟通原则：①先共情再回答②不承诺效果只用案例③每次沟通结束必留下一步动作。'}
+  else{t='这个问题我已记录。通用原则：①先共情再回答②不承诺效果只用案例③每次沟通结束必留下一步动作。\n你也可以点下方关键词，或换种说法再问我（如：价格/考虑/抗拒/效果/没时间）。'}
+  var ms=matchScore(meTalent(),c);
+  if(ms!==null)t+='\n\n🧭 本客户匹配'+ms+'分·'+['零','一','二','三','四','五','六','七','八'][ms]+'级：'+LEVELS[ms].split('。')[0]+'。';
+  c.msgs.push({r:'ai',ts:Date.now(),t:t,copy:copy,mats:mats.slice(0,3)});
+  store(a);document.getElementById('askIn').value='';renderRoom()}
+/* ══ 任务流操作 ══ */
+function advStage(id){var a=load(),c=a.find(x=>x.id===id);if(!c)return;
+  if(c.stage<4){
+    var since=c.lastAdv||c.ts;
+    var hasLog=c.logs.some(function(l){return l.ts>since&&l.txt.indexOf('已完成【')!==0});
+    if(!hasLog){openMask('<h3 style="color:#FF9D9D">⚠️ 本阶段还没有上传有效沟通信息</h3><div class="script" style="border-left:3px solid #E0564B">【'+STAGES[c.stage].t+'】还不能标记完成。\n\n每个阶段在成交之前，必须百分之百上传本次沟通获得的真实有效信息（好的或不好的反馈都算），系统识别通过后才会生成解决方案并放行到下一阶段。</div><button class="wordbtn" onclick="closeMask();openLog('+id+')">📝 立即上传本阶段信息</button>');return}
+    c.stage++;c.lastAdv=Date.now();var s=STAGES[c.stage-1];c.logs.push({ts:Date.now(),txt:'已完成【'+s.t+'】',next:STAGES[c.stage]?('下一阶段【'+STAGES[c.stage].t+'】：'+STAGES[c.stage].guide):'保持回访节奏'});c.msgs.push({r:'ai',ts:Date.now(),t:'✓【'+s.t+'】已完成。'+(STAGES[c.stage]?('下一阶段【'+STAGES[c.stage].t+'】：'+STAGES[c.stage].guide):'保持回访节奏。')});store(a);renderRoom()}}
+function delCust(id){if(!confirm('删除这条客户档案及其对话记录？'))return;store(load().filter(x=>x.id!==id));CUR=null;showView('home')}
+/* ══ 弹层 ══ */
+function openMask(html){document.getElementById('maskBody').innerHTML=html;document.getElementById('mask').classList.add('show')}
+function closeMask(){document.getElementById('mask').classList.remove('show')}
+document.getElementById('mask').addEventListener('click',function(e){if(e.target===this)closeMask()});
+/* 跟进记录 */
+function openLog(id){var c=load().find(x=>x.id===id);openMask('<h3>📝 跟进记录 · '+esc(c.name)+'</h3>'
+ +'<div class="f"><label>本次获取的重要信息</label><textarea id="lgTxt" placeholder="如：孩子数学偏弱/妈妈重视口才/预算1-2万……"></textarea></div>'
+ +'<label class="impCk"><input type="checkbox" id="lgImp"> 🔴 标记为关键记录（在客户对话间置顶凸显）</label>'
+ +'<button class="save" onclick="saveLog('+id+')">保存记录 → 自动生成解决方案</button>'
+ +'<h3 style="margin-top:16px">历史记录</h3>'
+ +(c.logs.length?c.logs.map(function(l,idx){return '<div class="log'+(l.imp?' imp':'')+'">'+(l.imp?'<span class="impTag">关键</span>':'')+fmt(l.ts)+' <i>'+esc(l.txt)+'</i>'+(l.sol?'<br>→ <i>已生成解决方案</i> <a style="color:#F5D576;font-weight:900;cursor:pointer" onclick="dlWord('+id+','+idx+')">📄 另存Word</a>':'')+'</div>'}).join(''):'<div class="empty">暂无记录</div>'))}
+/* ══ 上传内容有效性识别（防应付） ══ */
+function validInfo(txt,c){
+  var t=(txt||'').replace(/\s/g,'');
+  if(t.length<8)return{ok:false,why:'内容过短（不足8个字），不像一次真实沟通的收获'};
+  var uniq={};for(var i=0;i<t.length;i++)uniq[t[i]]=1;
+  if(Object.keys(uniq).length<5)return{ok:false,why:'文字重复度太高，疑似随手应付'};
+  if(/^(没什么|不知道|还好|还行|可以|无|没有|暂无|没啥|随便|再说|嗯|哦|好的|待定|一般|看看再说)[。！!,. ]*$/.test(t))return{ok:false,why:'系统识别为应付性措辞，未包含任何有效客户信息'};
+  if(c&&c.logs.some(function(l){return l.txt.replace(/\s/g,'')===t}))return{ok:false,why:'与历史记录完全重复，每次沟通都必须有新的有效反馈'};
+  if(!/[一-龥]{2,}/.test(t))return{ok:false,why:'未识别到有效中文信息'};
+  return{ok:true}}
+function warnInvalid(why){
+  openMask('<h3 style="color:#FF9D9D">⚠️ 上传未通过系统识别</h3>'
+  +'<div class="script" style="border-left:3px solid #E0564B">'+why+'。\n\n系统在保护你的成交率：客户在成交之前，每一个阶段的每一次沟通，都必须获得真实有效的反馈——无论是好的还是不好的（客户原话、态度变化、家庭情况、预算信号、孩子反应……）。\n\n请重新填写本次沟通真实获得的信息。</div>'
+  +'<button class="wordbtn" onclick="closeMask()">返回重新填写</button>')}
+function saveLog(id){
+  var txt=document.getElementById('lgTxt').value.trim();if(!txt){alert('先填写本次获取的信息');return}
+  var imp=document.getElementById('lgImp').checked;
+  var a=load(),c=a.find(x=>x.id===id);
+  var v=validInfo(txt,c);
+  if(!v.ok){warnInvalid(v.why);return}
+  var tips=[];if(/数|理化|理/.test(txt))tips.push('数学理化痛点→对应余峰导师线，用木桶理论「补短板不如延长长板」做话术支点');
+  if(/走神|发呆|拖拉/.test(txt))tips.push('走神拖拉→发《学习三重境界》短片+邀约开口窍体验课');
+  if(/记忆|背/.test(txt))tips.push('记忆痛点→主推吸照大法·扫描速记，用300→800→5000字速度分级案例');
+  if(/价格|贵|预算/.test(txt))tips.push('价格敏感→先推会议门票低门槛进场，现场转化，不正面报价');
+  if(/考虑|商量|想想/.test(txt))tips.push('犹豫中→锁名额给台阶，约定15分钟回访时间，留资料钩子');
+  if(!tips.length)tips.push('按当前阶段任务继续推进，下次电话前复习本记录');
+  var sol=genSolution(c,txt,tips);
+  c.logs.push({ts:Date.now(),txt:txt,imp:imp,next:tips.join('；'),sol:sol});
+  c.msgs.push({r:'ai',ts:Date.now(),t:'跟进记录已保存'+(imp?'（🔴关键记录，已置顶凸显）':'')+'，解决方案已生成：\n\n'+sol,copy:true});
+  store(a);closeMask();renderRoom();
+  openMask('<h3>📋 解决方案 · '+esc(c.name)+'</h3><div class="solbox">'+esc(sol)+'</div>'
+   +'<button class="wordbtn" onclick="dlWord('+id+','+(c.logs.length-1)+')">📄 生成Word另存</button>'
+   +'<button class="copybtn" onclick="copyTxt(document.querySelector(\'.solbox\'))">📋 复制全文</button>')}
+/* 强指导解决方案生成 */
+function genSolution(c,txt,tips){
+  var s=STAGES[c.stage];
+  var L=[];
+  L.push('【解决方案】'+c.name+'（'+c.role+' · '+c.city+' · 孩子'+c.grade+'）');
+  L.push('生成时间：'+fmt(Date.now())+'　当前阶段：'+s.t);
+  L.push('');
+  L.push('一、问题诊断');
+  L.push('客户本次暴露：'+txt);
+  L.push('原始急需解决：'+c.need);
+  if(c.plan&&PLANS[c.plan])L.push('学情定位：'+c.plan+'（'+PLANS[c.plan]+'）');
+  L.push('');
+  L.push('二、怎么谈（开口话术）');
+  if(/数|理化|理/.test(txt))L.push('「孩子不是学不会理科，是还没开窍。我们余峰老师是985芯片实验室教研组的理科提效专家，先给孩子做一次天赋测评，看清他的思维类型，再决定补哪里——方向错了，补得越多越累。」');
+  else if(/走神|发呆|拖拉/.test(txt))L.push('「发呆走神不是态度问题，是大脑的三个境界没打通：无是心非、眼是心非、口是心非。孩子卡在哪个境界，一测便知。我先发您一段3分钟的短片，您陪孩子一起看，看完咱们约一节开口窍体验课。」');
+  else if(/记忆|背/.test(txt))L.push('「普通孩子阅读150字一分钟，我们的合格线是800-1000字，有学员当晚从150字冲到5000字。记忆不是天赋差异，是方法差异——吸照大法的扫描速记，就是专门解决背不下来的。」');
+  else if(/价格|贵|预算/.test(txt))L.push('「您更关心效果还是预算？这样，我不让您现在做任何大额决定——先拿一张近期会议的门票，您到现场亲眼看看其他孩子的变化，看完咱们再谈方案，一分钱不损失。」');
+  else L.push('「您说的这个情况我特别重视。这样，我先帮孩子申请一个天赋测评名额，把问题一次诊断清楚，我再给您出针对性的方案——咱们不走弯路。」');
+  L.push('');
+  L.push('三、怎么做（动作清单·按时限）');
+  L.push('① 本次通话结束10分钟内：把上面话术的核心一句用文字再发一遍（加深印象）');
+  tips.forEach(function(t,i){L.push('② 针对性动作'+(tips.length>1?String.fromCharCode(65+i):'')+'：'+t)});
+  L.push('③ 24小时内：在对话间问我要对应资料（短片/案例/单页），一键转发给客户');
+  L.push('④ 下次触达严格按任务流：当前阶段【'+s.t+'】'+(STAGES[c.stage+1]?'，完成后进入【'+STAGES[c.stage+1].t+'】':'')+'，不可跳步');
+  L.push('');
+  L.push('四、怎么沟通（节奏与心法）');
+  L.push('· 先共情再回答：客户说什么都先接一句「太正常了/我特别理解」，再进话术');
+  L.push('· 不承诺效果，只用案例与数据；不主动报价，用五数字铺垫后再报档');
+  L.push('· 每次沟通必须留下一步动作：约时间、锁名额、发资料，三选一，不能空挂');
+  L.push('· 关键信息当场记进跟进记录，下次电话前重读一遍本方案');
+  return L.join('\n')}
+/* Word另存 */
+function dlWord(id,idx){
+  var c=load().find(x=>x.id===id);if(!c||!c.logs[idx]||!c.logs[idx].sol)return;
+  var body='<h2 style="color:#C9A227">大宇天赋教育 · 客户解决方案</h2>'+esc(c.logs[idx].sol).replace(/\n/g,'<br>');
+  var blob=new Blob(['﻿<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"></head><body style="font-family:Microsoft YaHei,PingFang SC;font-size:15px;line-height:1.9;color:#222">'+body+'</body></html>'],{type:'application/msword'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='解决方案·'+c.name+'·'+fmt(c.logs[idx].ts).replace(/[: ]/g,'')+'.doc';
+  document.body.appendChild(a);a.click();a.remove()}
+/* 购买登记 */
+function openProd(id){var c=load().find(x=>x.id===id);openMask('<h3>🛒 购买登记 · '+esc(c.name)+'</h3>'
+ +'<div class="f"><label>已购产品（可多选）——7天电话营销主推大会门票</label><div class="prod" id="prodBox" style="flex-wrap:wrap">'
+ +['大会门票','线上体验课','导师项目','星耀项目','合伙人项目'].map(p=>'<span class="'+(c.products.includes(p)?'on':'')+'" style="min-width:45%">'+p+'</span>').join('')+'</div></div>'
+ +'<div class="f" id="prodNoteF" style="display:'+(c.products.includes('大会门票')?'block':'none')+'"><label>大会门票备注（如：七月大会·杭州）</label><input type="text" id="prodNote" value="'+esc(c.prodNote||'')+'" placeholder="如：七月大会·杭州"></div>'
+ +'<button class="save" onclick="saveProd('+id+')">保存（成交客户自动转入「未服务」，交接服务团队）</button>')}
+document.addEventListener('click',function(e){var s=e.target.closest('#prodBox span');if(s){s.classList.toggle('on');var f=document.getElementById('prodNoteF');if(f)f.style.display=[...document.querySelectorAll('#prodBox span.on')].some(x=>x.textContent==='大会门票')?'block':'none'}});
+function saveProd(id){var a=load(),c=a.find(x=>x.id===id);c.products=[...document.querySelectorAll('#prodBox span.on')].map(s=>s.textContent);
+  var pn=document.getElementById('prodNote');c.prodNote=pn?pn.value.trim():'';
+  if(c.products.length){c.stage=4;c.tag='';c.served=false;c.logs.push({ts:Date.now(),txt:'成交：'+c.products.join('、')+(c.prodNote?'（'+c.prodNote+'）':''),next:'交接服务团队，进入推崇导师流程'});c.msgs.push({r:'ai',ts:Date.now(),t:'🎉 成交登记：'+c.products.join('、')+(c.prodNote?'（'+c.prodNote+'）':'')+'。\n客户标签已自动转为【未服务】——已交接服务团队，未开始服务或未到预约期。接下来：电话推崇导师身份与稀缺性→预约试课→叮嘱准时→开课前提醒。点顶部「推崇导师」一键生成话术。'})}
+  store(a);closeMask();renderRoom()}
+/* 推崇导师 */
+function openTeacher(id){var c=load().find(x=>x.id===id);
+  var rec=c.kt==='行者'?'田小静':(c.kt==='思者'?'余峰':(c.kt==='赢者'?'秦念国':(c.kt==='德者'?'善雨':'张宇')));
+  openMask('<h3>🎓 推崇导师 · '+esc(c.name)+'</h3>'
+  +'<div class="f"><label>系统推荐服务导师（按孩子天赋匹配）</label><select id="tSel">'+Object.keys(TEACHERS).map(t=>'<option'+(t===rec?' selected':'')+'>'+t+'</option>').join('')+'</select></div>'
+  +'<div class="f"><label>试课时间（自动生成叮嘱与课前提醒任务）</label><input type="datetime-local" id="tryAt"></div>'
+  +'<button class="save" onclick="genTeacher('+id+')">生成推崇话术与任务</button><div id="tOut"></div>')}
+function genTeacher(id){var t=document.getElementById('tSel').value,at=document.getElementById('tryAt').value;
+  var script='【电话推崇话术】\n「'+t+'老师是'+TEACHERS[t]+'。这次我是特意为您家孩子申请的——孩子的天赋类型和'+t+'老师的方向完全对口。我已经帮您预约了试课时间：'+(at||'（待定）')+'。这个名额非常紧张，请您务必准时，提前10分钟准备好。」\n\n【自动任务】\n① 试课前1天：电话叮嘱准时\n② 开课前2小时：再次提醒\n③ 课后当天：回访体验感受，推进正价课';
+  document.getElementById('tOut').innerHTML='<div class="script" style="margin-top:12px">'+script+'</div><button class="copybtn" onclick="copyTxt(this.previousElementSibling)">一键复制话术</button>';
+  var a=load(),c=a.find(x=>x.id===id);c.teacher=t;c.tryAt=at;c.logs.push({ts:Date.now(),txt:'推崇导师【'+t+'】'+(at?'，试课时间 '+at:''),next:'试课前1天电话叮嘱准时→开课前2小时再提醒→课后当天回访'});
+  c.msgs.push({r:'ai',ts:Date.now(),t:script,copy:true});
+  store(a);renderRoom()}
+/* ══ 转发与复制 ══ */
+function pushMat(i){var m=MATS[i];copyStr('【大宇天赋教育资料】'+m.n+'\n（'+m.c+'，正式环境由系统自动附上文件/链接，顾问一键转发给客户）');alert('已复制转发文案：'+m.n)}
+function copyStr(t){if(navigator.clipboard){navigator.clipboard.writeText(t)}else{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}}
+function copyTxt(el){copyStr(el.textContent);alert('话术已复制')}
+
+/* ── dayu-frame 导航桥 ── */
+function post(type, extra){
+  try{
+    if(window.parent && window.parent !== window){
+      window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function nav(path){
+  if(post('dayu-nav', {path: path})) return;
+  location.href = path;
+}
+function goBackToMine(){
+  if(post('dayu-nav', {path: '/pages/parent/pset'})) return;
+  location.href = 'pset.html';
+}
+document.addEventListener('click', function(e){
+  var a = e.target.closest && e.target.closest('a');
+  if(!a) return;
+  var href = a.getAttribute('href') || '';
+  if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+  if(href.indexOf('tel:')===0) return;
+  var file = href.split('?')[0].split('#')[0].split('/').pop();
+  var map = {
+    'parent.html': '/pages/parent/dayu',
+    'pset.html': '/pages/parent/pset',
+    'pdata.html': '/pages/parent/pdata',
+    'consult.html': '/pages/parent/consult',
+    'community.html': '/pages/parent/community',
+    'pcourse.html': '/pages/parent/pcourse',
+    'wallet.html': '/pages/parent/wallet',
+    'console.html': '/pages/parent/console',
+    'career.html': '/pages/parent/pset'
+  };
+  if(a.id === 'backBtn' && (file==='pset.html' || file==='career.html')){
+    e.preventDefault();
+    e.stopPropagation();
+    goBackToMine();
+    return;
+  }
+  if(map[file]){
+    e.preventDefault();
+    e.stopPropagation();
+    nav(map[file]);
+  }
+}, true);
+showView('home');setInterval(function(){if(document.getElementById('vHome').style.display!=='none')render()},60000);
+</script>
+
+
+</body></html>

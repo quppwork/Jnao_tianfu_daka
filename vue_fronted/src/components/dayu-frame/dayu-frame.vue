@@ -104,6 +104,7 @@ function syncFrameLayoutVars() {
       'community.html',
       'pcourse.html',
       'wallet.html',
+      'console.html',
     ])
     const isParent = parentPages.has(pageFile(props.page))
     const mute = isParent ? '#8B93A5' : '#5A6274'
@@ -125,9 +126,11 @@ function syncFrameLayoutVars() {
       `html.lt .foot a.on{color:${ltOn}!important}`,
       `.foot a img,.foot .fic,.foot a .fic,.fic{width:38px!important;height:38px!important;`,
       `display:block!important;margin:0 auto 1px!important;object-fit:contain!important}`,
-      `.askbar{left:0!important;right:0!important;transform:none!important;`,
+      `.askbar,.inbar{left:0!important;right:0!important;transform:none!important;`,
       `width:100%!important;max-width:none!important;margin:0 auto!important;`,
       `bottom:calc(72px + ${sab})!important;box-sizing:border-box!important}`,
+      `#roomBar .askbar,#roomBar .inbar{bottom:0!important}`,
+      `#roomBar{left:0!important;right:0!important;width:100%!important}`,
       `html,body{height:100%!important;overflow:hidden!important;overflow-x:hidden!important;`,
       `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
       `html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
@@ -245,6 +248,7 @@ function handleMessage(ev) {
     'community.html',
     'pcourse.html',
     'wallet.html',
+    'console.html',
   ])
   const parentShellRoutes = {
     '/pages/parent/dayu': true,
@@ -254,6 +258,7 @@ function handleMessage(ev) {
     '/pages/parent/community': true,
     '/pages/parent/pcourse': true,
     '/pages/parent/wallet': true,
+    '/pages/parent/console': true,
   }
 
   if (data.type !== 'dayu-nav' || !data.path) return
@@ -274,7 +279,10 @@ function handleMessage(ev) {
   }
   if (parentShellRoutes[base]) {
     // 底栏页用 reLaunch；子页（家长课堂）用 navigateTo，失败再 reLaunch
-    const stackOnly = base === '/pages/parent/pcourse' || base === '/pages/parent/wallet'
+    const stackOnly =
+      base === '/pages/parent/pcourse'
+      || base === '/pages/parent/wallet'
+      || base === '/pages/parent/console'
     if (stackOnly) {
       uni.navigateTo({
         url: path,
