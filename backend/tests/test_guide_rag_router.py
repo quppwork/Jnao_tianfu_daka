@@ -7,6 +7,8 @@ def test_talent_query_triggers_rag():
     assert should_guide_use_rag("学者天赋是什么")
     assert should_guide_use_rag("超脑阅读怎么练")
     assert should_guide_use_rag("翻箱进化是什么")
+    assert should_guide_use_rag("火箭提分营的服务周期和收费是怎样的")
+    assert should_guide_use_rag("提分营适合谁")
 
 
 def test_homework_skips_rag():
