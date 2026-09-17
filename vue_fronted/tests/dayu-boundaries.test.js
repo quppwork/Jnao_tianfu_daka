@@ -232,7 +232,7 @@ describe('dayu 听音 90% 打卡门槛', () => {
     expect(isListenReady({ item_type: 'perception', audio_url: '/a.mp3' })).toBe(true)
   })
 
-  it('未达 90% 首次打开过关指导 → 拦截；已有打卡记录可再打开', () => {
+  it('未达 90% 首次打开提交打卡 → 拦截；已有打卡记录可再打开', () => {
     const item = { ...audioItem(50), _state: 'active' }
     expect(canOpenCheckin({
       item, existingRecord: null, phase: 'running', devMode: false,
@@ -376,13 +376,18 @@ describe('dayu 计时结束后媒体锁 / 打卡仍可用', () => {
     return { ok: true }
   }
 
-  function canOpenCheckinAfterExpire({ phase, stageLocked, listenReady, existing, devMode }) {
+  function canOpenCheckinAfterExpire({
+    phase, stageLocked, listenReady, existing, devMode, mediaExhausted = false,
+  }) {
     if (stageLocked) return { ok: false, reason: 'locked' }
     if (!devMode && phase !== 'running' && phase !== 'expired') {
       return { ok: false, reason: 'phase' }
     }
-    // 计时结束仍可打卡；仅卡听音门槛（已有记录可改）
-    if (!existing && !devMode && !listenReady) return { ok: false, reason: 'listen' }
+    const mediaLocked = !devMode && (phase === 'expired' || mediaExhausted)
+    // 计时结束 / 时长用尽后仍可打卡，不再卡听音门槛
+    if (!existing && !devMode && !mediaLocked && !listenReady) {
+      return { ok: false, reason: 'listen' }
+    }
     return { ok: true }
   }
 
@@ -399,12 +404,115 @@ describe('dayu 计时结束后媒体锁 / 打卡仍可用', () => {
     }).reason).toBe('media')
   })
 
-  it('结束后仍可打开过关指导（补打卡）', () => {
+  it('结束后仍可打开提交打卡（补打卡）', () => {
     expect(canOpenCheckinAfterExpire({
       phase: 'expired', stageLocked: false, listenReady: true, existing: null, devMode: false,
     }).ok).toBe(true)
     expect(canOpenCheckinAfterExpire({
       phase: 'expired', stageLocked: false, listenReady: false, existing: { id: 1 }, devMode: false,
     }).ok).toBe(true)
+    // 未听满但时长已到 → 仍可补打卡
+    expect(canOpenCheckinAfterExpire({
+      phase: 'expired', stageLocked: false, listenReady: false, existing: null, devMode: false,
+    }).ok).toBe(true)
+    expect(canOpenCheckinAfterExpire({
+      phase: 'running', mediaExhausted: true, stageLocked: false,
+      listenReady: false, existing: null, devMode: false,
+    }).ok).toBe(true)
+  })
+})
+
+describe('dayu 进度条只反映真实听看', () => {
+  function itemNeedsAudioListen(item) {
+    if (!item) return false
+    if (item.item_type === 'perception' || item.item_type === 'placeholder') return false
+    return !!item.audio_url
+  }
+  function audioWatchPct(item) {
+    const wp = item?.watch_progress
+    if (!wp || typeof wp !== 'object') return 0
+    const audio = wp.audio && typeof wp.audio === 'object' ? wp.audio : null
+    if (audio) return Math.max(0, Math.min(100, Number(audio.pct || 0)))
+    return Math.max(0, Math.min(100, Number(wp.pct || 0)))
+  }
+  function itemPct(item) {
+    if (!item) return 0
+    if (itemNeedsAudioListen(item)) return audioWatchPct(item)
+    const wp = item.watch_progress
+    if (!wp || typeof wp !== 'object') return 0
+    const video = wp.video && typeof wp.video === 'object' ? wp.video : null
+    const v = Number(video?.pct ?? 0)
+    const a = Number(wp.pct || 0)
+    return Math.max(0, Math.min(100, Math.max(a, v)))
+  }
+  function itemDone(item) {
+    if (!item) return false
+    return item.checkin_status === 'done'
+  }
+
+  it('已打卡但只听了 67% → 进度条仍是 67%', () => {
+    const it = {
+      checkin_status: 'done',
+      audio_url: '/a.mp3',
+      watch_progress: { pct: 67, audio: { pct: 67 } },
+    }
+    expect(itemPct(it)).toBe(67)
+    expect(itemDone(it)).toBe(true)
+  })
+
+  it('未打卡听满 100% → 进度 100%，但未通关', () => {
+    const it = {
+      checkin_status: 'pending',
+      audio_url: '/a.mp3',
+      watch_progress: { pct: 100, audio: { pct: 100 } },
+    }
+    expect(itemPct(it)).toBe(100)
+    expect(itemDone(it)).toBe(false)
+  })
+})
+
+describe('dayu 今日通关后不踢回选时长', () => {
+  function resolvePhaseFromPlan(data, itemPct = () => 0) {
+    const tp = data?.timer_phase
+    const items = data?.items || []
+    const hasItems = !!(data?.plan_id && items.length)
+    if (data?.day_locked && hasItems) {
+      return tp === 'running' ? 'running' : 'expired'
+    }
+    if (tp === 'running') return 'running'
+    if (tp === 'expired') return 'expired'
+    if (hasItems) {
+      const started = items.some(
+        (i) => i.checkin_status === 'done' || itemPct(i) > 0,
+      )
+      return started ? 'running' : 'confirm'
+    }
+    return 'setup'
+  }
+
+  it('day_locked + 已完成方案 → expired，不是 setup', () => {
+    expect(resolvePhaseFromPlan({
+      day_locked: true,
+      plan_id: 156,
+      status: 'completed',
+      timer_phase: 'expired',
+      items: [
+        { checkin_status: 'done' },
+        { checkin_status: 'done' },
+        { checkin_status: 'done' },
+      ],
+    })).toBe('expired')
+  })
+
+  it('无方案 → setup', () => {
+    expect(resolvePhaseFromPlan({ day_locked: false, items: [] })).toBe('setup')
+  })
+
+  it('有方案未开练 → confirm', () => {
+    expect(resolvePhaseFromPlan({
+      plan_id: 1,
+      timer_phase: 'setup',
+      items: [{ checkin_status: 'pending' }],
+    })).toBe('confirm')
   })
 })

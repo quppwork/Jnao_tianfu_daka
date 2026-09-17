@@ -187,17 +187,17 @@
       <view class="plan2">
         <view class="ph">
           <text class="pt">今日修炼挑战</text>
-          <text class="chip-gold">{{ phase === 'expired' ? '已结束' : '已确认 ✓' }}</text>
+          <text class="chip-gold">{{ planStatusChip }}</text>
         </view>
 
         <!-- 紧凑倒计时：嵌在演示卡结构里，不另起大块 -->
-        <view class="timer-row" :class="{ expired: phase === 'expired' }">
+        <view class="timer-row" :class="{ expired: phase === 'expired' || planFullyDone }">
           <view class="timer-row-main">
-            <text class="timer-lab">{{ phase === 'expired' ? '今日训练' : '剩余时间' }}</text>
+            <text class="timer-lab">{{ planFullyDone || phase === 'expired' ? '今日训练' : '剩余时间' }}</text>
             <text class="timer-val">{{ countdownLabel }}</text>
           </view>
           <text class="timer-sub">
-            {{ phase === 'expired' ? '时长已到 · 音视频锁定 · 仍可补打卡' : `计划 ${plannedDurationLabel}` }}
+            {{ timerSubText }}
           </text>
           <view v-if="phase === 'running' && plannedDurationSec > 0" class="timer-track">
             <view class="timer-fill" :style="{ width: timerRemainPct + '%' }" />
@@ -207,7 +207,7 @@
         <view class="count">
           <text class="cnt-b">{{ items.length }}</text>
           <text class="cnt-s">个技能任务</text>
-          <text class="cnt-m">完成当前任务解锁新任务</text>
+          <text class="cnt-m">{{ planFullyDone ? '今日训练结束，明天再来吧' : '完成当前任务解锁新任务' }}</text>
         </view>
         <view class="bar"><view class="bar-i" :style="{ width: progressPct + '%' }" /></view>
 
@@ -231,8 +231,8 @@
       <view class="dayu">
         <view class="bear" :style="avatarStyle" />
         <view class="bubble">
-          <text class="b">{{ phase === 'expired' ? '计时已结束' : '先过当前关' }}</text>
-          {{ phase === 'expired' ? '，音视频已锁定，仍可补打卡。' : '，再继续下一关。点卡片可播放或打卡。' }}
+          <text class="b">{{ mapBubbleTitle }}</text>
+          {{ mapBubbleBody }}
         </view>
       </view>
 
@@ -316,7 +316,7 @@
               <view class="vid zd" @click="openCheckin(it)">
                 <text>✅</text>
                 <view>
-                  <text class="vb">过关指导</text>
+                  <text class="vb">提交打卡</text>
                   <text class="vs">{{ guideSub(it) }}</text>
                 </view>
               </view>
@@ -377,71 +377,94 @@
       </view>
     </view>
 
-    <!-- 打卡弹层 -->
-    <view v-if="checkinOpen" class="overlay" @click="closeCheckin">
+    <!-- 打卡弹层：手机居中小卡，正文可滚，避免键盘挡住 -->
+    <view v-if="checkinOpen" class="overlay checkin-overlay" @click="closeCheckin">
       <view class="sheet checkin-sheet" @click.stop>
-        <text class="sheet-t">{{ checkinEditing ? '修改打卡' : '打卡' }} · {{ checkinSkill }}</text>
-        <view class="field" @click.stop>
-          <text class="fl">用时(分钟)</text>
-          <input
-            class="fi-input"
-            type="digit"
-            :value="form.time"
-            placeholder="如：20"
-            :focus="checkinFocus"
-            @input="onFormInput('time', $event)"
-            @click.stop
-            @mousedown.stop
-            @touchstart.stop
-          />
+        <text class="sheet-t">{{ checkinEditing ? '修改打卡' : '提交打卡' }} · {{ checkinSkill }}</text>
+        <text class="checkin-hint">记录今日完成</text>
+        <scroll-view scroll-y class="checkin-body" :show-scrollbar="false">
+          <view class="field-row" :class="{ 'one-col': !showWord }">
+            <view class="field" :class="{ 'field-half': showWord }" @click.stop>
+              <text class="fl">用时(分钟)</text>
+              <input
+                class="fi-input"
+                type="digit"
+                :value="form.time"
+                placeholder="如：20"
+                :focus="checkinFocus"
+                @input="onFormInput('time', $event)"
+                @focus="onCheckinFieldFocus"
+                @click.stop
+                @mousedown.stop
+                @touchstart.stop
+              />
+            </view>
+            <view v-if="showWord" class="field field-half" @click.stop>
+              <text class="fl">字数</text>
+              <input
+                class="fi-input"
+                type="digit"
+                :value="form.wordCount"
+                placeholder="完成字数"
+                @input="onFormInput('wordCount', $event)"
+                @focus="onCheckinFieldFocus"
+                @click.stop
+                @mousedown.stop
+                @touchstart.stop
+              />
+            </view>
+          </view>
+          <view v-if="showAcc" class="field" @click.stop>
+            <text class="fl">准确率(%)</text>
+            <input
+              class="fi-input"
+              type="digit"
+              :value="form.accuracy"
+              placeholder="0-100"
+              @input="onFormInput('accuracy', $event)"
+              @focus="onCheckinFieldFocus"
+              @click.stop
+              @mousedown.stop
+              @touchstart.stop
+            />
+          </view>
+          <view class="field" @click.stop>
+            <text class="fl">备注</text>
+            <input
+              class="fi-input"
+              type="text"
+              :value="form.note"
+              placeholder="可选"
+              @input="onFormInput('note', $event)"
+              @focus="onCheckinFieldFocus"
+              @click.stop
+              @mousedown.stop
+              @touchstart.stop
+            />
+          </view>
+          <view class="field checkin-attitude" @click.stop>
+            <text class="fl">配合度 {{ form.attitude }}%</text>
+            <view class="sa-grid">
+              <view
+                v-for="s in attitudeScores"
+                :key="s.pct"
+                class="sa-item"
+                :class="{ active: Number(form.attitude) === s.pct }"
+                @click.stop="setAttitudeScore(s.pct)"
+              >
+                <text class="sa-pct">{{ s.pct }}%</text>
+                <text class="sa-emoji">{{ s.emoji }}</text>
+              </view>
+            </view>
+            <text class="sa-desc">{{ attitudeDesc }}</text>
+          </view>
+        </scroll-view>
+        <view class="checkin-actions">
+          <view class="checkin-cancel" @click="closeCheckin">取消</view>
+          <view class="btn checkin-submit" :class="{ dim: checkinBusy }" @click="submitCheckin">
+            {{ checkinSubmitLabel }}
+          </view>
         </view>
-        <view v-if="showWord" class="field" @click.stop>
-          <text class="fl">字数</text>
-          <input
-            class="fi-input"
-            type="digit"
-            :value="form.wordCount"
-            placeholder="完成字数"
-            @input="onFormInput('wordCount', $event)"
-            @click.stop
-            @mousedown.stop
-            @touchstart.stop
-          />
-        </view>
-        <view v-if="showAcc" class="field" @click.stop>
-          <text class="fl">准确率(%)</text>
-          <input
-            class="fi-input"
-            type="digit"
-            :value="form.accuracy"
-            placeholder="0-100"
-            @input="onFormInput('accuracy', $event)"
-            @click.stop
-            @mousedown.stop
-            @touchstart.stop
-          />
-        </view>
-        <view class="field" @click.stop>
-          <text class="fl">备注</text>
-          <input
-            class="fi-input"
-            type="text"
-            :value="form.note"
-            placeholder="可选"
-            @input="onFormInput('note', $event)"
-            @click.stop
-            @mousedown.stop
-            @touchstart.stop
-          />
-        </view>
-        <view class="field" @click.stop>
-          <text class="fl">态度 {{ form.attitude }}%</text>
-          <slider :value="form.attitude" min="0" max="100" @changing="onAttitude" @change="onAttitude" />
-        </view>
-        <view class="btn block" :class="{ dim: checkinBusy }" @click="submitCheckin">
-          {{ checkinSubmitLabel }}
-        </view>
-        <view class="link" @click="closeCheckin">取消</view>
       </view>
     </view>
 
@@ -736,6 +759,31 @@ const checkinSubmitLabel = computed(() => {
 })
 
 const items = computed(() => plan.value?.items || [])
+const planFullyDone = computed(() => {
+  if (plan.value?.status === 'completed' || plan.value?.day_locked) return true
+  const list = items.value
+  return list.length > 0 && list.every((i) => i.checkin_status === 'done')
+})
+const planStatusChip = computed(() => {
+  if (planFullyDone.value) return '今日结束'
+  if (phase.value === 'expired') return '已结束'
+  return '已确认 ✓'
+})
+const timerSubText = computed(() => {
+  if (planFullyDone.value) return '今日训练结束，明天再来吧'
+  if (phase.value === 'expired') return '时长已到 · 音视频锁定 · 仍可补打卡'
+  return `计划 ${plannedDurationLabel.value}`
+})
+const mapBubbleTitle = computed(() => {
+  if (planFullyDone.value) return '今日训练结束'
+  if (phase.value === 'expired') return '计时已结束'
+  return '先过当前关'
+})
+const mapBubbleBody = computed(() => {
+  if (planFullyDone.value) return '，明天再来吧。仍可修改今日打卡。'
+  if (phase.value === 'expired') return '，音视频已锁定，仍可补打卡。'
+  return '，再继续下一关。点卡片可播放或打卡。'
+})
 const plannedMins = computed(() => Number(plan.value?.planned_minutes || mins.value) || mins.value)
 const chipText = computed(() => `${talentLabel.value || '学员'} · 第 ${dayNum.value || 1} 天`)
 const countdownLabel = computed(() => formatCountdown(remainingSeconds.value))
@@ -899,9 +947,35 @@ function onFormInput(key, e) {
   const v = e?.detail?.value ?? e?.target?.value ?? ''
   form[key] = v
 }
-function onAttitude(e) {
-  form.attitude = Number(e?.detail?.value ?? 60) || 60
+
+/** 原版训练页配合度表情格（替代滑条） */
+const attitudeScores = [
+  { pct: 100, emoji: '🔴', desc: '身体已透支，精神还要求进步' },
+  { pct: 80, emoji: '🟡', desc: '能完成任务，但还有余力学习' },
+  { pct: 60, emoji: '🔵', desc: '做基本任务，被动的低效训练' },
+  { pct: 40, emoji: '🟤', desc: '不完成任务，不认真逃避训练' },
+  { pct: 20, emoji: '⚫️', desc: '不完成任务，基本不配合训练' },
+  { pct: 0, emoji: '☠️', desc: '不完成任务，严重不配合训练' },
+]
+const attitudeDesc = computed(() => {
+  const hit = attitudeScores.find((s) => s.pct === Number(form.attitude))
+  return hit?.desc || ''
+})
+function setAttitudeScore(pct) {
+  form.attitude = Number(pct)
 }
+
+/** 聚焦输入时滚入可视区，减少手机键盘遮挡 */
+function onCheckinFieldFocus(e) {
+  const el = e?.target
+  if (!el || typeof el.scrollIntoView !== 'function') return
+  setTimeout(() => {
+    try {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    } catch (_) { /* ignore */ }
+  }, 120)
+}
+
 function closeCheckin() {
   checkinOpen.value = false
   checkinFocus.value = false
@@ -945,8 +1019,8 @@ function isElective(item) {
 
 function itemDone(item) {
   if (!item) return false
-  if (item.checkin_status === 'done') return true
-  return itemPct(item) >= 100
+  // 通关以打卡为准；进度条另走 itemPct（真实听看）
+  return item.checkin_status === 'done'
 }
 
 /** 与后端 is_item_media_complete 一致：有 audio_url 时只看音频进度 */
@@ -966,8 +1040,7 @@ function audioWatchPct(item) {
 
 function itemPct(item) {
   if (!item) return 0
-  if (item.checkin_status === 'done') return 100
-  // 打卡门槛只看音频：展示也与门槛对齐，避免「视频 90% 却打不了卡」
+  // 进度条只反映真实听/看进度，不因已打卡强行显示 100%
   if (itemNeedsAudioListen(item)) return audioWatchPct(item)
   const wp = item.watch_progress
   if (!wp || typeof wp !== 'object') return 0
@@ -988,7 +1061,7 @@ function weaponSub(it) {
   if (it._done) return '已打卡，可回看训练'
   if (itemNeedsAudioListen(it)) {
     const p = audioWatchPct(it)
-    if (p >= 90) return '训练音频已达 90%，可去「过关指导」打卡'
+    if (p >= 90) return '训练音频已达 90%，可去「提交打卡」'
     return `听训练音频达 90% 可打卡（当前 ${p.toFixed(0)}%）`
   }
   if (it.video_url) return '播放训练视频'
@@ -1002,7 +1075,7 @@ function guideSub(it) {
   if (itemNeedsAudioListen(it) && !isListenReady(it)) {
     return `听满 90% 后打卡（${audioWatchPct(it).toFixed(0)}%）`
   }
-  return '提交打卡 · 记录今日完成'
+  return '记录今日完成'
 }
 
 function weaponTitle(it) {
@@ -1277,14 +1350,17 @@ function formatWindowTime(ms) {
 function applyPlan(data) {
   plan.value = data
   const tp = data?.timer_phase
-  if (data?.day_locked) {
-    phase.value = 'setup'
+  const items = data?.items || []
+  const hasItems = !!(data?.plan_id && items.length)
+  // 今日方案已全部打卡 → day_locked；应留在闯关页，禁止踢回「选时长」
+  if (data?.day_locked && hasItems) {
+    phase.value = tp === 'running' ? 'running' : 'expired'
   } else if (tp === 'running') {
     phase.value = 'running'
   } else if (tp === 'expired') {
     phase.value = 'expired'
-  } else if (data?.plan_id && (data.items || []).length) {
-    const started = (data.items || []).some(
+  } else if (hasItems) {
+    const started = items.some(
       (i) => i.checkin_status === 'done' || itemPct(i) > 0,
     )
     phase.value = started ? 'running' : 'confirm'
@@ -1392,6 +1468,11 @@ async function bootstrap() {
 /** 对应老页 startTrainingWithPrefer：只排课，不开计时 */
 async function genPlan() {
   if (scheduleBusy.value) return
+  if (plan.value?.day_locked || plan.value?.status === 'completed') {
+    uni.showToast({ title: '今日已通关，明天再来吧', icon: 'none' })
+    phase.value = 'expired'
+    return
+  }
   if (mins.value < MIN) {
     uni.showToast({ title: `至少 ${MIN} 分钟`, icon: 'none' })
     return
@@ -1751,7 +1832,8 @@ async function openCheckin(it) {
   const raw = findItem(it.id) || it
   const existing = checkinByItemId.value[String(it.id)]
   // 已打卡再次打开：回填上次内容，不再卡 90% 门槛
-  if (!existing && !devMode.value && !isListenReady(raw)) {
+  // 时长用尽（媒体锁定）后仍可补打卡，与后端 media_exhausted 语义一致
+  if (!existing && !devMode.value && !isMediaLocked.value && !isListenReady(raw)) {
     uni.showToast({
       title: `请先听完训练音频（需达到 90%，当前 ${audioWatchPct(raw).toFixed(0)}%）`,
       icon: 'none',
@@ -1786,7 +1868,7 @@ async function submitCheckin() {
     const skill = checkinSkill.value || '训练'
     const raw = findItem(checkinItemId.value)
     const existing = checkinByItemId.value[String(checkinItemId.value)]
-    if (!existing && !devMode.value && raw && !isListenReady(raw)) {
+    if (!existing && !devMode.value && !isMediaLocked.value && raw && !isListenReady(raw)) {
       throw new Error(`请先听完训练音频（需达到 90%，当前 ${audioWatchPct(raw).toFixed(0)}%）`)
     }
     if (showWord.value && !String(form.wordCount || '').trim()) {
@@ -1842,7 +1924,19 @@ async function submitCheckin() {
       if (keep === 'running' || keep === 'expired') phase.value = keep
       await hydrateCheckins(uid)
     }
-    uni.showToast({ title: existing ? '已保存修改' : '打卡成功', icon: 'none' })
+    const justFinishedToday = !existing && (
+      plan.value?.status === 'completed'
+      || plan.value?.day_locked
+      || ((plan.value?.items || []).length > 0
+        && (plan.value.items || []).every((i) => i.checkin_status === 'done'))
+    )
+    uni.showToast({
+      title: existing
+        ? '已保存修改'
+        : (justFinishedToday ? '今日训练结束，明天再来吧' : '打卡成功'),
+      icon: 'none',
+      duration: justFinishedToday ? 2800 : 2000,
+    })
   } catch (e) {
     uni.showToast({ title: e.message || '打卡失败', icon: 'none', duration: 2800 })
   } finally {
@@ -2340,21 +2434,21 @@ onUnmounted(() => {
 .val { font-size: 30px; font-weight: 900; color: #edebe4; min-width: 64px; }
 
 .goPlan, .confirm {
-  margin: 14px 18px 4px;
+  margin: 12px 18px 4px;
   background: #2e6be6;
   color: #fff;
-  border-radius: 16px;
-  padding: 17px;
-  font-size: 19px;
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-size: 16px;
   font-weight: 900;
   text-align: center;
 }
 .goPlan .sub, .confirm .sub {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   opacity: 0.75;
-  margin-top: 3px;
+  margin-top: 2px;
 }
 .dim { opacity: 0.55; pointer-events: none; }
 
@@ -2999,8 +3093,151 @@ onUnmounted(() => {
   z-index: 10000;
   pointer-events: auto;
 }
+.checkin-overlay {
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  background: rgba(5, 8, 16, 0.62);
+}
 .checkin-sheet {
-  margin-bottom: 56px;
+  width: min(100%, 360px);
+  max-height: min(62vh, 520px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1.5px solid #2a3040;
+  padding: 12px 12px 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(180deg, #1a2233 0%, #121826 100%);
+  overflow: hidden;
+}
+.checkin-sheet .sheet-t {
+  font-size: 14px;
+  margin-bottom: 2px;
+  flex: none;
+}
+.checkin-hint {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b93a5;
+  margin: 0 0 6px;
+  flex: none;
+}
+.checkin-body {
+  flex: 1;
+  min-height: 0;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
+}
+.checkin-sheet .field {
+  margin-top: 8px;
+}
+.checkin-sheet .field-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 0;
+}
+.checkin-sheet .field-row .field {
+  margin-top: 0;
+}
+.checkin-sheet .field-half {
+  flex: 1;
+  min-width: 0;
+}
+.checkin-sheet .field-row.one-col .field {
+  flex: 1;
+  width: 100%;
+}
+.checkin-sheet .fl {
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.checkin-sheet .fi-input {
+  height: 34px;
+  padding: 6px 9px;
+  font-size: 13px;
+  line-height: 20px;
+  border-radius: 8px;
+}
+.checkin-attitude .sa-grid {
+  display: flex;
+  gap: 3px;
+}
+.checkin-attitude .sa-item {
+  flex: 1;
+  text-align: center;
+  padding: 4px 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+}
+.checkin-attitude .sa-item.active {
+  border-color: rgba(78, 160, 216, 0.85);
+  background: rgba(44, 110, 158, 0.28);
+}
+.checkin-attitude .sa-pct {
+  display: block;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  font-weight: 700;
+}
+.checkin-attitude .sa-item.active .sa-pct {
+  color: #6fd3a7;
+}
+.checkin-attitude .sa-emoji {
+  display: block;
+  font-size: 11px;
+  margin-top: 1px;
+  line-height: 1.15;
+}
+.checkin-attitude .sa-desc {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  color: #8b93a5;
+  line-height: 1.3;
+}
+.checkin-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.checkin-cancel {
+  flex: 0 0 auto;
+  min-width: 64px;
+  text-align: center;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8b93a5;
+  border-radius: 10px;
+  border: 1px solid #2a3040;
+  background: rgba(255, 255, 255, 0.03);
+}
+.checkin-submit {
+  flex: 1;
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 10px;
+  line-height: 1.2;
+}
+
+@media (max-height: 700px) {
+  .checkin-sheet {
+    max-height: min(70vh, 480px);
+  }
+  .checkin-body {
+    max-height: min(48vh, 300px);
+  }
 }
 .sheet-t {
   display: block; font-size: 17px; font-weight: 900; color: #edebe4; margin-bottom: 10px;

@@ -211,6 +211,17 @@
         <view class="sclose" @tap="showSettings = false"><text>关闭</text></view>
       </view>
     </view>
+
+    <!-- 选图：自研中文底栏，避免 H5 ActionSheet 取消键显示 Cancel -->
+    <view v-if="showImageSheet" class="img-sheet-mask" @tap="closeImageSheet">
+      <view class="img-sheet" @tap.stop>
+        <view class="img-sheet-group">
+          <view class="img-sheet-item" @tap="onPickSource('camera')">拍照</view>
+          <view class="img-sheet-item" @tap="onPickSource('album')">从相册选择</view>
+        </view>
+        <view class="img-sheet-cancel" @tap="closeImageSheet">取消</view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -257,6 +268,7 @@ const messages = ref([])
 const sessionList = ref([])
 const scrollInto = ref('')
 const pendingImage = ref(null)
+const showImageSheet = ref(false)
 const mismatchSuggest = ref(null)
 const mismatchResendText = ref('')
 const subsRef = ref(null)
@@ -521,24 +533,27 @@ async function switchSession(sessionId) {
 
 async function pickImage() {
   if (loading.value) return
-  uni.showActionSheet({
-    itemList: ['拍照', '从相册选择'],
-    success: async (res) => {
-      const source = res.tapIndex === 0 ? 'camera' : 'album'
-      try {
-        const path = await chooseQuestionImage(source)
-        if (!path) return
-        pendingImage.value = await buildPendingImageFromPath(path)
-        await sendMsg()
-      } catch (e) {
-        if (e?.message && e.message !== 'cancel' && e?.code !== 'WEBCAM') {
-          uni.showToast({ title: e.message || '选图失败', icon: 'none' })
-        } else if (e?.code === 'WEBCAM') {
-          uni.showToast({ title: '当前环境请用相册选图', icon: 'none' })
-        }
-      }
-    },
-  })
+  showImageSheet.value = true
+}
+
+function closeImageSheet() {
+  showImageSheet.value = false
+}
+
+async function onPickSource(source) {
+  showImageSheet.value = false
+  try {
+    const path = await chooseQuestionImage(source)
+    if (!path) return
+    pendingImage.value = await buildPendingImageFromPath(path)
+    await sendMsg()
+  } catch (e) {
+    if (e?.message && e.message !== 'cancel' && e?.code !== 'WEBCAM') {
+      uni.showToast({ title: e.message || '选图失败', icon: 'none' })
+    } else if (e?.code === 'WEBCAM') {
+      uni.showToast({ title: '当前环境请用相册选图', icon: 'none' })
+    }
+  }
 }
 
 function previewImg(url) {
@@ -1159,5 +1174,61 @@ onMounted(async () => {
 .sclose {
   margin-top: 14px; text-align: center; font-size: 13px; font-weight: 800;
   color: #8b93a5; border: 1.5px solid #2a3040; border-radius: 12px; padding: 10px;
+}
+
+.img-sheet-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  max-width: var(--app-max-width, 480px);
+  margin: 0 auto;
+}
+.img-sheet {
+  width: 100%;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+.img-sheet-group {
+  background: #f5f5f7;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.app:not(.lt) .img-sheet-group {
+  background: #1c2333;
+  border: 1px solid #2a3040;
+}
+.img-sheet-item {
+  text-align: center;
+  padding: 16px 12px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #007aff;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.18);
+}
+.app:not(.lt) .img-sheet-item {
+  color: #6ea8ff;
+  border-bottom-color: #2a3040;
+}
+.img-sheet-item:last-child {
+  border-bottom: none;
+}
+.img-sheet-cancel {
+  text-align: center;
+  padding: 16px 12px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #007aff;
+  background: #f5f5f7;
+  border-radius: 14px;
+}
+.app:not(.lt) .img-sheet-cancel {
+  color: #edebe4;
+  background: #1c2333;
+  border: 1px solid #2a3040;
 }
 </style>

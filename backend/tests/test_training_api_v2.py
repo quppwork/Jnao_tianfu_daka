@@ -165,6 +165,29 @@ class TestCheckinV2:
         }, **_auth(uid))
         assert res.status_code == 200
 
+    def test_media_exhausted_allows_checkin_without_watch(
+        self, client, user_ready_for_training, db_session
+    ):
+        """时长用尽后媒体已锁：未听满 90% 仍可打卡。"""
+        from app.db.models import TrainingItem, TrainingPlan
+
+        uid = user_ready_for_training
+        sched = client.post("/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid))
+        plan = sched.json()
+        item = plan["items"][0]
+        row = db_session.get(TrainingItem, item["id"])
+        row.audio_url = "https://example.com/a.mp3"
+        row.video_url = None
+        plan_row = db_session.get(TrainingPlan, plan["plan_id"])
+        plan_row.media_exhausted = 1
+        db_session.commit()
+
+        res = client.post("/api/training/checkin", json={
+            "plan_id": plan["plan_id"], "item_id": item["id"],
+            "cards": [{"name": "超脑阅读", "time": "2.5", "wordCount": "900"}],
+        }, **_auth(uid))
+        assert res.status_code == 200
+
     def test_video_item_checkin_without_watch(self, client, user_ready_for_training, db_session):
         """仅视频的训练项不要求看完即可打卡。"""
         from app.db.models import TrainingItem

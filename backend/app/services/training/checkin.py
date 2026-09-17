@@ -74,8 +74,14 @@ def submit_checkin(
         raise TrainingError("训练项不存在", 404)
 
     # 选修/免打卡项：点开即过关，不设「听完 90%」门槛（见 item_skips_checkin）
+    # 时长用尽后媒体已锁：仍允许打卡至训练日截止（与 media_exhausted 语义一致）
     from app.services.training.service import is_item_media_complete
-    if not item_skips_checkin(target_item) and not is_item_media_complete(target_item):
+    media_locked = bool(getattr(plan, "media_exhausted", 0))
+    if (
+        not media_locked
+        and not item_skips_checkin(target_item)
+        and not is_item_media_complete(target_item)
+    ):
         raise TrainingError(
             f"请先听完/看完本项音视频后再打卡（需达到 {int(WATCH_COMPLETE_PCT)}%）",
             403,
