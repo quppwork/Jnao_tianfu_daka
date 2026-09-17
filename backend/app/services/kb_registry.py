@@ -14,7 +14,11 @@ from app.core.logger import get_logger
 
 logger = get_logger("kb.registry")
 
-_REGISTRY_PATH = Path(__file__).resolve().parents[2] / "data" / "kb_registry.yaml"
+# 放在 config/：生产 compose 把 named volume 挂到 /app/data，会盖住镜像里的 data/，
+# 导致 registry 空 → guide_kb_agent_ready=False → 退化成 retrieve+豆包（答案变短）。
+_ROOT = Path(__file__).resolve().parents[2]
+_REGISTRY_PATH = _ROOT / "config" / "kb_registry.yaml"
+_LEGACY_REGISTRY_PATH = _ROOT / "data" / "kb_registry.yaml"
 
 # env 可覆盖 registry 中的 aid（便于生产不改 yaml）
 _ENV_AID_KEYS = {
@@ -93,10 +97,20 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
     return raw
 
 
+def resolve_registry_path(path: Path | None = None) -> Path:
+    if path is not None:
+        return path
+    if _REGISTRY_PATH.is_file():
+        return _REGISTRY_PATH
+    if _LEGACY_REGISTRY_PATH.is_file():
+        return _LEGACY_REGISTRY_PATH
+    return _REGISTRY_PATH
+
+
 def load_kb_registry(*, path: Path | None = None) -> KnowledgeRegistry:
-    p = path or _REGISTRY_PATH
+    p = resolve_registry_path(path)
     if not p.is_file():
-        logger.warning("kb_registry missing: %s", p)
+        logger.warning("kb_registry missing: %s (also tried %s)", p, _LEGACY_REGISTRY_PATH)
         return KnowledgeRegistry()
     data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     items: list[KnowledgeSource] = []

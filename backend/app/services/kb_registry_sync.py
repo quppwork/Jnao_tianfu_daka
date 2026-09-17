@@ -10,7 +10,7 @@ import yaml
 from app.core.logger import get_logger
 from app.services.bailian.config import load_bailian_config
 from app.services.bailian.list_documents import list_all_index_document_stems
-from app.services.kb_registry import _REGISTRY_PATH, get_kb_registry
+from app.services.kb_registry import get_kb_registry, resolve_registry_path
 
 logger = get_logger("kb.registry_sync")
 
@@ -66,7 +66,7 @@ def sync_registry_tags_from_bailian(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """拉取两库已入库文件名，合并进 yaml tags；清掉 get_kb_registry 缓存。"""
-    p = path or _REGISTRY_PATH
+    p = resolve_registry_path(path)
     cfg = load_bailian_config()
     data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     sources = data.get("sources") or []

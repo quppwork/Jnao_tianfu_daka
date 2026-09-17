@@ -303,13 +303,27 @@ async def guide_chat_stream(
             yield sse_json({"type": "error", "message": "AI 服务未配置，请先设置豆包 API Key。"})
             yield sse_done()
             return
-        async for chunk in emit_event_stream(
-            guide_service.chat_stream(
+        path_mark = "-"
+        rag_mark = "-"
+
+        async def _tracked():
+            nonlocal path_mark, rag_mark
+            async for kind, payload in guide_service.chat_stream(
                 db, child_user_id, req.message, session_id=req.session_id
-            )
-        ):
+            ):
+                if kind == "done" and isinstance(payload, dict):
+                    path_mark = payload.get("pipeline_path") or "-"
+                    rag_mark = payload.get("rag_source") or "-"
+                yield kind, payload
+
+        async for chunk in emit_event_stream(_tracked()):
             yield chunk
-        biz_event("guide.chat_stream", result="ok")
+        biz_event(
+            "guide.chat_stream",
+            result="ok",
+            path=path_mark,
+            rag=rag_mark,
+        )
 
     return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 

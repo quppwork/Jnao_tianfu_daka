@@ -341,6 +341,8 @@ async def chat_stream(
             "situation_label": meta.get("situation_label"),
             "tools_used": meta.get("tools_used") or [],
             "blocks": meta.get("blocks") or [],
+            "pipeline_path": meta.get("pipeline_path"),
+            "rag_source": meta.get("rag_source"),
         },
     )
 

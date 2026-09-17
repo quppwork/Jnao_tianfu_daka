@@ -16,7 +16,6 @@ __pycache__/
 *.egg
 .pytest_cache/
 backend/data/*
-!backend/data/kb_registry.yaml
 
 # SQLite databases
 data/*.db

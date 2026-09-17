@@ -85,7 +85,7 @@
 | 开关 | `GUIDE_KB_AGENT`（默认开）、`GUIDE_RAG_ENABLED`、`GUIDE_RAG_MODE=retrieve\|search` |
 | 直答生成 | `BAILIAN_RAG_GENERATE`（0=Retrieve+豆包；1=百炼 file_search 直答） |
 | 代码 | `backend/app/services/bailian/`、`knowledge/`、`agents/guide/kb_agent.py` |
-| 选库目录 | `backend/data/kb_registry.yaml` |
+| 选库目录 | `backend/config/kb_registry.yaml` |
 | 就绪判断 | `guide_kb_agent_ready()` / `guide_rag_ready()` / `bailian_status()` |
 
 **两条引导知识路径：**
@@ -263,7 +263,7 @@ RAG_API_SECRET=
 | `app/services/academic_plan_service.py` | 学业规划（单次豆包） |
 | `app/services/jnao_client.py` | 天赋测评上游 |
 | `config/integration.yaml` | 接入状态声明 |
-| `data/kb_registry.yaml` | 百炼选库目录 |
+| `config/kb_registry.yaml` | 百炼选库目录 |
 
 ---
 

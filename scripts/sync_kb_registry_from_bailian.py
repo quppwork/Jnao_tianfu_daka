@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""从百炼 ListIndexDocuments 刷新 backend/data/kb_registry.yaml 的 tags。
+"""从百炼 ListIndexDocuments 刷新 backend/config/kb_registry.yaml 的 tags。
 
 用法（在 backend 目录或项目根，需已配置 OSS/百炼 AK 与 workspace）:
 
