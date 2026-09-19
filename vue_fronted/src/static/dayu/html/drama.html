@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html lang="zh-CN"><head>
+<!DOCTYPE html><html lang="zh-CN"><head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>劲脑天赋学院 · 内部频道</title>
@@ -104,9 +104,10 @@
   .nudge .ng1{font-size:22px;flex:none}
   .nudge p{flex:1;font-size:12px;color:#B9E5CB;line-height:1.55}
   .nudge a{flex:none;font-size:11.5px;font-weight:900;color:#0B0E14;background:#6FCF8E;border-radius:9px;padding:7px 11px;text-decoration:none}
-  /* 快捷话题 */
-  .replies{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}
-  .rp{background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:8px 13px;font-size:12px;font-weight:700;color:#D8DCE6;cursor:pointer}
+  /* 快捷话题：跟首页对话一样，横滑一行，不往下撑 */
+  .replies{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 4px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .replies::-webkit-scrollbar{display:none;height:0}
+  .rp{flex:0 0 auto;max-width:168px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#131926;border:1.5px solid #2A3040;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700;line-height:1.25;color:#D8DCE6;cursor:pointer}
   .rp:active{transform:scale(.95)}
   .rp:hover{border-color:#C9A869}
   /* 输入条 */
@@ -130,7 +131,7 @@ html.lt body{background:#ebeef4}html.lt /* ===== 学院头部 ===== */
   .chatroom{margin:12px 18px 0;background:#dfe5f1;border:1.5px solid #c2cadc;border-radius:18px;padding:12px 12px 8px;position:relative}html.lt .cr-head{display:flex;align-items:center;gap:8px;padding-bottom:9px;border-bottom:1px solid #ccd4e5;margin-bottom:10px}html.lt .cr-head b{font-size:13.5px;font-weight:900;color:#1b1912}html.lt .cr-head .on9{margin-left:auto;font-size:10px;color:#30904f;font-weight:800}html.lt .cr-head .on9::before{content:"●";margin-right:4px}html.lt #msgwrap{max-height:430px;overflow-y:auto;position:relative}html.lt .msg{display:flex;gap:8px;margin-bottom:12px;animation:stin .3s ease}@keyframes stin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}html.lt .msg .ma{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none;border:1.5px solid #bfc5d5}html.lt .msg .mc{max-width:78%}html.lt .msg .mn{font-size:10.5px;color:#8b93a5;font-weight:800;margin-bottom:3px}html.lt .msg .mn i{font-style:normal;color:#71c18d;border:1px solid rgba(113,193,141,.5);border-radius:5px;padding:0 4px;margin-left:4px;font-size:9px}html.lt .msg .mb{background:#ccd4e5;border-radius:4px 14px 14px 14px;padding:9px 12px;font-size:14px;color:#0f131b;line-height:1.6}html.lt .msg.me{flex-direction:row-reverse}html.lt .msg.me .mb{background:linear-gradient(135deg,#0041c5,#2956d1);color:#141414;border-radius:14px 4px 14px 14px}html.lt .msg.me .mn{text-align:right}html.lt .msg.sys{justify-content:center}html.lt .msg.sys .mb{background:transparent;color:#8b93a5;font-size:11px;padding:2px 10px;border:1px dashed #bfc5d5;border-radius:99px}html.lt .typing{display:flex;gap:8px;margin-bottom:12px;align-items:center}html.lt .typing .tdots{background:#ccd4e5;border-radius:4px 14px 14px 14px;padding:11px 14px;display:flex;gap:4px}html.lt .typing .tdots i{width:6px;height:6px;border-radius:50%;background:#5a6274;animation:tp 1.2s infinite}html.lt .typing .tdots i:nth-child(2){animation-delay:.2s}html.lt .typing .tdots i:nth-child(3){animation-delay:.4s}@keyframes tp{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}html.lt /* 模糊预告层 */
   .locked-teaser #msgwrap{filter:blur(5px) saturate(.8);pointer-events:none;user-select:none}html.lt .lockov{position:absolute;inset:44px 0 0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px}html.lt .locked-teaser .lockov{display:flex}html.lt .lockov .lk1{font-size:15px;font-weight:900;color:#1b1912;text-shadow:0 2px 8px #f7f7f7}html.lt .lockov .lk2{font-size:11.5px;color:#313846}html.lt .lockov .lk3{margin-top:6px;font-size:11px;font-weight:900;color:#ebeef4;background:#967536;border-radius:99px;padding:7px 16px}html.lt /* 轻提醒卡（训练归训练，互动归互动） */
   .nudge{display:flex;gap:10px;align-items:center;margin:4px 0 12px;background:rgba(48,144,79,.07);border:1px dashed rgba(48,144,79,.5);border-radius:13px;padding:10px 12px;animation:stin .4s}html.lt .nudge .ng1{font-size:22px;flex:none}html.lt .nudge p{flex:1;font-size:12px;color:#1a462c;line-height:1.55}html.lt .nudge a{flex:none;font-size:11.5px;font-weight:900;color:#ebeef4;background:#30904f;border-radius:9px;padding:7px 11px;text-decoration:none}html.lt /* 快捷话题 */
-  .replies{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}html.lt .rp{background:#d9dfec;border:1.5px solid #bfc5d5;border-radius:99px;padding:8px 13px;font-size:12px;font-weight:700;color:#191d27;cursor:pointer}html.lt .rp:active{transform:scale(.95)}html.lt .rp:hover{border-color:#967536}html.lt /* 输入条 */
+  .replies{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 4px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}html.lt .replies::-webkit-scrollbar{display:none;height:0}html.lt .rp{flex:0 0 auto;max-width:168px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#d9dfec;border:1.5px solid #bfc5d5;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700;line-height:1.25;color:#191d27;cursor:pointer}html.lt .rp:active{transform:scale(.95)}html.lt .rp:hover{border-color:#967536}html.lt /* 输入条 */
   .inbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 18px;display:flex;gap:10px;align-items:center;background:rgba(235,238,244,.94);z-index:20}html.lt .inbar input{flex:1;background:#d4dbe9;border:1.5px solid #bfc5d5;border-radius:999px;padding:11px 16px;font-size:13.5px;color:#1b1912;outline:none}html.lt .inbar input:focus{border-color:#967536}html.lt .inbar .send{width:42px;height:42px;border-radius:50%;background:#967536;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;color:#dce2ef;font-weight:900;cursor:pointer;border:none}</style>
 <script>
 (function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
@@ -149,7 +150,7 @@ function toggleTheme(){
     <div class="ac-row">
       <div class="ac-badge"><i>🎓</i></div>
       <div class="ac-name">劲脑天赋学院<small>JNAO TALENT ACADEMY · 内部频道</small></div>
-      <span class="ac-lv">思者 · Lv.1</span>
+      <span class="ac-lv" id="ac-lv">思者 · Lv.1</span>
     </div>
     <div class="ac-chan">
       <span class="hash">#</span><b id="chanName">E13 · 五兽桩讨论组</b>
@@ -311,7 +312,7 @@ const TEASER=[
 <script>
 const $=id=>document.getElementById(id);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
-let joined=false,msgCount=0,nudgeShown=false,lastResponder='';
+var joined=false,msgCount=0,nudgeShown=false,lastResponder='';
 
 /* ---------- 场景舞台 ---------- */
 function showScene(key){
@@ -323,14 +324,16 @@ function showScene(key){
   $('propChips').style.display=c.chips?'block':'none';
 }
 /* ---------- 消息渲染 ---------- */
-function addMsg(who,text){
+function addMsg(who,text,extra){
+  if (window.AcademyTalk) { AcademyTalk.mount(who, text, extra, false); return }
   const c=CHARS[who];
   const d=document.createElement('div');
   d.className='msg';
   d.innerHTML=`<img class="ma" src="${c.av}"><div class="mc"><div class="mn">${c.n}<i>${c.tag}</i></div><div class="mb">${text}</div></div>`;
   $('msgs').appendChild(d); scrollChat();
 }
-function addMe(text){
+function addMe(text,extra){
+  if (window.AcademyTalk) { AcademyTalk.mount('me', text, extra, true); return }
   const d=document.createElement('div');
   d.className='msg me';
   d.innerHTML=`<div class="mc"><div class="mn">我</div><div class="mb">${text}</div></div>`;
@@ -355,7 +358,7 @@ function showTyping(key,cb,wait){
   setTimeout(()=>{$('typing').style.display='none';cb();},wait||900+Math.random()*700);
 }
 /* ---------- 播放前：模糊滚动预告 ---------- */
-let teaserTm=null;
+var teaserTm=null;
 function startTeaser(){
   let i=0;
   const push=()=>{
@@ -568,12 +571,26 @@ function respond(userText){
 }
 function sendFree(){
   const t=$('inp').value.trim();
-  if(!joined||!t)return;
-  $('inp').value=''; addMe(t); respond(t);
+  if(!joined)return;
+  var extra = window.AcademyTalk ? AcademyTalk.collect(t) : {};
+  if(!t && !extra.sticker)return;
+  $('inp').value='';
+  if (window.AcademyTalk) AcademyTalk.clear();
+  addMe(t, extra);
+  respond(Object.assign({text:t}, extra));
 }
 $('inp').addEventListener('keydown',e=>{if(e.key==='Enter')sendFree();});
 /* ---------- 初始化 ---------- */
-startTeaser();
+try {
+  var _cachedSector = JSON.parse(localStorage.getItem('jnao_academy_sector') || 'null');
+  if (_cachedSector && _cachedSector.episode && _cachedSector.episode.unlocked) {
+    window.__ACADEMY_CACHED_SECTOR = _cachedSector;
+  } else {
+    startTeaser();
+  }
+} catch (e) {
+  startTeaser();
+}
 </script>
 <script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-nav',path:'/pages/dayu/home'},'*');}else if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
 
@@ -608,4 +625,11 @@ startTeaser();
 })();
 </script>
 
+<script src="/static/dayu/html/academy/client.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/fake.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/talk.js?v=20260919f"></script>
+<script src="/static/dayu/html/academy/channel.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/story.js?v=20260919c"></script>
+<script src="/static/dayu/html/academy/courses.js?v=20260919c"></script>
+<script src="/static/dayu/html/academy/boot.js?v=20260919c"></script>
 </body></html>

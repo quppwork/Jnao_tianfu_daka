@@ -9,7 +9,8 @@ app/agents/
 │   ├── stage.py / talent.py
 │   └── handoff.py          # navigate 白名单 / situation 文案（Agent 间只交接动作）
 ├── qa/                     # 学科答疑 Agent
-└── guide/                  # 首页引导 Agent
+├── guide/                  # 首页引导 Agent
+└── academy/                # 天赋学院角色 harness（每人独立人设，不互调 runner）
 ```
 
 ## 多 Agent 边界（勿耦合）

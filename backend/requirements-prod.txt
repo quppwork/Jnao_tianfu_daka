@@ -17,3 +17,7 @@ alibabacloud_tea_openapi>=0.3.14
 alibabacloud_bailian20231229>=2.0.0
 Pillow>=10.0.0
 PyJWT>=2.8.0
+langchain-core>=0.3.60
+langgraph>=0.2.60
+langgraph-checkpoint-mysql>=3.0.0
+aiomysql>=0.2.0

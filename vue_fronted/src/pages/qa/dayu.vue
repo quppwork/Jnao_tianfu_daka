@@ -15,7 +15,7 @@
     </view>
 
     <view class="mstage">
-      <image class="mstage-img" :src="activeMentor.gif || activeMentor.ava" mode="aspectFill" />
+      <image class="mstage-img" :src="stageImageSrc" mode="aspectFill" />
       <view class="mgrad" />
       <view v-if="loading" class="mlive">
         <view class="dot" />
@@ -226,7 +226,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import {
   ensureChildUser,
@@ -239,8 +239,7 @@ import {
   uploadQaImage,
 } from '@/utils/userApi.js'
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
-import { formatQaRichHtml } from '@/utils/chatRichText.js'
-import 'katex/dist/katex.min.css'
+import { formatQaRichHtml, prefetchKatex } from '@/utils/chatRichText.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 import {
   chooseQuestionImage,
@@ -276,6 +275,30 @@ let streamAbort = null
 let abortRequested = false
 
 const activeMentor = computed(() => mentorOrStage(subject.value))
+/** 先进 JPG 占位，空闲后再换 GIF，避免进页拉 1MB+ 动图 */
+const stageGifReady = ref(false)
+let stageGifTimer = null
+function scheduleStageGif() {
+  stageGifReady.value = false
+  if (stageGifTimer) {
+    clearTimeout(stageGifTimer)
+    stageGifTimer = null
+  }
+  const gif = activeMentor.value?.gif
+  if (!gif) return
+  const kick = () => { stageGifReady.value = true }
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(kick, { timeout: 1800 })
+  } else {
+    stageGifTimer = setTimeout(kick, 900)
+  }
+}
+watch(activeMentor, () => scheduleStageGif(), { immediate: true })
+const stageImageSrc = computed(() => {
+  const m = activeMentor.value || {}
+  if (stageGifReady.value && m.gif) return m.gif
+  return m.ava || m.gif || ''
+})
 const displayName = computed(() => {
   const m = activeMentor.value
   if (!subject.value) return '张宇老师'
@@ -663,6 +686,7 @@ onShow(() => {
 })
 
 onMounted(async () => {
+  prefetchKatex()
   readTheme()
   readSimple()
   const auth = await requirePageAuth('student')

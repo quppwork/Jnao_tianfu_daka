@@ -22,8 +22,8 @@
 
         <view class="hero">
           <view class="hero-sh ct-sh" />
-          <image class="hero-p zy" src="/static/dayu/assets/_zy-cut.png" mode="heightFix" />
-          <image class="hero-p ct" src="/static/dayu/assets/_cartoon-cut.png" mode="heightFix" />
+          <image class="hero-p zy" src="/static/dayu/assets/_zy-cut.png" mode="heightFix" lazy-load />
+          <image class="hero-p ct" src="/static/dayu/assets/_cartoon-cut.png" mode="heightFix" lazy-load />
           <view class="hero-fuse" />
         </view>
 

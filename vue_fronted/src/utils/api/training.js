@@ -10,6 +10,22 @@ export async function fetchTrainingEntry(userId) {
   return apiJson(withUser('/api/training/entry', userId))
 }
 
+/** 进页聚合：天赋 + 今日方案（一次请求，减少瀑布） */
+export async function fetchTrainingHome(userId) {
+  try {
+    const data = await apiJson(withUser('/api/training/home', userId))
+    if (data?.needs_assessment) {
+      return { error: 'assessment', message: data.message || '请先完成天赋测评', data }
+    }
+    return { data }
+  } catch (e) {
+    if (e.status === 403) {
+      return { error: 'assessment', message: e.data?.detail || '请先完成天赋测评' }
+    }
+    return { error: 'api', message: e.message }
+  }
+}
+
 /** 获取今日训练方案，skipAi=1 跳过 LLM 报告生成（首屏加速） */
 export async function fetchTrainingToday(userId, options = {}) {
   const skipAi = options.skipAi ?? options.skip_ai ?? false

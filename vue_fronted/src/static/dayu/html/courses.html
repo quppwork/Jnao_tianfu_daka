@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html lang="zh-CN"><head>
+<!DOCTYPE html><html lang="zh-CN"><head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>天赋课程 · 我的课程体系</title>
@@ -187,6 +187,7 @@ const MJ=[['六感神剑','mj-tfsd','多元感知 · 六感全开'],['左右同�
 (function(){
   let left=7,en=183;const total=190;
   setInterval(()=>{
+    if(window.__ACADEMY_HOLD_AD) return;
     if(left>2&&Math.random()<0.6){left--;en++;
       document.getElementById('adLeft').textContent=left;
       document.getElementById('adEn').textContent=en;
@@ -230,4 +231,10 @@ document.getElementById('mj').innerHTML=MJ.map(([n,f,d])=>
 })();
 </script>
 
+<script src="/static/dayu/html/academy/client.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/fake.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/channel.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/story.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/courses.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/boot.js?v=20260919d"></script>
 </body></html>

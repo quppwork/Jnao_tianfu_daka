@@ -113,7 +113,7 @@
 <script setup>
 import { computed } from 'vue'
 import { formatGuideRichHtml } from '@/utils/chatRichText.js'
-import 'katex/dist/katex.min.css'
+import { prefetchKatex } from '@/utils/chatRichText.js'
 
 const props = defineProps({
   /** gold=家长 · green=孩子 */

@@ -29,6 +29,7 @@ from app.schemas.training import (
     ScheduleRequest,
     TalentVideoResponse,
     TrainingEntryResponse,
+    TrainingHomeResponse,
     TrainingProgressResponse,
     TrainingTodayResponse,
     WatchProgressRequest,
@@ -37,7 +38,8 @@ from app.schemas.training import (
     WindowSetRequest,
     WindowStatusResponse,
 )
-from app.services import training_service
+from app.services import training as training_service
+from app.services.training import TrainingError
 from app.services.training_elective_service import (
     get_elective_offers,
     submit_elective_checkin,
@@ -46,7 +48,6 @@ from app.services.training_plan_generator import ensure_plan_report
 from app.services.training_schedule_service import (
     schedule_training_by_duration,
 )
-from app.services.training_service import TrainingError
 from app.services.video_push_service import get_talent_training_video, get_talent_video_raw_url
 
 router = APIRouter(prefix="/api/training", tags=["training"])
@@ -234,6 +235,21 @@ def training_entry(
     with biz_timer("training.entry") as ctx:
         try:
             return training_service.get_training_entry(db, child_user_id)
+        except TrainingError as e:
+            ctx["result"] = f"fail_{e.status_code}"
+            ctx["level"] = "warning"
+            raise HTTPException(e.status_code, e.message) from e
+
+
+@router.get("/home")
+def training_home(
+    child_user_id: int = Depends(get_authenticated_student),
+    db: Session = Depends(get_db),
+):
+    """进页聚合只读：天赋摘要 + 今日方案（一次请求）"""
+    with biz_timer("training.home") as ctx:
+        try:
+            return training_service.get_training_home(db, child_user_id)
         except TrainingError as e:
             ctx["result"] = f"fail_{e.status_code}"
             ctx["level"] = "warning"

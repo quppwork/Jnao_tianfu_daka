@@ -108,6 +108,7 @@ import {
   trimGuideMessages,
 } from '@/utils/guideUi.js'
 import { goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
+import { PARENT_TABS, switchParentTab, goAppPage } from '@/utils/mainTabs.js'
 
 const FOCUS_KEY = 'jnao_parent_focus_child_id'
 
@@ -122,13 +123,7 @@ const suggestChips = ref([
   { label: '提分营适合谁', text: '火箭提分营适合什么样的孩子' },
 ])
 
-const parentTabs = [
-  { key: 'dayu', label: '大宇', path: '/pages/parent/dayu', icon: '/static/dayu/assets/ic/robot.png' },
-  { key: 'community', label: '天赋社区', path: '/pages/parent/community', icon: '/static/dayu/assets/ic/family.png' },
-  { key: 'consult', label: '在线咨询', path: '/pages/parent/consult', icon: '/static/dayu/assets/ic/bubble.png' },
-  { key: 'pdata', label: '数据分析', path: '/pages/parent/pdata', icon: '/static/dayu/assets/ic/target.png' },
-  { key: 'pset', label: '我的', path: '/pages/parent/pset', icon: '/static/dayu/assets/ic/person.png' },
-]
+const parentTabs = PARENT_TABS
 
 const pageLoading = ref(false)
 const messages = ref([])
@@ -155,11 +150,7 @@ async function loadSuggestChips(uid) {
 
 function go(url) {
   if (!url) return
-  if (url.startsWith('/pages/parent/') && url !== '/pages/parent/pcourse') {
-    uni.reLaunch({ url })
-    return
-  }
-  uni.navigateTo({ url, fail: () => uni.reLaunch({ url }) })
+  goAppPage(url)
 }
 
 function goStudent() {
@@ -168,7 +159,7 @@ function goStudent() {
 
 function onTab(tab) {
   if (!tab?.path || tab.key === 'dayu') return
-  uni.reLaunch({ url: tab.path })
+  switchParentTab(tab.path)
 }
 
 function scrollChat() {

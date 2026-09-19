@@ -98,6 +98,20 @@ def _record_doubao(
         logger.warning("doubao usage record skipped: %s", e)
 
 
+def _message_text(message: dict) -> str | None:
+    content = message.get("content")
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                parts.append(str(part.get("text") or ""))
+        content = "".join(parts)
+    text = str(content or "").strip()
+    return text or None
+
+
 async def chat_completion(
     *,
     system_prompt: str,
@@ -106,6 +120,7 @@ async def chat_completion(
     max_tokens: int = 500,
     timeout: float = 30,
     feature: str | None = None,
+    disable_thinking: bool = False,
 ) -> str | None:
     cfg = _cfg()
     if not cfg["api_key"]:
@@ -115,19 +130,33 @@ async def chat_completion(
 
     try:
         client = _get_client(timeout)
+        payload = {
+            "model": cfg["model"],
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if disable_thinking:
+            payload["thinking"] = {"type": "disabled"}
         resp = await client.post(
             f"{cfg['api_base']}/chat/completions",
             headers={
                 "Authorization": f"Bearer {cfg['api_key']}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": cfg["model"],
-                "messages": messages,
-                "max_tokens": max_tokens,
-            },
+            json=payload,
             timeout=timeout,
         )
+        if resp.status_code == 400 and disable_thinking and "thinking" in resp.text:
+            payload.pop("thinking", None)
+            resp = await client.post(
+                f"{cfg['api_base']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
         if resp.status_code != 200:
             logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
             _record_doubao(api="chat.completions", model=cfg["model"], usage=None, ok=False, feature=feature)
@@ -139,7 +168,7 @@ async def chat_completion(
             usage=data.get("usage"),
             feature=feature,
         )
-        return data["choices"][0]["message"]["content"]
+        return _message_text(data["choices"][0]["message"])
     except httpx.HTTPError as e:
         logger.warning(f"Doubao request failed: {e}")
         return None

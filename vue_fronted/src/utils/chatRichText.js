@@ -1,8 +1,31 @@
 /**
  * 聊天气泡富文本：Markdown 轻量语法 + KaTeX 公式
  * 支持 \( \)、\[ \]、$ $、$$ $$
+ * katex 按需动态加载，避免主包强依赖。
  */
-import katex from 'katex'
+
+let katexMod = null
+let katexLoading = null
+let katexCssLoaded = false
+
+function loadKatexCss() {
+  if (katexCssLoaded) return
+  katexCssLoaded = true
+  import('katex/dist/katex.min.css').catch(() => {})
+}
+
+/** 预热：答疑页 onMounted 可调用 */
+export function prefetchKatex() {
+  loadKatexCss()
+  if (katexMod || katexLoading) return katexLoading || Promise.resolve(katexMod)
+  katexLoading = import('katex')
+    .then((m) => {
+      katexMod = m.default || m
+      return katexMod
+    })
+    .catch(() => null)
+  return katexLoading
+}
 
 export function escapeHtml(s) {
   return String(s)
@@ -20,8 +43,12 @@ const MATH_RULES = [
 ]
 
 function renderTex(tex, displayMode) {
+  if (!katexMod) {
+    prefetchKatex()
+    return escapeHtml(displayMode ? `\\[${tex}\\]` : `\\(${tex}\\)`)
+  }
   try {
-    return katex.renderToString(tex.trim(), {
+    return katexMod.renderToString(tex.trim(), {
       displayMode,
       throwOnError: false,
       strict: 'ignore',

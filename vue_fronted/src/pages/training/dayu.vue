@@ -391,6 +391,7 @@
                 type="digit"
                 :value="form.time"
                 placeholder="如：20"
+                placeholder-class="fi-ph"
                 :focus="checkinFocus"
                 @input="onFormInput('time', $event)"
                 @focus="onCheckinFieldFocus"
@@ -405,7 +406,8 @@
                 class="fi-input"
                 type="digit"
                 :value="form.wordCount"
-                placeholder="完成字数"
+                placeholder="如：300"
+                placeholder-class="fi-ph"
                 @input="onFormInput('wordCount', $event)"
                 @focus="onCheckinFieldFocus"
                 @click.stop
@@ -420,7 +422,8 @@
               class="fi-input"
               type="digit"
               :value="form.accuracy"
-              placeholder="0-100"
+              placeholder="如：90"
+              placeholder-class="fi-ph"
               @input="onFormInput('accuracy', $event)"
               @focus="onCheckinFieldFocus"
               @click.stop
@@ -434,7 +437,8 @@
               class="fi-input"
               type="text"
               :value="form.note"
-              placeholder="可选"
+              placeholder="可选填写"
+              placeholder-class="fi-ph"
               @input="onFormInput('note', $event)"
               @focus="onCheckinFieldFocus"
               @click.stop
@@ -537,6 +541,7 @@ import {
   ensureChildUser,
   resolveTrainingStreamUrl,
   fetchTrainingEntry,
+  fetchTrainingHome,
   fetchTrainingToday,
   scheduleTrainingPlan,
   setTrainingWindow,
@@ -563,6 +568,7 @@ import {
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState, talentAvatarUrl, talentThemeColor } from '@/utils/talentState.js'
 import { resolvePlanItemSkill, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
 import { MAIN_TABS, switchMainTab } from '@/utils/mainTabs.js'
+import { ATTITUDE_SCORES, attitudeDescFor, emptyCheckinForm } from '@/composables/useTrainingCheckin.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 
 const MIN = 20
@@ -744,7 +750,7 @@ const checkinSkill = ref('')
 const checkinBusy = ref(false)
 /** item_id -> 今日打卡记录（二次打开回填 / 修改） */
 const checkinByItemId = ref({})
-const form = reactive({ time: '', wordCount: '', accuracy: '', note: '', attitude: 60 })
+const form = reactive(emptyCheckinForm())
 
 const showWord = computed(() => ['超脑阅读', '影像追忆', '扫描速记'].includes(checkinSkill.value))
 const showAcc = computed(() => checkinSkill.value === '影像追忆')
@@ -949,18 +955,8 @@ function onFormInput(key, e) {
 }
 
 /** 原版训练页配合度表情格（替代滑条） */
-const attitudeScores = [
-  { pct: 100, emoji: '🔴', desc: '身体已透支，精神还要求进步' },
-  { pct: 80, emoji: '🟡', desc: '能完成任务，但还有余力学习' },
-  { pct: 60, emoji: '🔵', desc: '做基本任务，被动的低效训练' },
-  { pct: 40, emoji: '🟤', desc: '不完成任务，不认真逃避训练' },
-  { pct: 20, emoji: '⚫️', desc: '不完成任务，基本不配合训练' },
-  { pct: 0, emoji: '☠️', desc: '不完成任务，严重不配合训练' },
-]
-const attitudeDesc = computed(() => {
-  const hit = attitudeScores.find((s) => s.pct === Number(form.attitude))
-  return hit?.desc || ''
-})
+const attitudeScores = ATTITUDE_SCORES
+const attitudeDesc = computed(() => attitudeDescFor(form.attitude))
 function setAttitudeScore(pct) {
   form.attitude = Number(pct)
 }
@@ -1416,46 +1412,85 @@ async function bootstrap() {
     return
   }
   const uid = await ensureChildUser()
+  const talentMap = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }
+
+  // 优先一次 /home；失败再并行 talent+today
+  const home = await fetchTrainingHome(uid)
+  if (!home.error && home.data) {
+    const h = home.data
+    talentLabel.value = h.talent_tag || ''
+    talentPrimary.value = h.talent_primary || talentMap[h.talent_tag] || ''
+    if (h.needs_assessment) {
+      phase.value = 'need_assessment'
+      rememberPhase('need_assessment')
+      bootReady.value = true
+      return
+    }
+    if (h.plan) {
+      applyPlan(h.plan)
+      if (h.plan.plan_id) await hydrateCheckins(uid)
+      bootReady.value = true
+      return
+    }
+  }
+  if (home.error === 'assessment') {
+    phase.value = 'need_assessment'
+    rememberPhase('need_assessment')
+    bootReady.value = true
+    return
+  }
+
+  const [talentSettled, todaySettled] = await Promise.allSettled([
+    ensureTalentState(uid),
+    fetchTrainingToday(uid, { skipAi: true }),
+  ])
+
   let needAssessment = false
-  try {
-    const talent = await ensureTalentState(uid)
+  const talent = talentSettled.status === 'fulfilled' ? talentSettled.value : null
+  if (talent) {
     talentLabel.value = talent?.talent_tag || ''
     talentPrimary.value = talent?.talent_primary
-      || ({ 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }[talent?.talent_tag] || '')
+      || talentMap[talent?.talent_tag]
+      || ''
     if (!hasEffectiveTalent(talent) || talent.needs_assessment) {
+      needAssessment = true
+    }
+  } else {
+    needAssessment = true
+  }
+
+  const result = todaySettled.status === 'fulfilled' ? todaySettled.value : { error: 'network' }
+  if (result?.error === 'assessment' || (needAssessment && result?.error)) {
+    if (needAssessment && result?.error !== 'assessment') {
       const entry = await fetchTrainingEntry(uid).catch(() => null)
-      if (!entry || entry.needs_assessment) needAssessment = true
       if (entry?.talent_tag) talentLabel.value = entry.talent_tag
       if (entry?.talent_primary) talentPrimary.value = entry.talent_primary
       else if (entry?.talent_tag && !talentPrimary.value) {
-        talentPrimary.value = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }[entry.talent_tag] || ''
+        talentPrimary.value = talentMap[entry.talent_tag] || ''
       }
-    }
-  } catch (_) {
-    const entry = await fetchTrainingEntry(uid).catch(() => null)
-    if (entry?.needs_assessment) needAssessment = true
-    if (entry?.talent_tag) talentLabel.value = entry.talent_tag
-    if (entry?.talent_primary) talentPrimary.value = entry.talent_primary
-    else if (entry?.talent_tag) {
-      talentPrimary.value = { 学: '学者', 思: '思者', 行: '行者', 德: '德者', 赢: '赢者' }[entry.talent_tag] || ''
+      if (!entry || entry.needs_assessment) {
+        phase.value = 'need_assessment'
+        rememberPhase('need_assessment')
+        bootReady.value = true
+        return
+      }
+      needAssessment = false
+    } else if (result?.error === 'assessment') {
+      phase.value = 'need_assessment'
+      rememberPhase('need_assessment')
+      bootReady.value = true
+      return
     }
   }
 
-  if (needAssessment) {
+  if (needAssessment && !result?.data) {
     phase.value = 'need_assessment'
     rememberPhase('need_assessment')
     bootReady.value = true
     return
   }
 
-  const result = await fetchTrainingToday(uid, { skipAi: true })
-  if (result.error === 'assessment') {
-    phase.value = 'need_assessment'
-    rememberPhase('need_assessment')
-    bootReady.value = true
-    return
-  }
-  if (result.error) {
+  if (result.error && !result.data) {
     uni.showToast({ title: result.message || '加载失败', icon: 'none' })
     bootReady.value = true
     return
@@ -1463,6 +1498,22 @@ async function bootstrap() {
   applyPlan(result.data)
   if (result.data?.plan_id) await hydrateCheckins(uid)
   bootReady.value = true
+}
+
+/** onShow 轻量刷新：只拉 today + 打卡，不重跑鉴权/天赋 */
+async function softRefreshToday() {
+  try {
+    const uid = await ensureChildUser()
+    const result = await fetchTrainingToday(uid, { skipAi: true })
+    if (result.error === 'assessment') {
+      phase.value = 'need_assessment'
+      rememberPhase('need_assessment')
+      return
+    }
+    if (result.error || !result.data) return
+    applyPlan(result.data)
+    if (result.data?.plan_id) await hydrateCheckins(uid)
+  } catch (_) { /* ignore */ }
 }
 
 /** 对应老页 startTrainingWithPrefer：只排课，不开计时 */
@@ -1846,7 +1897,8 @@ async function openCheckin(it) {
   if (existing) {
     fillCheckinFormFromRecord(existing, raw)
   } else {
-    form.time = it.duration_min ? String(it.duration_min) : ''
+    // 新打卡：留空，用浅色 placeholder 提示，不预填方案时长
+    form.time = ''
     form.wordCount = ''
     form.accuracy = ''
     form.note = ''
@@ -2171,9 +2223,9 @@ onMounted(() => {
 })
 onShow(() => {
   if (checkinOpen.value || mediaOpen.value) return
-  // 已有今日方案时静默刷新，勿先把 bootReady 打回 false（避免闪选时长）
+  // 已有今日方案时只轻量刷新，避免整段 bootstrap 卡顿
   if (plan.value && (phase.value === 'running' || phase.value === 'expired' || phase.value === 'confirm')) {
-    bootstrap()
+    softRefreshToday()
   }
 })
 onUnmounted(() => {
@@ -3404,12 +3456,21 @@ onUnmounted(() => {
   line-height: 22px;
   pointer-events: auto;
 }
-/* uni-app H5 内层输入色 */
+.fi-ph {
+  color: rgba(139, 147, 165, 0.72);
+  font-size: 14px;
+}
+/* uni-app H5 内层输入色（勿盖住 placeholder） */
 .fi-input :deep(.uni-input-input),
 :deep(.fi-input) {
   color: #edebe4 !important;
-  -webkit-text-fill-color: #edebe4;
   background: transparent;
+}
+.fi-input :deep(input::placeholder),
+.fi-input :deep(.uni-input-input::placeholder) {
+  color: rgba(139, 147, 165, 0.72) !important;
+  -webkit-text-fill-color: rgba(139, 147, 165, 0.72);
+  opacity: 1;
 }
 .link { text-align: center; margin-top: 12px; color: #8b93a5; font-size: 13px; }
 </style>

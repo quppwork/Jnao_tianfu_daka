@@ -29,25 +29,21 @@ async def run_bootstrap(
     use_llm: bool = True,
 ) -> dict[str, Any]:
     """运行开场流水线，返回 bootstrap 载荷。"""
-    ctx = build_guide_context(db, child_user_id)  # 生成引导上下文
-    ctx = apply_situation(ctx)  # 应用情境
-    assert ctx.situation and ctx.next_action  # 确保情境和下一个动作存在
+    from app.agents.guide.proactive import resolve_proactive
+    from app.agents.shared.handoff import actions_for_next, situation_label
+    from app.services.training.common import _today_for
 
-    long_term = build_long_term_summary(
-        db, child_user_id, training_day=ctx.training_day
-    )  # 生成长期总结
-
-    from app.agents.guide.proactive import resolve_proactive  # 生成主动句
-    from app.agents.shared.handoff import actions_for_next, situation_label  # 生成动作列表和情境标签
-
-    if not force:  # 如果不需要强制重新生成
-        cached = get_cached_welcome(db, child_user_id, ctx.training_day)  # 获取缓存的开场欢迎文案
-        # 如果缓存的开场欢迎文案存在
-        if cached and cached.get("welcome"):  
-            sit = cached.get("situation") or ctx.situation   # 获取缓存的情境
-            nxt = cached.get("next_action") or ctx.next_action   # 获取缓存的下一个动作
-            # 情境以当日实时为准，便于主动句判定；欢迎文案仍用缓存
-            proactive = resolve_proactive(db, child_user_id, ctx, long_term)  # 生成主动句
+    # 缓存命中：只建轻量 context，跳过 long_term 重计算
+    if not force:
+        training_day = _today_for(db, child_user_id)
+        cached = get_cached_welcome(db, child_user_id, training_day)
+        if cached and cached.get("welcome"):
+            ctx = build_guide_context(db, child_user_id)
+            ctx = apply_situation(ctx)
+            assert ctx.situation and ctx.next_action
+            sit = cached.get("situation") or ctx.situation
+            nxt = cached.get("next_action") or ctx.next_action
+            proactive = resolve_proactive(db, child_user_id, ctx, None)
             out = {
                 "training_day": ctx.training_day,
                 "situation": sit,
@@ -62,6 +58,14 @@ async def run_bootstrap(
             if proactive:
                 out["proactive"] = proactive
             return out
+
+    ctx = build_guide_context(db, child_user_id)
+    ctx = apply_situation(ctx)
+    assert ctx.situation and ctx.next_action
+
+    long_term = build_long_term_summary(
+        db, child_user_id, training_day=ctx.training_day
+    )
 
     welcome, source = await _speak(ctx, long_term=long_term, use_llm=use_llm)
 

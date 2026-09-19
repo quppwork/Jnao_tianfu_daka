@@ -424,6 +424,37 @@ def get_training_entry(db: Session, child_user_id: int) -> dict:
     }
 
 
+def get_training_home(db: Session, child_user_id: int) -> dict:
+    """进页只读门面：天赋摘要 + 今日方案，供前端一次拉取。
+
+    不做 entry 里的 sync_pending / 全量 progress 聚合；方案走 get_today_plan
+    （缓存命中只刷计时，缺媒体才 catalog repair）。
+    """
+    talent = _resolve_effective_talent(db, child_user_id)
+    if not talent:
+        purge_today_plan_without_assessment(db, child_user_id)
+        return {
+            "needs_assessment": True,
+            "has_assessment": False,
+            "message": "需要先进行天赋测试才能帮你安排今日训练",
+            "talent_primary": None,
+            "talent_tag": None,
+            "talent_code": None,
+            "plan": None,
+        }
+    plan = get_today_plan(db, child_user_id)
+    return {
+        "needs_assessment": False,
+        "has_assessment": True,
+        "message": None,
+        "talent_primary": talent.get("talent_primary"),
+        "talent_tag": talent.get("talent_tag"),
+        "talent_code": talent.get("talent_code"),
+        "assessment_id": talent.get("assessment_id"),
+        "plan": plan,
+    }
+
+
 def _compute_content_index(
     db: Session, child_user_id: int, plan_date: date, series_len: int, *, talent_primary: str | None = None
 ) -> int:
@@ -473,13 +504,20 @@ def get_today_plan(db: Session, child_user_id: int, plan_date: date | None = Non
         from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
         from app.services.training_child_guide import build_coach_text_for_plan, is_technical_schedule_note
 
-        ensure_supplementary_catalogs(db)
         talent_code = talent.get("talent_code") if talent else None
         started = _plan_session_started(db, plan)
-        # 未开练可挂新视频；已开练只补缺音频，避免改掉正在练的方案
-        if repair_plan_media_items(db, plan, talent_code, attach_videos=not started):
-            db.commit()
-            plan = _resolve_today_plan(db, child_user_id, plan_date)
+        # 仅缺媒体时扫目录/修补，避免每次进页全量 catalog sync
+        needs_media = any(
+            bool(getattr(it, "id", None))
+            and not (getattr(it, "audio_url", None) or getattr(it, "video_url", None))
+            and str(getattr(it, "item_type", "") or "") in ("audio", "video", "perception", "skill")
+            for it in (plan.items or [])
+        )
+        if needs_media:
+            ensure_supplementary_catalogs(db)
+            if repair_plan_media_items(db, plan, talent_code, attach_videos=not started):
+                db.commit()
+                plan = _resolve_today_plan(db, child_user_id, plan_date)
         if plan and plan.items and is_technical_schedule_note(plan.report_text):
             plan.report_text = build_coach_text_for_plan(plan)
             db.commit()

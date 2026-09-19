@@ -199,6 +199,7 @@ import {
   submitTalentReport,
 } from '@/utils/userApi.js'
 import { _readStoredRole } from '@/utils/api/auth.js'
+import { goAppPage } from '@/utils/mainTabs.js'
 import {
   clearTalentState,
   refreshTalentState,
@@ -384,7 +385,7 @@ const quizHint = computed(() => {
 
 function goFoot(url) {
   if (!url) return
-  uni.reLaunch({ url })
+  goAppPage(url)
 }
 
 function startCd() {

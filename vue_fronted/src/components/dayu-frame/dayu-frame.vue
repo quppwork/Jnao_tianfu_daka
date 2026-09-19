@@ -19,7 +19,7 @@
 
 <script setup>
 import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
-import { switchMainTab } from '@/utils/mainTabs.js'
+import { switchMainTab, goAppPage } from '@/utils/mainTabs.js'
 import { goLinkedParentHome, goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
 import { fetchUsageSummary, formatTokenCount } from '@/utils/api/usage.js'
 
@@ -159,6 +159,9 @@ function pushHydrate() {
   if (h.console) {
     postToFrame({ type: 'dayu-console', console: h.console })
   }
+  if (h.academy) {
+    postToFrame({ type: 'dayu-academy', academy: h.academy })
+  }
   pushUsage()
 }
 
@@ -231,12 +234,12 @@ function handleMessage(ev) {
   if (data.type === 'dayu-back') {
     const target = String(props.backPath || '').trim()
     if (target) {
-      uni.reLaunch({ url: target })
+      goAppPage(target)
       return
     }
     const pages = getCurrentPages()
     if (pages.length > 1) uni.navigateBack({ delta: 1 })
-    else uni.reLaunch({ url: '/pages/dayu/home' })
+    else switchMainTab('/pages/dayu/home')
     return
   }
 
@@ -278,7 +281,7 @@ function handleMessage(ev) {
     return
   }
   if (parentShellRoutes[base]) {
-    // 底栏页用 reLaunch；子页（家长课堂）用 navigateTo，失败再 reLaunch
+    // 底栏页软切；子页（家长课堂等）走栈
     const stackOnly =
       base === '/pages/parent/pcourse'
       || base === '/pages/parent/wallet'
@@ -286,10 +289,10 @@ function handleMessage(ev) {
     if (stackOnly) {
       uni.navigateTo({
         url: path,
-        fail: () => uni.reLaunch({ url: path }),
+        fail: () => goAppPage(path),
       })
     } else {
-      uni.reLaunch({ url: base })
+      goAppPage(base)
     }
     return
   }
@@ -298,10 +301,10 @@ function handleMessage(ev) {
     if (parentShellPages.has(pageFile(props.page))) {
       uni.navigateTo({
         url: path,
-        fail: () => uni.reLaunch({ url: path }),
+        fail: () => goAppPage(path),
       })
     } else {
-      uni.reLaunch({ url: '/pages/parent/dayu' })
+      goAppPage('/pages/parent/dayu')
     }
     return
   }

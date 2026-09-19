@@ -173,7 +173,9 @@ async def ensure_plan_report(
         }
 
     try:
-        plan_data = get_today_plan(db, child_user_id, plan_date)
+        from app.core.async_workers import run_sync
+
+        plan_data = await run_sync(get_today_plan, db, child_user_id, plan_date)
     except TrainingError as e:
         if e.status_code == 503:
             now = training_now()

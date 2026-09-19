@@ -495,3 +495,109 @@ class CreditProductOrder(Base):
     meta_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class AcademyProgress(Base):
+    """天赋学院单集观看进度。解锁只看服务端 percent，不信前端计时。"""
+
+    __tablename__ = "academy_progress"
+    __table_args__ = (
+        UniqueConstraint("child_user_id", "episode_id", name="uk_academy_progress"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    episode_id: Mapped[str] = mapped_column(String(16), nullable=False)
+    percent: Mapped[int] = mapped_column(Integer, default=0)
+    unlocked: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AcademyRoom(Base):
+    """讨论区记录。每人独立，角色台词由学院 harness 写入。"""
+
+    __tablename__ = "academy_room"
+    __table_args__ = (
+        UniqueConstraint("child_user_id", "episode_id", name="uk_academy_room"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    episode_id: Mapped[str] = mapped_column(String(16), nullable=False)
+    messages: Mapped[list | None] = mapped_column(JSON)
+    user_turns: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AcademyBot(Base):
+    """画中人。bot_id 稳定，提示词和约束可改，六个角色同一张表。"""
+
+    __tablename__ = "academy_bot"
+
+    bot_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    character_key: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(32), nullable=False)
+    tag: Mapped[str] = mapped_column(String(16), nullable=False)
+    persona_prompt: Mapped[str] = mapped_column(Text, default="")
+    constraints: Mapped[str] = mapped_column(Text, default="")
+    voice: Mapped[str] = mapped_column(Text, default="")
+    steer: Mapped[str] = mapped_column(Text, default="")
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AcademyBotScript(Base):
+    """某个 Bot 眼中的某一集剧本和剧情。不与其他 Bot 共用正文。"""
+
+    __tablename__ = "academy_bot_script"
+    __table_args__ = (
+        UniqueConstraint("bot_id", "episode_id", name="uk_academy_bot_script"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    episode_id: Mapped[str] = mapped_column(String(16), nullable=False)
+    script_body: Mapped[str] = mapped_column(Text, default="")
+    plot_summary: Mapped[str] = mapped_column(Text, default="")
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AcademyBotMemory(Base):
+    """长期自我感知。每次提示词、约束、剧本、剧情更新追加一条，不覆盖。"""
+
+    __tablename__ = "academy_bot_memory"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    episode_id: Mapped[str | None] = mapped_column(String(16))
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, default="")
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AcademyBotSession(Base):
+    """某个 Bot 在某孩子、某集讨论里的会话记忆。与别人的会话记忆分开。"""
+
+    __tablename__ = "academy_bot_session"
+    __table_args__ = (
+        UniqueConstraint("bot_id", "child_user_id", "episode_id", name="uk_academy_bot_session"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    episode_id: Mapped[str] = mapped_column(String(16), nullable=False)
+    messages: Mapped[list | None] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

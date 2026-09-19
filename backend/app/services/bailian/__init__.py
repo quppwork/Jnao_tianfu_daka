@@ -1,9 +1,9 @@
-"""完整 RAG 流水线：Query → Retrieve/Search → 归一化切片 → 供 LLM 生成。
+"""完整 RAG 流水线：Query �?Retrieve/Search �?归一化切�?�?�?LLM 生成�?
 
-对齐官方三种用法中的「API 检索切片 + 自有模型生成」：
-- Retrieve：单库 OpenAPI（AccessKey）
-- Search：跨库 HTTP（DashScope Key + agent_id）
-- 生成：项目内豆包（非百炼应用 rag_options）
+对齐官方三种用法中的「API 检索切�?+ 自有模型生成」：
+- Retrieve：单�?OpenAPI（AccessKey�?
+- Search：跨�?HTTP（DashScope Key + agent_id�?
+- 生成：项目内豆包（非百炼应用 rag_options�?
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from app.core.async_workers import run_sync
 from app.core.logger import get_logger
 from app.services.bailian.config import (
     BailianConfig,
@@ -75,7 +76,7 @@ async def rag_query(
         return None
     try:
         return await asyncio.wait_for(
-            asyncio.to_thread(
+            run_sync(
                 _run_sync,
                 q,
                 cfg=cfg,
@@ -117,7 +118,7 @@ async def training_rag_query(query: str, *, timeout: float = 20) -> RagResult | 
         index_id = cfg.video_index_id
     try:
         return await asyncio.wait_for(
-            asyncio.to_thread(
+            run_sync(
                 _run_sync,
                 q,
                 cfg=cfg,
@@ -146,7 +147,7 @@ async def guide_knowledge_reply(
     t = timeout if timeout is not None else cfg.generate_timeout
     try:
         return await asyncio.wait_for(
-            asyncio.to_thread(
+            run_sync(
                 generate_sync,
                 q,
                 index_id=cfg.index_id,
@@ -180,7 +181,7 @@ async def training_knowledge_reply(
     t = timeout if timeout is not None else cfg.generate_timeout
     try:
         return await asyncio.wait_for(
-            asyncio.to_thread(
+            run_sync(
                 generate_sync,
                 q,
                 index_id=cfg.video_index_id,

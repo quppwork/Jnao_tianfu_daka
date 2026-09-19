@@ -109,3 +109,6 @@ docs/过期文件/
 # 压测账号明文表（含密码，不入库）
 backend/tools/*loadtest*.csv
 
+
+# CodeGraph local index
+.codegraph/

@@ -1,6 +1,7 @@
 """兼容入口：请优先 `from app.services.training import …`。
 
 历史路径 `app.services.training_service` 仍可用（含私有 `_` 符号）。
+`import *` 不会带出以下划线开头的名字，这里显式拷贝。
 """
 
 import app.services.training.checkin as _checkin

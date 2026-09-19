@@ -33,6 +33,14 @@ export const MAIN_TABS = [
   },
 ]
 
+export const PARENT_TABS = [
+  { key: 'dayu', label: '大宇', path: '/pages/parent/dayu', icon: '/static/dayu/assets/ic/robot.png' },
+  { key: 'community', label: '天赋社区', path: '/pages/parent/community', icon: '/static/dayu/assets/ic/family.png' },
+  { key: 'consult', label: '在线咨询', path: '/pages/parent/consult', icon: '/static/dayu/assets/ic/bubble.png' },
+  { key: 'pdata', label: '数据分析', path: '/pages/parent/pdata', icon: '/static/dayu/assets/ic/target.png' },
+  { key: 'pset', label: '我的', path: '/pages/parent/pset', icon: '/static/dayu/assets/ic/person.png' },
+]
+
 /** 顶区 chips */
 export const HOME_CHIPS = [
   { key: 'talent', label: '天赋测试', path: '/pages/talent/hub' },
@@ -40,12 +48,77 @@ export const HOME_CHIPS = [
   { key: 'course', label: '天赋课程', path: '/pages/hub/courses' },
 ]
 
+const MAIN_TAB_ROUTES = new Set(MAIN_TABS.map((t) => normalizeRoute(t.path)))
+const PARENT_TAB_ROUTES = new Set(PARENT_TABS.map((t) => normalizeRoute(t.path)))
+
+function normalizeRoute(path) {
+  return String(path || '').split('?')[0].replace(/^\//, '')
+}
+
+function withSlash(path) {
+  const p = String(path || '')
+  return p.startsWith('/') ? p : `/${p}`
+}
+
+function currentRoute() {
+  try {
+    const pages = getCurrentPages()
+    if (!pages.length) return ''
+    return String(pages[pages.length - 1].route || '')
+  } catch (_) {
+    return ''
+  }
+}
+
+/** 软切：优先 stack 回退，再 redirectTo。不用官方 tabBar，避免和页面自绘底栏叠两层。 */
+function softNavigate(url) {
+  const full = withSlash(url)
+  const target = normalizeRoute(full)
+  if (!target) return
+  const cur = currentRoute()
+  if (cur === target && !String(url).includes('?')) return
+
+  try {
+    const pages = getCurrentPages()
+    for (let i = pages.length - 2; i >= 0; i -= 1) {
+      if (String(pages[i].route || '') === target) {
+        uni.navigateBack({ delta: pages.length - 1 - i })
+        return
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  uni.redirectTo({
+    url: full,
+    fail: () => uni.reLaunch({ url: full }),
+  })
+}
+
 export function switchMainTab(path) {
-  const full = String(path || '')
-  if (!full) return
-  const target = full.split('?')[0]
-  const pages = getCurrentPages()
-  const cur = pages.length ? `/${pages[pages.length - 1].route}` : ''
-  if (cur === target && !full.includes('?')) return
-  uni.reLaunch({ url: full.startsWith('/') ? full : `/${full}` })
+  softNavigate(path)
+}
+
+export function switchParentTab(path) {
+  softNavigate(path)
+}
+
+/** 通用页内跳转：Tab 走软切，其它 navigateTo */
+export function goAppPage(path) {
+  const full = withSlash(path)
+  const route = normalizeRoute(full)
+  if (MAIN_TAB_ROUTES.has(route)) {
+    switchMainTab(full)
+    return
+  }
+  if (PARENT_TAB_ROUTES.has(route)) {
+    switchParentTab(full)
+    return
+  }
+  uni.navigateTo({
+    url: full,
+    fail: () => uni.redirectTo({
+      url: full,
+      fail: () => uni.reLaunch({ url: full }),
+    }),
+  })
 }

@@ -252,6 +252,18 @@ class TrainingEntryResponse(BaseModel):
     new_day_ready: bool = True
 
 
+class TrainingHomeResponse(BaseModel):
+    """进页聚合：天赋摘要 + 今日方案（只读热路径）"""
+    needs_assessment: bool = False
+    has_assessment: bool = False
+    message: str | None = None
+    assessment_id: int | None = None
+    talent_primary: str | None = None
+    talent_tag: str | None = None
+    talent_code: int | None = None
+    plan: TrainingTodayResponse | None = None
+
+
 class WindowSetRequest(BaseModel):
     start_time: str = Field(..., description="HH:MM")
     end_time: str = Field(..., description="HH:MM")

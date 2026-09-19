@@ -95,6 +95,17 @@ onUnmounted(() => {
   --app-max-width: 480px;  /* 仅对平板做上限，手机 360-430 不受影响 */
 }
 
+/* 底栏只保留页面自绘的 .foot，关掉官方 tabBar 残留 */
+uni-tabbar,
+.uni-tabbar,
+.uni-tabbar-bottom {
+  display: none !important;
+  height: 0 !important;
+}
+.uni-app--showtabbar uni-page-wrapper {
+  height: 100% !important;
+}
+
 /* 横屏手机：宽高比翻转，不限宽度 */
 @media (orientation: landscape) and (max-height: 500px) {
   :root {

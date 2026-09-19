@@ -13,7 +13,7 @@ from app.core.cache import (
 )
 from app.services.training_day import get_training_day, training_now, TZ
 
-_PLAN_CACHE_TTL = ttl_env("CACHE_TTL_TRAINING_TODAY", 30)
+_PLAN_CACHE_TTL = ttl_env("CACHE_TTL_TRAINING_TODAY", 120)
 
 def invalidate_plan_cache(child_user_id: int, plan_date: date):
     """打卡、修改方案后立即清除该用户当日缓存"""

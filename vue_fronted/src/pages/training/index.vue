@@ -9,9 +9,10 @@
  * 保留本路由仅作深链兼容。
  */
 import { onLoad } from '@dcloudio/uni-app'
+import { switchMainTab } from '@/utils/mainTabs.js'
 
 onLoad(() => {
-  uni.reLaunch({ url: '/pages/training/dayu' })
+  switchMainTab('/pages/training/dayu')
 })
 </script>
 <style scoped>

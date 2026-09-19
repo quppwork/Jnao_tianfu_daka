@@ -119,10 +119,12 @@ def _text_weekly(lt: LongTermSummary) -> str:
 def _candidate(
     *,
     ctx: GuideContext,
-    long_term: LongTermSummary,
+    long_term: LongTermSummary | None,
     state: dict[str, Any],
 ) -> dict[str, Any] | None:
     """按优先级选一条；不写库。"""
+    if long_term is None:
+        return None
     day = _parse_day(ctx.training_day) or date.today()
 
     # 1) 掉队召回
@@ -165,7 +167,7 @@ def resolve_proactive(
     db: Session,
     child_user_id: int,
     ctx: GuideContext,
-    long_term: LongTermSummary,
+    long_term: LongTermSummary | None,
     *,
     persist: bool = True,
 ) -> dict[str, Any] | None:

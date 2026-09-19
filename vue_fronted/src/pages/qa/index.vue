@@ -288,6 +288,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppTabBar from '@/components/app-tab-bar/app-tab-bar.vue'
+import { switchMainTab } from '@/utils/mainTabs.js'
 
 import {
 
@@ -324,8 +325,7 @@ import {
 } from '@/utils/userApi.js'
 
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
-import { formatQaRichHtml } from '@/utils/chatRichText.js'
-import 'katex/dist/katex.min.css'
+import { formatQaRichHtml, prefetchKatex } from '@/utils/chatRichText.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 import {
@@ -444,7 +444,7 @@ const learnerGrade = ref('')
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
 
-function goBack() { uni.reLaunch({ url: '/pages/dayu/home' }) }
+function goBack() { switchMainTab('/pages/dayu/home') }
 
 
 
