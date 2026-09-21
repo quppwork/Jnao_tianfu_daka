@@ -6,7 +6,7 @@
 <style>
   body{background:#0B0E14}
   /* ===== 学院头部 ===== */
-  .academy{margin:12px 18px 0;background:linear-gradient(160deg,#1A2233,#0E1420 75%);border:1.5px solid #C9A869;border-radius:20px;padding:16px;position:relative;overflow:hidden}
+  .academy{margin:12px 18px 0;background:linear-gradient(160deg,#1A2233,#0E1420 75%);border:1.5px solid #C9A869;border-radius:20px;padding:16px;position:relative;overflow:visible;z-index:6}
   .academy::before{content:"";position:absolute;right:-40px;top:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,105,.18),transparent 70%)}
   .ac-row{display:flex;align-items:center;gap:12px;position:relative}
   .ac-badge{width:52px;height:52px;flex:none;border-radius:50%;background:conic-gradient(from 200deg,#C9A869,#8A6BF0,#3E8E5A,#C9A869);padding:2.5px}
@@ -14,11 +14,17 @@
   .ac-name{font-size:21px;font-weight:900;color:#F0DFB8;letter-spacing:2px}
   .ac-name small{display:block;font-size:10px;letter-spacing:3px;color:#8B93A5;font-weight:700;margin-top:2px}
   .ac-lv{margin-left:auto;font-size:11px;font-weight:800;color:#6FCF8E;border:1px solid rgba(111,207,142,.5);border-radius:99px;padding:4px 11px;flex:none}
-  .ac-chan{display:flex;align-items:center;gap:8px;margin-top:13px;background:rgba(11,14,20,.6);border:1px solid #232B3D;border-radius:12px;padding:10px 12px;position:relative}
-  .ac-chan .hash{font-size:16px;font-weight:900;color:#C9A869}
-  .ac-chan b{font-size:14px;font-weight:900;color:#EDEBE4}
+  .ac-chan{display:flex;align-items:center;gap:6px;margin-top:10px;background:rgba(11,14,20,.6);border:1px solid #232B3D;border-radius:12px;padding:10px 12px;position:relative;z-index:7}
+  .ac-chan .hash{font-size:16px;font-weight:900;color:#6FCF8E}
+  .ac-chan b{font-size:13px;font-weight:900;color:#EDEBE4;cursor:pointer;user-select:none}
+  .ac-chan b::after{content:" ▾";font-size:10px;color:#6FCF8E;font-weight:800}
   .ac-chan .online{margin-left:auto;font-size:10.5px;color:#6FCF8E;font-weight:800}
   .ac-chan .online::before{content:"● ";animation:blink 1.6s infinite}
+  .ep-pick{display:none;position:absolute;left:8px;right:8px;top:calc(100% + 6px);z-index:80;min-width:220px;background:#121722;border:1px solid #2A3347;border-radius:12px;padding:6px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+  .ep-pick.open{display:block}
+  .ep-pick button{display:block;width:100%;text-align:left;border:0;background:transparent;color:#EDEBE4;font-size:12.5px;font-weight:700;padding:10px 12px;border-radius:8px;cursor:pointer}
+  .ep-pick button.on{background:#1A2233;color:#6FCF8E}
+  .ep-pick button:disabled{opacity:.45;cursor:not-allowed}
   @keyframes blink{50%{opacity:.25}}
   .ac-notice{margin-top:9px;font-size:11.5px;color:#9C8DC4;display:flex;gap:7px;align-items:center;position:relative}
   .ac-notice .ni{flex:none}
@@ -36,14 +42,16 @@
   .vprog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.18);z-index:4;display:none}
   .vprog i{display:block;height:100%;width:0;background:#C9A869}
   .playing .vprog{display:block}
-  .playing .vplay,.playing .vtitle{display:none}
+  .playing .vplay,.playing .vtitle,.playing .vlive,.playing .vdur{display:none}
+  .playing > img,.playing .vshade{opacity:0;pointer-events:none}
+  .playing #vvideo{z-index:4;display:block!important}
   /* 弹幕层 */
-  .dmk{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;display:none}
+  .dmk{position:absolute;inset:0;z-index:5;pointer-events:none;overflow:hidden;display:none}
   .playing .dmk{display:block}
   .dm{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.8);animation:dmf linear forwards}
   .dm b{font-weight:900}
   @keyframes dmf{from{transform:translateX(430px)}to{transform:translateX(-110%)}}
-  .vend{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,8,14,.72);backdrop-filter:blur(3px)}
+  .vend{position:absolute;inset:0;z-index:6;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,8,14,.72);backdrop-filter:blur(3px)}
   .vend .ve1{font-size:17px;font-weight:900;color:#F0DFB8}
   .vend .ve2{font-size:12px;color:#B9C0CE;margin-top:6px}
   .vend .ve3{margin-top:14px;background:#6FCF8E;color:#0B0E14;font-size:14px;font-weight:900;border-radius:99px;padding:10px 22px;cursor:pointer}
@@ -103,7 +111,7 @@
   .nudge{display:flex;gap:10px;align-items:center;margin:4px 0 12px;background:rgba(111,207,142,.07);border:1px dashed rgba(111,207,142,.5);border-radius:13px;padding:10px 12px;animation:stin .4s}
   .nudge .ng1{font-size:22px;flex:none}
   .nudge p{flex:1;font-size:12px;color:#B9E5CB;line-height:1.55}
-  .nudge a{flex:none;font-size:11.5px;font-weight:900;color:#0B0E14;background:#6FCF8E;border-radius:9px;padding:7px 11px;text-decoration:none}
+  .nudge a,.nudge .ngo{flex:none;font-size:11.5px;font-weight:900;color:#0B0E14;background:#6FCF8E;border-radius:9px;padding:7px 11px;text-decoration:none;border:none;cursor:pointer;font-family:inherit}
   /* 快捷话题：跟首页对话一样，横滑一行，不往下撑 */
   .replies{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 4px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .replies::-webkit-scrollbar{display:none;height:0}
@@ -124,7 +132,7 @@
 .cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
 .foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
 html.lt body{background:#ebeef4}html.lt /* ===== 学院头部 ===== */
-  .academy{margin:12px 18px 0;background:linear-gradient(160deg,#ccd4e5,#dfe5f1 75%);border:1.5px solid #967536;border-radius:20px;padding:16px;position:relative;overflow:hidden}html.lt .academy::before{content:"";position:absolute;right:-40px;top:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(150,117,54,.18),transparent 70%)}html.lt .ac-row{display:flex;align-items:center;gap:12px;position:relative}html.lt .ac-badge{width:52px;height:52px;flex:none;border-radius:50%;background:conic-gradient(from 200deg,#967536,#2e0f94,#71c18d,#967536);padding:2.5px}html.lt .ac-badge i{display:flex;width:100%;height:100%;border-radius:50%;background:#ebeef4;align-items:center;justify-content:center;font-style:normal;font-size:24px}html.lt .ac-name{font-size:21px;font-weight:900;color:#47360f;letter-spacing:2px}html.lt .ac-name small{display:block;font-size:10px;letter-spacing:3px;color:#5a6274;font-weight:700;margin-top:2px}html.lt .ac-lv{margin-left:auto;font-size:11px;font-weight:800;color:#30904f;border:1px solid rgba(48,144,79,.5);border-radius:99px;padding:4px 11px;flex:none}html.lt .ac-chan{display:flex;align-items:center;gap:8px;margin-top:13px;background:rgba(235,238,244,.6);border:1px solid #c2cadc;border-radius:12px;padding:10px 12px;position:relative}html.lt .ac-chan .hash{font-size:16px;font-weight:900;color:#967536}html.lt .ac-chan b{font-size:14px;font-weight:900;color:#1b1912}html.lt .ac-chan .online{margin-left:auto;font-size:10.5px;color:#30904f;font-weight:800}html.lt .ac-chan .online::before{content:"● ";animation:blink 1.6s infinite}@keyframes blink{50%{opacity:.25}}html.lt .ac-notice{margin-top:9px;font-size:11.5px;color:#4a3b72;display:flex;gap:7px;align-items:center;position:relative}html.lt .ac-notice .ni{flex:none}html.lt /* ===== 视频区 ===== */
+  .academy{margin:12px 18px 0;background:linear-gradient(160deg,#ccd4e5,#dfe5f1 75%);border:1.5px solid #967536;border-radius:20px;padding:16px;position:relative;overflow:visible;z-index:6}html.lt .academy::before{content:"";position:absolute;right:-40px;top:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(150,117,54,.18),transparent 70%)}html.lt .ac-row{display:flex;align-items:center;gap:12px;position:relative}html.lt .ac-badge{width:52px;height:52px;flex:none;border-radius:50%;background:conic-gradient(from 200deg,#967536,#2e0f94,#71c18d,#967536);padding:2.5px}html.lt .ac-badge i{display:flex;width:100%;height:100%;border-radius:50%;background:#ebeef4;align-items:center;justify-content:center;font-style:normal;font-size:24px}html.lt .ac-name{font-size:21px;font-weight:900;color:#47360f;letter-spacing:2px}html.lt .ac-name small{display:block;font-size:10px;letter-spacing:3px;color:#5a6274;font-weight:700;margin-top:2px}html.lt .ac-lv{margin-left:auto;font-size:11px;font-weight:800;color:#30904f;border:1px solid rgba(48,144,79,.5);border-radius:99px;padding:4px 11px;flex:none}html.lt .ac-chan{display:flex;align-items:center;gap:8px;margin-top:13px;background:rgba(235,238,244,.6);border:1px solid #c2cadc;border-radius:12px;padding:10px 12px;position:relative;z-index:7}html.lt .ac-chan .hash{font-size:16px;font-weight:900;color:#967536}html.lt .ac-chan b{font-size:14px;font-weight:900;color:#1b1912;cursor:pointer;user-select:none}html.lt .ac-chan b::after{content:" ▾";font-size:10px;color:#30904f;font-weight:800}html.lt .ac-chan .online{margin-left:auto;font-size:10.5px;color:#30904f;font-weight:800}html.lt .ac-chan .online::before{content:"● ";animation:blink 1.6s infinite}html.lt .ep-pick{display:none;position:absolute;left:8px;right:8px;top:calc(100% + 6px);z-index:80;min-width:220px;background:#ebeef4;border:1px solid #c2cadc;border-radius:12px;padding:6px;box-shadow:0 10px 28px rgba(0,0,0,.18)}html.lt .ep-pick.open{display:block}html.lt .ep-pick button{display:block;width:100%;text-align:left;border:0;background:transparent;color:#1b1912;font-size:12.5px;font-weight:700;padding:10px 12px;border-radius:8px;cursor:pointer}html.lt .ep-pick button.on{background:#ccd4e5;color:#30904f}html.lt .ep-pick button:disabled{opacity:.45;cursor:not-allowed}html.lt .ac-notice{margin-top:9px;font-size:11.5px;color:#4a3b72;display:flex;gap:7px;align-items:center;position:relative}html.lt .ac-notice .ni{flex:none}html.lt /* ===== 视频区 ===== */
   .vbox{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/9;background:#f7f7f7;border:1.5px solid #c2cadc}html.lt .vbox>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}html.lt .vbox .vshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(241,244,250,.15),rgba(241,244,250,.72))}html.lt .vbox .vplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:#967536;color:#dce2ef;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 0 8px rgba(20,20,20,.16),0 10px 24px rgba(247,247,247,.5);animation:vpulse 2s infinite;z-index:3}@keyframes vpulse{0%,100%{box-shadow:0 0 0 8px rgba(20,20,20,.16)}50%{box-shadow:0 0 0 16px rgba(20,20,20,.07)}}html.lt .vbox .vtitle{position:absolute;left:14px;bottom:12px;z-index:2}html.lt .vbox .vtitle b{display:block;font-size:16px;font-weight:900;color:#141414;text-shadow:0 2px 8px rgba(247,247,247,.7)}html.lt .vbox .vtitle span{font-size:11px;color:rgba(20,20,20,.85)}html.lt .vbox .vdur{position:absolute;right:12px;top:10px;z-index:2;font-size:10.5px;font-weight:800;background:rgba(247,247,247,.55);color:#141414;border-radius:6px;padding:3px 9px}html.lt .vbox .vlive{position:absolute;left:12px;top:10px;z-index:2;font-size:10px;font-weight:900;color:#906800;background:rgba(247,247,247,.5);border-radius:6px;padding:3px 9px}html.lt .vprog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(20,20,20,.18);z-index:4;display:none}html.lt .vprog i{display:block;height:100%;width:0;background:#967536}html.lt .playing .vprog{display:block}html.lt .playing .vplay,html.lt .playing .vtitle{display:none}html.lt /* 弹幕层 */
   .dmk{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;display:none}html.lt .playing .dmk{display:block}html.lt .dm{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:rgba(20,20,20,.92);text-shadow:0 1px 4px rgba(247,247,247,.8);animation:dmf linear forwards}html.lt .dm b{font-weight:900}@keyframes dmf{from{transform:translateX(430px)}to{transform:translateX(-110%)}}html.lt .vend{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(241,244,250,.72);backdrop-filter:blur(3px)}html.lt .vend .ve1{font-size:17px;font-weight:900;color:#47360f}html.lt .vend .ve2{font-size:12px;color:#313846;margin-top:6px}html.lt .vend .ve3{margin-top:14px;background:#30904f;color:#ebeef4;font-size:14px;font-weight:900;border-radius:99px;padding:10px 22px;cursor:pointer}html.lt /* ===== 场景舞台 ===== */
   .stage{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/7.5;background:#dfe5f1;border:1.5px solid #c2cadc;display:none}html.lt .stage.on{display:block}html.lt .stage .scimg{position:absolute;inset:0;width:100%;height:106%;object-fit:cover;animation:kenburns 9s ease-in-out infinite alternate}@keyframes kenburns{from{transform:scale(1) translateY(0)}to{transform:scale(1.09) translateY(-2.5%)}}html.lt .stage .scchar{position:absolute;right:8%;bottom:-4%;height:88%;z-index:2;filter:drop-shadow(0 8px 18px rgba(247,247,247,.55));animation:charbob 3.2s ease-in-out infinite}@keyframes charbob{0%,100%{transform:translateY(0) rotate(-.6deg)}50%{transform:translateY(-7px) rotate(.8deg)}}html.lt .stage .scchar.vc{height:auto;width:38%;right:6%;bottom:auto;top:12%;border-radius:16px;border:2px solid rgba(150,117,54,.7);box-shadow:0 10px 26px rgba(247,247,247,.6)}html.lt .stage .prop{position:absolute;z-index:3;font-size:24px;filter:drop-shadow(0 3px 5px rgba(247,247,247,.5))}html.lt .stage .prop.phone{right:24%;bottom:26%;animation:phonetilt 2.4s ease-in-out infinite}@keyframes phonetilt{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(5deg)}}html.lt .stage .prop.chips{right:26%;bottom:44%;animation:chipbob 1.6s ease-in-out infinite}@keyframes chipbob{0%,100%{transform:translateY(16px) rotate(-8deg)}50%{transform:translateY(-4px) rotate(8deg)}}html.lt .stage .scshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(241,244,250,.05) 55%,rgba(241,244,250,.82))}html.lt .stage .sclive{position:absolute;right:12px;top:10px;z-index:4;font-size:9.5px;font-weight:900;color:#850000;background:rgba(247,247,247,.5);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:5px}html.lt .stage .sclive::before{content:"";width:6px;height:6px;border-radius:50%;background:#ad0000;animation:blink 1.2s infinite}html.lt .stage .scwho{position:absolute;left:13px;bottom:11px;z-index:4;display:flex;align-items:center;gap:8px}html.lt .stage .scwho .sa{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #967536}html.lt .stage .scwho b{font-size:14px;font-weight:900;color:#141414;text-shadow:0 2px 6px rgba(247,247,247,.8)}html.lt .stage .scwho span{font-size:10px;color:#967536;font-weight:800}html.lt /* ===== 聊天频道 ===== */
@@ -154,6 +162,7 @@ function toggleTheme(){
     </div>
     <div class="ac-chan">
       <span class="hash">#</span><b id="chanName">E13 · 五兽桩讨论组</b>
+      <div class="ep-pick" id="epPick"></div>
       <span class="online">6人在线</span>
     </div>
     <div class="ac-notice"><span class="ni">📢</span><span id="notice">频道公告：今晚全员站桩5分钟，桩上见。——善雨导师</span></div>
@@ -286,18 +295,173 @@ const INTENTS=[
  {k:'ep',re:/剧情|这一集|师父|十桩功|秘籍|短剧|视频|第.*集|故事/},
  {k:'greet',re:/^(你好|hi|在吗|大家好|哈喽|嗨)/i}
 ];
-/* 弹幕池（播放中围绕剧情的角色碎语） */
-const DANMAKU=[
- ['chenxue','#FF8A7A','陈雪：师父这套桩帅炸了🔥'],
- ['yuchen','#8FEFC0','章宇尘：脑子会了，腿还没会'],
- ['dani','#FFD76F','施丹尼：站桩能吃东西吗（小声）'],
- ['limo','#E8C87A','李寞：桩不骗人。'],
- ['jiahui','#9AD9FF','王家慧：膝盖不过脚尖，记笔记📒'],
- ['shanyu','#E4D8FF','善雨：桩不在久，在心。'],
- ['chenxue','#FF8A7A','陈雪：我熄灯前站半小时，谁来比？'],
- ['yuchen','#8FEFC0','章宇尘：落叶落地那一下我鸡皮疙瘩了'],
- ['dani','#FFD76F','施丹尼：看完就打卡！拉钩！']
-];
+/* 弹幕池：观众视角（B站风），不是角色台词。格式 [color, text] */
+const DM_COLORS = ['#FFFFFF', '#8FEFC0', '#FFD76F', '#9AD9FF', '#FF8A7A', '#E4D8FF', '#FB7299', '#70C1B3'];
+const DANMAKU_BY_EP = {
+  E13: [
+    '前方高能',
+    '蹲一个下集',
+    '哈哈哈哈哈哈哈',
+    '我腿看软了',
+    '这也太帅了吧',
+    '三连了三连了',
+    '已截图 今晚照着练',
+    '膝盖警告⚠️',
+    '虎桩那一下鸡皮疙瘩起来了',
+    '龙桩手心真的会热吗？？',
+    '鹤桩单腿我直接裂开',
+    '蛇桩转腰好丝滑',
+    '豹桩轻盈感绝了',
+    '五兽连起来好燃',
+    '师父好绝',
+    '不懂就问：涌泉是哪个穴位',
+    '膝盖不过脚尖 记笔记',
+    '我站不住怎么办（泪）',
+    '打卡打卡打卡',
+    '同款腿软+1',
+    '这集必二刷',
+    '节奏感好强',
+    '落叶那个特写绝了',
+    '氛围感拉满',
+    '我妈喊我吃饭了（先码）',
+    '课代表：站桩5分钟',
+    '正经人谁站桩啊（我站）',
+    '脑子会了腿说不会.jpg',
+    '这不比健身房香？',
+    '收藏了收藏了',
+    '谁懂啊谁懂',
+    '画面质感好高级',
+    '下次一起练！',
+    '弹幕护体',
+    '啊啊啊啊啊',
+    '爷青回',
+    '这才是基本功',
+    '呼吸跟镜头一起稳',
+    '我先练虎桩',
+    '鹤桩练的是定力吧',
+    '好想要分镜图',
+    'BGM一响就燃',
+    '膝盖救护小队报到',
+    '站完再说话',
+    '认真的吗这也太难了',
+    '情侣一起站桩（？）',
+    '今日份精神食粮',
+    '已犹豫是否要试',
+    '试试就逝世（狗头）',
+    '催更催更',
+    '高能来了高能来了',
+    '这集我能二刷三刷',
+    '桩架好标准',
+    '自动换腿警告',
+    '弹幕刷起来',
+    '已三连求更新',
+    '氛围感太顶了',
+    '站桩宇宙启动',
+    '我先存着今晚练',
+    '泪目了（被帅到）',
+  ],
+  E14: [
+    '关灯那一下心跳加速',
+    '好安静……',
+    '前方高能预警',
+    '眼罩戏好沉浸',
+    '我也想摸一张卡',
+    '红粒子绝了',
+    '蓝的圆的我看见了！',
+    '绿草地脑补成功',
+    '黄方块我猜到了',
+    '棱是什么玄学',
+    '吸音棉教室好科幻',
+    '别怕黑别怕黑',
+    '眼睛关了世界还开着',
+    '这句话好戳',
+    '氛围太顶了',
+    '我不敢关灯看（笑）',
+    '三连支持',
+    '这集好适合二刷',
+    '触感线写得真细',
+    '弹幕护体',
+    '已截图金句',
+    '课代表划重点：摸卡',
+    '心跳声好像都听见了',
+    '好想进这个教室',
+    '啊啊啊好紧张',
+    '静音党破防了',
+    '收藏收藏',
+    '下集呢下集呢',
+    '质感好电影',
+    '盲摸挑战启动',
+    '我手心出汗了',
+    '这才叫多元感知',
+    '轻声细语好有感觉',
+    '已码住今晚练',
+    '画面干净到可怕',
+    '催更！',
+    '同款紧张+1',
+    '再来一次关灯',
+    '爷青回',
+    '弹幕刷起来',
+    '高能高能',
+    '不敢出声（自动）',
+    '沉浸感满分',
+    '好想二刷',
+  ],
+  EH01: [
+    '博物馆氛围拉满',
+    '这壁画好震撼',
+    '满城尽带黄金甲！！',
+    '诗句杀疯了',
+    '待到秋来九月八',
+    '冲天香阵透长安',
+    '高能来了',
+    '历史课也能这么燃？',
+    '笔记党狂喜',
+    '张院长讲得好',
+    '种姓那问得好',
+    '中国为什么没有……深了',
+    '黄巢人设好复杂',
+    '不是赞美杀戮 记住了',
+    '寒门那句破防',
+    '油画特写绝了',
+    '三连了',
+    '这集适合戴耳机',
+    '弹幕护体',
+    '历史粉集合',
+    '啊啊啊好燃',
+    '客栈题诗那幕好酷',
+    '大齐只四年……唉',
+    '门阀那块讲清楚了',
+    '催更历史线',
+    '已截图诗',
+    '谁懂这句的杀气',
+    '博物馆打卡想去',
+    '课代表：回望不是赞美',
+    '质感好高级',
+    '安静看完再说',
+    'BGM一压就沉重',
+    '收藏当复习资料',
+    '同款鸡皮疙瘩',
+    '这才是讲历史该有的样子',
+    '问得好答得也好',
+    '屏幕前起立鼓掌',
+    '二刷预定',
+    '爷青回',
+    '下集呢！！',
+    '弹幕刷起来',
+    '高能预警',
+    '诗句循环播放中',
+    '已三连',
+  ],
+};
+function expandDanmaku(lines) {
+  return lines.map(function (text, i) {
+    return [DM_COLORS[i % DM_COLORS.length], text];
+  });
+}
+Object.keys(DANMAKU_BY_EP).forEach(function (k) {
+  DANMAKU_BY_EP[k] = expandDanmaku(DANMAKU_BY_EP[k]);
+});
+const DANMAKU = DANMAKU_BY_EP.E13;
 /* 播放中模糊预览的滚动假对话 */
 const TEASER=[
  ['shanyu','今晚的任务：站桩5分钟，桩上见。'],
@@ -344,11 +508,27 @@ function addSys(t){
   d.className='msg sys'; d.innerHTML=`<div class="mb">${t}</div>`;
   $('msgs').appendChild(d); scrollChat();
 }
+function goTodayTrain(){
+  var path='/pages/training/dayu';
+  try{
+    if(window.parent && window.parent!==window){
+      window.parent.postMessage({type:'dayu-nav', path:path}, '*');
+      return;
+    }
+  }catch(e){}
+  location.href='train.html';
+}
 function addNudge(){
   if(nudgeShown)return; nudgeShown=true;
   const d=document.createElement('div');
   d.className='nudge';
-  d.innerHTML=`<div class="ng1">⏰</div><p>善雨导师提醒：聊完记得完成今晚训练——${EP.task}，到大宇智能体打卡。</p><a href="train.html">去打卡</a>`;
+  d.innerHTML=`<div class="ng1">⏰</div><p>善雨导师提醒：聊完记得完成今晚训练——${EP.task}，到大宇智能体打卡。</p>`;
+  const go=document.createElement('button');
+  go.type='button';
+  go.className='ngo';
+  go.textContent='去打卡';
+  go.onclick=function(e){e.preventDefault();e.stopPropagation();goTodayTrain();};
+  d.appendChild(go);
   $('msgs').appendChild(d); scrollChat();
 }
 function scrollChat(){const w=$('msgwrap');w.scrollTop=w.scrollHeight;}
@@ -371,62 +551,75 @@ function startTeaser(){
   };
   push();
 }
-/* ---------- 播放中：弹幕 ---------- */
+/* ---------- 播放中：弹幕（按当前集） ---------- */
 let dmTm=null;
+function currentDanmakuPool(){
+  try{
+    const id = (window.JnaoAcademy && window.JnaoAcademy.state && window.JnaoAcademy.state.episode && window.JnaoAcademy.state.episode.id) || 'E13';
+    return DANMAKU_BY_EP[id] || DANMAKU_BY_EP.E13;
+  }catch(e){
+    return DANMAKU_BY_EP.E13;
+  }
+}
+function stopDanmaku(){
+  try{ clearTimeout(dmTm) }catch(e){}
+  dmTm=null;
+  if($('dmk')) $('dmk').innerHTML='';
+}
 function startDanmaku(){
+  stopDanmaku();
   let i=0;
   const fire=()=>{
     if(!$('vbox').classList.contains('playing'))return;
-    const [w,c,t]=DANMAKU[i%DANMAKU.length]; i++;
-    const d=document.createElement('div');
-    d.className='dm'; d.style.top=(8+Math.random()*55)+'%';
-    d.innerHTML=`<b style="color:${c}">${t}</b>`;
-    d.style.animationDuration=(6+Math.random()*3)+'s';
-    $('dmk').appendChild(d);
-    setTimeout(()=>d.remove(),9500);
-    dmTm=setTimeout(fire,1300+Math.random()*900);
+    const rows=currentDanmakuPool();
+    const burst = Math.random() < 0.28 ? 2 : 1;
+    for (let n = 0; n < burst; n += 1) {
+      const [c,t]=rows[i%rows.length]; i++;
+      const d=document.createElement('div');
+      d.className='dm'; d.style.top=(3+Math.random()*36)+'%';
+      d.innerHTML=`<b style="color:${c}">${t}</b>`;
+      d.style.animationDuration=(5.5+Math.random()*3.5)+'s';
+      $('dmk').appendChild(d);
+      setTimeout(()=>d.remove(),9500);
+    }
+    dmTm=setTimeout(fire,700+Math.random()*900);
   };
   fire();
 }
-/* ---------- 播放控制 ---------- */
-let playing=false;
+/* ---------- 播放控制（真逻辑在 academy/channel.js，这里只兜底） ---------- */
 function playEp(){
-  if(playing)return; playing=true;
-  $('vbox').classList.add('playing');
-  startDanmaku();
-  let p=0;
-  const tm=setInterval(()=>{
-    p+=1.2; $('vprogI').style.width=Math.min(100,p)+'%';
-    if(p>=100){
-      clearInterval(tm); playing=false;
-      $('vbox').classList.remove('playing');
-      $('dmk').innerHTML='';
-      $('vend').style.display='flex';
-    }
-  },90); // 演示：约7.5秒模拟正片播完（接真实视频后替换为 ended 事件）
+  if (window.JnaoAcademy && typeof window.JnaoAcademy._playEp === 'function') {
+    window.JnaoAcademy._playEp();
+    return;
+  }
+  if (typeof window.__academyPlayEp === 'function') {
+    window.__academyPlayEp();
+    return;
+  }
 }
-/* ---------- 加入频道 ---------- */
+/* ---------- 加入频道（真逻辑在 academy/channel.js） ---------- */
 function joinChat(){
+  if (window.JnaoAcademy && typeof window.JnaoAcademy._joinChat === 'function') {
+    window.JnaoAcademy._joinChat();
+    return;
+  }
+  if (typeof window.__academyJoinChat === 'function') {
+    window.__academyJoinChat();
+    return;
+  }
   joined=true; clearTimeout(teaserTm);
   $('vend').style.display='none';
-  $('msgs').innerHTML='';
   $('chatroom').classList.remove('locked-teaser');
   $('stage').classList.add('on');
-  $('inp').disabled=false;
-  $('inp').placeholder='说点什么，角色们都在…';
-  $('chatroom').scrollIntoView({behavior:'smooth'});
-  addSys('你加入了 #E13 · 五兽桩讨论组');
-  // 角色围绕本集自然开场（随机3条+导师收尾）
-  const openers=['yuchen','dani','chenxue','limo','jiahui'].sort(()=>Math.random()-.5).slice(0,3);
-  let delay=700;
-  openers.forEach(k=>{
-    setTimeout(()=>showTyping(k,()=>addMsg(k,pick(PERSONAS[k].ep))),delay);
-    delay+=1800+Math.random()*900;
-  });
-  setTimeout(()=>showTyping('shanyu',()=>{
-    addMsg('shanyu',pick(PERSONAS.shanyu.train));
-    setTimeout(()=>{showChips();addNudge();birthdayBeat();parentHookBeat();},700);
-  }),delay+400);
+  if ($('inp')) {
+    $('inp').disabled=false;
+    $('inp').placeholder='说点什么，角色们都在…';
+  }
+  try { $('chatroom').scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {}
+  setTimeout(function(){
+    try { $('chatroom').scrollIntoView({behavior:'smooth', block:'nearest'}); } catch(e2) {}
+    try { if ($('inp')) $('inp').focus(); } catch(e3) {}
+  }, 120);
 }
 /* ---------- 家长问题·剧情植入节拍 ---------- */
 const TALENT_CHAR={'思者':'yuchen','赢者':'chenxue','德者':'dani','行者':'limo','学者':'jiahui'};
@@ -625,10 +818,10 @@ try {
 })();
 </script>
 
-<script src="/static/dayu/html/academy/client.js?v=20260919d"></script>
-<script src="/static/dayu/html/academy/fake.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/client.js?v=20260921i"></script>
+<script src="/static/dayu/html/academy/fake.js?v=20260921d"></script>
 <script src="/static/dayu/html/academy/talk.js?v=20260919f"></script>
-<script src="/static/dayu/html/academy/channel.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/channel.js?v=20260921k"></script>
 <script src="/static/dayu/html/academy/story.js?v=20260919c"></script>
 <script src="/static/dayu/html/academy/courses.js?v=20260919c"></script>
 <script src="/static/dayu/html/academy/boot.js?v=20260919c"></script>

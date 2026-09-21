@@ -67,6 +67,27 @@ EPISODE_SENSE: dict[str, dict[str, str]] = {
         "chenxue": "师父那套桩帅。我只想熄灯前比一场，气势不能输。",
         "shanyu": "这一集只有一个定字。看懂的已经不是动作。",
     },
+    "E14": {
+        "yuchen": "关了灯我想到绿，绿长成一大片草地。不是卡片绿，是我想到了绿。",
+        "dani": "卡片是平的。我搓边却摸到棱。老师说是大脑把指尖的信号放大了。",
+        "limo": "黄的，方的。就是知道。为什么，我还说不清。",
+        "jiahui": "红的粒子里有个黑三角。我第一次听见自己的声音发颤。",
+        "chenxue": "蓝的圆的，看得清楚。边上那点联想不重要，我掐了。",
+        "shanyu": "这节课是田小静的教室。我没上台，只看他们关了眼睛还摸到世界。",
+    },
+    "EH01": {
+        "yuchen": "博物馆里我盯着画问：黄巢最后当上皇帝了没有。老师说称帝四年就没了。",
+        "dani": "他杀那么多人，里面也有孩子。老师说是榜和大旱先把他逼到墙角。",
+        "limo": "听到杀遍贵族，我的手自己握紧了。诗我没抄，拳头记得。",
+        "jiahui": "我把那首诗抄进笔记：冲天香阵透长安，满城尽带黄金甲。",
+        "chenxue": "我问种姓，又问他不杀绝会不会被报仇。老师把油画点成民族的骨气。",
+        "shanyu": "历史课是张宇在讲。我在讨论里听他们问完，不替院长重讲一遍。",
+    },
+}
+
+# 特辑不进主线幕序。只站在这一集里答。
+SPECIAL_BOX: dict[str, str] = {
+    "EH01": "历史课特辑·博物馆黄巢篇",
 }
 
 ACT_SENSE: dict[str, tuple[str, ...]] = {
@@ -117,11 +138,16 @@ ACT_SENSE: dict[str, tuple[str, ...]] = {
 
 def episode_no(episode_id: str) -> int:
     raw = (episode_id or "").strip().upper()
+    if raw in SPECIAL_BOX:
+        return 0
     digits = "".join(ch for ch in raw if ch.isdigit())
     return int(digits or "0")
 
 
 def act_index(episode_id: str) -> int:
+    raw = (episode_id or "").strip().upper()
+    if raw in SPECIAL_BOX:
+        return -1
     number = episode_no(episode_id)
     for index, (start, end, _name, _banned) in enumerate(ACTS):
         if start <= number <= end:
@@ -131,14 +157,24 @@ def act_index(episode_id: str) -> int:
 
 def time_box(character_key: str, episode_id: str, episode_title: str) -> str:
     """给模型的时间约束。未走到的幕名和禁词都写明。"""
+    raw = (episode_id or "").strip().upper()
+    sense_map = EPISODE_SENSE.get(raw, {})
+    sense = sense_map.get(character_key) or "这一集你只记得自己在场。"
+    if raw in SPECIAL_BOX:
+        return (
+            f"你是画中人，正站在《{episode_title}》这一集里，不是旁白。\n"
+            f"这一集是特辑：{SPECIAL_BOX[raw]}。只答这一集发生过的事。\n"
+            f"不要提主线地宫、五角迷宫、站桩考核或其他还没在本集出现的关卡。\n"
+            f"这一集你的感受：{sense}"
+        )
     index = act_index(episode_id)
     lived = [ACTS[i][2] for i in range(index + 1)]
     future = [ACTS[i][2] for i in range(index + 1, len(ACTS))]
     banned: list[str] = []
     for i in range(index + 1, len(ACTS)):
         banned.extend(ACTS[i][3])
-    sense_map = EPISODE_SENSE.get(episode_id.strip().upper(), {})
-    sense = sense_map.get(character_key) or ACT_SENSE.get(character_key, ("",))[index]
+    if not sense_map.get(character_key):
+        sense = ACT_SENSE.get(character_key, ("",))[index]
     growth = GROWTH.get(character_key, ("",))[index]
     future_text = "、".join(future) if future else "没有"
     ban_text = "、".join(banned) if banned else "无"
@@ -152,6 +188,12 @@ def time_box(character_key: str, episode_id: str, episode_title: str) -> str:
 
 
 def leaks_future(text: str, episode_id: str) -> bool:
+    raw = (episode_id or "").strip().upper()
+    if raw in SPECIAL_BOX:
+        for word in ("五角迷宫", "738", "书墙", "疾行梯", "第一扇门"):
+            if word in (text or ""):
+                return True
+        return False
     index = act_index(episode_id)
     for i in range(index + 1, len(ACTS)):
         name = ACTS[i][2]

@@ -22,12 +22,12 @@ export function fakeAcademySector(episodeId) {
     overall_tier: 2,
     episode: {
       id: focus === 'E13' ? 'E13' : focus,
-      title: focus === 'E13' ? '五兽桩' : '模拟剧集',
-      topic: '站桩 · 专注力修炼',
-      task: '站桩5分钟',
-      channel_name: `${focus} · 讨论组`,
+      title: focus === 'E13' ? '五兽桩' : focus === 'E14' ? '蒙上眼睛之后' : focus === 'EH01' ? '历史课·黄巢篇' : '模拟剧集',
+      topic: focus === 'E14' ? '多元感知 · 圆形教室' : focus === 'EH01' ? '博物馆 · 满城尽带黄金甲' : '站桩 · 专注力修炼',
+      task: focus === 'E14' ? '蒙眼认一张卡' : focus === 'EH01' ? '记住今天这节历史课' : '站桩5分钟',
+      channel_name: focus === 'E13' ? 'E13 · 五兽桩讨论组' : focus === 'E14' ? 'E14 · 蒙上眼睛之后讨论组' : focus === 'EH01' ? 'EH01 · 历史课·黄巢篇讨论组' : `${focus} · 讨论组`,
       online_count: 6,
-      notice: '频道公告：今晚站桩5分钟。——善雨导师',
+      notice: '频道公告：看完这一集再聊。——善雨导师',
       poster: '/static/dayu/assets/miji/mj-tfsd.jpg',
       duration_label: '模拟正片',
       play_url: '',
@@ -35,9 +35,13 @@ export function fakeAcademySector(episodeId) {
       playable: true,
       unlocked: true,
       percent: 100,
-      chips: ['这集你印象最深的是什么？', '今晚站桩谁跟我一组？', '我觉得我站不住怎么办？'],
+      chips: focus === 'E14'
+        ? ['戴上眼罩你怕不怕黑？', '你摸到卡片是什么感觉？', '五个世界里你最想问谁？']
+        : focus === 'EH01'
+          ? ['中国为什么没有种姓？', '黄巢最后当上皇帝了吗？', '那首诗你记住哪一句？']
+          : ['这集你印象最深的是什么？', '今晚站桩谁跟我一组？', '我觉得我站不住怎么办？'],
       nudge: {
-        text: '善雨导师提醒：聊完记得完成今晚训练——站桩5分钟，到大宇智能体打卡。',
+        text: '善雨导师提醒：聊完记得完成今晚训练，到大宇智能体打卡。',
         href: 'train.html',
       },
       cast: [
@@ -45,6 +49,11 @@ export function fakeAcademySector(episodeId) {
         { key: 'jiahui', name: '王家慧', tag: '学者' },
       ],
     },
+    switchable: [
+      { id: 'E13', title: '五兽桩', channel_name: 'E13 · 五兽桩讨论组', unlocked: true, current: focus === 'E13' },
+      { id: 'E14', title: '蒙上眼睛之后', channel_name: 'E14 · 蒙上眼睛之后讨论组', unlocked: true, current: focus === 'E14' },
+      { id: 'EH01', title: '历史课·黄巢篇', channel_name: 'EH01 · 历史课·黄巢篇讨论组', unlocked: true, current: focus === 'EH01' },
+    ],
     acts: [
       {
         no: '第三幕',

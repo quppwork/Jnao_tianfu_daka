@@ -41,28 +41,79 @@
     if (!body.mention && !(body.quote && body.quote.who) && salt % 3 === 0) turns.push(line('shanyu', salt))
     return { turns: turns, nudge: salt % 3 === 0 ? ns.fakeOpen().nudge : null }
   }
-  ns.fakeSector = function () {
+  var SWITCHABLE = [
+    { id: 'E13', title: '五兽桩', channel_name: 'E13 · 五兽桩讨论组', unlocked: true },
+    { id: 'E14', title: '蒙上眼睛之后', channel_name: 'E14 · 蒙上眼睛之后讨论组', unlocked: true },
+    { id: 'EH01', title: '历史课·黄巢篇', channel_name: 'EH01 · 历史课·黄巢篇讨论组', unlocked: true },
+  ]
+
+  var EP_META = {
+    E13: {
+      title: '五兽桩',
+      topic: '站桩 · 专注力修炼',
+      task: '站桩5分钟',
+      channel_name: 'E13 · 五兽桩讨论组',
+      notice: '频道公告：今晚站桩5分钟。——善雨导师',
+      chips: ['这集你印象最深的是什么？', '今晚站桩谁跟我一组？', '我觉得我站不住怎么办？'],
+    },
+    E14: {
+      title: '蒙上眼睛之后',
+      topic: '多元感知 · 圆形教室',
+      task: '蒙眼认一张卡',
+      channel_name: 'E14 · 蒙上眼睛之后讨论组',
+      notice: '频道公告：今晚蒙眼认一张卡。——善雨导师',
+      chips: ['戴上眼罩你怕不怕黑？', '你摸到卡片是什么感觉？', '五个世界里你最想问谁？'],
+    },
+    EH01: {
+      title: '历史课·黄巢篇',
+      topic: '博物馆 · 满城尽带黄金甲',
+      task: '记住今天这节历史课',
+      channel_name: 'EH01 · 历史课·黄巢篇讨论组',
+      notice: '频道公告：记住今天这节历史课。——善雨导师',
+      chips: ['中国为什么没有种姓？', '黄巢最后当上皇帝了吗？', '那首诗你记住哪一句？'],
+    },
+  }
+
+  ns.fakeSectorFor = function (episodeId) {
+    var focus = String(episodeId || 'E13').trim().toUpperCase() || 'E13'
+    var meta = EP_META[focus] || {
+      title: focus,
+      topic: '模拟剧集',
+      task: '看完这一集',
+      channel_name: focus + ' · 讨论组',
+      notice: '频道公告：看完这一集再聊。——善雨导师',
+      chips: ['这集你印象最深的是什么？'],
+    }
     return {
       fake: true,
       user_id: 0,
       badge: '学者 · Lv.2',
       episode: {
-        id: 'E13',
-        title: '五兽桩',
-        topic: '站桩 · 专注力修炼',
-        task: '站桩5分钟',
-        channel_name: 'E13 · 五兽桩讨论组',
+        id: focus,
+        title: meta.title,
+        topic: meta.topic,
+        task: meta.task,
+        channel_name: meta.channel_name,
         online_count: 6,
-        notice: '频道公告：今晚站桩5分钟。——善雨导师',
+        notice: meta.notice,
         poster: '/static/dayu/assets/miji/mj-tfsd.jpg',
         duration_label: '模拟正片',
         media: 'demo',
         playable: true,
         unlocked: true,
-        chips: ['这集你印象最深的是什么？', '今晚站桩谁跟我一组？', '我觉得我站不住怎么办？'],
+        chips: meta.chips,
         nudge: ns.fakeOpen().nudge,
         cast: []
       },
+      switchable: SWITCHABLE.map(function (item) {
+        return {
+          id: item.id,
+          title: item.title,
+          channel_name: item.channel_name,
+          unlocked: true,
+          current: item.id === focus,
+        }
+      }),
       acts: [{
         no: '第三幕', name: '唤醒基本功', range: 'E08-E14',
         poster: '/static/dayu/assets/hall/study2.png',
@@ -70,7 +121,8 @@
         tag: '含 7 集',
         locked: false, status: 'ing', watched: 5, total: 7,
         episodes: [
-          { id: 'E13', title: '五兽桩', topic: '站桩', status: 'watched', media: 'demo', playable: true, unlocked: true }
+          { id: 'E13', title: '五兽桩', topic: '站桩', status: 'watched', media: 'demo', playable: true, unlocked: true },
+          { id: 'E14', title: '蒙上眼睛之后', topic: '多元感知', status: 'open', media: 'demo', playable: true, unlocked: true }
         ]
       }],
       courses: {
@@ -78,7 +130,8 @@
         mine: {
           done: 2, total: 4, percent: 50,
           chapters: [
-            { title: '第 3 讲 · 五兽桩 · 站桩定力', episode_id: 'E13', status: 'now' }
+            { title: '第 3 讲 · 五兽桩 · 站桩定力', episode_id: 'E13', status: 'now' },
+            { title: '第 4 讲 · 蒙上眼睛之后', episode_id: 'E14', status: 'todo' }
           ]
         },
         miji: [
@@ -86,5 +139,9 @@
         ]
       }
     }
+  }
+
+  ns.fakeSector = function () {
+    return ns.fakeSectorFor('E13')
   }
 })(window)

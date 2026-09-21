@@ -528,6 +528,7 @@ class AcademyRoom(Base):
     episode_id: Mapped[str] = mapped_column(String(16), nullable=False)
     messages: Mapped[list | None] = mapped_column(JSON)
     user_turns: Mapped[int] = mapped_column(Integer, default=0)
+    affect: Mapped[dict | None] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )

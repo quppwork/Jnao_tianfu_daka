@@ -1,6 +1,6 @@
 """天赋学院 — 频道、历史剧情、课程共用。"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -63,6 +63,56 @@ def academy_sector(
     db: Session = Depends(get_db),
 ):
     return get_sector(db, user_id, episode_id)
+
+
+@router.get("/episodes/{episode_id}/stream")
+def academy_episode_stream(
+    episode_id: str,
+    request: Request,
+    user_id: int | None = Query(None, ge=1),
+    mt: str | None = Query(None, description="短期流签名（sector.play_url 自带）"),
+    x_session_token: str | None = Header(None, alias="X-Session-Token"),
+    session_token: str | None = Query(None, description="会话令牌（已弃用，请用 Cookie）"),
+    db: Session = Depends(get_db),
+):
+    """学院正片流 — 与今日修炼相同：鉴权后 302 CDN/OSS 或后端代理，供 <video> 同源播放。"""
+    from fastapi import HTTPException
+
+    from app.agents.academy.catalog import get_episode
+    from app.core.media_stream_token import verify_media_stream_token
+    from app.db.models import ChildUser
+    from app.services import auth_service
+    from app.services.academy.playback import episode_stream_token_id, kind_of, stored_oss_url
+    from app.services.media_redirect import try_media_redirect
+    from app.services.oss_stream_service import stream_oss_media
+
+    episode = get_episode(episode_id)
+    if not episode or kind_of(episode) != "oss":
+        raise HTTPException(404, "正片未找到")
+
+    token_id = episode_stream_token_id(episode.id)
+    child_id: int | None = None
+    if user_id and mt and verify_media_stream_token(mt, token_id, user_id, "video"):
+        user = db.get(ChildUser, user_id)
+        if not user or (user.role or auth_service.ROLE_STUDENT) != auth_service.ROLE_STUDENT:
+            raise HTTPException(403, "需要学生账号")
+        child_id = user_id
+    else:
+        child_id = get_authenticated_user(
+            request, user_id, None, x_session_token, session_token, db
+        )
+
+    stored = stored_oss_url(episode)
+    if not stored:
+        raise HTTPException(404, "正片未找到")
+    # 有 CDN 时 302 加速域；本地/无私有回源时走后端代理，与今日修炼同源播放一致
+    from app.services.oss_client import use_cdn_for_media
+
+    if use_cdn_for_media():
+        redirect = try_media_redirect(stored)
+        if redirect is not None:
+            return redirect
+    return stream_oss_media(stored, range_header=request.headers.get("range"))
 
 
 @router.post("/episodes/{episode_id}/progress")

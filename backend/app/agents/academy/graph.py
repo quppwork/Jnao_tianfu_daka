@@ -30,6 +30,11 @@ class SceneState(TypedDict, total=False):
     child_user_id: int
     mention: str
     quote: dict
+    topic: str
+    drama_notes: str
+    affect: dict
+    training_done: bool
+    nudge_train: bool
     speakers: list
     index: int
     turns: list
@@ -45,27 +50,18 @@ def bind_time(state: SceneState) -> SceneState:
 
 
 def plan_cast(state: SceneState) -> SceneState:
+    from app.agents.academy.affect import rank_speakers
     from app.agents.academy.harness import opening_order
-    from app.services.academy.bots import wake_bot
 
     if state.get("mode") == "reply":
-        mention = state.get("mention")
         quote_who = (state.get("quote") or {}).get("who")
-        speakers = []
-        if mention in CHARACTERS:
-            speakers.append(mention)
-        if quote_who in CHARACTERS and quote_who not in speakers:
-            speakers.append(quote_who)
-        if not speakers:
-            last = state.get("last_who")
-            pool = [bot_id_for(key) for key in CHARACTERS if key != last]
-            picked = wake_bot(pool, bot_id_for(last) if last else None)
-            speakers = [picked.removeprefix("bot_")]
-            turns = int(state.get("user_turns") or 0)
-            if turns and turns % 3 == 0 and speakers[-1] != "shanyu":
-                speakers.append("shanyu")
-        else:
-            speakers = speakers[:2]
+        speakers = rank_speakers(
+            mention=state.get("mention"),
+            quote_who=quote_who,
+            last_who=state.get("last_who"),
+            text=state.get("user_text") or "",
+            affect=state.get("affect"),
+        )
     else:
         speakers = opening_order(state.get("child_talent"))
         if not speakers or speakers[-1] != "shanyu":
@@ -81,6 +77,7 @@ class BotState(TypedDict, total=False):
     child_talent: str
     child_user_id: int
     instruction: str
+    drama_notes: str
     channel: list
     private: list
     memories: list
@@ -107,6 +104,12 @@ async def utter(state: BotState) -> BotState:
         f"{time_box(key, episode_id, title)}\n{identity_box(key)}\n"
         f"你记得的更新：{memories}\n你自己说过：{own}"
     )
+    notes = (state.get("drama_notes") or "").strip()
+    if notes:
+        box += (
+            "\n短剧资料（只用来贴这个人和这一集，不要念出来，不要讲还没演到的事）：\n"
+            + notes
+        )
     line = await speak(
         key,
         episode_title=title,
@@ -156,18 +159,42 @@ def bot_graph(character_key: str):
 
 
 def _hint(state: SceneState, key: str) -> str:
-    spoken = "像平时聊天，别像念稿。可以带一个表情，别连着堆。"
+    from app.agents.academy.harness import is_greeting
+
+    spoken = "像平时聊天。别报天赋名，别念口头禅，表情不是每句都要。"
+    bits = []
+    greeting = is_greeting(state.get("user_text") or "")
+    if state.get("topic") == "qa":
+        bits.append("这是答题。不要讲题，不要给答案。用你的口气让孩子去学科答疑问。")
+    mention_checkin = bool(state.get("nudge_train")) and int(state.get("index") or 0) == 0
+    asked = "打卡" in (state.get("user_text") or "") or "修炼" in (state.get("user_text") or "")
+    if mention_checkin:
+        bits.append("这一轮可以随口半句今日修炼，不要展开，不要写成约定或惩罚。")
+    elif not asked:
+        bits.append("不要提今日修炼，不要提打卡。")
+    from app.agents.academy.affect import speak_tone
+
+    bits.append(speak_tone(key, state.get("affect")))
+    speakers = list(state.get("speakers") or [])
+    index = int(state.get("index") or 0)
+    if greeting:
+        bits.append("孩子只是打招呼。先回问候，不要提站桩、膝盖或剧本。")
+    elif index > 0 and key in speakers[1:]:
+        bits.append("接孩子这句或上一句，不要另起一个没人问的问题。")
+    tail = " ".join(bits)
     if key == "shanyu" and state.get("mode") != "reply":
-        return f"导师收尾。点明今晚训练：{state.get('task') or '去打卡'}。口语，一句。"
+        return f"导师收尾。回到这一集，口语，一句。不要提打卡。{tail}"
     quote = state.get("quote") or {}
     if state.get("mode") == "reply" and state.get("mention") == key:
-        return f"孩子点名要你回。直接接话，别绕。{spoken}一句。"
+        return f"孩子点名要你回。先回他这句，不要改题。{spoken}{tail}一句。"
     if state.get("mode") == "reply" and quote.get("who") == key:
         snippet = str(quote.get("text") or "")[:40]
-        return f"孩子引用了你这句「{snippet}」。顺着这句往下说，别原样复读。{spoken}"
+        return f"孩子引用了你这句「{snippet}」。顺着这句往下说，别原样复读。{spoken}{tail}"
+    if state.get("mode") == "reply" and greeting:
+        return f"先回孩子的招呼。{spoken}{tail}一句。"
     if state.get("mode") == "reply":
-        return f"直接接孩子最后一句。{spoken}不要复读别人的例句。一句。"
-    return "接上一句，说出你在这一集画里的真实想法。口语，不要复读，不要剧透后面。"
+        return f"先接孩子最后一句，问什么答什么。没聊剧情就别硬拐。{spoken}{tail}一句。"
+    return f"接上一句，说出你在这一集画里的真实想法。口语，不要复读，不要剧透后面。{tail}"
 
 
 def _channel(state: SceneState) -> list:
@@ -192,6 +219,21 @@ async def speak_one(state: SceneState) -> SceneState:
         return {}
     key = speakers[index]
     episode_id = state.get("episode_id") or ""
+    from app.agents.academy.harness import is_greeting
+
+    notes = state.get("drama_notes")
+    if is_greeting(state.get("user_text") or ""):
+        notes = ""
+    elif notes is None:
+        from app.agents.academy.kb import drama_notes
+
+        names = [CHARACTERS[item].name for item in speakers if item in CHARACTERS]
+        notes = await drama_notes(
+            names=names,
+            episode_id=episode_id,
+            episode_title=state.get("episode_title") or episode_id,
+            user_text=state.get("user_text") or "",
+        )
     result = await bot_graph(key).ainvoke(
         {
             "character_key": key,
@@ -201,6 +243,7 @@ async def speak_one(state: SceneState) -> SceneState:
             "child_talent": state.get("child_talent") or "",
             "child_user_id": int(state.get("child_user_id") or 0),
             "instruction": _hint(state, key),
+            "drama_notes": notes,
             "channel": _channel(state),
         },
         {"configurable": {"thread_id": thread_id(state.get("child_user_id"), episode_id, key)}},
@@ -210,7 +253,7 @@ async def speak_one(state: SceneState) -> SceneState:
     if quote.get("text") and (key == state.get("mention") or key == quote.get("who")):
         line = {**line, "quote": {"who": quote.get("who"), "text": quote.get("text")}}
     turns = list(state.get("turns") or []) + [line]
-    return {"turns": turns, "index": index + 1}
+    return {"turns": turns, "index": index + 1, "drama_notes": notes or ""}
 
 
 def _continue(state: SceneState) -> str:

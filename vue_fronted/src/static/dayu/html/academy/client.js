@@ -71,11 +71,12 @@
     if (!instant) {
       var bots = list.filter(function (turn) { return turn && turn.who !== 'me' && turn.who !== 'user' })
       var chain = Promise.resolve()
-      bots.forEach(function (turn) {
+      bots.forEach(function (turn, i) {
         chain = chain.then(function () {
           return new Promise(function (resolve) {
+            var wait = i === 0 ? 600 : 3000
             if (typeof showTyping === 'function' && typeof addMsg === 'function') {
-              showTyping(turn.who, function () { addMsg(turn.who, turn.text, turn); resolve() }, 650)
+              showTyping(turn.who, function () { addMsg(turn.who, turn.text, turn); resolve() }, wait)
             } else {
               resolve()
             }

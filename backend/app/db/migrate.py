@@ -71,6 +71,11 @@ def apply_schema_patches(engine: Engine) -> None:
             "meta_json",
             "ALTER TABLE qa_session ADD COLUMN meta_json JSON",
         ),
+        (
+            "academy_room",
+            "affect",
+            "ALTER TABLE academy_room ADD COLUMN affect JSON",
+        ),
     ]
     dialect = engine.dialect.name
     for table, column, ddl in patches:

@@ -61,8 +61,14 @@ def load_settings() -> dict:
         db["url"] = default_db
     raw["database"] = db
     oss = raw.get("oss", {})
-    oss["access_key_id"] = os.getenv("OSS_ACCESS_KEY_ID", oss.get("access_key_id", ""))
-    oss["access_key_secret"] = os.getenv("OSS_ACCESS_KEY_SECRET", oss.get("access_key_secret", ""))
+    oss_id = os.getenv("OSS_ACCESS_KEY_ID", oss.get("access_key_id", ""))
+    oss_secret = os.getenv("OSS_ACCESS_KEY_SECRET", oss.get("access_key_secret", ""))
+    if str(oss_id).startswith("${"):
+        oss_id = ""
+    if str(oss_secret).startswith("${"):
+        oss_secret = ""
+    oss["access_key_id"] = oss_id
+    oss["access_key_secret"] = oss_secret
     oss["bucket"] = os.getenv("OSS_BUCKET", oss.get("bucket", "jnao-talent-ai"))
     oss["endpoint"] = os.getenv("OSS_ENDPOINT", oss.get("endpoint", "oss-cn-beijing.aliyuncs.com"))
     oss_prefix = os.getenv("OSS_PREFIX", oss.get("prefix", "yinpin/"))

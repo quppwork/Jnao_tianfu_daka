@@ -11,6 +11,7 @@ from app.agents.academy.catalog import (
     EPISODES,
     MIJI,
     OFFERS,
+    SWITCHABLE_IDS,
     Episode,
     get_episode,
 )
@@ -153,7 +154,7 @@ def _courses(rows: dict[str, AcademyProgress]) -> dict:
     }
 
 
-def _channel(episode: Episode, row: AcademyProgress | None) -> dict:
+def _channel(episode: Episode, row: AcademyProgress | None, *, user_id: int | None = None) -> dict:
     cast = _cast(episode.cast)
     media = playback.kind_of(episode)
     return {
@@ -166,7 +167,7 @@ def _channel(episode: Episode, row: AcademyProgress | None) -> dict:
         "notice": f"频道公告：今晚{episode.task}。——善雨导师",
         "poster": episode.poster,
         "duration_label": playback.duration_label(episode),
-        "play_url": playback.play_url(episode),
+        "play_url": playback.play_url(episode, user_id=user_id),
         "media": media,
         "playable": media != "none",
         "unlocked": progress_store.is_unlocked(row),
@@ -180,6 +181,23 @@ def _channel(episode: Episode, row: AcademyProgress | None) -> dict:
     }
 
 
+def _switchable(rows: dict[str, AcademyProgress], current_id: str) -> list[dict]:
+    """频道标题下拉：测试集始终可切；讨论是否解锁仍看 episode.unlocked。"""
+    out = []
+    for episode_id in SWITCHABLE_IDS:
+        episode = EPISODES.get(episode_id)
+        if not episode:
+            continue
+        out.append({
+            "id": episode.id,
+            "title": episode.title,
+            "channel_name": f"{episode.id} · {episode.title}讨论组",
+            "unlocked": True,
+            "current": episode.id == current_id,
+        })
+    return out
+
+
 def get_sector(db: Session, user_id: int, episode_id: str | None = None) -> dict:
     progress_store.seed_demo_if_empty(db, user_id)
     rows = progress_store.load_map(db, user_id)
@@ -190,7 +208,8 @@ def get_sector(db: Session, user_id: int, episode_id: str | None = None) -> dict
         "badge": badge,
         "talent_primary": talent_name,
         "overall_tier": tier,
-        "episode": _channel(focus, rows.get(focus.id)),
+        "episode": _channel(focus, rows.get(focus.id), user_id=user_id),
+        "switchable": _switchable(rows, focus.id),
         "acts": _acts(rows),
         "courses": _courses(rows),
     }

@@ -78,7 +78,36 @@ EPISODES: dict[str, Episode] = {
                 "师父，十桩功最难的是哪一桩？",
             ),
         ),
-        _ep("E14", "蒙上眼睛之后", "多元感知"),
+        Episode(
+            id="E14",
+            title="蒙上眼睛之后",
+            topic="多元感知 · 圆形教室",
+            task="蒙眼认一张卡",
+            duration_label="正片约 5:50",
+            poster="/static/dayu/assets/miji/mj-tfsd.jpg",
+            oss_key="AIshipin/E14_blindfold_720p.mp4",
+            chips=(
+                "戴上眼罩你怕不怕黑？",
+                "你摸到卡片是什么感觉？",
+                "五个世界里你最想问谁？",
+                "眼睛关了世界真的没关吗？",
+            ),
+        ),
+        Episode(
+            id="EH01",
+            title="历史课·黄巢篇",
+            topic="博物馆 · 满城尽带黄金甲",
+            task="记住今天这节历史课",
+            duration_label="正片约 5:20",
+            poster="/static/dayu/assets/hall/think1.png",
+            oss_key="AIshipin/EH01_huangchao_720p.mp4",
+            chips=(
+                "中国为什么没有种姓？",
+                "黄巢最后当上皇帝了吗？",
+                "他杀那么多人，你怎么看？",
+                "那首诗你记住哪一句？",
+            ),
+        ),
         _ep("E15", "跑道尽头", "观察推理 · 入口"),
         _ep("E16", "738", "听觉 · 录音破解"),
         _ep("E17", "第一扇门", "第一关 · 五角迷宫"),
@@ -120,6 +149,9 @@ ACTS: tuple[Act, ...] = (
 )
 
 CURRENT_EPISODE_ID = "E13"
+
+# 频道标题可切换的测试集。每集讨论与感知独立。
+SWITCHABLE_IDS: tuple[str, ...] = ("E13", "E14", "EH01")
 
 # 大书道章节对应剧集，进度跟观看解锁走，不再写死 38%。
 CALLIGRAPHY = (

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 DEMO_WATCHED_IDS = tuple(f"E{n:02d}" for n in range(1, 13))
-DEMO_MEDIA_IDS = frozenset(f"E{n:02d}" for n in range(1, 14))
+DEMO_MEDIA_IDS = frozenset(f"E{n:02d}" for n in range(1, 15)) | frozenset({"EH01"})
 
 CAMP = {
     "title": "超脑训练营 · 四天三夜",

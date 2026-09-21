@@ -44,6 +44,38 @@ def opening_order(talent: str | None) -> list[str]:
     return picked + ["shanyu"]
 
 
+_QA = re.compile(r"答题|这道题|作业题|解题|怎么算|数学|语文|英语|物理|化学|生物|公式")
+_LOW = re.compile(r"累|烦|不想|放弃|难过|害怕|焦虑|崩溃|无聊|讨厌|站不住")
+_HIGH = re.compile(r"哈哈|开心|太好了|兴奋|想赢|爽|来比")
+
+
+def route_topic(text: str) -> str:
+    """答题去学科答疑，其余走剧情。"""
+    if _QA.search(text or ""):
+        return "qa"
+    return "plot"
+
+
+_GREET = re.compile(
+    r"^(你好|哈喽|嗨|hi|hello|在吗|早|晚安|吃了吗)[啊呀吧呢哦哈！!。.~～\s]*$",
+    re.I,
+)
+
+
+def is_greeting(text: str) -> bool:
+    return bool(_GREET.match((text or "").strip()))
+
+
+def read_mood(text: str) -> str:
+    """从这一句看情绪，用来调语气，不改人设。"""
+    raw = text or ""
+    if _LOW.search(raw):
+        return "low"
+    if _HIGH.search(raw):
+        return "high"
+    return "even"
+
+
 def pick_reply_cast(text: str, talent: str | None, last_who: str | None, user_turns: int) -> list[str]:
     intent = detect_intent(text)
     pools = {
@@ -160,6 +192,7 @@ async def opening_turns(
     task: str,
     child_talent: str,
     child_user_id: int | None = None,
+    training_done: bool = True,
 ) -> list[dict]:
     from app.agents.academy.graph import run_scene
 
@@ -170,6 +203,7 @@ async def opening_turns(
         "task": task,
         "child_talent": child_talent,
         "child_user_id": int(child_user_id or 0),
+        "training_done": training_done,
         "prior": [],
         "turns": [],
     })
@@ -188,6 +222,10 @@ async def reply_turns(
     child_user_id: int | None = None,
     mention: str | None = None,
     quote: dict | None = None,
+    topic: str = "plot",
+    affect: dict | None = None,
+    training_done: bool = True,
+    nudge_train: bool = False,
 ) -> list[dict]:
     from app.agents.academy.graph import run_scene
 
@@ -204,5 +242,9 @@ async def reply_turns(
         "user_turns": user_turns,
         "mention": mention,
         "quote": quote,
+        "topic": topic,
+        "affect": affect or {},
+        "training_done": training_done,
+        "nudge_train": nudge_train,
         "turns": [],
     })

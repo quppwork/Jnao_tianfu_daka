@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.academy.catalog import Episode, get_episode
 from app.agents.academy.characters import bot_id_for
-from app.agents.academy.harness import opening_turns, reply_turns
+from app.agents.academy.affect import step
+from app.agents.academy.harness import opening_turns, reply_turns, route_topic
 from app.agents.academy.talk import build_user_line
 from app.db.models import AcademyRoom
 from app.services.academy.bots import remember_session
 from app.services.academy.errors import AcademyError
+from app.services.academy.guide import today_training
 from app.services.academy.profile import talent_badge
 from app.services.academy.progress import require_unlocked
 
@@ -37,14 +40,18 @@ def _room(db: Session, user_id: int, episode_id: str) -> AcademyRoom:
     return row
 
 
-def _tail(episode: Episode) -> dict:
-    return {
+def _tail(episode: Episode, trained: bool) -> dict:
+    body = {
         "chips": list(episode.chips),
-        "nudge": {
-            "text": f"善雨导师提醒：聊完记得完成今晚训练——{episode.task}，到大宇智能体打卡。",
-            "href": "train.html",
-        },
+        "training_done": trained,
+        "nudge": None,
     }
+    if not trained:
+        body["nudge"] = {
+            "text": f"今天的训练还没完成。去今日修炼做完再回来聊——{episode.task}。",
+            "href": "train.html",
+        }
+    return body
 
 
 def _memorize(db: Session, user_id: int, episode_id: str, lines: list[dict]) -> None:
@@ -118,7 +125,8 @@ async def open_room(db: Session, user_id: int, episode_id: str) -> dict:
     require_unlocked(db, user_id, episode.id)
     room = _room(db, user_id, episode.id)
     existing = list(room.messages or [])
-    tail = _tail(episode)
+    trained = bool(today_training(db, user_id).get("done"))
+    tail = _tail(episode, trained)
     if existing:
         db.commit()
         turns = list(room.messages or [])
@@ -131,6 +139,7 @@ async def open_room(db: Session, user_id: int, episode_id: str) -> dict:
             task=episode.task,
             child_talent=talent_name,
             child_user_id=user_id,
+            training_done=trained,
         ),
         user_id,
         episode.id,
@@ -163,6 +172,9 @@ async def chat(
         None,
     )
     _, talent_name, _ = talent_badge(db, user_id)
+    trained = bool(today_training(db, user_id).get("done"))
+    affect = step(room.affect if isinstance(room.affect, dict) else None, content)
+    room.affect = affect
     user_turns = int(room.user_turns or 0) + 1
     prior = list(history)
     history = prior + [row]
@@ -182,6 +194,10 @@ async def chat(
             child_user_id=user_id,
             mention=row.get("mention"),
             quote=row.get("quote"),
+            topic=route_topic(content),
+            affect=affect,
+            training_done=trained,
+            nudge_train=(not trained) and random.random() < 0.22,
         ),
         user_id,
         episode.id,
@@ -190,5 +206,4 @@ async def chat(
     room.messages = history[-40:]
     _memorize(db, user_id, episode.id, history[-12:])
     db.commit()
-    show_nudge = user_turns >= 3 or any(word in content for word in ("打卡", "训练", "站桩"))
-    return {"turns": turns, "nudge": _tail(episode)["nudge"] if show_nudge else None}
+    return {"turns": turns, "nudge": _tail(episode, trained)["nudge"], "training_done": trained}

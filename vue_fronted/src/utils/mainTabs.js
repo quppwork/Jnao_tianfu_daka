@@ -76,14 +76,26 @@ function softNavigate(url) {
   const target = normalizeRoute(full)
   if (!target) return
   const cur = currentRoute()
-  if (cur === target && !String(url).includes('?')) return
+  const hasQuery = String(full).includes('?')
+  if (cur === target && !hasQuery) return
+
+  // 同路由但带 ?ep= 等参数：必须 replace，navigateBack 会丢掉 query
+  if (cur === target && hasQuery) {
+    uni.redirectTo({
+      url: full,
+      fail: () => uni.reLaunch({ url: full }),
+    })
+    return
+  }
 
   try {
     const pages = getCurrentPages()
-    for (let i = pages.length - 2; i >= 0; i -= 1) {
-      if (String(pages[i].route || '') === target) {
-        uni.navigateBack({ delta: pages.length - 1 - i })
-        return
+    if (!hasQuery) {
+      for (let i = pages.length - 2; i >= 0; i -= 1) {
+        if (String(pages[i].route || '') === target) {
+          uni.navigateBack({ delta: pages.length - 1 - i })
+          return
+        }
       }
     }
   } catch (_) { /* ignore */ }
