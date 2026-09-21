@@ -26,13 +26,17 @@
 
 后端只打 **stdout**；`docker-compose.logging.yml` 用 **Alloy** 采集 Docker 日志写入 **Loki**，用 **Grafana** 实时查看与检索历史（默认保留约 14 天）。
 
-部署（`deploy-baota.sh` 会自动叠加 logging compose）：
+部署（在**宝塔终端**执行；`deploy-baota.sh` 会自动叠加 logging compose）：
 
 ```bash
+cd /www/wwwroot/jnao_daka
 bash scripts/deploy-baota.sh
 # 等价于:
-# docker compose -f docker-compose.prod.yml -f docker-compose.logging.yml --env-file .env.production up -d
+# docker compose -f docker-compose.prod.yml -f docker-compose.logging.yml --env-file .env.production up -d --build
 ```
+
+完整发版步骤见 [运维与发版.md](../docs/运维与发版.md) 第四节（本地 push → 宝塔手动 pull，不依赖本机 SSH）。
+
 
 打开：`http://127.0.0.1:3000`（或宝塔反代）→ **Explore** → 数据源 Loki。
 
