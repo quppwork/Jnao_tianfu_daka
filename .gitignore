@@ -6,6 +6,7 @@ backend/venv
 # Claude Code 本地记忆
 CLAUDE.md
 .claude/
+.codex
 
 # Python
 .venv/
