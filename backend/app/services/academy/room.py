@@ -121,10 +121,18 @@ async def _keep_running(work, user_id: int, episode_id: str):
 
 
 async def open_room(db: Session, user_id: int, episode_id: str) -> dict:
+    from app.agents.academy.perception import messages_fit_episode
+
     episode = _require_episode(episode_id)
     require_unlocked(db, user_id, episode.id)
     room = _room(db, user_id, episode.id)
     existing = list(room.messages or [])
+    # 串集旧稿（如 E14 里还是五兽桩）丢掉重开
+    if existing and not messages_fit_episode(episode.id, existing):
+        room.messages = []
+        room.user_turns = 0
+        existing = []
+        db.commit()
     trained = bool(today_training(db, user_id).get("done"))
     tail = _tail(episode, trained)
     if existing:

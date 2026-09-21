@@ -73,9 +73,18 @@ def bot_id_for(character_key: str) -> str:
     return f"bot_{character_key.strip()}"
 
 
-def system_prompt(char: Character, *, episode_title: str, task: str, child_talent: str) -> str:
+def system_prompt(
+    char: Character,
+    *,
+    episode_title: str,
+    task: str,
+    child_talent: str,
+    episode_id: str | None = None,
+) -> str:
     del child_talent  # 不写进提示词，避免角色在对话里报天赋名
-    samples = " / ".join(char.samples)
+    from app.agents.academy.perception import sample_lines
+
+    samples = " / ".join(sample_lines(char.key, episode_id) or char.samples)
     return (
         f"你是劲脑天赋学院讨论频道里的{char.name}。\n"
         f"内部人设（不要念出来）：{char.voice}\n"

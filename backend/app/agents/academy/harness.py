@@ -109,8 +109,11 @@ def _clean_line(text: str | None, fallback: str) -> str:
     return raw[:80]
 
 
-def _fallback(char: Character) -> str:
-    return random.choice(char.samples)
+def _fallback(char: Character, episode_id: str | None = None) -> str:
+    from app.agents.academy.perception import sample_lines
+
+    pool = sample_lines(char.key, episode_id) or char.samples
+    return random.choice(pool) if pool else "嗯。"
 
 
 def _transcript(lines: list[dict]) -> str:
@@ -145,10 +148,11 @@ async def speak(
     prior: list[dict],
     instruction: str,
     time_box: str = "",
+    episode_id: str | None = None,
     prompt=None,
 ) -> dict:
     char = CHARACTERS[key]
-    fallback = _fallback(char)
+    fallback = _fallback(char, episode_id)
     transcript = _transcript(prior)
     if prompt is not None:
         messages = prompt.format_messages(
@@ -157,6 +161,7 @@ async def speak(
                 episode_title=episode_title,
                 task=task,
                 child_talent=child_talent,
+                episode_id=episode_id,
             ),
             time_box=time_box,
             transcript=transcript,
@@ -170,6 +175,7 @@ async def speak(
             episode_title=episode_title,
             task=task,
             child_talent=child_talent,
+            episode_id=episode_id,
         )
         if time_box:
             system = f"{system}\n{time_box}"

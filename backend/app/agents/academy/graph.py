@@ -118,10 +118,11 @@ async def utter(state: BotState) -> BotState:
         prior=list(state.get("channel") or []),
         instruction=state.get("instruction") or "",
         time_box=box,
+        episode_id=episode_id,
         prompt=_LINE,
     )
     if leaks_future(line["text"], episode_id):
-        line = {"who": key, "text": _fallback(CHARACTERS[key])}
+        line = {"who": key, "text": _fallback(CHARACTERS[key], episode_id)}
     line = {**line, "bot_id": bot_id_for(key)}
     private = list(state.get("private") or []) + [line]
     return {"line": line, "private": private[-12:]}

@@ -4,19 +4,36 @@
   if (!ns) return
   var $ = ns.$
 
+  /** 开房结果预取：看片过程中就请求，点「加入讨论」时不再等网络 */
+  var openWarm = { id: '', live: false, promise: null, data: null }
+
   function showEndOverlay() {
+    var box = $('vbox')
+    if (box) {
+      box.classList.remove('playing')
+      box.classList.add('ended')
+    }
+    var video = $('vvideo')
+    if (video) {
+      try { video.pause() } catch (e) { /* ignore */ }
+      video.removeAttribute('controls')
+    }
     if ($('vend')) $('vend').style.display = 'flex'
-    if ($('vbox')) $('vbox').classList.remove('playing')
     if ($('dmk')) $('dmk').innerHTML = ''
   }
 
   function hideEndOverlay() {
     if ($('vend')) $('vend').style.display = 'none'
+    var box = $('vbox')
+    if (box) box.classList.remove('ended')
+    var video = $('vvideo')
+    if (video) video.setAttribute('controls', '')
   }
 
   function markUnlocked(data, ep, opts) {
     if (!data || !data.unlocked) return
     ep.unlocked = true
+    warmOpenRoom(ep)
     if (opts && opts.showEnd) showEndOverlay()
   }
 
@@ -60,6 +77,7 @@
     var timer = setInterval(function () {
       percent += 4
       if ($('vprogI')) $('vprogI').style.width = Math.min(100, percent) + '%'
+      if (percent >= 72) warmOpenRoom(ep)
       if (percent < 100) return
       clearInterval(timer)
       root.__academyPlaying = false
@@ -67,6 +85,7 @@
         .then(function (data) { markUnlocked(data, ep, { showEnd: true }) })
         .catch(function () {
           ep.unlocked = true
+          warmOpenRoom(ep)
           showEndOverlay()
           ns.toast('进度没记上，再看一遍')
         })
@@ -80,7 +99,12 @@
   function readRoom(id) {
     try {
       var raw = JSON.parse(localStorage.getItem(roomKey(id)) || 'null')
-      return Array.isArray(raw) && raw.length ? raw : null
+      if (!Array.isArray(raw) || !raw.length) return null
+      if (ns.turnsFitEpisode && !ns.turnsFitEpisode(id, raw)) {
+        try { localStorage.removeItem(roomKey(id)) } catch (e2) { /* ignore */ }
+        return null
+      }
+      return raw
     } catch (e) {
       return null
     }
@@ -90,6 +114,139 @@
     try {
       localStorage.setItem(roomKey(id), JSON.stringify((turns || []).slice(-40)))
     } catch (e) { /* 隐私模式写不进也不影响这一次 */ }
+  }
+
+  function clearOpenWarm() {
+    openWarm = { id: '', live: false, promise: null, data: null }
+  }
+
+  function unlockChatShell() {
+    joined = true
+    try { clearTimeout(teaserTm) } catch (e) { /* ignore */ }
+    if ($('chatroom')) $('chatroom').classList.remove('locked-teaser')
+    if ($('stage')) $('stage').classList.add('on')
+    if ($('inp')) {
+      $('inp').disabled = false
+      $('inp').placeholder = '说点什么，可以 @ 人或按住引用'
+    }
+  }
+
+  function lockChatShell() {
+    if ($('chatroom')) $('chatroom').classList.add('locked-teaser')
+    if ($('stage')) $('stage').classList.remove('on')
+    if ($('inp')) {
+      $('inp').disabled = true
+      $('inp').placeholder = '看完正片即可加入讨论'
+    }
+    if ($('replies')) {
+      $('replies').innerHTML = ''
+      $('replies').style.display = 'none'
+    }
+  }
+
+  /** 滚到讨论区，并让消息列表停在最新一条。不 focus 输入框，避免弹出键盘。 */
+  function scrollToLatestChat() {
+    var room = $('chatroom')
+    if (room) {
+      try { room.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch (e) { /* ignore */ }
+    }
+    function pinBottom() {
+      if (typeof scrollChat === 'function') {
+        scrollChat()
+        return
+      }
+      var wrap = $('msgwrap')
+      if (wrap) wrap.scrollTop = wrap.scrollHeight
+    }
+    pinBottom()
+    setTimeout(pinBottom, 80)
+    setTimeout(pinBottom, 280)
+  }
+
+  function restoreRoomQuiet(ep) {
+    if (!ep || !ep.id) return
+    var live = !!(ns.userId && ns.userId())
+    var roomMark = (live ? 'live:' : 'fake:') + ep.id
+    warmOpenRoom(ep)
+    if (shownRoom === roomMark && $('msgs') && $('msgs').children.length) {
+      return
+    }
+    var cached = readRoom(ep.id)
+    if (cached && cached.length) {
+      shownRoom = roomMark
+      if ($('msgs')) $('msgs').innerHTML = ''
+      paintSaved(ep, { replay: true, turns: cached, nudge: ep.nudge }, true)
+      return
+    }
+    warmOpenRoom(ep).then(function (data) {
+      if (!data || !ns.state || !ns.state.episode || ns.state.episode.id !== ep.id) return
+      if (!ep.unlocked) return
+      shownRoom = roomMark
+      if ($('msgs')) $('msgs').innerHTML = ''
+      return paintSaved(ep, data, true)
+    }).catch(function () { /* 进页预取失败，点讨论时再开 */ })
+  }
+
+  function prefetchChatAssets() {
+    var chars = root.CHARS || {}
+    var urls = {}
+    Object.keys(chars).forEach(function (key) {
+      var c = chars[key]
+      if (!c) return
+      ;[c.av, c.bg, c.sp].forEach(function (u) {
+        if (u) urls[u] = true
+      })
+    })
+    ;[
+      '/static/dayu/assets/bg-dorm.png',
+      '/static/dayu/assets/bg-study.png',
+      '/static/dayu/assets/ip/sizhe.png',
+      '/static/dayu/assets/ip/dezhe.png',
+      '/static/dayu/assets/ip/xingzhe.png',
+      '/static/dayu/assets/ip/xuezhe.png',
+      '/static/dayu/assets/ip/yingzhe.png',
+      '/static/dayu/assets/avatar_teacher.jpg',
+    ].forEach(function (u) { urls[u] = true })
+    Object.keys(urls).forEach(function (src) {
+      try {
+        var img = new Image()
+        img.decoding = 'async'
+        img.src = src
+      } catch (e) { /* ignore */ }
+    })
+  }
+
+  function fetchOpenPayload(ep, live) {
+    if (live) {
+      return ns.api('/api/academy/episodes/' + ep.id + '/open', {})
+    }
+    var cached = readRoom(ep.id)
+    if (cached) {
+      return Promise.resolve({ replay: true, turns: cached, nudge: ep.nudge })
+    }
+    if (ns.fakeOpen) return Promise.resolve(ns.fakeOpen(ep.id))
+    return ns.api('/api/academy/episodes/' + ep.id + '/open', {})
+  }
+
+  function warmOpenRoom(ep) {
+    if (!ep || !ep.id) return openWarm.promise
+    var live = !!(ns.userId && ns.userId())
+    if (openWarm.id === ep.id && openWarm.live === live && openWarm.promise) {
+      return openWarm.promise
+    }
+    openWarm.id = ep.id
+    openWarm.live = live
+    openWarm.data = null
+    openWarm.promise = fetchOpenPayload(ep, live).then(function (data) {
+      if (openWarm.id === ep.id) openWarm.data = data
+      if (data && data.turns) writeRoom(ep.id, data.turns)
+      return data
+    }).catch(function (err) {
+      // 预取失败不清 promise，join 时再走兜底
+      openWarm.promise = null
+      throw err
+    })
+    return openWarm.promise
   }
 
   var shownRoom = ''
@@ -125,11 +282,12 @@
 
   function resetChannelView() {
     shownRoom = ''
+    clearOpenWarm()
     if (typeof root.stopDanmaku === 'function') root.stopDanmaku()
     else if (typeof stopDanmaku === 'function') stopDanmaku()
     if ($('msgs')) $('msgs').innerHTML = ''
     if ($('chatroom')) $('chatroom').classList.add('locked-teaser')
-    if ($('vend')) $('vend').style.display = 'none'
+    hideEndOverlay()
     if ($('stage')) $('stage').classList.remove('on')
     if ($('replies')) {
       $('replies').innerHTML = ''
@@ -142,7 +300,10 @@
       video.dataset.src = ''
       video.style.display = 'none'
     }
-    if ($('vbox')) $('vbox').classList.remove('playing')
+    if ($('vbox')) {
+      $('vbox').classList.remove('playing')
+      $('vbox').classList.remove('ended')
+    }
     if ($('vprogI')) $('vprogI').style.width = '0%'
     if ($('dmk')) $('dmk').innerHTML = ''
   }
@@ -240,11 +401,14 @@
       root.EP.title = ep.title
       root.EP.id = ep.id
     }
+    prefetchChatAssets()
+    hideEndOverlay()
     if (ep.unlocked) {
-      hideEndOverlay()
-      if (typeof root.joinChat === 'function') root.joinChat()
+      // 已解锁：直接打开讨论区并恢复上次对话，不必再「看完解锁」
+      unlockChatShell()
+      restoreRoomQuiet(ep)
     } else {
-      hideEndOverlay()
+      lockChatShell()
     }
   }
 
@@ -308,6 +472,9 @@
             var cur = ns.state && ns.state.episode
             if (!cur || !video.duration) return
             if ($('vprogI')) $('vprogI').style.width = Math.min(100, video.currentTime / video.duration * 100) + '%'
+            var ratio = video.currentTime / video.duration
+            // 过半就预取讨论，不必等播完再点
+            if (ratio >= 0.55 || cur.unlocked) warmOpenRoom(cur)
             if (Date.now() - lastSent < 4000) return
             lastSent = Date.now()
             // 中途只记进度/解锁讨论，不弹出「已看完」
@@ -319,22 +486,33 @@
           video.addEventListener('ended', function () {
             var cur = ns.state && ns.state.episode
             if (!cur) return
+            var already = !!cur.unlocked
+            warmOpenRoom(cur)
             ns.api('/api/academy/episodes/' + cur.id + '/progress', { percent: 100 })
               .then(function (data) {
-                markUnlocked(data || { unlocked: true }, cur, { showEnd: true })
+                // 重看同一集：仍可点进讨论，但不必再挡在「解锁」态
+                markUnlocked(data || { unlocked: true }, cur, { showEnd: !already })
+                if (already) {
+                  unlockChatShell()
+                  showEndOverlay()
+                }
               })
               .catch(function () {
                 cur.unlocked = true
+                warmOpenRoom(cur)
+                unlockChatShell()
                 showEndOverlay()
               })
           })
           video.addEventListener('error', function () {
             $('vbox').classList.remove('playing')
+            $('vbox').classList.remove('ended')
             ns.toast('正片加载失败，稍后再试')
           })
         }
         try { video.currentTime = 0 } catch (e) { /* ignore */ }
         $('vbox').classList.add('playing')
+        $('vbox').classList.remove('ended')
         if (typeof startDanmaku === 'function') startDanmaku()
         video.play().catch(function () { ns.toast('点一下画面再播放') })
         return
@@ -348,20 +526,7 @@
     ns._playEp = root.playEp
     root.__academyPlayEp = root.playEp
     function focusChatroom() {
-      var room = $('chatroom')
-      if (!room) return
-      try {
-        room.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      } catch (e) { /* ignore */ }
-      setTimeout(function () {
-        try {
-          room.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        } catch (e2) { /* ignore */ }
-        var inp = $('inp')
-        if (inp) {
-          try { inp.focus() } catch (e3) { /* ignore */ }
-        }
-      }, 120)
+      scrollToLatestChat()
     }
 
     root.joinChat = function () {
@@ -375,43 +540,35 @@
         return
       }
       hideEndOverlay()
+      prefetchChatAssets()
+      unlockChatShell()
       var live = !!(ns.userId && ns.userId())
       var roomMark = (live ? 'live:' : 'fake:') + ep.id
-      // 已进过房：只滚到下方对话框
-      if (shownRoom === roomMark) {
-        if ($('chatroom')) $('chatroom').classList.remove('locked-teaser')
-        if ($('stage')) $('stage').classList.add('on')
+      // 已进过房：只滚到最新消息，不弹键盘
+      if (shownRoom === roomMark && $('msgs') && $('msgs').children.length) {
         focusChatroom()
         return
       }
       shownRoom = roomMark
-      joined = true
-      try { clearTimeout(teaserTm) } catch (e) { /* ignore */ }
       if ($('msgs')) $('msgs').innerHTML = ''
-      if ($('chatroom')) $('chatroom').classList.remove('locked-teaser')
-      if ($('stage')) $('stage').classList.add('on')
-      if ($('inp')) {
-        $('inp').disabled = false
-        $('inp').placeholder = '说点什么，可以 @ 人或按住引用'
-      }
       focusChatroom()
+
       var cached = readRoom(ep.id)
-      var openTalk
-      if (live) {
-        if (typeof addSys === 'function') addSys('角色正在开口…')
-        openTalk = ns.api('/api/academy/episodes/' + ep.id + '/open', {})
-      } else if (ns.fakeOpen) {
-        openTalk = Promise.resolve(cached
-          ? { replay: true, turns: cached, nudge: ep.nudge }
-          : ns.fakeOpen())
-      } else {
-        openTalk = ns.api('/api/academy/episodes/' + ep.id + '/open', {})
+      var warmReady = openWarm.id === ep.id && openWarm.data
+      var openTalk = warmReady
+        ? Promise.resolve(openWarm.data)
+        : warmOpenRoom(ep)
+
+      if (!warmReady && !cached && live && typeof addSys === 'function') {
+        addSys('角色正在开口…')
       }
+
       openTalk.then(function (data) {
         if (typeof addSys === 'function') {
           addSys(data.replay ? '回到 #' + ep.channel_name : '你加入了 #' + ep.channel_name)
         }
-        return paintSaved(ep, data, live)
+        var instant = !!(warmReady || data.replay || cached)
+        return paintSaved(ep, data, instant)
       }).then(function () {
         focusChatroom()
       }).catch(function (err) {
@@ -422,9 +579,9 @@
         }
         var data = cached
           ? { replay: true, turns: cached, nudge: ep.nudge }
-          : (ns.fakeOpen ? ns.fakeOpen() : { turns: [] })
+          : (ns.fakeOpen ? ns.fakeOpen(ep.id) : { turns: [] })
         if (typeof addSys === 'function') addSys(data.replay ? '回到 #' + ep.channel_name : '接口没通，先用本地假对话')
-        return paintSaved(ep, data).then(function () { focusChatroom() })
+        return paintSaved(ep, data, true).then(function () { focusChatroom() })
       })
     }
     ns._joinChat = root.joinChat
@@ -468,5 +625,8 @@
         })
       })
     }
+
+    // 进页即预热舞台与角色图
+    prefetchChatAssets()
   }
 })(window)

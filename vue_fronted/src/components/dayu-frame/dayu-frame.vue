@@ -47,7 +47,7 @@ const emit = defineEmits(['parent', 'student', 'account', 'theme'])
 
 const src = computed(() => {
   const file = props.page || ''
-  const rev = file === 'drama.html' ? '20260921o' : ''
+  const rev = file === 'drama.html' ? '20260921r' : ''
   return `/static/dayu/html/${file}${rev ? `?v=${rev}` : ''}`
 })
 const iframeRef = ref(null)

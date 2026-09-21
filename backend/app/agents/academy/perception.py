@@ -85,6 +85,34 @@ EPISODE_SENSE: dict[str, dict[str, str]] = {
     },
 }
 
+# 讨论室开场/兜底口吻。按集切开，避免 E14 仍吐五兽桩台词。
+EPISODE_LINES: dict[str, dict[str, tuple[str, ...]]] = {
+    "E13": {
+        "jiahui": ("膝盖不过脚尖，重心落涌泉。笔记我整理好了。", "先站3分钟标准桩，比10分钟歪桩有用。"),
+        "yuchen": ("十桩功我连起来看懂了，就是腿还没看懂。", "先站5分钟再想原理，我认了。"),
+        "dani": ("我已经拉钩了，谁也不许偷懒。", "你站我就站。"),
+        "limo": ("站一分钟是一分钟的功夫。", "今晚我陪你站。"),
+        "chenxue": ("看完就一个想法：我也要打到那个境界。", "你敢站上来就已经赢了一半。"),
+        "shanyu": ("心不定，这一下是空的。", "聊得热闹。聊完，心别跑。"),
+    },
+    "E14": {
+        "jiahui": ("红的粒子中间有个黑三角。我第一次听见自己的声音发颤。", "眼罩一戴，标准就只剩指尖了。"),
+        "yuchen": ("关了灯我想到绿，绿漫成一大片草地。不是卡片绿，是我想到了绿。", "眼睛关了，脑子反而更吵。"),
+        "dani": ("卡片是平的。我搓边却摸到棱。老师说是大脑把信号放大了。", "关灯那一下我抓住你袖子了，别笑。"),
+        "limo": ("黄的，方的。就是知道。为什么，我还说不清。", "摸到了。别问我怎么摸到的。"),
+        "chenxue": ("蓝的圆的，看得清楚。边上那点联想不重要，我掐了。", "别怕黑。黑只是把眼睛关了。"),
+        "shanyu": ("眼睛关了，世界不会关。", "聊得热闹。聊完，心别跑。"),
+    },
+    "EH01": {
+        "jiahui": ("我把那首诗抄进笔记：冲天香阵透长安，满城尽带黄金甲。", "种姓那面墙，我先把名字和顺序记下来了。"),
+        "yuchen": ("我盯着画问：黄巢最后当上皇帝了没有。老师说称帝四年就没了。", "榜上没有名字的时候，人会把整张榜烧掉吗？"),
+        "dani": ("他杀那么多人，里面也有孩子。老师说是榜和大旱先把他逼到墙角。", "听完我有点难受，但还想听完。"),
+        "limo": ("听到杀遍贵族，我的手自己握紧了。诗我没抄，拳头记得。", "油画里的甲，比字更沉。"),
+        "chenxue": ("中国为什么没有种姓？不赶尽杀绝，世家后代会不会报仇？", "这堂课不像讲故事，像在问我们站哪边。"),
+        "shanyu": ("历史课听完了。问完再离开。", "聊得热闹。聊完，心别跑。"),
+    },
+}
+
 # 特辑不进主线幕序。只站在这一集里答。
 SPECIAL_BOX: dict[str, str] = {
     "EH01": "历史课特辑·博物馆黄巢篇",
@@ -136,6 +164,54 @@ ACT_SENSE: dict[str, tuple[str, ...]] = {
 }
 
 
+def sample_lines(character_key: str, episode_id: str | None = None) -> tuple[str, ...]:
+    """本集口吻样本；优先剧集包，其次 EPISODE_LINES，再回落角色默认 samples。"""
+    from app.agents.academy.characters import CHARACTERS
+    from app.agents.academy.packs import pack_lines
+
+    raw = (episode_id or "").strip().upper()
+    from_pack = pack_lines(raw, character_key) if raw else ()
+    if from_pack:
+        return from_pack
+    by_ep = EPISODE_LINES.get(raw) or {}
+    if character_key in by_ep:
+        return by_ep[character_key]
+    char = CHARACTERS.get(character_key)
+    return char.samples if char else ()
+
+
+def messages_fit_episode(episode_id: str, messages: list[dict] | None) -> bool:
+    """已落库的讨论是否像本集。串集（如 E14 仍是站桩）返回 False，便于重开。"""
+    import re
+
+    from app.agents.academy.packs import pack_fit
+
+    rows = list(messages or [])
+    if not rows:
+        return True
+    blob = "".join(str(row.get("text") or "") for row in rows)
+    eid = (episode_id or "").strip().upper()
+    fit = pack_fit(eid)
+    must_have = fit.get("must_have") or ()
+    must_not = fit.get("must_not_alone") or ()
+    if must_have or must_not:
+        has_good = any(token in blob for token in must_have) if must_have else True
+        has_bad = any(token in blob for token in must_not) if must_not else False
+        if has_bad and not has_good:
+            return False
+        return True
+    stake = bool(re.search(r"站桩|标准桩|十桩|涌泉|膝盖不过脚尖", blob))
+    blind = bool(re.search(r"眼罩|卡片|关灯|摸到|草地|粒子|棱|田小静", blob))
+    hist = bool(re.search(r"黄巢|种姓|博物馆|黄金甲|大齐|冲天香阵", blob))
+    if eid == "E14":
+        return not (stake and not blind)
+    if eid == "EH01":
+        return not ((stake or blind) and not hist)
+    if eid == "E13":
+        return not ((blind and not stake) or (hist and not stake))
+    return True
+
+
 def episode_no(episode_id: str) -> int:
     raw = (episode_id or "").strip().upper()
     if raw in SPECIAL_BOX:
@@ -157,8 +233,10 @@ def act_index(episode_id: str) -> int:
 
 def time_box(character_key: str, episode_id: str, episode_title: str) -> str:
     """给模型的时间约束。未走到的幕名和禁词都写明。"""
+    from app.agents.academy.packs import pack_sense
+
     raw = (episode_id or "").strip().upper()
-    sense_map = EPISODE_SENSE.get(raw, {})
+    sense_map = pack_sense(raw) or EPISODE_SENSE.get(raw, {})
     sense = sense_map.get(character_key) or "这一集你只记得自己在场。"
     if raw in SPECIAL_BOX:
         return (
