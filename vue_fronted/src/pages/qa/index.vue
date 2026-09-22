@@ -4,6 +4,12 @@
 
     <view class="qa-header">
 
+      <view class="nav-back" @tap="goBack">
+
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+
+      </view>
+
       <text class="nav-title">学科答疑</text>
 
       <view class="nav-history" @tap="openSessionSheet"><text>历史</text></view>
@@ -275,8 +281,6 @@
       </view>
     </view>
 
-    <app-tab-bar active="qa" />
-
   </view>
 
 </template>
@@ -287,8 +291,7 @@
 
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import AppTabBar from '@/components/app-tab-bar/app-tab-bar.vue'
-import { switchMainTab } from '@/utils/mainTabs.js'
+import { studentHomeUrl, isClassicUi } from '@/utils/uiSkin.js'
 
 import {
 
@@ -444,7 +447,12 @@ const learnerGrade = ref('')
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
 
-function goBack() { switchMainTab('/pages/dayu/home') }
+function goBack() {
+  uni.navigateBack({
+    delta: 1,
+    fail: () => uni.reLaunch({ url: studentHomeUrl() }),
+  })
+}
 
 
 
@@ -907,6 +915,15 @@ async function applySuggestedSubject() {
 }
 
 onLoad((opts) => {
+  // 大宇壳走 /pages/qa/dayu（自带图二底栏）；本页仅旧版原生答疑
+  if (!isClassicUi()) {
+    const qs = Object.entries(opts || {})
+      .filter(([, v]) => v != null && String(v).trim())
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v).trim())}`)
+      .join('&')
+    uni.reLaunch({ url: qs ? `/pages/qa/dayu?${qs}` : '/pages/qa/dayu' })
+    return
+  }
   const from = String(opts?.from || '').trim()
   let rawSubject = String(opts?.subject || '').trim()
   let rawHint = String(opts?.hint || '').trim()
@@ -1711,7 +1728,7 @@ onBeforeUnmount(() => {
 
   color: var(--text);
 
-  padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 
   box-sizing: border-box;
 
