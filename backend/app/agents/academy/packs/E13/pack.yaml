@@ -7,7 +7,7 @@ poster: /static/dayu/assets/miji/mj-tfsd.jpg
 oss_key: ""
 switchable: true
 chips:
-  - 这集你印象最深的是什么？
+  - 这一集里师父哪一下你记得最清？
   - 今晚站桩谁跟我一组？
   - 我觉得我站不住怎么办？
   - 师父，十桩功最难的是哪一桩？
@@ -45,6 +45,7 @@ plot:
   can_talk: 院子站桩、十桩功、定、膝盖与涌泉
   cannot_know: 第一扇门、五角迷宫、738
   teacher: 善雨
+  synopsis: 院子里练五兽桩：心要定，膝盖不过脚尖，重心落涌泉，十桩功连起来练。
 fit:
   must_have: [站桩, 桩, 十桩, 涌泉]
   must_not_alone: [眼罩, 黄巢, 种姓]

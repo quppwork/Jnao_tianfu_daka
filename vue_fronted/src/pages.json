@@ -60,7 +60,7 @@
     {
       "path": "pages/index",
       "style": {
-        "navigationBarTitleText": "跳转中",
+        "navigationBarTitleText": "JNAO",
         "navigationStyle": "custom"
       }
     },

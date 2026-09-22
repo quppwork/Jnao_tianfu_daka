@@ -8,6 +8,7 @@ import {
   applySwitchParentSession,
 } from '@/utils/api/auth.js'
 import { getChildUserId, invalidatePageAuthCache } from '@/utils/api/client.js'
+import { parentHomeUrl, studentHomeUrl } from '@/utils/uiSkin.js'
 
 const LAST_STUDENT_KEY = 'jnao_last_student_id'
 
@@ -42,7 +43,7 @@ export async function goLinkedParentHome() {
     const data = await switchParentAccount(uid)
     applySwitchParentSession(data)
     uni.reLaunch({
-      url: '/pages/parent/dayu',
+      url: parentHomeUrl(),
       complete: () => { try { uni.hideLoading() } catch (_) { /* ignore */ } },
     })
   } catch (e) {
@@ -68,7 +69,7 @@ export async function goLinkedStudentHome() {
     const data = await switchStudentAccount(parentId, target || undefined)
     applySwitchChildSession(data)
     uni.reLaunch({
-      url: '/pages/dayu/home',
+      url: studentHomeUrl(),
       complete: () => { try { uni.hideLoading() } catch (_) { /* ignore */ } },
     })
   } catch (e) {

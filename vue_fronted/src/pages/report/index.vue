@@ -5,6 +5,7 @@
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import DayuFrame from '@/components/dayu-frame/dayu-frame.vue'
+import { studentHomeUrl } from '@/utils/uiSkin.js'
 
 /** 一比一复刻 kimi report-kid / report-v3；旧 Vue 报告 UI 已下线 */
 const htmlPage = ref('report-kid.html')
@@ -14,7 +15,7 @@ const backPath = ref('')
 function resolveBackPath(from, isAdult) {
   const f = String(from || '').toLowerCase()
   if (f === 'training') return '/pages/training/dayu'
-  if (f === 'onboarding') return '/pages/dayu/home'
+  if (f === 'onboarding') return studentHomeUrl()
   if (f === 'hub' || f === 'talent') return '/pages/talent/hub'
   // 默认：儿童卷回训练，成人卷回天赋大厅
   return isAdult ? '/pages/talent/hub' : '/pages/training/dayu'

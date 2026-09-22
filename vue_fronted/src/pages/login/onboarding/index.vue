@@ -160,6 +160,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { requirePageAuth, getChildUserId, saveProfile, fetchProfile } from '@/utils/userApi.js'
 import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
+import { studentHomeUrl } from '@/utils/uiSkin.js'
 
 const step = ref(1)
 const studentType = ref('')
@@ -306,7 +307,7 @@ function nextDataStep() {
 
 async function goHome() {
   try { await persistOnboarding({ finalize: true }) } catch (_) {}
-  uni.redirectTo({ url: '/pages/dayu/home' })
+  uni.redirectTo({ url: studentHomeUrl() })
 }
 
 onMounted(async () => {
@@ -329,7 +330,7 @@ onMounted(async () => {
     const p = await fetchProfile(uid)
     const ob = p.profile_json?.onboarding || {}
     if (ob.completed_at) {
-      uni.redirectTo({ url: '/pages/dayu/home' })
+      uni.redirectTo({ url: studentHomeUrl() })
       return
     }
     if (ob.student_type) studentType.value = ob.student_type

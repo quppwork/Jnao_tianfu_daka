@@ -1,5 +1,7 @@
 /** 微信内 H5 家长登录辅助 */
 
+import { parentHomeUrl } from './uiSkin.js'
+
 export function isWeChatBrowser() {
   if (typeof navigator === 'undefined') return false
   return /MicroMessenger/i.test(navigator.userAgent || '')
@@ -228,5 +230,5 @@ export function redirectParentNextStep(nextStep, bindTicket = '') {
     uni.reLaunch({ url: '/pages/login/complete-parent?from=wechat' })
     return
   }
-  uni.reLaunch({ url: '/pages/parent/dayu' })
+  uni.reLaunch({ url: parentHomeUrl() })
 }

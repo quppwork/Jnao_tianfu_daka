@@ -16,10 +16,19 @@ from app.agents.academy.catalog import (
     get_episode,
 )
 from app.agents.academy.characters import CHARACTERS
+from app.agents.academy.packs import get_pack
 from app.db.models import AcademyProgress
 from app.services.academy import playback, progress as progress_store
 from app.services.academy.demo import CAMP
 from app.services.academy.profile import talent_badge
+
+
+def episode_chips(episode: Episode) -> list[str]:
+    """用户视角问剧情的快捷提示；优先剧集包。"""
+    pack = get_pack(episode.id)
+    if pack and pack.chips:
+        return list(pack.chips)
+    return list(episode.chips)
 
 
 def episode_status(*, unlocked: bool, media: str, prev_ready: bool, act_locked: bool) -> str:
@@ -172,7 +181,7 @@ def _channel(episode: Episode, row: AcademyProgress | None, *, user_id: int | No
         "playable": media != "none",
         "unlocked": progress_store.is_unlocked(row),
         "percent": int(row.percent) if row else 0,
-        "chips": list(episode.chips),
+        "chips": episode_chips(episode),
         "nudge": {
             "text": f"善雨导师提醒：聊完记得完成今晚训练——{episode.task}，到大宇智能体打卡。",
             "href": "train.html",

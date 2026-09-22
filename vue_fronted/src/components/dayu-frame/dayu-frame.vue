@@ -22,6 +22,7 @@ import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { switchMainTab, goAppPage } from '@/utils/mainTabs.js'
 import { goLinkedParentHome, goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
 import { fetchUsageSummary, formatTokenCount } from '@/utils/api/usage.js'
+import { isClassicUi, studentHomeUrl } from '@/utils/uiSkin.js'
 
 const USAGE_PILL_PAGES = new Set(['parent.html', 'pset.html'])
 
@@ -271,13 +272,17 @@ function handleMessage(ev) {
   if (data.type !== 'dayu-nav' || !data.path) return
   let path = String(data.path)
   const base = path.split('?')[0]
-  // 旧 /pages/index 对话页已废弃 → 大宇首页
+  // 旧 /pages/index：大宇模式回大宇首页；旧版皮肤保留原生首页
   if (base === '/pages/index') {
-    switchMainTab('/pages/dayu/home')
+    if (isClassicUi()) {
+      goAppPage(studentHomeUrl())
+    } else {
+      switchMainTab('/pages/dayu/home')
+    }
     return
   }
-  if (base === '/pages/training/index') path = '/pages/training/dayu'
-  if (base === '/pages/qa/index' && !path.includes('?')) path = '/pages/qa/dayu'
+  if (base === '/pages/training/index' && !isClassicUi()) path = '/pages/training/dayu'
+  if (base === '/pages/qa/index' && !path.includes('?') && !isClassicUi()) path = '/pages/qa/dayu'
   // 家长账户登录入口 / 切到关联家长版
   if (path.includes('role=parent')) {
     emit('parent')
@@ -308,7 +313,7 @@ function handleMessage(ev) {
         fail: () => goAppPage(path),
       })
     } else {
-      goAppPage('/pages/parent/dayu')
+      goAppPage(isClassicUi() ? '/pages/parent/index' : '/pages/parent/dayu')
     }
     return
   }

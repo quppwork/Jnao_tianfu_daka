@@ -570,6 +570,7 @@ import { resolvePlanItemSkill, ELECTIVE_ABILITIES } from '@/utils/trainingCardDi
 import { MAIN_TABS, switchMainTab } from '@/utils/mainTabs.js'
 import { ATTITUDE_SCORES, attitudeDescFor, emptyCheckinForm } from '@/composables/useTrainingCheckin.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
+import { isClassicUi } from '@/utils/uiSkin.js'
 
 const MIN = 20
 const MAX = 720
@@ -2217,6 +2218,10 @@ async function devResetTalentAction() {
 }
 
 onMounted(() => {
+  if (isClassicUi()) {
+    uni.reLaunch({ url: '/pages/training/index' })
+    return
+  }
   bootstrap().then(() => {
     if (devMode.value) loadDevStatus()
   })

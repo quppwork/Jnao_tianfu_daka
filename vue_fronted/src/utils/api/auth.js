@@ -18,6 +18,7 @@ import {
   markPageAuthValidated,
   resetSessionExpiryGuard,
 } from './client.js'
+import { parentHomeUrl } from '../uiSkin.js'
 
 export function saveAuthSession(data) {
   _storeAuth(data)
@@ -166,7 +167,7 @@ export function parentNeedsAccountReady(data) {
 
 /** 家长登录/注册后统一跳转目标；`__bind_phone__` 表示需走绑手机注册流 */
 export function resolveParentAuthTarget(data) {
-  if (data?.role !== 'parent') return '/pages/parent/dayu'
+  if (data?.role !== 'parent') return parentHomeUrl()
   if (parentNeedsAccountReady(data)) {
     if (data.next_step === 'bind-phone') return '__bind_phone__'
     return '/pages/login/complete-parent' + (data.login_channel === 'wechat' ? '?from=wechat' : '')
@@ -174,7 +175,7 @@ export function resolveParentAuthTarget(data) {
   if (parentNeedsProfileComplete(data)) {
     return '/pages/login/complete-parent'
   }
-  return '/pages/parent/dayu'
+  return parentHomeUrl()
 }
 
 /** 同家长下切换孩子账户后写入 session（Cookie 模式） */

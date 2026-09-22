@@ -109,6 +109,7 @@ import {
 } from '@/utils/guideUi.js'
 import { goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
 import { PARENT_TABS, switchParentTab, goAppPage } from '@/utils/mainTabs.js'
+import { isClassicUi, parentHomeUrl } from '@/utils/uiSkin.js'
 
 const FOCUS_KEY = 'jnao_parent_focus_child_id'
 
@@ -306,6 +307,10 @@ function stopStream() {
 }
 
 onMounted(async () => {
+  if (isClassicUi()) {
+    uni.reLaunch({ url: parentHomeUrl() })
+    return
+  }
   // 家长首页 intro 可先出壳；会话后台加载，避免切换账号后整页转圈
   const auth = await requirePageAuth('parent')
   if (!auth.ok) return

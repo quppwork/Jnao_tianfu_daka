@@ -17,6 +17,7 @@
           </view>
           <view class="icons">
             <view class="themebtn" @tap="toggleTheme">{{ isLight ? '☀️' : '🌙' }}</view>
+            <view class="logoutbtn" @tap="doLogout">退出</view>
           </view>
         </view>
 
@@ -138,6 +139,7 @@ import {
   requirePageAuth,
   sendGuideMessageStream,
   switchChildAccount,
+  logoutAndGoLogin,
 } from '@/utils/userApi.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 import { MAIN_TABS, HOME_CHIPS, switchMainTab } from '@/utils/mainTabs.js'
@@ -150,6 +152,7 @@ import {
   normalizeNavigateActions,
   trimGuideMessages,
 } from '@/utils/guideUi.js'
+import { isClassicUi, studentHomeUrl } from '@/utils/uiSkin.js'
 
 const FALLBACK_WELCOME = '你好！我是张宇老师的智能体——大宇智能体，你的专属 AI 教练。点上方入口开始，或直接问我。'
 
@@ -214,6 +217,17 @@ function toggleTheme() {
   } catch (_) { /* ignore */ }
 }
 
+function doLogout() {
+  uni.showModal({
+    title: '退出登录',
+    content: '确定退出当前账号？',
+    success: (r) => {
+      if (!r.confirm) return
+      logoutAndGoLogin('/pages/login/index?role=student')
+    },
+  })
+}
+
 function goParentLogin() {
   goLinkedParentHome()
 }
@@ -246,7 +260,7 @@ async function switchToChild(targetId) {
     applySwitchChildSession(data)
     if (data?.nickname) currentUserDisplay.value = String(data.nickname).trim()
     uni.reLaunch({
-      url: '/pages/dayu/home',
+      url: studentHomeUrl(),
       complete: () => { try { uni.hideLoading() } catch (_) { /* ignore */ } },
     })
   } catch (e) {
@@ -522,6 +536,10 @@ async function initHome(uid) {
 }
 
 onMounted(async () => {
+  if (isClassicUi()) {
+    uni.reLaunch({ url: studentHomeUrl() })
+    return
+  }
   hydrateFromLocal()
   // 本地已有昵称时立刻出壳，不再整页转圈等网络
   if (currentUserDisplay.value && currentUserDisplay.value !== '学员') {
@@ -614,6 +632,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 4px;
 }
 .themebtn {
   width: 36px;
@@ -622,6 +641,21 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   font-size: 17px;
+  flex-shrink: 0;
+}
+.logoutbtn {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #c8cdd8;
+  border: 1.5px solid rgba(200, 205, 216, 0.35);
+  border-radius: 99px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.app.lt .logoutbtn {
+  color: #5a6274;
+  border-color: rgba(90, 98, 116, 0.35);
 }
 .acctbtn {
   font-size: 11.5px;

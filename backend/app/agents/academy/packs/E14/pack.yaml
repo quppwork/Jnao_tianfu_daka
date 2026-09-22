@@ -46,6 +46,7 @@ plot:
   can_talk: 圆形教室、眼罩、卡片、各人摸到或想到的那一下
   cannot_know: 地宫、五角迷宫、738
   teacher: 田小静
+  synopsis: 圆形教室蒙眼认卡：眼睛关了世界没关，指尖和脑子各自摸到颜色、棱和画面。
 fit:
   must_have: [眼罩, 卡片, 关灯, 摸]
   must_not_alone: [站桩, 标准桩, 十桩, 黄巢]

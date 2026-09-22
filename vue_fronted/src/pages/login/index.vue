@@ -9,6 +9,22 @@
         </view>
         <text class="subtitle">欢迎来到天赋成长平台</text>
         <text class="sub-desc">天赋测评 · 每日训练 · 成长记录</text>
+        <view class="skin-switch" role="tablist">
+          <view
+            class="skin-opt"
+            :class="{ active: uiSkin === 'dayu' }"
+            @click="chooseSkin('dayu')"
+          >
+            <text>大宇版</text>
+          </view>
+          <view
+            class="skin-opt"
+            :class="{ active: uiSkin === 'classic' }"
+            @click="chooseSkin('classic')"
+          >
+            <text>旧版本</text>
+          </view>
+        </view>
       </view>
 
       <!-- 入口选择：家长 / 孩子（不再提供微信一键登录） -->
@@ -186,8 +202,20 @@ import {
   minDelay,
 } from '@/utils/useLoginFlow.js'
 import { consumePostLoginRoute, sanitizeAuthForLoginEntry, prepareRoleLoginEntry } from '@/utils/appSession.js'
+import {
+  getUiSkin,
+  setUiSkin,
+  parentHomeUrl,
+  studentHomeUrl,
+} from '@/utils/uiSkin.js'
 
 const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
+
+const uiSkin = ref(getUiSkin())
+
+function chooseSkin(skin) {
+  uiSkin.value = setUiSkin(skin)
+}
 
 const form = ref({
   phone: '',
@@ -294,17 +322,17 @@ function tryRedirectIfLoggedIn() {
     const role = raw ? JSON.parse(raw).role : null
     if (loginEntryRole.value === 'student') {
       if (role === 'student') {
-        uni.reLaunch({ url: '/pages/dayu/home' })
+        uni.reLaunch({ url: studentHomeUrl() })
         return true
       }
       return false
     }
     if (role === 'parent') {
-      uni.reLaunch({ url: '/pages/parent/dayu' })
+      uni.reLaunch({ url: parentHomeUrl() })
       return true
     }
     if (role === 'student') {
-      uni.reLaunch({ url: '/pages/dayu/home' })
+      uni.reLaunch({ url: studentHomeUrl() })
       return true
     }
   } catch (_) { /* ignore */ }
@@ -592,7 +620,9 @@ async function routeParentHome(data) {
     goRegister(form.value.phone.trim(), data.bind_ticket || pendingBindTicket.value)
     return
   }
-  if (target === '/pages/parent/dayu') target = consumePostLoginRoute(target, 'parent')
+  if (target === parentHomeUrl() || target === '/pages/parent/dayu' || target === '/pages/parent/index') {
+    target = consumePostLoginRoute(target, 'parent')
+  }
   uni.redirectTo({ url: target })
 }
 
@@ -600,22 +630,24 @@ async function routeStudentHome(data) {
   clearLoginGuard()
   saveAuthSession(data)
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
-  let target = '/pages/dayu/home'
+  let target = studentHomeUrl()
   try {
     if (await studentNeedsOnboarding(data.child_user_id)) {
       target = '/pages/login/onboarding/index'
     }
   } catch (e) {
     console.error('[login] studentNeedsOnboarding 检查失败，先进首页:', e?.message || e)
-    target = '/pages/dayu/home'
+    target = studentHomeUrl()
   }
-  if (target === '/pages/dayu/home') target = consumePostLoginRoute(target, 'student')
+  if (target === studentHomeUrl() || target === '/pages/dayu/home' || target === '/pages/index') {
+    target = consumePostLoginRoute(target, 'student')
+  }
   uni.reLaunch({ url: target })
 }
 
 function postLoginFallbackUrl() {
   if (form.value.role === 'student' || loginEntryRole.value === 'student') {
-    return '/pages/dayu/home'
+    return studentHomeUrl()
   }
   return inferHomeFromSession()
 }
@@ -784,6 +816,42 @@ onUnmounted(() => {
 .logo-ai { font-weight:300; }
 .subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; line-height:1.4; margin-bottom:2px; }
 .sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.4; margin-bottom:0; opacity:0.85; }
+.skin-switch {
+  display: flex;
+  margin: 16px auto 0;
+  max-width: 240px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.skin-opt {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.skin-opt text {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 500;
+}
+.skin-opt.active {
+  background: linear-gradient(135deg, rgba(0,210,255,0.28), rgba(0,136,204,0.22));
+  border: 1px solid rgba(0,210,255,0.25);
+}
+.skin-opt.active text { color: #fff; font-weight: 600; }
+[data-theme="white"] .skin-switch {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+[data-theme="white"] .skin-opt text { color: #6b7280; }
+[data-theme="white"] .skin-opt.active {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+[data-theme="white"] .skin-opt.active text { color: #fff; }
 .login-main { margin-top:60px; }
 .login-flow { margin-top:20px; padding-top:0; }
 .page-footer { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06); }

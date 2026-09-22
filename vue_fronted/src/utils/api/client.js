@@ -25,6 +25,7 @@ import {
   migrateAuthStorage,
   clearAllAuthSessions,
 } from '../appSession.js'
+import { parentHomeUrl, studentHomeUrl } from '../uiSkin.js'
 
 const CHILD_KEY = 'jnao_child_user_id'
 const PARENT_SLOT_KEY = 'jnao_parent_user_id'
@@ -237,11 +238,11 @@ export async function requirePageAuth(kind) {
   if (!session?.userId) {
     if (kind === 'student' && snap.parent?.userId) {
       // 家长 session 误入学生页：回家长版，切勿清登录态
-      try { uni.reLaunch({ url: '/pages/parent/dayu' }) } catch (_) { /* ignore */ }
+      try { uni.reLaunch({ url: parentHomeUrl() }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
     if (kind === 'parent' && snap.student?.userId) {
-      try { uni.reLaunch({ url: '/pages/dayu/home' }) } catch (_) { /* ignore */ }
+      try { uni.reLaunch({ url: studentHomeUrl() }) } catch (_) { /* ignore */ }
       return { ok: false, reason: 'wrong_role' }
     }
     redirectToLoginForKind(kind, { silent: true })
@@ -292,11 +293,11 @@ export async function requirePageAuth(kind) {
         if (raw) role = JSON.parse(raw).role || role
       } catch (_) { /* ignore */ }
       if (kind === 'student' && (role === 'parent' || snap.parent?.userId)) {
-        try { uni.reLaunch({ url: '/pages/parent/dayu' }) } catch (_) { /* ignore */ }
+        try { uni.reLaunch({ url: parentHomeUrl() }) } catch (_) { /* ignore */ }
         return { ok: false, reason: 'wrong_role' }
       }
       if (kind === 'parent' && role === 'student') {
-        try { uni.reLaunch({ url: '/pages/dayu/home' }) } catch (_) { /* ignore */ }
+        try { uni.reLaunch({ url: studentHomeUrl() }) } catch (_) { /* ignore */ }
         return { ok: false, reason: 'wrong_role' }
       }
       redirectToLoginForKind(kind)

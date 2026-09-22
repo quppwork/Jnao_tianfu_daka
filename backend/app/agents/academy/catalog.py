@@ -72,7 +72,7 @@ EPISODES: dict[str, Episode] = {
             duration_label="正片 12:30",
             poster="/static/dayu/assets/miji/mj-tfsd.jpg",
             chips=(
-                "这集你印象最深的是什么？",
+                "这一集里师父哪一下你记得最清？",
                 "今晚站桩谁跟我一组？",
                 "我觉得我站不住怎么办？",
                 "师父，十桩功最难的是哪一桩？",

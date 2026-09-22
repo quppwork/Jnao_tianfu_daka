@@ -5,9 +5,11 @@ from app.agents.academy.packs.loader import (
     all_packs,
     clear_pack_cache,
     get_pack,
+    pack_fact_seed,
     pack_fit,
     pack_lines,
     pack_sense,
+    pack_synopsis,
     switchable_ids,
 )
 
@@ -16,8 +18,10 @@ __all__ = [
     "all_packs",
     "clear_pack_cache",
     "get_pack",
+    "pack_fact_seed",
     "pack_fit",
     "pack_lines",
     "pack_sense",
+    "pack_synopsis",
     "switchable_ids",
 ]

@@ -134,5 +134,44 @@ def pack_fit(episode_id: str) -> dict[str, tuple[str, ...]]:
     return dict(pack.fit) if pack else {}
 
 
+def pack_synopsis(episode_id: str | None) -> str:
+    pack = get_pack(episode_id)
+    if not pack or not isinstance(pack.plot, dict):
+        return ""
+    return str(pack.plot.get("synopsis") or "").strip()[:180]
+
+
+def pack_fact_seed(
+    episode_id: str | None,
+    user_ask: str | None,
+    character_key: str = "",
+) -> str:
+    """按用户问句匹配剧集包事实种子。对不上则返回空，禁止拿别的题顶上。"""
+    pack = get_pack(episode_id)
+    if not pack:
+        return ""
+    ask = (user_ask or "").strip()
+    if not ask:
+        return ""
+    facts = pack.plot.get("facts") if isinstance(pack.plot, dict) else None
+    if not isinstance(facts, list):
+        return ""
+    key = (character_key or "").strip()
+    for row in facts:
+        if not isinstance(row, dict):
+            continue
+        matches = row.get("match") or []
+        if isinstance(matches, str):
+            matches = [matches]
+        if not any(str(m) and str(m) in ask for m in matches):
+            continue
+        by = row.get("by") if isinstance(row.get("by"), dict) else {}
+        picked = (by.get(key) if key else None) or row.get("seed") or ""
+        text = str(picked).strip()
+        if text:
+            return text[:80]
+    return ""
+
+
 def clear_pack_cache() -> None:
     all_packs.cache_clear()

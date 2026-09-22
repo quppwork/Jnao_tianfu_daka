@@ -84,6 +84,7 @@ import {
 } from '@/utils/userApi.js'
 import { validatePasswordClient, PASSWORD_HINT } from '@/utils/passwordPolicy.js'
 import { validateRealNameClient, validateNicknameClient } from '@/utils/namePolicy.js'
+import { parentHomeUrl } from '@/utils/uiSkin.js'
 
 const parentId = ref(null)
 const missing = ref([])
@@ -116,7 +117,7 @@ onMounted(async () => {
     form.value.realName = p.real_name || ''
     form.value.nickname = p.nickname || ''
     if (p.account_ready || (p.profile_complete && !isWechat.value)) {
-      uni.redirectTo({ url: '/pages/parent/dayu' })
+      uni.redirectTo({ url: parentHomeUrl() })
     }
   } catch (_) {
     goBack()
@@ -170,7 +171,7 @@ async function submit() {
       return
     }
     saveParentGateCache({ role: 'parent', ...p })
-    uni.redirectTo({ url: '/pages/parent/dayu' })
+    uni.redirectTo({ url: parentHomeUrl() })
   } catch (e) {
     uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {

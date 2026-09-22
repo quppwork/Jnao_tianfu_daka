@@ -71,7 +71,7 @@ def rank_speakers(
     text: str,
     affect: dict | None,
 ) -> list[str]:
-    """被点名的先说。其余按激活分：底色、话题、情绪、刚说过的降一档。"""
+    """被点名的先说。其余按激活分。默认 2 人，剧情问句可到 3 人：主答 + 旁听补句。"""
     from app.agents.academy.characters import CHARACTERS
     from app.agents.academy.harness import detect_intent
 
@@ -107,9 +107,18 @@ def rank_speakers(
         speakers.append(mention)
     if quote_who in CHARACTERS and quote_who not in speakers:
         speakers.append(quote_who)
+    # 用户视角剧情问：多人监听；点名/引用仍以 2 人为主，避免抢话
+    raw = (text or "").strip()
+    want = 2
+    if mention or quote_who:
+        want = 2
+    elif intent in ("ep", "feel") or ("？" in raw or "?" in raw):
+        want = 3
+    elif len(raw) >= 10:
+        want = 3
     for key in ordered:
-        if len(speakers) >= 2:
+        if len(speakers) >= want:
             break
         if key not in speakers:
             speakers.append(key)
-    return speakers[:2]
+    return speakers[:want]

@@ -3,6 +3,8 @@
  * 纯函数可单测；异步校验见 userApi.requirePageAuth
  */
 
+import { isClassicUi, studentHomeUrl } from './uiSkin.js'
+
 export const PUBLIC_PATH_PREFIXES = [
   '/pages/login/',
   '/pages/admin/login',
@@ -427,11 +429,12 @@ export function routeToUrl(route, query = '') {
   return q ? `${route}?${q}` : route
 }
 
-/** 旧学生首页 /pages/index 已废弃，一律回大宇壳首页 */
+/** 旧学生首页 /pages/index：大宇模式下回大宇壳；旧版皮肤保留 */
 function normalizeStudentHomeRoute(route, query = '') {
   const base = normalizePath(route).split('?')[0]
   if (base === '/pages/index') {
-    return '/pages/dayu/home'
+    if (isClassicUi()) return routeToUrl(route, query)
+    return studentHomeUrl()
   }
   return routeToUrl(route, query)
 }

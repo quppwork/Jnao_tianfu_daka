@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 
@@ -17,6 +18,8 @@ log = logging.getLogger(__name__)
 _SAVER = None
 _STORE = InMemoryStore()
 _CONN = None
+_GENERATION = 0
+_LOCK: asyncio.Lock | None = None
 
 
 def _database_url() -> str:
@@ -42,12 +45,37 @@ def _mysql_uri(url: str) -> str:
     return url
 
 
+def _drop_bots() -> None:
+    try:
+        from app.agents.academy import graph as academy_graph
+
+        academy_graph._BOTS.clear()
+    except Exception:
+        pass
+
+
+def reset_checkpointer() -> None:
+    """连接坏掉或 event loop 重建后，丢掉旧 saver / 已编译图。"""
+    global _SAVER, _CONN, _GENERATION
+    conn = _CONN
+    _SAVER = None
+    _CONN = None
+    _GENERATION += 1
+    _drop_bots()
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def checkpointer():
-    global _SAVER
+    """同步取检查点。未就绪时用内存，禁止抛错打断发言。"""
+    global _SAVER, _GENERATION
     if _SAVER is None:
-        if not _use_memory():
-            raise RuntimeError("学院检查点还没就绪")
         _SAVER = InMemorySaver()
+        _GENERATION += 1
+        log.warning("学院检查点尚未异步就绪，本轮用内存")
     return _SAVER
 
 
@@ -55,36 +83,62 @@ def memory_store():
     return _STORE
 
 
+def checkpointer_generation() -> int:
+    return _GENERATION
+
+
+def _lock() -> asyncio.Lock:
+    global _LOCK
+    if _LOCK is None:
+        _LOCK = asyncio.Lock()
+    return _LOCK
+
+
 async def ensure_checkpointer():
     """第一次开口前建好检查点。图编译会用到它，必须先于 bot_graph。"""
-    global _SAVER, _CONN
-    if _SAVER is not None:
-        return _SAVER
-    if _use_memory():
-        _SAVER = InMemorySaver()
-        return _SAVER
-    try:
-        import aiomysql
-        from langgraph.checkpoint.mysql.aio import AIOMySQLSaver
+    global _SAVER, _CONN, _GENERATION
+    async with _lock():
+        if _SAVER is not None and not isinstance(_SAVER, InMemorySaver):
+            return _SAVER
+        if _use_memory():
+            if _SAVER is None:
+                _SAVER = InMemorySaver()
+                _GENERATION += 1
+            return _SAVER
+        try:
+            import aiomysql
+            from langgraph.checkpoint.mysql.aio import AIOMySQLSaver
 
-        info = AIOMySQLSaver.parse_conn_string(_mysql_uri(_database_url()))
-        _CONN = await aiomysql.connect(
-            host=info.get("host") or "127.0.0.1",
-            user=info.get("user"),
-            password=info.get("password") or "",
-            db=info.get("db"),
-            port=info.get("port") or 3306,
-            unix_socket=info.get("unix_socket"),
-            charset="utf8mb4",
-            autocommit=True,
-        )
-        saver = AIOMySQLSaver(_CONN)
-        await saver.setup()
-        _SAVER = saver
-    except Exception:
-        log.exception("MySQL 检查点不可用，这一轮退回内存，重启后私有记忆不会留下")
-        _SAVER = InMemorySaver()
-    return _SAVER
+            info = AIOMySQLSaver.parse_conn_string(_mysql_uri(_database_url()))
+            conn = await aiomysql.connect(
+                host=info.get("host") or "127.0.0.1",
+                user=info.get("user"),
+                password=info.get("password") or "",
+                db=info.get("db"),
+                port=info.get("port") or 3306,
+                unix_socket=info.get("unix_socket"),
+                charset="utf8mb4",
+                autocommit=True,
+            )
+            saver = AIOMySQLSaver(conn)
+            await saver.setup()
+            old = _CONN
+            _CONN = conn
+            _SAVER = saver
+            _GENERATION += 1
+            _drop_bots()
+            if old is not None and old is not conn:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+        except Exception:
+            log.exception("MySQL 检查点不可用，这一轮退回内存，重启后私有记忆不会留下")
+            if _SAVER is None:
+                _SAVER = InMemorySaver()
+                _GENERATION += 1
+                _drop_bots()
+        return _SAVER
 
 
 def thread_id(child_user_id: int | None, episode_id: str, character_key: str) -> str:

@@ -114,7 +114,6 @@ def test_reopen_keeps_the_user_line(db_session):
 
 
 def test_chat_saves_the_user_line_before_the_model(db_session, monkeypatch):
-    import pytest
     from sqlalchemy import select
 
     from app.db.models import AcademyProgress, AcademyRoom
@@ -132,8 +131,9 @@ def test_chat_saves_the_user_line_before_the_model(db_session, monkeypatch):
     ))
     db_session.commit()
 
-    with pytest.raises(RuntimeError, match="model down"):
-        asyncio.run(chat(db_session, 7, "E13", "我站不住"))
+    result = asyncio.run(chat(db_session, 7, "E13", "我站不住"))
+    assert result["turns"]
+    assert all(row["who"] != "me" for row in result["turns"])
 
     db_session.expire_all()
     room = db_session.scalar(
@@ -144,5 +144,5 @@ def test_chat_saves_the_user_line_before_the_model(db_session, monkeypatch):
     )
     assert room is not None
     assert room.user_turns == 1
-    assert room.messages[-1] == {"who": "me", "text": "我站不住"}
+    assert any(m.get("who") == "me" and m.get("text") == "我站不住" for m in room.messages)
     assert seen["prior"] == []

@@ -3,6 +3,7 @@
  */
 import { computed, ref } from 'vue'
 import { getLoggedInUserId, hasUserSession } from './api/client.js'
+import { parentHomeUrl, studentHomeUrl } from './uiSkin.js'
 
 export function minDelay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -16,8 +17,8 @@ export function inferHomeFromSession() {
   try {
     const raw = localStorage.getItem('jnao_user')
     const role = raw ? JSON.parse(raw).role : null
-    if (role === 'parent') return '/pages/parent/dayu'
-    if (role === 'student') return '/pages/dayu/home'
+    if (role === 'parent') return parentHomeUrl()
+    if (role === 'student') return studentHomeUrl()
     if (role === 'admin') return '/pages/admin/index'
   } catch (_) { /* ignore */ }
   return '/pages/login/index'

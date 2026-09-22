@@ -41,8 +41,10 @@ def _room(db: Session, user_id: int, episode_id: str) -> AcademyRoom:
 
 
 def _tail(episode: Episode, trained: bool) -> dict:
+    from app.services.academy.sector import episode_chips
+
     body = {
-        "chips": list(episode.chips),
+        "chips": episode_chips(episode),
         "training_done": trained,
         "nudge": None,
     }
@@ -158,6 +160,34 @@ async def open_room(db: Session, user_id: int, episode_id: str) -> dict:
     return {"replay": False, "turns": turns, **tail}
 
 
+def _fallback_turns(
+    episode_id: str,
+    *,
+    mention: str | None = None,
+    last_who: str | None = None,
+    avoid: list[str] | None = None,
+    user_text: str = "",
+) -> list[dict]:
+    """模型整轮挂掉时，用本集事实种子/样例台词顶上，避免前端 500。"""
+    from app.agents.academy.characters import CHARACTERS, bot_id_for
+    from app.agents.academy.harness import _fallback, wake_speakers
+
+    speakers = wake_speakers(
+        mention=mention,
+        quote_who=None,
+        last_who=last_who,
+    )
+    used = list(avoid or [])
+    turns = []
+    for key in speakers:
+        if key not in CHARACTERS:
+            continue
+        text = _fallback(CHARACTERS[key], episode_id, avoid=used, user_ask=user_text)
+        used.append(text)
+        turns.append({"who": key, "text": text, "bot_id": bot_id_for(key)})
+    return turns
+
+
 async def chat(
     db: Session,
     user_id: int,
@@ -189,29 +219,43 @@ async def chat(
     room.messages = history[-40:]
     room.user_turns = user_turns
     db.commit()
-    turns = await _keep_running(
-        reply_turns(
-            content,
-            episode_id=episode.id,
-            episode_title=f"{episode.id} {episode.title}",
-            task=episode.task,
-            child_talent=talent_name,
-            prior=prior,
-            last_who=last_who,
-            user_turns=user_turns,
-            child_user_id=user_id,
+    try:
+        turns = await _keep_running(
+            reply_turns(
+                content,
+                episode_id=episode.id,
+                episode_title=f"{episode.id} {episode.title}",
+                task=episode.task,
+                child_talent=talent_name,
+                prior=prior,
+                last_who=last_who,
+                user_turns=user_turns,
+                child_user_id=user_id,
+                mention=row.get("mention"),
+                quote=row.get("quote"),
+                topic=route_topic(content),
+                affect=affect,
+                training_done=trained,
+                nudge_train=(not trained) and random.random() < 0.22,
+            ),
+            user_id,
+            episode.id,
+        )
+    except Exception:
+        log.exception("讨论区模型失败，退回本集台词")
+        turns = _fallback_turns(
+            episode.id,
             mention=row.get("mention"),
-            quote=row.get("quote"),
-            topic=route_topic(content),
-            affect=affect,
-            training_done=trained,
-            nudge_train=(not trained) and random.random() < 0.22,
-        ),
-        user_id,
-        episode.id,
-    )
+            last_who=last_who,
+            avoid=[str(m.get("text") or "") for m in prior if m.get("text")],
+            user_text=content,
+        )
     history.extend(turns)
     room.messages = history[-40:]
-    _memorize(db, user_id, episode.id, history[-12:])
-    db.commit()
+    try:
+        _memorize(db, user_id, episode.id, history[-12:])
+        db.commit()
+    except Exception:
+        log.exception("讨论区记忆写入失败")
+        db.rollback()
     return {"turns": turns, "nudge": _tail(episode, trained)["nudge"], "training_done": trained}
