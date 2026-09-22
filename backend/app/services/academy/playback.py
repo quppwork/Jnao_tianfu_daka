@@ -1,4 +1,8 @@
-"""播放地址。有 CDN 走签名直链；否则同源 /stream，与今日修炼一致。"""
+"""播放地址。与今日修炼共用 media_redirect：
+
+- 有 OSS_CDN_DOMAIN：sector 直接下发 CDN 签名 URL
+- 否则：同源 /stream（短签 mt），stream 接口 302 到 OSS（OSS_MEDIA_DIRECT_REDIRECT）
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ def kind_of(episode: Episode) -> str:
 
 
 def stored_oss_url(episode: Episode) -> str | None:
-    """桶内对象的原始 HTTPS URL（未签名），供 stream 回源。"""
+    """桶内对象的原始 HTTPS URL（未签名），供 stream 回源 / 签名。"""
     key = (episode.oss_key or "").strip()
     if not key:
         return None
@@ -35,9 +39,11 @@ def stream_path(episode_id: str) -> str:
 def play_url(episode: Episode, *, user_id: int | None = None) -> str | None:
     if kind_of(episode) != "oss":
         return None
+    # CDN：与训练 plan_view 一致，前端直连加速域
     if use_cdn_for_media():
         raw = stored_oss_url(episode)
         return sign_cdn_play_url(raw) or raw
+    # 无 CDN：同源 stream → try_media_redirect 302 OSS
     path = stream_path(episode.id)
     if user_id:
         from app.core.media_stream_token import append_media_stream_token

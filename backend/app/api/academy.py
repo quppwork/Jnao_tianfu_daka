@@ -105,15 +105,12 @@ def academy_episode_stream(
     stored = stored_oss_url(episode)
     if not stored:
         raise HTTPException(404, "正片未找到")
-    # 有 CDN 时 302 加速域；本地/无私有回源时走后端代理，与今日修炼同源播放一致
-    from app.services.oss_client import use_cdn_for_media
-
-    if use_cdn_for_media():
-        redirect = try_media_redirect(stored)
-        if redirect is not None:
-            return redirect
+    # 与今日修炼同一套：有 CDN → CDN；否则 OSS 签名 302（OSS_MEDIA_DIRECT_REDIRECT）；
+    # 仅直跳关闭时才走后端代理。
+    redirect = try_media_redirect(stored)
+    if redirect is not None:
+        return redirect
     return stream_oss_media(stored, range_header=request.headers.get("range"))
-
 
 @router.post("/episodes/{episode_id}/progress")
 def academy_progress(
