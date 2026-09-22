@@ -17,7 +17,8 @@ services:
     volumes:
       - backend_data:/app/data
       - ./docs/data:/catalog_data:ro
-      - ./docs/export/qywx_follow_mobile.csv:/app/data/qywx_export/qywx_follow_mobile.csv:ro
+      # 企微通讯录 CSV 可选：有文件时再挂，避免路径缺失/被建成目录导致 backend 起不来
+      # - ./docs/export/qywx_follow_mobile.csv:/app/data/qywx_export/qywx_follow_mobile.csv:ro
     env_file:
       - .env.production
     environment:
