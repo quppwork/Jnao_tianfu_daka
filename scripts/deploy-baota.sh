@@ -42,8 +42,9 @@ set -a
 source "$ENV_FILE"
 set +a
 
-if [ -z "${DOUBAO_API_KEY:-}" ] || [ "$DOUBAO_API_KEY" = "your-ark-api-key" ]; then
-  echo "[ERROR] 请在 $ENV_FILE 中配置 DOUBAO_API_KEY"
+# 豆包已停用；主模型为 DeepSeek（doubao_client 模块名保留，实际读 DEEPSEEK_*）
+if [ -z "${DEEPSEEK_API_KEY:-}" ] || [ "$DEEPSEEK_API_KEY" = "sk-your-key-here" ] || [ "$DEEPSEEK_API_KEY" = "your-ark-api-key" ]; then
+  echo "[ERROR] 请在 $ENV_FILE 中配置 DEEPSEEK_API_KEY（全平台对话主模型）"
   exit 1
 fi
 
