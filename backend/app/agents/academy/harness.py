@@ -1,4 +1,4 @@
-"""学院 harness — 一个编排，多个角色智能体。角色之间不互相调用，只看频道记录。"""
+"""学院 harness — Scene Manager 调度 + 角色卡出话。无样例台词兜底。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import random
 import re
 from difflib import SequenceMatcher
 
-from app.agents.academy.characters import CHARACTERS, KIDS, TALENT_CHAR, Character, get_character, system_prompt
+from app.agents.academy.characters import CHARACTERS, get_character, system_prompt
 from app.services.doubao_client import chat_completion
 
 UNLOCK_PERCENT = 90
@@ -90,30 +90,25 @@ def apply_observe(
     episode_id: str | None = None,
     character_key: str = "",
 ) -> dict[str, str]:
-    """环境观察（主流 ReAct 的 Observation 由环境回填，不单靠模型编）。"""
-    from app.agents.academy.packs import pack_fact_seed
-
+    """Observation = 全局图认知 + 检索笔记；不再塞事实种子/人设兜底句。"""
+    del user_ask, episode_id, character_key
     out = dict(scratch or {})
-    action = (out.get("action") or "answer").lower()
     bits: list[str] = []
     if out.get("observation"):
         bits.append(str(out["observation"]))
-    ask = (user_ask or "").strip() or last_user_ask(channel)
-    fact = pack_fact_seed(episode_id, ask, character_key)
-    if fact and action in ("answer", "example", "retrieve", "react"):
-        bits.append("常识要点：" + fact)
     notes = (drama_notes or "").strip()
-    if notes and action in ("answer", "example", "retrieve"):
-        bits.append("短剧资料要点：" + " ".join(notes.split())[:220])
+    if notes:
+        bits.append(notes)
     last_peer = ""
     for row in reversed(channel or []):
         who = row.get("who")
         if who and who not in ("me", "user"):
             last_peer = f"{who}说：{row.get('text') or ''}"
             break
-    if last_peer and action in ("react", "answer"):
+    if last_peer:
         bits.append(last_peer)
-    out["observation"] = "；".join(bits)[:400] if bits else (out.get("observation") or "先按人设口语接孩子。")
+    out["observation"] = "；".join(bits)[:400] if bits else ""
+    out["action"] = out.get("action") or "answer"
     return out
 
 
@@ -130,18 +125,14 @@ def detect_intent(text: str) -> str:
     return "off"
 
 
-def opening_order(talent: str | None) -> list[str]:
-    kids = list(KIDS)
-    random.shuffle(kids)
-    picked = kids[:3]
-    lead = TALENT_CHAR.get((talent or "").strip())
-    if lead:
-        if lead in picked:
-            picked.remove(lead)
-        else:
-            picked = picked[:2]
-        picked.insert(0, lead)
-    return picked + ["shanyu"]
+def opening_order(talent: str | None, episode_id: str | None = None) -> list[str]:
+    from app.agents.academy.scene import select_speakers
+
+    return select_speakers(
+        episode_id=episode_id,
+        mode="opening",
+        child_talent=talent,
+    )
 
 
 _QA = re.compile(r"答题|这道题|作业题|解题|怎么算|数学|语文|英语|物理|化学|生物|公式")
@@ -182,27 +173,18 @@ def wake_speakers(
     quote_who: str | None,
     last_who: str | None,
     n: int = 2,
+    episode_id: str | None = None,
 ) -> list[str]:
-    """会话回复随机唤醒。点名、引用的人先开口，其余从同学里抽，尽量不连着同一个。"""
-    pool = [key for key in KIDS if key != last_who] or list(KIDS)
-    speakers: list[str] = []
-    if mention in CHARACTERS:
-        speakers.append(mention)
-    if quote_who in CHARACTERS and quote_who not in speakers:
-        speakers.append(quote_who)
-    rest = [key for key in pool if key not in speakers]
-    random.shuffle(rest)
-    for key in rest:
-        if len(speakers) >= n:
-            break
-        speakers.append(key)
-    if len(speakers) < n:
-        for key in KIDS:
-            if key not in speakers:
-                speakers.append(key)
-            if len(speakers) >= n:
-                break
-    return speakers[:n]
+    from app.agents.academy.scene import select_speakers
+
+    return select_speakers(
+        episode_id=episode_id,
+        mode="reply",
+        mention=mention,
+        quote_who=quote_who,
+        last_who=last_who,
+        n=n,
+    )
 
 
 def _norm(text: str | None) -> str:
@@ -210,18 +192,26 @@ def _norm(text: str | None) -> str:
 
 
 def alike(a: str | None, b: str | None, *, threshold: float = 0.72) -> bool:
-    """原样、互相包含、或高度相似都算复读。"""
+    """原样或高度相似算复读。短句互含不再一刀切，避免「种姓要点」答句被旧台词误杀。"""
     na, nb = _norm(a), _norm(b)
     if not na or not nb:
         return False
-    if na == nb or na in nb or nb in na:
+    if na == nb:
+        return True
+    shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
+    # 仅当较短句足够长，且几乎占满较长句时，才视为互含复读
+    if len(shorter) >= 10 and shorter in longer and len(shorter) / max(len(longer), 1) >= 0.82:
         return True
     return SequenceMatcher(None, na, nb).ratio() >= threshold
 
 
 def prior_said(prior: list[dict] | None) -> list[str]:
+    """只收集角色已说的话，避免把孩子原话当「复读」禁掉回礼。"""
     out: list[str] = []
     for row in prior or []:
+        who = row.get("who")
+        if who in ("me", "user"):
+            continue
         text = str(row.get("text") or "").strip()
         if text:
             out.append(text)
@@ -258,11 +248,13 @@ def looks_robotic(text: str | None) -> bool:
 
 
 def looks_echo(text: str | None, user_ask: str | None) -> bool:
-    """几乎只是复述孩子问句，或整段只抛无关新问题。"""
+    """几乎只是复述孩子问句，或整段只抛无关新问题。寒暄回礼不算复读。"""
     raw = (text or "").strip()
     ask = (user_ask or "").strip()
     if not raw:
         return True
+    if is_greeting(ask):
+        return False
     if ask and alike(raw, ask, threshold=0.78):
         return True
     ask_core = re.sub(r"[？?！!。.~～\s]+", "", ask)
@@ -279,10 +271,12 @@ def looks_echo(text: str | None, user_ask: str | None) -> bool:
 
 
 def misses_ask(text: str | None, user_ask: str | None) -> bool:
-    """沾了题面词却没答到因果/是否——典型样例跑偏。"""
+    """沾了题面词却没答到因果/是否——典型样例跑偏。寒暄不套此规则。"""
     raw = (text or "").strip()
     ask = (user_ask or "").strip()
     if not raw or not ask:
+        return False
+    if is_greeting(ask):
         return False
     if "为什么" in ask or "为啥" in ask or "咋" in ask:
         if not any(token in raw for token in ("因为", "所以", "才", "科举", "血统", "锁", "打开", "撕", "撬", "怕")):
@@ -306,59 +300,17 @@ def clamp_scratch(scratch: dict | None, instruction: str) -> dict[str, str]:
 
 def _clean_line(
     text: str | None,
-    fallback: str,
     *,
     avoid: list[str] | None = None,
     user_ask: str = "",
 ) -> str:
+    """只挡空句、人机腔、纯复述问句、明显答偏。不再因与频道旧句相似而丢弃。"""
+    del avoid
     raw = (text or "").strip().splitlines()[0].strip() if text else ""
     raw = raw.strip("「」\"'“”")
     if not raw or looks_robotic(raw) or looks_echo(raw, user_ask) or misses_ask(raw, user_ask):
-        return fallback
-    raw = raw[:80]
-    for old in avoid or []:
-        if alike(raw, old):
-            return fallback
-    return raw
-
-
-def _fallback(
-    char: Character,
-    episode_id: str | None = None,
-    *,
-    avoid: list[str] | None = None,
-    user_ask: str = "",
-) -> str:
-    from app.agents.academy.packs import pack_fact_seed, pack_synopsis
-    from app.agents.academy.perception import sample_lines
-    from app.agents.academy.turn import prepare_turn
-
-    seen = list(avoid or [])
-    ctx = prepare_turn(
-        user_text=user_ask,
-        episode_id=episode_id or "",
-        character_keys=[char.key],
-    )
-    skill = ctx.skill
-    if skill == "summary":
-        synopsis = ctx.synopsis or pack_synopsis(episode_id)
-        if synopsis and not any(alike(synopsis, old) for old in seen):
-            return synopsis[:80]
-        return synopsis[:80] if synopsis else "这一集我还在看。"
-    if user_ask and skill == "answer":
-        fact = ctx.fact_for(char.key) or pack_fact_seed(episode_id, user_ask, char.key)
-        if fact and not any(alike(fact, old) for old in seen):
-            return fact
-        if fact:
-            return "对，就按刚才那句要点。"
-        # 事实题禁止抽无关样例（会答非所问）
-        return "这句我还没想圆，你再问细一点。"
-    if user_ask:
-        return "嗯，我听着。"
-    pool = list(sample_lines(char.key, episode_id) or char.samples)
-    fresh = [line for line in pool if not any(alike(line, old) for old in seen)]
-    choices = fresh or pool
-    return random.choice(choices) if choices else "嗯。"
+        return ""
+    return raw[:80]
 
 
 def _transcript(lines: list[dict]) -> str:
@@ -393,35 +345,19 @@ def _persona_system(
     episode_id: str | None,
     time_box: str,
 ) -> str:
-    system = system_prompt(
+    del time_box
+    return system_prompt(
         CHARACTERS[key],
         episode_title=episode_title,
         task=task,
         child_talent=child_talent,
         episode_id=episode_id,
     )
-    if time_box:
-        system = f"{system}\n{time_box}"
-    return system
 
 
 def _reason_user_message(transcript: str, instruction: str, avoid: list[str]) -> str:
-    banned = "\n".join(f"- {line}" for line in avoid[-12:]) or "- （还没有）"
-    lead = "主答" in (instruction or "")
-    action_line = (
-        "Action: answer / example / retrieve（主答三选一，禁止 redirect）"
-        if lead
-        else "Action: answer / example / react / redirect / retrieve（五选一）"
-    )
-    return (
-        f"频道记录：\n{transcript}\n\n"
-        f"禁复读：\n{banned}\n\n"
-        f"{instruction}\n\n"
-        "这是 ReAct 的思考步（不要写 Say，不要对频道说话）：\n"
-        "Thought: 孩子在问什么？要点事实是什么（可用常识）？我主答还是补半句？\n"
-        f"{action_line}\n"
-        "Observation: 你准备用的事实要点（一句话；资料会由环境再补）"
-    )
+    del transcript, instruction, avoid
+    return ""
 
 
 def _say_user_message(
@@ -429,67 +365,34 @@ def _say_user_message(
     instruction: str,
     avoid: list[str],
     scratch: dict | None,
-) -> str:
-    banned = "\n".join(f"- {line}" for line in avoid[-12:]) or "- （还没有）"
-    return (
-        f"频道记录：\n{transcript}\n\n"
-        f"禁复读：\n{banned}\n\n"
-        f"{instruction}\n\n"
-        f"你已完成的 ReAct 草稿：\n{format_scratch(scratch)}\n\n"
-        "只输出要对频道说的一句口语（60字内）。\n"
-        "先答孩子刚说的那句。历史、人物、剧情用常识说准，再带你的语气。"
-        "不要复述问句，不要改答别的题，不要 Thought/Action，不要引号。"
-    )
-
-
-async def polish_seed(
-    key: str,
     *,
-    seed: str,
-    user_ask: str,
-    episode_title: str,
-    task: str,
-    child_talent: str,
-    episode_id: str | None,
-    time_box: str,
-    avoid: list[str],
-    instruction: str = "",
+    drama_notes: str = "",
+    user_ask: str = "",
+    scene_context: str = "",
 ) -> str:
-    """兜底前再用模型润色：通用知识答准 + 人设口语；失败返回空。"""
-    system = _persona_system(
-        key,
-        episode_title=episode_title,
-        task=task,
-        child_talent=child_talent,
-        episode_id=episode_id,
-        time_box=time_box,
+    del scratch, avoid
+    notes = (drama_notes or "").strip() or "（本轮无已知事件）"
+    ask = (user_ask or "").strip() or "（接上一句）"
+    scene = (scene_context or "").strip() or "（无）"
+    hint = (instruction or "").strip()
+    policy = f"本轮要求：{hint}\n\n" if hint else ""
+    if is_greeting(ask):
+        return (
+            f"{policy}"
+            f"频道记录：\n{transcript}\n\n"
+            f"孩子说：{ask}\n\n"
+            "这是打招呼。用角色卡口吻回一句问候即可，不要提剧情、训练或历史课。"
+            "不要引号，不要旁白。"
+        )
+    return (
+        f"{policy}"
+        f"场景：{scene}\n\n"
+        f"频道记录：\n{transcript}\n\n"
+        f"你截至本集已知：\n{notes}\n\n"
+        f"孩子说：{ask}\n\n"
+        "只用你已知的事，用角色卡口吻回一句口语（60字内）。"
+        "不知道的事不要编。不要引号，不要旁白。"
     )
-    banned = " / ".join(avoid[-6:]) or "（无）"
-    ask = user_ask or "（接上一句）"
-    text = await chat_completion(
-        system_prompt=system,
-        user_message=(
-            f"孩子刚说：{ask}\n"
-            f"{instruction}\n"
-            f"口吻种子（只借语气，勿整句照搬）：{seed}\n"
-            f"不要接近：{banned}\n\n"
-            "用常识把孩子的问题答准，再用你的人设说成一句口语（60字内）。"
-            "不要复述问句，不要只抛新问题，不要引号。"
-        ),
-        max_tokens=120,
-        timeout=20,
-        feature="academy",
-        disable_thinking=True,
-    )
-    say = parse_react_say(text)
-    if not say and text:
-        say = text.strip().splitlines()[0].strip()
-    say = (say or "").strip().strip("「」\"'“”")[:80]
-    if not say or looks_robotic(say) or looks_echo(say, user_ask):
-        return ""
-    if any(alike(say, old) for old in avoid):
-        return ""
-    return say
 
 
 async def reason(
@@ -503,49 +406,9 @@ async def reason(
     time_box: str = "",
     episode_id: str | None = None,
 ) -> dict[str, str]:
-    """这个角色的 ReAct 思考：模型写 Thought/Action。限流或空回复时用本地感知顶上。"""
-    from app.agents.academy.skills import perceive, skill_instruction
-
-    avoid = prior_said(prior)
-    text = await chat_completion(
-        system_prompt=_persona_system(
-            key,
-            episode_title=episode_title,
-            task=task,
-            child_talent=child_talent,
-            episode_id=episode_id,
-            time_box=time_box,
-        ),
-        user_message=_reason_user_message(_transcript(prior), instruction, avoid),
-        max_tokens=180,
-        timeout=25,
-        feature="academy",
-        disable_thinking=True,
-    )
-    if text:
-        return clamp_scratch(parse_react_scratch(text), instruction)
-    seen = perceive(
-        key,
-        episode_id=episode_id or "",
-        episode_title=episode_title,
-        channel=prior,
-        index=0,
-    )
-    skill = seen.get("skill") or "answer"
-    action = {
-        "summary": "retrieve",
-        "redirect_qa": "redirect",
-        "comfort": "react",
-        "greet": "react",
-    }.get(skill, "answer")
-    return clamp_scratch(
-        {
-            "thought": skill_instruction(seen)[:160],
-            "action": action,
-            "observation": (seen.get("fact") or seen.get("synopsis") or "")[:180],
-        },
-        instruction,
-    )
+    """空 scratch 占位；认知注入在 observe / drama_notes。"""
+    del key, episode_title, task, child_talent, prior, instruction, time_box, episode_id
+    return {"thought": "", "action": "answer", "observation": ""}
 
 
 async def say_line(
@@ -559,12 +422,20 @@ async def say_line(
     scratch: dict | None,
     time_box: str = "",
     episode_id: str | None = None,
-) -> dict:
-    """LangGraph say：模型出话；限流/空响应时立刻走事实种子，不再连打烧配额。"""
-    char = CHARACTERS[key]
+    drama_notes: str = "",
+) -> dict | None:
+    """角色卡 system + 认知/场景 user；模型失败或不合格 → None（无台词兜底）。"""
+    if key not in CHARACTERS:
+        return None
     avoid = prior_said(prior)
     ask = last_user_ask(prior)
-    seed = _fallback(char, episode_id, avoid=avoid, user_ask=ask)
+    notes = (drama_notes or "").strip()
+    if not notes and scratch and scratch.get("observation"):
+        notes = str(scratch.get("observation") or "").strip()
+    from app.agents.academy.packs import get_pack
+
+    pack = get_pack(episode_id)
+    scene = pack.scene_context if pack else ""
     system = _persona_system(
         key,
         episode_title=episode_title,
@@ -573,52 +444,32 @@ async def say_line(
         episode_id=episode_id,
         time_box=time_box,
     )
-    user_message = _say_user_message(_transcript(prior), instruction, avoid, scratch)
-
-    async def _once(msg: str) -> str | None:
-        text = await chat_completion(
-            system_prompt=system,
-            user_message=msg,
-            max_tokens=120,
-            timeout=25,
-            feature="academy",
-            disable_thinking=True,
-        )
-        if text is None:
-            return None
-        say = parse_react_say(text)
-        if not say and text:
-            say = text.strip().splitlines()[0].strip()
-        return (say or "").strip() or ""
-
-    say = await _once(user_message)
-    if say is None:
-        # 上游空/429：直接事实种子，避免 retry+polish 再打爆 RPM
-        return {"who": key, "text": seed}
-    cleaned = _clean_line(say, "", avoid=avoid, user_ask=ask)
+    user_message = _say_user_message(
+        _transcript(prior),
+        instruction,
+        avoid,
+        scratch,
+        drama_notes=notes,
+        user_ask=ask,
+        scene_context=scene,
+    )
+    text = await chat_completion(
+        system_prompt=system,
+        user_message=user_message,
+        max_tokens=120,
+        timeout=25,
+        feature="academy",
+        disable_thinking=True,
+    )
+    if text is None:
+        return None
+    say = parse_react_say(text)
+    if not say and text:
+        say = text.strip().splitlines()[0].strip()
+    cleaned = _clean_line(say, avoid=avoid, user_ask=ask)
     if not cleaned:
-        say2 = await _once(
-            f"{user_message}\n\n上一句撞车、人机腔或没答到。换角度只回一句口语，先答孩子。"
-            f"不要接近：{' / '.join(avoid[-6:]) or '（无）'}"
-        )
-        if say2 is None:
-            return {"who": key, "text": seed}
-        cleaned = _clean_line(say2, "", avoid=avoid, user_ask=ask)
-    if not cleaned:
-        polished = await polish_seed(
-            key,
-            seed=seed,
-            user_ask=ask,
-            episode_title=episode_title,
-            task=task,
-            child_talent=child_talent,
-            episode_id=episode_id,
-            time_box=time_box,
-            avoid=avoid,
-            instruction=instruction,
-        )
-        cleaned = polished or seed
-    return {"who": key, "text": cleaned or seed}
+        return None
+    return {"who": key, "text": cleaned}
 
 
 async def speak(
@@ -633,8 +484,8 @@ async def speak(
     episode_id: str | None = None,
     prompt=None,
     drama_notes: str = "",
-) -> dict:
-    """兼容入口：reason → observe → say（与 bot 子图一致）。"""
+) -> dict | None:
+    """兼容入口：reason → observe → say。失败返回 None。"""
     del prompt
     scratch = await reason(
         key,
@@ -664,6 +515,7 @@ async def speak(
         scratch=scratch,
         time_box=time_box,
         episode_id=episode_id,
+        drama_notes=drama_notes,
     )
 
 

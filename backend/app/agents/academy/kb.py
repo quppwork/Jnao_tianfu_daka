@@ -1,4 +1,4 @@
-"""天赋学院短剧知识库。只给讨论室检索，不进引导页和学科答疑的选库。"""
+"""天赋学院知识注入：全局图认知 + 可选百炼检索。不做台词兜底。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import re
 import yaml
 
 from app.agents.academy.perception import episode_no
+from app.agents.academy.world import character_knowledge, character_mood
 from app.core.logger import get_logger
 from app.services.kb_registry import resolve_registry_path
 
@@ -54,25 +55,42 @@ async def drama_notes(
     episode_id: str,
     episode_title: str,
     user_text: str = "",
+    character_key: str = "",
+    knowledge_cutoff: str = "",
 ) -> str:
-    """检索短剧库。失败或未配置时返回空，讨论照常进行。"""
-    index_id = academy_kb()["index_id"]
-    if not index_id:
-        return ""
-    query = " ".join(
-        part
-        for part in (episode_id, episode_title, " ".join(names), (user_text or "")[:60])
-        if part
-    ).strip()
-    if not query:
-        return ""
-    try:
-        from app.services.bailian import rag_query
+    """
+    角色认知 = 全局图（必选） + 百炼检索（可选）。
+    无命中则返回空字符串，禁止用样例台词填充。
+    """
+    del names
+    cutoff = (knowledge_cutoff or episode_id or "").strip().upper()
+    bits: list[str] = []
+    known = character_knowledge(character_key, cutoff=cutoff) if character_key else ""
+    if known:
+        bits.append(known)
+    mood = character_mood(character_key, episode_id) if character_key else ""
+    if mood:
+        bits.append(mood)
 
-        result = await rag_query(query, index_id=index_id, top_n=4, timeout=8, mode="retrieve")
-    except Exception as e:
-        logger.warning("academy drama retrieve failed: %s", e)
-        return ""
-    if result is None or not result.nodes:
-        return ""
-    return clip_notes([node.text for node in result.nodes], episode_id)
+    index_id = academy_kb()["index_id"]
+    if index_id:
+        query = " ".join(
+            part
+            for part in (episode_id, episode_title, (user_text or "")[:60])
+            if part
+        ).strip()
+        if query:
+            try:
+                from app.services.bailian import rag_query
+
+                result = await rag_query(
+                    query, index_id=index_id, top_n=4, timeout=8, mode="retrieve"
+                )
+                if result is not None and result.nodes:
+                    clipped = clip_notes([node.text for node in result.nodes], episode_id)
+                    if clipped:
+                        bits.append(clipped)
+            except Exception as e:
+                logger.warning("academy drama retrieve failed: %s", e)
+
+    return "\n".join(bits)[:900]

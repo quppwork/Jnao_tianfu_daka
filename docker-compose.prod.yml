@@ -24,7 +24,7 @@ services:
     environment:
       # 只放容器运行时必须覆盖的项。密钥/百炼 aid 一律走 env_file。
       # 切勿在此写 ${DASHSCOPE_API_KEY:-} 这类空默认：compose 插值失败会写成空串，
-      # 从而覆盖 env_file，KB Agent 被关掉，引导页会退化成豆包+天赋报告。
+      # 从而覆盖 env_file，KB Agent 被关掉，引导页会退化成 DeepSeek+天赋报告。
       JNAO_HOST: 0.0.0.0
       JNAO_PORT: "8012"
       TZ: Asia/Shanghai

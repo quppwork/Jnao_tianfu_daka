@@ -13,7 +13,7 @@ from app.agents.academy.catalog import Episode, get_episode
 from app.agents.academy.characters import bot_id_for
 from app.agents.academy.affect import step
 from app.agents.academy.harness import opening_turns, reply_turns, route_topic
-from app.agents.academy.talk import build_user_line
+from app.agents.academy.talk import annotate_for_model, build_user_line
 from app.db.models import AcademyRoom
 from app.services.academy.bots import remember_session
 from app.services.academy.errors import AcademyError
@@ -160,34 +160,6 @@ async def open_room(db: Session, user_id: int, episode_id: str) -> dict:
     return {"replay": False, "turns": turns, **tail}
 
 
-def _fallback_turns(
-    episode_id: str,
-    *,
-    mention: str | None = None,
-    last_who: str | None = None,
-    avoid: list[str] | None = None,
-    user_text: str = "",
-) -> list[dict]:
-    """模型整轮挂掉时，用本集事实种子/样例台词顶上，避免前端 500。"""
-    from app.agents.academy.characters import CHARACTERS, bot_id_for
-    from app.agents.academy.harness import _fallback, wake_speakers
-
-    speakers = wake_speakers(
-        mention=mention,
-        quote_who=None,
-        last_who=last_who,
-    )
-    used = list(avoid or [])
-    turns = []
-    for key in speakers:
-        if key not in CHARACTERS:
-            continue
-        text = _fallback(CHARACTERS[key], episode_id, avoid=used, user_ask=user_text)
-        used.append(text)
-        turns.append({"who": key, "text": text, "bot_id": bot_id_for(key)})
-    return turns
-
-
 async def chat(
     db: Session,
     user_id: int,
@@ -203,15 +175,16 @@ async def chat(
     if not row:
         raise AcademyError("先说一句")
     content = row["text"]
+    model_text = annotate_for_model(row)
     room = _room(db, user_id, episode.id)
     history = list(room.messages or [])
     last_who = next(
-        (str(row["who"]) for row in reversed(history) if row.get("who") and row.get("who") != "me"),
+        (str(item["who"]) for item in reversed(history) if item.get("who") and item.get("who") != "me"),
         None,
     )
     _, talent_name, _ = talent_badge(db, user_id)
     trained = bool(today_training(db, user_id).get("done"))
-    affect = step(room.affect if isinstance(room.affect, dict) else None, content)
+    affect = step(room.affect if isinstance(room.affect, dict) else None, model_text)
     room.affect = affect
     user_turns = int(room.user_turns or 0) + 1
     prior = list(history)
@@ -219,10 +192,11 @@ async def chat(
     room.messages = history[-40:]
     room.user_turns = user_turns
     db.commit()
+    turns: list[dict] = []
     try:
         turns = await _keep_running(
             reply_turns(
-                content,
+                model_text,
                 episode_id=episode.id,
                 episode_title=f"{episode.id} {episode.title}",
                 task=episode.task,
@@ -233,7 +207,7 @@ async def chat(
                 child_user_id=user_id,
                 mention=row.get("mention"),
                 quote=row.get("quote"),
-                topic=route_topic(content),
+                topic=route_topic(model_text),
                 affect=affect,
                 training_done=trained,
                 nudge_train=(not trained) and random.random() < 0.22,
@@ -242,14 +216,8 @@ async def chat(
             episode.id,
         )
     except Exception:
-        log.exception("讨论区模型失败，退回本集台词")
-        turns = _fallback_turns(
-            episode.id,
-            mention=row.get("mention"),
-            last_who=last_who,
-            avoid=[str(m.get("text") or "") for m in prior if m.get("text")],
-            user_text=content,
-        )
+        log.exception("讨论区模型失败，本轮不返回假台词")
+        turns = []
     history.extend(turns)
     room.messages = history[-40:]
     try:

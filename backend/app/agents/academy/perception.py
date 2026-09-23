@@ -165,19 +165,12 @@ ACT_SENSE: dict[str, tuple[str, ...]] = {
 
 
 def sample_lines(character_key: str, episode_id: str | None = None) -> tuple[str, ...]:
-    """本集口吻样本；优先剧集包，其次 EPISODE_LINES，再回落角色默认 samples。"""
-    from app.agents.academy.characters import CHARACTERS
-    from app.agents.academy.packs import pack_lines
+    """口吻样本仅来自角色卡；不再回落硬编码台词。"""
+    del episode_id
+    from app.agents.academy.cards import get_card
 
-    raw = (episode_id or "").strip().upper()
-    from_pack = pack_lines(raw, character_key) if raw else ()
-    if from_pack:
-        return from_pack
-    by_ep = EPISODE_LINES.get(raw) or {}
-    if character_key in by_ep:
-        return by_ep[character_key]
-    char = CHARACTERS.get(character_key)
-    return char.samples if char else ()
+    card = get_card(character_key)
+    return card.voice_samples if card else ()
 
 
 def messages_fit_episode(episode_id: str, messages: list[dict] | None) -> bool:

@@ -13,13 +13,16 @@ upstream:
 
 deepseek:
   api_key: "${DEEPSEEK_API_KEY}"
-  model: "deepseek-v4-flash"
-  timeout: 3.0
+  api_base: "https://api.deepseek.com"
+  model: "deepseek-v4-pro"
+  vision_model: "deepseek-flash"
+  timeout: 60.0
 
+# 豆包已停用；保留键位仅兼容旧 env，运行时不再读取
 doubao:
-  api_key: "${DOUBAO_API_KEY}"
-  api_base: "${DOUBAO_API_BASE}"
-  model: "${DOUBAO_CHAT_MODEL}"
+  api_key: ""
+  api_base: ""
+  model: ""
   timeout: 30.0
 
 # 各天赋固定训练视频（url 可为 OSS 或 /static/ 路径）

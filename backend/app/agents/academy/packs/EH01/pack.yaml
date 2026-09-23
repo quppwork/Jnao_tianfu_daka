@@ -2,6 +2,19 @@ id: EH01
 title: 历史课·黄巢篇
 topic: 博物馆 · 满城尽带黄金甲
 task: 记住今天这节历史课
+time_point: EH01结束
+characters_present: [shanyu, yuchen, dani, limo, jiahui, chenxue]
+characters_absent: []
+knowledge_cutoff: EH01
+scene_context: |
+  刚在学校历史博物馆听完张宇院长的黄巢课。从印度种姓展墙转到黄巢巨幅油画：
+  贡院无名、题菊诗、大旱两年、冲天大将军破长安、清算门阀、称帝大齐约四年。
+  点题：回望不是赞美杀戮，是记住榜不给普通人留名字时总会有人烧掉它。
+  善雨在讨论里听孩子问，不替院长重讲。
+topic_hints:
+  - 中国为什么没有种姓？
+  - 黄巢最后当上皇帝了吗？
+  - 那首诗你记住哪一句？
 duration_label: 正片约 5:20
 poster: /static/dayu/assets/hall/think1.png
 oss_key: AIshipin/EH01_huangchao_720p.mp4
@@ -43,8 +56,8 @@ danmaku:
   - 称帝四年
   - 那张榜…
 plot:
-  can_talk: 博物馆、种姓、黄巢、诗句、科举、称帝
-  cannot_know: 地宫闯关、把杀戮当榜样
+  can_talk: 博物馆、种姓、黄巢、诗句、科举、称帝、大旱、门阀
+  cannot_know: 地宫闯关、把杀戮当榜样、眼罩认卡
   teacher: 张宇
   synopsis: 博物馆历史课，张宇讲黄巢：科举撕开种姓，黄巢称帝国号大齐只撑约四年，诗是冲天香阵透长安、满城尽带黄金甲。
   facts:
@@ -84,6 +97,15 @@ plot:
         dani: 那首诗我记住黄金甲了。
         limo: 黄金甲。记得。
         shanyu: 诗记得一句就够。
+    - match: [榜, 落第, 科举, 门阀]
+      seed: 贡院放榜无名，榜上几乎全是门阀大姓；寒门从一开始没位置。
+      by:
+        jiahui: 榜上九成九是门阀，寒门连名字都没有。
+        yuchen: 科举本该撕开血统，可那张榜先把他关在外面。
+        dani: 连榜都不给留名字，后面才走到墙角。
+        limo: 榜上没他。拳头记得。
+        chenxue: 门阀把路堵死了，他才去烧那条路。
+        shanyu: 先记住：榜不给人留名字。
 fit:
   must_have: [黄巢, 种姓, 博物馆, 黄金甲]
   must_not_alone: [站桩, 眼罩, 标准桩]

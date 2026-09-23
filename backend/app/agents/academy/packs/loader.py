@@ -27,6 +27,14 @@ class EpisodePack:
     oss_key: str = ""
     switchable: bool = False
     chips: tuple[str, ...] = ()
+    # 第二层：讨论区配置
+    time_point: str = ""
+    characters_present: tuple[str, ...] = ()
+    characters_absent: tuple[str, ...] = ()
+    knowledge_cutoff: str = ""
+    scene_context: str = ""
+    topic_hints: tuple[str, ...] = ()
+    # 遗留字段（UI / 弹幕）；不再做人设兜底台词
     sense: dict[str, str] = field(default_factory=dict)
     lines: dict[str, tuple[str, ...]] = field(default_factory=dict)
     danmaku: tuple[str, ...] = ()
@@ -68,6 +76,14 @@ def _from_dict(data: dict[str, Any]) -> EpisodePack:
     eid = str(data.get("id") or "").strip().upper()
     if not eid:
         raise ValueError("pack missing id")
+    present = _as_tuple(data.get("characters_present"))
+    absent = _as_tuple(data.get("characters_absent"))
+    hints = _as_tuple(data.get("topic_hints")) or _as_tuple(data.get("chips"))
+    cutoff = str(data.get("knowledge_cutoff") or eid).strip().upper()
+    scene = str(data.get("scene_context") or "").strip()
+    if not scene:
+        plot = data.get("plot") if isinstance(data.get("plot"), dict) else {}
+        scene = str((plot or {}).get("synopsis") or data.get("topic") or "").strip()
     return EpisodePack(
         id=eid,
         title=str(data.get("title") or eid),
@@ -78,6 +94,12 @@ def _from_dict(data: dict[str, Any]) -> EpisodePack:
         oss_key=str(data.get("oss_key") or "").strip(),
         switchable=bool(data.get("switchable")),
         chips=_as_tuple(data.get("chips")),
+        time_point=str(data.get("time_point") or f"{eid}结束").strip(),
+        characters_present=present,
+        characters_absent=absent,
+        knowledge_cutoff=cutoff,
+        scene_context=scene,
+        topic_hints=hints,
         sense={str(k): str(v) for k, v in (data.get("sense") or {}).items()},
         lines=_parse_lines(data.get("lines")),
         danmaku=_as_tuple(data.get("danmaku")),

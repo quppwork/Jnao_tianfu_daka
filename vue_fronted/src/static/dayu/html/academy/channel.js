@@ -120,15 +120,43 @@
     openWarm = { id: '', live: false, promise: null, data: null }
   }
 
+  function viewKey(id) {
+    return 'jnao_academy_view_' + id
+  }
+
+  function rememberChatView(id) {
+    if (!id) return
+    try { sessionStorage.setItem(viewKey(id), 'chat') } catch (e) { /* ignore */ }
+  }
+
+  function wantsChatView(ep) {
+    if (!ep || !ep.id) return false
+    if (ep.unlocked) return true
+    try {
+      if (sessionStorage.getItem(viewKey(ep.id)) === 'chat') return true
+    } catch (e) { /* ignore */ }
+    var cached = readRoom(ep.id)
+    return !!(cached && cached.length)
+  }
+
   function unlockChatShell() {
     joined = true
     try { clearTimeout(teaserTm) } catch (e) { /* ignore */ }
+    var ep = ns.state && ns.state.episode
+    if (ep && ep.id) {
+      rememberChatView(ep.id)
+      ep.unlocked = true
+    }
     if ($('chatroom')) $('chatroom').classList.remove('locked-teaser')
     if ($('stage')) $('stage').classList.add('on')
     if ($('inp')) {
       $('inp').disabled = false
       $('inp').placeholder = '说点什么，可以 @ 人或按住引用'
     }
+    // 解锁后先停在学院页（图一），下滑标题条进入全屏讨论
+    var phone = document.querySelector('.phone')
+    if (phone) phone.classList.add('qq-peek')
+    if (typeof syncChatDock === 'function') syncChatDock()
   }
 
   function lockChatShell() {
@@ -142,6 +170,7 @@
       $('replies').innerHTML = ''
       $('replies').style.display = 'none'
     }
+    if (typeof syncChatDock === 'function') syncChatDock()
   }
 
   /** 滚到讨论区，并让消息列表停在最新一条。不 focus 输入框，避免弹出键盘。 */
@@ -151,6 +180,7 @@
       try { room.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch (e) { /* ignore */ }
     }
     function pinBottom() {
+      if (typeof syncChatDock === 'function') syncChatDock()
       if (typeof scrollChat === 'function') {
         scrollChat()
         return
@@ -167,8 +197,8 @@
     if (!ep || !ep.id) return
     var live = !!(ns.userId && ns.userId())
     var roomMark = (live ? 'live:' : 'fake:') + ep.id
-    warmOpenRoom(ep)
     if (shownRoom === roomMark && $('msgs') && $('msgs').children.length) {
+      scrollToLatestChat()
       return
     }
     var cached = readRoom(ep.id)
@@ -176,14 +206,17 @@
       shownRoom = roomMark
       if ($('msgs')) $('msgs').innerHTML = ''
       paintSaved(ep, { replay: true, turns: cached, nudge: ep.nudge }, true)
+        .then(function () { scrollToLatestChat() })
+      // 后台预热 open，失败也不清本地对话
+      warmOpenRoom(ep).catch(function () { /* ignore */ })
       return
     }
     warmOpenRoom(ep).then(function (data) {
       if (!data || !ns.state || !ns.state.episode || ns.state.episode.id !== ep.id) return
-      if (!ep.unlocked) return
+      if (!wantsChatView(ep)) return
       shownRoom = roomMark
       if ($('msgs')) $('msgs').innerHTML = ''
-      return paintSaved(ep, data, true)
+      return paintSaved(ep, data, true).then(function () { scrollToLatestChat() })
     }).catch(function () { /* 进页预取失败，点讨论时再开 */ })
   }
 
@@ -200,12 +233,14 @@
     ;[
       '/static/dayu/assets/bg-dorm.png',
       '/static/dayu/assets/bg-study.png',
-      '/static/dayu/assets/ip/sizhe.png',
-      '/static/dayu/assets/ip/dezhe.png',
-      '/static/dayu/assets/ip/xingzhe.png',
-      '/static/dayu/assets/ip/xuezhe.png',
-      '/static/dayu/assets/ip/yingzhe.png',
+      '/static/dayu/assets/ip/sizhe.png?v=nobg',
+      '/static/dayu/assets/ip/dezhe.png?v=nobg',
+      '/static/dayu/assets/ip/xingzhe.png?v=nobg',
+      '/static/dayu/assets/ip/xuezhe.png?v=nobg',
+      '/static/dayu/assets/ip/yingzhe.png?v=nobg',
       '/static/dayu/assets/avatar_teacher.jpg',
+      '/static/dayu/assets/avatar-mind.jpg',
+      '/static/dayu/assets/gif/mentor-mind.gif',
     ].forEach(function (u) { urls[u] = true })
     Object.keys(urls).forEach(function (src) {
       try {
@@ -217,12 +252,19 @@
   }
 
   function fetchOpenPayload(ep, live) {
+    var cached = readRoom(ep.id)
+    // 本地已有对话：切回学院直接用缓存，避免重复 open（失败会刷红、还会冲界面）
+    if (cached && cached.length) {
+      return Promise.resolve({
+        replay: true,
+        turns: cached,
+        nudge: ep.nudge || null,
+        training_done: !!ep.training_done,
+        unlocked: true,
+      })
+    }
     if (live) {
       return ns.api('/api/academy/episodes/' + ep.id + '/open', {})
-    }
-    var cached = readRoom(ep.id)
-    if (cached) {
-      return Promise.resolve({ replay: true, turns: cached, nudge: ep.nudge })
     }
     if (ns.fakeOpen) return Promise.resolve(ns.fakeOpen(ep.id))
     return ns.api('/api/academy/episodes/' + ep.id + '/open', {})
@@ -253,9 +295,19 @@
 
   function paintSaved(ep, data, instant) {
     writeRoom(ep.id, data.turns || [])
+    if (typeof data.training_done !== 'undefined') ep.training_done = !!data.training_done
+    if (data && data.nudge) ep.nudge = data.nudge
+    else if (data && data.training_done) ep.nudge = null
     return ns.renderTurns(data.turns || [], !!instant || !!data.replay).then(function () {
       if (typeof showChips === 'function') showChips()
-      if (data && data.nudge && typeof addNudge === 'function') addNudge()
+      if (ep.training_done) {
+        try { sessionStorage.removeItem('jnao_nudge_dismiss_' + ep.id) } catch (e) { /* ignore */ }
+        if (typeof root.clearNudgeUi === 'function') root.clearNudgeUi(false)
+      } else if (data && data.nudge && typeof addNudge === 'function') {
+        addNudge()
+      } else if (typeof root.clearNudgeUi === 'function') {
+        root.clearNudgeUi(false)
+      }
       if ($('chatroom') && $('chatroom').scrollIntoView) {
         $('chatroom').scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
@@ -368,6 +420,8 @@
       e.preventDefault()
       e.stopPropagation()
       box.classList.toggle('open')
+      try { name.blur && name.blur() } catch (err) { /* ignore */ }
+      try { if (window.getSelection) window.getSelection().removeAllRanges() } catch (err) { /* ignore */ }
     }
     if (!root._epPickBound) {
       root._epPickBound = true
@@ -403,12 +457,21 @@
     }
     prefetchChatAssets()
     hideEndOverlay()
-    if (ep.unlocked) {
-      // 已解锁：直接打开讨论区并恢复上次对话，不必再「看完解锁」
+    if (wantsChatView(ep)) {
+      // 已进过讨论 / 本地有对话：切回学院时直接恢复，不必再走「看完解锁」
       unlockChatShell()
       restoreRoomQuiet(ep)
     } else {
       lockChatShell()
+      var box = $('replies')
+      if (box) {
+        box.innerHTML = ''
+        box.style.display = 'none'
+      }
+    }
+    // 切集后刷新底部提示词（按剧情）
+    if (typeof showChips === 'function' && wantsChatView(ep)) {
+      try { showChips() } catch (e) { /* ignore */ }
     }
   }
 
@@ -416,9 +479,12 @@
     if (!$('chanName')) return
     root.showChips = function () {
       var box = $('replies')
-      var chips = (ns.state && ns.state.episode && ns.state.episode.chips) || []
       if (!box) return
-      box.style.display = 'flex'
+      var chips = (ns.state && ns.state.episode && ns.state.episode.chips) || []
+      if (!chips.length && typeof currentChips === 'function') {
+        try { chips = currentChips() } catch (e) { chips = [] }
+      }
+      box.style.display = chips.length ? 'flex' : 'none'
       box.innerHTML = ''
       chips.forEach(function (text) {
         var node = document.createElement('div')
@@ -427,14 +493,35 @@
         node.onclick = function () { if (typeof quickSay === 'function') quickSay(text) }
         box.appendChild(node)
       })
+      if (typeof syncChatDock === 'function') syncChatDock()
+    }
+    root.clearNudgeUi = function (persistDismiss) {
+      var slot = $('nudgeSlot')
+      if (slot) slot.innerHTML = ''
+      document.querySelectorAll('#msgs .nudge').forEach(function (node) { node.remove() })
+      if (persistDismiss) {
+        try {
+          var ep0 = ns.state && ns.state.episode
+          if (ep0 && ep0.id) sessionStorage.setItem('jnao_nudge_dismiss_' + ep0.id, '1')
+        } catch (e) { /* ignore */ }
+      }
+      if (typeof syncChatDock === 'function') syncChatDock()
+    }
+    root.dismissNudge = function () {
+      root.clearNudgeUi(true)
     }
     root.addNudge = function () {
-      if (document.querySelector('#msgs .nudge')) return
+      if (document.querySelector('#nudgeSlot .nudge') || document.querySelector('#msgs .nudge')) return
       var ep = ns.state && ns.state.episode
+      if (!ep) return
+      if (ep.training_done) return
+      try {
+        if (ep.id && sessionStorage.getItem('jnao_nudge_dismiss_' + ep.id) === '1') return
+      } catch (e) { /* ignore */ }
+      if (!ep.nudge || !ep.nudge.text) return
       var node = document.createElement('div')
       node.className = 'nudge'
-      var text = (ep && ep.nudge && ep.nudge.text) || ''
-      node.innerHTML = '<div class="ng1">⏰</div><p>' + text + '</p>'
+      node.innerHTML = '<div class="ng1">⏰</div><p>' + ep.nudge.text + '</p>'
       var go = document.createElement('button')
       go.type = 'button'
       go.className = 'ngo'
@@ -442,10 +529,24 @@
       go.addEventListener('click', function (event) {
         event.preventDefault()
         event.stopPropagation()
+        root.dismissNudge()
         if (typeof root.goTodayTrain === 'function') root.goTodayTrain()
       })
       node.appendChild(go)
-      if ($('msgs')) $('msgs').appendChild(node)
+      var close = document.createElement('button')
+      close.type = 'button'
+      close.className = 'ngx'
+      close.setAttribute('aria-label', '关闭提醒')
+      close.textContent = '×'
+      close.addEventListener('click', function (event) {
+        event.preventDefault()
+        event.stopPropagation()
+        root.dismissNudge()
+      })
+      node.appendChild(close)
+      var slot = $('nudgeSlot') || $('msgs')
+      if (slot) slot.appendChild(node)
+      if (typeof syncChatDock === 'function') syncChatDock()
       if (typeof scrollChat === 'function') scrollChat()
     }
     root.playEp = function () {
@@ -590,25 +691,34 @@
       var ep = ns.state && ns.state.episode
       if (!ep) return
       var body = typeof payload === 'string' ? { text: payload } : (payload || {})
-      var userText = body.text || body.sticker || ''
-      if (!userText) return
-      var mine = { who: 'me', text: userText }
+      var sticker = body.sticker || ''
+      var userText = (body.text || '').trim()
+      if (!userText && !sticker) return
+      // 大表情：正文可空，仅走 sticker；小表情是普通 text，不要抬成大图
+      if (sticker && userText === sticker) {
+        userText = ''
+      }
+      var mine = { who: 'me', text: userText || sticker }
       if (body.mention) mine.mention = body.mention
       if (body.quote) mine.quote = body.quote
-      if (body.sticker) mine.sticker = body.sticker
+      if (sticker) mine.sticker = sticker
       var live = !!(ns.userId && ns.userId())
       var sendTalk = (!live && ns.fakeReply)
         ? Promise.resolve(ns.fakeReply(body))
         : ns.api('/api/academy/episodes/' + ep.id + '/chat', {
-          text: userText,
+          text: userText || (sticker ? '' : ''),
           mention: body.mention || undefined,
           quote: body.quote || undefined,
-          sticker: body.sticker || undefined
+          sticker: sticker || undefined
         })
       sendTalk.then(function (data) {
         var prev = readRoom(ep.id) || []
-        writeRoom(ep.id, prev.concat([mine]).concat(data.turns || []))
-        return ns.renderTurns(data.turns || [], false).then(function () {
+        var botTurns = data.turns || []
+        writeRoom(ep.id, prev.concat([mine]).concat(botTurns))
+        if (!botTurns.length && typeof addSys === 'function') {
+          addSys('这句角色没接上，再发一次或换个问法')
+        }
+        return ns.renderTurns(botTurns, false).then(function () {
           if (data && data.nudge && typeof addNudge === 'function') addNudge()
         })
       }).catch(function (err) {

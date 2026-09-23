@@ -1,0 +1,265 @@
+# 全局事件因果图 — 测试集 E13 / E14 / EH01 已补全；其余集后续追加。
+# knowledge: lived=亲历 / heard=听说 / unknown=不可见（默认）
+
+events:
+  # —— E13 五兽桩（占位，跑通用）——
+  - id: e13_yard_zhuang
+    episode_id: E13
+    summary: 院子里练五兽桩：心要定，膝盖不过脚尖，重心落涌泉，十桩功连起来练。
+    causes: []
+    knowledge:
+      shanyu: lived
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  # —— E14 蒙上眼睛之后 ——
+  - id: e14_room_no_window
+    episode_id: E14
+    summary: 圆形无窗感知教室，吸音棉墙，六枚蒲团围坐；田小静主讲。
+    causes: []
+    knowledge:
+      tianxiaojing: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  - id: e14_rules_blindfold
+    episode_id: E14
+    summary: 规则：戴眼罩耳机，不用眼睛说出卡片颜色与形状；灯光随佩戴渐暗。
+    causes: [e14_room_no_window]
+    knowledge:
+      tianxiaojing: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  - id: e14_jiahui_red_triangle
+    episode_id: E14
+    summary: 王家慧在脑海里看到红色，卡片中间有个黑三角形。
+    causes: [e14_rules_blindfold]
+    knowledge:
+      jiahui: lived
+      tianxiaojing: lived
+      shanyu: heard
+      yuchen: heard
+      dani: heard
+      limo: heard
+      chenxue: heard
+
+  - id: e14_yuchen_green_grass
+    episode_id: E14
+    summary: 章宇尘感到绿，但不是卡片绿——绿漫成一大片草地，想象巨物感。
+    causes: [e14_rules_blindfold]
+    knowledge:
+      yuchen: lived
+      tianxiaojing: lived
+      shanyu: heard
+      jiahui: heard
+      dani: heard
+      limo: heard
+      chenxue: heard
+
+  - id: e14_chenxue_blue_circle
+    episode_id: E14
+    summary: 陈雪看得清楚：蓝色圆形；边上联想被她主动掐掉。
+    causes: [e14_rules_blindfold]
+    knowledge:
+      chenxue: lived
+      tianxiaojing: lived
+      shanyu: heard
+      jiahui: heard
+      yuchen: heard
+      dani: heard
+      limo: heard
+
+  - id: e14_limo_just_knows
+    episode_id: E14
+    summary: 李寞几乎无画面：黄色方形，「就是知道」，说不清为什么。
+    causes: [e14_rules_blindfold]
+    knowledge:
+      limo: lived
+      tianxiaojing: lived
+      shanyu: heard
+      jiahui: heard
+      yuchen: heard
+      dani: heard
+      chenxue: heard
+
+  - id: e14_dani_edge_illusion
+    episode_id: E14
+    summary: 施丹尼拇指搓边摸到「棱」；田小静揭晓卡片其实是绝对平面，大脑把信号放大了。
+    causes: [e14_rules_blindfold]
+    knowledge:
+      dani: lived
+      tianxiaojing: lived
+      shanyu: heard
+      jiahui: heard
+      yuchen: heard
+      limo: heard
+      chenxue: heard
+
+  - id: e14_line_eyes_closed
+    episode_id: E14
+    summary: 收课金句：眼睛关了，世界不会关；每人在脑子里摸到一扇门。
+    causes: [e14_jiahui_red_triangle, e14_yuchen_green_grass, e14_chenxue_blue_circle, e14_limo_just_knows, e14_dani_edge_illusion]
+    knowledge:
+      tianxiaojing: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  # —— EH01 历史课·黄巢篇 ——
+  - id: eh01_caste_hook
+    episode_id: EH01
+    summary: 博物馆印度种姓展墙前，陈雪问：为什么中国没有种姓制度。
+    causes: []
+    knowledge:
+      zhangyu: lived
+      chenxue: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+
+  - id: eh01_huangchao_portrait
+    episode_id: EH01
+    summary: 张宇带众人到黄巢起义巨幅油画前，讲战争与民族强大的基因。
+    causes: [eh01_caste_hook]
+    knowledge:
+      zhangyu: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  - id: eh01_fail_list
+    episode_id: EH01
+    summary: 黄巢贡院放榜无名；榜上九成九是门阀大姓，寒门从一开始没位置。
+    causes: [eh01_huangchao_portrait]
+    knowledge:
+      zhangyu: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  - id: eh01_poem_wall
+    episode_id: EH01
+    summary: 客栈墙上题《不第后赋菊》：冲天香阵透长安，满城尽带黄金甲。
+    causes: [eh01_fail_list]
+    knowledge:
+      zhangyu: lived
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+      shanyu: heard
+
+  - id: eh01_drought
+    episode_id: EH01
+    summary: 中原大旱两年，赤地千里；榜不给活路，田也不给，造反成了活路。
+    causes: [eh01_poem_wall]
+    knowledge:
+      zhangyu: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  - id: eh01_leader
+    episode_id: EH01
+    summary: 投奔王仙芝后乱军杀出；王仙芝死后被推为冲天大将军——领袖是杀出来的。
+    causes: [eh01_drought]
+    knowledge:
+      zhangyu: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  - id: eh01_break_chang_an
+    episode_id: EH01
+    summary: 黄金甲洪流破长安；诗里的字成了眼前的景。
+    causes: [eh01_leader]
+    knowledge:
+      zhangyu: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived
+
+  - id: eh01_purge
+    episode_id: EH01
+    summary: 对大族贵姓满门清算；门阀垄断被摧毁（画面克制，不渲染残忍）。
+    causes: [eh01_break_chang_an]
+    knowledge:
+      zhangyu: lived
+      dani: lived
+      limo: lived
+      yuchen: lived
+      chenxue: lived
+      jiahui: lived
+      shanyu: heard
+
+  - id: eh01_qa_emperor
+    episode_id: EH01
+    summary: 张宇答章宇尘：黄巢称帝，国号大齐，约四年后兵败；自此无姓氏能世袭垄断几百年。
+    causes: [eh01_purge]
+    knowledge:
+      zhangyu: lived
+      yuchen: lived
+      jiahui: lived
+      chenxue: lived
+      dani: lived
+      limo: lived
+      shanyu: heard
+
+  - id: eh01_qa_motive
+    episode_id: EH01
+    summary: 张宇答施丹尼：不是天生杀神；是榜先不留名字，是大旱先不留活路。
+    causes: [eh01_drought, eh01_purge]
+    knowledge:
+      zhangyu: lived
+      dani: lived
+      yuchen: lived
+      chenxue: lived
+      jiahui: lived
+      limo: lived
+      shanyu: heard
+
+  - id: eh01_theme
+    episode_id: EH01
+    summary: 点题：回望黄巢不是赞美杀戮，是记住当榜不给普通人留名字时，总会有人站出来烧掉它。
+    causes: [eh01_qa_emperor, eh01_qa_motive]
+    knowledge:
+      zhangyu: lived
+      shanyu: heard
+      jiahui: lived
+      yuchen: lived
+      dani: lived
+      limo: lived
+      chenxue: lived

@@ -36,14 +36,20 @@ class BotChange:
 
 
 def default_persona(key: str) -> str:
+    """库种子：只写身份，不写约束/样例台词。"""
+    from app.agents.academy.cards import card_system_prompt, get_card
+
+    card = get_card(key)
+    if card:
+        return card_system_prompt(card)
     char = CHARACTERS[key]
-    samples = " / ".join(char.samples)
-    return f"{char.name}（{char.tag}）。说话：{char.voice} 口吻参考：{samples}"
+    return f"你是{char.name}。"
 
 
 def default_constraints(key: str) -> str:
-    char = CHARACTERS[key]
-    return f"{char.steer}。只说这一集已经发生的事。不许说自己是人工智能。"
+    """约束已迁到全局图 knowledge_cutoff；库字段留空。"""
+    del key
+    return ""
 
 
 def ensure_bots(db: Session) -> None:
@@ -57,9 +63,9 @@ def ensure_bots(db: Session) -> None:
             name=char.name,
             tag=char.tag,
             persona_prompt=default_persona(key),
-            constraints=default_constraints(key),
-            voice=char.voice,
-            steer=char.steer,
+            constraints="",
+            voice="",
+            steer="",
             revision=1,
         ))
     db.commit()

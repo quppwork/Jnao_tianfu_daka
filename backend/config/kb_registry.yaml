@@ -64,8 +64,9 @@ sources:
       以及练法/怎么练类问题（单库阶段一并查本库）。
 
 # 天赋学院短剧库。不在 sources 里，引导页和学科答疑不会选到。
+# 百炼库已清空：讨论只走本地 events/cards/packs；恢复入库后再填 index_id / aid。
 academy:
   key: short_drama
   name: AI短剧知识库
-  aid: aid-caa8c7be748c45d6a29a27b42d57525a
-  index_id: nv8orv5dh5
+  aid: ""
+  index_id: ""

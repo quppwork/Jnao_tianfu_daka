@@ -163,9 +163,21 @@ def _courses(rows: dict[str, AcademyProgress]) -> dict:
     }
 
 
-def _channel(episode: Episode, row: AcademyProgress | None, *, user_id: int | None = None) -> dict:
+def _channel(
+    episode: Episode,
+    row: AcademyProgress | None,
+    *,
+    user_id: int | None = None,
+    trained: bool = False,
+) -> dict:
     cast = _cast(episode.cast)
     media = playback.kind_of(episode)
+    nudge = None
+    if not trained:
+        nudge = {
+            "text": f"善雨导师提醒：聊完记得完成今晚训练——{episode.task}，到大宇智能体打卡。",
+            "href": "train.html",
+        }
     return {
         "id": episode.id,
         "title": episode.title,
@@ -182,10 +194,8 @@ def _channel(episode: Episode, row: AcademyProgress | None, *, user_id: int | No
         "unlocked": progress_store.is_unlocked(row),
         "percent": int(row.percent) if row else 0,
         "chips": episode_chips(episode),
-        "nudge": {
-            "text": f"善雨导师提醒：聊完记得完成今晚训练——{episode.task}，到大宇智能体打卡。",
-            "href": "train.html",
-        },
+        "training_done": bool(trained),
+        "nudge": nudge,
         "cast": cast,
     }
 
@@ -208,16 +218,19 @@ def _switchable(rows: dict[str, AcademyProgress], current_id: str) -> list[dict]
 
 
 def get_sector(db: Session, user_id: int, episode_id: str | None = None) -> dict:
+    from app.services.academy.guide import today_training
+
     progress_store.seed_demo_if_empty(db, user_id)
     rows = progress_store.load_map(db, user_id)
     badge, talent_name, tier = talent_badge(db, user_id)
     focus = _focus(episode_id, rows)
+    trained = bool(today_training(db, user_id).get("done"))
     return {
         "user_id": user_id,
         "badge": badge,
         "talent_primary": talent_name,
         "overall_tier": tier,
-        "episode": _channel(focus, rows.get(focus.id), user_id=user_id),
+        "episode": _channel(focus, rows.get(focus.id), user_id=user_id, trained=trained),
         "switchable": _switchable(rows, focus.id),
         "acts": _acts(rows),
         "courses": _courses(rows),

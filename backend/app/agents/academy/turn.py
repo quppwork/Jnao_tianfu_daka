@@ -14,6 +14,12 @@ _HISTORY = re.compile(
     r"种姓|科举|黄巢|称帝|皇帝|大齐|历史|为什么|为啥|当上|有没有|吗|诗|黄金甲|榜|大旱"
 )
 _ORAL = re.compile(r"^(那个|就是|嗯+|啊+|呃+|请问|我想问一下|我想问|帮我|你们能帮我)")
+# 「谁跟我一组」是找人，不是问怎么练
+_INVITE = re.compile(r"谁跟我|跟我一组|一起站|一起练|组队|有人陪|谁陪|拉我一组|谁来")
+
+
+def is_invite(ask: str) -> bool:
+    return bool(_INVITE.search((ask or "").strip()))
 
 
 @dataclass
@@ -124,7 +130,14 @@ def turn_instruction(ctx: TurnContext, *, character_key: str = "", index: int = 
     elif skill == "comfort":
         body = "感知：情绪低。先接住，再可轻轻贴本集。"
     elif skill == "train":
-        body = "感知：问训练。用做过的那一下接，不要说明书腔。"
+        if is_invite(ask):
+            body = (
+                f"感知：孩子在找人组队——「{ask}」。"
+                "你是频道里的真人同学，正面表态：跟不跟、算不算你一个。"
+                "用自己的口气应邀即可。禁止讲站桩要领、禁止说明书腔、禁止『我听着』、禁止改答别的题。"
+            )
+        else:
+            body = "感知：问训练。用做过的那一下接，不要说明书腔。"
     else:
         if fact:
             body = (
@@ -143,5 +156,8 @@ def turn_instruction(ctx: TurnContext, *, character_key: str = "", index: int = 
     if lead:
         body += " 你先开口，说完整。"
     else:
-        body += " 你接话：补半句或同感，不要重复上一句，不要另开新题。"
+        if skill == "train" and is_invite(ask):
+            body += " 你再表态：补一句也算你一个，或轻轻抬杠，不要复读上一句。"
+        else:
+            body += " 你接话：补半句或同感，不要重复上一句，不要另开新题。"
     return f"孩子原话：{ctx.raw_ask}\n独立问句：{ask}\n{body}"

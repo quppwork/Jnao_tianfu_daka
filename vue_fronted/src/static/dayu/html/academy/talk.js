@@ -2,11 +2,11 @@
 (function (root) {
   var style = document.createElement('style')
   style.textContent = '.ib{width:36px;height:36px;border-radius:50%;border:1.5px solid #2A3040;background:#161D2B;color:#EDEBE4;font-size:16px;font-weight:900;flex:none;cursor:pointer}'
-    + '.qbar{position:fixed;left:50%;transform:translateX(-50%);bottom:118px;width:calc(100% - 36px);max-width:444px;display:flex;gap:8px;align-items:center;background:#161D2B;border-left:3px solid #C9A869;border-radius:10px;padding:7px 10px;z-index:30;box-sizing:border-box}'
+    + '.qbar{position:relative;left:auto;transform:none;bottom:auto;width:100%;max-width:none;display:flex;gap:8px;align-items:center;background:#161D2B;border-left:3px solid #C9A869;border-radius:10px;padding:7px 10px;z-index:30;box-sizing:border-box;margin:0 0 6px}'
     + '.qbar[hidden],.talkpan[hidden]{display:none!important}'
     + '.qbar b{font-size:11px;color:#C9A869;flex:none}.qbar span{flex:1;font-size:12px;color:#B9C0CE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.qbar button{border:none;background:transparent;color:#B9C0CE;font-size:18px;cursor:pointer}'
-    + '.talkpan{position:fixed;left:50%;transform:translateX(-50%);bottom:118px;width:calc(100% - 28px);max-width:452px;background:#121826;border:1px solid #2A3040;border-radius:14px;padding:8px;z-index:40;max-height:240px;overflow:auto;box-sizing:border-box}'
+    + '.talkpan{position:absolute;left:12px;right:12px;bottom:calc(100% + 4px);width:auto;max-width:none;transform:none;background:#121826;border:1px solid #2A3040;border-radius:14px;padding:8px;z-index:40;max-height:min(240px,42vh);overflow:auto;box-sizing:border-box}'
     + '.talkpan button{border:none;background:#1A2233;color:#E4E8F0;border-radius:10px;padding:8px 10px;margin:4px;font-size:13px;font-weight:800;cursor:pointer}'
     + '.talkpan button i{font-style:normal;color:#8b93a5;font-size:10px;margin-left:4px;font-weight:700}'
     + '.emtab{font-size:11px;color:#8b93a5;font-weight:800;padding:4px 6px}.ems{display:flex;flex-wrap:wrap}'
@@ -20,7 +20,7 @@
     + 'html.lt .talkpan button{background:#d4dbe9}'
   document.head.appendChild(style)
   var phone = document.createElement('style')
-  phone.textContent = '.inbar{gap:8px;padding:8px 10px}'
+  phone.textContent = '.inbar{gap:8px;padding:0}'
     + '.inbar .ifield{flex:1;min-width:0;display:flex;align-items:center;background:#161D2B;border:1.5px solid #2A3040;border-radius:999px;padding-right:2px}'
     + '.inbar .ifield input,.inbar .ifield input:focus{flex:1;width:100%;min-width:0;border:none;background:transparent;box-shadow:none;padding:10px 4px 10px 14px;font-size:16px}'
     + '.ib.em{width:34px;height:34px;border:none;background:transparent;font-size:22px}'
@@ -41,8 +41,9 @@
     + 'html.lt .inbar .ifield input{color:#1b1912}'
     + '.talkshade{position:fixed;inset:0;z-index:36;background:transparent}'
     + '.talkshade[hidden]{display:none!important}'
+    + '.chat-dock{position:fixed}'
     + '.talkpan{z-index:45}'
-    + '.inbar{z-index:46}'
+    + '.chat-dock .inbar{z-index:46}'
   document.head.appendChild(phone)
   var PACK = ['😂','🤣','😭','😅','🥹','🥺','😏','🙄','🤔','😤','🥰','😎','🙈','🫠','👍','👏','❤️','🔥','✨','💪','🤝','👀','🙏','👋','💯','😴','🤡','😮','🐶','📒']
   var pendingQuote = null
@@ -240,6 +241,7 @@
     if (!pendingQuote) {
       bar.hidden = true
       bar.innerHTML = ''
+      if (typeof root.syncChatDock === 'function') root.syncChatDock()
       return
     }
     bar.hidden = false
@@ -249,6 +251,7 @@
       pendingQuote = null
       paintQuoteBar()
     }
+    if (typeof root.syncChatDock === 'function') root.syncChatDock()
   }
 
   function insertAtCursor(token) {
@@ -296,12 +299,14 @@
       ? '<div class="mq"><b>' + esc(nameOf(extra.quote.who)) + '</b><span>' + esc(extra.quote.text) + '</span></div>'
       : ''
     var sticker = extra.sticker ? '<div class="msticker">' + esc(extra.sticker) + '</div>' : ''
-    var body = text ? '<div class="mt">' + paint(text) + '</div>' : ''
+    var showText = text || ''
+    if (extra.sticker && showText === extra.sticker) showText = ''
+    var body = showText ? '<div class="mt">' + paint(showText) + '</div>' : ''
     var avatar = mine ? '' : '<img class="ma" alt="" src="' + esc(person.av || '') + '">'
     var tag = !mine && person.tag ? '<i>' + esc(person.tag) + '</i>' : ''
-    var onlyFace = !!(extra.sticker && !text)
+    var onlyFace = !!(extra.sticker && !showText)
     d.innerHTML = avatar + '<div class="mc"><div class="mn">' + esc(mine ? '我' : (person.n || who)) + tag + '</div><div class="mb' + (onlyFace ? ' faceonly' : '') + '">' + quoted + sticker + body + '</div></div>'
-    var plain = text || extra.sticker || ''
+    var plain = showText || extra.sticker || ''
     var bubble = d.querySelector('.mb')
     if (bubble) {
       bubble.setAttribute('role', 'button')
@@ -373,6 +378,11 @@
     var bar = document.querySelector('.inbar')
     var inp = $('inp')
     if (!bar || !inp) return
+    var dock = $('chatDock') || bar.parentNode
+    if (dock && dock.classList && !dock.classList.contains('chat-dock')) {
+      /* keep parent as insertion root */
+    }
+    if (dock && dock.style) dock.style.position = dock.style.position || ''
     var at = document.createElement('button')
     at.type = 'button'
     at.id = 'atBtn'
@@ -397,14 +407,23 @@
       send.classList.add('talk-send')
       send.textContent = '发送'
     }
+    var host = dock || bar.parentNode
     var qbar = document.createElement('div')
     qbar.id = 'qbar'
     qbar.className = 'qbar'
     qbar.hidden = true
-    bar.parentNode.insertBefore(qbar, bar)
-    var panels = document.createElement('div')
-    panels.innerHTML = '<div id="atPanel" class="talkpan" hidden></div><div id="emPanel" class="talkpan" hidden></div>'
-    bar.parentNode.insertBefore(panels, bar)
+    host.insertBefore(qbar, bar)
+    var atPanel = document.createElement('div')
+    atPanel.id = 'atPanel'
+    atPanel.className = 'talkpan'
+    atPanel.hidden = true
+    var emPanel = document.createElement('div')
+    emPanel.id = 'emPanel'
+    emPanel.className = 'talkpan'
+    emPanel.hidden = true
+    host.insertBefore(atPanel, bar)
+    host.insertBefore(emPanel, bar)
+    if (typeof root.syncChatDock === 'function') root.syncChatDock()
     var shade = document.createElement('div')
     shade.id = 'talkshade'
     shade.className = 'talkshade'
@@ -438,6 +457,9 @@
     inp.addEventListener('input', function () {
       if (/@[^\s@]*$/.test(inp.value)) openAt()
     })
+    inp.addEventListener('focus', function () {
+      if (typeof root.syncChatDock === 'function') root.syncChatDock()
+    })
   }
 
   root.AcademyTalk = {
@@ -446,9 +468,11 @@
     quote: quote,
     bind: bind,
     collect: function (text) {
+      var raw = String(text || '').trim()
+      // 只有点「大表情」才会带 pendingSticker；小表情只插入输入框，按普通字号发出
       return {
-        text: text || '',
-        mention: resolveMention(text || '') || undefined,
+        text: raw,
+        mention: resolveMention(raw || text || '') || undefined,
         quote: pendingQuote || undefined,
         sticker: pendingSticker || undefined
       }

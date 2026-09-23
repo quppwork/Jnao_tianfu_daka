@@ -48,7 +48,7 @@ const emit = defineEmits(['parent', 'student', 'account', 'theme'])
 
 const src = computed(() => {
   const file = props.page || ''
-  const rev = file === 'drama.html' ? '20260921r' : ''
+  const rev = file === 'drama.html' ? '20260923emoji' : ''
   return `/static/dayu/html/${file}${rev ? `?v=${rev}` : ''}`
 })
 const iframeRef = ref(null)
@@ -131,11 +131,18 @@ function syncFrameLayoutVars() {
       `html.lt .foot a.on{color:${ltOn}!important}`,
       `.foot a img,.foot .fic,.foot a .fic,.fic{width:38px!important;height:38px!important;`,
       `display:block!important;margin:0 auto 1px!important;object-fit:contain!important}`,
-      `.askbar,.inbar{left:0!important;right:0!important;transform:none!important;`,
+      `.askbar{left:0!important;right:0!important;transform:none!important;`,
       `width:100%!important;max-width:none!important;margin:0 auto!important;`,
       `bottom:calc(72px + ${sab})!important;box-sizing:border-box!important}`,
       `#roomBar .askbar,#roomBar .inbar{bottom:0!important}`,
       `#roomBar{left:0!important;right:0!important;width:100%!important}`,
+      `.chat-dock{left:0!important;right:0!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;margin:0!important;`,
+      `bottom:calc(56px + ${sab})!important;box-sizing:border-box!important;z-index:46!important;`,
+      `background:rgba(11,14,20,.98)!important}`,
+      `html.lt .chat-dock{background:rgba(235,238,244,.98)!important}`,
+      `.chat-dock .inbar{position:static!important;bottom:auto!important;left:auto!important;right:auto!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;padding:0!important;background:transparent!important;margin:0!important}`,
       `html,body{height:100%!important;overflow:hidden!important;overflow-x:hidden!important;`,
       `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
       `html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
@@ -144,6 +151,7 @@ function syncFrameLayoutVars() {
       `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
       `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
       `.phone::-webkit-scrollbar,.wrap::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
+      `#msgwrap{overscroll-behavior-y:auto!important;-webkit-overflow-scrolling:touch!important}`,
     ].join('')
     if (!style.parentNode) win.document.head.appendChild(style)
   } catch (_) { /* ignore */ }

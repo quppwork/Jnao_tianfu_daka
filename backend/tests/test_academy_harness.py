@@ -19,7 +19,9 @@ def test_opening_ends_with_mentor_and_leads_with_talent():
 
 
 def test_reply_wakes_two_at_random_and_pins_mention():
-    cast = harness.wake_speakers(mention=None, quote_who=None, last_who="dani")
+    cast = harness.wake_speakers(
+        mention=None, quote_who=None, last_who="dani", episode_id="E13"
+    )
     assert len(cast) == 2
     assert len(set(cast)) == 2
     assert "dani" not in cast or cast[0] != "dani"
@@ -31,6 +33,7 @@ def test_at_wakes_that_character_and_quote_wakes_the_author():
 
     directed = plan_cast({
         "mode": "reply",
+        "episode_id": "E13",
         "mention": "limo",
         "user_turns": 3,
         "last_who": "dani",
@@ -41,6 +44,7 @@ def test_at_wakes_that_character_and_quote_wakes_the_author():
 
     quoted = plan_cast({
         "mode": "reply",
+        "episode_id": "E13",
         "quote": {"who": "jiahui", "text": "按标准来"},
         "user_turns": 1,
     })
@@ -49,6 +53,7 @@ def test_at_wakes_that_character_and_quote_wakes_the_author():
 
     plot_q = plan_cast({
         "mode": "reply",
+        "episode_id": "E13",
         "user_text": "戴上眼罩你怕不怕黑？",
         "user_turns": 1,
     })
@@ -63,6 +68,16 @@ def test_at_wakes_that_character_and_quote_wakes_the_author():
     assert row["text"].startswith("@李寞")
     assert row["quote"]["who"] == "jiahui"
     assert row["sticker"] == "😂"
+    only = build_user_line("", None, None, "🥺")
+    assert only["sticker"] == "🥺"
+    assert only["text"] == "🥺"
+    from app.agents.academy.talk import annotate_for_model
+    assert "可怜" in annotate_for_model(only) or "表情" in annotate_for_model(only)
+    # 小表情只发正文：不抬成大贴纸字段，但仍能给模型注口语提示
+    solo = build_user_line("😅", None, None, None)
+    assert "sticker" not in solo
+    assert solo["text"] == "😅"
+    assert "表情" in annotate_for_model(solo) or "尴尬" in annotate_for_model(solo)
 
 
 def test_mood_sinks_when_the_child_is_down_and_then_fades():
@@ -88,6 +103,10 @@ def test_mood_sinks_when_the_child_is_down_and_then_fades():
     assert harness.read_mood("今晚好累不想站了") == "low"
     assert harness.is_greeting("你好") is True
     assert harness.is_greeting("师父，十桩功最难的是哪一桩") is False
+    assert harness.looks_echo("你好呀", "你好") is False
+    assert harness.misses_ask("嗨，在呢", "你好") is False
+    assert harness._clean_line("你好呀", avoid=[], user_ask="你好") == "你好呀"
+    assert harness.prior_said([{"who": "me", "text": "你好"}, {"who": "dani", "text": "嗨"}]) == ["嗨"]
 
 
 def test_speak_keeps_the_model_line(monkeypatch):
@@ -107,7 +126,6 @@ def test_speak_keeps_the_model_line(monkeypatch):
         instruction="直接回答",
     ))
     assert line["text"] == "今晚我跟你一组，你站左边我看着。"
-    assert line["text"] not in harness.CHARACTERS["limo"].samples
 
 
 def test_parse_react_say_and_alike():
@@ -117,6 +135,11 @@ def test_parse_react_say_and_alike():
     assert harness.alike("别怕黑。黑只是把眼睛关了。", "别怕黑。黑只是把眼睛关了。")
     assert harness.alike("别怕黑黑只是把眼睛关了", "别怕黑。黑只是把眼睛关了。")
     assert not harness.alike("五个世界我最想问老师", "别怕黑。黑只是把眼睛关了。")
+    # 同题再答：不再因与旧句相似而丢弃
+    old = "种姓靠血统锁人，科举把锁撬开了，所以咱们没走那条路。"
+    new = "没有。印度种姓靠血统卡位，咱们这边有科举，普通人也能往上考，所以没搞那一套。"
+    assert harness._clean_line(new, avoid=[old], user_ask="@王家慧 中国有种姓制度么") == new[:80]
+    assert harness._clean_line(old, avoid=[old], user_ask="中国为什么没有种姓？") == old[:80]
     scratch = harness.parse_react_scratch(
         "Thought: 问感觉\nAction: example\nObservation: 摸棱"
     )
@@ -127,19 +150,13 @@ def test_parse_react_say_and_alike():
         drama_notes="圆形教室眼罩卡片",
         channel=[{"who": "chenxue", "text": "别怕黑"}],
     )
-    assert "资料" in observed["observation"] or "眼罩" in observed["observation"]
+    assert "眼罩" in observed["observation"] or "别怕黑" in observed["observation"]
 
 
-def test_speak_avoids_repeating_prior_lines(monkeypatch):
-    calls = {"n": 0}
+def test_speak_keeps_line_even_if_similar_to_prior(monkeypatch):
+    """真实群聊允许意思相近；不再因像旧句就丢弃。"""
 
     async def _line(**kwargs):
-        calls["n"] += 1
-        msg = kwargs.get("user_message") or ""
-        if "不要写 Say" in msg or "思考步" in msg:
-            return "Thought: 换角度\nAction: example\nObservation: 摸墙"
-        if "撞车" in msg or "不可用" in msg:
-            return "像关灯摸墙，墙还在，你的手也还在。"
         return "别怕黑。黑只是把眼睛关了。"
 
     monkeypatch.setattr(harness, "chat_completion", _line)
@@ -155,12 +172,11 @@ def test_speak_avoids_repeating_prior_lines(monkeypatch):
         instruction="直接回答",
         episode_id="E14",
     ))
-    assert calls["n"] >= 2
-    assert "别怕黑" not in line["text"]
-    assert "摸墙" in line["text"] or "手" in line["text"] or "墙" in line["text"]
+    assert line is not None
+    assert "别怕黑" in line["text"]
 
 
-def test_speak_falls_back_when_llm_empty(monkeypatch):
+def test_speak_returns_none_when_llm_empty(monkeypatch):
     async def _empty(**kwargs):
         return None
 
@@ -173,8 +189,7 @@ def test_speak_falls_back_when_llm_empty(monkeypatch):
         prior=[],
         instruction="说一句",
     ))
-    assert line["who"] == "limo"
-    assert line["text"]
+    assert line is None
 
 
 def test_catalog_has_current_episode():
@@ -217,46 +232,43 @@ def test_e13_perception_stops_before_later_acts():
     assert leaks_future("腿还没看懂", "E13") is False
 
 
-def test_greeting_hint_does_not_open_a_stance_topic():
-    from app.agents.academy.graph import _hint
-
-    hint = _hint({
-        "mode": "reply",
-        "user_text": "你好",
-        "index": 1,
-        "speakers": ["yuchen", "chenxue"],
-    }, "chenxue")
-    assert "先回" in hint
-    assert "小话题" not in hint
-    assert "站桩" in hint
-
-
-def test_reply_hint_answers_the_child():
-    from app.agents.academy.graph import _hint
-    from app.agents.academy.turn import prepare_turn
-
-    ctx = prepare_turn(
-        user_text="中国为什么没有种姓？",
+def test_persona_only_prompt_and_kb_user_message():
+    """对话只留角色卡 system；user 走场景 + 认知 + 频道 + 本轮要求。"""
+    prompt = harness.system_prompt(
+        harness.CHARACTERS["chenxue"],
+        episode_title="EH01 黄巢",
+        task="记住这节课",
+        child_talent="赢者",
         episode_id="EH01",
-        character_keys=["chenxue", "dani"],
     )
-    hint = _hint({
-        "mode": "reply",
-        "user_text": "中国为什么没有种姓？",
-        "index": 0,
-        "speakers": ["chenxue", "dani"],
-        "turn_ctx": {
-            "raw_ask": ctx.raw_ask,
-            "standalone_query": ctx.standalone_query,
-            "skill": ctx.skill,
-            "reasoning_mode": ctx.reasoning_mode,
-            "synopsis": ctx.synopsis,
-            "fact_default": ctx.fact_default,
-            "facts_by_char": dict(ctx.facts_by_char),
-        },
-    }, "chenxue")
-    assert "种姓" in hint or "科举" in hint or "事实" in hint
-    assert "ReAct" in hint or "正面" in hint
+    assert "陈雪" in prompt
+    assert "人机腔" not in prompt
+    assert "Thought" not in prompt
+    assert "不许说自己是人工智能" not in prompt
+    msg = harness._say_user_message(
+        "孩子：今晚站桩谁跟我一组？",
+        "正面表态跟不跟",
+        ["别复读这句"],
+        {"thought": "x"},
+        drama_notes="站桩是本集功课",
+        user_ask="今晚站桩谁跟我一组？",
+        scene_context="刚看完五兽桩",
+    )
+    assert "已知" in msg or "站桩是本集功课" in msg
+    assert "谁跟我一组" in msg
+    assert "刚看完五兽桩" in msg
+    assert "正面表态跟不跟" in msg
+    assert "ReAct" not in msg
+    greet = harness._say_user_message(
+        "孩子：你好",
+        "先回问候，不要提剧情",
+        [],
+        None,
+        user_ask="你好",
+        scene_context="博物馆",
+    )
+    assert "打招呼" in greet or "问候" in greet
+    assert "黄巢" not in greet
 
 
 def test_clamp_scratch_and_echo_guards():
@@ -276,11 +288,13 @@ def test_clamp_scratch_and_echo_guards():
         child_talent="赢者",
         episode_id="EH01",
     )
-    assert "人机腔" in prompt or "复述" in prompt
-    assert "常识" in prompt
+    assert "陈雪" in prompt
+    assert "赢者" in prompt
+    assert "人机腔" not in prompt
+    assert "不许说自己是人工智能" not in prompt
 
 
-def test_fact_seed_answers_when_llm_empty(monkeypatch):
+def test_say_line_returns_none_when_llm_empty(monkeypatch):
     from app.agents.academy.packs import clear_pack_cache
 
     clear_pack_cache()
@@ -299,9 +313,7 @@ def test_fact_seed_answers_when_llm_empty(monkeypatch):
         scratch={"thought": "答种姓", "action": "answer", "observation": ""},
         episode_id="EH01",
     ))
-    assert "科举" in line["text"] or "血统" in line["text"] or "锁" in line["text"]
-    assert "那面墙" not in line["text"]
-    assert "记下来" not in line["text"]
+    assert line is None
 
 
 def test_eh01_pack_fact_seed_matches_ask():
@@ -335,7 +347,7 @@ def test_eh01_pack_fact_seed_matches_ask():
     assert "科举" in hist.fact_for("chenxue") or "锁" in hist.fact_for("chenxue")
 
 
-def test_caste_fallback_never_uses_emperor_line(monkeypatch):
+def test_caste_no_fake_line_when_llm_empty(monkeypatch):
     from app.agents.academy.packs import clear_pack_cache
 
     clear_pack_cache()
@@ -354,16 +366,26 @@ def test_caste_fallback_never_uses_emperor_line(monkeypatch):
         scratch={"thought": "答种姓", "action": "answer", "observation": "科举"},
         episode_id="EH01",
     ))
-    assert "科举" in line["text"] or "种姓" in line["text"] or "血统" in line["text"] or "锁" in line["text"]
-    assert "称了帝" not in line["text"]
-    assert "杀那么多" not in line["text"]
+    assert line is None
 
 
 def test_graph_opening_runs_in_order(monkeypatch):
     from app.agents.academy.graph import build_scene_graph
 
     async def _line(**kwargs):
-        return "腿还没看懂"
+        system = kwargs.get("system_prompt") or ""
+        # 按「你是某某」匹配，避免关系字段里的导师名误伤
+        for prefix, text in (
+            ("你是善雨", "先定心。"),
+            ("你是王家慧", "笔记写好了。"),
+            ("你是章宇尘", "原理我懂了。"),
+            ("你是施丹尼", "你站我就站。"),
+            ("你是李寞", "站一分钟算一分钟。"),
+            ("你是陈雪", "再来一次。"),
+        ):
+            if prefix in system:
+                return text
+        return "在。"
 
     monkeypatch.setattr(harness, "chat_completion", _line)
 
@@ -384,6 +406,53 @@ def test_graph_opening_runs_in_order(monkeypatch):
     assert whos[0] == "jiahui"
     assert whos[-1] == "shanyu"
     assert all(turn["text"] for turn in result["turns"])
+
+
+def test_invite_uses_model_not_canned_fallback(monkeypatch):
+    """组队意图走模型；空响应不返回假台词。"""
+    ask = "今晚站桩谁跟我一组？"
+
+    async def _line(**kwargs):
+        return "算我一个，跟你一组。"
+
+    monkeypatch.setattr(harness, "chat_completion", _line)
+    first = asyncio.run(harness.say_line(
+        "chenxue",
+        episode_title="E13 五兽桩",
+        task="站桩5分钟",
+        child_talent="赢者",
+        prior=[{"who": "me", "text": ask}],
+        instruction="感知：找人组队",
+        scratch={"thought": "应邀", "action": "react", "observation": ""},
+        episode_id="E13",
+    ))
+    assert first is not None
+    assert first["text"] == "算我一个，跟你一组。"
+    assert first["text"] != "嗯，我听着。"
+
+    async def _empty(**kwargs):
+        return None
+
+    monkeypatch.setattr(harness, "chat_completion", _empty)
+    empty = asyncio.run(harness.say_line(
+        "limo",
+        episode_title="E13 五兽桩",
+        task="站桩5分钟",
+        child_talent="行者",
+        prior=[{"who": "me", "text": ask}],
+        instruction="感知：找人组队",
+        scratch={"thought": "也算我", "action": "react", "observation": ""},
+        episode_id="E13",
+    ))
+    assert empty is None
+
+    from app.agents.academy.turn import is_invite, prepare_turn, turn_instruction
+
+    assert is_invite(ask)
+    ctx = prepare_turn(user_text=ask, episode_id="E13", character_keys=["chenxue", "limo"])
+    assert ctx.skill == "train"
+    hint = turn_instruction(ctx, character_key="chenxue", index=0)
+    assert "组队" in hint or "应邀" in hint or "跟不跟" in hint
 
 
 def test_demo_fills_missing_watch_and_media():

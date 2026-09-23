@@ -70,7 +70,10 @@ function currentRoute() {
   }
 }
 
-/** 软切：优先 stack 回退，再 redirectTo。不用官方 tabBar，避免和页面自绘底栏叠两层。 */
+/** 软切：优先 stack 回退，再 navigateTo 保留上一页（切回学院时讨论区 DOM 还在）。
+ * 栈过深才 redirectTo。不用官方 tabBar，避免和页面自绘底栏叠两层。 */
+const TAB_STACK_SOFT_MAX = 6
+
 function softNavigate(url) {
   const full = withSlash(url)
   const target = normalizeRoute(full)
@@ -97,6 +100,17 @@ function softNavigate(url) {
           return
         }
       }
+    }
+    // 底栏互切：用 navigateTo 把上一页留在栈里，返回时界面原样保留
+    if (pages.length < TAB_STACK_SOFT_MAX) {
+      uni.navigateTo({
+        url: full,
+        fail: () => uni.redirectTo({
+          url: full,
+          fail: () => uni.reLaunch({ url: full }),
+        }),
+      })
+      return
     }
   } catch (_) { /* ignore */ }
 

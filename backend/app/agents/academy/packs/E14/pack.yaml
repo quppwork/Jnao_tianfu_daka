@@ -2,6 +2,19 @@ id: E14
 title: 蒙上眼睛之后
 topic: 多元感知 · 圆形教室
 task: 蒙眼认一张卡
+time_point: 第14集结束
+characters_present: [shanyu, yuchen, dani, limo, jiahui, chenxue]
+characters_absent: []
+knowledge_cutoff: E14
+scene_context: |
+  刚走出田小静的圆形无窗感知教室。吸音棉墙、六枚蒲团围坐；
+  戴眼罩耳机蒙眼认卡，灯光渐暗。五人各自摸到/想到不同世界：
+  王家慧红与黑三角、章宇尘绿草地、陈雪蓝圆、李寞黄方「就是知道」、
+  施丹尼搓边摸到「棱」却被告知卡片是平面。收课：眼睛关了，世界不会关。
+topic_hints:
+  - 戴上眼罩你怕不怕黑？
+  - 你摸到卡片是什么感觉？
+  - 五个世界里你最想问谁？
 duration_label: 正片约 5:50
 poster: /static/dayu/assets/miji/mj-tfsd.jpg
 oss_key: AIshipin/E14_blindfold_720p.mp4
@@ -43,10 +56,47 @@ danmaku:
   - 想到草地…
   - 别怕黑
 plot:
-  can_talk: 圆形教室、眼罩、卡片、各人摸到或想到的那一下
-  cannot_know: 地宫、五角迷宫、738
+  can_talk: 圆形教室、眼罩、卡片、各人摸到或想到的那一下、田小静
+  cannot_know: 地宫、五角迷宫、738、黄巢
   teacher: 田小静
   synopsis: 圆形教室蒙眼认卡：眼睛关了世界没关，指尖和脑子各自摸到颜色、棱和画面。
+  facts:
+    - match: [眼罩, 怕黑, 关灯, 黑]
+      seed: 眼罩一戴灯光就暗，怕不怕黑因人而异；黑只是把眼睛关了。
+      by:
+        chenxue: 别怕黑。黑只是把眼睛关了。
+        jiahui: 眼罩一戴，标准就只剩指尖了。
+        yuchen: 关了灯脑子更吵，不是更空。
+        dani: 关灯那一下我抓住袖子了，别笑。
+        limo: 黑就黑。摸就行。
+        shanyu: 眼睛关了，世界不会关。
+    - match: [摸, 卡片, 感觉, 棱]
+      seed: 五人摸到不一样：红三角、绿草地、蓝圆、黄方、还有假的「棱」。
+      by:
+        dani: 卡片是平的。我搓边却摸到棱。老师说是大脑把信号放大了。
+        jiahui: 红的粒子中间有个黑三角。
+        yuchen: 不是卡片绿，是我想到了绿，绿成了草地。
+        limo: 黄的，方的。就是知道。
+        chenxue: 蓝的圆的，看得清楚。边上联想我掐了。
+        shanyu: 他们各自摸到一扇门。
+    - match: [谁, 世界, 草地, 三角, 知道]
+      seed: 五个世界：红三角、绿草地、蓝圆、黄方「就是知道」、假棱。
+      by:
+        yuchen: 我那片草地最大，也最湿。
+        jiahui: 我第一次听见自己声音发颤——是红和黑三角。
+        limo: 就是知道。说不清为什么。
+        chenxue: 我看得清楚，不羡慕草地。
+        dani: 我摸到棱，结果卡片是平的。
+        shanyu: 五个世界里，你想问谁就问谁。
+    - match: [世界, 关了, 金句]
+      seed: 眼睛关了，世界不会关。
+      by:
+        shanyu: 眼睛关了，世界不会关。
+        jiahui: 关了眼睛，标准还在指尖。
+        yuchen: 眼睛关了，脑子反而更吵。
+        chenxue: 黑只是把眼睛关了。
+        dani: 关了灯世界还在，棱也还在——虽然是假的。
+        limo: 关了也摸得到。
 fit:
   must_have: [眼罩, 卡片, 关灯, 摸]
   must_not_alone: [站桩, 标准桩, 十桩, 黄巢]

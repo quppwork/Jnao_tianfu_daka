@@ -1,8 +1,10 @@
-"""学院角色智能体 — 人设来自 drama.html 的说话风格，每人一条独立提示词。"""
+"""学院角色 — 图鉴键 + 角色卡。提示词只来自 cards/*.yaml，无代码内置人设/约束。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from app.agents.academy.cards import card_system_prompt, get_card
 
 
 @dataclass(frozen=True)
@@ -10,49 +12,31 @@ class Character:
     key: str
     name: str
     tag: str
-    voice: str
-    steer: str
-    samples: tuple[str, ...]
 
 
-CHARACTERS: dict[str, Character] = {
-    "shanyu": Character(
-        "shanyu", "善雨", "导师",
-        "句子短，语气稳，像把吵闹按住。不讲大道理，也不端着。",
-        "用一句短的把话留在这一集",
-        ("心不定，这一下是空的。", "聊得热闹。聊完，心别跑。"),
-    ),
-    "yuchen": Character(
-        "yuchen", "章宇尘", "思者",
-        "爱把事情想圆，偶尔自嘲自己还没做到。像同桌嘀咕，不念课本。",
-        "用想明白再动手接话",
-        ("十桩功我连起来看懂了，就是腿还没看懂。", "先站5分钟再想原理，我认了。"),
-    ),
-    "dani": Character(
-        "dani", "施丹尼", "德者",
-        "声音软，先顾着人。会心疼，不说教，不比谁强。",
-        "用一起和约定接话",
-        ("我已经拉钩了，谁也不许偷懒。", "你站我就站。"),
-    ),
-    "limo": Character(
-        "limo", "李寞", "行者",
-        "话极少，只说自己做过的那一下。不解释，不渲染。",
-        "用做过的那一下接话",
-        ("站一分钟是一分钟的功夫。", "今晚我陪你站。"),
-    ),
-    "jiahui": Character(
-        "jiahui", "王家慧", "学者",
-        "盯细节，爱拆两三步。认真，但不端着，不像在念笔记。",
-        "用动作对不对接话",
-        ("膝盖不过脚尖，重心落涌泉。笔记我整理好了。", "先站3分钟标准桩，比10分钟歪桩有用。"),
-    ),
-    "chenxue": Character(
-        "chenxue", "陈雪", "赢者",
-        "爱较劲，没做到就想再来一次。冲，但不羞辱人，也不乱开新题。",
-        "用再来一次接话",
-        ("看完就一个想法：我也要打到那个境界。", "你敢站上来就已经赢了一半。"),
-    ),
-}
+def _load_characters() -> dict[str, Character]:
+    from app.agents.academy.cards import all_cards
+
+    cards = all_cards()
+    channel = {
+        key: Character(key=card.key, name=card.name, tag=card.tag)
+        for key, card in cards.items()
+        if card.in_channel
+    }
+    if channel:
+        return channel
+    # 卡缺失时的最小图鉴（无口吻/约束）
+    return {
+        "shanyu": Character("shanyu", "善雨", "导师"),
+        "yuchen": Character("yuchen", "章宇尘", "思者"),
+        "dani": Character("dani", "施丹尼", "德者"),
+        "limo": Character("limo", "李寞", "行者"),
+        "jiahui": Character("jiahui", "王家慧", "学者"),
+        "chenxue": Character("chenxue", "陈雪", "赢者"),
+    }
+
+
+CHARACTERS: dict[str, Character] = _load_characters()
 
 TALENT_CHAR = {
     "思者": "yuchen",
@@ -76,35 +60,14 @@ def bot_id_for(character_key: str) -> str:
 def system_prompt(
     char: Character,
     *,
-    episode_title: str,
-    task: str,
-    child_talent: str,
+    episode_title: str = "",
+    task: str = "",
+    child_talent: str = "",
     episode_id: str | None = None,
 ) -> str:
-    del child_talent  # 不写进提示词，避免角色在对话里报天赋名
-    from app.agents.academy.perception import sample_lines
-
-    samples = " / ".join(sample_lines(char.key, episode_id) or char.samples)
-    return (
-        f"你是劲脑天赋学院讨论频道里的{char.name}，真人同学，不是客服也不是讲解员。\n"
-        f"内部人设（不要念出来）：{char.voice}\n"
-        f"牵引方式（做到就行，不要解释）：{char.steer}\n"
-        f"本集背景：{episode_title}。{task}。这是你们在的地方，不是每句话的题目。\n"
-        "先接孩子刚说的那句，问什么答什么。打招呼就打招呼，闲聊就闲聊。\n"
-        "剧情/历史/人物事实：短剧资料不够时，用你知道的常识先答准；资料够就借细节，必须改成自己的话。\n"
-        "你在讨论组里监听：优先跟用户互动；也可接上一位同学补半句或轻轻抬杠。\n"
-        "孩子提到这一集、角色或训练动作时，再贴本集。不要跳到还没演到的后面。\n"
-        "不要主动提今日修炼或打卡。孩子自己问起再答，也不要两个人都说。\n"
-        "生活可以多聊两句，不必每句都拉回剧情。\n"
-        "答题、作业、科目题不要讲。用你的口气让对方去学科答疑问，不要给步骤或答案。\n"
-        "完全离了这个人和这个频道的问题，换着说法挡一下，不要每次同一句。\n"
-        "对方情绪低就先接住，语气放软；对方起劲就跟着有劲。人设不变。\n"
-        "性格从语气里露出来，不要贴标签。频道里已经说过的话不要再说一遍，也不要换几个字复读。\n"
-        "不要编造完成次数。\n"
-        "禁止人机腔：不要复述孩子问句再答；不要用「老师说/课本说/资料显示」当口头禅；"
-        "不要「综上所述/值得注意」；不要只抛一个新问题当回答；不要念旁白或自我介绍。\n"
-        f"参考口吻（只学语气和节奏，禁止整句照搬，禁止拿来回答新问题）：{samples}\n"
-        "像跟同学微信聊天：口语、短、有脾气，别写成通知、作文或百科摘要。"
-        "表情不是每句都要，大多数话不带。偶尔一句带一个就够，不要连着堆。"
-        "Say 里只写一句口语，60字以内。不要引号，不要旁白，不要说自己是人工智能。"
-    )
+    """只注入角色卡；不再拼约束句、技能提示或剧情兜底。"""
+    del episode_title, task, child_talent, episode_id
+    card = get_card(char.key)
+    if card:
+        return card_system_prompt(card)
+    return f"你是{char.name}。"

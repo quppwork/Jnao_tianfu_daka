@@ -81,7 +81,9 @@
     var turn = line(first, salt, id)
     turn.text = turn.text.replace(/。$/, '呀')
     if (body.quote && body.quote.text) turn.quote = body.quote
-    if (body.sticker) turn.text = '哈哈看到了 ' + body.sticker
+    if (body.sticker) {
+      turn.text = '哈哈我看到你发的 ' + body.sticker + ' 了'
+    }
     var turns = [turn]
     if (!body.mention && !(body.quote && body.quote.who) && salt % 3 === 0) turns.push(line('shanyu', salt, id))
     return { turns: turns, nudge: salt % 3 === 0 ? ns.fakeOpen(id).nudge : null }
@@ -99,7 +101,7 @@
       task: '站桩5分钟',
       channel_name: 'E13 · 五兽桩讨论组',
       notice: '频道公告：今晚站桩5分钟。——善雨导师',
-      chips: ['这一集里师父哪一下你记得最清？', '今晚站桩谁跟我一组？', '我觉得我站不住怎么办？'],
+      chips: ['这一集里师父哪一下你记得最清？', '今晚站桩谁跟我一组？', '我觉得我站不住怎么办？', '师父，十桩功最难的是哪一桩？'],
     },
     E14: {
       title: '蒙上眼睛之后',
@@ -115,7 +117,7 @@
       task: '记住今天这节历史课',
       channel_name: 'EH01 · 历史课·黄巢篇讨论组',
       notice: '频道公告：记住今天这节历史课。——善雨导师',
-      chips: ['中国为什么没有种姓？', '黄巢最后当上皇帝了吗？', '那首诗你记住哪一句？'],
+      chips: ['中国为什么没有种姓？', '黄巢最后当上皇帝了吗？', '他杀那么多人，你怎么看？', '那首诗你记住哪一句？'],
     },
   }
 

@@ -88,7 +88,11 @@
     list.forEach(function (turn) {
       if (!turn || (!turn.text && !turn.sticker)) return
       if (turn.who === 'me' || turn.who === 'user') {
-        if (typeof addMe === 'function') addMe(turn.text || turn.sticker, turn)
+        if (typeof addMe === 'function') {
+          var meText = turn.text || ''
+          if (turn.sticker && meText === turn.sticker) meText = ''
+          addMe(meText, turn)
+        }
         return
       }
       if (typeof addMsg === 'function') addMsg(turn.who, turn.text, turn)

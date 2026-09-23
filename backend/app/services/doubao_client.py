@@ -1,4 +1,4 @@
-"""豆包 Ark 对话客户端 — 全平台 AI 统一入口"""
+"""统一对话客户端 — DeepSeek（OpenAI 兼容）。模块名 doubao_client 保留以免全仓改 import。"""
 
 from collections.abc import AsyncIterator
 
@@ -7,9 +7,11 @@ from config.loader import load_settings
 from app.core.logger import get_logger
 from app.services.usage_recorder import record_usage
 
-logger = get_logger("doubao")
+logger = get_logger("llm")
 
-DEFAULT_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+DEFAULT_API_BASE = "https://api.deepseek.com"
+DEFAULT_MODEL = "deepseek-v4-pro"
+DEFAULT_VISION_MODEL = "deepseek-flash"
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -29,25 +31,28 @@ def _sanitize_api_base(value: str | None) -> str:
 
 
 def is_configured() -> bool:
-    cfg = load_settings().get("doubao", {})
+    cfg = _cfg()
     key = str(cfg.get("api_key", "") or "").strip()
-    if not key or key.startswith("${") or key.startswith("your-"):
+    if not key or key.startswith("${") or key.startswith("your-") or key.startswith("sk-your"):
         return False
-    base = _sanitize_api_base(cfg.get("api_base"))
-    return bool(key and base.startswith("http"))
+    return bool(str(cfg.get("api_base") or "").startswith("http"))
 
 
 def _cfg() -> dict:
+    """只走 DeepSeek；不再回落豆包。"""
     settings = load_settings()
-    cfg = settings.get("doubao", {})
-    key = str(cfg.get("api_key", "") or "").strip()
+    ds = settings.get("deepseek", {}) or {}
+    key = str(ds.get("api_key", "") or "").strip()
     if key.startswith("${"):
         key = ""
+    model = str(ds.get("model") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    vision = str(ds.get("vision_model") or DEFAULT_VISION_MODEL).strip() or DEFAULT_VISION_MODEL
     return {
         "api_key": key,
-        "api_base": _sanitize_api_base(cfg.get("api_base")),
-        "model": cfg.get("model", "doubao-seed-1-6-250615"),
-        "vision_model": cfg.get("vision_model") or cfg.get("model", "doubao-seed-1-6-250615"),
+        "api_base": _sanitize_api_base(ds.get("api_base")),
+        "model": model,
+        "vision_model": vision,
+        "provider": "deepseek",
     }
 
 
@@ -84,7 +89,7 @@ def _record_doubao(
 ) -> None:
     try:
         record_usage(
-            provider="doubao",
+            provider="deepseek",
             api=api,
             model=model,
             feature=feature,
@@ -95,7 +100,7 @@ def _record_doubao(
             call_count=1,
         )
     except Exception as e:
-        logger.warning("doubao usage record skipped: %s", e)
+        logger.warning("llm usage record skipped: %s", e)
 
 
 def _message_text(message: dict) -> str | None:
@@ -120,8 +125,9 @@ async def chat_completion(
     max_tokens: int = 500,
     timeout: float = 30,
     feature: str | None = None,
-    disable_thinking: bool = False,
+    disable_thinking: bool = True,
 ) -> str | None:
+    """默认关 thinking：v4-pro 推理会吃满 max_tokens，短回复容易 content 为空。"""
     cfg = _cfg()
     if not cfg["api_key"]:
         return None
@@ -158,7 +164,7 @@ async def chat_completion(
                 timeout=timeout,
             )
         if resp.status_code != 200:
-            logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
+            logger.error(f"LLM error {resp.status_code}: {resp.text[:200]}")
             _record_doubao(api="chat.completions", model=cfg["model"], usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
@@ -170,10 +176,10 @@ async def chat_completion(
         )
         return _message_text(data["choices"][0]["message"])
     except httpx.HTTPError as e:
-        logger.warning(f"Doubao request failed: {e}")
+        logger.warning(f"LLM request failed: {e}")
         return None
     except (KeyError, IndexError, ValueError) as e:
-        logger.warning(f"Doubao response parse failed: {e}")
+        logger.warning(f"LLM response parse failed: {e}")
         return None
 
 
@@ -186,7 +192,7 @@ async def chat_completion_message(
     timeout: float = 30,
     feature: str | None = None,
 ) -> dict | None:
-    """Ark /chat/completions：返回 assistant message（可含 tool_calls）。
+    """DeepSeek /chat/completions：返回 assistant message（可含 tool_calls）。
 
     OpenAI 兼容：tools + tool_choice；用于 Guide 原生 function-calling 选工具。
     """
@@ -200,6 +206,8 @@ async def chat_completion_message(
         "model": cfg["model"],
         "messages": messages,
         "max_tokens": max_tokens,
+        # 工具选库也关 thinking，避免拖慢 Guide Agent
+        "thinking": {"type": "disabled"},
     }
     if tools:
         payload["tools"] = tools
@@ -217,9 +225,20 @@ async def chat_completion_message(
             json=payload,
             timeout=timeout,
         )
+        if resp.status_code == 400 and "thinking" in resp.text:
+            payload.pop("thinking", None)
+            resp = await client.post(
+                f"{cfg['api_base']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
         if resp.status_code != 200:
             logger.error(
-                f"Doubao tools error {resp.status_code}: {resp.text[:300]}"
+                f"LLM tools error {resp.status_code}: {resp.text[:300]}"
             )
             _record_doubao(api="chat.completions.tools", model=cfg["model"], usage=None, ok=False, feature=feature)
             return None
@@ -234,14 +253,14 @@ async def chat_completion_message(
         return msg if isinstance(msg, dict) else None
     except httpx.HTTPError as e:
         logger.warning(
-            "Doubao tools request failed: type=%s timeout=%s err=%r",
+            "LLM tools request failed: type=%s timeout=%s err=%r",
             type(e).__name__,
             timeout,
             e,
         )
         return None
     except (KeyError, IndexError, TypeError, ValueError) as e:
-        logger.warning(f"Doubao tools parse failed: {e}")
+        logger.warning(f"LLM tools parse failed: {e}")
         return None
 
 
@@ -292,7 +311,7 @@ async def vision_chat_completion(
                 },
             )
         if resp.status_code != 200:
-            logger.error(f"Doubao vision error {resp.status_code}: {resp.text[:200]}")
+            logger.error(f"LLM vision error {resp.status_code}: {resp.text[:200]}")
             _record_doubao(api="chat.completions.vision", model=cfg["vision_model"], usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
@@ -304,10 +323,10 @@ async def vision_chat_completion(
         )
         return data["choices"][0]["message"]["content"]
     except httpx.HTTPError as e:
-        logger.warning(f"Doubao vision request failed: {e}")
+        logger.warning(f"LLM vision request failed: {e}")
         return None
     except (KeyError, IndexError, ValueError) as e:
-        logger.warning(f"Doubao vision parse failed: {e}")
+        logger.warning(f"LLM vision parse failed: {e}")
         return None
 
 
@@ -322,7 +341,7 @@ async def chat_completion_stream(
     """流式输出：优先真流式，失败则整段回退"""
     cfg = _cfg()
     if not cfg["api_key"]:
-        yield "[ERROR] 豆包 API 未配置"
+        yield "[ERROR] DeepSeek API 未配置"
         return
 
     messages = _build_messages(system_prompt, user_message, history)
@@ -332,6 +351,7 @@ async def chat_completion_stream(
         "max_tokens": max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
+        "thinking": {"type": "disabled"},
     }
     usage_acc: dict | None = None
     yielded_any = False
@@ -349,7 +369,7 @@ async def chat_completion_stream(
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
-                    logger.error(f"Doubao stream error {resp.status_code}: {body[:200]}")
+                    logger.error(f"LLM stream error {resp.status_code}: {body[:200]}")
                     _record_doubao(
                         api="chat.completions.stream",
                         model=cfg["model"],
@@ -358,7 +378,7 @@ async def chat_completion_stream(
                         ok=False,
                         feature=feature,
                     )
-                    yield "[ERROR] 豆包服务异常"
+                    yield "[ERROR] DeepSeek 服务异常"
                     return
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data: "):
@@ -391,7 +411,7 @@ async def chat_completion_stream(
                 feature=feature,
             )
     except Exception as e:
-        logger.error(f"Doubao stream failed: {e}")
+        logger.error(f"LLM stream failed: {e}")
         full = await chat_completion(
             system_prompt=system_prompt,
             user_message=user_message,
@@ -417,7 +437,7 @@ async def vision_chat_completion_stream(
     """多模态流式输出"""
     cfg = _cfg()
     if not cfg["api_key"]:
-        yield "[ERROR] 豆包 API 未配置"
+        yield "[ERROR] DeepSeek API 未配置"
         return
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -459,7 +479,7 @@ async def vision_chat_completion_stream(
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
-                    logger.error(f"Doubao vision stream error {resp.status_code}: {body[:200]}")
+                    logger.error(f"LLM vision stream error {resp.status_code}: {body[:200]}")
                     _record_doubao(
                         api="chat.completions.vision.stream",
                         model=cfg["vision_model"],
@@ -468,7 +488,7 @@ async def vision_chat_completion_stream(
                         ok=False,
                         feature=feature,
                     )
-                    yield "[ERROR] 豆包识图服务异常"
+                    yield "[ERROR] DeepSeek 识图服务异常"
                     return
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data: "):
@@ -501,7 +521,7 @@ async def vision_chat_completion_stream(
                 feature=feature,
             )
     except Exception as e:
-        logger.error(f"Doubao vision stream failed: {e}")
+        logger.error(f"LLM vision stream failed: {e}")
         full = await vision_chat_completion(
             system_prompt=system_prompt,
             user_message=user_message,

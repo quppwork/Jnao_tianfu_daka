@@ -31,27 +31,32 @@ def load_settings() -> dict:
     server["port"] = int(os.getenv("JNAO_PORT", server.get("port", 8011)))
     upstream = raw.get("upstream", {}).get("tianfu_rag", {})
     upstream["url"] = os.getenv("TIANFU_RAG_URL", upstream.get("url", "http://127.0.0.1:8010"))
-    deepseek = raw.get("deepseek", {})
-    deepseek["api_key"] = os.getenv("DEEPSEEK_API_KEY", deepseek.get("api_key", ""))
-    raw["deepseek"] = deepseek
-    doubao = raw.get("doubao", {})
-    doubao_key = os.getenv("DOUBAO_API_KEY", doubao.get("api_key", ""))
-    if str(doubao_key).startswith("${"):
-        doubao_key = ""
-    doubao["api_key"] = doubao_key
-    doubao_base = os.getenv(
-        "DOUBAO_API_BASE",
-        doubao.get("api_base", "https://ark.cn-beijing.volces.com/api/v3"),
+    deepseek = raw.get("deepseek", {}) or {}
+    ds_key = os.getenv("DEEPSEEK_API_KEY", deepseek.get("api_key", ""))
+    if str(ds_key).startswith("${"):
+        ds_key = ""
+    deepseek["api_key"] = ds_key
+    ds_base = os.getenv(
+        "DEEPSEEK_API_BASE",
+        deepseek.get("api_base", "https://api.deepseek.com"),
     )
-    if str(doubao_base).startswith("${"):
-        doubao_base = "https://ark.cn-beijing.volces.com/api/v3"
-    doubao["api_base"] = doubao_base
-    raw_model = doubao.get("model", "")
-    if raw_model.startswith("${"):
-        raw_model = ""
-    doubao["model"] = os.getenv("DOUBAO_CHAT_MODEL", raw_model or "doubao-seed-1-6-250615")
-    doubao["vision_model"] = os.getenv("DOUBAO_VISION_MODEL", doubao["model"])
-    raw["doubao"] = doubao
+    if str(ds_base).startswith("${") or not str(ds_base).startswith("http"):
+        ds_base = "https://api.deepseek.com"
+    deepseek["api_base"] = str(ds_base).rstrip("/")
+    ds_model = os.getenv("DEEPSEEK_CHAT_MODEL", deepseek.get("model", "deepseek-v4-pro"))
+    if str(ds_model).startswith("${") or not str(ds_model).strip():
+        ds_model = "deepseek-v4-pro"
+    deepseek["model"] = str(ds_model).strip()
+    ds_vision = os.getenv(
+        "DEEPSEEK_VISION_MODEL",
+        deepseek.get("vision_model") or "deepseek-flash",
+    )
+    if str(ds_vision).startswith("${") or not str(ds_vision).strip():
+        ds_vision = "deepseek-flash"
+    deepseek["vision_model"] = str(ds_vision).strip()
+    raw["deepseek"] = deepseek
+    # 豆包停用：不再从环境注入；旧 DOUBAO_* 忽略
+    raw["doubao"] = {"api_key": "", "api_base": "", "model": "", "vision_model": ""}
     raw["server"] = server
     raw["upstream"]["tianfu_rag"] = upstream
     db = raw.get("database", {})
