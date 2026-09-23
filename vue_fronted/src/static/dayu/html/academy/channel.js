@@ -153,10 +153,17 @@
       $('inp').disabled = false
       $('inp').placeholder = '说点什么，可以 @ 人或按住引用'
     }
-    // 解锁后先停在学院页（图一），下滑标题条进入全屏讨论
+    // 加入讨论 → 直接全屏讨论页（上滑标题条可回到学院页）
     var phone = document.querySelector('.phone')
-    if (phone) phone.classList.add('qq-peek')
+    if (phone) phone.classList.remove('qq-peek')
+    try { document.documentElement.style.setProperty('--qq-top', '0px') } catch (e) { /* ignore */ }
     if (typeof syncChatDock === 'function') syncChatDock()
+    if (typeof showChips === 'function') {
+      try { showChips() } catch (e) { /* ignore */ }
+    }
+    setTimeout(function () {
+      if (typeof scrollChat === 'function') scrollChat()
+    }, 60)
   }
 
   function lockChatShell() {

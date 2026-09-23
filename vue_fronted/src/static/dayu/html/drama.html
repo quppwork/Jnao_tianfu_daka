@@ -82,7 +82,7 @@
   .stage .scwho span{font-size:10px;color:#C9A869;font-weight:800}
   /* ===== 聊天频道（默认卡片） ===== */
   .chatroom{margin:12px 18px calc(var(--chat-dock-h, 120px) + 8px);background:#121826;border:1.5px solid #232B3D;border-radius:18px;padding:12px 12px 8px;position:relative;display:flex;flex-direction:column;min-height:min(36vh,280px);box-sizing:border-box}
-  .cr-head{display:flex;align-items:center;gap:8px;padding:16px 0 9px;border-bottom:1px solid #1A2233;margin-bottom:10px;flex:none;position:relative;touch-action:pan-y}
+  .cr-head{display:flex;align-items:center;gap:8px;padding:16px 0 9px;border-bottom:1px solid #1A2233;margin-bottom:10px;flex:none;position:relative;touch-action:manipulation}
   .cr-head b{font-size:13.5px;font-weight:900;color:#EDEBE4;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cr-head .on9{margin-left:0;font-size:10px;color:#6FCF8E;font-weight:800;flex:none}
   .cr-head .on9::before{content:"●";margin-right:4px}
@@ -108,12 +108,28 @@
   .phone.qq-chat:not(.qq-peek) .vbox,
   .phone.qq-chat:not(.qq-peek) .stage{display:none!important}
   .phone.qq-chat:not(.qq-peek){--qq-top:0px}
-  /* 学院页（peek）：对话窗贴在下方，可下滑回全屏讨论 */
-  .phone.qq-chat.qq-peek .chatroom{border-radius:14px 14px 0 0;border:1.5px solid #232B3D;border-bottom:none;min-height:52px}
+  /* 学院页：正片/实况占满；讨论区只留底栏标题条，点一下才进聊天页（不能靠滚动互进） */
+  .phone.qq-chat.qq-peek .chatroom{
+    border-radius:14px 14px 0 0;border:1.5px solid #232B3D;border-bottom:none;
+    padding-bottom:4px;
+  }
+  .phone.qq-chat.qq-peek:not(.qq-sliding) #msgwrap,
+  .phone.qq-chat.qq-peek:not(.qq-sliding) .typing{display:none!important}
+  .phone.qq-chat.qq-peek:not(.qq-sliding) .cr-head{margin-bottom:0;border-bottom:none;padding-bottom:10px}
+  .phone.qq-chat.qq-peek .chatroom-spacer{display:none!important}
   .phone.qq-chat.qq-peek .cr-grab{width:42px;background:rgba(255,255,255,.38)}
-  .phone.qq-chat .cr-head{cursor:grab;-webkit-user-select:none;user-select:none}
-  .phone.qq-chat .cr-head:active{cursor:grabbing}
-  .phone.qq-chat.qq-dragging .chatroom{transition:none!important}
+  .phone.qq-chat .cr-head{cursor:pointer;-webkit-user-select:none;user-select:none}
+  /* 两页切换：丝滑滑动 --qq-top */
+  .phone.qq-chat.qq-sliding .chatroom{
+    border-radius:14px 14px 0 0;border:1.5px solid #232B3D;border-bottom:none;
+    transition:top .38s cubic-bezier(.22,.61,.36,1),border-radius .38s ease!important;
+  }
+  .phone.qq-chat.qq-sliding .chatroom-spacer{display:none!important}
+  .phone.qq-chat.qq-sliding .academy,
+  .phone.qq-chat.qq-sliding .vbox,
+  .phone.qq-chat.qq-sliding .stage{display:block!important}
+  .phone.qq-chat.qq-sliding .stage:not(.on){display:none!important}
+  .phone.qq-chat.qq-sliding #msgwrap{display:block!important}
   .msg{display:flex;gap:8px;margin-bottom:14px;animation:stin .3s ease}
   @keyframes stin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .msg .ma{width:36px;height:36px;border-radius:50%;object-fit:cover;flex:none;border:1px solid rgba(255,255,255,.08)}
@@ -174,7 +190,7 @@ html.lt body{background:#ebeef4}html.lt /* ===== 学院头部 ===== */
   .vbox{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/9;background:#f7f7f7;border:1.5px solid #c2cadc}html.lt .vbox>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}html.lt .vbox .vshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(241,244,250,.15),rgba(241,244,250,.72))}html.lt .vbox .vplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:#967536;color:#dce2ef;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 0 8px rgba(20,20,20,.16),0 10px 24px rgba(247,247,247,.5);animation:vpulse 2s infinite;z-index:3}@keyframes vpulse{0%,100%{box-shadow:0 0 0 8px rgba(20,20,20,.16)}50%{box-shadow:0 0 0 16px rgba(20,20,20,.07)}}html.lt .vbox .vtitle{position:absolute;left:14px;bottom:12px;z-index:2}html.lt .vbox .vtitle b{display:block;font-size:16px;font-weight:900;color:#141414;text-shadow:0 2px 8px rgba(247,247,247,.7)}html.lt .vbox .vtitle span{font-size:11px;color:rgba(20,20,20,.85)}html.lt .vbox .vdur{position:absolute;right:12px;top:10px;z-index:2;font-size:10.5px;font-weight:800;background:rgba(247,247,247,.55);color:#141414;border-radius:6px;padding:3px 9px}html.lt .vbox .vlive{position:absolute;left:12px;top:10px;z-index:2;font-size:10px;font-weight:900;color:#906800;background:rgba(247,247,247,.5);border-radius:6px;padding:3px 9px}html.lt .vprog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(20,20,20,.18);z-index:4;display:none}html.lt .vprog i{display:block;height:100%;width:0;background:#967536}html.lt .playing .vprog{display:block}html.lt .playing .vplay,html.lt .playing .vtitle{display:none}html.lt .vbox.ended .vplay,html.lt .vbox.ended .vtitle,html.lt .vbox.ended .vlive,html.lt .vbox.ended .vdur{display:none!important}html.lt .vbox.ended #vvideo{pointer-events:none}html.lt /* 弹幕层 */
   .dmk{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;display:none}html.lt .playing .dmk{display:block}html.lt .dm{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:rgba(20,20,20,.92);text-shadow:0 1px 4px rgba(247,247,247,.8);animation:dmf linear forwards}html.lt .dm b{font-weight:900}@keyframes dmf{from{transform:translateX(430px)}to{transform:translateX(-110%)}}html.lt .vend{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(241,244,250,.72);backdrop-filter:blur(3px)}html.lt .vend .ve1{font-size:17px;font-weight:900;color:#47360f}html.lt .vend .ve2{font-size:12px;color:#313846;margin-top:6px}html.lt .vend .ve3{margin-top:14px;background:#30904f;color:#ebeef4;font-size:14px;font-weight:900;border-radius:99px;padding:10px 22px;cursor:pointer}html.lt /* ===== 场景舞台 ===== */
   .stage{margin:12px 18px 0;border-radius:18px;overflow:hidden;position:relative;aspect-ratio:16/7.5;background:#dfe5f1;border:1.5px solid #c2cadc;display:none}html.lt .stage.on{display:block}html.lt .stage .scimg{position:absolute;inset:0;width:100%;height:106%;object-fit:cover;animation:kenburns 9s ease-in-out infinite alternate}@keyframes kenburns{from{transform:scale(1) translateY(0)}to{transform:scale(1.09) translateY(-2.5%)}}html.lt .stage .scchar{position:absolute;right:4%;bottom:-6%;height:92%;width:auto;max-width:52%;object-fit:contain;z-index:2;filter:drop-shadow(0 8px 18px rgba(247,247,247,.55));animation:charbob 3.2s ease-in-out infinite;pointer-events:none}@keyframes charbob{0%,100%{transform:translateY(0) rotate(-.6deg)}50%{transform:translateY(-7px) rotate(.8deg)}}html.lt .stage .scchar.vc{height:auto;width:38%;max-width:42%;right:6%;bottom:auto;top:12%;border-radius:16px;border:2px solid rgba(150,117,54,.7);box-shadow:0 10px 26px rgba(247,247,247,.6);object-fit:cover;filter:none}html.lt .stage .prop{position:absolute;z-index:3;font-size:24px;filter:drop-shadow(0 3px 5px rgba(247,247,247,.5))}html.lt .stage .prop.phone{right:24%;bottom:26%;animation:phonetilt 2.4s ease-in-out infinite}@keyframes phonetilt{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(5deg)}}html.lt .stage .prop.chips{right:26%;bottom:44%;animation:chipbob 1.6s ease-in-out infinite}@keyframes chipbob{0%,100%{transform:translateY(16px) rotate(-8deg)}50%{transform:translateY(-4px) rotate(8deg)}}html.lt .stage .scshade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(241,244,250,.05) 55%,rgba(241,244,250,.82))}html.lt .stage .sclive{position:absolute;right:12px;top:10px;z-index:4;font-size:9.5px;font-weight:900;color:#850000;background:rgba(247,247,247,.5);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:5px}html.lt .stage .sclive::before{content:"";width:6px;height:6px;border-radius:50%;background:#ad0000;animation:blink 1.2s infinite}html.lt .stage .scwho{position:absolute;left:13px;bottom:11px;z-index:4;display:flex;align-items:center;gap:8px}html.lt .stage .scwho .sa{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #967536}html.lt .stage .scwho b{font-size:14px;font-weight:900;color:#141414;text-shadow:0 2px 6px rgba(247,247,247,.8)}html.lt .stage .scwho span{font-size:10px;color:#967536;font-weight:800}html.lt /* ===== 聊天频道 ===== */
-  .chatroom{margin:12px 18px calc(var(--chat-dock-h, 120px) + 8px);background:#ebeff5;border:1.5px solid #c2cadc;border-radius:18px;padding:12px 12px 8px;position:relative;display:flex;flex-direction:column;min-height:min(36vh,280px);box-sizing:border-box}html.lt .cr-head{display:flex;align-items:center;gap:8px;padding:16px 0 9px;border-bottom:1px solid #ccd4e5;margin-bottom:10px;flex:none;position:relative;touch-action:pan-y}html.lt .cr-head b{font-size:15px;font-weight:700;color:#1b1912;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.lt .cr-head .on9{margin-left:0;font-size:10px;color:#30904f;font-weight:800;flex:none}html.lt .cr-head .on9::before{content:"●";margin-right:4px}html.lt .cr-grab{display:none;position:absolute;left:50%;top:6px;transform:translateX(-50%);width:36px;height:4px;border-radius:99px;background:rgba(0,0,0,.22);pointer-events:none}html.lt #msgwrap{flex:1 1 auto;min-height:160px;overflow-y:auto;overflow-x:hidden;position:relative;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;padding-bottom:12px;box-sizing:border-box}html.lt .phone.qq-chat .chatroom{position:fixed;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width,480px);top:var(--qq-top,0px);bottom:calc(var(--chat-dock-h,110px) + 56px + env(safe-area-inset-bottom,0px));margin:0;z-index:18;border-radius:0;border-bottom:none;border-left:none;border-right:none;min-height:0;height:auto;background:#ebeff5;transition:top .28s cubic-bezier(.22,.61,.36,1),border-radius .28s ease}html.lt .phone.qq-chat #msgwrap{flex:1 1 auto;min-height:0;height:auto;max-height:none}html.lt .phone.qq-chat .cr-grab{display:block}html.lt .phone.qq-chat.qq-peek .chatroom{border-radius:14px 14px 0 0;border:1.5px solid #c2cadc;border-bottom:none}html.lt .phone.qq-chat.qq-peek .cr-grab{width:42px;background:rgba(0,0,0,.28)}html.lt .msg{display:flex;gap:8px;margin-bottom:14px;animation:stin .3s ease}@keyframes stin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}html.lt .msg .ma{width:36px;height:36px;border-radius:50%;object-fit:cover;flex:none;border:1px solid #e2e6ef}html.lt .msg .mc{max-width:78%}html.lt .msg .mn{font-size:12px;color:#8b93a5;font-weight:600;margin-bottom:4px}html.lt .msg .mn i{font-style:normal;color:#4a9a68;border:1px solid rgba(74,154,104,.35);border-radius:4px;padding:0 5px;margin-left:5px;font-size:10px;font-weight:600}html.lt .msg .mb{background:#fff;border-radius:4px 16px 16px 16px;padding:10px 14px;font-size:16px;color:#1a1a1a;line-height:1.55;font-weight:400;box-shadow:0 1px 2px rgba(20,30,50,.04)}html.lt .msg.me{flex-direction:row-reverse}html.lt .msg.me .mb{background:#5B8DEF;color:#fff;border-radius:16px 4px 16px 16px;box-shadow:none}html.lt .msg.me .mn{text-align:right}html.lt .msg.sys{justify-content:center}html.lt .msg.sys .mb{background:transparent;color:#8b93a5;font-size:12px;padding:2px 10px;border:1px dashed #c8cedc;border-radius:99px;box-shadow:none}html.lt .typing{display:flex;gap:8px;margin:4px 0 2px;align-items:center;flex:none}html.lt .typing .tdots{background:#fff;border-radius:4px 16px 16px 16px;padding:12px 14px;display:flex;gap:4px;box-shadow:0 1px 2px rgba(20,30,50,.04)}html.lt .typing .tdots i{width:6px;height:6px;border-radius:50%;background:#8b93a5;animation:tp 1.2s infinite}html.lt .typing .tdots i:nth-child(2){animation-delay:.2s}html.lt .typing .tdots i:nth-child(3){animation-delay:.4s}@keyframes tp{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}html.lt /* 模糊预告层 */
+  .chatroom{margin:12px 18px calc(var(--chat-dock-h, 120px) + 8px);background:#ebeff5;border:1.5px solid #c2cadc;border-radius:18px;padding:12px 12px 8px;position:relative;display:flex;flex-direction:column;min-height:min(36vh,280px);box-sizing:border-box}html.lt .cr-head{display:flex;align-items:center;gap:8px;padding:16px 0 9px;border-bottom:1px solid #ccd4e5;margin-bottom:10px;flex:none;position:relative;touch-action:pan-y}html.lt .cr-head b{font-size:15px;font-weight:700;color:#1b1912;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.lt .cr-head .on9{margin-left:0;font-size:10px;color:#30904f;font-weight:800;flex:none}html.lt .cr-head .on9::before{content:"●";margin-right:4px}html.lt .cr-grab{display:none;position:absolute;left:50%;top:6px;transform:translateX(-50%);width:36px;height:4px;border-radius:99px;background:rgba(0,0,0,.22);pointer-events:none}html.lt #msgwrap{flex:1 1 auto;min-height:160px;overflow-y:auto;overflow-x:hidden;position:relative;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;padding-bottom:12px;box-sizing:border-box}html.lt .phone.qq-chat .chatroom{position:fixed;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width,480px);top:var(--qq-top,0px);bottom:calc(var(--chat-dock-h,110px) + 56px + env(safe-area-inset-bottom,0px));margin:0;z-index:18;border-radius:0;border-bottom:none;border-left:none;border-right:none;min-height:0;height:auto;background:#ebeff5;transition:top .28s cubic-bezier(.22,.61,.36,1),border-radius .28s ease}html.lt .phone.qq-chat #msgwrap{flex:1 1 auto;min-height:0;height:auto;max-height:none}html.lt .phone.qq-chat .cr-grab{display:block}html.lt .phone.qq-chat.qq-peek .chatroom{border-radius:14px 14px 0 0;border:1.5px solid #c2cadc;border-bottom:none;padding-bottom:4px;background:#ebeff5}html.lt .phone.qq-chat.qq-peek:not(.qq-sliding) #msgwrap,html.lt .phone.qq-chat.qq-peek:not(.qq-sliding) .typing{display:none!important}html.lt .phone.qq-chat.qq-peek:not(.qq-sliding) .cr-head{margin-bottom:0;border-bottom:none;padding-bottom:10px}html.lt .phone.qq-chat.qq-peek .chatroom-spacer{display:none!important}html.lt .phone.qq-chat.qq-peek .cr-grab{width:42px;background:rgba(0,0,0,.28)}html.lt .phone.qq-chat.qq-sliding .chatroom{border-radius:14px 14px 0 0;border:1.5px solid #c2cadc;border-bottom:none;transition:top .38s cubic-bezier(.22,.61,.36,1),border-radius .38s ease!important}html.lt .phone.qq-chat.qq-sliding .chatroom-spacer{display:none!important}html.lt .phone.qq-chat.qq-sliding .academy,html.lt .phone.qq-chat.qq-sliding .vbox,html.lt .phone.qq-chat.qq-sliding .stage{display:block!important}html.lt .phone.qq-chat.qq-sliding .stage:not(.on){display:none!important}html.lt .phone.qq-chat.qq-sliding #msgwrap{display:block!important}html.lt .msg{display:flex;gap:8px;margin-bottom:14px;animation:stin .3s ease}@keyframes stin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}html.lt .msg .ma{width:36px;height:36px;border-radius:50%;object-fit:cover;flex:none;border:1px solid #e2e6ef}html.lt .msg .mc{max-width:78%}html.lt .msg .mn{font-size:12px;color:#8b93a5;font-weight:600;margin-bottom:4px}html.lt .msg .mn i{font-style:normal;color:#4a9a68;border:1px solid rgba(74,154,104,.35);border-radius:4px;padding:0 5px;margin-left:5px;font-size:10px;font-weight:600}html.lt .msg .mb{background:#fff;border-radius:4px 16px 16px 16px;padding:10px 14px;font-size:16px;color:#1a1a1a;line-height:1.55;font-weight:400;box-shadow:0 1px 2px rgba(20,30,50,.04)}html.lt .msg.me{flex-direction:row-reverse}html.lt .msg.me .mb{background:#5B8DEF;color:#fff;border-radius:16px 4px 16px 16px;box-shadow:none}html.lt .msg.me .mn{text-align:right}html.lt .msg.sys{justify-content:center}html.lt .msg.sys .mb{background:transparent;color:#8b93a5;font-size:12px;padding:2px 10px;border:1px dashed #c8cedc;border-radius:99px;box-shadow:none}html.lt .typing{display:flex;gap:8px;margin:4px 0 2px;align-items:center;flex:none}html.lt .typing .tdots{background:#fff;border-radius:4px 16px 16px 16px;padding:12px 14px;display:flex;gap:4px;box-shadow:0 1px 2px rgba(20,30,50,.04)}html.lt .typing .tdots i{width:6px;height:6px;border-radius:50%;background:#8b93a5;animation:tp 1.2s infinite}html.lt .typing .tdots i:nth-child(2){animation-delay:.2s}html.lt .typing .tdots i:nth-child(3){animation-delay:.4s}@keyframes tp{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}html.lt /* 模糊预告层 */
   .locked-teaser #msgwrap{filter:blur(5px) saturate(.8);pointer-events:none;user-select:none}html.lt .lockov{position:absolute;inset:44px 0 0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px}html.lt .locked-teaser .lockov{display:flex}html.lt .lockov .lk1{font-size:15px;font-weight:900;color:#1b1912;text-shadow:0 2px 8px #f7f7f7}html.lt .lockov .lk2{font-size:11.5px;color:#313846}html.lt .lockov .lk3{margin-top:6px;font-size:11px;font-weight:900;color:#ebeef4;background:#967536;border-radius:99px;padding:7px 16px}html.lt /* 底坞 */
   .chat-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:56px;width:100%;max-width:var(--app-max-width,480px);z-index:20;box-sizing:border-box;padding:8px 12px 10px;background:rgba(235,238,244,.98);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid #c2cadc}html.lt .nudge{display:flex;gap:8px;align-items:center;margin:0 0 8px;background:rgba(48,144,79,.07);border:1px dashed rgba(48,144,79,.5);border-radius:13px;padding:10px 10px 10px 12px;animation:stin .4s;position:relative}html.lt .nudge .ng1{font-size:22px;flex:none}html.lt .nudge p{flex:1;font-size:12px;color:#1a462c;line-height:1.55;padding-right:2px}html.lt .nudge a,html.lt .nudge .ngo{flex:none;font-size:11.5px;font-weight:900;color:#ebeef4;background:#30904f;border-radius:9px;padding:7px 11px;text-decoration:none;border:none;cursor:pointer;font-family:inherit}html.lt .nudge .ngx{flex:none;width:22px;height:22px;margin:-2px -2px 0 0;align-self:flex-start;border:none;border-radius:50%;background:transparent;color:#5a8a6a;font-size:16px;line-height:1;font-weight:700;cursor:pointer;padding:0;font-family:inherit;opacity:.85}html.lt .nudge .ngx:hover,html.lt .nudge .ngx:active{color:#1a462c;opacity:1}html.lt .replies{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 8px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:none;touch-action:pan-x}html.lt .replies::-webkit-scrollbar{display:none;height:0}html.lt .rp{flex:0 0 auto;max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#f3f5f9;border:1px solid #d8dde8;border-radius:99px;padding:8px 14px;font-size:14px;font-weight:500;line-height:1.35;color:#333948;cursor:pointer}html.lt .rp:active{transform:scale(.95)}html.lt .rp:hover{border-color:#967536}html.lt .chat-dock .inbar{position:static;transform:none;width:100%;max-width:none;padding:0;background:transparent;display:flex;gap:10px;align-items:center}html.lt .inbar input{flex:1;background:#f3f5f9;border:1px solid #d8dde8;border-radius:999px;padding:12px 16px;font-size:16px;color:#1a1a1a;outline:none;font-weight:400}html.lt .inbar input:focus{border-color:#967536}html.lt .inbar .send{width:42px;height:42px;border-radius:50%;background:#967536;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;color:#dce2ef;font-weight:900;cursor:pointer;border:none}</style>
 <script>
@@ -627,54 +643,99 @@ function syncChatDock(){
     wrap.style.maxHeight='';
   }
   if(!joined){
-    phone.classList.remove('qq-peek');
+    phone.classList.remove('qq-peek','qq-sliding');
     document.documentElement.style.removeProperty('--qq-top');
     return;
   }
-  const peek=phone.classList.contains('qq-peek');
-  if(!peek){
-    // 讨论组全页
+  if(phone.classList.contains('qq-sliding')) return;
+  if(phone.classList.contains('qq-peek')){
+    document.documentElement.style.setProperty('--qq-top', peekStripTop()+'px');
+  }else{
     document.documentElement.style.setProperty('--qq-top', '0px');
-    return;
   }
-  // 学院页：对话顶边贴住上方可见块底（并保证标题条可拖）
-  var top = 8;
-  [document.querySelector('.academy'), $('vbox'), $('stage')].forEach(function(el){
-    if(!el) return;
-    if(el.id==='stage' && !el.classList.contains('on')) return;
-    var r=el.getBoundingClientRect();
-    if(r.height < 8) return;
-    if(r.bottom > top) top = r.bottom;
-  });
-  var dockH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chat-dock-h')) || 110;
-  var maxTop = Math.max(48, window.innerHeight - dockH - 56 - 56);
-  document.documentElement.style.setProperty('--qq-top', Math.min(Math.round(top + 8), maxTop)+'px');
+  try{ phone.style.removeProperty('--qq-top'); }catch(e){}
 }
-/** @param {boolean=} force true=学院页(peek) false=全屏讨论 */
+/** 学院页时讨论区标题条的顶边（贴在输入栏上方） */
+function peekStripTop(){
+  var dockH=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chat-dock-h'))||110;
+  var headH=52;
+  try{
+    var head=$('crHead')||document.querySelector('.cr-head');
+    if(head){
+      var h=Math.ceil(head.getBoundingClientRect().height);
+      if(h>24) headH=h;
+    }
+  }catch(e){}
+  return Math.max(96, Math.round(window.innerHeight - dockH - 56 - headH - 4));
+}
+/** 点击标题丝滑切换两页：false=聊天页，true=学院页（不可靠滚动互进） */
 function toggleChatPeek(force){
   const phone=document.querySelector('.phone');
   const room=$('chatroom');
   if(!phone || !room || room.classList.contains('locked-teaser')) return;
+  if(phone.classList.contains('qq-sliding')) return;
   const next = typeof force==='boolean' ? force : !phone.classList.contains('qq-peek');
-  phone.classList.toggle('qq-peek', next);
-  phone.classList.remove('qq-dragging');
-  syncChatDock();
-  if(next){
-    try{
-      const academy=document.querySelector('.academy');
-      if(academy) academy.scrollIntoView({behavior:'smooth', block:'start'});
-    }catch(e){}
-  }else{
-    try{
-      const phoneEl=document.querySelector('.phone');
-      if(phoneEl) phoneEl.scrollTop=0;
-      window.scrollTo(0,0);
-    }catch(e){}
-    setTimeout(function(){
-      if(typeof scrollChat==='function') scrollChat();
-    }, 80);
+  if(next === phone.classList.contains('qq-peek')) return;
+
+  var strip=peekStripTop();
+
+  if(!next){
+    // 学院页 → 聊天页
+    document.documentElement.style.setProperty('--qq-top', strip+'px');
+    phone.classList.add('qq-sliding','qq-peek');
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        document.documentElement.style.setProperty('--qq-top', '0px');
+      });
+    });
+    var doneFull=false;
+    function finishFull(){
+      if(doneFull) return;
+      doneFull=true;
+      room.removeEventListener('transitionend', onFullEnd);
+      phone.classList.remove('qq-peek','qq-sliding');
+      document.documentElement.style.setProperty('--qq-top', '0px');
+      try{ phone.scrollTop=0; window.scrollTo(0,0); }catch(e){}
+      syncChatDock();
+      setTimeout(function(){ if(typeof scrollChat==='function') scrollChat(); }, 40);
+    }
+    function onFullEnd(ev){
+      if(ev && ev.propertyName && ev.propertyName!=='top') return;
+      finishFull();
+    }
+    room.addEventListener('transitionend', onFullEnd);
+    setTimeout(finishFull, 480);
+    return;
   }
+
+  // 聊天页 → 学院页
+  phone.classList.add('qq-peek','qq-sliding');
+  document.documentElement.style.setProperty('--qq-top', '0px');
+  try{ phone.scrollTop=0; window.scrollTo(0,0); }catch(e){}
+  requestAnimationFrame(function(){
+    strip=peekStripTop();
+    requestAnimationFrame(function(){
+      document.documentElement.style.setProperty('--qq-top', strip+'px');
+    });
+  });
+  var donePeek=false;
+  function finishPeek(){
+    if(donePeek) return;
+    donePeek=true;
+    room.removeEventListener('transitionend', onPeekEnd);
+    phone.classList.remove('qq-sliding');
+    phone.classList.add('qq-peek');
+    document.documentElement.style.setProperty('--qq-top', peekStripTop()+'px');
+    syncChatDock();
+  }
+  function onPeekEnd(ev){
+    if(ev && ev.propertyName && ev.propertyName!=='top') return;
+    finishPeek();
+  }
+  room.addEventListener('transitionend', onPeekEnd);
+  setTimeout(finishPeek, 480);
 }
+window.peekStripTop=peekStripTop;
 window.toggleChatPeek=toggleChatPeek;
 window.syncChatDock=syncChatDock;
 function scrollChat(){
@@ -694,133 +755,16 @@ window.addEventListener('orientationchange', function(){ setTimeout(syncChatDock
     ticking=true;
     requestAnimationFrame(function(){ ticking=false; syncChatDock(); });
   }
-  function joinedPhone(){
+  /* 点讨论组标题条：学院页 ↔ 聊天页（仅点击） */
+  function onHeadClick(e){
     var phone=document.querySelector('.phone');
     var room=$('chatroom');
-    if(!phone||!room||room.classList.contains('locked-teaser')) return null;
-    if(!phone.classList.contains('qq-chat')) return null;
-    return phone;
-  }
-  function peekFloorTop(){
-    var top=8;
-    [document.querySelector('.academy'), $('vbox'), $('stage')].forEach(function(el){
-      if(!el) return;
-      if(el.id==='stage' && !el.classList.contains('on')) return;
-      var r=el.getBoundingClientRect();
-      if(r.height<8) return;
-      if(r.bottom>top) top=r.bottom;
-    });
-    var dockH=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chat-dock-h'))||110;
-    var maxTop=Math.max(48, window.innerHeight - dockH - 56 - 56);
-    return Math.min(Math.round(top+8), maxTop);
-  }
-  /* 标题条拖拽：下滑进讨论 / 上滑回学院（pointer 兼容触屏+鼠标） */
-  var drag={
-    on:false, pid:null, y0:0, top0:0, peek0:false, moved:false, el:null
-  };
-  function clientY(e){
-    if(e.touches && e.touches[0]) return e.touches[0].clientY;
-    if(e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientY;
-    return e.clientY;
-  }
-  function beginDrag(e){
-    var phone=joinedPhone();
-    if(!phone) return;
+    if(!phone||!room||room.classList.contains('locked-teaser')) return;
+    if(!phone.classList.contains('qq-chat')) return;
     var head=e.target && e.target.closest ? e.target.closest('.cr-head') : null;
-    var room=e.target && e.target.closest ? e.target.closest('#chatroom') : null;
-    // 学院页：整块可见讨论条可拖；全屏页：仅标题条（避免和消息滚动冲突）
-    var peek=phone.classList.contains('qq-peek');
-    if(!head && !(peek && room)) return;
-    if(!peek && !head) return;
-    // 全屏时点在消息里不拖
-    if(!peek && e.target && e.target.closest && e.target.closest('#msgwrap')) return;
-    drag.on=true;
-    drag.pid=e.pointerId;
-    drag.y0=clientY(e);
-    drag.peek0=peek;
-    drag.top0=drag.peek0 ? peekFloorTop() : 0;
-    drag.moved=false;
-    drag.el=head || room;
-    phone.classList.add('qq-dragging');
-    try{ if(e.pointerId!=null && drag.el) drag.el.setPointerCapture(e.pointerId); }catch(err){}
-  }
-  function moveDrag(e){
-    if(!drag.on) return;
-    if(drag.pid!=null && e.pointerId!=null && e.pointerId!==drag.pid) return;
-    var phone=joinedPhone();
-    if(!phone) return;
-    var y=clientY(e);
-    var dy=y-drag.y0;
-    if(Math.abs(dy)>6) drag.moved=true;
-    var floor=peekFloorTop();
-    var nextTop;
-    if(drag.peek0){
-      // 学院页：手指下拖(dy>0) → top 变小 → 讨论区变大
-      nextTop=Math.max(0, Math.min(floor, drag.top0 - dy));
-    }else{
-      // 全屏讨论：手指上拖(dy<0) → top 变大 → 露出学院
-      nextTop=Math.max(0, Math.min(floor, -dy));
-    }
-    document.documentElement.style.setProperty('--qq-top', Math.round(nextTop)+'px');
-    // 拖动中临时露出上方内容，方便看跟手
-    if(!drag.peek0 && nextTop>24){
-      phone.classList.add('qq-peek');
-    }
-    if(e.cancelable && drag.moved){
-      try{ e.preventDefault(); }catch(err){}
-    }
-  }
-  function endDrag(e){
-    if(!drag.on) return;
-    if(drag.pid!=null && e.pointerId!=null && e.pointerId!==drag.pid) return;
-    var phone=joinedPhone();
-    var y=clientY(e);
-    var dy=y-drag.y0;
-    drag.on=false;
-    drag.pid=null;
-    if(phone) phone.classList.remove('qq-dragging');
-    if(!phone) return;
-    // 轻点标题条：切换
-    if(!drag.moved || Math.abs(dy)<18){
-      toggleChatPeek(!drag.peek0);
-      return;
-    }
-    if(drag.peek0){
-      // 下滑超过阈值 → 全屏讨论；否则回学院页
-      toggleChatPeek(dy>36 ? false : true);
-    }else{
-      // 上滑超过阈值 → 学院页；否则回全屏
-      toggleChatPeek(dy<-36 ? true : false);
-    }
-  }
-  function cancelDrag(){
-    if(!drag.on) return;
-    drag.on=false;
-    var phone=joinedPhone();
-    if(phone){
-      phone.classList.remove('qq-dragging');
-      toggleChatPeek(drag.peek0);
-    }
-  }
-  /* 消息列表到顶后再上拉 → 回学院 */
-  var edge={on:false,y0:0};
-  function onWrapStart(e){
-    var phone=joinedPhone();
-    if(!phone || phone.classList.contains('qq-peek')) return;
-    var wrap=$('msgwrap');
-    if(!wrap || wrap.scrollTop>2) return;
-    edge.on=true;
-    edge.y0=clientY(e);
-  }
-  function onWrapEnd(e){
-    if(!edge.on) return;
-    edge.on=false;
-    var phone=joinedPhone();
-    if(!phone || phone.classList.contains('qq-peek')) return;
-    var wrap=$('msgwrap');
-    if(wrap && wrap.scrollTop>2) return;
-    var dy=clientY(e)-edge.y0;
-    if(dy<-56) toggleChatPeek(true);
+    if(!head) return;
+    e.preventDefault();
+    toggleChatPeek();
   }
   function bind(){
     syncChatDock();
@@ -828,31 +772,7 @@ window.addEventListener('orientationchange', function(){ setTimeout(syncChatDock
     if(phone) phone.addEventListener('scroll', onScroll, {passive:true});
     window.addEventListener('scroll', onScroll, {passive:true});
     var head=$('crHead') || document.querySelector('.cr-head');
-    var room=$('chatroom');
-    var dragRoot=room || head;
-    if(dragRoot){
-      if(window.PointerEvent){
-        dragRoot.addEventListener('pointerdown', beginDrag, {passive:true});
-        window.addEventListener('pointermove', moveDrag, {passive:false});
-        window.addEventListener('pointerup', endDrag, {passive:true});
-        window.addEventListener('pointercancel', cancelDrag, {passive:true});
-      }else{
-        dragRoot.addEventListener('touchstart', beginDrag, {passive:true});
-        window.addEventListener('touchmove', moveDrag, {passive:false});
-        window.addEventListener('touchend', endDrag, {passive:true});
-        window.addEventListener('touchcancel', cancelDrag, {passive:true});
-      }
-    }
-    var wrap=$('msgwrap');
-    if(wrap){
-      if(window.PointerEvent){
-        wrap.addEventListener('pointerdown', onWrapStart, {passive:true});
-        wrap.addEventListener('pointerup', onWrapEnd, {passive:true});
-      }else{
-        wrap.addEventListener('touchstart', onWrapStart, {passive:true});
-        wrap.addEventListener('touchend', onWrapEnd, {passive:true});
-      }
-    }
+    if(head) head.addEventListener('click', onHeadClick);
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind);
   else bind();
@@ -1190,7 +1110,7 @@ try {
 <script src="/static/dayu/html/academy/client.js?v=20260923sticker"></script>
 <script src="/static/dayu/html/academy/fake.js?v=20260923sticker"></script>
 <script src="/static/dayu/html/academy/talk.js?v=20260923emoji"></script>
-<script src="/static/dayu/html/academy/channel.js?v=20260923emoji"></script>
+<script src="/static/dayu/html/academy/channel.js?v=20260923twopage"></script>
 <script src="/static/dayu/html/academy/story.js?v=20260919c"></script>
 <script src="/static/dayu/html/academy/courses.js?v=20260919c"></script>
 <script src="/static/dayu/html/academy/boot.js?v=20260919c"></script>
