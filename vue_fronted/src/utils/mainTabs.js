@@ -124,8 +124,22 @@ export function switchMainTab(path) {
   softNavigate(path)
 }
 
+/**
+ * 家长五底栏互切：一律 redirectTo，禁止 navigateBack。
+ * softNavigate 会在栈里找到更早的「大宇」并 pop 回去，表现为偶发弹回首页。
+ * 家长页是 iframe 壳，不必用栈保留 DOM。
+ */
 export function switchParentTab(path) {
-  softNavigate(path)
+  const full = withSlash(path)
+  const target = normalizeRoute(full)
+  if (!target) return
+  const cur = currentRoute()
+  const hasQuery = String(full).includes('?')
+  if (cur === target && !hasQuery) return
+  uni.redirectTo({
+    url: full,
+    fail: () => uni.reLaunch({ url: full }),
+  })
 }
 
 /** 通用页内跳转：Tab 走软切，其它 navigateTo */

@@ -7,7 +7,20 @@ import re
 from difflib import SequenceMatcher
 
 from app.agents.academy.characters import CHARACTERS, get_character, system_prompt
-from app.services.doubao_client import chat_completion
+
+
+async def chat_completion(*, system_prompt: str, user_message: str, **kwargs):
+    """学院出话走 run_profile_turn；Scene Manager 仍在 room。"""
+    from app.harness.turn import run_profile_turn
+
+    del kwargs
+    turn = await run_profile_turn(
+        "academy",
+        user_message,
+        system_override=system_prompt,
+        max_steps=1,
+    )
+    return (turn.get("reply") or None)
 
 UNLOCK_PERCENT = 90
 

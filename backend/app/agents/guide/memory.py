@@ -5,15 +5,10 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.db.models import ChildUser, GuideSession
+from app.harness.memory import truncate_history
 
 # 进程内缓存：key = f"{uid}:{training_day}"
 _BOOTSTRAP_CACHE: dict[str, dict] = {}
-
-
-def truncate_history(messages: list[dict], *, max_turns: int = 12) -> list[dict]:
-    if max_turns <= 0 or len(messages) <= max_turns:
-        return list(messages)
-    return list(messages[-max_turns:])
 
 
 def session_to_history(session: GuideSession | None) -> list[dict]:

@@ -56,9 +56,13 @@
   .chat .warn{margin-top:10px;font-size:12.5px;color:#C9A869;line-height:1.55;background:rgba(201,168,105,.08);border-radius:10px;padding:8px 10px}
   .chat .go{display:inline-block;margin-top:12px;background:#2E6BE6;color:#fff;font-size:16px;font-weight:900;padding:12px 22px;border-radius:99px}
   /* 提问条 */
-  .askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 18px;display:flex;gap:10px;align-items:center;background:rgba(11,14,20,.94)}
-  .askbar .box{flex:1;background:#161D2B;border:1.5px solid #2A3040;border-radius:999px;padding:11px 16px;font-size:14px;color:#5A6274}
-  .askbar .send{width:42px;height:42px;border-radius:50%;background:#6FCF8E;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}
+  .askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 10px;display:flex;gap:8px;align-items:flex-end;background:rgba(11,14,20,.94);box-sizing:border-box}
+  .askbar .tool{width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;color:#D8DCE6}
+  .askbar .box-wrap{flex:1;min-width:0}
+  .askbar .box{width:100%;background:#0f1420;border:none;border-radius:8px;padding:8px 12px;font-size:15px;color:#5A6274;box-sizing:border-box}
+  .askbar .send-txt{display:none;min-width:56px;height:34px;padding:0 12px;border-radius:6px;background:#12b7f5;align-items:center;justify-content:center;font-size:14px;flex:none;color:#fff;font-weight:700;box-sizing:border-box}
+  .askbar.has-text .send-txt{display:flex}
+  .askbar.has-text .tool.plus{display:none}
 </style>
 <style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
 *{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}
@@ -91,7 +95,7 @@ html.lt .hero{border-color:#c2cadc;margin:6px 18px 0;width:auto;box-sizing:borde
 html.lt /* 四功能一排 */
   .nav4{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 18px}html.lt .nav4 a{flex:1;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:14px;padding:12px 2px;text-align:center}html.lt .nav4 .i{font-size:22px}html.lt .nav4 .n{font-size:12.5px;font-weight:800;color:#1b1912;margin-top:4px}html.lt /* 对话卡 */
   .chat{margin:4px 18px;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:18px;padding:14px}html.lt .chat .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}html.lt .chat .head .av{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar-dayu.jpg") center 12%/120% auto;border:2px solid #1956d1;flex:none}html.lt .chat .head .tag{background:rgba(25,86,209,.14);border:1px solid #1956d1;color:#103880;font-size:12.5px;font-weight:800;padding:4px 12px;border-radius:99px}html.lt .chat p{font-size:14.5px;color:#191d27;line-height:1.65}html.lt .chat p b{color:#30904f}html.lt .chat .warn{margin-top:10px;font-size:12.5px;color:#967536;line-height:1.55;background:rgba(150,117,54,.08);border-radius:10px;padding:8px 10px}html.lt .chat .go{display:inline-block;margin-top:12px;background:#1956d1;color:#141414;font-size:16px;font-weight:900;padding:12px 22px;border-radius:99px}html.lt /* 提问条 */
-  .askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 18px;display:flex;gap:10px;align-items:center;background:rgba(235,238,244,.94)}html.lt .askbar .box{flex:1;background:#d4dbe9;border:1.5px solid #bfc5d5;border-radius:999px;padding:11px 16px;font-size:14px;color:#8b93a5}html.lt .askbar .send{width:42px;height:42px;border-radius:50%;background:#30904f;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}</style>
+  .askbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 10px;display:flex;gap:8px;align-items:flex-end;background:rgba(235,238,244,.94);box-sizing:border-box}html.lt .askbar .tool{width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;color:#5a6274}html.lt .askbar .box-wrap{flex:1;min-width:0}html.lt .askbar .box{width:100%;background:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:15px;color:#8b93a5;box-sizing:border-box}html.lt .askbar .send-txt{display:none;min-width:56px;height:34px;padding:0 12px;border-radius:6px;background:#12b7f5;align-items:center;justify-content:center;font-size:14px;flex:none;color:#fff;font-weight:700;box-sizing:border-box}</style>
 <script>
 (function(){
   function readLight(){
@@ -168,8 +172,11 @@ html.lt /* 四功能一排 */
   </div>
 
   <div class="askbar" id="askbar">
-    <div class="box">输入问题…</div>
-    <div class="send">➤</div>
+    <div class="tool">🎤</div>
+    <div class="box-wrap"><div class="box">输入问题…</div></div>
+    <div class="tool">😊</div>
+    <div class="tool plus">＋</div>
+    <div class="send-txt">发送</div>
   </div>
   <script>
   (function(){

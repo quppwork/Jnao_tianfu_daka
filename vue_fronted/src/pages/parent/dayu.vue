@@ -56,6 +56,9 @@
         @stop="stopStream"
         @suggest="sendSuggest"
         @navigate="runNavigate"
+        @voice="onAskTool('语音消息即将开放')"
+        @emoji="onAskTool('表情即将开放')"
+        @plus="onAskTool('更多功能即将开放')"
       >
         <template #intro>
           <view class="intro">
@@ -230,6 +233,10 @@ function sendSuggest(text) {
   if (!text || loading.value) return
   inputText.value = text
   sendMsg()
+}
+
+function onAskTool(title) {
+  try { uni.showToast({ title: title || '功能即将开放', icon: 'none' }) } catch (_) { /* ignore */ }
 }
 
 async function sendMsg() {

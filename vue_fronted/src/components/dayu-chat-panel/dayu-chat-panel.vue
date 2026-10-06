@@ -85,26 +85,50 @@
       </view>
     </view>
 
-    <view class="chat-ask">
-      <input
-        class="box"
-        :value="modelValue"
-        type="text"
-        :placeholder="placeholder"
-        :disabled="loading"
-        confirm-type="send"
-        :adjust-position="true"
-        :hold-keyboard="true"
-        maxlength="2000"
-        @input="onInput"
-        @confirm="$emit('send')"
-      />
+    <view class="chat-ask" :class="{ 'has-text': canSend }">
+      <view class="tool voice" @tap="$emit('voice')">
+        <text>🎤</text>
+      </view>
+      <view class="box-wrap">
+        <input
+          class="box"
+          :value="modelValue"
+          type="text"
+          :placeholder="placeholder"
+          :disabled="loading"
+          confirm-type="send"
+          :adjust-position="true"
+          :hold-keyboard="true"
+          maxlength="2000"
+          @input="onInput"
+          @confirm="$emit('send')"
+        />
+      </view>
+      <view class="tool emoji" @tap="$emit('emoji')">
+        <text>😊</text>
+      </view>
       <view
-        class="send"
-        :class="{ stop: loading, disabled: !canSend && !loading }"
+        v-if="showMention"
+        class="tool plus"
+        :class="{ hide: canSend || loading }"
+        @tap="$emit('mention')"
+      >
+        <text>＋</text>
+      </view>
+      <view
+        v-else
+        class="tool plus"
+        :class="{ hide: canSend || loading }"
+        @tap="$emit('plus')"
+      >
+        <text>＋</text>
+      </view>
+      <view
+        class="send-txt"
+        :class="{ stop: loading, show: canSend || loading }"
         @tap="loading ? $emit('stop') : $emit('send')"
       >
-        <text>{{ loading ? '■' : '➤' }}</text>
+        <text>{{ loading ? '■' : '发送' }}</text>
       </view>
     </view>
   </view>
@@ -130,9 +154,23 @@ const props = defineProps({
   suggests: { type: Array, default: () => [] },
   /** 是否展示引导 chips（有历史也可展示，引导继续提问） */
   showSuggests: { type: Boolean, default: false },
+  /** 咨询群/学院：+ 打开 @；引导与答疑不需要 @ */
+  showMention: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'send', 'stop', 'navigate', 'confirm', 'dismiss', 'suggest'])
+const emit = defineEmits([
+  'update:modelValue',
+  'send',
+  'stop',
+  'navigate',
+  'confirm',
+  'dismiss',
+  'suggest',
+  'mention',
+  'emoji',
+  'voice',
+  'plus',
+])
 
 const canSend = computed(() => !!String(props.modelValue || '').trim() && !props.loading)
 const displaySuggests = computed(() => (Array.isArray(props.suggests) ? props.suggests.slice(0, 3) : []))
@@ -227,46 +265,65 @@ function onInput(e) {
 .chat-ask {
   flex-shrink: 0;
   display: flex;
-  gap: 10px;
-  align-items: center;
+  gap: 8px;
+  align-items: flex-end;
   padding: 8px 10px 10px;
   border-top: 1px solid #232b3d;
   background: rgba(11, 14, 20, 0.72);
   box-sizing: border-box;
 }
-.chat-ask .box {
-  flex: 1;
-  min-width: 0;
-  height: 42px;
-  line-height: 42px;
-  background: #161d2b;
-  border: 1.5px solid #2a3040;
-  border-radius: 999px;
-  padding: 0 16px;
-  font-size: 14px;
-  color: #edebe4;
-  box-sizing: border-box;
-}
-.chat-ask .send {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
+.chat-ask .tool {
+  width: 36px;
+  height: 36px;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 22px;
+  color: #d8dce6;
+}
+.chat-ask .tool.plus.hide { display: none; }
+.chat-ask .box-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.chat-ask .box {
+  width: 100%;
+  height: 36px;
+  line-height: 36px;
+  background: #0f1420;
+  border: none;
+  border-radius: 18px;
+  padding: 0 14px;
+  font-size: 15px;
+  color: #edebe4;
+  box-sizing: border-box;
+}
+.chat-ask .send-txt {
+  display: none;
+  min-width: 56px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
   flex: none;
-  font-weight: 900;
-  color: #0b0e14;
+  font-weight: 700;
+  color: #fff;
+  background: #12b7f5;
+  box-sizing: border-box;
 }
-.chat-ask .send.stop { background: #e05252 !important; color: #fff; }
-.chat-ask .send.disabled { opacity: 0.45; }
+.chat-ask .send-txt.show { display: flex; }
+.chat-ask .send-txt.stop { background: #e05252 !important; color: #fff; }
 
-.theme-green .chat-ask .send { background: #6fcf8e; }
-.theme-gold .chat-ask .send {
-  background: linear-gradient(135deg, #c9a227, #967536);
-  color: #0d111f;
-}
+.theme-green .chat-ask .send-txt { background: #12b7f5; }
+.theme-gold .chat-ask .send-txt { background: #12b7f5; }
+
+.chat-panel.lt .chat-ask { border-top-color: #c2cadc; background: rgba(235, 238, 244, 0.88); }
+.chat-panel.lt .chat-ask .tool { color: #5a6274; }
+.chat-panel.lt .chat-ask .box { background: #fff; color: #1b1912; }
+.chat-panel.lt .chat-ask .send-txt { background: #12b7f5; color: #fff; }
 
 .av {
   width: 44px;

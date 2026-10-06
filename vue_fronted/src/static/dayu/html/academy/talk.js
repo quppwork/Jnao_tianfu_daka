@@ -1,7 +1,7 @@
 /* 讨论区 @、引用、表情。表情是系统 Unicode，不加载 QQ / 微信版权包。 */
 (function (root) {
   var style = document.createElement('style')
-  style.textContent = '.ib{width:36px;height:36px;border-radius:50%;border:1.5px solid #2A3040;background:#161D2B;color:#EDEBE4;font-size:16px;font-weight:900;flex:none;cursor:pointer}'
+  style.textContent = '.ib{width:36px;height:36px;border-radius:50%;border:none;background:transparent;color:#D8DCE6;font-size:22px;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box}'
     + '.qbar{position:relative;left:auto;transform:none;bottom:auto;width:100%;max-width:none;display:flex;gap:8px;align-items:center;background:#161D2B;border-left:3px solid #C9A869;border-radius:10px;padding:7px 10px;z-index:30;box-sizing:border-box;margin:0 0 6px}'
     + '.qbar[hidden],.talkpan[hidden]{display:none!important}'
     + '.qbar b{font-size:11px;color:#C9A869;flex:none}.qbar span{flex:1;font-size:12px;color:#B9C0CE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
@@ -14,17 +14,19 @@
     + '.mq{border-left:3px solid rgba(201,168,105,.9);padding:0 0 4px 8px;margin-bottom:4px}'
     + '.mq b{display:block;font-size:10px;opacity:.8}.mq span{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;opacity:.85}'
     + '.msticker{font-size:42px;line-height:1.15}.mb .at{color:#8EBEFF;font-weight:800}.msg.me .mb .at{color:#FFF3C4}'
-    + 'html.lt .ib{background:#d4dbe9;border-color:#bfc5d5;color:#1b1912}'
+    + 'html.lt .ib{color:#5a6274}'
     + 'html.lt .qbar,html.lt .talkpan{background:#e7ebf4;border-color:#c2cadc}'
     + 'html.lt .qbar span,html.lt .talkpan button{color:#1b1912}'
     + 'html.lt .talkpan button{background:#d4dbe9}'
   document.head.appendChild(style)
   var phone = document.createElement('style')
-  phone.textContent = '.inbar{gap:8px;padding:0}'
-    + '.inbar .ifield{flex:1;min-width:0;display:flex;align-items:center;background:#161D2B;border:1.5px solid #2A3040;border-radius:999px;padding-right:2px}'
-    + '.inbar .ifield input,.inbar .ifield input:focus{flex:1;width:100%;min-width:0;border:none;background:transparent;box-shadow:none;padding:10px 4px 10px 14px;font-size:16px}'
-    + '.ib.em{width:34px;height:34px;border:none;background:transparent;font-size:22px}'
-    + '.inbar .send.talk-send{width:auto;min-width:64px;height:36px;border-radius:8px;padding:0 12px;font-size:15px}'
+  phone.textContent = '.inbar{gap:8px;padding:0;align-items:flex-end}'
+    + '.inbar .box-wrap{flex:1;min-width:0}'
+    + '.inbar .box-wrap input,.inbar .box-wrap input:focus{width:100%;min-width:0;border:none;background:#0f1420;border-radius:8px;box-shadow:none;padding:8px 12px;font-size:15px;color:#EEF1F6;outline:none;box-sizing:border-box}'
+    + '.ib.em,.ib.voice,.ib.plus{width:36px;height:36px;border:none;background:transparent;font-size:22px}'
+    + '.inbar .send.talk-send{display:none;width:auto;min-width:56px;height:34px;border-radius:6px;padding:0 12px;font-size:14px;font-weight:700;background:#12b7f5;color:#fff;border:none}'
+    + '.inbar.has-text .send.talk-send{display:flex;align-items:center;justify-content:center}'
+    + '.inbar.has-text .ib.plus{display:none}'
     + '.mb{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}'
     + '.mb.faceonly{background:transparent!important;padding:0!important}'
     + '.msticker{font-size:68px;line-height:1}'
@@ -37,8 +39,8 @@
     + '.holdmenu button{border:none;background:transparent;color:#fff;padding:14px 4px 12px;font-size:12px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}'
     + '.holdmenu button b{font-size:18px;font-weight:600;line-height:1}'
     + '.mb.picked{box-shadow:0 0 0 2px #C9A869}'
-    + 'html.lt .inbar .ifield{background:#fff;border-color:#d5dbe8}'
-    + 'html.lt .inbar .ifield input{color:#1b1912}'
+    + 'html.lt .inbar .box-wrap input{background:#fff;color:#1b1912}'
+    + 'html.lt .inbar .send.talk-send{background:#12b7f5;color:#fff}'
     + '.talkshade{position:fixed;inset:0;z-index:36;background:transparent}'
     + '.talkshade[hidden]{display:none!important}'
     + '.chat-dock{position:fixed}'
@@ -374,39 +376,55 @@
   }
 
   function bind() {
-    if ($('atBtn')) return
+    if ($('emBtn')) return
     var bar = document.querySelector('.inbar')
     var inp = $('inp')
     if (!bar || !inp) return
     var dock = $('chatDock') || bar.parentNode
-    if (dock && dock.classList && !dock.classList.contains('chat-dock')) {
-      /* keep parent as insertion root */
-    }
     if (dock && dock.style) dock.style.position = dock.style.position || ''
-    var at = document.createElement('button')
-    at.type = 'button'
-    at.id = 'atBtn'
-    at.className = 'ib'
-    at.textContent = '@'
-    at.setAttribute('aria-label', '提到某人')
+
+    function syncSendUi() {
+      var has = !!(inp && String(inp.value || '').trim())
+      bar.classList.toggle('has-text', has)
+    }
+
+    var voice = document.createElement('button')
+    voice.type = 'button'
+    voice.id = 'voiceBtn'
+    voice.className = 'ib voice'
+    voice.textContent = '🎤'
+    voice.setAttribute('aria-label', '语音')
+
+    var wrap = document.createElement('div')
+    wrap.className = 'box-wrap'
+    bar.insertBefore(wrap, inp)
+    wrap.appendChild(inp)
+
     var em = document.createElement('button')
     em.type = 'button'
     em.id = 'emBtn'
-    em.className = 'ib'
+    em.className = 'ib em'
     em.textContent = '😊'
     em.setAttribute('aria-label', '表情')
-    var field = document.createElement('div')
-    field.className = 'ifield'
-    bar.insertBefore(field, inp)
-    field.appendChild(inp)
-    em.classList.add('em')
-    field.appendChild(em)
-    bar.insertBefore(at, field)
+
+    var plus = document.createElement('button')
+    plus.type = 'button'
+    plus.id = 'atBtn'
+    plus.className = 'ib plus'
+    plus.textContent = '＋'
+    plus.setAttribute('aria-label', '更多')
+
+    bar.insertBefore(voice, wrap)
+    bar.appendChild(em)
+    bar.appendChild(plus)
+
     var send = bar.querySelector('.send')
     if (send) {
       send.classList.add('talk-send')
       send.textContent = '发送'
     }
+    syncSendUi()
+
     var host = dock || bar.parentNode
     var qbar = document.createElement('div')
     qbar.id = 'qbar'
@@ -437,7 +455,14 @@
       var box = $('inp')
       if (box && !box.disabled) box.focus()
     })
-    at.onclick = function () {
+    voice.onclick = function () {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'dayu-toast', title: '语音消息即将开放' }, '*')
+        }
+      } catch (e) {}
+    }
+    plus.onclick = function () {
       if ($('atPanel') && !$('atPanel').hidden) closePanels()
       else openAt()
     }
@@ -455,6 +480,7 @@
       })
     }
     inp.addEventListener('input', function () {
+      syncSendUi()
       if (/@[^\s@]*$/.test(inp.value)) openAt()
     })
     inp.addEventListener('focus', function () {

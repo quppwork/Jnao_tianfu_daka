@@ -42,9 +42,13 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 .dchat p b{color:#F5D9A8}
 .dchat .go{display:inline-block;margin-top:10px;background:linear-gradient(90deg,#C9A227,#967536);color:#0D111F;font-size:17px;font-weight:900;padding:10px 20px;border-radius:99px;text-decoration:none}
 /* 输入条 */
-.askbar{position:fixed;bottom:72px;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;display:flex;gap:8px;padding:8px 14px;z-index:40;box-sizing:border-box}
-.askbar .box{flex:1;background:#171E2E;border:1.5px solid #2A3040;border-radius:99px;padding:11px 16px;font-size:16px;color:#EDEBE4;outline:none}
-.askbar .send{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#C9A227,#967536);display:flex;align-items:center;justify-content:center;font-size:18px;color:#0D111F;font-weight:900}
+.askbar{position:fixed;bottom:72px;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;display:flex;gap:8px;padding:8px 10px;z-index:40;box-sizing:border-box;align-items:flex-end}
+.askbar .tool{width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;color:#D8DCE6}
+.askbar .box-wrap{flex:1;min-width:0}
+.askbar .box{width:100%;background:#0f1420;border:none;border-radius:8px;padding:8px 12px;font-size:15px;color:#EDEBE4;outline:none;box-sizing:border-box}
+.askbar .send-txt{display:none;min-width:56px;height:34px;padding:0 12px;border-radius:6px;background:#12b7f5;align-items:center;justify-content:center;font-size:14px;color:#fff;font-weight:700;box-sizing:border-box;cursor:pointer}
+.askbar.has-text .send-txt{display:flex}
+.askbar.has-text .tool.plus{display:none}
 /* 区块 */
 .sec{margin:18px 18px 0}
 .sec-t{font-size:18px;font-weight:900;margin-bottom:10px;display:flex;align-items:baseline;gap:8px}
@@ -129,7 +133,15 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
     <div id="chatThread"></div>
   </div>
 
-  <div class="askbar"><input class="box" id="askInput" placeholder="问大宇：孩子训练 / 家长课程 / 报告解读…"/><div class="send" id="askSend">➤</div></div>
+  <div class="askbar" id="askBar">
+    <div class="tool">🎤</div>
+    <div class="box-wrap">
+      <input class="box" id="askInput" placeholder="问大宇：孩子训练 / 家长课程 / 报告解读…"/>
+    </div>
+    <div class="tool">😊</div>
+    <div class="tool plus">＋</div>
+    <div class="send-txt" id="askSend">发送</div>
+  </div>
 
   <!-- 每日弹窗：先进群 · 推广奖算力 · 充值（每侧每天一次） -->
   <div class="qmask" id="qmask">
@@ -487,6 +499,15 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   if(inpEl) inpEl.addEventListener('keydown', function(e){
     if(e.key === 'Enter'){ e.preventDefault(); sendParentChat(); }
   });
+})();
+</script>
+<script>
+/* HAS_TEXT_SYNC_QQ */
+(function(){
+  var inp=document.getElementById('askInput');
+  var bar=document.getElementById('askBar');
+  function sync(){ if(bar) bar.classList.toggle('has-text', !!(inp && String(inp.value||'').trim())); }
+  if(inp){ inp.addEventListener('input', sync); sync(); }
 })();
 </script>
 </body></html>

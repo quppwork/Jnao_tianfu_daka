@@ -238,9 +238,10 @@
       </view>
     </view>
 
-    <!-- Bottom Input -->
-    <view class="input-panel">
-      <view class="input-wrap">
+    <!-- Bottom Input · QQ 风格：语音 | 输入 | 表情 | ＋/发送 -->
+    <view class="input-panel" :class="{ 'has-text': !!inputText.trim() || loading }">
+      <view class="tool voice" @click="onVoiceTap">🎤</view>
+      <view class="box-wrap">
         <input
           class="chat-input"
           v-model="inputText"
@@ -251,12 +252,16 @@
           @confirm="sendMsg"
           @keydown="onKeyDown"
         />
-        <view class="input-btns">
-          <view class="btn-send" :class="{ 'btn-stop': loading }" @click="loading ? stopStream() : sendMsg()">
-            <text v-if="loading" class="btn-send-icon">■</text>
-            <text v-else class="btn-send-icon">➤</text>
-          </view>
-        </view>
+      </view>
+      <view class="tool emoji" @click="onEmojiTap">😊</view>
+      <view class="tool plus" @click="onPlusTap">＋</view>
+      <view
+        class="send-txt"
+        :class="{ stop: loading }"
+        @click="loading ? stopStream() : sendMsg()"
+      >
+        <text v-if="loading">■</text>
+        <text v-else>发送</text>
       </view>
     </view>
 
@@ -672,6 +677,16 @@ function onKeyDown(e) {
     e.preventDefault()
     sendMsg()
   }
+}
+
+function onVoiceTap() {
+  uni.showToast({ title: '语音消息即将开放', icon: 'none' })
+}
+function onEmojiTap() {
+  uni.showToast({ title: '表情即将开放', icon: 'none' })
+}
+function onPlusTap() {
+  uni.showToast({ title: '更多功能即将开放', icon: 'none' })
 }
 
 async function sendMsg() {
@@ -1480,70 +1495,69 @@ function onNavTap() {
 
 .input-panel {
   flex-shrink: 0;
-  margin: 6px 14px 0;
-  padding: 0 0 calc(12px + env(safe-area-inset-bottom, 0px));
-}
-.input-wrap {
+  margin: 0;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
-  min-height: 48px;
-  padding: 5px 5px 5px 16px;
-  background: var(--bg-card);
-  border-radius: 24px;
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-top: 1px solid var(--border, #232b3d);
+  background: var(--bg-card, rgba(11, 14, 20, 0.96));
   box-sizing: border-box;
 }
-[data-theme="white"] .input-wrap {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+.input-panel .tool {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: var(--text-dim, #d8dce6);
+  cursor: pointer;
+}
+.input-panel .box-wrap {
+  flex: 1;
+  min-width: 0;
 }
 .chat-input {
-  flex: 1;
-  width: 0;
-  min-width: 0;
+  width: 100%;
   height: 36px;
   line-height: 36px;
-  padding: 0;
+  padding: 0 12px;
   margin: 0;
-  background: transparent;
+  background: var(--bg-input, #0f1420);
   border: none;
+  border-radius: 8px;
   outline: none;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text);
   box-sizing: border-box;
 }
 .chat-input::placeholder { color: var(--text-hint, rgba(148, 163, 184, 0.9)); }
+[data-theme="white"] .chat-input {
+  background: #fff;
+  color: #1b1912;
+}
 [data-theme="white"] .chat-input::placeholder { color: #9ca3af; }
-.input-btns {
-  display: flex;
+.input-panel .send-txt {
+  display: none;
+  min-width: 56px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: #12b7f5;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-.btn-send {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--accent);
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.btn-send.btn-stop { background: #ef4444; }
-.btn-send:active { opacity: 0.8; }
-.btn-send-icon {
-  color: #fff;
   font-size: 14px;
+  flex: none;
+  color: #fff;
   font-weight: 700;
-  line-height: 1;
+  box-sizing: border-box;
+  cursor: pointer;
 }
-.btn-send.btn-stop .btn-send-icon { font-size: 12px; }
-.btn-disabled { opacity: 0.45; pointer-events: none; }
+.input-panel .send-txt.stop { background: #ef4444; }
+.input-panel.has-text .send-txt { display: flex; }
+.input-panel.has-text .tool.plus { display: none; }
 
 /* Settings modal */
 .picker-overlay {

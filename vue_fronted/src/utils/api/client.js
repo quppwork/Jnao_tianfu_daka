@@ -177,9 +177,11 @@ export function logoutAdminAndGoLogin() {
 export async function logoutSession(kind) {
   try {
     if (kind === 'admin') {
-      await apiJson('/api/admin/logout', { method: 'POST' })
+      const aid = getAdminUserId()
+      if (aid) await apiJson(withAdmin('/api/admin/logout', aid), { method: 'POST' })
     } else if (kind === 'parent' || kind === 'student') {
-      await apiJson('/api/auth/logout', { method: 'POST' })
+      const uid = kind === 'parent' ? getParentUserId() : getStudentUserId()
+      if (uid) await apiJson(withUser('/api/auth/logout', uid), { method: 'POST' })
     }
   } catch (_) { /* ignore */ }
   clearSessionForKind(kind)
@@ -410,7 +412,9 @@ const AUTH_ATTEMPT_PREFIXES = [
   '/api/auth/sms/',
   '/api/auth/register',
   '/api/auth/wechat/exchange',
+  '/api/auth/logout',
   '/api/admin/login',
+  '/api/admin/logout',
 ]
 
 function isAuthAttemptRequest(url) {
@@ -490,7 +494,9 @@ export async function apiJson(url, options = {}) {
       handleMidSessionExpired(url)
     }
     const msg = formatApiError(data, res.status)
-    console.error(`[api] ${res.status} ${fetchOptions.method || 'GET'} ${url} — ${msg}`, data)
+    if (!(res.status === 401 && isAuthAttemptRequest(url))) {
+      console.error(`[api] ${res.status} ${fetchOptions.method || 'GET'} ${url} — ${msg}`, data)
+    }
     const err = new Error(msg)
     err.status = res.status
     err.data = data

@@ -101,11 +101,6 @@ def mock_doubao():
             return_value=reply,
         ) as mock_chat,
         patch(
-            "app.agents.qa.runner.chat_completion",
-            new_callable=AsyncMock,
-            return_value=reply,
-        ),
-        patch(
             "app.agents.qa.runner.vision_chat_completion",
             new_callable=AsyncMock,
             return_value="【测试】识题预览",
@@ -125,14 +120,17 @@ def mock_doubao():
             side_effect=lambda **kwargs: _fake_stream(),
         ),
         patch(
+            "app.services.doubao_client.chat_completion_messages_stream",
+            side_effect=lambda **kwargs: _fake_stream(),
+        ),
+        patch(
             "app.services.doubao_client.vision_chat_completion_stream",
             side_effect=lambda **kwargs: _fake_stream(),
         ),
         patch(
             "app.services.doubao_client.chat_completion_message",
             new_callable=AsyncMock,
-            # 默认无 tool_calls → planner 走启发式兜底，现有用例不依赖真 FC
-            return_value={"role": "assistant", "content": ""},
+            return_value={"role": "assistant", "content": reply},
         ) as mock_fc,
         patch("app.services.doubao_client.is_configured", return_value=True),
         # 本机若配置了百炼选库，禁止走真外呼；单测一律走 mock 豆包兜底

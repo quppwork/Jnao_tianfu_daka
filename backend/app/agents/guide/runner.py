@@ -187,29 +187,30 @@ def build_kb_primary_system_prompt(
 
 async def _gather_rag(message: str) -> tuple[str, list[str]]:
     """知识后端 Retrieve 切片 → rag_block（主链路，BAILIAN_RAG_GENERATE=0 时）。"""
+    from app.harness.runtime import call_tool
     from app.services.guide_rag_query import build_guide_rag_query
     from app.services.guide_rag_router import should_guide_use_rag
-    from app.services.knowledge import get_knowledge_backend
 
     if not should_guide_use_rag(message):
         return "", []
     query = build_guide_rag_query(message)
-    ans = await get_knowledge_backend().retrieve_chunks(query, timeout=20)
-    if not ans or not ans.rag or not ans.rag.rag_block:
-        # 兼容：若后端只填了 text
-        if ans and ans.text:
-            return ans.text, list(ans.sources or [])
-        return "", []
-    rag = ans.rag
-    sources = list(rag.sources)
+    retrieved = await call_tool(
+        "retrieve_kb",
+        {"query": query, "timeout": 20},
+        profile="guide",
+    )
+    data = retrieved.data if retrieved.ok else {}
+    block = str(data.get("rag_block") or "").strip()
+    sources = list(data.get("sources") or [])
     logger.info(
-        "guide rag mode=%s nodes=%s query=%r sources=%s",
-        rag.mode,
-        rag.node_count,
+        "guide rag retrieve_kb used=%s query=%r sources=%s",
+        bool(data.get("rag_used")),
         query[:80],
         sources[:3],
     )
-    return rag.rag_block, sources
+    if not block:
+        return "", []
+    return block, sources
 
 
 GUIDE_BAILIAN_INSTRUCTIONS = (
@@ -358,6 +359,7 @@ def _meta_from_ctx(
         tools_used=tools,
         has_assessment=bool(ctx.has_assessment),
         reply=reply,
+        child_id=ctx.child_user_id,
     )
     # R5：显式「记下」意图 → 确认卡置顶（确认前不落库）
     confirms = propose_write_confirms(message)
@@ -379,8 +381,9 @@ async def _qa_handoff_reply(
     message: str,
     history: list[dict] | None = None,
 ) -> str:
-    """学科题意图：豆包只做引导话术，不讲题。"""
-    from app.services.doubao_client import chat_completion, is_configured
+    """学科题意图：只做引导话术，不讲题。"""
+    from app.harness.turn import run_profile_turn
+    from app.services.doubao_client import is_configured
 
     if not is_configured():
         return "具体题目去「学科答疑」里问更合适，我可以帮你在那边讲解思路～"
@@ -389,13 +392,14 @@ async def _qa_handoff_reply(
         "用一两句自然中文引导去「学科答疑」，可点下方按钮进入。"
         "不要提今日训练，不要提知识库。"
     )
-    reply = await chat_completion(
-        system_prompt=system,
-        user_message=message,
-        history=history,
-        max_tokens=160,
+    turn = await run_profile_turn(
+        "guide",
+        message,
+        history=history or [],
+        system_override=system,
+        max_steps=2,
     )
-    text = (reply or "").strip()
+    text = (turn.get("reply") or "").strip()
     if "学科答疑" not in text:
         text = "具体题目去「学科答疑」里问更合适，我可以帮你在那边讲解思路～"
     return text
@@ -488,21 +492,22 @@ async def _minimal_guide_reply(
     history: list[dict] | None = None,
 ) -> str:
     """KB Agent 未命中时的轻量兜底（无长人设/策略）。"""
-    from app.services.doubao_client import chat_completion, is_configured
+    from app.harness.turn import run_profile_turn
+    from app.services.doubao_client import is_configured
 
     if not is_configured():
         return "我这边暂时没接上，你可以先去「今日训练」看看～"
     system = (
-        "你是训练教练张宇，用简短中文回答。"
-        "学科具体解题引导去「学科答疑」；需要示范引导去「今日训练」。"
+        "你是张宇老师的训练教练。用两三句中文回答；学科题请去学科答疑。"
     )
-    reply = await chat_completion(
-        system_prompt=system,
-        user_message=message,
-        history=history,
-        max_tokens=320,
+    turn = await run_profile_turn(
+        "guide",
+        message,
+        history=history or [],
+        system_override=system,
+        max_steps=3,
     )
-    return (reply or "").strip() or "好的，有需要随时问我～"
+    return (turn.get("reply") or "").strip() or "好的，有需要随时问我～"
 
 
 async def run_chat(
@@ -514,7 +519,8 @@ async def run_chat(
     use_tools: bool = True,
 ) -> dict[str, Any]:
     """单轮回复。返回 reply + actions + tools_used。"""
-    from app.services.doubao_client import chat_completion
+    from app.harness.context import ToolContext
+    from app.harness.turn import run_profile_turn
 
     timer = TurnTimer()
     ctx = _prepare_context(db, child_user_id)
@@ -687,12 +693,15 @@ async def run_chat(
             rag_block=rag_block,
             message=message,
         )
-    reply = await chat_completion(
-        system_prompt=system,
-        user_message=message,
+    turn = await run_profile_turn(
+        "guide",
+        message,
         history=hist,
-        max_tokens=500,
+        ctx=ToolContext(db=db, child_user_id=child_user_id, profile="guide"),
+        system_override=system,
+        max_steps=4,
     )
+    reply = turn.get("reply") or ""
     text = (reply or "").strip() or "抱歉，AI 暂时无法响应，请稍后再试。"
     leak_hits = scan_guide_leaks(text)
     if leak_hits:
@@ -733,8 +742,6 @@ async def run_chat_stream(
 
     yield ('meta', dict) | ('token', str) | ('error', str)
     """
-    from app.services.doubao_client import chat_completion_stream
-
     timer = TurnTimer()
     ctx = _prepare_context(db, child_user_id)
     hist, memory_block = _prepare_memory_and_history(
@@ -961,13 +968,24 @@ async def run_chat_stream(
 
     yield ("status", "正在生成回复…")
     parts: list[str] = []
-    async for token in chat_completion_stream(
-        system_prompt=system,
-        user_message=message,
+    from app.harness.context import ToolContext
+    from app.harness.turn import run_profile_turn_stream
+
+    done: dict | None = None
+    async for kind, payload in run_profile_turn_stream(
+        "guide",
+        message,
         history=hist,
-        max_tokens=800,
+        ctx=ToolContext(db=db, child_user_id=child_user_id, profile="guide"),
+        system_override=system,
+        max_steps=1,
+        allow_tools=False,
     ):
-        if token.startswith("[ERROR]"):
+        if kind == "token":
+            token = str(payload or "")
+            parts.append(token)
+            yield ("token", token)
+        elif kind == "error":
             emit_guide_trace(
                 build_turn_trace(
                     child_user_id=child_user_id,
@@ -981,12 +999,12 @@ async def run_chat_stream(
                     stream=True,
                 )
             )
-            yield ("error", token)
+            yield ("error", str(payload))
             return
-        parts.append(token)
-        yield ("token", token)
+        elif kind == "done" and isinstance(payload, dict):
+            done = payload
 
-    text = "".join(parts)
+    text = ((done or {}).get("reply") or "".join(parts) or "").strip()
     # 完整回复后再对齐按钮（解决「文案学科答疑、按钮今日训练」）
     aligned = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
     meta["actions"] = aligned.get("actions") or meta.get("actions") or []

@@ -374,6 +374,7 @@ async def run_guide_kb_turn(
             tools_used=[],
             has_assessment=bool(ctx.has_assessment) if ctx else False,
             reply="学科答疑",
+            child_id=child_user_id,
         )
         qa_actions = [a for a in actions if a.get("type") == "navigate" and a.get("target") == "qa"]
         if not qa_actions:

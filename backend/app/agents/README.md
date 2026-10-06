@@ -11,13 +11,28 @@ app/agents/
 ├── qa/                     # 学科答疑 Agent
 ├── guide/                  # 首页引导 Agent
 └── academy/                # 天赋学院角色 harness（每人独立人设，不互调 runner）
+
+app/harness/                # Tool + MCP + 沙箱 + 统一 run_profile_turn
+
 ```
 
 ## 多 Agent 边界（勿耦合）
 
 - **Guide 与 QA 互不 import**；联调靠前端跳转 + `shared/handoff` 的 `navigate` 动作。  
 - **禁止** `guide.runner` 调用 `qa.runner`（或反向）。  
-- 先各自做完，再按需加 thin handoff；不要先做超级 Orchestrator。
+- 先各自做完，再按需加 thin handoff；不要先做超级 Orchestrator。  
+- **出话循环统一** `harness.turn.run_profile_turn` / `run_profile_turn_stream`（consult / parent_guide / guide / qa / academy）。闸门与 Scene Manager 仍在各 facade。
+
+## Harness 六大组件（对齐）
+
+| 组件 | 内核落点 | 边界 |
+|---|---|---|
+| Agent Loop | `loop.iter_agent`：思考—工具—观察，失败重试 1 次，流式 token | 产品闸门在 facade / GateHook |
+| LLM Integration | `DeepSeekAdapter` + `PROFILES`（max_tokens / feature / 流式） | 单供应商 DeepSeek |
+| Tools & Actions | registry + policy + sandbox MCP | 写工具需确认 |
+| Memory & Context | 每步 `window_for_model` 折叠；会话表仍分域 | 无 AGENTS.md 文件记忆 |
+| Safety & Permissions | 消息长度闸门、profile 工具白名单、confirm、audit/trace | 无内容安全分类器 |
+| Orchestration | `harness.orchestration`：只交付 handoff 包 | **不** spawn 子代理 |
 
 ## 职责边界
 
@@ -67,5 +82,6 @@ app/agents/
 | ~~R11 多模态 / R12 语音~~ | ⏸ **暂不做**（产品确认不加传图/语音入口） |
 | QA Agent 打磨 | **另线** ✅ P0/P1/P2 已收口（语音明确不做） |
 | Orchestrator | **暂不做**（见 handoff 原则） |
+| Harness 工具层 | ✅ MCP 聚合：`jnao-host`（Mode B 凭证工具）+ `jnao-sandbox`（Mode A，stdio 无对外端口）。双重 allow 防 loopback 绕过。 |
 
 Guide 主线已收口。实现记录仅本地 `docs/过期文件/`（不入库）；现行约定见 `docs/前端后端API文档.md`（首页引导）与 `docs/数据闭环与预留说明.md` §1.6。

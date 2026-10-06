@@ -27,13 +27,25 @@ from app.services.ai_output_guard import (
     refusal_message,
     sanitize_ai_reply,
 )
-from app.services.doubao_client import chat_completion, vision_chat_completion
+from app.services.doubao_client import vision_chat_completion
 from app.services.qa_coach import build_coach_metadata, fetch_recent_coach_context_for_prompt
 from app.services.qa_image_store import image_data_url
-from app.services.qa_rag_client import rag_chat
 from app.services.qa_kb_router import QaKbPath, resolve_qa_kb_path
-from app.services.qa_kb_retrieve import retrieve_qa_method_kb
 from app.services.text_sanitize import sanitize_subject, sanitize_text, session_title_from_message
+
+
+async def _ocr_preview(image_data_url: str) -> str | None:
+    from app.harness.runtime import call_tool
+
+    result = await call_tool(
+        "vision_ocr",
+        {"image_data_url": image_data_url},
+        profile="qa",
+    )
+    if not result.ok:
+        return None
+    text = str((result.data or {}).get("text") or "").strip()
+    return text or None
 
 
 async def _fetch_qa_rag_bundle(
@@ -44,7 +56,9 @@ async def _fetch_qa_rag_bundle(
     has_image: bool,
     use_rag: bool | None,
 ) -> dict[str, Any]:
-    """按路径取知识库上下文：METHOD(百炼多轮) / LEGACY(旧 RAG) / 空。"""
+    """按路径取知识库上下文：METHOD(百炼多轮) / LEGACY(旧 RAG) / 空。闸门仍在 QA。"""
+    from app.harness.runtime import call_tool
+
     empty = {
         "rag_used": False,
         "rag_sources": [],
@@ -62,30 +76,40 @@ async def _fetch_qa_rag_bundle(
         return empty
 
     if path is QaKbPath.METHOD:
-        hit = await retrieve_qa_method_kb(message, subject=subject)
-        if hit and hit.get("answer"):
+        hit = await call_tool(
+            "retrieve_qa_kb",
+            {"query": message, "subject": subject or ""},
+            profile="qa",
+        )
+        data = hit.data if hit.ok else {}
+        if data.get("rag_used") and data.get("rag_context"):
             return {
                 "rag_used": True,
-                "rag_sources": list(hit.get("sources") or []),
-                "rag_context": hit["answer"],
+                "rag_sources": list(data.get("rag_sources") or []),
+                "rag_context": data["rag_context"],
                 "rag_kind": "method",
-                "rag_source": hit.get("rag_source") or "bailian_method",
+                "rag_source": data.get("rag_source") or "bailian_method",
             }
         return empty
 
     if path is QaKbPath.LEGACY_TEACHING:
-        rag = await rag_chat(
-            message,
-            user_id=f"child_{child_user_id}",
-            subject=subject,
+        rag = await call_tool(
+            "retrieve_qa_legacy",
+            {
+                "query": message,
+                "user_id": f"child_{child_user_id}",
+                "subject": subject or "",
+            },
+            profile="qa",
         )
-        if rag and rag.get("answer"):
+        data = rag.data if rag.ok else {}
+        if data.get("rag_used") and data.get("rag_context"):
             return {
                 "rag_used": True,
-                "rag_sources": list(rag.get("sources") or []),
-                "rag_context": rag["answer"],
+                "rag_sources": list(data.get("rag_sources") or []),
+                "rag_context": data["rag_context"],
                 "rag_kind": "legacy",
-                "rag_source": "tianfu_rag",
+                "rag_source": data.get("rag_source") or "tianfu_rag",
             }
     return empty
 
@@ -308,12 +332,7 @@ async def run_chat(
         if not data_url:
             raise ValueError("图片不存在或已过期")
         image_url = f"/api/qa/images/{image_id}?user_id={child_user_id}"
-        ocr_preview = await vision_chat_completion(
-            system_prompt="你是 OCR 助手。请简要识别图片中的学科题目文字与关键条件，不要解题。",
-            user_message="请识别图中题目，列出已知条件和问题。",
-            image_data_url=data_url,
-            max_tokens=400,
-        )
+        ocr_preview = await _ocr_preview(data_url)
 
     rag_bundle = await _fetch_qa_rag_bundle(
         message,
@@ -379,12 +398,18 @@ async def run_chat(
             max_tokens=900,
         )
     else:
-        reply = await chat_completion(
-            system_prompt=system,
-            user_message=user_message,
+        from app.harness.context import ToolContext
+        from app.harness.turn import run_profile_turn
+
+        turn = await run_profile_turn(
+            "qa",
+            user_message,
             history=history,
-            max_tokens=900,
+            ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
+            system_override=system,
+            max_steps=4,
         )
+        reply = turn.get("reply")
 
     if not reply:
         reply = "抱歉，AI 暂时无法响应，请稍后再试。"
@@ -438,7 +463,7 @@ async def run_chat_stream(
     use_rag: bool | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
     from app.services import qa_service as svc
-    from app.services.doubao_client import chat_completion_stream, vision_chat_completion_stream
+    from app.services.doubao_client import vision_chat_completion_stream
 
     timer = TurnTimer()
     message = sanitize_text(message)
@@ -653,12 +678,7 @@ async def run_chat_stream(
             yield ("error", "图片不存在或已过期")
             return
         image_url = f"/api/qa/images/{image_id}?user_id={child_user_id}"
-        ocr_preview = await vision_chat_completion(
-            system_prompt="你是 OCR 助手。请简要识别图片中的学科题目文字与关键条件，不要解题。",
-            user_message="请识别图中题目，列出已知条件和问题。",
-            image_data_url=data_url,
-            max_tokens=400,
-        )
+        ocr_preview = await _ocr_preview(data_url)
 
     rag_bundle = await _fetch_qa_rag_bundle(
         message,
@@ -721,22 +741,39 @@ async def run_chat_stream(
             history=history,
             max_tokens=900,
         )
+        async for token in token_iter:
+            if token.startswith("[ERROR]"):
+                yield ("error", token)
+                return
+            parts.append(token)
+            yield ("token", token)
+        reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
     else:
-        token_iter = chat_completion_stream(
-            system_prompt=system,
-            user_message=user_message,
+        from app.harness.context import ToolContext
+        from app.harness.turn import run_profile_turn_stream
+
+        done: dict | None = None
+        async for kind, payload in run_profile_turn_stream(
+            "qa",
+            user_message,
             history=history,
-            max_tokens=900,
-        )
-
-    async for token in token_iter:
-        if token.startswith("[ERROR]"):
-            yield ("error", token)
-            return
-        parts.append(token)
-        yield ("token", token)
-
-    reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
+            ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
+            system_override=system,
+            max_steps=1,
+            allow_tools=False,
+        ):
+            if kind == "token":
+                token = str(payload or "")
+                parts.append(token)
+                yield ("token", token)
+            elif kind == "error":
+                yield ("error", str(payload))
+                return
+            elif kind == "done" and isinstance(payload, dict):
+                done = payload
+        reply = ((done or {}).get("reply") or "".join(parts) or "").strip()
+        if not reply:
+            reply = "抱歉，AI 暂时无法响应，请稍后再试。"
     reply = sanitize_ai_reply(reply)
     assistant_meta = svc.assistant_meta_for_storage(
         coach_meta,

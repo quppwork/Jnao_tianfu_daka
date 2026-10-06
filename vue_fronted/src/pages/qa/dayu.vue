@@ -72,6 +72,10 @@
       </view>
     </view>
 
+    <view v-if="guideHandoffBanner" class="banner">
+      <text class="banner-text">来自首页引导：{{ guideHandoffBanner.hint || ('已切换到' + (guideHandoffBanner.subject || subject)) }}</text>
+      <text class="banner-x" @tap="guideHandoffBanner = null">×</text>
+    </view>
     <view v-if="mismatchSuggest" class="banner mismatch">
       <text class="banner-text">这道题更像「{{ mismatchSuggest }}」，点切换将自动重发上一问</text>
       <text class="banner-act" @tap="applySuggestedSubject">切换并重发</text>
@@ -135,24 +139,28 @@
       </view>
     </scroll-view>
 
-    <view class="inputbar">
-      <input
-        class="box"
-        v-model="inputText"
-        type="text"
-        confirm-type="send"
-        :disabled="loading"
-        placeholder="输入问题，或拍照发题..."
-        @confirm="sendMsg"
-      />
-      <view class="cam" @tap="pickImage">📷</view>
+    <view class="inputbar" :class="{ 'has-text': canSend || loading }">
+      <view class="tool voice">🎤</view>
+      <view class="box-wrap">
+        <input
+          class="box"
+          v-model="inputText"
+          type="text"
+          confirm-type="send"
+          :disabled="loading"
+          placeholder="输入问题，或拍照发题..."
+          @confirm="sendMsg"
+        />
+      </view>
+      <view class="tool cam" @tap="pickImage">📷</view>
+      <view class="tool plus" :class="{ hide: canSend || loading }">＋</view>
       <view
-        class="send"
-        :class="{ stop: loading, disabled: !loading && !canSend }"
+        class="send-txt"
+        :class="{ stop: loading, show: canSend || loading }"
         @tap="loading ? stopStream() : sendMsg()"
       >
         <text v-if="loading">■</text>
-        <text v-else>➤</text>
+        <text v-else>发送</text>
       </view>
     </view>
 
@@ -261,6 +269,7 @@ const showSettings = ref(false)
 const showHistory = ref(false)
 const subject = ref('')
 const inputText = ref('')
+const guideHandoffBanner = ref(null)
 const loading = ref(false)
 const qaSessionId = ref(null)
 const messages = ref([])
@@ -672,12 +681,24 @@ async function sendMsg() {
 }
 
 onLoad((opts) => {
+  const from = String(opts?.from || '').trim()
   let rawSubject = String(opts?.subject || '').trim()
   let rawHint = String(opts?.hint || '').trim()
+  let rawQuery = String(opts?.query || '').trim()
   try { if (rawSubject) rawSubject = decodeURIComponent(rawSubject) } catch (_) { /* keep */ }
   try { if (rawHint) rawHint = decodeURIComponent(rawHint) } catch (_) { /* keep */ }
+  try { if (rawQuery) rawQuery = decodeURIComponent(rawQuery) } catch (_) { /* keep */ }
   if (subjects.includes(rawSubject)) subject.value = rawSubject
-  if (rawHint) inputText.value = rawHint.slice(0, 200)
+  const prefill = (rawQuery || rawHint).slice(0, 400)
+  if (prefill) inputText.value = prefill.slice(0, 200)
+  if (from === 'guide' && (rawSubject || prefill)) {
+    guideHandoffBanner.value = {
+      subject: subjects.includes(rawSubject) ? rawSubject : '',
+      hint: (rawHint || prefill).slice(0, 60),
+      childId: String(opts?.child_id || '').trim(),
+      image: String(opts?.image || '').trim(),
+    }
+  }
 })
 
 onShow(() => {
@@ -1084,27 +1105,35 @@ onMounted(async () => {
 
 .inputbar {
   flex-shrink: 0;
-  padding: 8px 18px;
-  display: flex; gap: 9px; align-items: center;
+  padding: 8px 10px;
+  display: flex; gap: 8px; align-items: flex-end;
   background: rgba(11, 14, 20, 0.96);
   border-top: 1px solid #232b3d;
 }
 .app.lt .inputbar { background: rgba(235, 238, 244, 0.96); border-top-color: #c2cadc; }
-.box {
-  flex: 1; min-width: 0; height: 42px; line-height: 42px;
-  background: #161d2b; border: 1.5px solid #2a3040; border-radius: 999px;
-  padding: 0 16px; font-size: 14px; color: #edebe4;
-}
-.app.lt .box { background: #d4dbe9; border-color: #bfc5d5; color: #1b1912; }
-.cam { font-size: 21px; }
-.send {
-  width: 42px; height: 42px; border-radius: 50%; background: #6fcf8e;
+.inputbar .tool {
+  width: 36px; height: 36px; flex: none;
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; flex: none; color: #0b0e14; font-weight: 900;
+  font-size: 22px; color: #d8dce6;
 }
-.send.stop { background: #e05252; color: #fff; }
-.send.disabled { opacity: 0.45; }
-.app.lt .send { background: #30904f; color: #fff; }
+.inputbar .tool.plus.hide { display: none; }
+.inputbar .box-wrap { flex: 1; min-width: 0; }
+.box {
+  width: 100%; height: 36px; line-height: 36px;
+  background: #0f1420; border: none; border-radius: 8px;
+  padding: 0 12px; font-size: 15px; color: #edebe4; box-sizing: border-box;
+}
+.app.lt .box { background: #fff; color: #1b1912; }
+.send-txt {
+  display: none; min-width: 56px; height: 34px; padding: 0 12px; border-radius: 6px;
+  background: #12b7f5;
+  align-items: center; justify-content: center;
+  font-size: 14px; flex: none; color: #fff; font-weight: 700;
+  box-sizing: border-box;
+}
+.send-txt.show { display: flex; }
+.send-txt.stop { background: #e05252; color: #fff; }
+.app.lt .send-txt { background: #12b7f5; color: #fff; }
 
 .foot {
   position: fixed;

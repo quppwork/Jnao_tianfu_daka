@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -388,22 +388,30 @@ def login(req: LoginRequest, request: Request, response: Response, db: Session =
 def logout(
     request: Request,
     response: Response,
-    user_id: int = Depends(get_authenticated_user),
+    user_id: int | None = Query(None, ge=1),
+    x_child_user_id: int | None = Header(None, ge=1, alias="X-Child-User-Id"),
+    x_session_token: str | None = Header(None, alias="X-Session-Token"),
     db: Session = Depends(get_db),
 ):
+    """登出幂等：无会话也清 Cookie 并返回 200，避免开发态清本地后再打 401。"""
+    from app.core.deps import _resolve_session_token
     from app.core.session_cookie import clear_session_cookie
     from app.db.models import ChildUser
     from app.services.session_service import revoke_session_token
 
-    user = db.get(ChildUser, user_id)
-    role = (user.role if user else None) or auth_service.ROLE_STUDENT
-    token = getattr(request.state, "access_token", None)
-    revoke_session_token(db, user_id, token)
-    db.commit()
-    clear_session_cookie(response, role=role)
-    from app.core.biz_log import biz_event
+    uid = user_id or x_child_user_id
+    token = _resolve_session_token(request, x_session_token, None)
+    role = auth_service.ROLE_STUDENT
+    if uid:
+        user = db.get(ChildUser, uid)
+        role = (user.role if user else None) or auth_service.ROLE_STUDENT
+        if token:
+            revoke_session_token(db, uid, token)
+            db.commit()
+        from app.core.biz_log import biz_event
 
-    biz_event("auth.logout", result="ok", uid=user_id, role=role)
+        biz_event("auth.logout", result="ok", uid=uid, role=role)
+    clear_session_cookie(response, role=role)
     return {"ok": True}
 
 

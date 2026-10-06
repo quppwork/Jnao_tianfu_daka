@@ -298,17 +298,25 @@ def _qa_subject_from_message(message: str) -> str | None:
     return None
 
 
-def _handoff_query(
+def make_handoff_packet(
     *,
     intent: str,
     message: str,
-    tools_used: list[dict[str, Any]] | None,
-) -> dict[str, str] | None:
-    """组装跳转 query：date / focus / hint / from=guide。"""
-    q: dict[str, str] = {"from": "guide"}
+    tools_used: list[dict[str, Any]] | None = None,
+    child_id: int | None = None,
+    image_id: str | int | None = None,
+    from_agent: str = "guide",
+) -> dict[str, str]:
+    """Guide→QA 等跳转包：child_id / query / image / subject，前端导航带上。"""
+    q: dict[str, str] = {"from": from_agent or "guide"}
     text = (message or "").strip()
     if text:
         q["hint"] = text[:40]
+        q["query"] = text[:400]
+    if child_id:
+        q["child_id"] = str(int(child_id))
+    if image_id is not None and str(image_id).strip():
+        q["image"] = str(image_id).strip()
     if intent == "history":
         qd = _query_date_from_tools(tools_used)
         if qd:
@@ -316,7 +324,6 @@ def _handoff_query(
     if intent == "train":
         focus = _focus_skill_from_message(text)
         if not focus:
-            # 从档位工具里取最低档技能作关注提示（非晋级规则）
             for t in tools_used or []:
                 brief = t.get("result_brief") if isinstance(t, dict) else None
                 if not isinstance(brief, dict) or brief.get("type") != "skill_snapshot":
@@ -331,8 +338,24 @@ def _handoff_query(
         subj = _qa_subject_from_message(text)
         if subj:
             q["subject"] = subj
-    # 仅 from+空 hint 无意义时仍保留 from，便于对端识别来源
     return q
+
+
+def _handoff_query(
+    *,
+    intent: str,
+    message: str,
+    tools_used: list[dict[str, Any]] | None,
+    child_id: int | None = None,
+    image_id: str | int | None = None,
+) -> dict[str, str] | None:
+    return make_handoff_packet(
+        intent=intent,
+        message=message,
+        tools_used=tools_used,
+        child_id=child_id,
+        image_id=image_id,
+    )
 
 
 def resolve_reply_actions(
@@ -342,30 +365,33 @@ def resolve_reply_actions(
     tools_used: list[dict[str, Any]] | None = None,
     has_assessment: bool = False,
     reply: str | None = None,
+    child_id: int | None = None,
+    image_id: str | int | None = None,
 ) -> list[dict]:
     """优先按本轮意图给按钮；天赋意图且已测评 → 报告页；带深交接 query。"""
     intent = infer_navigate_intent(message, tools_used)
     if not intent and reply:
         intent = _intent_from_reply(reply)
+    packet_kw = {
+        "message": message,
+        "tools_used": tools_used,
+        "child_id": child_id,
+        "image_id": image_id,
+    }
     if intent == "talent":
         target = "report" if has_assessment else "talent"
-        return actions_for_next(target, query=_handoff_query(
-            intent=target, message=message, tools_used=tools_used,
-        ))
+        return actions_for_next(
+            target,
+            query=_handoff_query(intent=target, **packet_kw),
+        )
     if intent:
         return actions_for_next(
             intent,
-            query=_handoff_query(
-                intent=intent, message=message, tools_used=tools_used,
-            ),
+            query=_handoff_query(intent=intent, **packet_kw),
         )
     if situation_next:
         return actions_for_next(
             situation_next,
-            query=_handoff_query(
-                intent=situation_next,
-                message=message,
-                tools_used=tools_used,
-            ),
+            query=_handoff_query(intent=situation_next, **packet_kw),
         )
     return []

@@ -147,3 +147,9 @@ class TestJwtMultiDevice:
         assert client_strict_auth.get("/api/parent/profile", **_bearer(pid, tok1)).status_code == 401
         assert client_strict_auth.get("/api/parent/profile", **_bearer(pid, tok2)).status_code == 401
         assert client_strict_auth.get("/api/parent/profile", **_bearer(pid, new_tok)).status_code == 200
+
+    def test_logout_without_session_is_ok(self, client_strict_auth: TestClient):
+        client_strict_auth.cookies.clear()
+        res = client_strict_auth.post("/api/auth/logout")
+        assert res.status_code == 200, res.text
+        assert res.json().get("ok") is True

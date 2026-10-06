@@ -60,6 +60,18 @@ services:
     networks:
       - jnao_net
 
+  # 可选：docker compose --profile harness -f docker-compose.prod.yml build harness-sandbox
+  # 启用时在 .env.production 设 HARNESS_SANDBOX=docker 与 HARNESS_SANDBOX_IMAGE
+  harness-sandbox:
+    profiles: ["harness"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.harness-sandbox
+    image: jnao-harness-sandbox:${JNAO_BUILD_ID:-latest}
+    command: ["python", "-c", "print('jnao-harness-sandbox image ok')"]
+    networks:
+      - jnao_net
+
 volumes:
   backend_data:
   nginx_media_cache:

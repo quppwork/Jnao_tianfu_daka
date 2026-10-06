@@ -740,3 +740,140 @@ def _apply_parent_auth_patches(engine: Engine) -> None:
                     "ON child_user(login_name) WHERE login_name IS NOT NULL"
                 )
             )
+
+    seed_consult_channels(engine)
+
+
+def seed_consult_channels(engine: Engine) -> None:
+    """幂等写入默认咨询频道；顾问真人 ID / IM 模板留空待填。"""
+    from sqlalchemy.orm import Session
+
+    from app.db.models import ConsultChannel
+
+    seeds = [
+        {
+            "code": "dayu",
+            "kind": "group",
+            "title": "大宇智能体",
+            "bot_persona": "dayu",
+            "ai_enabled": 1,
+            "human_handoff": 0,
+            "sort_order": 0,
+            "meta_json": {
+                "tag": "AI·总协调",
+                "tp": "AI",
+                "skill": "天赋总纲·数据解读",
+                "chips": [],  # 待填
+                "welcome": "",  # 待填
+                "kb_route": "",  # 待填
+            },
+        },
+        {
+            "code": "sizhe",
+            "kind": "dm",
+            "title": "思者顾问",
+            "bot_persona": "sizhe",
+            "ai_enabled": 1,
+            "human_handoff": 1,
+            "sort_order": 10,
+            "meta_json": {
+                "tag": "AI·思维与创造",
+                "tp": "AI",
+                "skill": "思维训练·创造力",
+                "chips": [],
+                "welcome": "",
+                "kb_route": "",
+                "advisor_user_id": None,
+            },
+        },
+        {
+            "code": "yingzhe",
+            "kind": "dm",
+            "title": "赢者顾问",
+            "bot_persona": "yingzhe",
+            "ai_enabled": 1,
+            "human_handoff": 1,
+            "sort_order": 20,
+            "meta_json": {
+                "tag": "AI·目标与表达",
+                "tp": "AI",
+                "skill": "目标管理·表达力",
+                "chips": [],
+                "welcome": "",
+                "kb_route": "",
+                "advisor_user_id": None,
+            },
+        },
+        {
+            "code": "dezhe",
+            "kind": "dm",
+            "title": "德者顾问",
+            "bot_persona": "dezhe",
+            "ai_enabled": 1,
+            "human_handoff": 1,
+            "sort_order": 30,
+            "meta_json": {
+                "tag": "AI·品德与心性",
+                "tp": "AI",
+                "skill": "情绪心性·高效作业",
+                "chips": [],
+                "welcome": "",
+                "kb_route": "",
+                "advisor_user_id": None,
+            },
+        },
+        {
+            "code": "xingzhe",
+            "kind": "dm",
+            "title": "行者顾问",
+            "bot_persona": "xingzhe",
+            "ai_enabled": 1,
+            "human_handoff": 1,
+            "sort_order": 40,
+            "meta_json": {
+                "tag": "AI+真人·记忆与行动",
+                "tp": "真人",
+                "skill": "扫描速记·影像追忆",
+                "chips": [],
+                "welcome": "",
+                "kb_route": "",
+                "advisor_user_id": None,
+                "board_enabled": True,
+            },
+        },
+        {
+            "code": "xuezhe",
+            "kind": "dm",
+            "title": "学者顾问",
+            "bot_persona": "xuezhe",
+            "ai_enabled": 1,
+            "human_handoff": 1,
+            "sort_order": 50,
+            "meta_json": {
+                "tag": "AI+真人·方法与考核",
+                "tp": "真人",
+                "skill": "三错一讲·段位考核",
+                "chips": [],
+                "welcome": "",
+                "kb_route": "",
+                "advisor_user_id": None,
+                "board_enabled": True,
+            },
+        },
+    ]
+
+    insp = inspect(engine)
+    if "consult_channel" not in insp.get_table_names():
+        return
+
+    from sqlalchemy import select as sa_select
+
+    with Session(engine) as db:
+        for row in seeds:
+            existing = db.scalars(
+                sa_select(ConsultChannel).where(ConsultChannel.code == row["code"])
+            ).first()
+            if existing:
+                continue
+            db.add(ConsultChannel(**row, status="active"))
+        db.commit()

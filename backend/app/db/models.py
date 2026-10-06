@@ -602,3 +602,188 @@ class AcademyBotSession(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+# ── 在线咨询（consult_*；与 guide_* 分离）────────────────────────────────
+
+
+class ConsultChannel(Base):
+    """咨询频道目录：大宇群 / 顾问 DM。"""
+
+    __tablename__ = "consult_channel"
+    __table_args__ = (Index("idx_consult_channel_status_sort", "status", "sort_order"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # group | dm
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    bot_persona: Mapped[str | None] = mapped_column(String(64))
+    im_group_template: Mapped[str | None] = mapped_column(String(128))
+    advisor_user_id: Mapped[int | None] = mapped_column(Integer)
+    ai_enabled: Mapped[int] = mapped_column(Integer, default=1)
+    human_handoff: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    conversations: Mapped[list["ConsultConversation"]] = relationship(
+        back_populates="channel"
+    )
+
+
+class ConsultConversation(Base):
+    """一次进线会话（业务主键；IM 会话 ID 可空）。"""
+
+    __tablename__ = "consult_conversation"
+    __table_args__ = (
+        Index("idx_consult_conv_parent", "parent_user_id", "updated_at"),
+        Index("idx_consult_conv_assignee", "assignee_id", "status"),
+        Index("idx_consult_conv_channel_parent", "channel_id", "parent_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("consult_channel.id"), nullable=False
+    )
+    parent_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    child_user_id: Mapped[int | None] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    im_conversation_id: Mapped[str | None] = mapped_column(String(128), unique=True)
+    status: Mapped[str] = mapped_column(String(24), default="open")
+    assignee_id: Mapped[int | None] = mapped_column(Integer)
+    last_msg_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_msg_preview: Mapped[str | None] = mapped_column(String(200))
+    unread_parent: Mapped[int] = mapped_column(Integer, default=0)
+    unread_advisor: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    channel: Mapped["ConsultChannel"] = relationship(back_populates="conversations")
+    members: Mapped[list["ConsultMember"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan"
+    )
+    messages: Mapped[list["ConsultMessage"]] = relationship(
+        back_populates="conversation",
+        order_by="ConsultMessage.id",
+        cascade="all, delete-orphan",
+    )
+
+
+class ConsultMember(Base):
+    __tablename__ = "consult_member"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "user_id", "role", name="uk_consult_member"),
+        Index("idx_consult_member_user", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("consult_conversation.id"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(Integer, default=0)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    im_user_id: Mapped[str | None] = mapped_column(String(128))
+    joined_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    left_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    conversation: Mapped["ConsultConversation"] = relationship(back_populates="members")
+
+
+class ConsultMessage(Base):
+    """消息真相源。"""
+
+    __tablename__ = "consult_message"
+    __table_args__ = (
+        UniqueConstraint("im_msg_id", name="uk_consult_msg_im"),
+        UniqueConstraint("conversation_id", "client_msg_id", name="uk_consult_msg_client"),
+        Index("idx_consult_msg_conv_id", "conversation_id", "id"),
+        Index("idx_consult_msg_conv_time", "conversation_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("consult_conversation.id"), nullable=False
+    )
+    client_msg_id: Mapped[str | None] = mapped_column(String(64))
+    im_msg_id: Mapped[str | None] = mapped_column(String(128))
+    sender_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    sender_user_id: Mapped[int | None] = mapped_column(Integer)
+    content_type: Mapped[str] = mapped_column(String(16), default="text")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
+    reply_to_id: Mapped[int | None] = mapped_column(Integer)
+    visibility: Mapped[str] = mapped_column(String(16), default="all")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    conversation: Mapped["ConsultConversation"] = relationship(back_populates="messages")
+
+
+class ConsultAgentJob(Base):
+    __tablename__ = "consult_agent_job"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uk_consult_job_idem"),
+        Index("idx_consult_job_status", "status", "id"),
+        Index("idx_consult_job_conv", "conversation_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("consult_conversation.id"), nullable=False
+    )
+    trigger_msg_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    intent: Mapped[str | None] = mapped_column(String(32))
+    model: Mapped[str | None] = mapped_column(String(64))
+    kb_hits_json: Mapped[dict | list | None] = mapped_column(JSON)
+    tool_trace_json: Mapped[dict | list | None] = mapped_column(JSON)
+    result_msg_id: Mapped[int | None] = mapped_column(Integer)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ConsultAdvisorPresence(Base):
+    __tablename__ = "consult_advisor_presence"
+
+    advisor_user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    app_online: Mapped[int] = mapped_column(Integer, default=0)
+    im_online: Mapped[int] = mapped_column(Integer, default=0)
+    available: Mapped[int] = mapped_column(Integer, default=0)
+    max_concurrent: Mapped[int] = mapped_column(Integer, default=5)
+    active_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ConsultBoardPost(Base):
+    __tablename__ = "consult_board_post"
+    __table_args__ = (
+        Index("idx_consult_board_channel", "channel_id", "status"),
+        Index("idx_consult_board_parent", "parent_user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("consult_channel.id"), nullable=False
+    )
+    parent_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    conversation_id: Mapped[int | None] = mapped_column(Integer)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    claimed_by: Mapped[int | None] = mapped_column(Integer)
+    reply_body: Mapped[str | None] = mapped_column(Text)
+    reply_msg_id: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

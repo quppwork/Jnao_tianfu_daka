@@ -310,6 +310,71 @@ def _tool_block_from_results(rows: list[dict[str, Any]]) -> str:
     return "\n".join(parts)
 
 
+async def _parent_harness_reply(
+    db: Session,
+    child_user_id: int,
+    message: str,
+    *,
+    history: list[dict] | None = None,
+    live: bool,
+) -> dict[str, Any]:
+    from app.agents.guide.context import build_guide_context
+    from app.harness.context import ToolContext
+    from app.harness.turn import run_profile_turn
+    from app.services.doubao_client import is_configured
+
+    ctx = build_guide_context(db, child_user_id)
+    extra = (
+        f"{PARENT_SYSTEM}\n\n【孩子情境】\n{ctx.to_prompt_block()}\n\n"
+        "概念/课程问请 retrieve_kb；训练打卡/报告问请用 get_today_plan、"
+        "get_checkin_timeline、get_talent_report_summary。不要编造分数。"
+    )
+    reply = ""
+    tools_used: list[dict[str, Any]] = []
+    rag_used = False
+    if is_configured():
+        turn = await run_profile_turn(
+            "parent_guide",
+            message,
+            history=history or [],
+            ctx=ToolContext(db=db, child_user_id=child_user_id, profile="parent_guide"),
+            system_override=extra,
+            max_steps=5,
+        )
+        reply = (turn.get("reply") or "").strip()
+        tools_used = list(turn.get("tools_used") or [])
+        rag_used = bool(turn.get("rag_used"))
+    if not reply:
+        if live:
+            reply = (
+                f"已为你核对孩子「{ctx.nickname or '学员'}」的训练/报告入口。"
+                "请到「数据分析」查看明细。"
+            )
+        else:
+            reply = (
+                "家长您好。关于课程与平台说明，可进「家长课堂」；"
+                "孩子训练与报告可问我「训练数据 / 天赋报告」，或点上方入口。"
+            )
+    return {
+        "reply": reply,
+        "actions": _parent_actions(
+            message, live=live, kb=not live, child_id=child_user_id
+        ),
+        "tools_used": tools_used,
+        "rag_used": rag_used,
+        "rag_source": (
+            "parent_live_tools"
+            if live
+            else ("parent_retrieve_kb" if rag_used else "parent_minimal")
+        ),
+        "focus_child_id": child_user_id,
+        "situation": ctx.situation,
+        "next_action": "parent_pdata" if live else (
+            "parent_pcourse" if wants_course_kb(message) else None
+        ),
+    }
+
+
 async def _live_child_reply(
     db: Session,
     child_user_id: int,
@@ -317,57 +382,9 @@ async def _live_child_reply(
     *,
     history: list[dict] | None = None,
 ) -> dict[str, Any]:
-    from app.agents.guide.context import build_guide_context
-    from app.agents.guide.tools import call_tool
-    from app.services.doubao_client import chat_completion, is_configured
-
-    ctx = build_guide_context(db, child_user_id)
-    text = (message or "").strip()
-    picks: list[tuple[str, dict]] = []
-    if any(h in text for h in _LIVE_REPORT_HINTS) or "天赋" in text:
-        picks.append(("get_talent_report_summary", {}))
-    if any(h in text for h in _LIVE_TRAIN_HINTS) or not picks:
-        picks.append(("get_today_plan", {}))
-        picks.append(("get_checkin_timeline", {"limit": 7}))
-
-    audit: list[dict[str, Any]] = []
-    for name, args in picks:
-        try:
-            result = call_tool(db, child_user_id, name, args)
-            ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
-            audit.append({"name": name, "ok": ok, "args": args, "result": result})
-        except Exception as e:  # noqa: BLE001
-            audit.append({"name": name, "ok": False, "args": args, "error": str(e)})
-
-    tool_block = _tool_block_from_results(audit)
-    system = (
-        f"{PARENT_SYSTEM}\n\n【孩子情境】\n{ctx.to_prompt_block()}\n\n"
-        f"【工具结果】\n{tool_block or '（无）'}"
+    return await _parent_harness_reply(
+        db, child_user_id, message, history=history, live=True
     )
-    if not is_configured():
-        reply = (
-            f"已为你核对孩子「{ctx.nickname or '学员'}」的训练/报告数据。"
-            "AI 暂未配置，请到「数据分析」查看明细。"
-        )
-    else:
-        reply = await chat_completion(
-            system_prompt=system,
-            user_message=text,
-            history=history or [],
-            max_tokens=420,
-        )
-        reply = (reply or "").strip() or "我这边暂时没整理出结论，你可以先打开「数据分析」看一眼。"
-
-    return {
-        "reply": reply,
-        "actions": _parent_actions(text, live=True, kb=False, child_id=child_user_id),
-        "tools_used": audit,
-        "rag_used": False,
-        "rag_source": "parent_live_tools",
-        "focus_child_id": child_user_id,
-        "situation": ctx.situation,
-        "next_action": "parent_pdata",
-    }
 
 
 async def _kb_or_minimal_reply(
@@ -377,50 +394,9 @@ async def _kb_or_minimal_reply(
     *,
     history: list[dict] | None = None,
 ) -> dict[str, Any]:
-    from app.agents.guide.context import build_guide_context
-    from app.agents.guide.kb_agent import run_guide_kb_turn
-    from app.services.doubao_client import chat_completion, is_configured
-
-    ctx = build_guide_context(db, child_user_id)
-    kb = await run_guide_kb_turn(
-        db, child_user_id, message, history=history, ctx=ctx
+    return await _parent_harness_reply(
+        db, child_user_id, message, history=history, live=False
     )
-    if kb and (kb.get("reply") or "").strip():
-        out = dict(kb)
-        out["actions"] = _parent_actions(
-            message, live=False, kb=True, child_id=child_user_id
-        ) or out.get("actions") or []
-        out["focus_child_id"] = child_user_id
-        out.setdefault("rag_source", "kb_qa_agent")
-        return out
-
-    # 无库命中：用人设 + 孩子情境兜底，并引导课堂/咨询
-    system = f"{PARENT_SYSTEM}\n\n【孩子情境】\n{ctx.to_prompt_block()}"
-    if is_configured():
-        reply = await chat_completion(
-            system_prompt=system,
-            user_message=message,
-            history=history or [],
-            max_tokens=360,
-        )
-        reply = (reply or "").strip()
-    else:
-        reply = ""
-    if not reply:
-        reply = (
-            "家长您好。关于课程与平台说明，可进「家长课堂」；"
-            "孩子训练与报告可问我「训练数据 / 天赋报告」，或点上方入口。"
-        )
-    return {
-        "reply": reply,
-        "actions": _parent_actions(message, live=False, kb=True, child_id=child_user_id),
-        "tools_used": [],
-        "rag_used": False,
-        "rag_source": "parent_minimal",
-        "focus_child_id": child_user_id,
-        "situation": ctx.situation,
-        "next_action": "parent_pcourse" if wants_course_kb(message) else None,
-    }
 
 
 async def run_parent_turn(

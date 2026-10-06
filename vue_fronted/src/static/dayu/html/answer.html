@@ -76,11 +76,13 @@
   .hitem b{display:block;font-size:12.5px;color:#D8DCE6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .hitem small{font-size:10px;color:#5A6274}
   /* 输入栏 */
-  .inputbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 14px;display:flex;gap:9px;align-items:center;background:rgba(11,14,20,.96)}
-  .inputbar .box{flex:1;background:#161D2B;border:1.5px solid #2A3040;border-radius:999px;padding:11px 16px;font-size:14px;color:#EDEBE4;outline:none}
-  .inputbar .box:focus{border-color:#2E6BE6}
-  .inputbar .cam{font-size:21px;cursor:pointer}
-  .inputbar .send{width:42px;height:42px;border-radius:50%;background:#6FCF8E;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;cursor:pointer}
+  .inputbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 10px;display:flex;gap:8px;align-items:flex-end;background:rgba(11,14,20,.96);box-sizing:border-box}
+  .inputbar .tool{width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;color:#D8DCE6;cursor:pointer}
+  .inputbar .box-wrap{flex:1;min-width:0}
+  .inputbar .box{width:100%;background:#0f1420;border:none;border-radius:8px;padding:8px 12px;font-size:15px;color:#EDEBE4;outline:none;box-sizing:border-box}
+  .inputbar .send-txt{display:none;min-width:56px;height:34px;padding:0 12px;border-radius:6px;background:#12b7f5;align-items:center;justify-content:center;font-size:14px;flex:none;cursor:pointer;color:#fff;font-weight:700;box-sizing:border-box}
+  .inputbar.has-text .send-txt{display:flex}
+  .inputbar.has-text .tool.plus{display:none}
 </style>
 <style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
 *{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:var(--app-max-width, 480px);min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
@@ -97,7 +99,7 @@ html.lt body{background:#ebeef4}html.lt /* ===== 导师·正在回复你 GIF舞�
   .setm{position:fixed;inset:0;background:rgba(247,247,247,.6);z-index:80;display:none}html.lt .setm.on{display:block}html.lt .setm .sbox{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:#dce2ef;border:1.5px solid #bfc5d5;border-bottom:none;border-radius:20px 20px 0 0;padding:18px}html.lt .setm h3{margin:0 0 4px;font-size:16px;color:#1b1912}html.lt .setm .ssub{font-size:10.5px;color:#8b93a5;margin-bottom:12px}html.lt .srow{display:flex;align-items:center;gap:10px;padding:12px 2px;border-top:1px solid #c2cadc;font-size:13px;color:#191d27}html.lt .srow small{display:block;font-size:10px;color:#8b93a5;margin-top:2px}html.lt .sw{margin-left:auto;flex:none;width:44px;height:24px;border-radius:12px;background:#c2cadc;position:relative;cursor:pointer;transition:.25s}html.lt .sw i{position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#8b93a5;transition:.25s}html.lt .sw.on{background:#1956d1}html.lt .sw.on i{left:23px;background:#141414}html.lt .sclose{margin-top:14px;text-align:center;font-size:13px;font-weight:800;color:#5a6274;border:1.5px solid #bfc5d5;border-radius:12px;padding:10px;cursor:pointer}html.lt /* 简洁模式：隐藏学科按钮下方的介绍内容 */
   body.simple .mentor,html.lt body.simple .tipcards{display:none}html.lt /* 历史抽屉 */
   .hist{position:fixed;inset:0;background:rgba(247,247,247,.6);z-index:70;display:none}html.lt .hist.on{display:block}html.lt .hist .hbox{position:absolute;top:0;right:0;bottom:0;width:78%;max-width:320px;background:#dce2ef;border-left:1.5px solid #bfc5d5;padding:16px;overflow-y:auto}html.lt .hist .ht{font-size:15px;font-weight:900;color:#1b1912;margin-bottom:12px}html.lt .hitem{background:#d4dbe9;border:1px solid #c2cadc;border-radius:12px;padding:10px 12px;margin-bottom:9px;cursor:pointer}html.lt .hitem b{display:block;font-size:12.5px;color:#191d27;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.lt .hitem small{font-size:10px;color:#8b93a5}html.lt /* 输入栏 */
-  .inputbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 14px;display:flex;gap:9px;align-items:center;background:rgba(235,238,244,.96)}html.lt .inputbar .box{flex:1;background:#d4dbe9;border:1.5px solid #bfc5d5;border-radius:999px;padding:11px 16px;font-size:14px;color:#1b1912;outline:none}html.lt .inputbar .box:focus{border-color:#1956d1}html.lt .inputbar .cam{font-size:21px;cursor:pointer}html.lt .inputbar .send{width:42px;height:42px;border-radius:50%;background:#30904f;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;cursor:pointer}</style>
+  .inputbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);padding:8px 10px;display:flex;gap:8px;align-items:flex-end;background:rgba(235,238,244,.96);box-sizing:border-box}html.lt .inputbar .tool{width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;color:#5a6274;cursor:pointer}html.lt .inputbar .box-wrap{flex:1;min-width:0}html.lt .inputbar .box{width:100%;background:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:15px;color:#1b1912;outline:none;box-sizing:border-box}html.lt .inputbar .send-txt{display:none;min-width:56px;height:34px;padding:0 12px;border-radius:6px;background:#12b7f5;align-items:center;justify-content:center;font-size:14px;flex:none;cursor:pointer;color:#fff;font-weight:700;box-sizing:border-box}html.lt .inputbar.has-text .send-txt{display:flex}html.lt .inputbar.has-text .tool.plus{display:none}</style>
 <script>
 (function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
 function toggleTheme(){
@@ -153,11 +155,15 @@ function toggleTheme(){
     </div>
   </div>
 
-  <div class="inputbar">
-    <input class="box" id="inp" placeholder="输入问题，也可拍照发题…"/>
-    <span class="cam" onclick="$(&#39;file&#39;).click()">📷</span>
+  <div class="inputbar" id="inpBar">
+    <span class="tool">🎤</span>
+    <div class="box-wrap">
+      <input class="box" id="inp" placeholder="输入问题，也可拍照发题…"/>
+    </div>
+    <span class="tool cam" onclick="$(&#39;file&#39;).click()">📷</span>
+    <span class="tool plus">＋</span>
     <input type="file" id="file" accept="image/*" style="display:none" onchange="sendImg(this)"/>
-    <div class="send" onclick="send()">➤</div>
+    <div class="send-txt" onclick="send()">发送</div>
   </div>
 
   <!-- 设置弹窗 -->
@@ -464,12 +470,21 @@ paint();paintAPI();paintHist();welcome();
   }
   document.addEventListener('click', function(e){
     var t=e.target;
-    if(t.closest && (t.closest('.send') || t.closest('.cam') || t.closest('.inputbar'))){
+    if(t.closest && (t.closest('.send-txt') || t.closest('.cam') || t.closest('.inputbar'))){
       var inp=document.querySelector('.inputbar input, .box, input.chat-input, .inputbar .box');
       var q=inp && (inp.value||inp.textContent)||'';
       goQa(q);
     }
   }, true);
+})();
+</script>
+<script>
+/* HAS_TEXT_SYNC_QQ */
+(function(){
+  var inp=document.getElementById('inp');
+  var bar=document.getElementById('inpBar');
+  function sync(){ if(bar) bar.classList.toggle('has-text', !!(inp && String(inp.value||'').trim())); }
+  if(inp){ inp.addEventListener('input', sync); sync(); }
 })();
 </script>
 </body></html>

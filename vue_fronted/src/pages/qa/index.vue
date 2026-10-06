@@ -153,43 +153,28 @@
         </view>
       </view>
 
-      <view class="input-panel">
-
-        <view class="input-wrap">
-
+      <view class="input-panel" :class="{ 'has-text': canSend || loading }">
+        <view class="tool voice" @tap="toggleVoiceDesktop">🎤</view>
+        <view class="box-wrap">
           <input
-
             class="chat-input"
-
             v-model="inputText"
-
             placeholder="输入问题，也可拍照发题…"
-
             :disabled="loading"
-
+            confirm-type="send"
             @confirm="sendMsg"
-
           />
-
-          <view class="input-btns">
-
-            <view class="btn-camera" :class="{ 'btn-disabled': loading }" @tap="openImageSheet">
-
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="3"/><circle cx="12" cy="13.5" r="3.5"/><circle cx="8" cy="9" r="1" fill="var(--text-dim)" stroke="none"/></svg>
-
-            </view>
-
-            <view class="btn-send" :class="{ 'btn-stop': loading, disabled: !loading && !canSend }" @tap="loading ? stopStream() : sendMsg()">
-
-              <text v-if="loading" style="color:#fff;font-size:12px;font-weight:700;">■</text>
-              <text v-else style="color:#fff;font-size:14px;">➤</text>
-
-            </view>
-
-          </view>
-
         </view>
-
+        <view class="tool cam" :class="{ 'btn-disabled': loading }" @tap="openImageSheet">📷</view>
+        <view class="tool plus">＋</view>
+        <view
+          class="send-txt"
+          :class="{ stop: loading, disabled: !loading && !canSend }"
+          @tap="loading ? stopStream() : sendMsg()"
+        >
+          <text v-if="loading">■</text>
+          <text v-else>发送</text>
+        </view>
       </view>
 
     </view>
@@ -927,18 +912,23 @@ onLoad((opts) => {
   const from = String(opts?.from || '').trim()
   let rawSubject = String(opts?.subject || '').trim()
   let rawHint = String(opts?.hint || '').trim()
+  let rawQuery = String(opts?.query || '').trim()
   try { if (rawSubject) rawSubject = decodeURIComponent(rawSubject) } catch (_) { /* keep */ }
   try { if (rawHint) rawHint = decodeURIComponent(rawHint) } catch (_) { /* keep */ }
+  try { if (rawQuery) rawQuery = decodeURIComponent(rawQuery) } catch (_) { /* keep */ }
   const nextSubject = subjects.includes(rawSubject) ? rawSubject : ''
   if (nextSubject) subject.value = nextSubject
-  if (from === 'guide' && (nextSubject || rawHint)) {
+  const prefill = (rawQuery || rawHint).slice(0, 400)
+  if (from === 'guide' && (nextSubject || prefill)) {
     pendingGuideHandoff.value = true
     guideHandoffBanner.value = {
       subject: nextSubject || '',
-      hint: (rawHint || '').slice(0, 60),
+      hint: (rawHint || prefill).slice(0, 60),
+      childId: String(opts?.child_id || '').trim(),
+      image: String(opts?.image || '').trim(),
     }
-    if (rawHint && !inputText.value) {
-      inputText.value = rawHint.slice(0, 200)
+    if (prefill && !inputText.value) {
+      inputText.value = prefill.slice(0, 200)
     }
   }
 })
@@ -2389,35 +2379,35 @@ onBeforeUnmount(() => {
 [data-theme="white"] .jump-latest { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
 .jump-latest text { color: var(--accent); font-size: 12px; font-weight: 600; }
 .jump-latest:active { opacity: 0.85; }
-.input-panel { }
-.input-wrap {
-  display: flex; align-items: center;
-  background: rgba(255,255,255,0.1);
-  border-radius: 48rpx; padding: 2px 2px 2px 28rpx;
-  border: 1px solid rgba(255,255,255,0.15);
+.input-panel {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  box-sizing: border-box;
 }
-[data-theme="white"] .input-wrap { background: #f3f4f6; border-color: #d1d5db; }
-.input-wrap .chat-input {
-  flex: 1; background: transparent; border: none; outline: none;
-  font-size: 14px; color: var(--text); height: 36px; line-height: 36px;
-}
-.input-wrap .chat-input::placeholder { color: var(--text-hint); }
-.input-btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.btn-camera {
-  width: 34px; height: 34px; border-radius: 50%;
+.input-panel .tool {
+  width: 36px; height: 36px; flex: none;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0.7;
+  font-size: 22px; color: var(--text-dim); cursor: pointer;
 }
-.btn-camera:active { opacity: 1; background: rgba(255,255,255,0.1); }
-.btn-send {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--accent);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; flex-shrink: 0;
+.input-panel .box-wrap { flex: 1; min-width: 0; }
+.input-panel .chat-input {
+  width: 100%; background: var(--bg-input, rgba(255,255,255,0.08)); border: none; outline: none;
+  border-radius: 8px; font-size: 15px; color: var(--text); height: 36px; line-height: 36px;
+  padding: 0 12px; box-sizing: border-box;
 }
-.btn-send.btn-stop { background: #ef4444; }
-.btn-send.disabled { opacity: 0.45; pointer-events: none; }
-.btn-send:active:not(.disabled) { opacity: 0.8; }
+.input-panel .chat-input::placeholder { color: var(--text-hint); }
+[data-theme="white"] .input-panel .chat-input { background: #fff; color: #1b1912; }
+.input-panel .send-txt {
+  display: none; min-width: 56px; height: 34px; padding: 0 12px; border-radius: 6px;
+  background: #12b7f5; align-items: center; justify-content: center;
+  font-size: 14px; flex: none; color: #fff; font-weight: 700; box-sizing: border-box; cursor: pointer;
+}
+.input-panel .send-txt.stop { background: #ef4444; }
+.input-panel .send-txt.disabled { opacity: 0.45; pointer-events: none; }
+.input-panel.has-text .send-txt { display: flex; }
+.input-panel.has-text .tool.plus { display: none; }
 .btn-disabled { opacity: 0.45; pointer-events: none; }
 
 .sheet-mask {

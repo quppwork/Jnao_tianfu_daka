@@ -330,21 +330,21 @@ async def vision_chat_completion(
         return None
 
 
-async def chat_completion_stream(
+async def chat_completion_messages_stream(
     *,
-    system_prompt: str,
-    user_message: str,
-    history: list[dict] | None = None,
+    messages: list[dict],
     max_tokens: int = 500,
     feature: str | None = None,
 ) -> AsyncIterator[str]:
-    """流式输出：优先真流式，失败则整段回退"""
+    """按已组装 messages 流式输出；Harness loop 走这里。"""
     cfg = _cfg()
     if not cfg["api_key"]:
         yield "[ERROR] DeepSeek API 未配置"
         return
+    if not messages:
+        yield "[ERROR] 空消息"
+        return
 
-    messages = _build_messages(system_prompt, user_message, history)
     payload = {
         "model": cfg["model"],
         "messages": messages,
@@ -412,17 +412,36 @@ async def chat_completion_stream(
             )
     except Exception as e:
         logger.error(f"LLM stream failed: {e}")
-        full = await chat_completion(
-            system_prompt=system_prompt,
-            user_message=user_message,
-            history=history,
+        msg = await chat_completion_message(
+            messages=messages,
+            tools=None,
+            tool_choice=None,
             max_tokens=max_tokens,
             feature=feature,
         )
+        full = str((msg or {}).get("content") or "")
         if full:
             yield full
         else:
             yield f"[ERROR] {e}"
+
+
+async def chat_completion_stream(
+    *,
+    system_prompt: str,
+    user_message: str,
+    history: list[dict] | None = None,
+    max_tokens: int = 500,
+    feature: str | None = None,
+) -> AsyncIterator[str]:
+    """流式输出：优先真流式，失败则整段回退"""
+    messages = _build_messages(system_prompt, user_message, history)
+    async for tok in chat_completion_messages_stream(
+        messages=messages,
+        max_tokens=max_tokens,
+        feature=feature,
+    ):
+        yield tok
 
 
 async def vision_chat_completion_stream(

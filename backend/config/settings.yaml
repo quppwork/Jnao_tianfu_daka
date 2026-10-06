@@ -56,3 +56,16 @@ oss:
     - "shipin/"
   signed_url: true
   sign_expires: 7200
+
+# 在线咨询 · 已选型 OpenIM（API/Secret 用环境变量注入）
+consult:
+  im_provider: "openim"
+  im_api_url: ""
+  im_ws_url: ""
+  im_secret: ""
+  im_admin_user: "imAdmin"
+  im_bot_user_id: "jnao_bot_dayu"
+  im_callback_token: ""
+  mq_url: ""
+  agent_enabled: true
+  stub_reply: true

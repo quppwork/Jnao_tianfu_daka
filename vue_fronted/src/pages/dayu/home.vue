@@ -76,13 +76,16 @@
         :scroll-into="scrollInto"
         :suggests="suggestChips"
         :show-suggests="showSuggestChips"
-        placeholder="输入问题…"
+        placeholder="输入问题..."
         @send="sendMsg"
         @stop="stopStream"
         @suggest="onSuggestChip"
         @navigate="runNavigateAction"
         @confirm="onConfirmFromPanel"
         @dismiss="onDismissFromPanel"
+        @voice="onAskTool('语音消息即将开放')"
+        @emoji="onAskTool('表情即将开放')"
+        @plus="onAskTool('更多功能即将开放')"
       >
         <template #intro>
           <view v-if="showBootstrapCard" class="chat-card">
@@ -391,6 +394,10 @@ function scrollChat() {
     scrollInto.value = ''
     nextTick(() => { scrollInto.value = 'chatEnd' })
   })
+}
+
+function onAskTool(title) {
+  try { uni.showToast({ title: title || '功能即将开放', icon: 'none' }) } catch (_) { /* ignore */ }
 }
 
 async function sendMsg() {

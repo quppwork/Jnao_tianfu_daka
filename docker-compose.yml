@@ -28,5 +28,15 @@ services:
       - backend
     restart: unless-stopped
 
+  # 可选沙箱镜像：docker compose --profile harness build harness-sandbox
+  # 默认 HARNESS_SANDBOX=local。禁止把 /var/run/docker.sock 挂进 backend 或沙箱。
+  harness-sandbox:
+    profiles: ["harness"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.harness-sandbox
+    image: jnao-harness-sandbox:local
+    command: ["python", "-c", "print('jnao-harness-sandbox image ok')"]
+
 volumes:
   backend_data:

@@ -5,20 +5,31 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.harness.types import ToolResult
+
+
+def _kb_result(answer: str, *, sources=None) -> ToolResult:
+    return ToolResult(
+        ok=True,
+        name="retrieve_qa_kb",
+        data={
+            "ok": True,
+            "rag_used": True,
+            "rag_context": answer,
+            "rag_sources": list(sources or ["练法手册"]),
+            "rag_source": "bailian_method",
+            "rag_kind": "method",
+        },
+    )
+
 
 @pytest.mark.asyncio
 async def test_fetch_method_bundle_sets_kind():
     from app.agents.qa.runner import _fetch_qa_rag_bundle
 
     with patch(
-        "app.agents.qa.runner.retrieve_qa_method_kb",
-        new=AsyncMock(
-            return_value={
-                "answer": "先系统训练再专题",
-                "sources": ["练法手册"],
-                "rag_source": "bailian_method",
-            }
-        ),
+        "app.harness.runtime.call_tool",
+        new=AsyncMock(return_value=_kb_result("先系统训练再专题")),
     ):
         bundle = await _fetch_qa_rag_bundle(
             "数学怎么学",
@@ -38,12 +49,9 @@ async def test_fetch_homework_skips_kb():
     from app.agents.qa.runner import _fetch_qa_rag_bundle
 
     with patch(
-        "app.agents.qa.runner.retrieve_qa_method_kb",
-        new=AsyncMock(return_value={"answer": "不应调用"}),
-    ) as method_mock, patch(
-        "app.agents.qa.runner.rag_chat",
-        new=AsyncMock(return_value={"answer": "不应调用"}),
-    ) as legacy_mock:
+        "app.harness.runtime.call_tool",
+        new=AsyncMock(return_value=_kb_result("不应调用")),
+    ) as tool_mock:
         bundle = await _fetch_qa_rag_bundle(
             "这道应用题怎么解",
             child_user_id=1,
@@ -52,31 +60,25 @@ async def test_fetch_homework_skips_kb():
             use_rag=None,
         )
     assert bundle["rag_used"] is False
-    method_mock.assert_not_called()
-    legacy_mock.assert_not_called()
+    tool_mock.assert_not_called()
 
 
 def test_chat_method_kb_injected_into_prompt(client: TestClient, child_with_assessment, mock_doubao):
     uid = child_with_assessment
     captured: dict = {}
 
-    async def fake_chat(*, system_prompt, user_message, **kwargs):
-        captured["system"] = system_prompt
-        return "按系统训练先打基础。"
+    async def fake_turn(profile, user_message, **kwargs):
+        captured["system"] = kwargs.get("system_override")
+        return {"reply": "按系统训练先打基础。", "tools_used": [], "rag_used": True}
 
     with patch(
-        "app.agents.qa.runner.retrieve_qa_method_kb",
+        "app.harness.runtime.call_tool",
         new=AsyncMock(
-            return_value={
-                "answer": "知识库：系统训练优于单点刷题",
-                "sources": ["天赋文档"],
-                "source_keys": ["talent_doc"],
-                "rag_source": "bailian_method",
-            }
+            return_value=_kb_result("知识库：系统训练优于单点刷题", sources=["天赋文档"])
         ),
     ), patch(
-        "app.agents.qa.runner.chat_completion",
-        new=fake_chat,
+        "app.harness.turn.run_profile_turn",
+        new=fake_turn,
     ):
         res = client.post(
             f"/api/qa/chat?user_id={uid}",

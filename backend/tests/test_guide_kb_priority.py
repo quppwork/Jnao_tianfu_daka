@@ -37,6 +37,9 @@ async def test_rag_miss_uses_template_not_doubao(monkeypatch):
         "app.services.bailian.guide_rag_query",
         new=AsyncMock(return_value=None),
     ), patch(
+        "app.agents.guide.kb_agent.guide_kb_agent_ready",
+        return_value=False,
+    ), patch(
         "app.agents.guide.runner._try_bailian_direct_reply",
         new=AsyncMock(),
     ), patch(

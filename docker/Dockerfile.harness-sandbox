@@ -1,0 +1,8 @@
+FROM python:3.12-slim
+
+WORKDIR /sandbox
+COPY backend/scripts/harness_sandbox_agent.py /sandbox/sandbox_agent.py
+
+# 无网络；宿主通过 stdin/stdout JSON 调 Executor。不要挂 docker.sock / 宿主目录。
+USER nobody
+ENTRYPOINT ["python", "-u", "/sandbox/sandbox_agent.py"]

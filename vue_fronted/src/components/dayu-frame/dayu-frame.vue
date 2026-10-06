@@ -23,11 +23,47 @@ import { switchMainTab, goAppPage } from '@/utils/mainTabs.js'
 import { goLinkedParentHome, goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
 import { fetchUsageSummary, formatTokenCount } from '@/utils/api/usage.js'
 import { isClassicUi, studentHomeUrl } from '@/utils/uiSkin.js'
+import { formatGuideRichHtml, prefetchKatex } from '@/utils/chatRichText.js'
 
 const USAGE_PILL_PAGES = new Set(['parent.html', 'pset.html'])
+const RICH_TEXT_PAGES = new Set(['consult.html'])
 
 function pageFile(p) {
   return String(p || '').split('?')[0].split('#')[0]
+}
+
+function frameWindow() {
+  // #ifdef H5
+  try {
+    let win = null
+    const el = iframeRef.value
+    if (el) win = el.contentWindow || el.$el?.contentWindow || null
+    if (!win) {
+      const node = document.querySelector('.dayu-iframe')
+      win = node?.contentWindow || null
+    }
+    return win
+  } catch (_) {
+    return null
+  }
+  // #endif
+  // #ifndef H5
+  return null
+  // #endif
+}
+
+/** 把首页同款 Markdown 渲染注入 iframe（咨询页 AI 气泡复用） */
+function injectFrameRichText(win) {
+  // #ifdef H5
+  if (!win || !RICH_TEXT_PAGES.has(pageFile(props.page))) return
+  try {
+    win.__jnaoFormatGuideRichHtml = formatGuideRichHtml
+    prefetchKatex()
+    if (typeof win.dispatchEvent === 'function') {
+      win.dispatchEvent(new Event('jnao-rich-ready'))
+    }
+  } catch (_) { /* ignore */ }
+  // #endif
 }
 
 const props = defineProps({
@@ -48,7 +84,9 @@ const emit = defineEmits(['parent', 'student', 'account', 'theme'])
 
 const src = computed(() => {
   const file = props.page || ''
-  const rev = file === 'drama.html' ? '20260923twopage' : ''
+  const rev =
+    file === 'drama.html' ? '20260925qq2' :
+    file === 'consult.html' ? '20261006c1' : ''
   return `/static/dayu/html/${file}${rev ? `?v=${rev}` : ''}`
 })
 const iframeRef = ref(null)
@@ -60,15 +98,7 @@ function postToFrame(payload) {
     if (payload && payload.type === 'dayu-console' && payload.console) {
       window.__DAYU_CONSOLE__ = payload.console
     }
-    let win = null
-    const el = iframeRef.value
-    if (el) {
-      win = el.contentWindow || el.$el?.contentWindow || null
-    }
-    if (!win) {
-      const node = document.querySelector('.dayu-iframe')
-      win = node?.contentWindow || null
-    }
+    const win = frameWindow()
     if (win) win.postMessage(payload, '*')
   } catch (_) { /* ignore */ }
   // #endif
@@ -77,14 +107,9 @@ function postToFrame(payload) {
 function syncFrameLayoutVars() {
   // #ifdef H5
   try {
-    let win = null
-    const el = iframeRef.value
-    if (el) win = el.contentWindow || el.$el?.contentWindow || null
-    if (!win) {
-      const node = document.querySelector('.dayu-iframe')
-      win = node?.contentWindow || null
-    }
+    const win = frameWindow()
     if (!win?.document?.documentElement) return
+    injectFrameRichText(win)
     const maxW =
       getComputedStyle(document.documentElement).getPropertyValue('--app-max-width').trim() ||
       '480px'
@@ -117,6 +142,7 @@ function syncFrameLayoutVars() {
     const ltMute = '#8b93a5'
     const ltOn = isParent ? '#967536' : '#30904f'
 
+    const isConsult = pageFile(props.page) === 'consult.html'
     const style = win.document.getElementById('dayu-foot-sync') || win.document.createElement('style')
     style.id = 'dayu-foot-sync'
     style.textContent = [
@@ -141,16 +167,33 @@ function syncFrameLayoutVars() {
       `bottom:calc(56px + ${sab})!important;box-sizing:border-box!important;z-index:46!important;`,
       `background:rgba(11,14,20,.98)!important}`,
       `html.lt .chat-dock{background:rgba(235,238,244,.98)!important}`,
-      `.chat-dock .inbar{position:static!important;bottom:auto!important;left:auto!important;right:auto!important;transform:none!important;`,
-      `width:100%!important;max-width:none!important;padding:0!important;background:transparent!important;margin:0!important}`,
+      `.chat-dock .inbar,.chat-dock .inpbar{position:static!important;bottom:auto!important;left:auto!important;right:auto!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;padding:8px 10px 10px!important;background:transparent!important;margin:0!important}`,
+      `.chat-dock{background:#161b26!important}`,
       `html,body{height:100%!important;overflow:hidden!important;overflow-x:hidden!important;`,
       `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
       `html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
       `*{scrollbar-width:none!important;-ms-overflow-style:none!important}`,
-      `.phone,.wrap{overflow-x:hidden!important;overflow-y:auto!important;`,
-      `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
-      `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
-      `.phone::-webkit-scrollbar,.wrap::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
+      isConsult
+        ? [
+            `.phone{overflow:hidden!important;display:flex!important;flex-direction:column!important;`,
+            `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
+            `padding-bottom:calc(108px + ${sab})!important}`,
+            `#chatScroll,.chat-scroll{flex:1!important;min-height:0!important;`,
+            `overflow-x:hidden!important;overflow-y:auto!important;`,
+            `-webkit-overflow-scrolling:touch!important;overscroll-behavior-y:contain!important;`,
+            `padding-bottom:24px!important}`,
+            `.chat-head{flex:none!important}`,
+            `.qs{display:none!important}`,
+            `.at-panel{bottom:calc(108px + ${sab})!important;left:0!important;right:0!important;`,
+            `transform:none!important;width:auto!important;max-width:none!important;margin:0 12px!important}`,
+          ].join('')
+        : [
+            `.phone,.wrap{overflow-x:hidden!important;overflow-y:auto!important;`,
+            `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
+            `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
+            `.phone::-webkit-scrollbar,.wrap::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
+          ].join(''),
       `#msgwrap{overscroll-behavior-y:auto!important;-webkit-overflow-scrolling:touch!important}`,
     ].join('')
     if (!style.parentNode) win.document.head.appendChild(style)
@@ -298,7 +341,7 @@ function handleMessage(ev) {
     return
   }
   if (parentShellRoutes[base]) {
-    // 底栏页软切；子页（家长课堂等）走栈
+    // 底栏五页 redirect 互切（见 switchParentTab）；子页走栈
     const stackOnly =
       base === '/pages/parent/pcourse'
       || base === '/pages/parent/wallet'

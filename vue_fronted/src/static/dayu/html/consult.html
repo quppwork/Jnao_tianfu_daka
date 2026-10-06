@@ -4,116 +4,247 @@
 <title>在线咨询 · 大宇智能体家长版</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
-.phone{width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;min-height:100vh;min-height:100dvh;height:100vh;height:100dvh;padding-bottom:110px;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}.phone::-webkit-scrollbar{display:none;width:0;height:0}
+html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.phone{
+  width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;
+  height:100vh;height:100dvh;box-sizing:border-box;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  padding-bottom:calc(108px + env(safe-area-inset-bottom, 0px));
+  scrollbar-width:none;-ms-overflow-style:none
+}
+.phone::-webkit-scrollbar{display:none;width:0;height:0}
+.chat-head{flex:none;background:#0D111F;z-index:20;border-bottom:1px solid #1a2030}
+.chat-scroll{
+  flex:1;min-height:0;
+  overflow-x:hidden;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  scrollbar-width:none;-ms-overflow-style:none;
+  padding-bottom:24px
+}
+.chat-scroll::-webkit-scrollbar{display:none;width:0;height:0}
 .ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
 .ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
 .ptop .brand small{display:block;font-size:9px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
 .acctbtn{display:inline-block;font-size:11.5px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
-/* 智能体选择 */
+.wsdot{font-size:10px;color:#5A6274;margin-left:8px;font-weight:700}
+.wsdot.on{color:#3FB950}
 .agents{display:flex;gap:10px;overflow-x:auto;padding:12px 18px 4px;scrollbar-width:none}
 .agents::-webkit-scrollbar{display:none}
 .ag{flex:none;width:76px;text-align:center;cursor:pointer}
-.ag .av{width:56px;height:56px;border-radius:50%;margin:0 auto 5px;border:2px solid #2A3040;display:flex;align-items:center;justify-content:center;font-size:26px;background:#171E2E;position:relative;transition:border-color .2s}
+.ag .av{width:56px;height:56px;border-radius:50%;margin:0 auto 5px;border:2px solid #2A3040;display:flex;align-items:center;justify-content:center;font-size:26px;background:#171E2E;position:relative;transition:border-color .2s;overflow:hidden;background-size:cover;background-position:center 18%}
+.ag .av.face{color:transparent;font-size:0}
 .ag.on .av{border-color:#C9A227;box-shadow:0 0 14px rgba(201,162,39,.4)}
 .ag .av i{position:absolute;right:0;bottom:0;width:13px;height:13px;border-radius:50%;background:#3FB950;border:2px solid #0D111F;z-index:2}
 .ag span{font-size:10.5px;color:#8B93A5;font-weight:700;display:block}
 .ag.on span{color:#F5D9A8}
-/* 真人/AI 身份标记 + 擅长领域 */
 .ag .tp{position:absolute;top:-6px;left:-8px;z-index:3;font-size:8px;font-weight:900;border-radius:99px;padding:2px 7px;font-style:normal}
 .ag .tp.ai{color:#9AD9FF;background:rgba(46,107,230,.25);border:1px solid #2E6BE6}
 .ag .tp.rl{color:#0D111F;background:linear-gradient(90deg,#6FCF8E,#3FB950)}
 .ag .sk{display:block;font-size:8.5px;color:#5A6274;margin-top:2px;font-weight:700;line-height:1.3}
 .ag.on .sk{color:#C9A869}
-/* 有留言的头像：闪动+金圈脉冲 */
 .ag.pulse .av{border-color:#F5D576;animation:agp 1.4s ease-in-out infinite}
 .ag.pulse .av::after{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid rgba(245,213,118,.8);animation:ring 1.4s ease-out infinite}
 .ag.pulse .av::before{content:"留言";position:absolute;top:-8px;right:-10px;z-index:3;font-size:8px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:2px 7px;animation:agp 1.4s ease-in-out infinite}
 @keyframes agp{50%{transform:scale(1.07)}}
 @keyframes ring{0%{transform:scale(.85);opacity:1}100%{transform:scale(1.35);opacity:0}}
-/* 群信息条 */
 .gbar{margin:10px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:14px;padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:11px;color:#8B93A5}
 .gbar b{color:#D8DCE6;font-size:12.5px}
 .gbar .live{margin-left:auto;color:#3FB950;font-weight:800}
-/* 值班导师·真人 */
+.gbar[hidden],.duty[hidden],.qs[hidden]{display:none!important}
 .duty{margin:10px 18px 0;display:flex;align-items:center;gap:11px;background:linear-gradient(135deg,rgba(224,82,82,.14),rgba(224,82,82,.03));border:1.5px solid rgba(224,82,82,.5);border-radius:16px;padding:11px 13px}
-.duty .dav{width:48px;height:48px;border-radius:50%;border:2px solid #E05252;flex:none;background:#171E2E url('/static/dayu/assets/avatar-chinese.jpg') center/cover;position:relative}
-.duty .dav .tb{position:absolute;right:-4px;bottom:-4px;width:21px;height:21px;border-radius:50%;background:#0D111F;border:1.5px solid #E05252;color:#E05252;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;z-index:2}
-.msg .av{position:relative}
-.msg .av .tb{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:#0D111F;border:1.5px solid;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:900;line-height:1;z-index:2}
+.duty .dav{width:48px;height:48px;border-radius:50%;border:2px solid #E05252;flex:none;background:#171E2E;position:relative;display:flex;align-items:center;justify-content:center;font-size:20px}
 .duty .dinf{flex:1;min-width:0}
 .duty .dinf b{font-size:14px;font-weight:900;color:#D8DCE6}
 .duty .dinf b i{font-style:normal;font-size:9px;color:#F08A8A;border:1px solid rgba(224,82,82,.6);border-radius:5px;padding:1px 6px;margin-left:5px}
 .duty .dinf span{display:block;font-size:10px;color:#8B93A5;margin-top:2px}
-.duty .dbtn{flex:none;font-size:12px;font-weight:900;color:#fff;background:linear-gradient(90deg,#F08A8A,#E05252);border-radius:99px;padding:8px 15px;text-decoration:none}
-/* 对话区标题 */
+.duty .dbtn{flex:none;font-size:12px;font-weight:900;color:#fff;background:linear-gradient(90deg,#F08A8A,#E05252);border-radius:99px;padding:8px 15px;text-decoration:none;border:none;cursor:pointer}
 .cv-t{margin:14px 18px 8px;font-size:12px;font-weight:800;color:#8B93A5;display:flex;align-items:center;gap:8px}
 .cv-t b{color:#F5D9A8;font-size:13.5px}
-/* 消息流 */
 .msgs{margin:0 18px}
 .msg{display:flex;gap:9px;margin-bottom:14px}
-.msg .av{width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid}
+.msg .av{width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid;position:relative;overflow:hidden;background-size:cover;background-position:center 18%}
+.msg .av.face{color:transparent;font-size:0}
+.tx.think{display:flex;align-items:center;gap:6px;min-width:56px}
+.tx.think i{width:6px;height:6px;border-radius:50%;background:#C9A869;opacity:.3;animation:tdot 1.05s ease-in-out infinite}
+.tx.think i:nth-child(2){animation-delay:.18s}
+.tx.think i:nth-child(3){animation-delay:.36s}
+@keyframes tdot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.fups{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fups button{border:1px solid rgba(201,162,39,.45);background:rgba(201,162,39,.1);color:#F5D9A8;font-size:11px;font-weight:800;border-radius:99px;padding:6px 10px;cursor:pointer;font-family:inherit}
+.fups button:active{opacity:.75}
+.livebar{margin:8px 18px 0;font-size:11px;font-weight:800;color:#C9A869;display:none}
+.livebar.on{display:block}
 .msg .bd{max-width:80%}
 .msg .who{font-size:10.5px;color:#8B93A5;margin-bottom:3px}
 .msg .who i{font-style:normal;font-size:9px;border:1px solid;border-radius:5px;padding:0 6px;margin-left:5px}
-.msg .tx{background:#171E2E;border:1px solid #2A3040;border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:13px;color:#D8DCE6;line-height:1.65}
-.msg .tx b{color:#F5D9A8}
+.msg .tx{background:#171E2E;border:1px solid #2A3040;border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:13px;color:#D8DCE6;line-height:1.65;word-break:break-word}
+.msg .tx b,.msg .tx strong{color:#F5D9A8;font-weight:800}
+.msg .tx em{font-style:italic;color:#B8C0D0}
+.msg .tx.chat-rich .gd-p{margin:0 0 10px}
+.msg .tx.chat-rich .gd-p:last-child{margin-bottom:0}
+.msg .tx.chat-rich .gd-h{margin:12px 0 8px;font-weight:800;color:#EDEBE4;line-height:1.45}
+.msg .tx.chat-rich .gd-h1{font-size:15px}.msg .tx.chat-rich .gd-h2{font-size:14px}.msg .tx.chat-rich .gd-h3,.msg .tx.chat-rich .gd-h4{font-size:13px}
+.msg .tx.chat-rich .gd-h:first-child,.msg .tx.chat-rich .gd-sec:first-child,.msg .tx.chat-rich .gd-p:first-child{margin-top:0}
+.msg .tx.chat-rich .gd-sec{margin:12px 0 6px;padding-left:10px;border-left:3px solid #C9A227;color:#F5D9A8;font-weight:800;font-size:13px;line-height:1.5}
+.msg .tx.chat-rich .gd-ul,.msg .tx.chat-rich .gd-ol{margin:6px 0 10px;padding-left:1.25em}
+.msg .tx.chat-rich .gd-ul{list-style:disc}.msg .tx.chat-rich .gd-ol{list-style:decimal}
+.msg .tx.chat-rich .gd-ul li,.msg .tx.chat-rich .gd-ol li{margin:4px 0;padding-left:2px}
+.msg .tx.chat-rich .gd-quote{margin:8px 0 10px;padding:8px 10px;border-left:3px solid rgba(154,217,255,.45);background:rgba(46,107,230,.08);border-radius:0 8px 8px 0;color:#B8C0D0}
+.msg .tx.chat-rich .gd-quote p{margin:0 0 4px}.msg .tx.chat-rich .gd-quote p:last-child{margin-bottom:0}
+.msg .tx.chat-rich .gd-hr{margin:12px 0;border:none;border-top:1px solid #2A3040}
+.msg .tx.chat-rich .gd-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0 4px}
+.msg .tx.chat-rich .gd-table{width:100%;min-width:220px;border-collapse:collapse;font-size:12px;line-height:1.45}
+.msg .tx.chat-rich .gd-table th,.msg .tx.chat-rich .gd-table td{border:1px solid rgba(255,255,255,.14);padding:6px 8px;text-align:left;vertical-align:top}
+.msg .tx.chat-rich .gd-table th{background:rgba(255,255,255,.06);color:#F5D576;font-weight:800}
+.msg .tx.chat-rich .katex{font-size:1.02em}.msg .tx.chat-rich .katex-display{margin:8px 0;overflow-x:auto}
 .msg.me{flex-direction:row-reverse}
 .msg.me .tx{background:linear-gradient(135deg,#C9A227,#967536);border:none;border-radius:14px 4px 14px 14px;color:#0D111F}
+.msg.me .tx b,.msg.me .tx strong{color:#0D111F}
 .msg.me .who{text-align:right}
 .sys{text-align:center;font-size:10px;color:#5A6274;margin:12px 0}
 .sys i{font-style:normal;background:#131926;border:1px solid #232B3D;border-radius:99px;padding:4px 12px}
-/* 留言板（归属当前智能体） */
 .board{margin:4px 18px 0;background:#131926;border:1.5px solid rgba(201,162,39,.4);border-radius:16px;padding:13px}
 .board .bt{font-size:14px;font-weight:900;margin-bottom:10px;color:#F5D9A8}
 .board .bt span{font-size:10px;color:#8B93A5;font-weight:700;margin-left:6px}
 .bmsg{margin-bottom:10px}
 .bq{font-size:12px;color:#D8DCE6;background:#171E2E;border:1px solid #2A3040;border-radius:4px 12px 12px 12px;padding:9px 12px;line-height:1.6}
-.bq b{color:#9AD9FF}
 .bq small{display:block;font-size:9px;color:#5A6274;margin-top:4px}
 .ba{font-size:12px;color:#E8DFC8;background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.3);border-radius:12px 4px 12px 12px;padding:9px 12px;line-height:1.6;margin-top:6px;margin-left:18px}
-.ba b{color:#F5D9A8}
 .ba small{display:block;font-size:9px;color:#8B93A5;margin-top:4px}
 .bin{display:flex;gap:8px;margin-top:6px}
 .bin input{flex:1;background:#0D111F;border:1.5px solid #2A3040;border-radius:99px;padding:9px 14px;font-size:12px;color:#EDEBE4;outline:none}
-.bin span{flex:none;font-size:12px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:9px 16px}
-/* 快捷问题 */
-.qs{display:flex;gap:8px;overflow-x:auto;padding:14px 18px 10px;scrollbar-width:none}
-.qs::-webkit-scrollbar{display:none}
-.qs span{flex:none;font-size:11.5px;color:#9AD9FF;background:rgba(46,107,230,.12);border:1px solid rgba(46,107,230,.45);border-radius:99px;padding:7px 13px}
-/* 输入条 */
-.inpbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);display:flex;gap:8px;padding:8px 14px;background:rgba(13,17,31,.9);backdrop-filter:blur(10px);z-index:40}
-.inpbar .box{flex:1;background:#171E2E;border:1.5px solid #2A3040;border-radius:99px;padding:11px 16px;font-size:13px;color:#EDEBE4;outline:none}
-.inpbar .send{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#C9A227,#967536);display:flex;align-items:center;justify-content:center;font-size:18px;color:#0D111F;font-weight:900}
-/* 底栏 */
+.bin button{flex:none;font-size:12px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:9px 16px;border:none;cursor:pointer}
+.qs{display:none!important}
+.chat-dock{
+  position:fixed;bottom:calc(56px + env(safe-area-inset-bottom, 0px));
+  left:50%;transform:translateX(-50%);
+  width:100%;max-width:var(--app-max-width, 480px);
+  z-index:40;background:#161b26;border-top:1px solid #232b3d
+}
+.plus-panel{
+  display:none;padding:12px 10px 6px;border-bottom:1px solid #232b3d;
+  grid-template-columns:repeat(4,1fr);gap:10px
+}
+.plus-panel.on{display:grid}
+.plus-cell{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:8px 4px;border:none;background:transparent;cursor:pointer;color:#B8C0D0
+}
+.plus-cell .ic{
+  width:52px;height:52px;border-radius:14px;background:#1c2333;border:1px solid #2a3040;
+  display:flex;align-items:center;justify-content:center;font-size:22px
+}
+.plus-cell span{font-size:11px;font-weight:700;color:#8B93A5}
+.inpbar{
+  position:static;transform:none;left:auto;bottom:auto;width:100%;max-width:none;
+  display:flex;align-items:flex-end;gap:8px;padding:8px 10px 10px;
+  background:transparent;backdrop-filter:none;z-index:auto;box-sizing:border-box
+}
+.inpbar .tool{
+  width:36px;height:36px;flex:none;border:none;background:transparent;padding:0;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;color:#D8DCE6
+}
+.inpbar .tool svg{width:26px;height:26px;display:block}
+.inpbar .box-wrap{flex:1;min-width:0}
+.inpbar .box{
+  display:block;width:100%;min-height:36px;max-height:96px;resize:none;
+  background:#0f1420;border:none;border-radius:8px;
+  padding:8px 12px;font-size:15px;line-height:1.35;color:#EDEBE4;
+  outline:none;box-sizing:border-box;font-family:inherit
+}
+.inpbar .box::placeholder{color:#5A6274}
+.inpbar .send-txt{
+  flex:none;height:34px;min-width:56px;padding:0 12px;border:none;border-radius:6px;
+  background:#12b7f5;color:#fff;font-size:14px;font-weight:700;cursor:pointer;
+  display:none;align-items:center;justify-content:center
+}
+.inpbar.has-text .send-txt{display:flex}
+.inpbar.has-text .tool.plus{display:none}
+.inpbar .tool.plus.on{color:#F5D9A8}
 .foot{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}.foot a{text-align:center;color:#8B93A5;font-size:11px;flex:1;text-decoration:none;padding:0}.foot a.on{color:#F5D9A8;font-weight:700}.foot a img{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}
+.errbanner{margin:8px 18px;padding:10px 12px;border-radius:12px;background:rgba(224,82,82,.15);border:1px solid rgba(224,82,82,.45);color:#F08A8A;font-size:12px;font-weight:700}
+.at-panel{
+  position:fixed;left:50%;transform:translateX(-50%);
+  width:calc(100% - 24px);max-width:calc(var(--app-max-width, 480px) - 24px);
+  bottom:calc(118px + env(safe-area-inset-bottom, 0px));
+  z-index:55;background:#131926;border:1.5px solid #2A3040;border-radius:14px;
+  box-shadow:0 12px 32px rgba(0,0,0,.45);overflow:hidden;max-height:240px;
+  display:none;flex-direction:column
+}
+.at-panel.on{display:flex}
+.at-panel .at-hd{padding:10px 14px 6px;font-size:11px;font-weight:800;color:#8B93A5;border-bottom:1px solid #1a2030}
+.at-panel .at-list{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 0;scrollbar-width:none}
+.at-panel .at-list::-webkit-scrollbar{display:none}
+.at-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer}
+.at-item:active,.at-item.on{background:rgba(201,162,39,.12)}
+.at-item .av{width:36px;height:36px;border-radius:50%;border:2px solid;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px}
+.at-item .nm{flex:1;min-width:0}
+.at-item .nm b{display:block;font-size:13px;color:#EDEBE4;font-weight:800}
+.at-item .nm span{display:block;font-size:10px;color:#8B93A5;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.at-item .tag{flex:none;font-size:9px;font-weight:900;border-radius:5px;padding:2px 7px}
+.at-item .tag.ai{color:#9AD9FF;border:1px solid #2E6BE6;background:rgba(46,107,230,.2)}
+.at-item .tag.rl{color:#0D111F;background:linear-gradient(90deg,#6FCF8E,#3FB950)}
+.at-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(160px + env(safe-area-inset-bottom,0px));
+  z-index:60;background:rgba(19,25,38,.96);border:1px solid #2A3040;color:#F5D9A8;
+  font-size:12px;font-weight:800;padding:8px 14px;border-radius:99px;pointer-events:none;opacity:0;transition:opacity .2s}
+.at-toast.on{opacity:1}
+.msg .av{cursor:pointer;-webkit-user-select:none;user-select:none}
+.ag .av{cursor:pointer;-webkit-user-select:none;user-select:none}
 </style>
 </head>
 <body>
 <div class="phone">
 
-  <div class="ptop">
-    <div class="brand">在线咨询<small>CONSULT · 智能体×社群</small></div>
-    <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+  <div class="chat-head">
+    <div class="ptop">
+      <div class="brand">在线咨询<small>CONSULT · WebSocket <span class="wsdot" id="wsDot">● 连接中</span></small></div>
+      <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+    </div>
+
+    <div id="errBanner" class="errbanner" hidden></div>
+    <div class="agents" id="agRow"></div>
+    <div class="gbar" id="gbar" hidden></div>
+    <div class="duty" id="duty" hidden></div>
+    <div class="cv-t" id="cvT"></div>
+    <div class="livebar" id="liveBar">顾问正在思考…</div>
   </div>
 
-  <div class="agents" id="agRow"></div>
-
-  <div class="gbar"><b>天赋家长交流群 · 3群</b><span>群成员 486</span><span class="live">● 128 人在线</span></div>
-
-  <div class="duty">
-    <div class="dav"><span class="tb" title="赢者天赋">赢</span></div>
-    <div class="dinf"><b>秦念国导师 <i>真人 · 今日值班</i></b><span>赢者天赋 · 国学与表达 · 1 对 1 在线</span></div>
-    <a class="dbtn" href="javascript:;" onclick="alert(&#39;正在为你接通 秦念国导师（真人）…\n\n1 对 1 视频/语音通道接入中，敬请期待 ✨&#39;)">直接对话 ›</a>
+  <div class="chat-scroll" id="chatScroll">
+    <div class="msgs" id="cvMsgs"></div>
+    <div id="cvBoard"></div>
   </div>
 
-  <div class="cv-t" id="cvT"></div>
-  <div class="msgs" id="cvMsgs"></div>
-  <div id="cvBoard"></div>
+  <div class="at-panel" id="atPanel" aria-hidden="true">
+    <div class="at-hd">选择要 @ 的对象</div>
+    <div class="at-list" id="atList"></div>
+  </div>
+  <div class="at-toast" id="atToast">长按头像可 @</div>
 
-  <div class="qs"><span>段位怎么冲刺？</span><span>孩子不爱训练怎么办？</span><span>家长课程怎么报名？</span><span>天赋报告怎么看？</span></div>
-
-  <div class="inpbar"><input class="box" id="inp" placeholder="发消息…"/><div class="send" onclick="sendMsg()">➤</div></div>
+  <div class="chat-dock" id="chatDock">
+    <div class="plus-panel" id="plusPanel" aria-hidden="true">
+      <button type="button" class="plus-cell" data-act="at"><div class="ic">＠</div><span>@顾问</span></button>
+      <button type="button" class="plus-cell" data-act="album"><div class="ic">🖼</div><span>相册</span></button>
+      <button type="button" class="plus-cell" data-act="camera"><div class="ic">📷</div><span>拍摄</span></button>
+      <button type="button" class="plus-cell" data-act="file"><div class="ic">📎</div><span>文件</span></button>
+    </div>
+    <div class="inpbar" id="inpBar">
+      <button type="button" class="tool" id="btnVoice" aria-label="语音" title="语音">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8 21h8"/></svg>
+      </button>
+      <div class="box-wrap">
+        <textarea class="box" id="inp" rows="1" placeholder="发消息…" autocomplete="off"></textarea>
+      </div>
+      <button type="button" class="tool" id="btnEmoji" aria-label="表情" title="表情">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M15.5 10h.01"/><path d="M8.2 14.2c1.1 1.3 2.5 2 3.8 2s2.7-.7 3.8-2"/></svg>
+      </button>
+      <button type="button" class="tool plus" id="btnPlus" aria-label="更多" title="更多">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      </button>
+      <button type="button" class="send-txt" id="btnSend">发送</button>
+    </div>
+  </div>
 
   <div class="foot">
     <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
@@ -124,73 +255,778 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   </div>
 
 </div>
+<script src="/static/dayu/js/guide-rich.js?v=20261006c1"></script>
 <script>
-/* 智能体配置：board=该智能体的留言板（有留言→头像闪动） */
-const AG={
- dayu:{name:'大宇智能体',tag:'AI·总协调',tp:'AI',sk:'天赋总纲·数据解读',ic:'🎓',c:'#C9A227',board:0,
-  msgs:[
-   {w:'大宇智能体',b:'AI',t:'各位家长晚上好！今晚 20:00 群内有<b>张宇老师团队·真人答疑</b>活动，主题：「段位冲刺期，家长该做什么」。有问题可以提前丢给我汇总。'},
-   {w:'雨晨妈妈',t:'@大宇智能体 孩子三段冲四段，考核要过"开窍期"门槛，最近训练有点急躁怎么办？',c:'#6FCF8E',ic:'👩',tb:'思',tc:'#3E8E5A'},
-   {w:'大宇智能体',b:'AI',t:'@雨晨妈妈 已调取雨晨近14天数据：训练时长稳定但<b>有效率从91%降到83%</b>，属于典型的"冲段焦虑"。建议：① 三天内不加量，只做复习关；② 今晚家长课堂《亲子关系》第6讲正好是"冲段期的情绪陪伴"，推荐您听。'},
-   {me:1,t:'@大宇智能体 帮我分析一下我家孩子最近的训练数据'},
-   {w:'大宇智能体',b:'AI',t:'好的，已为您生成简报：本周训练 <b>286分钟</b>，有效率 <b>89%</b>，超脑阅读进步最快（+18%）。详细图表在「数据分析」页，我已在重点项上做了标注 📊'},
-  ]},
- sizhe:{name:'思者顾问',tag:'AI·思维与创造',tp:'AI',sk:'思维训练·创造力',ic:'🧠',c:'#9AD9FF',board:0,
-  msgs:[{w:'思者顾问',b:'AI',t:'您好，我是思者顾问 🧠 孩子的<b>思维训练、创造力培养、AI指挥官课程</b>相关问题，都可以问我。'}]},
- yingzhe:{name:'赢者顾问',tag:'AI·目标与表达',tp:'AI',sk:'目标管理·表达力',ic:'🏆',c:'#F5D576',board:0,
-  msgs:[{w:'赢者顾问',b:'AI',t:'您好，我是赢者顾问 🏆 <b>目标管理、表达力、无界外语、超脑阅读</b>方面的问题，我在这儿等您。'}]},
- dezhe:{name:'德者顾问',tag:'AI·品德与心性',tp:'AI',sk:'情绪心性·高效作业',ic:'🌿',c:'#6FCF8E',board:0,
-  msgs:[{w:'德者顾问',b:'AI',t:'您好，我是德者顾问 🌿 孩子的<b>情绪、心性、高效作业、大书道</b>相关问题，慢慢来，我们一起看。'}]},
- xingzhe:{name:'行者顾问',tag:'AI+田小静真人·记忆与行动',tp:'真人',sk:'扫描速记·影像追忆',ic:'🚶',c:'#FF9EBB',board:1,
-  boardBy:'田小静导师（真人）',
-  msgs:[{w:'行者顾问',b:'AI',t:'您好，我是行者顾问 🚶 <b>扫描速记、影像追忆、记忆力训练</b>的问题问我。您有一条<b>田小静导师的留言回复</b>，见下方留言板 👇'}],
-  boardMsgs:[
-   {q:'雨晨妈妈：段位考核前一周，训练要加量吗？',qt:'今天 09:42',
-    a:'不加量，做"减量复习"。考核考的是稳定性不是冲刺，把已过关卡每天过一遍即可。',at:'今天 10:15 回复'}]},
- xuezhe:{name:'学者顾问',tag:'AI+余峰真人·方法与考核',tp:'真人',sk:'三错一讲·段位考核',ic:'📚',c:'#B8C0D0',board:1,
-  boardBy:'余峰导师（真人）',
-  msgs:[{w:'学者顾问',b:'AI',t:'您好，我是学者顾问 📚 <b>学习方法、三错一讲、段位考核</b>的问题问我。您有一条<b>余峰导师的留言回复</b>，见下方留言板 👇'}],
-  boardMsgs:[
-   {q:'子墨爸爸：孩子睡前不肯复盘错题，一讲就烦，有什么好办法？',qt:'昨天 21:14',
-    a:'把"讲错题"改成"三错一讲"游戏——让孩子当小老师给你讲，讲错你也不纠正，他自己会发现。今晚试试，明晚来留言告诉我效果。',at:'昨天 22:03 回复'}]},
-};
-let cur='dayu';
-const read={}; /* 已读后不再闪动 */
+(function(){
+  var ICONS = {dayu:'🎓',sizhe:'🧠',yingzhe:'🏆',dezhe:'🌿',xingzhe:'🚶',xuezhe:'📚'};
+  var COLORS = {dayu:'#C9A227',sizhe:'#9AD9FF',yingzhe:'#F5D576',dezhe:'#6FCF8E',xingzhe:'#FF9EBB',xuezhe:'#B8C0D0'};
+  var AVATARS = {
+    dayu:'/static/dayu/assets/avatar-dayu.jpg',
+    sizhe:'/static/dayu/assets/ip/sizhe.png',
+    yingzhe:'/static/dayu/assets/ip/yingzhe.png',
+    dezhe:'/static/dayu/assets/ip/dezhe.png',
+    xingzhe:'/static/dayu/assets/ip/xingzhe.png',
+    xuezhe:'/static/dayu/assets/ip/xuezhe.png'
+  };
+  var WELCOME = {
+    dayu:'我是大宇。群里 @我 提问；点上方顾问头像可进单独咨询。',
+    sizhe:'我是思者顾问，擅长思维训练与创造力。直接把问题发给我即可。',
+    yingzhe:'我是赢者顾问，擅长目标管理与表达力。想冲刺或开口，直接问我。',
+    dezhe:'我是德者顾问，擅长情绪心性与高效作业。养育卡住了可以跟我说。',
+    xingzhe:'我是行者顾问。记忆/影像追忆相关可先问我；需要真人可走留言板。',
+    xuezhe:'我是学者顾问。学习方法与段位考核可以直接问；需要真人可留言。'
+  };
 
-function renderRow(){
-  document.getElementById('agRow').innerHTML=Object.entries(AG).map(([k,a])=>{
-    const pulse=a.board&&!read[k]?' pulse':'';
-    const tp=a.tp==='真人'?'<em class="tp rl">真人</em>':'<em class="tp ai">AI</em>';
-    return `<div class="ag${k===cur?' on':''}${pulse}" onclick="pick('${k}')"><div class="av">${tp}${a.ic}<i></i></div><span>${a.name}</span><span class="sk">${a.sk}</span></div>`;
-  }).join('');
-}
-function renderConv(){
-  const a=AG[cur];
-  document.getElementById('cvT').innerHTML=`正在与 <b>${a.name}</b> 对话 · <span>${a.tag}</span>`;
-  document.getElementById('cvMsgs').innerHTML=a.msgs.map(m=>{
-    if(m.me)return `<div class="msg me"><div class="bd"><div class="who">我</div><div class="tx">${m.t}</div></div></div>`;
-    const c=m.c||(m.b==='AI'?'#EDEBE4':a.c), ic=m.ic||a.ic;
-    return `<div class="msg"><div class="av" style="border-color:${c};background:${c}18">${ic}${m.tb?`<span class="tb" style="border-color:${m.tc||c};color:${m.tc||c}">${m.tb}</span>`:''}</div><div class="bd"><div class="who">${m.w}${m.b?`<i>${m.b}</i>`:''}</div><div class="tx">${m.t}</div></div></div>`;
-  }).join('');
-  const bd=document.getElementById('cvBoard');
-  if(a.board&&a.boardMsgs){
-    bd.innerHTML=`<div class="board"><div class="bt">📝 ${a.name} · 留言板<span>老师看到必回 · 一般 2 小时内</span></div>`
-      +a.boardMsgs.map(m=>`<div class="bmsg"><div class="bq"><b>${m.q.split('：')[0]}：</b>${m.q.split('：').slice(1).join('：')}<small>${m.qt}</small></div><div class="ba"><b>${a.boardBy}：</b>${m.a}<small>${m.at}</small></div></div>`).join('')
-      +`<div class="bin"><input placeholder="给${a.name}留言，看到必回…"><span>提交</span></div></div>`;
-  }else{bd.innerHTML='';}
-  document.getElementById('inp').placeholder=`发消息给 ${a.name}…`;
-}
-function pick(k){cur=k;read[k]=1;renderRow();renderConv();window.scrollTo({top:0,behavior:'smooth'});}
-function sendMsg(){
-  const v=document.getElementById('inp').value.trim();if(!v)return;
-  AG[cur].msgs.push({me:1,t:v});
-  AG[cur].msgs.push({w:AG[cur].name,b:'AI',t:'收到！我先把这条记录下来'+(AG[cur].board?'，如需真人导师回复，也可以写在下方留言板 👇':'，稍后为您详细解答 ✨')});
-  document.getElementById('inp').value='';renderConv();
-}
-renderRow();renderConv();
+  var channels = [];
+  var curCode = 'dayu';
+  var convByCode = {};
+  var msgsByConv = {};
+  var boardByCode = {};
+  var boardPulse = {};
+  var seenMsgIds = {};
+  var sending = false;
+  var ws = null;
+  var wsTimer = null;
+  var atOpen = false;
+  var atFilter = '';
+  var atReplaceFrom = -1;
+  var longPressTimer = null;
+  var longPressMoved = false;
+  var suppressClickUntil = 0;
+
+  function esc(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>');
+  }
+  /** 复用 guide-rich.js / 父页注入的 formatGuideRichHtml（与首页引导同款） */
+  function richHtml(raw){
+    try{
+      var fn = window.__jnaoFormatGuideRichHtml || window.formatGuideRichHtml;
+      if(typeof fn === 'function') return fn(raw);
+    }catch(e){}
+    return esc(raw);
+  }
+  function bubbleBody(m, isMe){
+    if(isMe || m.sender_role === 'parent'){
+      return '<div class="tx">'+esc(m.content)+'</div>';
+    }
+    return '<div class="tx chat-rich">'+richHtml(m.content)+'</div>';
+  }
+  function showErr(t){
+    var el = document.getElementById('errBanner');
+    if(!t){ el.hidden = true; el.textContent=''; return; }
+    el.hidden = false; el.textContent = t;
+  }
+  function authHeaders(){
+    var h = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    try{
+      var tok = localStorage.getItem('jnao_access_token') || localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){ var o = JSON.parse(snap); tok = (o.parent && o.parent.token) || o.token || ''; }
+      }
+      if(tok) h.Authorization = 'Bearer ' + tok;
+    }catch(e){}
+    return h;
+  }
+  function accessToken(){
+    try{
+      var tok = localStorage.getItem('jnao_access_token') || localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){ var o = JSON.parse(snap); tok = (o.parent && o.parent.token) || o.token || ''; }
+      }
+      return tok || '';
+    }catch(e){ return ''; }
+  }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || localStorage.getItem('jnao_child_user_id') || '';
+      if(raw) return parseInt(raw,10)||0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        return (o.parent && o.parent.userId) || (o.role==='parent' && o.userId) || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function apiUrl(path){
+    var uid = parentUserId();
+    var sep = path.indexOf('?')>=0 ? '&' : '?';
+    return path + sep + 'user_id=' + encodeURIComponent(uid);
+  }
+  async function api(method, path, body){
+    var res = await fetch(apiUrl(path), {
+      method: method,
+      credentials: 'include',
+      headers: authHeaders(),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    var data = null;
+    try{ data = await res.json(); }catch(e){}
+    if(!res.ok){
+      var msg = (data && (data.detail || data.message)) || ('HTTP '+res.status);
+      if(typeof msg !== 'string') msg = JSON.stringify(msg);
+      throw new Error(msg);
+    }
+    return data;
+  }
+  function curChannel(){
+    return channels.find(function(c){ return c.code === curCode; }) || null;
+  }
+  function curConv(){ return convByCode[curCode] || null; }
+
+  function mentionTargets(filter){
+    var q = String(filter || '').trim().toLowerCase();
+    var list = channels.filter(function(c){
+      if(!c.ai_enabled && c.tp !== '真人') return false;
+      return true;
+    });
+    if(!q) return list;
+    return list.filter(function(c){
+      var blob = [c.mention_name, c.title, c.code].concat(c.mention_aliases || []).join(' ').toLowerCase();
+      return blob.indexOf(q) >= 0;
+    });
+  }
+  function mentionLabel(ch){
+    return (ch && (ch.mention_name || ch.title || ch.code)) || '';
+  }
+  function showAtToast(t){
+    var el = document.getElementById('atToast');
+    if(!el) return;
+    el.textContent = t || '长按头像可 @';
+    el.classList.add('on');
+    clearTimeout(showAtToast._t);
+    showAtToast._t = setTimeout(function(){ el.classList.remove('on'); }, 1400);
+  }
+  function hideAtPanel(){
+    atOpen = false;
+    atFilter = '';
+    atReplaceFrom = -1;
+    var p = document.getElementById('atPanel');
+    if(p){ p.classList.remove('on'); p.setAttribute('aria-hidden','true'); }
+  }
+  function renderAtPanel(filter){
+    var list = mentionTargets(filter);
+    var box = document.getElementById('atList');
+    var panel = document.getElementById('atPanel');
+    if(!box || !panel) return;
+    if(!list.length){
+      box.innerHTML = '<div class="at-item" style="color:#8B93A5;font-size:12px">没有匹配的对象</div>';
+    }else{
+      box.innerHTML = list.map(function(a){
+        var ic = ICONS[a.code] || '💬';
+        var color = COLORS[a.code] || '#C9A227';
+        var isHuman = a.tp === '真人' || (!a.ai_enabled && a.human_handoff);
+        var isDayu = a.code === 'dayu' || a.kind === 'group';
+        var tag = isHuman
+          ? '<em class="tag rl">真人</em>'
+          : (isDayu ? '<em class="tag ai">群内</em>' : '<em class="tag ai">单独咨询</em>');
+        var hint = isDayu
+          ? '在本群 @后由大宇直接回答'
+          : '点击上方头像进入单独咨询；群内 @ 会由大宇指引';
+        return '<div class="at-item" data-code="'+esc(a.code)+'">'+
+          '<div class="av" style="border-color:'+color+';background:'+color+'22">'+ic+'</div>'+
+          '<div class="nm"><b>'+esc(mentionLabel(a))+'</b><span>'+esc(hint)+'</span></div>'+
+          tag+'</div>';
+      }).join('');
+      box.querySelectorAll('.at-item[data-code]').forEach(function(el){
+        el.addEventListener('click', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          pickMention(el.getAttribute('data-code'));
+        });
+      });
+    }
+    atOpen = true;
+    panel.classList.add('on');
+    panel.setAttribute('aria-hidden','false');
+  }
+  function openAtPanel(filter, replaceFrom){
+    atFilter = filter || '';
+    atReplaceFrom = typeof replaceFrom === 'number' ? replaceFrom : -1;
+    renderAtPanel(atFilter);
+  }
+  function insertMentionText(name){
+    var inp = document.getElementById('inp');
+    if(!inp || !name) return;
+    var v = inp.value || '';
+    var caret = typeof inp.selectionStart === 'number' ? inp.selectionStart : v.length;
+    var token = '@' + name + ' ';
+    var start = atReplaceFrom;
+    if(start < 0){
+      // 找光标前最近的 @
+      var before = v.slice(0, caret);
+      start = before.lastIndexOf('@');
+      if(start < 0) start = caret;
+    }
+    var end = caret;
+    // 替换 @ 后的过滤片段
+    var next = v.slice(0, start) + token + v.slice(end);
+    inp.value = next;
+    var pos = start + token.length;
+    try{ inp.setSelectionRange(pos, pos); }catch(e){}
+    inp.focus();
+    hideAtPanel();
+    try{ syncSendUi(); }catch(e){}
+  }
+  function pickMention(code){
+    var ch = channels.find(function(c){ return c.code === code; });
+    if(!ch){ hideAtPanel(); return; }
+    insertMentionText(mentionLabel(ch));
+  }
+  function mentionFromChannelCode(code){
+    var ch = channels.find(function(c){ return c.code === code; });
+    if(!ch) return;
+    var inp = document.getElementById('inp');
+    var name = mentionLabel(ch);
+    if(!inp) return;
+    // 长按插入时，若已有未完成的 @ 片段则替换，否则追加
+    var v = inp.value || '';
+    var caret = typeof inp.selectionStart === 'number' ? inp.selectionStart : v.length;
+    var before = v.slice(0, caret);
+    var at = before.lastIndexOf('@');
+    if(at >= 0 && !/\s/.test(before.slice(at+1))){
+      atReplaceFrom = at;
+      insertMentionText(name);
+    }else{
+      atReplaceFrom = caret;
+      insertMentionText(name);
+    }
+    showAtToast('已 @'+name);
+  }
+  function bindLongPress(el, onLong, onShort){
+    if(!el) return;
+    function clear(){
+      if(longPressTimer){ clearTimeout(longPressTimer); longPressTimer = null; }
+    }
+    function start(ev){
+      longPressMoved = false;
+      clear();
+      longPressTimer = setTimeout(function(){
+        longPressTimer = null;
+        suppressClickUntil = Date.now() + 600;
+        try{ if(navigator.vibrate) navigator.vibrate(12); }catch(e){}
+        onLong && onLong(ev);
+      }, 420);
+    }
+    function move(){ longPressMoved = true; clear(); }
+    function end(ev){
+      var wasTiming = !!longPressTimer;
+      clear();
+      if(wasTiming && !longPressMoved && Date.now() > suppressClickUntil){
+        onShort && onShort(ev);
+      }
+    }
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', clear);
+    el.addEventListener('pointerleave', clear);
+    el.addEventListener('click', function(e){
+      if(Date.now() < suppressClickUntil){
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+  }
+  function scanAtTrigger(){
+    var ch = curChannel();
+    // 群聊才弹 @ 面板；私聊不需要
+    if(!ch || ch.kind !== 'group'){ hideAtPanel(); return; }
+    var inp = document.getElementById('inp');
+    if(!inp) return;
+    var v = inp.value || '';
+    var caret = typeof inp.selectionStart === 'number' ? inp.selectionStart : v.length;
+    var before = v.slice(0, caret);
+    var at = before.lastIndexOf('@');
+    if(at < 0){ hideAtPanel(); return; }
+    // @ 前应为开头或空白
+    if(at > 0 && !/\s/.test(before.charAt(at-1))){ hideAtPanel(); return; }
+    var frag = before.slice(at+1);
+    if(/[\s\n]/.test(frag)){ hideAtPanel(); return; }
+    openAtPanel(frag, at);
+  }
+
+  function setWsDot(on, label){
+    var el = document.getElementById('wsDot');
+    el.className = 'wsdot' + (on ? ' on' : '');
+    el.textContent = '● ' + (label || (on ? '已连接' : '未连接'));
+  }
+
+  function connectWs(){
+    var uid = parentUserId();
+    var tok = accessToken();
+    if(!uid || !tok){ setWsDot(false, '未登录'); return; }
+    try{ if(ws){ ws.onclose=null; ws.close(); } }catch(e){}
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var url = proto + '//' + location.host + '/api/parent/consult/ws?user_id=' +
+      encodeURIComponent(uid) + '&token=' + encodeURIComponent(tok);
+    ws = new WebSocket(url);
+    ws.onopen = function(){ setWsDot(true, '实时'); };
+    ws.onclose = function(){
+      setWsDot(false, '重连中');
+      clearTimeout(wsTimer);
+      wsTimer = setTimeout(connectWs, 3000);
+    };
+    ws.onerror = function(){ setWsDot(false, '异常'); };
+    ws.onmessage = function(ev){
+      var data;
+      try{ data = JSON.parse(ev.data); }catch(e){ return; }
+      if(!data || !data.type) return;
+      if(data.type === 'message.new' && data.message){
+        ingestMessage(data.conversation_id, data.message, true);
+      }else if(data.type === 'board.updated' && data.channel_code){
+        boardPulse[data.channel_code] = true;
+        if(data.channel_code === curCode) loadBoard(curCode);
+        renderRow();
+      }else if(data.type === 'hello'){
+        var c = curConv();
+        if(c && ws && ws.readyState === 1){
+          ws.send(JSON.stringify({type:'subscribe', conversation_id: c.id}));
+        }
+      }
+    };
+  }
+
+  function ingestMessage(conversationId, m, rerender){
+    if(!m) return;
+    var list = msgsByConv[conversationId] || (msgsByConv[conversationId] = []);
+    if(m.client_msg_id){
+      var idx = -1;
+      for(var i=0;i<list.length;i++){
+        if(list[i].client_msg_id === m.client_msg_id){ idx = i; break; }
+      }
+      if(idx >= 0){
+        list[idx] = Object.assign({}, list[idx], m, { pending: false });
+        if(m.id) seenMsgIds[m.id] = 1;
+        if(rerender) renderMsgs();
+        return;
+      }
+    }
+    if(m.id && seenMsgIds[m.id]) return;
+    if(m.id) seenMsgIds[m.id] = 1;
+    list.push(m);
+    list.sort(function(a,b){
+      var aid = typeof a.id === 'number' ? a.id : 1e15;
+      var bid = typeof b.id === 'number' ? b.id : 1e15;
+      return aid - bid;
+    });
+    var conv = curConv();
+    if(rerender && conv && conv.id === conversationId) renderMsgs();
+  }
+
+  function renderRow(){
+    document.getElementById('agRow').innerHTML = channels.map(function(a){
+      var pulse = boardPulse[a.code] ? ' pulse' : '';
+      var on = a.code === curCode ? ' on' : '';
+      var tp = (a.tp === '真人') ? '<em class="tp rl">真人</em>' : '<em class="tp ai">AI</em>';
+      var ic = ICONS[a.code] || '💬';
+      return '<div class="ag'+on+pulse+'" data-code="'+esc(a.code)+'">'+
+        '<div class="av" data-code="'+esc(a.code)+'">'+tp+ic+'<i></i></div>'+
+        '<span>'+esc(a.title)+'</span>'+
+        '<span class="sk">'+esc(a.skill||'')+'</span></div>';
+    }).join('');
+    document.querySelectorAll('#agRow .ag').forEach(function(el){
+      var code = el.getAttribute('data-code');
+      var av = el.querySelector('.av');
+      bindLongPress(av,
+        function(){ mentionFromChannelCode(code); },
+        function(){ pick(code); }
+      );
+      // 点名称区域仍切换频道
+      el.addEventListener('click', function(e){
+        if(e.target.closest && e.target.closest('.av')) return;
+        if(Date.now() < suppressClickUntil) return;
+        pick(code);
+      });
+    });
+  }
+
+  function renderMeta(){
+    var ch = curChannel();
+    var gbar = document.getElementById('gbar');
+    var duty = document.getElementById('duty');
+    var gb = window.__consultGroupBar;
+    if(ch && ch.kind === 'group'){
+      gbar.hidden = false;
+      var title = (gb && gb.title) || '天赋家长交流群';
+      var members = (gb && gb.members) || '';
+      var live = (gb && gb.live) || '';
+      var conv = curConv();
+      if(conv && conv.member_count){
+        members = '群成员 ' + conv.member_count;
+      }
+      gbar.innerHTML = '<b>'+esc(title)+'</b>'+
+        (members ? '<span>'+esc(members)+'</span>' : '')+
+        (live ? '<span class="live">● '+esc(live)+'</span>' : '');
+    }else{
+      gbar.hidden = true;
+    }
+    var d = window.__consultDuty;
+    if(d && d.channel_code){
+      duty.hidden = false;
+      duty.innerHTML = '<div class="dav">'+(d.icon||'👤')+'</div>'+
+        '<div class="dinf"><b>'+esc(d.name||'值班导师')+' <i>真人 · 今日值班</i></b>'+
+        '<span>'+esc(d.desc||'')+'</span></div>'+
+        '<button type="button" class="dbtn" id="dutyBtn">直接对话 ›</button>';
+      var btn = document.getElementById('dutyBtn');
+      if(btn) btn.onclick = function(){ pick(d.channel_code); };
+    }else{
+      duty.hidden = true;
+    }
+  }
+
+  function renderChips(){ /* chips 已改为回答末尾引导词，保留空函数兼容调用 */ }
+
+  function renderMsgs(){
+    var ch = curChannel();
+    var conv = curConv();
+    var me = parentUserId();
+    var title = ch ? ch.title : '';
+    var tag = ch ? (ch.tag || '') : '';
+    if(ch && ch.kind === 'group'){
+      document.getElementById('cvT').innerHTML =
+        '群聊 · <b>'+esc(title)+'</b> · <span>@大宇 群内答；@其他顾问会指引去单独咨询</span>';
+    }else{
+      document.getElementById('cvT').innerHTML =
+        '正在与 <b>'+esc(title)+'</b> 对话 · <span>'+esc(tag)+'</span>';
+    }
+    var box = document.getElementById('cvMsgs');
+    if(!conv){
+      box.innerHTML = '<div class="sys"><i>正在打开会话…</i></div>';
+      return;
+    }
+    var list = msgsByConv[conv.id] || [];
+    if(!list.length){
+      box.innerHTML = '<div class="sys"><i>暂无消息，打个招呼吧</i></div>';
+      return;
+    }
+    var ic = ICONS[curCode] || '💬';
+    var color = COLORS[curCode] || '#C9A227';
+    box.innerHTML = list.map(function(m){
+      var isMe = m.is_me || (m.sender_role === 'parent' && m.sender_user_id === me);
+      var pending = m.pending ? ' <i style="opacity:.6">发送中</i>' : '';
+      if(isMe){
+        return '<div class="msg me"><div class="bd"><div class="who">我'+pending+'</div>'+bubbleBody(m, true)+'</div></div>';
+      }
+      if(m.sender_role === 'parent'){
+        var pname = m.sender_name || ('家长'+(m.sender_user_id||''));
+        return '<div class="msg"><div class="av" data-mention="'+esc(pname)+'" style="border-color:#6FCF8E;background:#6FCF8E22">👩</div>'+
+          '<div class="bd"><div class="who">'+esc(pname)+'<i>家长</i></div>'+
+          bubbleBody(m, false)+'</div></div>';
+      }
+      var badge = m.sender_role === 'bot' ? 'AI' : (m.sender_role === 'advisor' ? '真人' : '');
+      var who = m.sender_name || title;
+      var personaCode = (m.meta && m.meta.persona_code) || curCode;
+      var mic = ICONS[personaCode] || ic;
+      var mcolor = COLORS[personaCode] || color;
+      var mname = (m.meta && m.meta.persona_title) || who;
+      // @ 短名：优先频道 mention_name
+      var mch = channels.find(function(c){ return c.code === personaCode; });
+      var atName = mch ? mentionLabel(mch) : mname;
+      return '<div class="msg"><div class="av" data-mention="'+esc(atName)+'" data-code="'+esc(personaCode)+'" style="border-color:'+mcolor+';background:'+mcolor+'22">'+mic+'</div>'+
+        '<div class="bd"><div class="who">'+esc(who)+(badge?'<i>'+badge+'</i>':'')+'</div>'+
+        bubbleBody(m, false)+'</div></div>';
+    }).join('');
+    box.querySelectorAll('.msg .av[data-mention]').forEach(function(av){
+      var name = av.getAttribute('data-mention') || '';
+      var code = av.getAttribute('data-code') || '';
+      bindLongPress(av, function(){
+        if(code) mentionFromChannelCode(code);
+        else if(name){
+          atReplaceFrom = -1;
+          insertMentionText(name);
+          showAtToast('已 @'+name);
+        }
+      }, null);
+    });
+    try{
+      var sc = document.getElementById('chatScroll');
+      if(sc) sc.scrollTop = sc.scrollHeight;
+    }catch(e){}
+  }
+
+  window.addEventListener('jnao-rich-ready', function(){
+    try{ renderMsgs(); }catch(e){}
+  });
+
+  function renderBoard(){
+    var ch = curChannel();
+    var bd = document.getElementById('cvBoard');
+    if(!ch || !ch.board_enabled){ bd.innerHTML=''; return; }
+    var posts = boardByCode[ch.code] || [];
+    var html = '<div class="board"><div class="bt">📝 '+esc(ch.title)+' · 留言板<span>老师看到必回</span></div>';
+    if(!posts.length){
+      html += '<div class="sys" style="margin:0 0 8px"><i>暂无留言</i></div>';
+    }else{
+      posts.forEach(function(p){
+        html += '<div class="bmsg"><div class="bq">'+esc(p.body)+
+          '<small>'+esc(p.created_at||'')+' · '+esc(p.status||'')+'</small></div>';
+        if(p.reply_body){
+          html += '<div class="ba"><b>导师回复：</b>'+esc(p.reply_body)+
+            '<small>'+esc(p.updated_at||'')+'</small></div>';
+        }
+        html += '</div>';
+      });
+    }
+    html += '<div class="bin"><input id="boardInp" placeholder="给'+esc(ch.title)+'留言…"/>'+
+      '<button type="button" id="boardSend">提交</button></div></div>';
+    bd.innerHTML = html;
+    var btn = document.getElementById('boardSend');
+    if(btn) btn.onclick = submitBoard;
+  }
+
+  async function loadBoard(code){
+    try{
+      var data = await api('GET', '/api/parent/consult/board?channel_code='+encodeURIComponent(code));
+      boardByCode[code] = data.posts || [];
+      var hasReply = (boardByCode[code]||[]).some(function(p){ return p.reply_body; });
+      if(hasReply) boardPulse[code] = true;
+      if(code === curCode){ boardPulse[code] = false; renderBoard(); renderRow(); }
+    }catch(e){ /* 静默 */ }
+  }
+
+  async function submitBoard(){
+    var inp = document.getElementById('boardInp');
+    var body = (inp && inp.value || '').trim();
+    if(!body) return;
+    var conv = curConv();
+    try{
+      await api('POST', '/api/parent/consult/board', {
+        channel_code: curCode,
+        body: body,
+        conversation_id: conv ? conv.id : null,
+      });
+      if(inp) inp.value = '';
+      await loadBoard(curCode);
+    }catch(e){ showErr(e.message || '留言失败'); }
+  }
+
+  async function openConv(code){
+    var data = await api('POST', '/api/parent/consult/conversations/open', { channel_code: code });
+    convByCode[code] = data.conversation;
+    var cid = data.conversation.id;
+    msgsByConv[cid] = [];
+    seenMsgIds = {};
+    var hist = await api('GET', '/api/parent/consult/conversations/'+cid+'/messages?limit=100');
+    (hist.messages || []).forEach(function(m){ ingestMessage(cid, m, false); });
+    if(ws && ws.readyState === 1){
+      ws.send(JSON.stringify({type:'subscribe', conversation_id: cid}));
+    }
+    // 刷新群人数条
+    try{
+      var chs = await api('GET', '/api/parent/consult/channels');
+      window.__consultGroupBar = chs.group_bar || null;
+      renderMeta();
+    }catch(e){}
+  }
+
+  async function pick(code){
+    if(!code) return;
+    curCode = code;
+    boardPulse[code] = false;
+    showErr('');
+    renderRow();
+    renderMeta();
+    renderChips();
+    var ch = curChannel();
+    var tip = (ch && ch.kind === 'group')
+      ? '群里发言，@大宇 提问；@顾问可指引去单独咨询…'
+      : ('发消息给 '+(ch && ch.title || '')+'…');
+    document.getElementById('inp').placeholder = tip;
+    hideAtPanel();
+    renderMsgs();
+    try{
+      await openConv(code);
+      renderMsgs();
+      await loadBoard(code);
+      renderBoard();
+    }catch(e){
+      showErr(e.message || '打开会话失败');
+    }
+  }
+
+  async function sendMsg(){
+    if(sending) return;
+    var v = document.getElementById('inp').value.trim();
+    if(!v) return;
+    var conv = curConv();
+    if(!conv){ showErr('会话未就绪'); return; }
+    sending = true;
+    document.getElementById('inp').value = '';
+    syncSendUi();
+    var clientId = 'c-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+    var temp = {
+      id: 'tmp-'+clientId,
+      client_msg_id: clientId,
+      sender_role: 'parent',
+      sender_user_id: parentUserId(),
+      sender_name: '我',
+      is_me: true,
+      content: v,
+      content_type: 'text',
+      pending: true,
+    };
+    ingestMessage(conv.id, temp, true);
+    try{
+      var data = await api('POST', '/api/parent/consult/conversations/'+conv.id+'/messages', {
+        content: v,
+        client_msg_id: clientId,
+      });
+      if(data.message) ingestMessage(conv.id, data.message, true);
+      if(data.bot_message) ingestMessage(conv.id, data.bot_message, true);
+      renderMsgs();
+    }catch(e){
+      showErr(e.message || '发送失败');
+      // 去掉 pending 失败气泡
+      var list = msgsByConv[conv.id] || [];
+      msgsByConv[conv.id] = list.filter(function(m){ return m.client_msg_id !== clientId || !m.pending; });
+      renderMsgs();
+      document.getElementById('inp').value = v;
+      syncSendUi();
+    }finally{
+      sending = false;
+    }
+  }
+
+  async function boot(){
+    var uid = parentUserId();
+    if(!uid || !accessToken()){
+      showErr('请先登录家长账号');
+      setWsDot(false, '未登录');
+      return;
+    }
+    try{
+      var data = await api('GET', '/api/parent/consult/channels');
+      channels = data.channels || [];
+      window.__consultDuty = data.duty || null;
+      window.__consultGroupBar = data.group_bar || null;
+      if(!channels.length){
+        showErr('暂无咨询频道，请稍后或联系管理员');
+        return;
+      }
+      if(!channels.find(function(c){ return c.code === curCode; })){
+        curCode = channels[0].code;
+      }
+      renderRow();
+      connectWs();
+      await pick(curCode);
+    }catch(e){
+      showErr(e.message || '加载频道失败');
+    }
+  }
+
+  document.getElementById('btnSend').addEventListener('click', sendMsg);
+  var inpEl = document.getElementById('inp');
+  var inpBar = document.getElementById('inpBar');
+  var plusPanel = document.getElementById('plusPanel');
+  var btnPlus = document.getElementById('btnPlus');
+
+  function syncSendUi(){
+    var has = !!(inpEl && String(inpEl.value || '').trim());
+    if(inpBar) inpBar.classList.toggle('has-text', has);
+    if(has) hidePlusPanel();
+    autoGrowInp();
+  }
+  function autoGrowInp(){
+    if(!inpEl) return;
+    inpEl.style.height = 'auto';
+    var h = Math.min(96, Math.max(36, inpEl.scrollHeight));
+    inpEl.style.height = h + 'px';
+  }
+  function hidePlusPanel(){
+    if(plusPanel){
+      plusPanel.classList.remove('on');
+      plusPanel.setAttribute('aria-hidden','true');
+    }
+    if(btnPlus) btnPlus.classList.remove('on');
+  }
+  function togglePlusPanel(){
+    if(!plusPanel) return;
+    var on = !plusPanel.classList.contains('on');
+    plusPanel.classList.toggle('on', on);
+    plusPanel.setAttribute('aria-hidden', on ? 'false' : 'true');
+    if(btnPlus) btnPlus.classList.toggle('on', on);
+    if(on) try{ inpEl && inpEl.blur(); }catch(e){}
+  }
+  function soon(title){
+    showAtToast(title || '功能即将开放');
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-toast', title: title || '功能即将开放'}, '*');
+      }
+    }catch(e){}
+  }
+
+  inpEl.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){ hideAtPanel(); hidePlusPanel(); return; }
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      hideAtPanel();
+      hidePlusPanel();
+      sendMsg();
+    }
+  });
+  inpEl.addEventListener('input', function(){
+    syncSendUi();
+    scanAtTrigger();
+  });
+  inpEl.addEventListener('click', function(){
+    hidePlusPanel();
+    scanAtTrigger();
+  });
+  inpEl.addEventListener('focus', function(){ hidePlusPanel(); });
+  inpEl.addEventListener('keyup', function(e){
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End'){
+      scanAtTrigger();
+    }
+  });
+  document.getElementById('btnVoice').addEventListener('click', function(){ soon('语音消息即将开放'); });
+  document.getElementById('btnEmoji').addEventListener('click', function(){ soon('表情即将开放'); });
+  btnPlus.addEventListener('click', function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    togglePlusPanel();
+  });
+  plusPanel.querySelectorAll('.plus-cell').forEach(function(el){
+    el.addEventListener('click', function(){
+      var act = el.getAttribute('data-act');
+      if(act === 'at'){
+        hidePlusPanel();
+        var ch = curChannel();
+        if(ch && ch.kind === 'group'){
+          var v = inpEl.value || '';
+          var caret = typeof inpEl.selectionStart === 'number' ? inpEl.selectionStart : v.length;
+          var needAt = !(caret > 0 && v.charAt(caret-1) === '@');
+          if(needAt){
+            inpEl.value = v.slice(0, caret) + '@' + v.slice(caret);
+            try{ inpEl.setSelectionRange(caret+1, caret+1); }catch(err){}
+          }
+          inpEl.focus();
+          syncSendUi();
+          scanAtTrigger();
+        }else{
+          soon('私聊无需 @，直接发消息即可');
+        }
+        return;
+      }
+      soon('功能即将开放');
+      hidePlusPanel();
+    });
+  });
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if(t && t.closest && (t.closest('#atPanel') || t.closest('#inp') || t.closest('#chatDock'))) return;
+    hideAtPanel();
+    hidePlusPanel();
+  });
+  syncSendUi();
+
+  boot();
+  try{ window.parent && window.parent !== window && window.parent.postMessage({type:'dayu-ready'}, '*'); }catch(e){}
+})();
 </script>
-
-
 
 <script>
 (function(){
@@ -209,19 +1045,6 @@ renderRow();renderConv();
   }
   var btnStudent = document.getElementById('btnStudent');
   if(btnStudent){
-    btnStudent.addEventListener('click', function(e){
-      e.preventDefault();
-      if(!post('dayu-student')) location.href = '/pages/dayu/home';
-    });
-  }
-  document.querySelectorAll('a.acctbtn[href="index.html"]').forEach(function(a){
-    a.setAttribute('href','javascript:;');
-    a.id = a.id || 'btnStudent';
-  });
-  // re-bind if we just set id
-  btnStudent = document.getElementById('btnStudent');
-  if(btnStudent && !btnStudent._bound){
-    btnStudent._bound = 1;
     btnStudent.addEventListener('click', function(e){
       e.preventDefault();
       if(!post('dayu-student')) location.href = '/pages/dayu/home';

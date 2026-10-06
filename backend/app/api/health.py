@@ -91,6 +91,29 @@ async def health():
             "mode", "index_id", "workspace_id", "retrieve_ready", "search_ready", "pipeline"
         ) if k in br},
     }
+
+    from app.harness.runtime import harness_status
+    from app.services import consult_service
+
+    hs = harness_status()
+    integrations["harness"] = {
+        "status": "live",
+        "description": "Harness 控制面+数据面：Gateway → 沙箱 Executor（默认本地 JSON stdio）",
+        "sandbox": hs.get("sandbox"),
+        "tools": hs.get("tools"),
+        "mcp_transport": hs.get("mcp_transport"),
+    }
+
+    im_ok = consult_service.im_configured()
+    integrations["consult"] = {
+        "status": "live",
+        "description": "在线咨询 · WebSocket 实时 + 业务库 SoT（OpenIM 可选）",
+        "realtime": "websocket",
+        "ws_path": "/api/parent/consult/ws",
+        "im_configured": im_ok,
+        "openim_optional": True,
+        "agent_enabled": consult_service.load_consult_config().get("agent_enabled"),
+    }
     # 旧 enterprise_rag 代理：仅学科答疑遗留路径，引导页已切百炼
     integrations["tianfu_rag"]["description"] = (
         "【遗留】本地 enterprise_rag /chat（学科答疑）；引导页已改用 bailian_rag"
