@@ -8,6 +8,7 @@ import {
   getChildUserId,
   hasUserSession,
   NeedLoginError,
+  formatApiError,
 } from './client.js'
 import { authHeaders } from '../loginGuard.js'
 
@@ -86,7 +87,12 @@ export async function uploadQaImage(userId, file) {
     body: form,
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+  if (!res.ok) {
+    const err = new Error(formatApiError(data, res.status))
+    err.status = res.status
+    err.data = data
+    throw err
+  }
   return data
 }
 
@@ -98,7 +104,9 @@ export async function transcribeVoice(audioBlob, filename = 'speech.webm') {
   const headers = qaAuthHeaders(userId)
   const res = await fetch(withUser('/api/voice/asr', userId), { method: 'POST', headers, body: form })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok || data.error) throw new Error(data.error || data.detail || '语音识别失败')
+  if (!res.ok || data.error) {
+    throw new Error(formatApiError(data, res.status) || data.error || '语音识别失败')
+  }
   return data.text || ''
 }
 

@@ -117,11 +117,48 @@ export function allAuthStorageKeys() {
   return [...keys]
 }
 
+/** 天赋学院本地缓存（讨论区/目录）— 换号前清掉，防串历史 */
+export function purgeAcademyBrowserCache() {
+  try {
+    const drop = []
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i)
+      if (!key) continue
+      if (
+        key === 'jnao_academy_sector'
+        || key.startsWith('jnao_academy_sector_')
+        || key.startsWith('jnao_academy_room_')
+        || key === 'jnao_academy_last_ep'
+        || key.startsWith('jnao_academy_last_ep_')
+      ) {
+        drop.push(key)
+      }
+    }
+    drop.forEach((key) => {
+      try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
+    })
+  } catch (_) { /* ignore */ }
+  try {
+    const drop = []
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i)
+      if (!key) continue
+      if (key.startsWith('jnao_academy_view_') || key.startsWith('jnao_nudge_dismiss_')) {
+        drop.push(key)
+      }
+    }
+    drop.forEach((key) => {
+      try { sessionStorage.removeItem(key) } catch (_) { /* ignore */ }
+    })
+  } catch (_) { /* ignore */ }
+}
+
 /** 清除全部登录态（用户自助 / 迁移） */
 export function clearAllAuthSessions() {
   for (const key of allAuthStorageKeys()) {
     try { localStorage.removeItem(key) } catch (_) { /* ignore */ }
   }
+  purgeAcademyBrowserCache()
   purgeLegacyRouteSnapshots()
 }
 
@@ -481,6 +518,10 @@ export function clearSessionsExcept(kind) {
     try {
       localStorage.removeItem('jnao_logged_in')
     } catch (_) { /* ignore */ }
+  }
+  // 换账号登录时清学院本地讨论缓存（后端本就按 child 隔离）
+  if (kind === 'student' || kind === 'parent') {
+    purgeAcademyBrowserCache()
   }
   purgeLegacyRouteSnapshots()
 }

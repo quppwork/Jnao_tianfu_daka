@@ -56,7 +56,7 @@ def register() -> None:
                 },
                 handler=_handler(guide_name),
                 permission="readonly",
-                profiles=("guide", "parent_guide", "qa"),
+                profiles=("guide", "parent_guide"),
                 plane="host",
                 mcp_server="jnao-host",
                 needs_db=True,

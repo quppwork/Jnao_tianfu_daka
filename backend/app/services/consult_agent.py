@@ -25,43 +25,14 @@ _THOUGHT_BLOCK = re.compile(
 )
 _FOLLOWUP_MARKERS = ("如果你还想", "你可能还想", "还可以继续问", "想进一步了解")
 
-# 频道人设（运营文案可后置进 meta_json.system_prompt）
-_PERSONA: dict[str, str] = {
-    "dayu": (
-        "你是张宇老师团队的智能体「大宇」，在家长「在线咨询」中担任总协调。"
-        "语气亲切、专业、简洁；可引导家长去训练、数据分析、家长课堂。"
-        "不要编造孩子的具体分数或未提供的数据；不确定时说明并建议去对应页面查看。"
-    ),
-    "sizhe": (
-        "你是「思者顾问」，擅长思维训练、创造力、AI 指挥官相关问题。"
-        "面向家长，语气清晰有条理；结合知识库作答，勿编造未检索到的课程细节。"
-    ),
-    "yingzhe": (
-        "你是「赢者顾问」，擅长目标管理、表达力、无界外语、超脑阅读。"
-        "面向家长，鼓励且务实；依据知识库回答。"
-    ),
-    "dezhe": (
-        "你是「德者顾问」，擅长情绪心性、高效作业、大书道。"
-        "面向家长，温和耐心；依据知识库回答。"
-    ),
-    "xingzhe": (
-        "你是「行者顾问」，擅长扫描速记、影像追忆、记忆力训练。"
-        "面向家长；可提示需要真人导师时留言。依据知识库回答。"
-    ),
-    "xuezhe": (
-        "你是「学者顾问」，擅长学习方法、三错一讲、段位考核。"
-        "面向家长；可提示需要真人导师时留言。依据知识库回答。"
-    ),
-}
-
-
 def _persona_for(channel: ConsultChannel) -> str:
+    """人设/知识来自 harness LLM 路由层 PROFILES['consult']；meta.system_prompt 可整段覆盖。"""
+    from app.harness.llm import profile_system
+
     meta = channel.meta_json or {}
     custom = (meta.get("system_prompt") or "").strip()
-    if custom:
-        return custom
     code = (channel.bot_persona or channel.code or "dayu").strip()
-    return _PERSONA.get(code, _PERSONA["dayu"])
+    return profile_system("consult", persona=code, override=custom or None)
 
 
 def _msg_for_parent(m: ConsultMessage, parent_user_id: int, parent_msg_ids: set[int]) -> bool:
@@ -121,8 +92,16 @@ def _history_for_parent(
         else:
             continue
         content = (m.content or "").strip()
-        if content:
-            out.append({"role": role, "content": content})
+        if not content:
+            continue
+        # 过滤历史 stub 占位，避免污染模型上下文
+        if role == "assistant" and (
+            "（stub）" in content
+            or "(stub)" in content.lower()
+            or "请改用 DeepSeek Agent" in content
+        ):
+            continue
+        out.append({"role": role, "content": content})
     if len(out) > limit:
         out = out[-limit:]
     # 末条若是刚写入的本轮用户消息，chat_completion 还会再 append，去掉以免重复
@@ -213,8 +192,9 @@ def _react_system_extra() -> str:
         "请用「Say:」开头写对用户可见正文。\n"
         "4) 只根据【本家长对话记忆】与【知识库摘录】作答；"
         "禁止引用或臆测其他家长的发言、孩子或数据。\n"
-        "5) 需要平台知识时先调用 retrieve_kb，再根据工具结果回答；"
-        "不要假装调用了查分/改档工具。"
+        "5) 需要脑科学/五者天赋/因材施教知识时先 retrieve_kb"
+        "（prefer_docs 可用 01-脑科学理论.md,02-五者天赋体系.md,03-因材施教指南.md），"
+        "再根据工具结果回答；不要假装调用了查分/改档工具。"
     )
 
 
@@ -321,6 +301,9 @@ async def generate_consult_reply(
 
     system = "\n\n".join(system_parts)
     history = _history_for_parent(db, conversation.id, parent_user_id)
+    from app.harness.memory import fold_and_truncate
+
+    history, _ = fold_and_truncate(history, {}, keep=12)
 
     if not is_configured():
         logger.warning("consult DeepSeek not configured")

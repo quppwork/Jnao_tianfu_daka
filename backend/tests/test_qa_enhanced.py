@@ -80,10 +80,10 @@ class TestQaChatEnhanced:
             files={"file": ("q.png", io.BytesIO(png), "image/png")},
         ).json()
         with patch(
-            "app.agents.qa.runner.vision_chat_completion",
+            "app.agents.qa.runner._ocr_preview",
             new_callable=AsyncMock,
             return_value="【测试】识题：1+1=?",
-        ) as vision_mock:
+        ) as ocr_mock:
             res = client.post(
                 f"/api/qa/chat?user_id={uid}",
                 json={
@@ -93,7 +93,7 @@ class TestQaChatEnhanced:
                 },
             )
         assert res.status_code == 200
-        assert vision_mock.call_count >= 1
+        assert ocr_mock.call_count >= 1
         assert "ocr_preview" not in res.json()
 
     def test_rag_context_injected(self, client: TestClient, child_with_assessment, mock_doubao):

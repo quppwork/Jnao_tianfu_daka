@@ -7,7 +7,7 @@
       :src="src"
       frameborder="0"
       scrolling="no"
-      allow="autoplay; fullscreen"
+      allow="autoplay; fullscreen; camera; microphone; geolocation"
       @load="onFrameLoad"
     />
     <!-- #endif -->
@@ -24,6 +24,8 @@ import { goLinkedParentHome, goLinkedStudentHome } from '@/utils/switchLinkedAcc
 import { fetchUsageSummary, formatTokenCount } from '@/utils/api/usage.js'
 import { isClassicUi, studentHomeUrl } from '@/utils/uiSkin.js'
 import { formatGuideRichHtml, prefetchKatex } from '@/utils/chatRichText.js'
+import { chooseQuestionImage, pickImageViaNativeInput } from '@/utils/qaMedia.js'
+import { browserCanUseMic, BrowserVoiceRecorder } from '@/utils/qaVoice.js'
 
 const USAGE_PILL_PAGES = new Set(['parent.html', 'pset.html'])
 const RICH_TEXT_PAGES = new Set(['consult.html'])
@@ -78,6 +80,11 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  /** 学院页每次 onShow 递增：收起讨论组，避免软切回仍停在全屏讨论 */
+  academyCollapseSignal: {
+    type: Number,
+    default: 0,
+  },
 })
 
 const emit = defineEmits(['parent', 'student', 'account', 'theme'])
@@ -85,12 +92,14 @@ const emit = defineEmits(['parent', 'student', 'account', 'theme'])
 const src = computed(() => {
   const file = props.page || ''
   const rev =
-    file === 'drama.html' ? '20260925qq2' :
-    file === 'consult.html' ? '20261006c1' : ''
+    file === 'drama.html' ? '20261008ep4' :
+    file === 'consult.html' ? '20261008b1' : ''
   return `/static/dayu/html/${file}${rev ? `?v=${rev}` : ''}`
 })
 const iframeRef = ref(null)
 let frameReady = false
+/** iframe 主动 sync 时勿再 post 回去，避免切集后二次 paint 冲掉播放 */
+let suppressHydratePush = false
 
 function postToFrame(payload) {
   // #ifdef H5
@@ -240,6 +249,66 @@ async function pushUsage() {
   }
 }
 
+async function handleDayuMedia(data) {
+  const reqId = data.reqId || ''
+  const action = String(data.action || '')
+  const reply = (payload) => {
+    postToFrame({ type: 'dayu-media-result', reqId, ...payload })
+  }
+  try {
+    if (action === 'camera' || action === 'album') {
+      let path = ''
+      try {
+        path = await chooseQuestionImage(action === 'camera' ? 'camera' : 'album')
+      } catch (e) {
+        if (e?.code === 'WEBCAM' || e?.message === 'webcam') {
+          const picked = await pickImageViaNativeInput(action === 'camera' ? 'environment' : '')
+          reply({ ok: true, preview: picked.preview, path: picked.path, name: picked.file?.name })
+          return
+        }
+        throw e
+      }
+      // #ifdef H5
+      try {
+        const resp = await fetch(path)
+        const blob = await resp.blob()
+        const preview = URL.createObjectURL(blob)
+        reply({ ok: true, preview, path, name: 'image.jpg' })
+        return
+      } catch (_) { /* fallthrough */ }
+      // #endif
+      reply({ ok: true, preview: path, path, name: 'image.jpg' })
+      return
+    }
+    if (action === 'mic') {
+      if (!browserCanUseMic()) {
+        reply({ ok: false, error: '语音需 HTTPS，才会弹出系统麦克风授权' })
+        return
+      }
+      uni.showToast({ title: '请允许麦克风权限', icon: 'none' })
+      const rec = new BrowserVoiceRecorder()
+      await rec.start()
+      uni.showToast({ title: '录音中，约 4 秒后结束…', icon: 'none' })
+      await new Promise((r) => setTimeout(r, 4000))
+      const { blob } = await rec.stop()
+      // 家长壳暂无学生 ASR：把时长提示回填，后续可接家长语音接口
+      reply({
+        ok: true,
+        text: '',
+        error: blob?.size ? '已采集音频（识别接口待接家长端）；请先打字补充' : '未录到音频',
+      })
+      if (!blob?.size) return
+      uni.showToast({ title: '已拿到麦克风授权，请打字发送问题', icon: 'none' })
+      return
+    }
+    reply({ ok: false, error: 'unsupported' })
+  } catch (e) {
+    const msg = e?.message || '授权失败'
+    if (msg !== 'cancel') uni.showToast({ title: msg, icon: 'none' })
+    reply({ ok: false, error: msg })
+  }
+}
+
 function handleMessage(ev) {
   const data = ev?.data
   if (!data || typeof data !== 'object') return
@@ -256,6 +325,27 @@ function handleMessage(ev) {
   }
   if (data.type === 'dayu-toast') {
     uni.showToast({ title: data.title || '功能即将开放', icon: 'none' })
+    return
+  }
+  // 学院 iframe 内切集：只更新父页 hydrate，不 navigate（保留播放/讨论）
+  if (data.type === 'dayu-academy-sync' && data.academy) {
+    const h = props.hydrate
+    if (h && typeof h === 'object') {
+      suppressHydratePush = true
+      h.academy = data.academy
+      setTimeout(() => { suppressHydratePush = false }, 0)
+    }
+    try {
+      const ep = data.academy?.episode?.id
+      const uid = localStorage.getItem('jnao_child_user_id') || ''
+      if (ep && uid) {
+        localStorage.setItem(`jnao_academy_last_ep_${uid}`, String(ep).toUpperCase())
+      }
+    } catch (_) { /* ignore */ }
+    return
+  }
+  if (data.type === 'dayu-media') {
+    handleDayuMedia(data)
     return
   }
   if (data.type === 'dayu-account') {
@@ -409,8 +499,20 @@ function onFrameLoad() {
 
 watch(
   () => props.hydrate,
-  () => pushHydrate(),
+  () => {
+    if (suppressHydratePush) return
+    pushHydrate()
+  },
   { deep: true },
+)
+
+watch(
+  () => props.academyCollapseSignal,
+  (n, o) => {
+    if (!n || n === o) return
+    if (pageFile(props.page) !== 'drama.html') return
+    postToFrame({ type: 'dayu-academy-collapse' })
+  },
 )
 
 onMounted(() => {

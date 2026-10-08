@@ -15,7 +15,8 @@ def test_opening_ends_with_mentor_and_leads_with_talent():
     order = harness.opening_order("学者")
     assert order[0] == "jiahui"
     assert order[-1] == "shanyu"
-    assert len(order) == 4
+    # 开场压到 2 人（天赋同学 + 导师），避免串行 LLM 堵死 SQLite
+    assert len(order) == 2
 
 
 def test_reply_wakes_two_at_random_and_pins_mention():

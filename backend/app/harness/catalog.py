@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.harness.policy import visible_specs
+from app.harness.policy import profile_tool_allowlist, visible_specs
 from app.harness.registry import list_tool_specs
 from app.harness.types import ToolSpec
 
@@ -13,7 +13,11 @@ SERVERS = (
         "name": "jnao-host",
         "plane": "host",
         "mode": "B",
-        "description": "凭证类工具在沙箱外（百炼 Retrieve 等），密钥不进沙箱",
+        "description": (
+            "宿主 Mode B：凭证类工具在沙箱外。"
+            "含百炼 Retrieve、答疑 OCR(ocr_extract)、联网查证(web_lookup)、"
+            "数学草图(math_sketch)、题库/符号校验等；密钥不进沙箱。"
+        ),
     },
     {
         "name": "jnao-sandbox",
@@ -30,13 +34,25 @@ SERVERS = (
 )
 
 
+def _apply_profile_allowlist(
+    specs: list[ToolSpec], *, profile: str | None
+) -> list[ToolSpec]:
+    allow = profile_tool_allowlist(profile)
+    if allow is None:
+        return specs
+    return [t for t in specs if t.name in allow]
+
+
 def tools_for_server(server: str, *, profile: str | None = None) -> list[ToolSpec]:
     specs = [t for t in list_tool_specs(profile=None) if t.mcp_server == server]
-    return visible_specs(specs, profile=profile)
+    return _apply_profile_allowlist(visible_specs(specs, profile=profile), profile=profile)
 
 
 def aggregated_tools(*, profile: str | None = None) -> list[ToolSpec]:
-    return visible_specs(list_tool_specs(profile=None), profile=profile)
+    return _apply_profile_allowlist(
+        visible_specs(list_tool_specs(profile=None), profile=profile),
+        profile=profile,
+    )
 
 
 def mcp_tool_list(*, profile: str | None = None) -> list[dict[str, Any]]:

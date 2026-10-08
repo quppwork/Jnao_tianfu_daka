@@ -294,21 +294,17 @@ async def _legacy_tools_and_knowledge(
     rag_route_hit: bool,
     rag_generate: bool,
 ) -> tuple[list[dict[str, Any]], str, str | None, str, list[str]]:
-    """LEGACY_RAG：工具与百炼直答/Retrieve 并行，外层 wait_for 防拖死。"""
+    """LEGACY_RAG：只做百炼直答/Retrieve；业务工具改由 Harness 环内调用。"""
+    del history, use_tools  # 工具环已迁入 run_profile_turn
     tools_used: list[dict[str, Any]] = []
     tool_block = ""
     bailian_reply: str | None = None
     rag_block, rag_sources = "", []
     try:
         if rag_route_hit and rag_generate:
-            (tools_used, tool_block), (bailian_reply, _) = await asyncio.wait_for(
-                asyncio.gather(
-                    _gather_tools(
-                        db, child_user_id, message, history=history, use_tools=use_tools
-                    ),
-                    _try_bailian_direct_reply(
-                        db, child_user_id, message, memory_block=memory_block
-                    ),
+            bailian_reply, _ = await asyncio.wait_for(
+                _try_bailian_direct_reply(
+                    db, child_user_id, message, memory_block=memory_block
                 ),
                 timeout=LEGACY_PARALLEL_TIMEOUT,
             )
@@ -317,25 +313,12 @@ async def _legacy_tools_and_knowledge(
                     _gather_rag(message), timeout=25.0
                 )
         elif rag_route_hit:
-            (tools_used, tool_block), (rag_block, rag_sources) = await asyncio.wait_for(
-                asyncio.gather(
-                    _gather_tools(
-                        db, child_user_id, message, history=history, use_tools=use_tools
-                    ),
-                    _gather_rag(message),
-                ),
-                timeout=LEGACY_PARALLEL_TIMEOUT,
-            )
-        else:
-            tools_used, tool_block = await asyncio.wait_for(
-                _gather_tools(
-                    db, child_user_id, message, history=history, use_tools=use_tools
-                ),
-                timeout=LEGACY_PARALLEL_TIMEOUT,
+            rag_block, rag_sources = await asyncio.wait_for(
+                _gather_rag(message), timeout=LEGACY_PARALLEL_TIMEOUT
             )
     except asyncio.TimeoutError:
         logger.warning(
-            "guide legacy parallel timeout uid=%s rag=%s generate=%s",
+            "guide legacy rag timeout uid=%s rag=%s generate=%s",
             child_user_id,
             rag_route_hit,
             rag_generate,
@@ -700,9 +683,11 @@ async def run_chat(
         ctx=ToolContext(db=db, child_user_id=child_user_id, profile="guide"),
         system_override=system,
         max_steps=4,
+        allow_tools=bool(use_tools),
     )
     reply = turn.get("reply") or ""
     text = (reply or "").strip() or "抱歉，AI 暂时无法响应，请稍后再试。"
+    tools_used = list(tools_used) + list(turn.get("tools_used") or [])
     leak_hits = scan_guide_leaks(text)
     if leak_hits:
         logger.warning(
@@ -978,8 +963,8 @@ async def run_chat_stream(
         history=hist,
         ctx=ToolContext(db=db, child_user_id=child_user_id, profile="guide"),
         system_override=system,
-        max_steps=1,
-        allow_tools=False,
+        max_steps=4,
+        allow_tools=bool(use_tools),
     ):
         if kind == "token":
             token = str(payload or "")
@@ -1005,6 +990,7 @@ async def run_chat_stream(
             done = payload
 
     text = ((done or {}).get("reply") or "".join(parts) or "").strip()
+    tools_used = list(tools_used) + list((done or {}).get("tools_used") or [])
     # 完整回复后再对齐按钮（解决「文案学科答疑、按钮今日训练」）
     aligned = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
     meta["actions"] = aligned.get("actions") or meta.get("actions") or []

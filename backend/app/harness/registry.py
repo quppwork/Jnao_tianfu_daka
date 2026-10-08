@@ -50,6 +50,10 @@ def ensure_builtin_tools() -> None:
     from app.harness.tools import teacher_ops as _to
     from app.harness.tools import learn_ops as _lo
     from app.harness.tools import qa_ops as _qo
+    from app.harness.tools import ocr_ops as _ocr
+    from app.harness.tools import web_lookup as _wl
+    from app.harness.tools import math_sketch as _ms
+    from app.harness.tools import solve_ops as _so
 
     _rk.register()
     _sp.register()
@@ -58,11 +62,23 @@ def ensure_builtin_tools() -> None:
     _to.register()
     _lo.register()
     _qo.register()
+    _ocr.register()
+    _wl.register()
+    _ms.register()
+    _so.register()
+    from app.harness.gates import install_builtin_gates
+
+    install_builtin_gates()
     _BOOTSTRAPPED = True
 
 
 def reset_registry_for_tests() -> None:
     """仅测试用。"""
     global _BOOTSTRAPPED
+    from app.harness.loop import clear_gates
+    import app.harness.gates as _gates
+
     _TOOLS.clear()
+    clear_gates()
+    _gates._INSTALLED = False
     _BOOTSTRAPPED = False

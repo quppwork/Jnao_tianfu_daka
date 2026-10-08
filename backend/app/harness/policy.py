@@ -18,6 +18,20 @@ class PolicyDecision:
     reason: str = ""
 
 
+def profile_tool_allowlist(profile: str | None) -> frozenset[str] | None:
+    """PROFILES[profile].tools 非空时返回白名单；None 表示不额外收窄。"""
+    if not profile:
+        return None
+    from app.harness.llm import get_profile, resolve_profile_name
+
+    cfg = get_profile(resolve_profile_name(profile))
+    raw = cfg.get("tools")
+    if not isinstance(raw, (list, tuple)) or not raw:
+        return None
+    names = frozenset(str(x).strip() for x in raw if str(x).strip())
+    return names or None
+
+
 def check_tool(spec: ToolSpec | None, name: str, *, profile: str | None = None) -> PolicyDecision:
     cfg = load_harness_settings()
     tool = (name or "").strip()
@@ -33,6 +47,9 @@ def check_tool(spec: ToolSpec | None, name: str, *, profile: str | None = None) 
         return PolicyDecision(False, f"unknown tool {tool}")
     if profile and spec.profiles and profile not in spec.profiles:
         return PolicyDecision(False, f"profile {profile} cannot use {tool}")
+    allow = profile_tool_allowlist(profile)
+    if allow is not None and tool not in allow:
+        return PolicyDecision(False, f"profile {profile} tools allowlist excludes {tool}")
     if cfg.mcp_expose and tool not in cfg.mcp_expose:
         return PolicyDecision(False, f"mcp catalog hides {tool}")
     if spec.plane == "sandbox" and tool in cfg.sandbox_deny:

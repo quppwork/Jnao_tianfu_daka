@@ -35,6 +35,9 @@ async def emit_event_stream(
             msg = payload if isinstance(payload, str) else str(payload or "")
             if msg:
                 yield sse_json({"type": "status", "message": msg})
+        elif kind == "meta":
+            meta = payload if isinstance(payload, dict) else {"data": payload}
+            yield sse_json({"type": "meta", **meta})
         elif kind == "done":
             meta = payload if isinstance(payload, dict) else {}
             yield sse_json({"type": "done", **meta})

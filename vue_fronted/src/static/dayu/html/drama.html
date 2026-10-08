@@ -106,6 +106,14 @@
   .phone.qq-chat .cr-grab{display:block}
   .phone.qq-chat .chatroom-spacer{display:block;height:calc(100dvh - var(--qq-top,0px) - var(--chat-dock-h,110px) - 56px);pointer-events:none}
   .chatroom-spacer{display:none}
+  /* 浏览正片 / 切集：整块讨论与底坞隐藏，仅手动加入后才出现 */
+  .phone.browse-mode .chatroom,
+  .phone.browse-mode .chatroom-spacer,
+  .phone.browse-mode .chat-dock{display:none!important}
+  .phone.browse-mode{--chat-dock-h:0px}
+  .browse-join{display:none;margin:10px 18px 0;padding:12px 14px;border-radius:14px;border:1px solid rgba(111,207,142,.45);background:rgba(111,207,142,.1);color:#EDEBE4;font-size:13px;font-weight:800;text-align:center;cursor:pointer}
+  .phone.browse-mode .browse-join.is-on{display:block}
+  .browse-join small{display:block;margin-top:4px;font-size:11px;font-weight:600;color:#8B93A5}
   /* 全页讨论：收起上方学院/正片/实况 */
   .phone.qq-chat:not(.qq-peek) .academy,
   .phone.qq-chat:not(.qq-peek) .vbox,
@@ -244,6 +252,7 @@ function toggleTheme(){
       <div class="ve3" onclick="joinChat()">加入频道讨论 →</div>
     </div>
   </div>
+  <div class="browse-join" id="browseJoin" role="button">进入讨论组 →<small>本集已解锁，点这里和角色聊</small></div>
 
   <!-- ===== 场景舞台 ===== -->
   <div class="stage" id="stage">
@@ -1073,15 +1082,23 @@ function sendFree(){
 $('inp').addEventListener('keydown',e=>{if(e.key==='Enter')sendFree();});
 /* ---------- 初始化 ---------- */
 try {
-  var _cachedSector = JSON.parse(localStorage.getItem('jnao_academy_sector') || 'null');
+  var _uid = '';
+  try { _uid = localStorage.getItem('jnao_child_user_id') || ''; } catch (_e) {}
+  var _cachedSector = null;
+  if (_uid) {
+    _cachedSector = JSON.parse(localStorage.getItem('jnao_academy_sector_' + _uid) || 'null');
+  }
+  if (!_cachedSector || !_cachedSector.episode) {
+    _cachedSector = JSON.parse(localStorage.getItem('jnao_academy_sector') || 'null');
+    if (_cachedSector && _uid && String(_cachedSector.user_id || '') !== String(_uid)) {
+      _cachedSector = null;
+    }
+  }
   if (_cachedSector && _cachedSector.episode && _cachedSector.episode.unlocked) {
     window.__ACADEMY_CACHED_SECTOR = _cachedSector;
-  } else {
-    startTeaser();
   }
-} catch (e) {
-  startTeaser();
-}
+  // 不再自动 startTeaser：假消息会让讨论区看起来像已打开
+} catch (e) { /* ignore */ }
 </script>
 <script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-nav',path:'/pages/dayu/home'},'*');}else if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
 
@@ -1116,11 +1133,11 @@ try {
 })();
 </script>
 
-<script src="/static/dayu/html/academy/client.js?v=20260923sticker"></script>
-<script src="/static/dayu/html/academy/fake.js?v=20260923sticker"></script>
-<script src="/static/dayu/html/academy/talk.js?v=20260925qq2"></script>
-<script src="/static/dayu/html/academy/channel.js?v=20260924stage"></script>
-<script src="/static/dayu/html/academy/story.js?v=20260919c"></script>
-<script src="/static/dayu/html/academy/courses.js?v=20260919c"></script>
-<script src="/static/dayu/html/academy/boot.js?v=20260919c"></script>
+<script src="/static/dayu/html/academy/client.js?v=20261008c1"></script>
+<script src="/static/dayu/html/academy/fake.js?v=20261008c1"></script>
+<script src="/static/dayu/html/academy/talk.js?v=20261008c1"></script>
+<script src="/static/dayu/html/academy/channel.js?v=20261008c4"></script>
+<script src="/static/dayu/html/academy/story.js?v=20261008c1"></script>
+<script src="/static/dayu/html/academy/courses.js?v=20261008c1"></script>
+<script src="/static/dayu/html/academy/boot.js?v=20261008c3"></script>
 </body></html>

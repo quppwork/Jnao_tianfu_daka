@@ -1,4 +1,4 @@
-"""答疑侧 MCP 工具：检索与看图 OCR。闸门仍在 QA runner。"""
+"""答疑侧 MCP 工具：检索。OCR 见 harness/tools/ocr_ops.py（ocr_extract）。"""
 
 from __future__ import annotations
 
@@ -53,21 +53,6 @@ async def retrieve_qa_legacy(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def vision_ocr(args: dict[str, Any]) -> dict[str, Any]:
-    from app.services.doubao_client import vision_chat_completion
-
-    data_url = str(args.get("image_data_url") or "").strip()
-    if not data_url:
-        return {"ok": False, "error": "image_data_url 不能为空"}
-    text = await vision_chat_completion(
-        system_prompt="你是 OCR 助手。请简要识别图片中的学科题目文字与关键条件，不要解题。",
-        user_message=str(args.get("prompt") or "请识别图中题目，列出已知条件和问题。"),
-        image_data_url=data_url,
-        max_tokens=int(args.get("max_tokens") or 400),
-    )
-    return {"ok": True, "text": (text or "").strip()}
-
-
 def register() -> None:
     register_tool(
         ToolSpec(
@@ -87,6 +72,7 @@ def register() -> None:
             permission="readonly",
             profiles=("qa",),
             plane="host",
+            mcp_server="jnao-host",
         )
     )
     register_tool(
@@ -107,25 +93,6 @@ def register() -> None:
             permission="readonly",
             profiles=("qa",),
             plane="host",
-        )
-    )
-    register_tool(
-        ToolSpec(
-            name="vision_ocr",
-            description="识别题目图片文字与条件，不解题。",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "image_data_url": {"type": "string"},
-                    "prompt": {"type": "string"},
-                    "max_tokens": {"type": "integer"},
-                },
-                "required": ["image_data_url"],
-                "additionalProperties": False,
-            },
-            handler=vision_ocr,
-            permission="readonly",
-            profiles=("qa",),
-            plane="host",
+            mcp_server="jnao-host",
         )
     )

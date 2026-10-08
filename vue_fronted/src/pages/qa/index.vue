@@ -84,16 +84,27 @@
 
           <view v-if="m.role === 'user'" class="bubble-user bubble-user-tail">
 
-            <img
-              v-if="m.imageUrl"
-              :src="m.imageUrl"
-              class="bubble-img"
-              loading="lazy"
-              @click.stop="previewMessageImage(i)"
-              @error="onMsgImageError(i)"
-            />
+            <view
+              v-if="m.imageUrl || m.hasImage"
+              class="bubble-img-wrap"
+              @click.stop="m.imageUrl && previewMessageImage(i)"
+            >
+              <img
+                v-if="m.imageUrl"
+                :src="m.imageUrl"
+                class="bubble-img"
+                loading="eager"
+                @error="onMsgImageError(i)"
+              />
+              <view v-else class="bubble-img-ph"><text>题目图片加载中…</text></view>
+            </view>
 
-            <text v-if="m.text && !(m.imageUrl && m.text === '请帮我看这道题')" class="bubble-text">{{ m.text }}</text>
+            <text
+              v-if="shouldShowUserBubbleText(m)"
+              class="bubble-text"
+              selectable
+              user-select
+            >{{ m.text }}</text>
 
           </view>
 
@@ -116,7 +127,7 @@
             <view
               v-else-if="m.text"
               class="bubble-rich"
-              v-html="formatQaRichHtml(m.text)"
+              v-html="qaRichHtml(m.text)"
             ></view>
 
           </view>
@@ -142,38 +153,48 @@
 
     <view class="composer">
 
-      <view v-if="pendingImage" class="pending-bubble-wrap">
-        <view class="pending-bubble">
-          <img
-            :src="pendingImage.preview"
-            class="pending-thumb"
-            @click="previewImage(pendingImage.preview)"
-          />
-          <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
+      <view v-if="pendingImage" class="pending-preview">
+        <view class="pending-bubble-wrap">
+          <view class="pending-bubble">
+            <img
+              v-if="pendingImage.preview"
+              :src="pendingImage.preview"
+              class="pending-thumb"
+              alt="题目预览"
+              @click="previewImage(pendingImage.preview)"
+              @error="onPendingThumbError"
+            />
+            <view v-else class="pending-thumb pending-thumb-ph"><text>预览</text></view>
+            <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
+          </view>
         </view>
+        <text class="pending-send-hint">已附上题目图，点右侧蓝色 ↑ 发送</text>
       </view>
 
-      <view class="input-panel" :class="{ 'has-text': canSend || loading }">
+      <view class="input-panel">
         <view class="tool voice" @tap="toggleVoiceDesktop">🎤</view>
-        <view class="box-wrap">
+        <view class="composer-main">
           <input
             class="chat-input"
             v-model="inputText"
-            placeholder="输入问题，也可拍照发题…"
+            placeholder="输入问题，也可粘贴/拍照发题…"
             :disabled="loading"
             confirm-type="send"
             @confirm="sendMsg"
+            @paste="onInputPaste"
           />
-        </view>
-        <view class="tool cam" :class="{ 'btn-disabled': loading }" @tap="openImageSheet">📷</view>
-        <view class="tool plus">＋</view>
-        <view
-          class="send-txt"
-          :class="{ stop: loading, disabled: !loading && !canSend }"
-          @tap="loading ? stopStream() : sendMsg()"
-        >
-          <text v-if="loading">■</text>
-          <text v-else>发送</text>
+          <view class="composer-actions">
+            <view class="act cam" :class="{ 'btn-disabled': loading }" @tap="openImageSheet">
+              <text class="act-ic">📷</text>
+            </view>
+            <view v-if="loading" class="act send stop" @tap="stopStream()">
+              <text class="send-ic">■</text>
+            </view>
+            <view v-else-if="canSend" class="act send" @tap="sendMsg()">
+              <text class="send-ic">↑</text>
+            </view>
+            <view v-else class="act plus"><text class="act-ic">＋</text></view>
+          </view>
         </view>
       </view>
 
@@ -310,10 +331,14 @@ import {
 
   gradeToSchoolStage,
 
+  errMessage,
+
 } from '@/utils/userApi.js'
 
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
-import { formatQaRichHtml, prefetchKatex } from '@/utils/chatRichText.js'
+import 'katex/dist/katex.min.css'
+import '@/styles/qaBubbleRich.css'
+import { formatQaRichHtml, prefetchKatex, getKatexEpoch } from '@/utils/chatRichText.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 import {
@@ -324,7 +349,9 @@ import {
   buildPendingImageFromPath,
   browserCanUseCamera,
   pickImageViaNativeInput,
+  extractClipboardImageFile,
   fileToDataUrl,
+  pendingFromImageFile,
   putQaImageLocal,
   parseQaImageId,
   getQaImageLocal,
@@ -367,6 +394,11 @@ const inputText = ref('')
 const inputFocused = ref(false)
 
 const loading = ref(false)
+const katexTick = ref(0)
+function qaRichHtml(text) {
+  void katexTick.value
+  return formatQaRichHtml(text || '')
+}
 let streamAbort = null
 let abortRequested = false
 
@@ -495,7 +527,7 @@ function onMsgImageError(msgIndex) {
     m.imageUrl = m.serverImageUrl
     return
   }
-  if (!m.text || m.text === '请帮我看这道题') {
+  if (!m.text || isImageOnlyPlaceholder(m.text)) {
     m.text = '📷 题目图片（点击查看原图）'
   }
 }
@@ -762,21 +794,42 @@ const DEFAULT_GREETING = { role: 'assistant', text: '你好！我是张宇老师
 
 
 
+/** 纯发图时的占位文案：历史里可能仍有，气泡不展示 */
+const IMAGE_ONLY_PLACEHOLDERS = new Set([
+  '请帮我看这道题',
+  '帮我看这道题',
+  '帮我看下',
+  '帮我看看',
+])
+
+function isImageOnlyPlaceholder(text) {
+  return IMAGE_ONLY_PLACEHOLDERS.has(String(text || '').trim())
+}
+
+function shouldShowUserBubbleText(m) {
+  const t = String(m?.text || '').trim()
+  if (!t) return false
+  // 有图且是占位句 → 只展示图片
+  if (m?.imageUrl && isImageOnlyPlaceholder(t)) return false
+  return true
+}
+
 function mapSessionMessages(data, uid) {
 
   if (!data.messages?.length) return [DEFAULT_GREETING]
 
-  return data.messages.map(m => ({
-
-    role: m.role === 'user' ? 'user' : 'assistant',
-
-    text: m.content,
-
-    imageUrl: resolveMessageImageDisplay(m.image_url, uid) || null,
-
-    imageId: parseQaImageId(m.image_url),
-
-  }))
+  return data.messages.map(m => {
+    const imageUrl = resolveMessageImageDisplay(m.image_url, uid) || null
+    let text = m.content || ''
+    if (imageUrl && isImageOnlyPlaceholder(text)) text = ''
+    return {
+      role: m.role === 'user' ? 'user' : 'assistant',
+      text,
+      imageUrl,
+      hasImage: Boolean(imageUrl),
+      imageId: parseQaImageId(m.image_url),
+    }
+  })
 
 }
 
@@ -1028,6 +1081,8 @@ async function confirmDeleteSession() {
 
     await deleteQaSession(uid, sessionId)
 
+    sessionList.value = sessionList.value.filter((s) => s.id !== sessionId)
+
     if (qaSessionId.value === sessionId) {
 
       qaSessionId.value = null
@@ -1095,6 +1150,18 @@ function trackPendingPreview(preview) {
   if (preview?.startsWith('blob:')) messageBlobUrls.add(preview)
 }
 
+function onPendingThumbError() {
+  // blob 失效时尝试用 file 再生成预览，避免蓝条空壳
+  const p = pendingImage.value
+  if (!p?.file) return
+  try {
+    if (p.preview?.startsWith('blob:')) revokeBlobUrl(p.preview)
+    const preview = URL.createObjectURL(p.file)
+    trackPendingPreview(preview)
+    pendingImage.value = { ...p, preview, path: preview }
+  } catch (_) { /* ignore */ }
+}
+
 async function setPendingFromPick(path) {
   if (isWebH5()) {
     try {
@@ -1111,6 +1178,29 @@ async function setPendingFromNativePick(captureMode = 'environment') {
   const pending = await pickImageViaNativeInput(captureMode)
   trackPendingPreview(pending.preview)
   pendingImage.value = pending
+}
+
+async function handleClipboardPaste(event) {
+  if (loading.value || typeof document === 'undefined') return
+  const file = extractClipboardImageFile(event)
+  if (!file) return
+  event.preventDefault?.()
+  event.stopPropagation?.()
+  try {
+    const pending = pendingFromImageFile(file)
+    // 换图时清掉上一张 blob，避免预览失效/占内存
+    const prev = pendingImage.value?.preview
+    if (prev?.startsWith('blob:') && prev !== pending.preview) revokeBlobUrl(prev)
+    trackPendingPreview(pending.preview)
+    pendingImage.value = pending
+    uni.showToast({ title: '已粘贴图片，点发送提问', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: errMessage(e, '粘贴图片失败'), icon: 'none' })
+  }
+}
+
+function onInputPaste(event) {
+  handleClipboardPaste(event)
 }
 
 async function onPickSource(source) {
@@ -1268,11 +1358,14 @@ function revokeBlobUrl(url) {
 function clearPendingImage({ keepPreview } = {}) {
 
   const preview = pendingImage.value?.preview
+  const usedInChat = messages.value.some((m) => m?.imageUrl === preview)
 
-  if (preview?.startsWith('blob:') && preview !== keepPreview) {
-
+  if (
+    preview?.startsWith('blob:') &&
+    preview !== keepPreview &&
+    !usedInChat
+  ) {
     revokeBlobUrl(preview)
-
   }
 
   pendingImage.value = null
@@ -1434,40 +1527,45 @@ async function sendMsg() {
     return
   }
 
-  const text = inputText.value.trim() || (pendingImage.value ? '请帮我看这道题' : '')
-
-  if (!text || loading.value) return
+  // 纯发图不塞「请帮我看这道题」：气泡只显示图片，后端允许 message 为空 + image_id
+  const text = inputText.value.trim()
+  const pending = pendingImage.value
+  if ((!text && !pending) || loading.value) return
 
   abortRequested = false
 
-  const pending = pendingImage.value
-
+  // 先立刻用 blob 预览占位，再异步转 dataURL，避免发图瞬间气泡空白
   let displayImageUrl = pending?.preview || null
-
-  if (pending) {
-    try {
-      const rawFile = await resolveImageFile(pending)
-      displayImageUrl = await fileToDataUrl(rawFile)
-    } catch (_) { /* keep blob preview */ }
-  }
-
   if (displayImageUrl?.startsWith('blob:')) {
     messageBlobUrls.add(displayImageUrl)
   }
 
   const userMsgIdx = messages.value.length
-
-  messages.value.push({ role: 'user', text, imageUrl: displayImageUrl })
+  messages.value.push({
+    role: 'user',
+    text,
+    imageUrl: displayImageUrl,
+    hasImage: Boolean(pending),
+  })
 
   inputText.value = ''
-
-  clearPendingImage({ keepPreview: displayImageUrl?.startsWith('blob:') ? displayImageUrl : null })
-
+  // 气泡还在用同一 blob 时不要 revoke
+  clearPendingImage({ keepPreview: displayImageUrl })
   loading.value = true
-
   await nextTick()
-
   scrollChat()
+
+  if (pending) {
+    try {
+      const rawFile = await resolveImageFile(pending)
+      const dataUrl = await fileToDataUrl(rawFile)
+      if (dataUrl && messages.value[userMsgIdx]) {
+        const old = messages.value[userMsgIdx].imageUrl
+        messages.value[userMsgIdx].imageUrl = dataUrl
+        if (old?.startsWith('blob:') && old !== dataUrl) revokeBlobUrl(old)
+      }
+    } catch (_) { /* 保留 blob 预览 */ }
+  }
 
   let aiIdx = -1
 
@@ -1503,8 +1601,9 @@ async function sendMsg() {
       if (up.url && messages.value[userMsgIdx]) {
         messages.value[userMsgIdx].serverImageUrl = resolveQaImageUrl(up.url, uid)
         messages.value[userMsgIdx].imageId = imageId
-        if (displayImageUrl?.startsWith('data:')) {
-          putQaImageLocal(imageId, displayImageUrl)
+        const local = messages.value[userMsgIdx].imageUrl
+        if (local?.startsWith('data:')) {
+          putQaImageLocal(imageId, local)
         }
       }
 
@@ -1520,7 +1619,7 @@ async function sendMsg() {
       return
     }
 
-    const { promise, abort } = sendQaMessageStream(uid, text, qaSessionId.value, {
+    const { promise, abort } = sendQaMessageStream(uid, text || '', qaSessionId.value, {
       subject: subject.value,
       image_id: imageId,
     }, {
@@ -1541,7 +1640,11 @@ async function sendMsg() {
       },
     })
     streamAbort = abort
-    await promise
+    const finalPayload = await promise
+    if (aiIdx >= 0 && !String(messages.value[aiIdx]?.text || '').trim()) {
+      const fallback = String(finalPayload?.reply || '').trim()
+      messages.value[aiIdx].text = fallback || '老师暂时没有回复，请再发一次试试～'
+    }
 
   } catch (e) {
 
@@ -1550,7 +1653,7 @@ async function sendMsg() {
       return
     }
 
-    const errText = e?.message || '请求失败，请稍后再试'
+    const errText = errMessage(e, '请求失败，请稍后再试')
 
     if (messages.value.length && messages.value[messages.value.length - 1].role === 'assistant' && !messages.value[messages.value.length - 1].text) {
       messages.value[messages.value.length - 1].text = `出错了：${errText}`
@@ -1631,6 +1734,11 @@ onShow(() => {
 })
 
 onMounted(async () => {
+  await prefetchKatex()
+  katexTick.value = getKatexEpoch()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('paste', handleClipboardPaste)
+  }
 
   const auth = await requirePageAuth('student')
   if (!auth) return
@@ -1681,6 +1789,10 @@ onBeforeUnmount(() => {
   browserRecorder?.cancel()
 
   closeWebcam()
+
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('paste', handleClipboardPaste)
+  }
 
   messageBlobUrls.forEach((url) => revokeBlobUrl(url))
 
@@ -2154,141 +2266,89 @@ onBeforeUnmount(() => {
   50% { opacity: 0.9; }
 }
 
-.bubble-rich {
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.6;
-  word-break: break-word;
+/* 富文本分层样式见 @/styles/qaBubbleRich.css（非 scoped，才能作用到 v-html） */
+.bubble-user .bubble-text,
+.bubble-ai .bubble-text {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
 }
-.bubble-rich .katex {
-  font-size: 1.05em;
-}
-.bubble-rich .katex-display {
-  margin: 8px 0;
-  overflow-x: auto;
-}
-.bubble-rich .qa-gap { height: 8px; }
-.bubble-rich .qa-line { margin: 0 0 2px; white-space: pre-wrap; }
-.bubble-rich .qa-sec {
-  margin: 10px 0 6px;
-  padding: 2px 0 2px 8px;
-  border-left: 3px solid var(--accent);
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-}
-.bubble-rich .qa-sec:first-child { margin-top: 2px; }
-.bubble-rich .qa-struct {
-  margin: 4px 0 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(88, 166, 255, 0.08);
-  border: 1px solid rgba(88, 166, 255, 0.18);
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-[data-theme="white"] .bubble-rich .qa-struct {
-  background: #f0f7ff;
-  border-color: #dbeafe;
-}
-.bubble-rich .qa-tag {
-  display: inline-block;
-  margin: 0 1px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: rgba(88, 166, 255, 0.16);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.5;
-}
-.bubble-rich .qa-kv {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 3px 0;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-}
-[data-theme="white"] .bubble-rich .qa-kv { background: #f8fafc; }
-.bubble-rich .qa-k { color: var(--text-dim); font-size: 12px; min-width: 3em; }
-.bubble-rich .qa-arrow { color: var(--accent); font-size: 12px; opacity: 0.8; }
-.bubble-rich .qa-v { color: var(--text); font-weight: 600; font-size: 13px; }
-.bubble-rich .qa-challenge {
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px dashed rgba(251, 191, 36, 0.45);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.bubble-rich .qa-challenge-label {
-  color: #b45309;
-  font-size: 11px;
-  font-weight: 700;
-}
-[data-theme="dark"] .bubble-rich .qa-challenge-label,
-:root:not([data-theme="white"]) .bubble-rich .qa-challenge-label {
-  color: #fbbf24;
-}
-.bubble-rich .qa-challenge-text {
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.bubble-rich strong { font-weight: 700; color: var(--text); }
 
-
-
-.bubble-img {
-  width: auto;
-  max-width: 400rpx;
-  min-width: 160rpx;
-  height: auto;
-  max-height: 480rpx;
-  border-radius: 20rpx;
-  margin-bottom: 12rpx;
-  display: block;
-  object-fit: contain;
-  background: rgba(255, 255, 255, 0.08);
+.bubble-img-wrap {
+  width: 180px;
+  max-width: min(180px, 70vw);
+  min-height: 96px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
   cursor: pointer;
 }
+.bubble-img {
+  width: 100%;
+  height: auto;
+  min-height: 96px;
+  max-height: 240px;
+  display: block;
+  object-fit: cover;
+}
+.bubble-img-ph {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+.pending-thumb-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
 
-/* 待发送预览：右对齐气泡，尾巴向下指向输入框 */
+/* 待发送预览：上图下文，固定缩略图尺寸，避免 flex 挤扁成蓝条 */
+.pending-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0 14px 8px;
+  gap: 6px;
+}
 .pending-bubble-wrap {
   display: flex;
   justify-content: flex-end;
-  padding: 0 14px 12px;
 }
 .pending-bubble {
   position: relative;
-  max-width: 400rpx;
+  width: 120px;
+  height: 120px;
   background: var(--accent);
-  border-radius: 16px;
+  border-radius: 14px;
   border-bottom-right-radius: 4px;
-  padding: 6px;
+  padding: 5px;
+  box-sizing: border-box;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  flex-shrink: 0;
 }
 .pending-bubble::after {
   content: '';
   position: absolute;
   right: -6px;
-  bottom: 10px;
+  bottom: 12px;
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
   border-left: 8px solid var(--accent);
 }
 .pending-thumb {
   width: 100%;
-  max-width: 360rpx;
-  max-height: 280rpx;
-  border-radius: 20rpx;
+  height: 100%;
+  border-radius: 10px;
   display: block;
   object-fit: cover;
+  background: rgba(0, 0, 0, 0.2);
 }
 .pending-clear {
   position: absolute;
@@ -2301,6 +2361,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 2;
 }
 .pending-clear text { color: #fff; font-size: 12px; line-height: 1; }
 
@@ -2379,6 +2440,14 @@ onBeforeUnmount(() => {
 [data-theme="white"] .jump-latest { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
 .jump-latest text { color: var(--accent); font-size: 12px; font-weight: 600; }
 .jump-latest:active { opacity: 0.85; }
+.pending-send-hint {
+  display: block;
+  width: 100%;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-hint, #6b7280);
+  line-height: 1.35;
+}
 .input-panel {
   display: flex;
   align-items: flex-end;
@@ -2387,27 +2456,73 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 .input-panel .tool {
-  width: 36px; height: 36px; flex: none;
+  width: 36px; height: 44px; flex: none;
   display: flex; align-items: center; justify-content: center;
   font-size: 22px; color: var(--text-dim); cursor: pointer;
 }
-.input-panel .box-wrap { flex: 1; min-width: 0; }
+.input-panel .composer-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 22px;
+  background: var(--bg-input, rgba(255,255,255,0.08));
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  box-sizing: border-box;
+}
+[data-theme="white"] .input-panel .composer-main {
+  background: #fff;
+  border-color: #c8d0e0;
+}
 .input-panel .chat-input {
-  width: 100%; background: var(--bg-input, rgba(255,255,255,0.08)); border: none; outline: none;
-  border-radius: 8px; font-size: 15px; color: var(--text); height: 36px; line-height: 36px;
-  padding: 0 12px; box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  border-radius: 0;
+  font-size: 15px;
+  color: var(--text);
+  height: 36px;
+  line-height: 36px;
+  padding: 0;
+  box-sizing: border-box;
 }
 .input-panel .chat-input::placeholder { color: var(--text-hint); }
-[data-theme="white"] .input-panel .chat-input { background: #fff; color: #1b1912; }
-.input-panel .send-txt {
-  display: none; min-width: 56px; height: 34px; padding: 0 12px; border-radius: 6px;
-  background: #12b7f5; align-items: center; justify-content: center;
-  font-size: 14px; flex: none; color: #fff; font-weight: 700; box-sizing: border-box; cursor: pointer;
+[data-theme="white"] .input-panel .chat-input { color: #1b1912; }
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
 }
-.input-panel .send-txt.stop { background: #ef4444; }
-.input-panel .send-txt.disabled { opacity: 0.45; pointer-events: none; }
-.input-panel.has-text .send-txt { display: flex; }
-.input-panel.has-text .tool.plus { display: none; }
+.composer-actions .act {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.composer-actions .act-ic { font-size: 20px; line-height: 1; }
+.composer-actions .act.send {
+  background: #4d6bfe;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(77, 107, 254, 0.35);
+}
+.composer-actions .act.send.stop { background: #ef4444; box-shadow: none; }
+.composer-actions .send-ic {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
 .btn-disabled { opacity: 0.45; pointer-events: none; }
 
 .sheet-mask {

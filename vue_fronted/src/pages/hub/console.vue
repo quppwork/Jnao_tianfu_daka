@@ -14,7 +14,13 @@ const hydrate = reactive({
   console: null,
 })
 
-async function loadConsole() {
+let loading = false
+let loadedOnce = false
+
+async function loadConsole({ force = false } = {}) {
+  if (loading) return
+  if (loadedOnce && !force && hydrate.console) return
+  loading = true
   try {
     const theme = localStorage.getItem('jn_theme') || ''
     hydrate.theme = theme === 'lt' ? 'lt' : ''
@@ -24,6 +30,7 @@ async function loadConsole() {
     const uid = await ensureChildUser()
     const data = await fetchGrowthConsole(uid)
     hydrate.console = data
+    loadedOnce = true
     try {
       window.__DAYU_CONSOLE__ = data
     } catch (_) { /* ignore */ }
@@ -38,12 +45,14 @@ async function loadConsole() {
       icon: 'none',
       duration: 2500,
     })
+  } finally {
+    loading = false
   }
 }
 
 onShow(() => {
-  loadConsole()
+  loadConsole({ force: false })
 })
 
-loadConsole()
+loadConsole({ force: true })
 </script>

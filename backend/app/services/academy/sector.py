@@ -201,7 +201,8 @@ def _channel(
 
 
 def _switchable(rows: dict[str, AcademyProgress], current_id: str) -> list[dict]:
-    """频道标题下拉：测试集始终可切；讨论是否解锁仍看 episode.unlocked。"""
+    """频道标题下拉：测试集始终可切，不下发锁态。讨论是否开放仍看 episode.unlocked。"""
+    del rows  # 切集不看进度
     out = []
     for episode_id in SWITCHABLE_IDS:
         episode = EPISODES.get(episode_id)

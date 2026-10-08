@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_authenticated_student, get_db
@@ -42,11 +42,18 @@ async def qa_debug():
 
 
 class QaChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=4000)
+    # 纯发图时 message 可为空；有字或有图至少一项
+    message: str = Field("", max_length=4000)
     session_id: int | None = Field(None, ge=1)
     subject: str | None = Field(None, max_length=20, description="数学/语文/英语/科学/学习心法")
     image_id: str | None = Field(None, max_length=64)
     use_rag: bool | None = Field(None, description="是否检索教学法知识库")
+
+    @model_validator(mode="after")
+    def require_text_or_image(self):
+        if not (self.message or "").strip() and not self.image_id:
+            raise ValueError("请输入问题或上传题目图片")
+        return self
 
 
 class QaSessionCreateRequest(BaseModel):
@@ -123,6 +130,10 @@ async def qa_chat_stream(
         except ValueError as e:
             biz_event("qa.chat_stream", result="not_found", level="warning")
             yield sse_json({"type": "error", "message": str(e)})
+            yield sse_done()
+        except Exception as e:
+            biz_event("qa.chat_stream", result="error", level="error", error=str(e)[:160])
+            yield sse_json({"type": "error", "message": "答疑服务暂时异常，请稍后再试"})
             yield sse_done()
 
     return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)

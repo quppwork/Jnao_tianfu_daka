@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html lang="zh-CN"><head>
+<!DOCTYPE html><html lang="zh-CN"><head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <title>在线咨询 · 大宇智能体家长版</title>
@@ -269,13 +269,15 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
     xuezhe:'/static/dayu/assets/ip/xuezhe.png'
   };
   var WELCOME = {
-    dayu:'我是大宇。群里 @我 提问；点上方顾问头像可进单独咨询。',
-    sizhe:'我是思者顾问，擅长思维训练与创造力。直接把问题发给我即可。',
-    yingzhe:'我是赢者顾问，擅长目标管理与表达力。想冲刺或开口，直接问我。',
-    dezhe:'我是德者顾问，擅长情绪心性与高效作业。养育卡住了可以跟我说。',
-    xingzhe:'我是行者顾问。记忆/影像追忆相关可先问我；需要真人可走留言板。',
-    xuezhe:'我是学者顾问。学习方法与段位考核可以直接问；需要真人可留言。'
+    dayu:'我是大宇。群里 @我 提问；点上方顾问头像可进单独咨询。我按脑科学与五者天赋帮你看孩子怎么教。',
+    sizhe:'我是思者顾问。擅长思维训练与创造力——意愿第一、效率第一。直接把养育/学习问题发给我。',
+    yingzhe:'我是赢者顾问。擅长目标管理与表达力——奖励第一、结果第一。想冲刺或开口，直接问我。',
+    dezhe:'我是德者顾问。擅长情绪心性与高效作业——监督第一、过程第一。养育卡住了可以跟我说。',
+    xingzhe:'我是行者顾问。记忆/影像追忆相关可先问我；需要真人可走留言板。情绪第一、行动第一。',
+    xuezhe:'我是学者顾问。学习方法与段位考核可以直接问；需要真人可留言。综合统筹，一个也不能少。'
   };
+  var mediaBusy = false;
+  var voiceRec = null;
 
   var channels = [];
   var curCode = 'dayu';
@@ -305,11 +307,71 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
     }catch(e){}
     return esc(raw);
   }
+  function isStubMessage(m){
+    if(!m || m.sender_role !== 'bot') return false;
+    var c = String(m.content || '');
+    var meta = m.meta || m.meta_json || {};
+    if(meta && (meta.intent === 'stub' || meta.kind === 'stub')) return true;
+    return c.indexOf('（stub）') >= 0 || /stub/i.test(c) && c.indexOf('请改用 DeepSeek') >= 0;
+  }
+  function parseFollowups(content){
+    var raw = String(content || '');
+    var idx = -1;
+    var markers = ['如果你还想了解', '你可能还想', '还可以继续问', '想进一步了解'];
+    for(var i=0;i<markers.length;i++){
+      var p = raw.indexOf(markers[i]);
+      if(p >= 0 && (idx < 0 || p < idx)) idx = p;
+    }
+    if(idx < 0) return [];
+    var tail = raw.slice(idx);
+    var lines = tail.split(/\n+/);
+    var chips = [];
+    for(var j=0;j<lines.length;j++){
+      var line = lines[j].replace(/^[\s*•\-\d.、]+/, '').replace(/[？?。.]+$/, '').trim();
+      if(!line || line.length < 4 || line.length > 36) continue;
+      if(markers.some(function(m){ return line.indexOf(m) === 0; })) continue;
+      chips.push(line);
+      if(chips.length >= 3) break;
+    }
+    return chips;
+  }
+  function avatarHtml(code, mentionName, borderColor){
+    var url = AVATARS[code] || '';
+    var ic = ICONS[code] || '💬';
+    var color = borderColor || COLORS[code] || '#C9A227';
+    if(url){
+      return '<div class="av face" data-mention="'+esc(mentionName||'')+'" data-code="'+esc(code||'')+'" style="border-color:'+color+';background-image:url(\''+url+'\')"></div>';
+    }
+    return '<div class="av" data-mention="'+esc(mentionName||'')+'" data-code="'+esc(code||'')+'" style="border-color:'+color+';background:'+color+'22">'+ic+'</div>';
+  }
+  function setLiveBar(on, text){
+    var el = document.getElementById('liveBar');
+    if(!el) return;
+    if(text) el.textContent = text;
+    if(on) el.classList.add('on'); else el.classList.remove('on');
+  }
   function bubbleBody(m, isMe){
+    if(m && m.thinking){
+      return '<div class="tx think"><i></i><i></i><i></i></div>';
+    }
+    if(m && (m.content_type === 'image' || m.image_url)){
+      var src = m.image_url || '';
+      var cap = esc(m.content || '图片');
+      if(src){
+        return '<div class="tx">'+cap+'<div style="margin-top:8px"><img src="'+esc(src)+'" alt="" style="max-width:100%;border-radius:10px;display:block"/></div></div>';
+      }
+    }
     if(isMe || m.sender_role === 'parent'){
       return '<div class="tx">'+esc(m.content)+'</div>';
     }
-    return '<div class="tx chat-rich">'+richHtml(m.content)+'</div>';
+    var chips = parseFollowups(m.content);
+    var html = '<div class="tx chat-rich">'+richHtml(m.content)+'</div>';
+    if(chips.length){
+      html += '<div class="fups">'+chips.map(function(c){
+        return '<button type="button" data-chip="'+esc(c)+'">'+esc(c)+'</button>';
+      }).join('')+'</div>';
+    }
+    return html;
   }
   function showErr(t){
     var el = document.getElementById('errBanner');
@@ -591,6 +653,7 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
 
   function ingestMessage(conversationId, m, rerender){
     if(!m) return;
+    if(isStubMessage(m)) return;
     var list = msgsByConv[conversationId] || (msgsByConv[conversationId] = []);
     if(m.client_msg_id){
       var idx = -1;
@@ -621,9 +684,15 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
       var pulse = boardPulse[a.code] ? ' pulse' : '';
       var on = a.code === curCode ? ' on' : '';
       var tp = (a.tp === '真人') ? '<em class="tp rl">真人</em>' : '<em class="tp ai">AI</em>';
+      var url = AVATARS[a.code] || '';
       var ic = ICONS[a.code] || '💬';
+      var avInner = url
+        ? (tp+'<i></i>')
+        : (tp+ic+'<i></i>');
+      var avCls = url ? 'av face' : 'av';
+      var avStyle = url ? ' style="background-image:url(\''+url+'\')"' : '';
       return '<div class="ag'+on+pulse+'" data-code="'+esc(a.code)+'">'+
-        '<div class="av" data-code="'+esc(a.code)+'">'+tp+ic+'<i></i></div>'+
+        '<div class="'+avCls+'" data-code="'+esc(a.code)+'"'+avStyle+'>'+avInner+'</div>'+
         '<span>'+esc(a.title)+'</span>'+
         '<span class="sk">'+esc(a.skill||'')+'</span></div>';
     }).join('');
@@ -697,12 +766,13 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
       box.innerHTML = '<div class="sys"><i>正在打开会话…</i></div>';
       return;
     }
-    var list = msgsByConv[conv.id] || [];
+    var list = (msgsByConv[conv.id] || []).filter(function(m){ return !isStubMessage(m); });
     if(!list.length){
-      box.innerHTML = '<div class="sys"><i>暂无消息，打个招呼吧</i></div>';
+      var chW = curChannel();
+      var welcome = (chW && chW.welcome) || WELCOME[curCode] || '打个招呼吧';
+      box.innerHTML = '<div class="sys"><i>'+esc(welcome)+'</i></div>';
       return;
     }
-    var ic = ICONS[curCode] || '💬';
     var color = COLORS[curCode] || '#C9A227';
     box.innerHTML = list.map(function(m){
       var isMe = m.is_me || (m.sender_role === 'parent' && m.sender_user_id === me);
@@ -719,16 +789,24 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
       var badge = m.sender_role === 'bot' ? 'AI' : (m.sender_role === 'advisor' ? '真人' : '');
       var who = m.sender_name || title;
       var personaCode = (m.meta && m.meta.persona_code) || curCode;
-      var mic = ICONS[personaCode] || ic;
       var mcolor = COLORS[personaCode] || color;
       var mname = (m.meta && m.meta.persona_title) || who;
       // @ 短名：优先频道 mention_name
       var mch = channels.find(function(c){ return c.code === personaCode; });
       var atName = mch ? mentionLabel(mch) : mname;
-      return '<div class="msg"><div class="av" data-mention="'+esc(atName)+'" data-code="'+esc(personaCode)+'" style="border-color:'+mcolor+';background:'+mcolor+'22">'+mic+'</div>'+
+      return '<div class="msg">'+avatarHtml(personaCode, atName, mcolor)+
         '<div class="bd"><div class="who">'+esc(who)+(badge?'<i>'+badge+'</i>':'')+'</div>'+
         bubbleBody(m, false)+'</div></div>';
     }).join('');
+    box.querySelectorAll('.fups button[data-chip]').forEach(function(btn){
+      btn.onclick = function(){
+        var t = btn.getAttribute('data-chip') || '';
+        if(!t) return;
+        document.getElementById('inp').value = t;
+        syncSendUi();
+        sendMsg();
+      };
+    });
     box.querySelectorAll('.msg .av[data-mention]').forEach(function(av){
       var name = av.getAttribute('data-mention') || '';
       var code = av.getAttribute('data-code') || '';
@@ -857,6 +935,7 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
     document.getElementById('inp').value = '';
     syncSendUi();
     var clientId = 'c-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+    var thinkId = 'think-'+clientId;
     var temp = {
       id: 'tmp-'+clientId,
       client_msg_id: clientId,
@@ -869,23 +948,40 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
       pending: true,
     };
     ingestMessage(conv.id, temp, true);
+    var thinkMsg = {
+      id: thinkId,
+      client_msg_id: thinkId,
+      sender_role: 'bot',
+      sender_name: (curChannel() && curChannel().title) || '顾问',
+      content: '',
+      thinking: true,
+      meta: { persona_code: curCode },
+    };
+    ingestMessage(conv.id, thinkMsg, true);
+    setLiveBar(true, '顾问正在思考…');
     try{
       var data = await api('POST', '/api/parent/consult/conversations/'+conv.id+'/messages', {
         content: v,
         client_msg_id: clientId,
       });
-      if(data.message) ingestMessage(conv.id, data.message, true);
-      if(data.bot_message) ingestMessage(conv.id, data.bot_message, true);
+      var list = msgsByConv[conv.id] || [];
+      msgsByConv[conv.id] = list.filter(function(m){ return m.id !== thinkId && m.client_msg_id !== thinkId; });
+      if(data.message) ingestMessage(conv.id, data.message, false);
+      if(data.bot_message) ingestMessage(conv.id, data.bot_message, false);
       renderMsgs();
     }catch(e){
       showErr(e.message || '发送失败');
-      // 去掉 pending 失败气泡
-      var list = msgsByConv[conv.id] || [];
-      msgsByConv[conv.id] = list.filter(function(m){ return m.client_msg_id !== clientId || !m.pending; });
+      // 去掉 pending / 思考中气泡
+      var list2 = msgsByConv[conv.id] || [];
+      msgsByConv[conv.id] = list2.filter(function(m){
+        if(m.id === thinkId || m.client_msg_id === thinkId) return false;
+        return m.client_msg_id !== clientId || !m.pending;
+      });
       renderMsgs();
       document.getElementById('inp').value = v;
       syncSendUi();
     }finally{
+      setLiveBar(false);
       sending = false;
     }
   }
@@ -982,7 +1078,170 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
       scanAtTrigger();
     }
   });
-  document.getElementById('btnVoice').addEventListener('click', function(){ soon('语音消息即将开放'); });
+  function isSecureMedia(){
+    try{ return !!(window.isSecureContext); }catch(e){ return location.protocol === 'https:'; }
+  }
+  function askParentMedia(action){
+    return new Promise(function(resolve, reject){
+      if(!window.parent || window.parent === window){
+        reject(new Error('no-parent'));
+        return;
+      }
+      var reqId = 'm-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+      var timer = setTimeout(function(){
+        window.removeEventListener('message', onMsg);
+        reject(new Error('timeout'));
+      }, 45000);
+      function onMsg(ev){
+        var d = ev && ev.data;
+        if(!d || d.type !== 'dayu-media-result' || d.reqId !== reqId) return;
+        clearTimeout(timer);
+        window.removeEventListener('message', onMsg);
+        if(d.ok) resolve(d);
+        else reject(new Error(d.error || 'denied'));
+      }
+      window.addEventListener('message', onMsg);
+      try{
+        window.parent.postMessage({ type:'dayu-media', action: action, reqId: reqId }, '*');
+      }catch(e){
+        clearTimeout(timer);
+        window.removeEventListener('message', onMsg);
+        reject(e);
+      }
+    });
+  }
+  function pickImageViaInput(captureMode){
+    return new Promise(function(resolve, reject){
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      if(captureMode) input.setAttribute('capture', captureMode);
+      input.style.cssText = 'position:fixed;left:-9999px;opacity:0';
+      document.body.appendChild(input);
+      var done = false;
+      function cleanup(){ try{ document.body.removeChild(input); }catch(e){} }
+      input.addEventListener('change', function(){
+        if(done) return; done = true;
+        var file = input.files && input.files[0];
+        cleanup();
+        if(!file){ reject(new Error('cancel')); return; }
+        resolve({ file: file, preview: URL.createObjectURL(file), name: file.name || 'photo.jpg' });
+      });
+      input.addEventListener('cancel', function(){ if(done) return; done = true; cleanup(); reject(new Error('cancel')); });
+      input.click();
+    });
+  }
+  async function ensureMicPermission(){
+    if(!isSecureMedia()){
+      showErr('语音需 HTTPS 安全环境，系统才会弹出麦克风授权');
+      return false;
+    }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showErr('当前浏览器不支持麦克风');
+      return false;
+    }
+    try{
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream.getTracks().forEach(function(t){ t.stop(); });
+      return true;
+    }catch(e){
+      if(e && e.name === 'NotAllowedError'){
+        showErr('麦克风权限被拒绝：请在系统/浏览器弹窗中允许，或到设置里打开');
+      }else{
+        showErr((e && e.message) || '无法申请麦克风权限');
+      }
+      return false;
+    }
+  }
+  async function startConsultVoice(){
+    if(mediaBusy || sending) return;
+    // 优先让父页 UniApp 申请系统权限
+    try{
+      var parentRes = await askParentMedia('mic');
+      if(parentRes && parentRes.text){
+        inpEl.value = (inpEl.value ? inpEl.value+' ' : '') + parentRes.text;
+        syncSendUi();
+        return;
+      }
+    }catch(e){ /* 回退浏览器 */ }
+    if(!(await ensureMicPermission())) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(SR){
+      try{
+        mediaBusy = true;
+        setLiveBar(true, '正在听你说…（系统已授权麦克风）');
+        var rec = new SR();
+        voiceRec = rec;
+        rec.lang = 'zh-CN';
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        rec.onresult = function(ev){
+          var text = (ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript) || '';
+          if(text){
+            inpEl.value = (inpEl.value ? inpEl.value+' ' : '') + text;
+            syncSendUi();
+          }
+        };
+        rec.onerror = function(){ showErr('语音识别失败，可改打字'); };
+        rec.onend = function(){ mediaBusy = false; setLiveBar(false); voiceRec = null; };
+        rec.start();
+        return;
+      }catch(err){
+        mediaBusy = false;
+        setLiveBar(false);
+      }
+    }
+    showErr('已授权麦克风。当前环境无语音识别引擎，请改用打字；App 内将走系统录音。');
+  }
+  async function pickConsultImage(source){
+    if(mediaBusy) return;
+    hidePlusPanel();
+    mediaBusy = true;
+    setLiveBar(true, source === 'camera' ? '正在申请相机…' : '正在打开相册…');
+    try{
+      var got = null;
+      try{
+        var pr = await askParentMedia(source === 'camera' ? 'camera' : 'album');
+        if(pr && (pr.preview || pr.path || pr.dataUrl)){
+          got = { preview: pr.preview || pr.path || pr.dataUrl, name: pr.name || 'image.jpg' };
+        }
+      }catch(e){ /* H5 fallback */ }
+      if(!got){
+        got = await pickImageViaInput(source === 'camera' ? 'environment' : '');
+      }
+      if(!got) return;
+      // 咨询图暂以说明文案发送（后端图文通道后续可接）；本地先预览提醒
+      var tip = source === 'camera'
+        ? '【拍照】我发来一张图片，请结合孩子天赋与因材施教帮我看看怎么沟通/引导（若是学科题请提示去答疑）。'
+        : '【相册】我发来一张图片，请结合孩子天赋与因材施教帮我看看怎么沟通/引导（若是学科题请提示去答疑）。';
+      inpEl.value = tip;
+      syncSendUi();
+      // 会话里插入本地预览气泡
+      var conv = curConv();
+      if(conv && got.preview){
+        ingestMessage(conv.id, {
+          id: 'img-local-'+Date.now(),
+          sender_role: 'parent',
+          sender_user_id: parentUserId(),
+          is_me: true,
+          content: '[图片] '+ (got.name || ''),
+          content_type: 'image',
+          image_url: got.preview,
+        }, true);
+      }
+      showErr('');
+      uniToast('已选图，确认文案后发送');
+    }catch(e){
+      if((e && e.message) !== 'cancel') showErr((e && e.message) || '选图失败');
+    }finally{
+      mediaBusy = false;
+      setLiveBar(false);
+    }
+  }
+  function uniToast(title){
+    try{ window.parent && window.parent.postMessage({ type:'dayu-toast', title: title }, '*'); }catch(e){}
+  }
+  document.getElementById('btnVoice').addEventListener('click', function(){ startConsultVoice(); });
   document.getElementById('btnEmoji').addEventListener('click', function(){ soon('表情即将开放'); });
   btnPlus.addEventListener('click', function(e){
     e.preventDefault();
@@ -1011,6 +1270,8 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
         }
         return;
       }
+      if(act === 'camera'){ pickConsultImage('camera'); return; }
+      if(act === 'album'){ pickConsultImage('album'); return; }
       soon('功能即将开放');
       hidePlusPanel();
     });

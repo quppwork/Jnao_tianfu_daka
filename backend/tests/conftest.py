@@ -101,7 +101,7 @@ def mock_doubao():
             return_value=reply,
         ) as mock_chat,
         patch(
-            "app.agents.qa.runner.vision_chat_completion",
+            "app.agents.qa.runner._ocr_preview",
             new_callable=AsyncMock,
             return_value="【测试】识题预览",
         ),

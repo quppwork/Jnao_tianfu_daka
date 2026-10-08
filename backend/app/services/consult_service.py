@@ -35,7 +35,8 @@ def load_consult_config() -> dict[str, Any]:
         "im_bot_user_id": oi["bot_user_id"],
         "mq_url": (os.getenv("CONSULT_MQ_URL") or "").strip(),
         "agent_enabled": (os.getenv("CONSULT_AGENT_ENABLED", "1").strip() not in ("0", "false", "False")),
-        "stub_reply": (os.getenv("CONSULT_STUB_REPLY", "1").strip() not in ("0", "false", "False")),
+        # 默认关 stub；正式出话走 consult_agent → Harness
+        "stub_reply": (os.getenv("CONSULT_STUB_REPLY", "0").strip() in ("1", "true", "True")),
     }
 
 
@@ -176,9 +177,8 @@ def enqueue_agent_job(
     if cfg["mq_url"]:
         # TODO: publish to MQ
         pass
-    elif process_inline and cfg["agent_enabled"] and cfg["stub_reply"]:
-        # 仅兼容旧同步路径；正式走 async consult_agent
-        process_agent_job(db, job.id)
+    # stub 已废弃：process_inline 不再写占位回复，正式出话走 consult_agent
+    _ = process_inline
 
     return job
 
@@ -235,40 +235,17 @@ def finish_agent_job(
 
 
 def process_agent_job(db: Session, job_id: int) -> ConsultAgentJob | None:
-    """遗留 stub：同步占位回复。正式路径见 consult_agent + API async。"""
+    """已废弃：不再写 stub 占位。正式路径见 consult_agent.generate_consult_reply。"""
     job = db.get(ConsultAgentJob, job_id)
     if not job or job.status in ("done", "cancelled"):
         return job
-    if job.status == "running":
-        return job
-
-    job.status = "running"
-    job.started_at = datetime.utcnow()
-    job.intent = "stub"
-    job.model = "stub"
-    db.flush()
-
-    conv = db.get(ConsultConversation, job.conversation_id)
-    channel = db.get(ConsultChannel, conv.channel_id) if conv else None
-    trigger = db.get(ConsultMessage, job.trigger_msg_id)
-    title = channel.title if channel else "顾问"
-
-    reply_text = (
-        f"收到。我是{title}（stub）。"
-        f"请改用 DeepSeek Agent 路径；"
-        f"消息已入库{f'（#{trigger.id}）' if trigger else ''}。"
-    )
-
-    bot_msg = append_bot_message(
-        db,
-        conversation=conv,
-        content=reply_text,
-        meta={"job_id": job.id, "intent": "stub"},
-    ) if conv else None
-
-    job.result_msg_id = bot_msg.id if bot_msg else None
-    job.status = "done"
+    job.status = "cancelled"
+    job.intent = "harness_only"
+    job.model = None
+    job.error = "stub_disabled_use_consult_agent"
     job.finished_at = datetime.utcnow()
+    if not job.started_at:
+        job.started_at = job.finished_at
     db.flush()
     return job
 

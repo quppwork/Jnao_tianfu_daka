@@ -55,58 +55,28 @@ def clear_gates() -> None:
 
 
 class DeepSeekAdapter:
+    """模型适配 → 委托 llm.route(profile)；流式仅透传。"""
+
     def __init__(self, profile: str = "harness") -> None:
         self.profile = profile
 
-    def _cfg(self) -> dict[str, Any]:
-        from app.harness.llm import PROFILES
+    def _route(self):
+        from app.harness.llm import route
 
-        return PROFILES.get(self.profile) or PROFILES["harness"]
+        return route(self.profile)
+
+    def _cfg(self) -> dict[str, Any]:
+        return self._route().cfg
 
     async def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> dict[str, Any]:
-        from app.services.doubao_client import chat_completion_message, is_configured
-
-        if not is_configured():
-            return {"role": "assistant", "content": "模型未配置，请稍后重试。"}
-        cfg = self._cfg()
-        msg = await chat_completion_message(
-            messages=messages,
-            tools=tools or None,
-            tool_choice="auto" if tools else None,
-            max_tokens=int(cfg.get("max_tokens") or 700),
-            timeout=float(cfg.get("timeout") or 45),
-            feature=f"harness.{self.profile}",
-        )
-        if not isinstance(msg, dict):
-            return {"role": "assistant", "content": "暂时无法生成回复。"}
-        msg.setdefault("role", "assistant")
-        return msg
+        return await self._route().complete(messages, tools or None)
 
     async def complete_stream(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> AsyncIterator[str]:
-        from app.services.doubao_client import (
-            chat_completion_messages_stream,
-            is_configured,
-        )
-
-        if tools:
-            msg = await self.complete(messages, tools)
-            text = str(msg.get("content") or "")
-            if text:
-                yield text
-            return
-        if not is_configured():
-            yield "模型未配置，请稍后重试。"
-            return
-        cfg = self._cfg()
-        async for tok in chat_completion_messages_stream(
-            messages=messages,
-            max_tokens=int(cfg.get("max_tokens") or 700),
-            feature=f"harness.{self.profile}",
-        ):
+        async for tok in self._route().stream(messages, tools or None):
             yield tok
 
 
@@ -184,6 +154,9 @@ async def iter_agent(
     fresh: bool = False,
     allow_tools: bool = True,
 ) -> AsyncIterator[tuple[str, Any]]:
+    from app.harness.gates import install_builtin_gates
+
+    install_builtin_gates()
     tid = (thread_id or uuid.uuid4().hex)[:32]
     state = None if fresh else load_state(tid)
     if user_message:
@@ -290,6 +263,11 @@ async def iter_agent(
             state.reply = "本轮步数已用完，请根据已查到的信息继续提问。"
             yield ("token", state.reply)
 
+    if state.status == "completed":
+        appended = _append_math_sketch_fence(state)
+        if appended and state.reply:
+            yield ("token", "\n\n" + appended)
+
     audit_loop(
         "complete",
         thread_id=state.thread_id,
@@ -298,6 +276,30 @@ async def iter_agent(
     )
     save_state(state)
     yield ("done", state)
+
+
+def _append_math_sketch_fence(state: AgentState) -> str:
+    """若 math_sketch 已产出 fence 但最终回复未粘贴，补上以免前端丢图。"""
+    reply = (state.reply or "").strip()
+    if "jnao-svg" in reply:
+        return ""
+    for msg in reversed(state.messages or []):
+        if msg.get("role") != "tool":
+            continue
+        if str(msg.get("name") or "") != "math_sketch":
+            continue
+        try:
+            payload = json.loads(msg.get("content") or "{}")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            continue
+        fence = str(payload.get("fence") or "").strip()
+        if not fence or "jnao-svg" not in fence:
+            continue
+        state.reply = f"{reply}\n\n{fence}".strip() if reply else fence
+        return fence
+    return ""
 
 
 async def _handle_calls(

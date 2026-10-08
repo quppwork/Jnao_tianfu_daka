@@ -76,7 +76,10 @@ async def run_profile_turn_stream(
     model: Any | None = None,
     allow_tools: bool = False,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """流式：('token', str) … ('done', turn_dict)。闸门仍在 facade。"""
+    """门面流式入口：消费内核 route().stream 透传（token/done）。
+
+    何时开流、SSE/WS 协议由各 facade API 决定，不进 harness 内核。
+    """
     async for kind, payload in iter_agent(
         profile=profile,
         user_message=user_message,

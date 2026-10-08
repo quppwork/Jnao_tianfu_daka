@@ -16,6 +16,7 @@ alibabacloud_dysmsapi20170525>=4.0.0
 alibabacloud_tea_openapi>=0.3.14
 alibabacloud_bailian20231229>=2.0.0
 Pillow>=10.0.0
+sympy>=1.12
 PyJWT>=2.8.0
 langchain-core>=0.3.60
 langgraph>=0.2.60

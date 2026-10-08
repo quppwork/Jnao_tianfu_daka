@@ -1,12 +1,14 @@
 /**
  * 聊天气泡富文本：Markdown 轻量语法 + KaTeX 公式
- * 支持 \( \)、\[ \]、$ $、$$ $$
+ * 支持 \( \)、\[ \]、$ $、$$ $$，以及模型常见的「裸 LaTeX」行/片段
  * katex 按需动态加载，避免主包强依赖。
  */
 
 let katexMod = null
 let katexLoading = null
 let katexCssLoaded = false
+/** 加载完成后递增，页面可依赖此值触发 v-html 重算 */
+let katexEpoch = 0
 
 function loadKatexCss() {
   if (katexCssLoaded) return
@@ -14,16 +16,29 @@ function loadKatexCss() {
   import('katex/dist/katex.min.css').catch(() => {})
 }
 
-/** 预热：答疑页 onMounted 可调用 */
+export function getKatexEpoch() {
+  return katexEpoch
+}
+
+export function isKatexReady() {
+  return Boolean(katexMod)
+}
+
+/** 预热：答疑页 onMounted 应 await，并在完成后 bump 本地 ref 以重绘气泡 */
 export function prefetchKatex() {
   loadKatexCss()
-  if (katexMod || katexLoading) return katexLoading || Promise.resolve(katexMod)
+  if (katexMod) return Promise.resolve(katexMod)
+  if (katexLoading) return katexLoading
   katexLoading = import('katex')
     .then((m) => {
       katexMod = m.default || m
+      katexEpoch += 1
       return katexMod
     })
-    .catch(() => null)
+    .catch(() => {
+      katexLoading = null
+      return null
+    })
   return katexLoading
 }
 
@@ -42,21 +57,315 @@ const MATH_RULES = [
   { start: '$', end: '$', display: false },
 ]
 
+function wrapMathHtml(html, displayMode) {
+  return displayMode ? html : `<span class="qa-math-inline">${html}</span>`
+}
+
+function katexOpts(displayMode, throwOnError) {
+  return {
+    displayMode,
+    throwOnError,
+    strict: 'ignore',
+    trust: false,
+    errorColor: 'inherit',
+  }
+}
+
+function closeUnbalancedLatex(tex) {
+  let s = String(tex || '')
+  let depth = 0
+  for (let i = 0; i < s.length; i += 1) {
+    const ch = s[i]
+    if (ch === '{' && s[i - 1] !== '\\') depth += 1
+    else if (ch === '}' && s[i - 1] !== '\\') depth = Math.max(0, depth - 1)
+  }
+  if (depth > 0) s += '}'.repeat(depth)
+  const lefts = (s.match(/\\left\b/g) || []).length
+  const rights = (s.match(/\\right\b/g) || []).length
+  if (lefts > rights) s += '\\right.'.repeat(lefts - rights)
+  return s
+}
+
+/** 去掉末尾半截命令 / 只写了分子的 \frac，便于二次渲染 */
+function stripTrailingBrokenLatex(tex) {
+  let s = String(tex || '').trim()
+  if (!s) return s
+  // 未闭合的 \frac{... 或 \sqrt{...
+  s = s.replace(/\\(?:frac|dfrac|tfrac|binom|sqrt)\s*\{[^{}]*$/u, '')
+  // 已补全 } 但仍缺分母：\frac{num} 结尾
+  s = s.replace(/\\(?:frac|dfrac|tfrac|binom)\s*\{[^{}]*\}\s*$/u, '')
+  // 尾部悬挂运算符
+  s = s.replace(/(?:\\cdot|\\times|\\div|\\pm|\\mp|\+|=|-|\/|,|;|:|\.|·|⋅)\s*$/u, '')
+  // 尾部半截控制字（如 \si）
+  s = s.replace(/\\[a-zA-Z]{1,2}$/u, '')
+  return s.trim()
+}
+
+/**
+ * 失败公式的修复候选：原串 → 补括号 → 砍半截 → 按 = 取最长前缀。
+ * 供 renderTex 依次试渲染，第一个成功的用于展示。
+ */
+export function buildLatexRepairCandidates(tex) {
+  const raw = String(tex || '').trim()
+  const out = []
+  const push = (v) => {
+    const t = String(v || '').trim()
+    if (t && !out.includes(t)) out.push(t)
+  }
+  push(raw)
+  push(closeUnbalancedLatex(raw))
+
+  let cur = closeUnbalancedLatex(raw)
+  for (let i = 0; i < 4; i += 1) {
+    const next = closeUnbalancedLatex(stripTrailingBrokenLatex(cur))
+    if (!next || next === cur) break
+    push(next)
+    cur = next
+  }
+
+  const parts = raw.split('=')
+  if (parts.length > 1) {
+    for (let n = parts.length - 1; n >= 1; n -= 1) {
+      const prefix = parts.slice(0, n).join('=').trim()
+      push(closeUnbalancedLatex(prefix))
+      push(closeUnbalancedLatex(stripTrailingBrokenLatex(prefix)))
+    }
+  }
+  return out
+}
+
 function renderTex(tex, displayMode) {
+  const body = String(tex || '').trim()
+  if (!body) return ''
   if (!katexMod) {
     prefetchKatex()
-    return escapeHtml(displayMode ? `\\[${tex}\\]` : `\\(${tex}\\)`)
+    const fallback = escapeHtml(displayMode ? `\\[${body}\\]` : `\\(${body}\\)`)
+    return displayMode ? fallback : `<span class="qa-math-inline">${fallback}</span>`
   }
-  try {
-    return katexMod.renderToString(tex.trim(), {
-      displayMode,
-      throwOnError: false,
-      strict: 'ignore',
-      trust: false,
-    })
-  } catch {
-    return escapeHtml(displayMode ? `\\[${tex}\\]` : `\\(${tex}\\)`)
+
+  const candidates = buildLatexRepairCandidates(body)
+  for (const candidate of candidates) {
+    try {
+      const html = katexMod.renderToString(candidate, katexOpts(displayMode, true))
+      if (html && !html.includes('katex-error')) {
+        return wrapMathHtml(html, displayMode)
+      }
+    } catch {
+      /* try next */
+    }
   }
+
+  // 仍失败：软渲染最长候选（不抛），避免红字源码胶囊
+  for (let i = candidates.length - 1; i >= 0; i -= 1) {
+    try {
+      const html = katexMod.renderToString(candidates[i], katexOpts(displayMode, false))
+      if (html && !html.includes('katex-error')) {
+        return wrapMathHtml(html, displayMode)
+      }
+    } catch {
+      /* continue */
+    }
+  }
+  return ''
+}
+
+/** 整行是否像「裸公式」（无 $ 定界、几乎无中文） */
+export function looksLikeMathLine(line) {
+  const t = String(line || '').trim()
+  if (!t) return false
+  if (/\$|\\\(|\\\[|\\\]|\\\)/.test(t)) return false
+  if (!/\\[a-zA-Z]/.test(t)) return false
+  const zh = (t.match(/[\u4e00-\u9fff]/g) || []).length
+  if (zh > 4) return false
+  return /[=]|\\frac|\\nabla|\\sum|\\int|\\mathbf|\\mathrm|\\partial|\\begin|\\left|\\right|\\vec|\\hat|\\dot|\\bar/.test(
+    t,
+  ) || ((t.match(/\\[a-zA-Z]+/g) || []).length >= 2 && zh === 0)
+}
+
+/**
+ * 多行 \[...\] / $$...$$ 收成单行 $$...$$。
+ * formatQaRichHtml 按行排版，若不收拢，定界符 \[ \] 会单独成行露在公式框外。
+ */
+export function collapseMultilineDisplayMath(text) {
+  let s = String(text || '').replace(/\r\n/g, '\n')
+  const toDisplay = (body) => {
+    const inner = String(body || '').trim().replace(/\s*\n\s*/g, ' ')
+    return inner ? `$$${inner}$$` : ''
+  }
+  // \[ ... \]（可跨行；非贪婪）
+  s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, body) => toDisplay(body))
+  // 已是 $$...$$ 但跨多行 → 压成单行，便于后面的 displayOnly 匹配
+  s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_, body) => toDisplay(body))
+  return s
+}
+
+/** 全角 $、常见转义定界 → ASCII，避免行内公式扫不到 */
+export function normalizeMathDelimiters(text) {
+  return collapseMultilineDisplayMath(
+    String(text || '')
+      .replace(/\uFF04/g, '$')
+      .replace(/＄/g, '$')
+      .replace(/\\\$/g, '$'),
+  )
+}
+
+/**
+ * 模型常写 **\frac{...}**（加粗包裸公式）。先把粗体内的裸 LaTeX 包成 $…$，
+ * 避免后面扫描把闭合 ** 吞进公式（会变成乱码 $…**$）。
+ */
+function wrapBareLatexInsideBold(line) {
+  return String(line || '').replace(/\*\*((?:(?!\*\*).)+?)\*\*/g, (full, inner) => {
+    const t = String(inner || '').trim()
+    if (!t) return full
+    // 已有定界则只做内层裸片段修补
+    if (/\$|\\\(|\\\[/.test(t)) {
+      return `**${wrapInlineBareLatex(t)}**`
+    }
+    if (/\\[a-zA-Z]/.test(t) || /^[a-zA-Z]'?\s*=\s*\\/.test(t)) {
+      const wrapped = wrapInlineBareLatex(t)
+      // 整段像公式但未包上时，整包
+      if (wrapped === t && /\\[a-zA-Z]/.test(t)) {
+        return `**$${t}$**`
+      }
+      return `**${wrapped}**`
+    }
+    return full
+  })
+}
+
+/**
+ * 模型常不写 $…$：把裸公式行包成 $$，行内 \frac/\rho… 包成 $
+ * 已有定界符的区域不改。
+ */
+export function wrapBareLatex(text) {
+  const lines = normalizeMathDelimiters(text).replace(/\r\n/g, '\n').split('\n')
+  const out = []
+  let mathBuf = []
+  const flushMath = () => {
+    if (!mathBuf.length) return
+    out.push(`$$${mathBuf.join(' ')}$$`)
+    mathBuf = []
+  }
+  for (const line of lines) {
+    if (looksLikeMathLine(line)) {
+      mathBuf.push(line.trim())
+      continue
+    }
+    flushMath()
+    out.push(wrapInlineBareLatex(wrapBareLatexInsideBold(line)))
+  }
+  flushMath()
+  return out.join('\n')
+}
+
+/** 在非定界区域，把连续 LaTeX 命令串包进 $…$ */
+function wrapInlineBareLatex(line) {
+  const src = String(line || '')
+  if (!/\\[a-zA-Z]/.test(src)) return src
+  // 已有完整定界则仍可能夹杂裸片段；统一走扫描
+  let i = 0
+  let out = ''
+  while (i < src.length) {
+    // 跳过已有定界块
+    let skipped = false
+    for (const rule of MATH_RULES) {
+      if (!src.startsWith(rule.start, i)) continue
+      const contentStart = i + rule.start.length
+      const endIdx = src.indexOf(rule.end, contentStart)
+      if (endIdx === -1) continue
+      out += src.slice(i, endIdx + rule.end.length)
+      i = endIdx + rule.end.length
+      skipped = true
+      break
+    }
+    if (skipped) continue
+
+    // 跳过 markdown **，避免与公式交叉
+    if (src.startsWith('**', i)) {
+      out += '**'
+      i += 2
+      continue
+    }
+
+    if (src[i] === '\\' && /[a-zA-Z]/.test(src[i + 1] || '')) {
+      const end = consumeBareLatexExpr(src, i)
+      if (end > i) {
+        const tex = src.slice(i, end).trim()
+        out += `$${tex}$`
+        i = end
+        continue
+      }
+    }
+    out += src[i]
+    i += 1
+  }
+  return out
+}
+
+/** 从 \command 起吞掉一段裸公式（命令、括号、^_、运算符、空格） */
+function consumeBareLatexExpr(src, start) {
+  let i = start
+  if (src[i] !== '\\') return start
+  // 含 *：防止吞掉 markdown 的 ** 闭合符（否则出现 $…**$ 乱码）
+  const stopAt = /[\u4e00-\u9fff：；。，、！？【】（）()「」""''：:*`]/
+  while (i < src.length) {
+    if (stopAt.test(src[i])) break
+    if (src.startsWith('**', i)) break
+    if (src[i] === '\\' && /[a-zA-Z]/.test(src[i + 1] || '')) {
+      i += 1
+      while (i < src.length && /[a-zA-Z]/.test(src[i])) i += 1
+      continue
+    }
+    if (src[i] === '{') {
+      let depth = 1
+      i += 1
+      while (i < src.length && depth > 0) {
+        if (src[i] === '{') depth += 1
+        else if (src[i] === '}') depth -= 1
+        i += 1
+      }
+      if (depth !== 0) return start
+      continue
+    }
+    if (src[i] === '^' || src[i] === '_') {
+      i += 1
+      if (src[i] === '{') continue
+      if (i < src.length && /[a-zA-Z0-9'\\]/.test(src[i])) i += 1
+      continue
+    }
+    // f'(x) 这类撇号
+    if (src[i] === "'" || src[i] === '’') {
+      i += 1
+      continue
+    }
+    if (/[+\-=*/<>|,.]/.test(src[i])) {
+      i += 1
+      continue
+    }
+    if (/\s/.test(src[i])) {
+      // 空格后若仍是公式续写则保留，否则结束
+      let j = i + 1
+      while (j < src.length && /\s/.test(src[j])) j += 1
+      if (
+        j < src.length &&
+        (src[j] === '\\' || src[j] === '{' || src[j] === '^' || src[j] === '_' || /[+\-=]/.test(src[j]))
+      ) {
+        i = j
+        continue
+      }
+      break
+    }
+    // 普通拉丁/数字可跟在公式里（如 Du Dt）
+    if (/[a-zA-Z0-9]/.test(src[i])) {
+      i += 1
+      continue
+    }
+    break
+  }
+  // 太短或几乎不是公式
+  const slice = src.slice(start, i)
+  if (slice.length < 3 || !/\\[a-zA-Z]{2,}/.test(slice)) return start
+  return i
 }
 
 /** 将 plain 文本中的 LaTeX 片段转为 KaTeX HTML，其余 escape */
@@ -64,7 +373,7 @@ export function renderLatexInPlainText(text) {
   if (!text) return ''
   let i = 0
   let out = ''
-  const src = String(text)
+  const src = wrapBareLatex(String(text))
 
   while (i < src.length) {
     let matched = false
@@ -117,20 +426,54 @@ function applyInlineMarkdown(html) {
   return out
 }
 
+/** 抽取 ```jnao-svg ... ```，只允许 svg 标签，防止 XSS */
+function extractSafeSvgBlock(raw) {
+  const t = String(raw || '').trim()
+  if (!t.toLowerCase().startsWith('<svg') || !t.toLowerCase().includes('</svg>')) return ''
+  // 去掉脚本与事件属性
+  let s = t.replace(/<script[\s\S]*?<\/script>/gi, '')
+  s = s.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+  s = s.replace(/javascript:/gi, '')
+  return s
+}
+
 /** 学科答疑 AI 回复 → HTML（含公式） */
 export function formatQaRichHtml(raw) {
   if (!raw) return ''
-  const lines = String(raw).replace(/\r\n/g, '\n').split('\n')
+  // 先规范化裸 LaTeX，再按行排版（$$ 块可能占一行）
+  const lines = wrapBareLatex(String(raw)).replace(/\r\n/g, '\n').split('\n')
   const out = []
-  for (const line of lines) {
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li]
     const trimmed = line.trimEnd()
     if (!trimmed.trim()) {
       out.push('<div class="qa-gap"></div>')
       continue
     }
+    // math_sketch 返回的 SVG 围栏
+    if (/^```jnao-svg\s*$/i.test(trimmed.trim())) {
+      const buf = []
+      li += 1
+      while (li < lines.length && !/^```\s*$/.test(lines[li].trim())) {
+        buf.push(lines[li])
+        li += 1
+      }
+      const svg = extractSafeSvgBlock(buf.join('\n'))
+      if (svg) out.push(`<div class="qa-sketch">${svg}</div>`)
+      continue
+    }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed.trim())) {
+      out.push('<hr class="qa-hr" />')
+      continue
+    }
+    // 流式未收拢时，单独成行的定界符直接丢掉，避免公式框外露出 \[ \]
+    if (/^(\\\[|\\\]|\\\(|\\\))$/.test(trimmed.trim())) {
+      continue
+    }
     const header = trimmed.match(/^\*\*(.+?)\*\*\s*[:：]?$/)
     if (header) {
-      out.push(`<div class="qa-sec">${escapeHtml(header[1])}</div>`)
+      // 章节行也可能夹行内公式，不能只用 escapeHtml（否则 $b=0$ 原样露出）
+      out.push(`<div class="qa-sec">${renderLatexInPlainText(header[1])}</div>`)
       continue
     }
     const challenge = trimmed.match(/^[（(]\s*小挑战[：:]\s*(.+?)[）)]\s*$/)
@@ -148,6 +491,14 @@ export function formatQaRichHtml(raw) {
           `<span class="qa-arrow">→</span>` +
           `<span class="qa-v">${renderLatexInPlainText(kv[2].trim())}</span></div>`,
       )
+      continue
+    }
+    // $$…$$ 或 \[…\] 单独成行 → 块级公式容器
+    const displayOnly =
+      trimmed.match(/^\$\$([\s\S]+)\$\$$/) || trimmed.match(/^\\\[([\s\S]+)\\\]$/)
+    if (displayOnly) {
+      const mathHtml = renderTex(displayOnly[1], true)
+      if (mathHtml) out.push(`<div class="qa-math">${mathHtml}</div>`)
       continue
     }
     let html = renderLatexInPlainText(trimmed)

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.agents.shared.handoff import make_handoff_packet, resolve_reply_actions
-from app.harness.llm import PROFILES, profile_system
+from app.harness.llm import PROFILES, profile_system, route
 from app.harness.memory import fold_and_truncate, truncate_history
 from app.harness.registry import reset_registry_for_tests
 from app.harness.runtime import call_tool
@@ -28,6 +28,17 @@ def test_profiles_cover_facades():
     for name in ("consult", "guide", "parent_guide", "qa", "academy", "harness"):
         assert profile_system(name)
         assert name in PROFILES
+    # 架构图别名
+    assert profile_system("guide_child") == profile_system("guide")
+    assert profile_system("guide_parent") == profile_system("parent_guide")
+    # 人设/知识在 PROFILES（LLM 路由层）
+    consult = PROFILES["consult"]
+    assert consult.get("knowledge", {}).get("docs")
+    assert "sizhe" in (consult.get("personas") or {})
+    assert "脑科学" in profile_system("consult", persona="sizhe")
+    # 流式入口在 route().stream（透传，非 SSE）
+    assert hasattr(route("consult"), "stream")
+    assert hasattr(route("consult"), "complete")
 
 
 def test_truncate_and_fold():
@@ -155,6 +166,7 @@ async def test_qa_tools_registered():
     from app.harness.registry import get_tool
 
     assert get_tool("retrieve_qa_kb") is not None
-    assert get_tool("vision_ocr") is not None
+    assert get_tool("ocr_extract") is not None
+    assert get_tool("vision_ocr") is not None  # ocr_extract 别名
     result = await call_tool("retrieve_qa_kb", {"query": ""}, profile="qa")
     assert result.ok is False

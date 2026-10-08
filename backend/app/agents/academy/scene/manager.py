@@ -84,19 +84,22 @@ def select_speakers(
         present = list(CHARACTERS.keys())
 
     if mode == "opening":
+        # 开场只留「天赋同学 + 导师」两人，避免 4 次串行 LLM 把 open/sector 拖到 70s+
         kids = [key for key in present if key in KIDS]
         random.shuffle(kids)
-        picked = kids[:3] if kids else present[:3]
         lead = TALENT_CHAR.get((child_talent or "").strip())
+        kid: str | None = None
         if lead and lead in present:
-            if lead in picked:
-                picked.remove(lead)
-            else:
-                picked = picked[:2]
-            picked.insert(0, lead)
-        if "shanyu" in present and (not picked or picked[-1] != "shanyu"):
-            picked = [key for key in picked if key != "shanyu"] + ["shanyu"]
-        return [key for key in picked if key in present]
+            kid = lead
+        else:
+            for key in kids:
+                kid = key
+                break
+            if kid is None and present:
+                kid = next((key for key in present if key != "shanyu"), present[0])
+        if "shanyu" in present:
+            return ([kid] if kid and kid != "shanyu" else []) + ["shanyu"]
+        return [kid] if kid else present[:1]
 
     speakers: list[str] = []
     if mention in present:

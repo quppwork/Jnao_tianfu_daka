@@ -70,9 +70,13 @@ function currentRoute() {
   }
 }
 
-/** 软切：优先 stack 回退，再 navigateTo 保留上一页（切回学院时讨论区 DOM 还在）。
- * 栈过深才 redirectTo。不用官方 tabBar，避免和页面自绘底栏叠两层。 */
+/**
+ * 软切：仅「上一页就是目标」时 navigateBack（保留学院 iframe）；
+ * 主底栏其它互切一律 redirectTo。
+ * 禁止跨层 back——否则学院⇄中央电脑会偶发弹回大宇首页。
+ */
 const TAB_STACK_SOFT_MAX = 6
+let _navLockUntil = 0
 
 function softNavigate(url) {
   const full = withSlash(url)
@@ -81,6 +85,10 @@ function softNavigate(url) {
   const cur = currentRoute()
   const hasQuery = String(full).includes('?')
   if (cur === target && !hasQuery) return
+
+  const now = Date.now()
+  if (now < _navLockUntil) return
+  _navLockUntil = now + 320
 
   // 同路由但带 ?ep= 等参数：必须 replace，navigateBack 会丢掉 query
   if (cur === target && hasQuery) {
@@ -93,15 +101,22 @@ function softNavigate(url) {
 
   try {
     const pages = getCurrentPages()
-    if (!hasQuery) {
-      for (let i = pages.length - 2; i >= 0; i -= 1) {
-        if (String(pages[i].route || '') === target) {
-          uni.navigateBack({ delta: pages.length - 1 - i })
-          return
-        }
+    // 只允许相邻回退：刚从学院进中央电脑再点回来时，保留讨论区 DOM
+    if (!hasQuery && pages.length >= 2) {
+      const prev = String(pages[pages.length - 2].route || '')
+      if (prev === target) {
+        uni.navigateBack({ delta: 1 })
+        return
       }
     }
-    // 底栏互切：用 navigateTo 把上一页留在栈里，返回时界面原样保留
+    // 主底栏互切：redirectTo，避免栈越堆越深、跨层 back 弹回首页
+    if (MAIN_TAB_ROUTES.has(target) && (!cur || MAIN_TAB_ROUTES.has(cur))) {
+      uni.redirectTo({
+        url: full,
+        fail: () => uni.reLaunch({ url: full }),
+      })
+      return
+    }
     if (pages.length < TAB_STACK_SOFT_MAX) {
       uni.navigateTo({
         url: full,

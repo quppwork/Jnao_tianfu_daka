@@ -12,6 +12,7 @@ import {
   setSessionToken,
   hasUserSession,
   markFreshLogin,
+  isFreshLogin,
   markChildUserSessionValid,
   invalidateChildUserSession,
   invalidatePageAuthCache,

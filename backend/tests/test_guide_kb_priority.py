@@ -51,9 +51,6 @@ async def test_rag_miss_uses_template_not_doubao(monkeypatch):
         "app.agents.guide.runner._prepare_memory_and_history",
         return_value=([], ""),
     ), patch(
-        "app.agents.guide.runner._gather_tools",
-        new=AsyncMock(return_value=([], "")),
-    ), patch(
         "app.agents.guide.runner._meta_from_ctx",
         return_value={"situation": "ready_to_train", "actions": []},
     ):

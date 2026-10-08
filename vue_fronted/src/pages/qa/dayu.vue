@@ -109,19 +109,36 @@
               <text class="who-i">{{ subject || '导师在线' }}</text>
             </view>
             <view class="tx" :class="{ 'tx-me': m.role === 'user' }">
-              <image
-                v-if="m.imageUrl"
-                :src="m.imageUrl"
-                class="bubble-img"
-                mode="widthFix"
-                @tap="previewImg(m.imageUrl)"
+              <view v-if="m.imageUrl || m.hasImage" class="bubble-img-wrap" @tap="m.imageUrl && previewImg(m.imageUrl)">
+                <image
+                  v-if="m.imageUrl"
+                  :src="m.imageUrl"
+                  class="bubble-img"
+                  mode="aspectFill"
+                />
+                <view v-else class="bubble-img-ph"><text>题目图片加载中…</text></view>
+              </view>
+              <!-- H5：v-html 才能正确挂 KaTeX；rich-text 会丢掉公式 DOM/样式 -->
+              <!-- #ifdef H5 -->
+              <view
+                v-if="m.role !== 'user' && m.text"
+                class="tx-rich bubble-rich"
+                v-html="formatHtml(m.text)"
               />
+              <!-- #endif -->
+              <!-- #ifndef H5 -->
               <rich-text
                 v-if="m.role !== 'user' && m.text"
                 class="tx-rich"
                 :nodes="formatHtml(m.text)"
               />
-              <text v-else-if="m.text" class="tx-text">{{ m.text }}</text>
+              <!-- #endif -->
+              <text
+                v-else-if="shouldShowUserBubbleText(m)"
+                class="tx-text"
+                selectable
+                user-select
+              >{{ m.text }}</text>
               <view
                 v-else-if="loading && i === messages.length - 1 && m.role !== 'user'"
                 class="thinking"
@@ -139,28 +156,56 @@
       </view>
     </scroll-view>
 
-    <view class="inputbar" :class="{ 'has-text': canSend || loading }">
-      <view class="tool voice">🎤</view>
-      <view class="box-wrap">
-        <input
-          class="box"
-          v-model="inputText"
-          type="text"
-          confirm-type="send"
-          :disabled="loading"
-          placeholder="输入问题，或拍照发题..."
-          @confirm="sendMsg"
-        />
+    <!-- DeepSeek 手机版式：圆角功能框 + 右侧固定发送位（有内容/图片时「＋」换成发送） -->
+    <view class="composer">
+      <view v-if="pendingImage" class="pending-inline">
+        <view class="pending-card">
+          <image
+            class="pending-thumb"
+            :src="pendingImage.preview"
+            mode="aspectFill"
+            @tap="previewImg(pendingImage.preview)"
+          />
+          <view class="pending-clear" @tap="clearPendingImage"><text>✕</text></view>
+        </view>
+        <text class="pending-hint">已附上题目图，点右侧发送</text>
       </view>
-      <view class="tool cam" @tap="pickImage">📷</view>
-      <view class="tool plus" :class="{ hide: canSend || loading }">＋</view>
-      <view
-        class="send-txt"
-        :class="{ stop: loading, show: canSend || loading }"
-        @tap="loading ? stopStream() : sendMsg()"
-      >
-        <text v-if="loading">■</text>
-        <text v-else>发送</text>
+      <view class="composer-row">
+        <view class="tool voice" aria-hidden="true">🎤</view>
+        <view class="composer-main">
+          <input
+            class="box"
+            v-model="inputText"
+            type="text"
+            confirm-type="send"
+            :disabled="loading"
+            placeholder="输入问题，或粘贴/拍照发题..."
+            @confirm="sendMsg"
+            @paste="onInputPaste"
+          />
+          <view class="composer-actions">
+            <view class="act cam" :class="{ disabled: loading }" @tap="pickImage">
+              <text class="act-ic">📷</text>
+            </view>
+            <view
+              v-if="loading"
+              class="act send stop"
+              @tap="stopStream()"
+            >
+              <text class="send-ic">■</text>
+            </view>
+            <view
+              v-else-if="canSend"
+              class="act send"
+              @tap="sendMsg()"
+            >
+              <text class="send-ic">↑</text>
+            </view>
+            <view v-else class="act plus">
+              <text class="act-ic">＋</text>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -187,13 +232,31 @@
             v-for="s in sessionList"
             :key="s.id"
             class="hitem"
+            :class="{ active: s.id === qaSessionId }"
             @tap="switchSession(s.id)"
           >
-            <text class="hitem-t">{{ s.title || '新对话' }}</text>
-            <text class="hitem-s">{{ s.subject || '通用' }} · {{ formatTime(s.created_at) }}</text>
+            <view class="hitem-main">
+              <text class="hitem-t">{{ s.title || '新对话' }}</text>
+              <text class="hitem-s">{{ s.subject || '通用' }} · {{ formatTime(s.created_at) }}</text>
+            </view>
+            <text class="hitem-del" @tap.stop="askDeleteSession(s.id)">✕</text>
           </view>
           <view v-if="!sessionList.length" class="hempty"><text>暂无历史会话</text></view>
         </scroll-view>
+      </view>
+    </view>
+
+    <!-- 删除历史确认 -->
+    <view v-if="deleteTargetId" class="delm" @tap="cancelDeleteSession">
+      <view class="delbox" @tap.stop>
+        <text class="delt">删除对话</text>
+        <text class="deld">确定删除这条对话记录？删除后无法恢复。</text>
+        <view class="delacts">
+          <view class="delbtn cancel" @tap="cancelDeleteSession"><text>取消</text></view>
+          <view class="delbtn danger" @tap="confirmDeleteSession">
+            <text>{{ deleteSubmitting ? '删除中...' : '删除' }}</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -234,26 +297,32 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import {
   ensureChildUser,
   requirePageAuth,
   fetchQaSessions,
   createQaSession,
+  deleteQaSession,
   fetchQaSession,
   resolveQaImageUrl,
   sendQaMessageStream,
   uploadQaImage,
+  errMessage,
 } from '@/utils/userApi.js'
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
-import { formatQaRichHtml, prefetchKatex } from '@/utils/chatRichText.js'
+import 'katex/dist/katex.min.css'
+import '@/styles/qaBubbleRich.css'
+import { formatQaRichHtml, prefetchKatex, getKatexEpoch } from '@/utils/chatRichText.js'
 import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 import {
   chooseQuestionImage,
   compressImage,
   buildPendingImageFromPath,
+  extractClipboardImageFile,
   fileToDataUrl,
+  pendingFromImageFile,
   putQaImageLocal,
 } from '@/utils/qaMedia.js'
 import { MAIN_TABS, switchMainTab } from '@/utils/mainTabs.js'
@@ -274,6 +343,8 @@ const loading = ref(false)
 const qaSessionId = ref(null)
 const messages = ref([])
 const sessionList = ref([])
+const deleteTargetId = ref(null)
+const deleteSubmitting = ref(false)
 const scrollInto = ref('')
 const pendingImage = ref(null)
 const showImageSheet = ref(false)
@@ -335,7 +406,9 @@ const mavaStyle = computed(() => {
 })
 const canSend = computed(() => !loading.value && !!(inputText.value.trim() || pendingImage.value))
 
+const katexTick = ref(0)
 function formatHtml(text) {
+  void katexTick.value
   return formatQaRichHtml(text || '')
 }
 function formatTime(t) {
@@ -524,6 +597,36 @@ function closeHistory() {
   showHistory.value = false
 }
 
+function askDeleteSession(sessionId) {
+  deleteTargetId.value = sessionId
+}
+
+function cancelDeleteSession() {
+  if (deleteSubmitting.value) return
+  deleteTargetId.value = null
+}
+
+async function confirmDeleteSession() {
+  const sessionId = deleteTargetId.value
+  if (!sessionId || deleteSubmitting.value) return
+  deleteSubmitting.value = true
+  try {
+    const uid = await ensureChildUser()
+    await deleteQaSession(uid, sessionId)
+    sessionList.value = sessionList.value.filter((s) => s.id !== sessionId)
+    if (qaSessionId.value === sessionId) {
+      qaSessionId.value = null
+      pushWelcome()
+    }
+    deleteTargetId.value = null
+    if (!sessionList.value.length) closeHistory()
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e?.message || '删除失败', icon: 'none' })
+  }
+  deleteSubmitting.value = false
+}
+
 async function startNewSession() {
   try {
     const uid = await ensureChildUser()
@@ -572,13 +675,30 @@ function closeImageSheet() {
   showImageSheet.value = false
 }
 
+function clearPendingImage() {
+  const prev = pendingImage.value?.preview
+  pendingImage.value = null
+  if (prev && String(prev).startsWith('blob:')) {
+    try { URL.revokeObjectURL(prev) } catch (_) { /* ignore */ }
+  }
+}
+
+function setPendingImage(pending) {
+  if (!pending?.file || loading.value) return
+  const prev = pendingImage.value?.preview
+  pendingImage.value = pending
+  if (prev && prev !== pending.preview && String(prev).startsWith('blob:')) {
+    try { URL.revokeObjectURL(prev) } catch (_) { /* ignore */ }
+  }
+}
+
 async function onPickSource(source) {
   showImageSheet.value = false
   try {
     const path = await chooseQuestionImage(source)
     if (!path) return
-    pendingImage.value = await buildPendingImageFromPath(path)
-    await sendMsg()
+    setPendingImage(await buildPendingImageFromPath(path))
+    uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
   } catch (e) {
     if (e?.message && e.message !== 'cancel' && e?.code !== 'WEBCAM') {
       uni.showToast({ title: e.message || '选图失败', icon: 'none' })
@@ -586,6 +706,25 @@ async function onPickSource(source) {
       uni.showToast({ title: '当前环境请用相册选图', icon: 'none' })
     }
   }
+}
+
+/** 对话框 Ctrl+V / 粘贴图片：只挂上待发送，不自动发出 */
+async function handleClipboardPaste(event) {
+  if (loading.value || typeof document === 'undefined') return
+  const file = extractClipboardImageFile(event)
+  if (!file) return
+  event.preventDefault?.()
+  event.stopPropagation?.()
+  try {
+    setPendingImage(pendingFromImageFile(file))
+    uni.showToast({ title: '已粘贴图片，点发送提问', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e?.message || '粘贴图片失败', icon: 'none' })
+  }
+}
+
+function onInputPaste(event) {
+  handleClipboardPaste(event)
 }
 
 function previewImg(url) {
@@ -598,27 +737,60 @@ function stopStream() {
   streamAbort?.()
 }
 
+const IMAGE_ONLY_PLACEHOLDERS = new Set([
+  '请帮我看这道题',
+  '帮我看这道题',
+  '帮我看下',
+  '帮我看看',
+])
+
+function isImageOnlyPlaceholder(text) {
+  return IMAGE_ONLY_PLACEHOLDERS.has(String(text || '').trim())
+}
+
+function shouldShowUserBubbleText(m) {
+  const t = String(m?.text || '').trim()
+  if (!t) return false
+  // 有图时的占位句不展示（只显示图片）
+  if (m?.imageUrl && isImageOnlyPlaceholder(t)) return false
+  return true
+}
+
 async function sendMsg() {
-  const text = inputText.value.trim() || (pendingImage.value ? '请帮我看这道题' : '')
-  if (!text || loading.value) return
+  // 纯发图不附带「请帮我看这道题」
+  const text = inputText.value.trim()
+  const pending = pendingImage.value
+  if ((!text && !pending) || loading.value) return
   if (!subject.value) {
     uni.showToast({ title: '先选一门学科频道', icon: 'none' })
     return
   }
 
   abortRequested = false
-  const pending = pendingImage.value
+  // 先立刻展示 blob 预览，再异步转 dataURL
   let displayImageUrl = pending?.preview || null
-  if (pending?.file) {
-    try {
-      displayImageUrl = await fileToDataUrl(pending.file)
-    } catch (_) { /* keep preview */ }
-  }
-
-  messages.value.push({ role: 'user', text, imageUrl: displayImageUrl })
+  messages.value.push({
+    role: 'user',
+    text,
+    imageUrl: displayImageUrl,
+    hasImage: Boolean(pending),
+  })
   inputText.value = ''
   pendingImage.value = null
   loading.value = true
+  const userMsgIdx = messages.value.length - 1
+  if (pending?.file) {
+    try {
+      const dataUrl = await fileToDataUrl(pending.file)
+      if (dataUrl && messages.value[userMsgIdx]) {
+        const old = messages.value[userMsgIdx].imageUrl
+        messages.value[userMsgIdx].imageUrl = dataUrl
+        if (old?.startsWith('blob:') && old !== dataUrl) {
+          try { URL.revokeObjectURL(old) } catch (_) { /* ignore */ }
+        }
+      }
+    } catch (_) { /* 保留 blob */ }
+  }
   const aiIdx = messages.value.length
   messages.value.push({ role: 'assistant', text: '' })
   await nextTick()
@@ -631,14 +803,15 @@ async function sendMsg() {
       const compressed = await compressImage(pending.file)
       const up = await uploadQaImage(uid, compressed)
       imageId = up.image_id
-      if (displayImageUrl?.startsWith('data:')) {
-        putQaImageLocal(imageId, displayImageUrl)
+      const local = messages.value[userMsgIdx]?.imageUrl
+      if (local?.startsWith('data:')) {
+        putQaImageLocal(imageId, local)
       }
     }
 
     const { promise, abort } = sendQaMessageStream(
       uid,
-      text,
+      text || '',
       qaSessionId.value,
       { subject: subject.value, image_id: imageId },
       {
@@ -652,7 +825,7 @@ async function sendMsg() {
           if (data.reply) messages.value[aiIdx].text = data.reply
           if (data.subject_mismatch && data.suggested_subject && subjects.includes(data.suggested_subject)) {
             mismatchSuggest.value = data.suggested_subject
-            mismatchResendText.value = text
+            mismatchResendText.value = text || ''
           } else {
             dismissMismatch()
           }
@@ -660,13 +833,17 @@ async function sendMsg() {
       },
     )
     streamAbort = abort
-    await promise
+    const finalPayload = await promise
+    if (!String(messages.value[aiIdx]?.text || '').trim()) {
+      const fallback = String(finalPayload?.reply || '').trim()
+      messages.value[aiIdx].text = fallback || '老师暂时没有回复，请再发一次试试～'
+    }
   } catch (e) {
     if (isStreamAborted(e)) {
       applyStreamStoppedHint(messages, aiIdx)
       return
     }
-    const errText = e?.message || '请求失败，请稍后再试'
+    const errText = errMessage(e, '请求失败，请稍后再试')
     if (!messages.value[aiIdx]?.text) {
       messages.value[aiIdx].text = `出错了：${errText}`
     } else {
@@ -707,13 +884,24 @@ onShow(() => {
 })
 
 onMounted(async () => {
-  prefetchKatex()
   readTheme()
   readSimple()
+  await prefetchKatex()
+  katexTick.value = getKatexEpoch()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('paste', handleClipboardPaste)
+  }
   const auth = await requirePageAuth('student')
   if (!auth?.ok) return
   pushWelcome()
   scrollChat()
+})
+
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('paste', handleClipboardPaste)
+  }
+  clearPendingImage()
 })
 </script>
 
@@ -1064,13 +1252,34 @@ onMounted(async () => {
   word-break: break-word;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
+}
+/* 富文本分层样式见 @/styles/qaBubbleRich.css（非 scoped，才能作用到 v-html） */
+.bubble-img-wrap {
+  width: 160px;
+  max-width: min(160px, 70vw);
+  min-height: 96px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 6px;
+  background: rgba(0, 0, 0, 0.2);
 }
 .bubble-img {
-  max-width: min(180px, 100%);
   width: 100%;
-  border-radius: 10px;
+  height: 120px;
   display: block;
-  margin-bottom: 6px;
+  object-fit: cover;
+}
+.bubble-img-ph {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  padding: 10px;
 }
 .thinking {
   display: flex;
@@ -1103,37 +1312,142 @@ onMounted(async () => {
 .thinking-ellipsis .te:nth-child(2) { animation-delay: 0.2s; }
 .thinking-ellipsis .te:nth-child(3) { animation-delay: 0.4s; }
 
-.inputbar {
+.composer {
   flex-shrink: 0;
-  padding: 8px 10px;
-  display: flex; gap: 8px; align-items: flex-end;
+  padding: 8px 10px 10px;
   background: rgba(11, 14, 20, 0.96);
   border-top: 1px solid #232b3d;
 }
-.app.lt .inputbar { background: rgba(235, 238, 244, 0.96); border-top-color: #c2cadc; }
-.inputbar .tool {
-  width: 36px; height: 36px; flex: none;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px; color: #d8dce6;
+.app.lt .composer {
+  background: rgba(235, 238, 244, 0.96);
+  border-top-color: #c2cadc;
 }
-.inputbar .tool.plus.hide { display: none; }
-.inputbar .box-wrap { flex: 1; min-width: 0; }
-.box {
-  width: 100%; height: 36px; line-height: 36px;
-  background: #0f1420; border: none; border-radius: 8px;
-  padding: 0 12px; font-size: 15px; color: #edebe4; box-sizing: border-box;
+.pending-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 0 2px;
 }
-.app.lt .box { background: #fff; color: #1b1912; }
-.send-txt {
-  display: none; min-width: 56px; height: 34px; padding: 0 12px; border-radius: 6px;
-  background: #12b7f5;
-  align-items: center; justify-content: center;
-  font-size: 14px; flex: none; color: #fff; font-weight: 700;
+.pending-card {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+.app.lt .pending-card { border-color: #c2cadc; background: rgba(0, 0, 0, 0.06); }
+.pending-thumb {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.pending-clear {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pending-clear text { color: #fff; font-size: 10px; line-height: 1; }
+.pending-hint {
+  font-size: 12px;
+  color: rgba(237, 235, 228, 0.55);
+  flex: 1;
+  min-width: 0;
+}
+.app.lt .pending-hint { color: #6b7280; }
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.composer .tool.voice {
+  width: 36px;
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #d8dce6;
+}
+.composer-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 22px;
+  background: #161c2a;
+  border: 1px solid #2a3348;
   box-sizing: border-box;
 }
-.send-txt.show { display: flex; }
-.send-txt.stop { background: #e05252; color: #fff; }
-.app.lt .send-txt { background: #12b7f5; color: #fff; }
+.app.lt .composer-main {
+  background: #fff;
+  border-color: #c8d0e0;
+}
+.composer-main .box {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  line-height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 15px;
+  color: #edebe4;
+  box-sizing: border-box;
+}
+.app.lt .composer-main .box { color: #1b1912; }
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.composer-actions .act {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.composer-actions .act.cam { color: #d8dce6; }
+.composer-actions .act.cam.disabled { opacity: 0.4; pointer-events: none; }
+.composer-actions .act.plus { color: #d8dce6; font-size: 22px; }
+.composer-actions .act-ic { font-size: 20px; line-height: 1; }
+.composer-actions .act.send {
+  background: #4d6bfe;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(77, 107, 254, 0.35);
+}
+.composer-actions .act.send:active { transform: scale(0.96); }
+.composer-actions .act.send.stop {
+  background: #e05252;
+  box-shadow: none;
+}
+.composer-actions .send-ic {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
 
 .foot {
   position: fixed;
@@ -1189,16 +1503,54 @@ onMounted(async () => {
 }
 .hlist::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .hitem {
+  display: flex; align-items: center; gap: 8px;
   background: #161d2b; border: 1px solid #232b3d; border-radius: 12px;
   padding: 10px 12px; margin-bottom: 9px;
 }
+.hitem.active { border-color: #3d8bff; background: rgba(46, 107, 230, 0.12); }
 .app.lt .hitem { background: #d4dbe9; border-color: #c2cadc; }
+.app.lt .hitem.active { border-color: #1956d1; background: rgba(25, 86, 209, 0.1); }
+.hitem-main { flex: 1; min-width: 0; }
 .hitem-t {
   display: block; font-size: 12.5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .hitem-s { font-size: 10px; color: #5a6274; }
+.hitem-del {
+  flex-shrink: 0; color: #f85149; font-size: 14px; padding: 4px 6px;
+  line-height: 1; cursor: pointer;
+}
 .hempty { text-align: center; color: #5a6274; font-size: 12px; padding: 24px 0; }
+
+.delm {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  max-width: var(--app-max-width, 480px); margin: 0 auto;
+}
+.delbox {
+  width: 100%; max-width: 300px;
+  background: #161d2b; border: 1px solid #2a3040; border-radius: 16px;
+  padding: 18px 16px;
+}
+.app.lt .delbox { background: #e8ecf4; border-color: #c2cadc; }
+.delt {
+  display: block; text-align: center; font-size: 16px; font-weight: 800; margin-bottom: 8px;
+}
+.deld {
+  display: block; text-align: center; font-size: 13px; color: #8b93a5;
+  line-height: 1.5; margin-bottom: 16px;
+}
+.app.lt .deld { color: #5a6274; }
+.delacts { display: flex; gap: 10px; }
+.delbtn {
+  flex: 1; text-align: center; border-radius: 10px; padding: 10px 0;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.delbtn.cancel { background: rgba(255,255,255,.06); color: #8b93a5; }
+.app.lt .delbtn.cancel { background: rgba(0,0,0,.06); color: #5a6274; }
+.delbtn.danger { background: rgba(248, 81, 73, 0.18); color: #f85149; }
 
 .sbox {
   position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);

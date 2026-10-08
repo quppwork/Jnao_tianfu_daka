@@ -125,9 +125,6 @@ async def test_guide_bailian_direct_skips_doubao(monkeypatch):
             "app.agents.guide.kb_agent.guide_kb_agent_ready",
             return_value=False,
         ), patch(
-            "app.agents.guide.runner._gather_tools",
-            new=AsyncMock(return_value=([], "")),
-        ), patch(
             "app.agents.guide.runner._meta_from_ctx",
             return_value={"situation": "idle", "actions": []},
         ):

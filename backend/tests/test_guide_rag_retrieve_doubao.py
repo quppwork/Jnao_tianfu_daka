@@ -67,9 +67,6 @@ async def test_guide_retrieve_doubao_primary(monkeypatch):
         "app.agents.guide.runner._prepare_memory_and_history",
         return_value=([], ""),
     ), patch(
-        "app.agents.guide.runner._gather_tools",
-        new=AsyncMock(return_value=([{"name": "get_today_plan", "ok": True}], "今日有训练方案")),
-    ), patch(
         "app.agents.guide.runner._meta_from_ctx",
         return_value={"situation": "ready_to_train", "actions": []},
     ):
@@ -83,7 +80,8 @@ async def test_guide_retrieve_doubao_primary(monkeypatch):
     assert result.get("pipeline_path") == "legacy_rag"
     direct.assert_not_called()
     assert "超脑阅读从扫读开始" in captured["rag_block"]
-    assert "今日有训练方案" in captured["tool_block"]
+    # 业务工具已迁入 Harness，前置 tool_block 为空
+    assert captured.get("tool_block") == ""
 
 
 @pytest.mark.asyncio
@@ -112,9 +110,6 @@ async def test_guide_skips_direct_when_generate_off(monkeypatch):
     ), patch("app.agents.guide.runner._prepare_context"), patch(
         "app.agents.guide.runner._prepare_memory_and_history",
         return_value=([], ""),
-    ), patch(
-        "app.agents.guide.runner._gather_tools",
-        new=AsyncMock(return_value=([], "")),
     ), patch(
         "app.agents.guide.runner._meta_from_ctx",
         return_value={"situation": "idle", "actions": []},

@@ -27,7 +27,6 @@ from app.services.ai_output_guard import (
     refusal_message,
     sanitize_ai_reply,
 )
-from app.services.doubao_client import vision_chat_completion
 from app.services.qa_coach import build_coach_metadata, fetch_recent_coach_context_for_prompt
 from app.services.qa_image_store import image_data_url
 from app.services.qa_kb_router import QaKbPath, resolve_qa_kb_path
@@ -35,11 +34,19 @@ from app.services.text_sanitize import sanitize_subject, sanitize_text, session_
 
 
 async def _ocr_preview(image_data_url: str) -> str | None:
+    """经 Harness MCP · ocr_extract（Qwen3.5-OCR）识别题干。"""
     from app.harness.runtime import call_tool
 
     result = await call_tool(
-        "vision_ocr",
-        {"image_data_url": image_data_url},
+        "ocr_extract",
+        {
+            "image_data_url": image_data_url,
+            "max_tokens": 1600,
+            "prompt": (
+                "请完整识别图中题目全部文字与公式，保持题号与小问(1)(2)(3)结构；"
+                "数学公式用 LaTeX；不要解题、不要省略小问。"
+            ),
+        },
         profile="qa",
     )
     if not result.ok:
@@ -374,7 +381,11 @@ async def run_chat(
         coach_context=coach_context,
         ocr_preview=ocr_preview,
     )
-    user_message = build_qa_user_message(message, learner_context)
+    # 纯拍照：气泡可空；给模型一条非空指令（不写进用户气泡）
+    model_text = message or (
+        "请根据题目图片与识别预览讲解；勿编造未识别出的题干。" if has_image else ""
+    )
+    user_message = build_qa_user_message(model_text, learner_context)
 
     user_row = QaMessage(
         session_id=session.id,
@@ -388,28 +399,20 @@ async def run_chat(
         session.title = session_title_from_message(message)
     db.commit()
 
-    if has_image and image_id:
-        data_url = image_data_url(image_id, child_user_id)
-        reply = await vision_chat_completion(
-            system_prompt=system,
-            user_message=user_message,
-            image_data_url=data_url or "",
-            history=history,
-            max_tokens=900,
-        )
-    else:
-        from app.harness.context import ToolContext
-        from app.harness.turn import run_profile_turn
+    # 拍图：先经 harness MCP ocr_extract（见 _ocr_preview），出话统一走 run_profile_turn
+    from app.harness.context import ToolContext
+    from app.harness.turn import run_profile_turn
 
-        turn = await run_profile_turn(
-            "qa",
-            user_message,
-            history=history,
-            ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
-            system_override=system,
-            max_steps=4,
-        )
-        reply = turn.get("reply")
+    turn = await run_profile_turn(
+        "qa",
+        user_message,
+        history=history,
+        ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
+        system_override=system,
+        max_steps=4,
+        allow_tools=True,
+    )
+    reply = turn.get("reply")
 
     if not reply:
         reply = "抱歉，AI 暂时无法响应，请稍后再试。"
@@ -463,7 +466,6 @@ async def run_chat_stream(
     use_rag: bool | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
     from app.services import qa_service as svc
-    from app.services.doubao_client import vision_chat_completion_stream
 
     timer = TurnTimer()
     message = sanitize_text(message)
@@ -717,7 +719,10 @@ async def run_chat_stream(
         coach_context=coach_context,
         ocr_preview=ocr_preview,
     )
-    user_message = build_qa_user_message(message, learner_context)
+    model_text = message or (
+        "请根据题目图片与识别预览讲解；勿编造未识别出的题干。" if has_image else ""
+    )
+    user_message = build_qa_user_message(model_text, learner_context)
 
     user_row = QaMessage(
         session_id=session.id,
@@ -732,48 +737,31 @@ async def run_chat_stream(
     db.commit()
 
     parts: list[str] = []
-    if has_image and image_id:
-        data_url = image_data_url(image_id, child_user_id) or ""
-        token_iter = vision_chat_completion_stream(
-            system_prompt=system,
-            user_message=user_message,
-            image_data_url=data_url,
-            history=history,
-            max_tokens=900,
-        )
-        async for token in token_iter:
-            if token.startswith("[ERROR]"):
-                yield ("error", token)
-                return
+    from app.harness.context import ToolContext
+    from app.harness.turn import run_profile_turn_stream
+
+    done: dict | None = None
+    async for kind, payload in run_profile_turn_stream(
+        "qa",
+        user_message,
+        history=history,
+        ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
+        system_override=system,
+        max_steps=4,
+        allow_tools=True,
+    ):
+        if kind == "token":
+            token = str(payload or "")
             parts.append(token)
             yield ("token", token)
-        reply = "".join(parts) or "抱歉，AI 暂时无法响应，请稍后再试。"
-    else:
-        from app.harness.context import ToolContext
-        from app.harness.turn import run_profile_turn_stream
-
-        done: dict | None = None
-        async for kind, payload in run_profile_turn_stream(
-            "qa",
-            user_message,
-            history=history,
-            ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
-            system_override=system,
-            max_steps=1,
-            allow_tools=False,
-        ):
-            if kind == "token":
-                token = str(payload or "")
-                parts.append(token)
-                yield ("token", token)
-            elif kind == "error":
-                yield ("error", str(payload))
-                return
-            elif kind == "done" and isinstance(payload, dict):
-                done = payload
-        reply = ((done or {}).get("reply") or "".join(parts) or "").strip()
-        if not reply:
-            reply = "抱歉，AI 暂时无法响应，请稍后再试。"
+        elif kind == "error":
+            yield ("error", str(payload))
+            return
+        elif kind == "done" and isinstance(payload, dict):
+            done = payload
+    reply = ((done or {}).get("reply") or "".join(parts) or "").strip()
+    if not reply:
+        reply = "抱歉，AI 暂时无法响应，请稍后再试。"
     reply = sanitize_ai_reply(reply)
     assistant_meta = svc.assistant_meta_for_storage(
         coach_meta,

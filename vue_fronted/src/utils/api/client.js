@@ -450,14 +450,33 @@ function handleMidSessionExpired(url) {
   } catch (_) { /* ignore */ }
   setTimeout(() => redirectToLoginForKind(kind, { silent: true }), 400)
 }
-function formatApiError(data, status) {
-  const d = data?.detail ?? data?.message
+/** FastAPI detail 可能是 string / 校验错误数组 / 嵌套对象，避免出现 [object Object] */
+export function formatApiError(data, status) {
+  const d = data?.detail ?? data?.message ?? data?.error
   if (typeof d === 'string' && d.trim()) return d
   if (Array.isArray(d)) {
-    const parts = d.map((x) => x?.msg || x?.message).filter(Boolean)
+    const parts = d.map((x) => {
+      if (typeof x === 'string') return x
+      return x?.msg || x?.message || ''
+    }).filter(Boolean)
     if (parts.length) return parts.join('；')
   }
-  return `HTTP ${status}`
+  if (d && typeof d === 'object') {
+    const nested = d.msg || d.message || d.error
+    if (typeof nested === 'string' && nested.trim()) return nested
+  }
+  if (typeof status === 'number' && status > 0) return `HTTP ${status}`
+  return '请求失败，请稍后重试'
+}
+
+/** 任意 catch 值 → 可读文案 */
+export function errMessage(err, fallback = '请求失败，请稍后重试') {
+  if (!err) return fallback
+  if (typeof err === 'string' && err.trim()) return err
+  const m = err?.message
+  if (typeof m === 'string' && m.trim() && m !== '[object Object]') return m
+  if (err?.data) return formatApiError(err.data, err.status)
+  return fallback
 }
 
 export async function apiJson(url, options = {}) {
@@ -535,8 +554,9 @@ export async function streamPostSse(url, body, handlers = {}) {
     if (res.status === 401) {
       handleMidSessionExpired(url)
     }
-    const err = new Error(data.detail || data.message || `HTTP ${res.status}`)
+    const err = new Error(formatApiError(data, res.status))
     err.status = res.status
+    err.data = data
     throw err
   }
   const reader = res.body?.getReader()

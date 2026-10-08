@@ -641,6 +641,16 @@ async function routeStudentHome(data) {
   }
   if (target === studentHomeUrl() || target === '/pages/dayu/home' || target === '/pages/index') {
     target = consumePostLoginRoute(target, 'student')
+    // 登录后不要恢复到学院/中央电脑（易落在讨论全屏），统一回大宇首页
+    const base = String(target || '').split('?')[0]
+    if (
+      base === '/pages/hub/academy'
+      || base === '/pages/hub/console'
+      || base === '/pages/hub/story'
+      || base === '/pages/hub/courses'
+    ) {
+      target = studentHomeUrl()
+    }
   }
   uni.reLaunch({ url: target })
 }

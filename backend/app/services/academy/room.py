@@ -23,6 +23,13 @@ from app.services.academy.progress import require_unlocked
 
 log = logging.getLogger(__name__)
 
+# 同一用户同一集共用一个 opening Task，断开重进也不二次打模型
+_open_inflight: dict[tuple[int, str], asyncio.Task] = {}
+
+
+def _open_key(user_id: int, episode_id: str) -> tuple[int, str]:
+    return (int(user_id), str(episode_id).upper())
+
 
 def _room(db: Session, user_id: int, episode_id: str) -> AcademyRoom:
     row = db.scalar(
@@ -79,6 +86,60 @@ def _require_episode(episode_id: str) -> Episode:
     return episode
 
 
+def _peek_messages(user_id: int, episode_id: str) -> list[dict]:
+    from app.db.session import get_session_factory
+
+    db = get_session_factory()()
+    try:
+        room = _room(db, user_id, episode_id)
+        return list(room.messages or [])
+    finally:
+        db.close()
+
+
+def _persist_opening(user_id: int, episode_id: str, turns: list[dict]) -> list[dict]:
+    """LLM 结束后用独立会话落库；若并发已写入则直接回放。"""
+    from app.db.session import get_session_factory
+
+    db = get_session_factory()()
+    try:
+        room = _room(db, user_id, episode_id)
+        existing = list(room.messages or [])
+        if existing:
+            return existing
+        room.messages = list(turns or [])
+        if turns:
+            _memorize(db, user_id, episode_id, turns)
+        db.commit()
+        return list(turns or [])
+    except Exception:
+        log.exception("讨论区开场落库失败")
+        db.rollback()
+        return list(turns or [])
+    finally:
+        db.close()
+
+
+def _append_reply_detached(user_id: int, episode_id: str, turns: list[dict]) -> None:
+    if not turns:
+        return
+    from app.db.session import get_session_factory
+
+    db = get_session_factory()()
+    try:
+        room = _room(db, user_id, episode_id)
+        history = list(room.messages or [])
+        history.extend(turns)
+        room.messages = history[-40:]
+        _memorize(db, user_id, episode_id, history[-12:])
+        db.commit()
+    except Exception:
+        log.exception("讨论区回复落库失败")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _save_detached(user_id: int, episode_id: str, turns: list[dict]) -> None:
     """请求已经取消时，用自己的会话把角色台词补上。不复用请求里的 Session。"""
     if not turns:
@@ -122,6 +183,21 @@ async def _keep_running(work, user_id: int, episode_id: str):
         raise
 
 
+def _release_request_db(db: Session) -> None:
+    """长 LLM 前释放请求 Session，避免 SQLite 连接占住挡住 sector/progress。"""
+    try:
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    try:
+        db.close()
+    except Exception:
+        pass
+
+
 async def open_room(db: Session, user_id: int, episode_id: str) -> dict:
     from app.agents.academy.perception import messages_fit_episode
 
@@ -138,26 +214,69 @@ async def open_room(db: Session, user_id: int, episode_id: str) -> dict:
     trained = bool(today_training(db, user_id).get("done"))
     tail = _tail(episode, trained)
     if existing:
-        db.commit()
-        turns = list(room.messages or [])
-        return {"replay": True, "turns": turns, **tail}
+        _release_request_db(db)
+        return {"replay": True, "turns": existing, **tail}
     _, talent_name, _ = talent_badge(db, user_id)
-    turns = await _keep_running(
-        opening_turns(
-            episode_id=episode.id,
-            episode_title=f"{episode.id} {episode.title}",
-            task=episode.task,
+    ep_id = episode.id
+    ep_title = f"{episode.id} {episode.title}"
+    ep_task = episode.task
+    # 释放连接后再跑 opening（多角色串行 LLM 可达数十秒）
+    _release_request_db(db)
+
+    key = _open_key(user_id, ep_id)
+    inflight = _open_inflight.get(key)
+    if inflight is not None and not inflight.done():
+        try:
+            saved = await asyncio.shield(inflight)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            saved = _peek_messages(user_id, ep_id)
+        if not saved:
+            saved = _peek_messages(user_id, ep_id)
+        return {"replay": True, "turns": list(saved or []), **tail}
+
+    again = _peek_messages(user_id, ep_id)
+    if again and messages_fit_episode(ep_id, again):
+        return {"replay": True, "turns": again, **tail}
+    if again and not messages_fit_episode(ep_id, again):
+        from app.db.session import get_session_factory
+
+        wipe = get_session_factory()()
+        try:
+            row = _room(wipe, user_id, ep_id)
+            row.messages = []
+            row.user_turns = 0
+            wipe.commit()
+        finally:
+            wipe.close()
+
+    async def _generate() -> list[dict]:
+        turns = await opening_turns(
+            episode_id=ep_id,
+            episode_title=ep_title,
+            task=ep_task,
             child_talent=talent_name,
             child_user_id=user_id,
             training_done=trained,
-        ),
-        user_id,
-        episode.id,
-    )
-    room.messages = list(turns)
-    _memorize(db, user_id, episode.id, turns)
-    db.commit()
-    return {"replay": False, "turns": turns, **tail}
+        )
+        return _persist_opening(user_id, ep_id, list(turns or []))
+
+    gen_task = asyncio.create_task(_generate())
+    _open_inflight[key] = gen_task
+
+    def _clear(done: asyncio.Task, *, _k: tuple[int, str] = key) -> None:
+        if _open_inflight.get(_k) is done:
+            _open_inflight.pop(_k, None)
+
+    gen_task.add_done_callback(_clear)
+
+    try:
+        saved = await asyncio.shield(gen_task)
+        return {"replay": False, "turns": list(saved or []), **tail}
+    except asyncio.CancelledError:
+        # 生成继续跑完并落库；下次 open 会挂上同一 Task 或直接 replay
+        raise
 
 
 async def chat(
@@ -174,7 +293,6 @@ async def chat(
     row = build_user_line(text, mention, quote, sticker)
     if not row:
         raise AcademyError("先说一句")
-    content = row["text"]
     model_text = annotate_for_model(row)
     room = _room(db, user_id, episode.id)
     history = list(room.messages or [])
@@ -191,7 +309,10 @@ async def chat(
     history = prior + [row]
     room.messages = history[-40:]
     room.user_turns = user_turns
-    db.commit()
+    nudge = _tail(episode, trained)["nudge"]
+    # 用户句先落库并释放连接，再等模型
+    _release_request_db(db)
+
     turns: list[dict] = []
     try:
         turns = await _keep_running(
@@ -218,12 +339,6 @@ async def chat(
     except Exception:
         log.exception("讨论区模型失败，本轮不返回假台词")
         turns = []
-    history.extend(turns)
-    room.messages = history[-40:]
-    try:
-        _memorize(db, user_id, episode.id, history[-12:])
-        db.commit()
-    except Exception:
-        log.exception("讨论区记忆写入失败")
-        db.rollback()
-    return {"turns": turns, "nudge": _tail(episode, trained)["nudge"], "training_done": trained}
+    if turns:
+        _append_reply_detached(user_id, episode.id, turns)
+    return {"turns": turns, "nudge": nudge, "training_done": trained}

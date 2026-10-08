@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.agents.qa.memory import QaMemory
@@ -148,6 +148,8 @@ def delete_session(db: Session, session_id: int, child_user_id: int) -> bool:
     session = db.get(QaSession, session_id)
     if not session or session.child_user_id != child_user_id:
         return False
+    # 显式删消息，避免仅依赖 ORM cascade / 库表无 ON DELETE CASCADE 时残留
+    db.execute(delete(QaMessage).where(QaMessage.session_id == session_id))
     db.delete(session)
     db.commit()
     invalidate_session_list(child_user_id)
