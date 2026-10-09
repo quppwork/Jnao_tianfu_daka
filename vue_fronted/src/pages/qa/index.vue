@@ -336,6 +336,7 @@ import {
 } from '@/utils/userApi.js'
 
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
+import { normalizeQaSubject } from '@/utils/qaMentors.js'
 import 'katex/dist/katex.min.css'
 import '@/styles/qaBubbleRich.css'
 import { formatQaRichHtml, prefetchKatex, getKatexEpoch } from '@/utils/chatRichText.js'
@@ -369,16 +370,16 @@ import {
 const QA_VOICE_ENABLED = false
 
 const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
-const subjects = ['数学', '语文', '英语', '科学', '学习心法']
+const subjects = ['理科', '文科', '外语', '科技', '书法']
 const subjectIcon = {
-  数学: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><path d="M6 4l6 14"/><path d="M18 4l-6 14"/></svg>',
-  语文: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
-  英语: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
-  科学: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-  学习心法: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 12c2 2 4 3 5 3s3-1 5-3"/><path d="M7 16c2 2 4 3 5 3s3-1 5-3"/></svg>',
+  理科: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><path d="M6 4l6 14"/><path d="M18 4l-6 14"/></svg>',
+  文科: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
+  外语: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+  科技: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  书法: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 12c2 2 4 3 5 3s3-1 5-3"/><path d="M7 16c2 2 4 3 5 3s3-1 5-3"/></svg>',
 }
 
-const subject = ref('数学')
+const subject = ref('理科')
 
 /** Guide 深交接：学科 chip + 可选预填 */
 const guideHandoffBanner = ref(null)
@@ -969,7 +970,10 @@ onLoad((opts) => {
   try { if (rawSubject) rawSubject = decodeURIComponent(rawSubject) } catch (_) { /* keep */ }
   try { if (rawHint) rawHint = decodeURIComponent(rawHint) } catch (_) { /* keep */ }
   try { if (rawQuery) rawQuery = decodeURIComponent(rawQuery) } catch (_) { /* keep */ }
-  const nextSubject = subjects.includes(rawSubject) ? rawSubject : ''
+  const nextSubject = (() => {
+    const n = normalizeQaSubject(rawSubject)
+    return subjects.includes(n) ? n : ''
+  })()
   if (nextSubject) subject.value = nextSubject
   const prefill = (rawQuery || rawHint).slice(0, 400)
   if (from === 'guide' && (nextSubject || prefill)) {

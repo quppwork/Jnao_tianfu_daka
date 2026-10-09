@@ -16,7 +16,7 @@ def test_qa_strategy_talent_and_stage():
     block = strategy_to_prompt_block(s)
     assert "学者" in block
     assert "初中" in block or "junior" in block or "推理" in block
-    prompt = build_qa_system_prompt(subject="数学", strategy_block=block)
+    prompt = build_qa_system_prompt(subject="理科", strategy_block=block)
     assert "辅导策略" in prompt
 
 
@@ -34,17 +34,17 @@ def test_qa_strategy_disabled(monkeypatch):
 
 
 def test_wont_guide_level1():
-    got = wont_guide_reply("不会", subject="数学", session_meta=None)
+    got = wont_guide_reply("不会", subject="理科", session_meta=None)
     assert got is not None
     reply, patch = got
-    assert "数学" in reply
+    assert "理科" in reply
     assert patch.get("wont_guide_stage") == 1
 
 
 def test_wont_guide_level2_unclear():
     got = wont_guide_reply(
         "说不清楚",
-        subject="语文",
+        subject="文科",
         session_meta={"wont_guide_stage": 1},
     )
     assert got is not None
@@ -54,25 +54,25 @@ def test_wont_guide_level2_unclear():
 
 
 def test_wont_guide_skips_with_image():
-    assert wont_guide_reply("不会", subject="数学", session_meta=None, has_image=True) is None
+    assert wont_guide_reply("不会", subject="理科", session_meta=None, has_image=True) is None
 
 
 def test_wont_guide_api(client, child_with_assessment, mock_doubao):
     uid = child_with_assessment
     r1 = client.post(
         f"/api/qa/chat?user_id={uid}",
-        json={"message": "不会", "subject": "数学"},
+        json={"message": "不会", "subject": "理科"},
     )
     assert r1.status_code == 200
     d1 = r1.json()
     assert d1.get("clarified") is True
     assert d1.get("wont_guide") is True
-    assert "数学" in d1["reply"]
+    assert "理科" in d1["reply"]
     assert mock_doubao["chat"].call_count == 0
 
     r2 = client.post(
         f"/api/qa/chat?user_id={uid}",
-        json={"message": "说不清楚", "subject": "数学", "session_id": d1["session_id"]},
+        json={"message": "说不清楚", "subject": "理科", "session_id": d1["session_id"]},
     )
     assert r2.status_code == 200
     d2 = r2.json()

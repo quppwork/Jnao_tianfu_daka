@@ -207,6 +207,7 @@ QA_PROFILE_TOOLS: list[str] = [
     "retrieve_kb",
     "ocr_extract",
     "vision_ocr",
+    "qa_reload_passage",
     "web_lookup",
     "web_search",
     "math_sketch",
@@ -217,7 +218,8 @@ QA_PROFILE_TOOLS: list[str] = [
 QA_PROFILE_KNOWLEDGE = {
     "docs": [],
     "rules": (
-        "解题以题干、OCR 预览与工具结果为准。"
+        "解题以题干、本会话 OCR 原文与工具结果为准；禁止编造段落/行号。"
+        "用户指出定位错误时用 qa_reload_passage 回看或重识图，不要让用户无故重拍。"
         "断言卷别/年份前须 web_lookup；图形辅助用 math_sketch 并原样粘贴 ```jnao-svg。"
     ),
     "mcp_server": "jnao-host",

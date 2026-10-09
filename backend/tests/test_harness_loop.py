@@ -198,6 +198,29 @@ async def test_iter_agent_yields_tokens():
 
 
 @pytest.mark.asyncio
+async def test_iter_agent_chunks_when_tools_enabled():
+    """allow_tools=True 时走 complete，最终正文应拆成多段 token，避免整段弹出。"""
+    from app.harness.loop import iter_agent
+
+    long_reply = "第一步先读题。" * 8 + "第二步再回原文定位关键词。" * 6
+    model = QueueModel([{"role": "assistant", "content": long_reply}])
+    token_parts: list[str] = []
+    async for kind, payload in iter_agent(
+        profile="qa",
+        user_message="这道阅读怎么做",
+        thread_id="t-qa-stream",
+        model=model,
+        max_steps=2,
+        allow_tools=True,
+        fresh=True,
+    ):
+        if kind == "token":
+            token_parts.append(str(payload))
+    assert len(token_parts) >= 3
+    assert "".join(token_parts) == long_reply
+
+
+@pytest.mark.asyncio
 async def test_loop_compacts_long_history():
     hist = [{"role": "user", "content": f"旧{i}"} for i in range(40)]
     seen = []

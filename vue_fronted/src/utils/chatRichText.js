@@ -412,9 +412,20 @@ function findNextDelimiterIndex(src, from) {
   return best
 }
 
+function normalizeMdMarkers(text) {
+  // 模型偶发全角标记，先归一再解析
+  return String(text || '')
+    .replace(/\uFF0A/g, '*') // ＊
+    .replace(/\uFF03/g, '#') // ＃
+    .replace(/\u2014{3,}/g, '---') // ——— → hr
+}
+
 function applyInlineMarkdown(html) {
   let out = html
+  // 先 ** 再单层 *斜体*，避免把 ** 拆坏
   out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  out = out.replace(/(^|[\s，。；：、])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+  out = out.replace(/`([^`\n]+)`/g, '<code class="qa-code">$1</code>')
   out = out.replace(
     /\((主语|谓语|宾语|定语|状语|补语|表语)\)/g,
     '<span class="qa-tag">$1</span>',
@@ -437,21 +448,80 @@ function extractSafeSvgBlock(raw) {
   return s
 }
 
-/** 学科答疑 AI 回复 → HTML（含公式） */
+function qaInline(text) {
+  return applyInlineMarkdown(renderLatexInPlainText(String(text || '')))
+}
+
+function renderQaTable(rows) {
+  if (!rows.length) return ''
+  const bodyRows = rows.filter((r) => !isGuideTableSeparator(r))
+  if (!bodyRows.length) return ''
+  const headCells = splitGuideTableCells(bodyRows[0])
+  const dataRows = bodyRows.slice(1)
+  const thead = `<thead><tr>${headCells
+    .map((c) => `<th>${qaInline(c)}</th>`)
+    .join('')}</tr></thead>`
+  const tbody = dataRows.length
+    ? `<tbody>${dataRows
+        .map((r) => {
+          const cells = splitGuideTableCells(r)
+          while (cells.length < headCells.length) cells.push('')
+          return `<tr>${cells
+            .slice(0, headCells.length)
+            .map((c) => `<td>${qaInline(c)}</td>`)
+            .join('')}</tr>`
+        })
+        .join('')}</tbody>`
+    : ''
+  return `<div class="qa-table-wrap"><table class="qa-table">${thead}${tbody}</table></div>`
+}
+
+/** 生词行：词：across = 在……对面（无「词：」前缀时须含中文释义，避免误伤数学 a=1） */
+function tryRenderVocabLine(trimmed) {
+  const labeled = trimmed.match(/^(?:词|生词|单词|词汇)[：:]\s*(.+)$/u)
+  const body = labeled ? labeled[1].trim() : trimmed
+  const m = body.match(
+    /^(?:\*\*)?([A-Za-z][A-Za-z\-']*)(?:\*\*)?(?:\s*[\/／]([^\/／]+)[\/／])?\s*[=＝:：]\s*(.+)$/u,
+  )
+  if (!m) return ''
+  const word = m[1]
+  const ipa = (m[2] || '').trim()
+  const gloss = m[3].trim()
+  if (!gloss) return ''
+  if (!labeled) {
+    if (word.length < 3) return ''
+    if (!/[\u4e00-\u9fff]/.test(gloss)) return ''
+  }
+  return (
+    `<div class="qa-vocab">` +
+    `<span class="qa-vocab-word">${escapeHtml(word)}</span>` +
+    (ipa ? `<span class="qa-vocab-ipa">/${escapeHtml(ipa)}/</span>` : '') +
+    `<span class="qa-vocab-eq">=</span>` +
+    `<span class="qa-vocab-gloss">${qaInline(gloss)}</span>` +
+    `</div>`
+  )
+}
+
+/** 学科答疑 AI 回复 → HTML（含公式、表格、原文引用、生词） */
 export function formatQaRichHtml(raw) {
   if (!raw) return ''
   // 先规范化裸 LaTeX，再按行排版（$$ 块可能占一行）
-  const lines = wrapBareLatex(String(raw)).replace(/\r\n/g, '\n').split('\n')
+  const lines = wrapBareLatex(normalizeMdMarkers(String(raw)))
+    .replace(/\r\n/g, '\n')
+    .split('\n')
   const out = []
-  for (let li = 0; li < lines.length; li++) {
+  let li = 0
+  while (li < lines.length) {
     const line = lines[li]
     const trimmed = line.trimEnd()
-    if (!trimmed.trim()) {
+    const t = trimmed.trim()
+    if (!t) {
       out.push('<div class="qa-gap"></div>')
+      li += 1
       continue
     }
     // math_sketch 返回的 SVG 围栏
-    if (/^```jnao-svg\s*$/i.test(trimmed.trim())) {
+    if (/^```jnao-svg\s*$/i.test(t)) {
       const buf = []
       li += 1
       while (li < lines.length && !/^```\s*$/.test(lines[li].trim())) {
@@ -460,37 +530,110 @@ export function formatQaRichHtml(raw) {
       }
       const svg = extractSafeSvgBlock(buf.join('\n'))
       if (svg) out.push(`<div class="qa-sketch">${svg}</div>`)
+      li += 1
       continue
     }
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed.trim())) {
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) {
       out.push('<hr class="qa-hr" />')
+      li += 1
       continue
     }
     // 流式未收拢时，单独成行的定界符直接丢掉，避免公式框外露出 \[ \]
-    if (/^(\\\[|\\\]|\\\(|\\\))$/.test(trimmed.trim())) {
+    if (/^(\\\[|\\\]|\\\(|\\\))$/.test(t)) {
+      li += 1
       continue
     }
-    const header = trimmed.match(/^\*\*(.+?)\*\*\s*[:：]?$/)
+    // Markdown ATX 标题：### Question 24
+    const mdHeading = t.match(/^(#{1,6})\s+(.+)$/)
+    if (mdHeading) {
+      const level = Math.min(mdHeading[1].length, 4)
+      out.push(`<div class="qa-sec qa-h qa-h${level}">${qaInline(mdHeading[2])}</div>`)
+      li += 1
+      continue
+    }
+    // Markdown 表格（外语阅读对照最常见）
+    if (isGuideTableRow(t)) {
+      const tableRows = []
+      while (li < lines.length && isGuideTableRow(lines[li].trim())) {
+        tableRows.push(lines[li].trim())
+        li += 1
+      }
+      out.push(renderQaTable(tableRows))
+      continue
+    }
+    // 原文/引用块：> 【原文 · Paragraph 2】…
+    if (t.startsWith('>')) {
+      const quoteLines = []
+      while (li < lines.length && lines[li].trim().startsWith('>')) {
+        quoteLines.push(lines[li].trim().replace(/^>\s?/, ''))
+        li += 1
+      }
+      const joined = quoteLines.join('\n')
+      const isSource = /原文|Paragraph|paragraph|Passage|passage|Text\s*\d/i.test(joined)
+      const cls = isSource ? 'qa-source' : 'qa-quote'
+      const label = isSource
+        ? '<div class="qa-source-label">原文定位</div>'
+        : ''
+      out.push(
+        `<div class="${cls}">${label}` +
+          quoteLines.map((l) => `<p>${qaInline(l)}</p>`).join('') +
+          `</div>`,
+      )
+      continue
+    }
+    // 无序列表
+    if (/^[-*•]\s+/.test(t)) {
+      const items = []
+      while (li < lines.length && /^[-*•]\s+/.test(lines[li].trim())) {
+        items.push(lines[li].trim().replace(/^[-*•]\s+/, ''))
+        li += 1
+      }
+      out.push(
+        `<ul class="qa-ul">${items.map((it) => `<li>${qaInline(it)}</li>`).join('')}</ul>`,
+      )
+      continue
+    }
+    // 有序列表：1. / 1、 / 1)
+    if (/^\d+[.、)\]]\s+/.test(t)) {
+      const items = []
+      while (li < lines.length && /^\d+[.、)\]]\s+/.test(lines[li].trim())) {
+        items.push(lines[li].trim().replace(/^\d+[.、)\]]\s+/, ''))
+        li += 1
+      }
+      out.push(
+        `<ol class="qa-ol">${items.map((it) => `<li>${qaInline(it)}</li>`).join('')}</ol>`,
+      )
+      continue
+    }
+    const header = t.match(/^\*\*(.+?)\*\*\s*[:：]?$/)
     if (header) {
-      // 章节行也可能夹行内公式，不能只用 escapeHtml（否则 $b=0$ 原样露出）
-      out.push(`<div class="qa-sec">${renderLatexInPlainText(header[1])}</div>`)
+      out.push(`<div class="qa-sec">${qaInline(header[1])}</div>`)
+      li += 1
       continue
     }
     const challenge = trimmed.match(/^[（(]\s*小挑战[：:]\s*(.+?)[）)]\s*$/)
     if (challenge) {
       out.push(
         `<div class="qa-challenge"><span class="qa-challenge-label">小挑战</span>` +
-          `<span class="qa-challenge-text">${renderLatexInPlainText(challenge[1])}</span></div>`,
+          `<span class="qa-challenge-text">${qaInline(challenge[1])}</span></div>`,
       )
+      li += 1
+      continue
+    }
+    const vocabHtml = tryRenderVocabLine(trimmed.trim())
+    if (vocabHtml) {
+      out.push(vocabHtml)
+      li += 1
       continue
     }
     const kv = trimmed.match(/^(.+?)\s*(?:->|→)\s*(.+)$/)
     if (kv && !trimmed.includes('**') && trimmed.length <= 80) {
       out.push(
-        `<div class="qa-kv"><span class="qa-k">${renderLatexInPlainText(kv[1].trim())}</span>` +
+        `<div class="qa-kv"><span class="qa-k">${qaInline(kv[1].trim())}</span>` +
           `<span class="qa-arrow">→</span>` +
-          `<span class="qa-v">${renderLatexInPlainText(kv[2].trim())}</span></div>`,
+          `<span class="qa-v">${qaInline(kv[2].trim())}</span></div>`,
       )
+      li += 1
       continue
     }
     // $$…$$ 或 \[…\] 单独成行 → 块级公式容器
@@ -499,15 +642,17 @@ export function formatQaRichHtml(raw) {
     if (displayOnly) {
       const mathHtml = renderTex(displayOnly[1], true)
       if (mathHtml) out.push(`<div class="qa-math">${mathHtml}</div>`)
+      li += 1
       continue
     }
-    let html = renderLatexInPlainText(trimmed)
-    html = applyInlineMarkdown(html)
+    let html = qaInline(trimmed)
     if (trimmed.includes(' + ') && /(主语|谓语|宾语|定语|状语)/.test(trimmed)) {
       out.push(`<div class="qa-struct">${html}</div>`)
+      li += 1
       continue
     }
     out.push(`<div class="qa-line">${html}</div>`)
+    li += 1
   }
   return out.join('')
 }

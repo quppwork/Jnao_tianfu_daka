@@ -198,4 +198,61 @@ S=\\frac12 ab\\sin C
     expect(html).toContain('小学 (1-3年级)')
     expect(html).not.toContain('| :---')
   })
+
+  it('formatQaRichHtml 渲染 Markdown 对照表', () => {
+    const raw = `**Step 3：题干与段落对照**
+
+| 题目问什么 | 去哪个段找 | 关键同义改写 |
+| :--- | :--- | :--- |
+| Which hotel is the nearest? | Paragraph 6 | right across the street = nearest |`
+    const html = formatQaRichHtml(raw)
+    expect(html).toContain('qa-table')
+    expect(html).toContain('<th>')
+    expect(html).toContain('Which hotel is the nearest?')
+    expect(html).not.toContain('| :---')
+  })
+
+  it('formatQaRichHtml 原文引用块带定位标签', () => {
+    const raw = `> 【原文 · Paragraph 2】
+> The hotel is right across the street from the station.`
+    const html = formatQaRichHtml(raw)
+    expect(html).toContain('qa-source')
+    expect(html).toContain('原文定位')
+    expect(html).toContain('right across the street')
+  })
+
+  it('formatQaRichHtml 生词行渲染为 qa-vocab', () => {
+    const html = formatQaRichHtml('词：across /əˈkrɒs/ = 在……对面')
+    expect(html).toContain('qa-vocab')
+    expect(html).toContain('qa-vocab-word')
+    expect(html).toContain('across')
+    expect(html).toContain('在……对面')
+  })
+
+  it('formatQaRichHtml 不把数学 a=1 当成生词', () => {
+    const html = formatQaRichHtml('令 a = 1，再求 b')
+    expect(html).not.toContain('qa-vocab')
+    expect(html).toContain('qa-line')
+  })
+
+  it('formatQaRichHtml 渲染 ### 标题与行内加粗', () => {
+    const raw = `### Question 24: Kevin 平时怎么查词义?
+
+关键词是 **Kevin + usually + 查询词义的方式**。`
+    const html = formatQaRichHtml(raw)
+    expect(html).toContain('qa-h3')
+    expect(html).toContain('Question 24')
+    expect(html).not.toContain('###')
+    expect(html).toContain('<strong>')
+    expect(html).not.toContain('**Kevin')
+  })
+
+  it('formatQaRichHtml 渲染有序列表', () => {
+    const raw = `1. 先读题干
+2. 再回原文`
+    const html = formatQaRichHtml(raw)
+    expect(html).toContain('qa-ol')
+    expect(html).toContain('<li>')
+    expect(html).toContain('先读题干')
+  })
 })

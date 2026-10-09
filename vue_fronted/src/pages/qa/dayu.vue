@@ -326,7 +326,7 @@ import {
   putQaImageLocal,
 } from '@/utils/qaMedia.js'
 import { MAIN_TABS, switchMainTab } from '@/utils/mainTabs.js'
-import { QA_MENTORS, QA_SUBJECTS, mentorOrStage } from '@/utils/qaMentors.js'
+import { QA_MENTORS, QA_SUBJECTS, mentorOrStage, normalizeQaSubject } from '@/utils/qaMentors.js'
 
 const tabs = MAIN_TABS
 const mentors = QA_MENTORS
@@ -644,8 +644,9 @@ async function switchSession(sessionId) {
   try {
     const uid = await ensureChildUser()
     const meta = sessionList.value.find((s) => s.id === sessionId)
-    if (meta?.subject && subjects.includes(meta.subject)) {
-      subject.value = meta.subject
+    const sessSubject = normalizeQaSubject(meta?.subject)
+    if (sessSubject && subjects.includes(sessSubject)) {
+      subject.value = sessSubject
     }
     qaSessionId.value = sessionId
     const data = await fetchQaSession(uid, sessionId)
@@ -865,12 +866,13 @@ onLoad((opts) => {
   try { if (rawSubject) rawSubject = decodeURIComponent(rawSubject) } catch (_) { /* keep */ }
   try { if (rawHint) rawHint = decodeURIComponent(rawHint) } catch (_) { /* keep */ }
   try { if (rawQuery) rawQuery = decodeURIComponent(rawQuery) } catch (_) { /* keep */ }
-  if (subjects.includes(rawSubject)) subject.value = rawSubject
+  const normSubject = normalizeQaSubject(rawSubject)
+  if (subjects.includes(normSubject)) subject.value = normSubject
   const prefill = (rawQuery || rawHint).slice(0, 400)
   if (prefill) inputText.value = prefill.slice(0, 200)
-  if (from === 'guide' && (rawSubject || prefill)) {
+  if (from === 'guide' && (normSubject || prefill)) {
     guideHandoffBanner.value = {
-      subject: subjects.includes(rawSubject) ? rawSubject : '',
+      subject: subjects.includes(normSubject) ? normSubject : '',
       hint: (rawHint || prefill).slice(0, 60),
       childId: String(opts?.child_id || '').trim(),
       image: String(opts?.image || '').trim(),

@@ -476,9 +476,13 @@ async def say_line(
     )
     if text is None:
         return None
-    say = parse_react_say(text)
+    from app.harness.safety import strip_internal_scratch
+
+    say = parse_react_say(text) or strip_internal_scratch(text)
     if not say and text:
         say = text.strip().splitlines()[0].strip()
+    # 二次剥离：防止 Thought 草稿漏进气泡
+    say = strip_internal_scratch(say) or say
     cleaned = _clean_line(say, avoid=avoid, user_ask=ask)
     if not cleaned:
         return None

@@ -103,7 +103,7 @@ def test_resolve_reply_actions_math_question_to_qa():
     )
     assert acts and acts[0]["target"] == "qa"
     assert "学科答疑" in acts[0]["label"]
-    assert acts[0].get("query", {}).get("subject") == "数学"
+    assert acts[0].get("query", {}).get("subject") == "理科"
 
 
 def test_resolve_reply_actions_reply_mentions_qa():

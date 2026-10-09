@@ -38,12 +38,12 @@ class TestBuildPrompt:
         assert "学者" in learner
 
     def test_includes_subject(self):
-        prompt = build_qa_system_prompt(subject="数学")
-        assert "数学" in prompt
+        prompt = build_qa_system_prompt(subject="理科")
+        assert "理科" in prompt
 
     def test_method_kb_header_and_context(self):
         prompt = build_qa_system_prompt(
-            subject="数学",
+            subject="理科",
             rag_context="系统训练先打基础再专题",
             rag_kind="method",
         )

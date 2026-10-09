@@ -39,12 +39,14 @@ from app.agents.guide.ui_blocks import build_ui_blocks
 from app.agents.guide.eval_safety import scan_guide_leaks
 from app.agents.guide.trace import TurnTimer, build_turn_trace, emit_guide_trace
 from app.agents.guide.writes import propose_write_confirms
+from app.agents.memory_policy import GUIDE_HISTORY_KEEP_DEFAULT
 from app.agents.shared.handoff import resolve_reply_actions, situation_label
 from app.core.logger import get_logger
 
 logger = get_logger("guide.runner")
 
-HISTORY_MAX_TURNS = 12
+# 与 harness.window_for_model / memory_policy 对齐，避免门面与内核两套窗口
+HISTORY_MAX_TURNS = GUIDE_HISTORY_KEEP_DEFAULT
 # legacy 路径：工具与知识外呼并行时的外层超时（秒）
 LEGACY_PARALLEL_TIMEOUT = 45.0
 
@@ -396,7 +398,10 @@ async def _gather_tools(
     history: list[dict] | None = None,
     use_tools: bool = True,
 ) -> tuple[list[dict[str, Any]], str]:
-    """多步只读 tool loop：归一后 plan_tools，再按结果 followup；末尾附 grounding 提示。"""
+    """已废弃（保留测调用）：生产路径业务工具改由 Harness ``run_profile_turn(allow_tools=True)``。
+
+    ``_legacy_tools_and_knowledge`` 不再调用本函数；勿在 run_chat / stream 重新挂回。
+    """
     if not use_tools:
         return [], ""
 

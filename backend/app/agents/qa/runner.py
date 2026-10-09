@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -10,7 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.agents.qa.clarify import clarification_reply, needs_stem_clarification
 from app.agents.qa.clarify_guide import wont_guide_reply
-from app.agents.qa.memory import QaMemory
+from app.agents.qa.memory import QaMemory, load_session_passage, save_session_passage
 from app.agents.qa.prompt_builder import (
     build_learner_context_block,
     build_qa_system_prompt,
@@ -32,6 +33,34 @@ from app.services.qa_image_store import image_data_url
 from app.services.qa_kb_router import QaKbPath, resolve_qa_kb_path
 from app.services.text_sanitize import sanitize_subject, sanitize_text, session_title_from_message
 
+_OCR_PROMPT = (
+    "请完整识别图中题目与阅读材料的全部文字与公式；"
+    "保持题号、小问(1)(2)(3)与段落换行；原文若有段落序号请原样保留，没有则不要编造 Paragraph/行号；"
+    "数学公式用 LaTeX；不要解题、不要省略小问或段落。"
+)
+
+_LOCATION_CORRECTION_RE = re.compile(
+    r"(段落|行数|行号|定位|原文).{0,16}(不对|错|有问题|不对应|不准|有点)|"
+    r"(不对|错了|有问题|不准).{0,16}(段落|行数|行号|定位|原文)|"
+    r"找错了|位置不对|原文不是|不是这一段|不是这行",
+    re.I,
+)
+
+_CORRECTION_INSTRUCTION = (
+    "【系统纠错指令】用户指出先前段落/行号/定位有误。"
+    "请严格依据本会话题目原文（OCR）重新逐段核对并更正讲解与答案；"
+    "可调用工具 qa_reload_passage（需要时可 reocr=true 重新识图）；"
+    "原文已在上下文时不要让用户重拍，禁止用「以你书上为准」推脱；"
+    "原文没有印刷行号时改用「第 N 段（按换行）」或直接引用句子。"
+)
+
+
+def looks_like_location_correction(message: str) -> bool:
+    text = (message or "").strip()
+    if not text:
+        return False
+    return bool(_LOCATION_CORRECTION_RE.search(text))
+
 
 async def _ocr_preview(image_data_url: str) -> str | None:
     """经 Harness MCP · ocr_extract（Qwen3.5-OCR）识别题干。"""
@@ -41,11 +70,8 @@ async def _ocr_preview(image_data_url: str) -> str | None:
         "ocr_extract",
         {
             "image_data_url": image_data_url,
-            "max_tokens": 1600,
-            "prompt": (
-                "请完整识别图中题目全部文字与公式，保持题号与小问(1)(2)(3)结构；"
-                "数学公式用 LaTeX；不要解题、不要省略小问。"
-            ),
+            "max_tokens": 3500,
+            "prompt": _OCR_PROMPT,
         },
         profile="qa",
     )
@@ -53,6 +79,39 @@ async def _ocr_preview(image_data_url: str) -> str | None:
         return None
     text = str((result.data or {}).get("text") or "").strip()
     return text or None
+
+
+async def _resolve_passage_for_turn(
+    session: QaSession,
+    *,
+    child_user_id: int,
+    image_id: str | None,
+    message: str,
+) -> tuple[str | None, str | None, str | None]:
+    """返回 (ocr_text, image_url_for_bubble, resolved_image_id)。
+
+    - 本轮有新图：OCR 并写入会话
+    - 多轮纯文字：回灌会话里上次 OCR；若用户纠错定位则尽量重新识图
+    """
+    correction = looks_like_location_correction(message)
+    if image_id:
+        data_url = image_data_url(image_id, child_user_id)
+        if not data_url:
+            raise ValueError("图片不存在或已过期")
+        ocr = await _ocr_preview(data_url)
+        save_session_passage(session, image_id=image_id, ocr_text=ocr)
+        url = f"/api/qa/images/{image_id}?user_id={child_user_id}"
+        return ocr, url, image_id
+
+    last_image_id, last_ocr = load_session_passage(session)
+    if correction and last_image_id:
+        data_url = image_data_url(last_image_id, child_user_id)
+        if data_url:
+            ocr = await _ocr_preview(data_url)
+            if ocr:
+                save_session_passage(session, image_id=last_image_id, ocr_text=ocr)
+                return ocr, None, last_image_id
+    return last_ocr, None, last_image_id
 
 
 async def _fetch_qa_rag_bundle(
@@ -141,6 +200,56 @@ def _patch_session_meta(session: QaSession, patch: dict[str, Any]) -> None:
     flag_modified(session, "meta_json")
 
 
+async def _run_product_gate(
+    message: str,
+    *,
+    reply: str,
+    code: str,
+    extra: dict[str, Any] | None = None,
+) -> str:
+    """产品闸门经 GateLook 短接（不调模型）；返回闸门 reply。"""
+    from app.harness.turn import run_profile_turn
+
+    gate = {"reply": reply, "code": code}
+    if extra:
+        gate.update(extra)
+    turn = await run_profile_turn(
+        "qa",
+        message or "",
+        max_steps=1,
+        allow_tools=False,
+        metadata={"product_gate": gate},
+    )
+    return (turn.get("reply") or reply).strip() or reply
+
+
+async def _stream_product_gate(
+    message: str,
+    *,
+    reply: str,
+    code: str,
+    extra: dict[str, Any] | None = None,
+) -> AsyncIterator[tuple[str, Any]]:
+    """流式产品闸门：经 iter_agent GateHook 吐 token，再由调用方补 done 业务字段。"""
+    from app.harness.turn import run_profile_turn_stream
+
+    gate = {"reply": reply, "code": code}
+    if extra:
+        gate.update(extra)
+    async for kind, payload in run_profile_turn_stream(
+        "qa",
+        message or "",
+        max_steps=1,
+        allow_tools=False,
+        metadata={"product_gate": gate},
+    ):
+        if kind == "token":
+            yield ("token", payload)
+        elif kind == "error":
+            yield ("error", payload)
+            return
+
+
 async def run_chat(
     db: Session,
     child_user_id: int,
@@ -210,7 +319,15 @@ async def run_chat(
         QaMemory.append_message(db, session_id=session.id, role="user", content=message)
         if session.title == "新对话":
             session.title = session_title_from_message(message)
-        reply = mismatch_reply(mismatch)
+        reply = await _run_product_gate(
+            message,
+            reply=mismatch_reply(mismatch),
+            code="subject_mismatch",
+            extra={
+                "suggested_subject": mismatch.detected,
+                "selected_subject": mismatch.selected,
+            },
+        )
         QaMemory.append_message(
             db,
             session_id=session.id,
@@ -252,7 +369,13 @@ async def run_chat(
         has_image=has_image,
     )
     if wont:
-        reply, meta_patch = wont
+        reply_raw, meta_patch = wont
+        reply = await _run_product_gate(
+            message,
+            reply=reply_raw,
+            code="wont_guide",
+            extra={"wont_guide": True},
+        )
         QaMemory.append_message(db, session_id=session.id, role="user", content=message)
         if session.title == "新对话":
             session.title = session_title_from_message(message)
@@ -332,14 +455,12 @@ async def run_chat(
     if topics:
         coach_meta["recent_topics"] = topics[:3]
 
-    ocr_preview = None
-    image_url = None
-    if image_id:
-        data_url = image_data_url(image_id, child_user_id)
-        if not data_url:
-            raise ValueError("图片不存在或已过期")
-        image_url = f"/api/qa/images/{image_id}?user_id={child_user_id}"
-        ocr_preview = await _ocr_preview(data_url)
+    ocr_preview, image_url, resolved_image_id = await _resolve_passage_for_turn(
+        session,
+        child_user_id=child_user_id,
+        image_id=image_id,
+        message=message,
+    )
 
     rag_bundle = await _fetch_qa_rag_bundle(
         message,
@@ -385,6 +506,8 @@ async def run_chat(
     model_text = message or (
         "请根据题目图片与识别预览讲解；勿编造未识别出的题干。" if has_image else ""
     )
+    if looks_like_location_correction(message):
+        model_text = f"{model_text}\n\n{_CORRECTION_INSTRUCTION}".strip()
     user_message = build_qa_user_message(model_text, learner_context)
 
     user_row = QaMessage(
@@ -407,9 +530,18 @@ async def run_chat(
         "qa",
         user_message,
         history=history,
-        ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
+        ctx=ToolContext(
+            db=db,
+            child_user_id=child_user_id,
+            profile="qa",
+            extra={
+                "qa_session_id": session.id,
+                "last_image_id": resolved_image_id or "",
+                "last_ocr_text": ocr_preview or "",
+            },
+        ),
         system_override=system,
-        max_steps=4,
+        max_steps=6 if looks_like_location_correction(message) else 4,
         allow_tools=True,
     )
     reply = turn.get("reply")
@@ -534,6 +666,23 @@ async def run_chat_stream(
         if session.title == "新对话":
             session.title = session_title_from_message(message)
         reply = mismatch_reply(mismatch)
+        parts: list[str] = []
+        async for kind, payload in _stream_product_gate(
+            message,
+            reply=reply,
+            code="subject_mismatch",
+            extra={
+                "suggested_subject": mismatch.detected,
+                "selected_subject": mismatch.selected,
+            },
+        ):
+            if kind == "token":
+                parts.append(str(payload))
+                yield ("token", payload)
+            elif kind == "error":
+                yield ("error", payload)
+                return
+        reply = ("".join(parts) or reply).strip() or reply
         QaMemory.append_message(
             db,
             session_id=session.id,
@@ -559,7 +708,6 @@ async def run_chat_stream(
             suggested_subject=mismatch.detected,
             stream=True,
         )
-        yield ("token", reply)
         yield (
             "done",
             {
@@ -581,7 +729,21 @@ async def run_chat_stream(
         has_image=has_image,
     )
     if wont:
-        reply, meta_patch = wont
+        reply_raw, meta_patch = wont
+        parts = []
+        async for kind, payload in _stream_product_gate(
+            message,
+            reply=reply_raw,
+            code="wont_guide",
+            extra={"wont_guide": True},
+        ):
+            if kind == "token":
+                parts.append(str(payload))
+                yield ("token", payload)
+            elif kind == "error":
+                yield ("error", payload)
+                return
+        reply = ("".join(parts) or reply_raw).strip() or reply_raw
         QaMemory.append_message(db, session_id=session.id, role="user", content=message)
         if session.title == "新对话":
             session.title = session_title_from_message(message)
@@ -606,7 +768,6 @@ async def run_chat_stream(
             clarified=True,
             stream=True,
         )
-        yield ("token", reply)
         yield (
             "done",
             svc.public_chat_payload(
@@ -672,15 +833,16 @@ async def run_chat_stream(
     if topics:
         coach_meta["recent_topics"] = topics[:3]
 
-    ocr_preview = None
-    image_url = None
-    if image_id:
-        data_url = image_data_url(image_id, child_user_id)
-        if not data_url:
-            yield ("error", "图片不存在或已过期")
-            return
-        image_url = f"/api/qa/images/{image_id}?user_id={child_user_id}"
-        ocr_preview = await _ocr_preview(data_url)
+    try:
+        ocr_preview, image_url, resolved_image_id = await _resolve_passage_for_turn(
+            session,
+            child_user_id=child_user_id,
+            image_id=image_id,
+            message=message,
+        )
+    except ValueError as e:
+        yield ("error", str(e))
+        return
 
     rag_bundle = await _fetch_qa_rag_bundle(
         message,
@@ -722,6 +884,8 @@ async def run_chat_stream(
     model_text = message or (
         "请根据题目图片与识别预览讲解；勿编造未识别出的题干。" if has_image else ""
     )
+    if looks_like_location_correction(message):
+        model_text = f"{model_text}\n\n{_CORRECTION_INSTRUCTION}".strip()
     user_message = build_qa_user_message(model_text, learner_context)
 
     user_row = QaMessage(
@@ -745,9 +909,18 @@ async def run_chat_stream(
         "qa",
         user_message,
         history=history,
-        ctx=ToolContext(db=db, child_user_id=child_user_id, profile="qa"),
+        ctx=ToolContext(
+            db=db,
+            child_user_id=child_user_id,
+            profile="qa",
+            extra={
+                "qa_session_id": session.id,
+                "last_image_id": resolved_image_id or "",
+                "last_ocr_text": ocr_preview or "",
+            },
+        ),
         system_override=system,
-        max_steps=4,
+        max_steps=6 if looks_like_location_correction(message) else 4,
         allow_tools=True,
     ):
         if kind == "token":

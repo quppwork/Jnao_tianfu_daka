@@ -83,6 +83,58 @@
   margin-top: 2px;
 }
 
+.bubble-rich .qa-h1 {
+  font-size: 15.5px;
+}
+.bubble-rich .qa-h2 {
+  font-size: 14.5px;
+}
+.bubble-rich .qa-h3,
+.bubble-rich .qa-h4 {
+  font-size: 13.5px;
+}
+
+.bubble-rich .qa-ul,
+.bubble-rich .qa-ol {
+  margin: 6px 0 12px;
+  padding-left: 1.35em;
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-ul {
+  list-style: disc;
+}
+
+.bubble-rich .qa-ol {
+  list-style: decimal;
+}
+
+.bubble-rich .qa-ul li,
+.bubble-rich .qa-ol li {
+  margin: 0 0 6px;
+  line-height: 1.65;
+  padding-left: 2px;
+}
+
+.bubble-rich .qa-ul li:last-child,
+.bubble-rich .qa-ol li:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-rich em {
+  font-style: italic;
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  background: var(--qa-math-chip);
+  color: var(--qa-math-ink);
+}
+
 /* 行内公式：青石色 + 浅底，和中文解说明显分开 */
 .bubble-rich .qa-math-inline {
   display: inline;
@@ -254,4 +306,153 @@
   height: auto;
   display: inline-block;
   vertical-align: middle;
+}
+
+/* 外语阅读：对照表 */
+.bubble-rich .qa-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 10px 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--qa-math-panel-border);
+  background: var(--qa-math-panel);
+}
+
+.bubble-rich .qa-table {
+  width: 100%;
+  min-width: 260px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.bubble-rich .qa-table th,
+.bubble-rich .qa-table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-table th {
+  background: rgba(110, 200, 224, 0.12);
+  color: var(--qa-math-ink);
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bubble-rich .qa-table tr:last-child td {
+  border-bottom: none;
+}
+
+[data-theme='white'] .bubble-rich .qa-table th,
+.app.lt .bubble-rich .qa-table th {
+  background: rgba(13, 107, 124, 0.08);
+}
+
+[data-theme='white'] .bubble-rich .qa-table th,
+[data-theme='white'] .bubble-rich .qa-table td,
+.app.lt .bubble-rich .qa-table th,
+.app.lt .bubble-rich .qa-table td {
+  border-bottom-color: rgba(100, 116, 139, 0.18);
+}
+
+/* 原文定位块 */
+.bubble-rich .qa-source {
+  margin: 10px 0 14px;
+  padding: 10px 12px 12px;
+  border-radius: 0 12px 12px 0;
+  border-left: 3px solid rgba(94, 184, 212, 0.75);
+  background: rgba(80, 170, 200, 0.1);
+}
+
+.bubble-rich .qa-source-label {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--qa-math-ink);
+}
+
+.bubble-rich .qa-source p {
+  margin: 0 0 6px;
+  color: var(--qa-prose-strong);
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.bubble-rich .qa-source p:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-rich .qa-quote {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border-radius: 0 10px 10px 0;
+  border-left: 3px solid rgba(148, 163, 184, 0.45);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.bubble-rich .qa-quote p {
+  margin: 0 0 4px;
+  color: var(--qa-prose);
+  line-height: 1.65;
+}
+
+.bubble-rich .qa-quote p:last-child {
+  margin-bottom: 0;
+}
+
+[data-theme='white'] .bubble-rich .qa-source,
+.app.lt .bubble-rich .qa-source {
+  background: rgba(13, 107, 124, 0.06);
+  border-left-color: rgba(13, 107, 124, 0.45);
+}
+
+/* 生词条 */
+.bubble-rich .qa-vocab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
+.bubble-rich .qa-vocab-word {
+  font-weight: 700;
+  font-size: 14px;
+  color: #f0c674;
+  letter-spacing: 0.02em;
+}
+
+[data-theme='white'] .bubble-rich .qa-vocab-word,
+.app.lt .bubble-rich .qa-vocab-word {
+  color: #b45309;
+}
+
+.bubble-rich .qa-vocab-ipa {
+  font-size: 12px;
+  color: var(--qa-prose);
+  opacity: 0.75;
+}
+
+.bubble-rich .qa-vocab-eq {
+  font-size: 12px;
+  color: var(--qa-math-ink);
+  opacity: 0.85;
+}
+
+.bubble-rich .qa-vocab-gloss {
+  flex: 1 1 120px;
+  font-size: 13px;
+  color: var(--qa-prose-strong);
+  line-height: 1.5;
 }

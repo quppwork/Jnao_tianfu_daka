@@ -1,10 +1,9 @@
-/** 大宇学科答疑 · 导师频道（与原站 answer.html MENTORS 对齐）
+/** 大宇学科答疑 · 导师频道
  *
- * ava  = 导师卡片人像
- * gif  = 顶部舞台动态图
- * sig  = 人物性格提示词（卡片展示 + 后端 ROLE 必须遵守的语气）
- * know = 对孩子说的话 / 导师金句
- * tip  = 讲法提纲
+ * subject = 频道名（与后端 registry / API 一致）：理科 / 文科 / 外语 / 科技 / 书法
+ * guide   = 顶部标签文案（与 subject 同名）
+ * ava/gif = 舞台与卡片图
+ * sig     = 人物性格提示词（卡片 + 后端软约束语气）
  */
 
 export const QA_STAGE = {
@@ -15,16 +14,25 @@ export const QA_STAGE = {
   badge: '思',
   badgeColor: '#3E8E5A',
   sig: '不急着讲题。先懂这个孩子，再解决他的问题。',
-  know: '我是大宇智能体。选一门学科，让最懂你的导师来陪你。',
+  know: '我是大宇智能体。选一个频道，让最懂你的导师来陪你。',
   ava: '/static/dayu/assets/avatar-dayu.jpg',
   gif: '/static/dayu/assets/gif/mentor-dayu.gif',
 }
 
+/** 旧会话 / 引导跳转别名 → 新频道 */
+export const QA_SUBJECT_ALIASES = {
+  数学: '理科',
+  语文: '文科',
+  英语: '外语',
+  科学: '科技',
+  学习心法: '书法',
+}
+
 export const QA_MENTORS = [
   {
-    key: 'math',
-    subject: '数学',
-    guide: '竞赛类/理科',
+    key: 'science_track',
+    subject: '理科',
+    guide: '理科',
     name: '余峰',
     emoji: '📐',
     color: '#7FA7EF',
@@ -38,9 +46,9 @@ export const QA_MENTORS = [
     gif: '/static/dayu/assets/gif/mentor-math.gif',
   },
   {
-    key: 'chinese',
-    subject: '语文',
-    guide: '艺术类/外语',
+    key: 'arts_track',
+    subject: '文科',
+    guide: '文科',
     name: '秦念国',
     emoji: '📜',
     color: '#C9A227',
@@ -54,9 +62,9 @@ export const QA_MENTORS = [
     gif: '/static/dayu/assets/gif/mentor-chinese.gif',
   },
   {
-    key: 'english',
-    subject: '英语',
-    guide: '记忆力/文科',
+    key: 'language_track',
+    subject: '外语',
+    guide: '外语',
     name: '田小静',
     emoji: '🌸',
     color: '#FF9EBB',
@@ -70,9 +78,9 @@ export const QA_MENTORS = [
     gif: '/static/dayu/assets/gif/mentor-english.gif',
   },
   {
-    key: 'science',
-    subject: '科学',
-    guide: '脑科学/发明',
+    key: 'tech_track',
+    subject: '科技',
+    guide: '科技',
     name: '张宇',
     emoji: '🔭',
     color: '#9AD9FF',
@@ -86,9 +94,9 @@ export const QA_MENTORS = [
     gif: '/static/dayu/assets/gif/mentor-science.gif',
   },
   {
-    key: 'mind',
-    subject: '学习心法',
-    guide: '大书道/艺术',
+    key: 'calligraphy_track',
+    subject: '书法',
+    guide: '书法',
     name: '善雨',
     emoji: '🍵',
     color: '#E4D8FF',
@@ -105,8 +113,16 @@ export const QA_MENTORS = [
 
 export const QA_SUBJECTS = QA_MENTORS.map((m) => m.subject)
 
+export function normalizeQaSubject(subject) {
+  const s = String(subject || '').trim()
+  if (!s) return ''
+  if (QA_SUBJECTS.includes(s)) return s
+  return QA_SUBJECT_ALIASES[s] || s
+}
+
 export function mentorBySubject(subject) {
-  return QA_MENTORS.find((m) => m.subject === subject) || null
+  const key = normalizeQaSubject(subject)
+  return QA_MENTORS.find((m) => m.subject === key) || null
 }
 
 export function mentorOrStage(subject) {

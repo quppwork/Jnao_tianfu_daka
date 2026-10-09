@@ -103,15 +103,17 @@ async def ocr_extract(args: dict[str, Any]) -> dict[str, Any]:
                 (((data.get("choices") or [{}])[0].get("message") or {}).get("content"))
                 or ""
             ).strip()
-            return {
-                "ok": True,
-                "text": text,
-                "provider": "qwen-ocr" if "ocr" in model.lower() else "qwen-vl",
-                "model": model,
-                "mock": False,
-            }
-        except Exception as e:
-            return {"ok": False, "error": f"qwen-ocr failed: {e}"[:240], "mock": False}
+            if text:
+                return {
+                    "ok": True,
+                    "text": text,
+                    "provider": "qwen-ocr" if "ocr" in model.lower() else "qwen-vl",
+                    "model": model,
+                    "mock": False,
+                }
+        except Exception:
+            # 主 OCR 失败：继续走下方 vision 回退（仍在本工具内，不回业务门面）
+            pass
 
     if not data_url and b64:
         data_url = f"data:image/jpeg;base64,{b64}"
@@ -125,12 +127,14 @@ async def ocr_extract(args: dict[str, Any]) -> dict[str, Any]:
                 image_data_url=data_url,
                 max_tokens=max_tokens,
             )
-            return {
-                "ok": True,
-                "text": (text or "").strip(),
-                "provider": "deepseek_vision",
-                "mock": False,
-            }
+            text = (text or "").strip()
+            if text:
+                return {
+                    "ok": True,
+                    "text": text,
+                    "provider": "deepseek_vision",
+                    "mock": False,
+                }
     except Exception as e:
         return {"ok": False, "error": f"vision failed: {e}"[:240], "mock": False}
 

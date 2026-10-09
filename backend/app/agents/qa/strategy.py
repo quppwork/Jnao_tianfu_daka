@@ -25,7 +25,10 @@ STAGE_STRATEGY: dict[str, str] = {
     "senior": "学段高中：可更严谨，点明方法名称与适用条件，仍引导自学而非代写。",
 }
 
-_FOOTER = "策略只调语气与侧重点；禁止泄露平台晋级/Part 内部规则；禁止编造学员训练数据。"
+_FOOTER = (
+    "策略只调语气与侧重点，不要把策略原文或「（咱们不跳过术语）」这类旁白写进给学生看的回复；"
+    "禁止泄露平台晋级/Part 内部规则；禁止编造学员训练数据。"
+)
 
 
 def strategy_enabled() -> bool:
@@ -65,7 +68,10 @@ def resolve_qa_strategy(
         keys.append(f"stage:{stage}")
 
     if has_image:
-        lines.append("学员已附图：先对照图中条件讲解，不确定处再追问，勿无视图片空讲。")
+        lines.append(
+            "学员已附图：先对照图中条件讲解；若图中有多道小题，本轮只精讲一题，"
+            "讲完再问是否继续，勿一次写完全卷答案。"
+        )
         keys.append("modality:image")
 
     if lines:

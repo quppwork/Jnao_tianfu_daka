@@ -30,17 +30,94 @@
     if (video) video.setAttribute('controls', '')
   }
 
-  function markUnlocked(data, ep, opts) {
-    if (!data || !data.unlocked) return
-    ep.unlocked = true
-    // 刚解锁：清掉此前 403 冻结；仅预热，不展开讨论
-    if (openWarm.id === ep.id) {
-      openWarm.blocked = false
-      openWarm.promise = null
-      openWarm.data = null
+  function syncUnlockedToParent(ep) {
+    if (!ep || !ep.id || !ns.state) return
+    try {
+      var payload = ns.state
+      if (payload.episode && payload.episode.id === ep.id) {
+        payload.episode.unlocked = true
+        payload.episode.percent = Math.max(Number(payload.episode.percent) || 0, 100)
+      }
+      localStorage.removeItem('jnao_academy_sector')
+      localStorage.setItem(sectorCacheKey(), JSON.stringify(payload))
+      if (root.parent && root.parent !== root) {
+        root.parent.postMessage({ type: 'dayu-academy-sync', academy: payload }, '*')
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function refreshUnlockChrome(ep) {
+    if (!ep) return
+    var unlocked = !!ep.unlocked
+    if ($('inp')) {
+      $('inp').disabled = !joined
+      if (!joined) {
+        $('inp').placeholder = unlocked ? '点击加入讨论' : '看完正片即可加入讨论'
+      }
     }
+    var lk2 = document.querySelector('#chatroom .lk2')
+    var lk3 = document.querySelector('#chatroom .lk3')
+    if (lk2) {
+      lk2.textContent = unlocked ? '本集已解锁，点「加入频道讨论」进入' : '看完正片，即可加入讨论'
+    }
+    if (lk3) {
+      lk3.textContent = unlocked ? '加入频道讨论 →' : '看完正片即可加入讨论'
+      lk3.style.cursor = unlocked ? 'pointer' : ''
+      lk3.onclick = unlocked
+        ? function (ev) {
+            try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e0) { /* ignore */ }
+            if (typeof root.joinChat === 'function') root.joinChat()
+            else if (typeof joinChat === 'function') joinChat()
+          }
+        : null
+    }
+    var browseJoin = $('browseJoin')
+    if (browseJoin) {
+      var phone = document.querySelector('.phone')
+      var inBrowse = !!(phone && phone.classList.contains('browse-mode'))
+      browseJoin.classList.toggle('is-on', unlocked && inBrowse && !joined)
+      browseJoin.onclick = unlocked
+        ? function (ev) {
+            try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e4) { /* ignore */ }
+            if (joinGateBlocked()) return
+            if (typeof root.joinChat === 'function') root.joinChat()
+            else if (typeof joinChat === 'function') joinChat()
+          }
+        : null
+    }
+  }
+
+  function markUnlocked(data, ep, opts) {
+    if (!ep) return
+    var pct = data && data.percent != null ? Number(data.percent) : NaN
+    var unlocked = !!(data && (data.unlocked || pct >= 90))
+    if (!unlocked) return
+    ep.unlocked = true
+    if (isFinite(pct) && pct > Number(ep.percent || 0)) ep.percent = pct
+    else if (!ep.percent || ep.percent < 90) ep.percent = 100
+    // 刚解锁：清掉此前 403 冻结；仅预热，不展开讨论
+    if (openWarm.id === ep.id || !openWarm.id) {
+      openWarm.blocked = false
+      if (openWarm.id === ep.id) {
+        openWarm.promise = null
+        openWarm.data = null
+      }
+    }
+    syncUnlockedToParent(ep)
+    refreshUnlockChrome(ep)
     warmOpenRoom(ep).catch(function () { /* ignore */ })
     if (opts && opts.showEnd) showEndOverlay()
+  }
+
+  /** 同集陈旧 hydrate 不得把已解锁打回锁定（否则播完「进入讨论组」会消失） */
+  function preserveLocalUnlock(nextEp) {
+    var prev = ns.state && ns.state.episode
+    if (!prev || !nextEp || prev.id !== nextEp.id) return nextEp
+    if (prev.unlocked && !nextEp.unlocked) {
+      nextEp.unlocked = true
+      nextEp.percent = Math.max(Number(nextEp.percent) || 0, Number(prev.percent) || 0, 100)
+    }
+    return nextEp
   }
 
   function resolvePlaySrc(playUrl) {
@@ -200,8 +277,15 @@
     }
     if (lk3) {
       lk3.textContent = unlocked ? '加入频道讨论 →' : '看完正片即可加入讨论'
-      lk3.style.cursor = ''
-      lk3.onclick = null
+      lk3.style.cursor = unlocked ? 'pointer' : ''
+      lk3.onclick = unlocked
+        ? function (ev) {
+            try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e3) { /* ignore */ }
+            if (joinGateBlocked()) return
+            if (typeof root.joinChat === 'function') root.joinChat()
+            else if (typeof joinChat === 'function') joinChat()
+          }
+        : null
     }
     var browseJoin = $('browseJoin')
     if (browseJoin) {
@@ -485,6 +569,7 @@
         ns.toast('这一集还没准备好')
         return
       }
+      preserveLocalUnlock(data.episode)
       if (!data.switchable || !data.switchable.length) {
         data.switchable = defaultSwitchable(data.episode.id)
       }
@@ -553,6 +638,7 @@
   ns.paintChannel = function (sector) {
     var ep = sector && sector.episode
     if (!ep || !$('chanName')) return
+    preserveLocalUnlock(ep)
     if (!sector.switchable || !sector.switchable.length) {
       sector.switchable = defaultSwitchable(ep.id)
     }
@@ -680,14 +766,17 @@
           var lastSent = 0
           video.addEventListener('timeupdate', function () {
             var cur = ns.state && ns.state.episode
-            if (!cur || !video.duration) return
-            if ($('vprogI')) $('vprogI').style.width = Math.min(100, video.currentTime / video.duration * 100) + '%'
+            var dur = Number(video.duration)
+            if (!cur || !isFinite(dur) || dur <= 0) return
+            var pct = Math.min(100, (Number(video.currentTime) / dur) * 100)
+            if ($('vprogI')) $('vprogI').style.width = pct + '%'
             if (Date.now() - lastSent < 4000) return
             lastSent = Date.now()
-            // 中途只记进度/解锁讨论，不弹出「已看完」；解锁后再 warm（未解锁 open 会 403）
+            // 必须带 percent：duration=Infinity 时 JSON 会变成 null，后端会 400
             ns.api('/api/academy/episodes/' + cur.id + '/progress', {
+              percent: pct,
               position_sec: video.currentTime,
-              duration_sec: video.duration,
+              duration_sec: dur,
             }).then(function (data) { markUnlocked(data, cur) }).catch(function () {})
           })
           video.addEventListener('ended', function () {
@@ -698,13 +787,19 @@
             ns.api('/api/academy/episodes/' + cur.id + '/progress', { percent: 100 })
               .then(function (data) {
                 // 播完只出「加入讨论」按钮，不自动弹讨论组
-                markUnlocked(data || { unlocked: true }, cur, { showEnd: true })
+                markUnlocked(data || { unlocked: true, percent: 100 }, cur, { showEnd: true })
                 if (already) showEndOverlay()
               })
               .catch(function () {
-                // 进度没记上：不假装解锁、不打 open，避免 403 风暴
-                showEndOverlay()
-                ns.toast('进度没记上，再看一遍或稍后重试')
+                // 网络抖动：再试一次 percent=100（不依赖 duration）
+                ns.api('/api/academy/episodes/' + cur.id + '/progress', { percent: 100 })
+                  .then(function (data) {
+                    markUnlocked(data || { unlocked: true, percent: 100 }, cur, { showEnd: true })
+                  })
+                  .catch(function () {
+                    showEndOverlay()
+                    ns.toast('进度没记上，点「加入讨论」会再试一次，或再播一遍')
+                  })
               })
           })
           video.addEventListener('error', function () {
@@ -740,12 +835,33 @@
       }
       if (joinGateBlocked()) return
       if (!ep.unlocked) {
-        ns.toast('看完正片才能加入讨论')
+        // 播完了但本地/父页状态被冲掉时：补记一次进度再进
+        if (root.__academyJoinUnlocking) return
+        root.__academyJoinUnlocking = true
+        ns.api('/api/academy/episodes/' + ep.id + '/progress', { percent: 100 })
+          .then(function (data) {
+            root.__academyJoinUnlocking = false
+            if (data && (data.unlocked || Number(data.percent) >= 90)) {
+              markUnlocked(data, ep)
+              root.joinChat()
+              return
+            }
+            ns.toast('看完正片才能加入讨论')
+          })
+          .catch(function () {
+            root.__academyJoinUnlocking = false
+            ns.toast('看完正片才能加入讨论')
+          })
         return
       }
       hideEndOverlay()
       prefetchChatAssets()
       unlockChatShell()
+      // 已解锁进房：清掉历史 403 冻结，避免 warm 一直 reject
+      if (openWarm.id === ep.id) {
+        openWarm.blocked = false
+        if (openWarm.promise && !openWarm.data) openWarm.promise = null
+      }
       var live = !!(ns.userId && ns.userId())
       var roomMark = (live ? 'live:' : 'fake:') + storageUid() + ':' + ep.id
       // 已进过房：只滚到最新消息，不弹键盘
@@ -758,7 +874,7 @@
       focusChatroom()
 
       var cached = readRoom(ep.id)
-      var warmReady = openWarm.id === ep.id && openWarm.uid === storageUid() && openWarm.data
+      var warmReady = openWarm.id === ep.id && openWarm.uid === storageUid() && openWarm.data && !openWarm.blocked
       var openTalk = warmReady
         ? Promise.resolve(openWarm.data)
         : warmOpenRoom(ep)

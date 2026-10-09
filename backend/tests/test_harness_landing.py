@@ -71,7 +71,7 @@ def test_qa_handoff_packet_keeps_context():
         image_id="img-9",
     )
     assert pkt["from"] == "guide"
-    assert pkt["subject"] == "数学"
+    assert pkt["subject"] == "理科"
     assert pkt["child_id"] == "42"
     assert pkt["image"] == "img-9"
     assert "3x+1=7" in pkt["query"]

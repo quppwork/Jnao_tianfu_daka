@@ -57,10 +57,16 @@ def check_tool(spec: ToolSpec | None, name: str, *, profile: str | None = None) 
     return PolicyDecision(True)
 
 
-def check_user_message(text: str) -> PolicyDecision:
+def check_user_message(text: str, *, profile: str | None = None) -> PolicyDecision:
+    """用户输入策略：长度 + 提示词注入（Harness 共用，各 profile 生效）。"""
+    del profile  # 判定本身与 profile 无关；拒识文案由调用方按 profile 选取
     raw = text or ""
     if len(raw) > MAX_USER_CHARS:
         return PolicyDecision(False, f"message exceeds {MAX_USER_CHARS} chars")
+    from app.harness.safety import looks_like_prompt_injection
+
+    if looks_like_prompt_injection(raw):
+        return PolicyDecision(False, "prompt_injection")
     return PolicyDecision(True)
 
 

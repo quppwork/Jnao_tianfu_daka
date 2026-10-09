@@ -5,6 +5,15 @@
 
   function apply(payload) {
     if (!payload) return
+    // 同集：iframe 内已解锁时，勿被父页陈旧 sector 盖回 locked
+    try {
+      var prev = ns.state && ns.state.episode
+      var next = payload.episode
+      if (prev && next && prev.id === next.id && prev.unlocked && !next.unlocked) {
+        next.unlocked = true
+        next.percent = Math.max(Number(next.percent) || 0, Number(prev.percent) || 0, 100)
+      }
+    } catch (eKeep) { /* ignore */ }
     ns.state = payload
     if (ns.bindChannel) ns.bindChannel()
     if (ns.paintChannel) ns.paintChannel(payload)

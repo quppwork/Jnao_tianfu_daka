@@ -38,9 +38,13 @@ def window_for_model(
     messages: list[dict],
     mem: dict[str, Any] | None = None,
     *,
-    keep: int = 20,
+    keep: int = HISTORY_KEEP_DEFAULT,
 ) -> tuple[list[dict], dict[str, Any]]:
-    """给模型的上下文窗：system 常驻，其余折叠；不改原 messages。"""
+    """给模型的上下文窗：system 常驻，其余折叠；不改原 messages。
+
+    keep 默认与 memory_policy.HISTORY_KEEP_DEFAULT 一致，避免门面已折一轮、
+    内核再用不同窗口二次压扁。
+    """
     msgs = list(messages or [])
     systems = [m for m in msgs if m.get("role") == "system"]
     rest = [m for m in msgs if m.get("role") != "system"]

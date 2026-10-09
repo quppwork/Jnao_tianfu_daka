@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -34,6 +35,36 @@ logger = logging.getLogger("jnao.harness.loop")
 
 GateHook = Callable[[AgentState], Awaitable[AgentState | None] | AgentState | None]
 
+# allow_tools 时必须走 complete（才能拿 tool_calls），最终正文会整段返回；
+# 切成小块再 SSE，避免学科答疑等场景「整段弹出」。
+_STREAM_CHUNK_CHARS = 28
+_STREAM_CHUNK_PAUSE_S = 0.01
+
+
+async def _iter_text_tokens(text: str) -> AsyncIterator[str]:
+    """把完整回复切成渐进 token，供非 live 路径模拟流式。"""
+    s = str(text or "")
+    if not s:
+        return
+    if len(s) <= _STREAM_CHUNK_CHARS:
+        yield s
+        return
+    i = 0
+    n = len(s)
+    while i < n:
+        j = min(i + _STREAM_CHUNK_CHARS, n)
+        if j < n:
+            # 向后多看一点，尽量在换行/标点处切断
+            for k in range(j, min(n, j + 16)):
+                if s[k] in "\n。！？；，、,.!?;: ":
+                    j = k + 1
+                    break
+        piece = s[i:j]
+        i = j
+        if piece:
+            yield piece
+            await asyncio.sleep(_STREAM_CHUNK_PAUSE_S)
+
 
 class ModelAdapter(Protocol):
     async def complete(
@@ -52,6 +83,12 @@ def register_gate(profile: str, hook: GateHook) -> None:
 
 def clear_gates() -> None:
     _GATES.clear()
+    try:
+        from app.harness import gates as _gates_mod
+
+        _gates_mod._INSTALLED = False
+    except Exception:
+        pass
 
 
 class DeepSeekAdapter:
@@ -116,6 +153,7 @@ async def run_agent(
     system_override: str | None = None,
     fresh: bool = False,
     allow_tools: bool = True,
+    metadata: dict[str, Any] | None = None,
 ) -> AgentState:
     """跑一轮或从审批中断恢复。业务 facade 请用 run_profile_turn(fresh)。"""
     state: AgentState | None = None
@@ -132,6 +170,7 @@ async def run_agent(
         system_override=system_override,
         fresh=fresh,
         allow_tools=allow_tools,
+        metadata=metadata,
     ):
         if kind == "done":
             state = payload
@@ -153,31 +192,50 @@ async def iter_agent(
     system_override: str | None = None,
     fresh: bool = False,
     allow_tools: bool = True,
+    metadata: dict[str, Any] | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
     from app.harness.gates import install_builtin_gates
 
     install_builtin_gates()
     tid = (thread_id or uuid.uuid4().hex)[:32]
     state = None if fresh else load_state(tid)
+    # 产品闸门短接：允许空 user_message（错科 / 引导话术已由门面写好 reply）
+    has_product_gate = bool(
+        isinstance((metadata or {}).get("product_gate"), dict)
+        and str((metadata or {}).get("product_gate", {}).get("reply") or "").strip()
+    )
     if user_message:
-        gate = check_user_message(user_message)
+        gate = check_user_message(user_message, profile=profile)
         if not gate.allowed:
+            from app.harness.safety import injection_refusal
+
+            if gate.reason == "prompt_injection":
+                deny_reply = injection_refusal(profile)
+            else:
+                deny_reply = "问题过长，请缩短后再问。"
             failed = AgentState(
                 thread_id=tid,
                 profile=profile,
                 status="failed",
-                reply="问题过长，请缩短后再问。",
+                reply=deny_reply,
                 metadata={"policy": gate.reason},
             )
             audit_loop("deny_message", thread_id=tid, profile=profile, extra={"reason": gate.reason})
             save_state(failed)
+            if deny_reply:
+                yield ("token", deny_reply)
             yield ("done", failed)
             return
     if state is None:
+        from app.harness.safety import anti_leak_rules_for_profile
+
         sys_msg = (system_override or "").strip() or profile_system(profile)
         extra = (system_extra or "").strip()
         if extra:
             sys_msg = f"{sys_msg}\n\n{extra}"
+        leak = anti_leak_rules_for_profile(profile)
+        if leak and leak not in sys_msg:
+            sys_msg = f"{sys_msg}\n\n{leak}"
         msgs: list[dict[str, Any]] = [{"role": "system", "content": sys_msg}]
         for item in history or []:
             role = str(item.get("role") or "")
@@ -186,12 +244,19 @@ async def iter_agent(
             msgs.append(item)
         if user_message:
             msgs.append({"role": "user", "content": user_message})
+        elif has_product_gate:
+            msgs.append({"role": "user", "content": ""})
+        base_meta: dict[str, Any] = {
+            "child_user_id": getattr(ctx, "child_user_id", 0) if ctx else 0,
+        }
+        if metadata:
+            base_meta.update(metadata)
         state = AgentState(
             thread_id=tid,
             profile=profile,
             messages=msgs,
             max_steps=max_steps,
-            metadata={"child_user_id": getattr(ctx, "child_user_id", 0) if ctx else 0},
+            metadata=base_meta,
         )
     elif user_message and state.status != "awaiting_approval":
         state.messages.append({"role": "user", "content": user_message})
@@ -208,6 +273,9 @@ async def iter_agent(
         if isinstance(extra_state, AgentState):
             state = extra_state
             if state.status in ("completed", "failed", "awaiting_approval"):
+                # 产品闸门短接也要吐 token，否则 SSE 前端只收到 done、气泡空白
+                if state.status == "completed" and (state.reply or "").strip():
+                    yield ("token", state.reply)
                 save_state(state)
                 yield ("done", state)
                 return
@@ -243,8 +311,10 @@ async def iter_agent(
         if not calls:
             state.reply = str(assistant.get("content") or "").strip()
             state.status = "completed"
+            # live 路径已在 streamer 里逐 token yield；complete 路径需补推
             if not live and state.reply:
-                yield ("token", state.reply)
+                async for piece in _iter_text_tokens(state.reply):
+                    yield ("token", piece)
             break
         executed, paused = await _handle_calls(state, calls, ctx=ctx)
         if paused:
@@ -254,19 +324,27 @@ async def iter_agent(
             state.reply = str(assistant.get("content") or "").strip() or "工具调用未执行。"
             state.status = "completed"
             if state.reply:
-                yield ("token", state.reply)
+                async for piece in _iter_text_tokens(state.reply):
+                    yield ("token", piece)
             break
 
     if state.status == "running":
         state.status = "completed"
         if not state.reply:
             state.reply = "本轮步数已用完，请根据已查到的信息继续提问。"
-            yield ("token", state.reply)
+            async for piece in _iter_text_tokens(state.reply):
+                yield ("token", piece)
 
     if state.status == "completed":
         appended = _append_math_sketch_fence(state)
         if appended and state.reply:
             yield ("token", "\n\n" + appended)
+        # 对外回复再过一遍：去 Thought 草稿 + 防泄露（学院/答疑共用）
+        from app.harness.safety import sanitize_public_reply
+
+        cleaned = sanitize_public_reply(state.reply or "", profile=profile)
+        if cleaned != (state.reply or ""):
+            state.reply = cleaned
 
     audit_loop(
         "complete",

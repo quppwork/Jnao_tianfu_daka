@@ -293,6 +293,20 @@ async def chat(
     row = build_user_line(text, mention, quote, sticker)
     if not row:
         raise AcademyError("先说一句")
+    from app.harness.safety import injection_refusal, looks_like_prompt_injection
+
+    # 学院走 LangGraph/角色卡，不经 iter_agent 时也要拦注入
+    if looks_like_prompt_injection(str(row.get("text") or text or "")):
+        return {
+            "turns": [
+                {
+                    "who": "善雨",
+                    "text": injection_refusal("academy"),
+                }
+            ],
+            "nudge": None,
+            "training_done": False,
+        }
     model_text = annotate_for_model(row)
     room = _room(db, user_id, episode.id)
     history = list(room.messages or [])

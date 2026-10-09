@@ -43,14 +43,55 @@ def load_session_memory(session: QaSession | None) -> dict[str, Any]:
 
 
 def save_session_memory(db: Session, session: QaSession, mem: dict[str, Any]) -> None:
-    """写入会话 meta；由调用方统一 commit（删会话即清空摘要）。"""
+    """写入会话 meta；由调用方统一 commit（删会话即清空摘要）。
+
+    合并写入，保留 last_ocr_text / last_image_id 等本题锚点字段。
+    """
     del db  # 保持签名与 Guide 侧一致，便于测试注入
-    session.meta_json = {
-        "version": MEMORY_VERSION,
-        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
-        "rolling_summary": str(mem.get("rolling_summary") or "")[:MAX_DIGEST_CHARS],
-    }
+    base = dict(session.meta_json) if isinstance(session.meta_json, dict) else {}
+    base.update(
+        {
+            "version": MEMORY_VERSION,
+            "updated_at": datetime.now(timezone.utc)
+            .replace(tzinfo=None)
+            .isoformat(timespec="seconds"),
+            "rolling_summary": str(mem.get("rolling_summary") or "")[:MAX_DIGEST_CHARS],
+        }
+    )
+    session.meta_json = base
     flag_modified(session, "meta_json")
+
+
+_MAX_OCR_CHARS = 12000
+
+
+def save_session_passage(
+    session: QaSession,
+    *,
+    image_id: str | None,
+    ocr_text: str | None,
+) -> None:
+    """把本会话最近一次拍题 OCR 原文落到 meta，供多轮纠错回看。"""
+    base = dict(session.meta_json) if isinstance(session.meta_json, dict) else {}
+    if image_id:
+        base["last_image_id"] = str(image_id).strip()
+    text = (ocr_text or "").strip()
+    if text:
+        base["last_ocr_text"] = text[:_MAX_OCR_CHARS]
+        base["last_ocr_at"] = (
+            datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+        )
+    session.meta_json = base
+    flag_modified(session, "meta_json")
+
+
+def load_session_passage(session: QaSession | None) -> tuple[str | None, str | None]:
+    """返回 (last_image_id, last_ocr_text)。"""
+    if not session or not isinstance(session.meta_json, dict):
+        return None, None
+    image_id = str(session.meta_json.get("last_image_id") or "").strip() or None
+    ocr = str(session.meta_json.get("last_ocr_text") or "").strip() or None
+    return image_id, ocr
 
 
 def fold_overflow_history(

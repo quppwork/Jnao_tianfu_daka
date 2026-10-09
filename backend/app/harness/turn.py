@@ -45,6 +45,7 @@ async def run_profile_turn(
     thread_id: str | None = None,
     model: Any | None = None,
     allow_tools: bool = True,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """一轮：system(+extra) → model → tools → reply。每轮 fresh，不复用内存 checkpoint。"""
     state = await run_agent(
@@ -59,6 +60,7 @@ async def run_profile_turn(
         system_override=system_override,
         fresh=True,
         allow_tools=allow_tools,
+        metadata=metadata,
     )
     return _public_turn(state, profile)
 
@@ -75,10 +77,12 @@ async def run_profile_turn_stream(
     thread_id: str | None = None,
     model: Any | None = None,
     allow_tools: bool = False,
+    metadata: dict[str, Any] | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
     """门面流式入口：消费内核 route().stream 透传（token/done）。
 
     何时开流、SSE/WS 协议由各 facade API 决定，不进 harness 内核。
+    metadata.product_gate 可挂产品闸门短接（错科 / 不会引导等）。
     """
     async for kind, payload in iter_agent(
         profile=profile,
@@ -92,6 +96,7 @@ async def run_profile_turn_stream(
         system_override=system_override,
         fresh=True,
         allow_tools=allow_tools,
+        metadata=metadata,
     ):
         if kind == "token":
             text = str(payload or "")
