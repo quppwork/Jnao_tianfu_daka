@@ -1,87 +1,65 @@
-# Agent 层目录规划
+# Agent 层 · 架构分层
 
-面向「张宇老师」等多 Agent 场景：人设、情境、编排、只读工具从 `services/` 抽离；  
-`services` 保留 HTTP/DB 落库与鉴权编排入口。
+对齐六层：前端 → 接入 → 编排 → **Agent** → Harness → 能力。  
+改码前先读项目 skill：`.cursor/skills/jnao-agent-layers/SKILL.md`（意图 → 层 → 路径）。
+
+```
+前端 (vue_fronted)
+    ↕ HTTP / SSE / WS
+接入层 (api/* + services CRUD)
+    ↓
+编排层 (harness/orchestration + shared/handoff + guide/pipeline)
+    ↓
+Agent 层（本目录五核：Role / Goal / 工具权限 / 产品闸门）
+    ↓
+Harness（loop / turn / tools / safety — 全 Agent 共享）
+    ↓
+能力层 (doubao_client / bailian / DB)
+```
+
+## 目录
 
 ```
 app/agents/
-├── shared/                 # 跨 Agent 共用（无业务决策）
-│   ├── stage.py / talent.py
-│   └── handoff.py          # navigate 白名单 / situation 文案（Agent 间只交接动作）
-├── qa/                     # 学科答疑 Agent
-├── guide/                  # 首页引导 Agent
-└── academy/                # 天赋学院角色 harness（每人独立人设，不互调 runner）
-
-app/harness/                # Tool + MCP + 沙箱 + 统一 run_profile_turn
-
+├── shared/           # handoff / stage / talent（无业务决策）
+├── qa/               # 学科答疑
+├── guide/            # 首页引导
+├── academy/          # 天赋学院角色
+├── consult/          # 家长在线咨询（runner 出话）
+├── parent_guide/     # 家长版大宇引导（runner 出话）
+└── solve/            # 拍题领域 profile（与 QA 并列）
 ```
 
-## 多 Agent 边界（勿耦合）
+## 五路边界
 
-- **Guide 与 QA 互不 import**；联调靠前端跳转 + `shared/handoff` 的 `navigate` 动作。  
-- **禁止** `guide.runner` 调用 `qa.runner`（或反向）。  
-- 先各自做完，再按需加 thin handoff；不要先做超级 Orchestrator。  
-- **出话循环统一** `harness.turn.run_profile_turn` / `run_profile_turn_stream`（consult / parent_guide / guide / qa / academy）。闸门与 Scene Manager 仍在各 facade。
+| Agent | 出话 | 落库 Service | API |
+|-------|------|--------------|-----|
+| qa | `qa/runner.py` → `run_profile_turn` | `qa_service` | `api/qa.py` |
+| guide | `guide/runner.py` | `guide_service` | `api/guide.py` |
+| academy | `academy/harness.py` 等 | `services/academy/` | `api/academy.py` |
+| consult | `consult/runner.py` | `consult_service` | `api/consult.py` |
+| parent_guide | `parent_guide/runner.py` | `parent_guide_service` | `api/parent.py` |
 
-## Harness 六大组件（对齐）
+- **Guide ↔ QA 互不 import runner**；联调靠 `shared/handoff` + 前端跳转。  
+- **禁止**在 Agent 内直接 `httpx` 打模型；一律 Harness → `doubao_client`。  
+- 产品闸门（错科、OCR 澄清、学院选角）留在各 Agent facade，不进 `loop` 内核。
 
-| 组件 | 内核落点 | 边界 |
-|---|---|---|
-| Agent Loop | `loop.iter_agent`：思考—工具—观察，失败重试 1 次，流式 token | 产品闸门在 facade / GateHook |
-| LLM Integration | `DeepSeekAdapter` + `PROFILES`（max_tokens / feature / 流式） | 单供应商 DeepSeek |
-| Tools & Actions | registry + policy + sandbox MCP | 写工具需确认 |
-| Memory & Context | 每步 `window_for_model` 折叠；会话表仍分域 | 无 AGENTS.md 文件记忆 |
-| Safety & Permissions | 消息长度闸门、profile 工具白名单、confirm、audit/trace | 无内容安全分类器 |
-| Orchestration | `harness.orchestration`：只交付 handoff 包 | **不** spawn 子代理 |
+## Harness / 能力（勿塞进本目录）
 
-## 职责边界
-
-| 层 | 职责 |
+| 层 | 落点 |
 |----|------|
-| `api/guide.py` | 路由：session / bootstrap / chat；不写业务 |
-| `services/guide_service.py` | 会话 CRUD、调 Agent、落库 |
-| `agents/guide/*` | 情境、开场、对话、actions |
-| `agents/shared/handoff.py` | 跨 Agent 跳转白名单 |
+| Loop / Turn | `app/harness/loop.py`、`turn.py` |
+| 工具 MCP | `app/harness/tools/*`、`registry.py` |
+| LLM HTTP / 多 Key | `app/services/doubao_client.py`（多 Key 见 `docs/待开发.md`） |
+| Profile 默认参 | `app/harness/llm.py` |
 
-## 演进
+## 自研 vs 框架
 
-### 已完成（Guide 主线）
+主路径保持自研 ReAct（`iter_agent`）。是否引入 LangGraph/LangChain：  
+问「业务复杂度是否已超过自研循环」，**不要**为对齐架构图而换框架。  
+细则：`.cursor/skills/jnao-agent-layers/SKILL.md` §5。
 
-1. **A0** 进页 bootstrap  
-2. **A1** 对话注入情境  
-3. **A2** actions 协议 + 轻状态条  
-4. **B** `tools/*` 只读 tool-loop  
-5. **B+** 前端吃满 `actions`；旧 `/api/chat` 已删  
-6. **C** `long_term` + 日快照 + 评测抽检  
-7. **UX** 会话管理 / 欢迎常驻 / 思考中 / 设置折叠（前端）
+## 兼容
 
-**主线无未完成阶段。** 可选增强与另线见下。
-
-### 下一步（可选 / 另线，非 Guide 阶段债）
-
-| 项 | 说明 |
-|----|------|
-| ~~设置「清除当前」与「清空全部」入口收敛~~ | ✅ 已做 |
-| ~~真豆包话术抽检 / E2E~~ | ✅ `DOUBAO_LIVE_TEST=1` → `test_guide_live_quality.py` |
-| ~~调试开关展示 tools_used~~ | ✅ 设置内开关 |
-| ~~话术「先答后导」+ 训练逻辑模糊化~~ | ✅ persona / 工具摘要 / 去掉 consecutive_pass 外泄 |
-| ~~天赋报告摘要工具 + 意图按钮~~ | ✅ `get_talent_report_summary`；问天赋 → 报告/测评 |
-| ~~原生 function-calling~~ | ✅ `chat_completion_message` + `plan_tools_native_fc`；失败/空则启发式 |
-| ~~多步只读 tool loop 骨架~~ | ✅ `runner` 多轮 + `suggest_followup_picks`；完整 ReAct/FC 补查仍可选 |
-| ~~Guide 对话 QPS/日限额~~ | ✅ `check_guide_chat_limits`（默认 10/60s、150/日）；多 worker Redis 可选 |
-| ~~R4 查询归一 + 二次规划~~ | ✅ `tools/query_normalize.py` + `plan_tools` |
-| ~~R3 澄清 / Grounding 提示~~ | ✅ persona + `build_grounding_hint` |
-| ~~R2 对话记忆~~ | ✅ `student_memory` + runner 注入；`clear` 时清除 |
-| **P0（R1～R4）** | ✅ 已收口（2026-07-29） |
-| ~~R6 Generative UI~~ | ✅ `ui_blocks` + 首页 `blocks` 渲染 |
-| ~~R7 深交接~~ | ✅ `handoff.query` 加深；训练/历史消费 |
-| ~~R8 主动节奏~~ | ✅ `proactive` 进页一句；频控 / 可关 |
-| ~~R9 评测与可观测~~ | ✅ `eval_safety` + `trace` + `guide_r9_regression` 四类回归 |
-| ~~R10 个性化策略~~ | ✅ `strategy.py` 天赋/弱项/情境短策略注入 |
-| ~~R5 受控写~~ | ✅ `writes.py` 习惯/意向白名单 + 确认卡 + `/confirm`；可扩白名单 |
-| ~~R11 多模态 / R12 语音~~ | ⏸ **暂不做**（产品确认不加传图/语音入口） |
-| QA Agent 打磨 | **另线** ✅ P0/P1/P2 已收口（语音明确不做） |
-| Orchestrator | **暂不做**（见 handoff 原则） |
-| Harness 工具层 | ✅ MCP 聚合：`jnao-host`（Mode B 凭证工具）+ `jnao-sandbox`（Mode A，stdio 无对外端口）。双重 allow 防 loopback 绕过。 |
-
-Guide 主线已收口。实现记录仅本地 `docs/过期文件/`（不入库）；现行约定见 `docs/前端后端API文档.md`（首页引导）与 `docs/数据闭环与预留说明.md` §1.6。
+- `services/consult_agent.py` → 再导出 `agents.consult.runner`  
+- `services/parent_guide_service` 保留会话 CRUD，并再导出 runner 符号供旧 import

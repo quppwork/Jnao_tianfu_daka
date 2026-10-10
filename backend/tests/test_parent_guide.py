@@ -61,7 +61,7 @@ async def test_run_parent_turn_routes_talent_concept_to_kb(db_session: Session):
     db_session.commit()
 
     with patch(
-        "app.services.parent_guide_service._kb_or_minimal_reply",
+        "app.agents.parent_guide.runner._kb_or_minimal_reply",
         new=AsyncMock(
             return_value={
                 "reply": "赢者释义",
@@ -73,7 +73,7 @@ async def test_run_parent_turn_routes_talent_concept_to_kb(db_session: Session):
             }
         ),
     ) as kb_mock, patch(
-        "app.services.parent_guide_service._live_child_reply",
+        "app.agents.parent_guide.runner._live_child_reply",
         new=AsyncMock(),
     ) as live_mock:
         out = await parent_guide_service.run_parent_turn(
@@ -117,7 +117,7 @@ async def test_run_parent_turn_routes_course_to_kb(db_session: Session):
     db_session.commit()
 
     with patch(
-        "app.services.parent_guide_service._kb_or_minimal_reply",
+        "app.agents.parent_guide.runner._kb_or_minimal_reply",
         new=AsyncMock(
             return_value={
                 "reply": "课堂说明",
@@ -129,7 +129,7 @@ async def test_run_parent_turn_routes_course_to_kb(db_session: Session):
             }
         ),
     ) as kb_mock, patch(
-        "app.services.parent_guide_service._live_child_reply",
+        "app.agents.parent_guide.runner._live_child_reply",
         new=AsyncMock(),
     ) as live_mock:
         out = await parent_guide_service.run_parent_turn(
@@ -163,7 +163,7 @@ async def test_run_parent_turn_routes_train_to_live(db_session: Session):
     db_session.commit()
 
     with patch(
-        "app.services.parent_guide_service._live_child_reply",
+        "app.agents.parent_guide.runner._live_child_reply",
         new=AsyncMock(
             return_value={
                 "reply": "训练摘要",
@@ -175,7 +175,7 @@ async def test_run_parent_turn_routes_train_to_live(db_session: Session):
             }
         ),
     ) as live_mock, patch(
-        "app.services.parent_guide_service._kb_or_minimal_reply",
+        "app.agents.parent_guide.runner._kb_or_minimal_reply",
         new=AsyncMock(),
     ) as kb_mock:
         out = await parent_guide_service.run_parent_turn(

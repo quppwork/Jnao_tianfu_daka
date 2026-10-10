@@ -58,6 +58,20 @@
           cached = null
         }
       }
+      // uid 未就绪时扫一份 sector 缓存，避免首屏默认锁定
+      if ((!cached || !cached.episode) && !uidR) {
+        try {
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i)
+            if (!k || k.indexOf('jnao_academy_sector_') !== 0) continue
+            var cand = JSON.parse(localStorage.getItem(k) || 'null')
+            if (cand && cand.episode && !cand.fake) {
+              cached = cand
+              break
+            }
+          }
+        } catch (eScan) { /* ignore */ }
+      }
     }
     if (cached && cached.episode) apply(cached)
   } catch (e) { /* 没有上次目录就等父页 */ }

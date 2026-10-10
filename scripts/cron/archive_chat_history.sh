@@ -3,7 +3,7 @@
 #
 # 宝塔计划任务:
 #   周期: 每月 1 日 04:15
-#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh
+#   脚本: /bin/bash /data/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh
 
 set -euo pipefail
 

@@ -3,7 +3,7 @@
 #
 # 宝塔计划任务:
 #   周期: 每周日 04:20
-#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/restart_backend.sh
+#   脚本: /bin/bash /data/wwwroot/jnao_daka/scripts/cron/restart_backend.sh
 
 set -euo pipefail
 

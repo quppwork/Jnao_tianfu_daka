@@ -50,8 +50,22 @@ export function readAcademyCache(uid) {
     if (!raw || !raw.episode) {
       raw = JSON.parse(localStorage.getItem('jnao_academy_sector') || 'null')
     }
-    if (!raw || raw.fake || !raw.episode) return null
     const cur = Number(uid || getChildUserId() || 0)
+    // uid 尚未写入时：扫一份带 episode 的 sector 缓存，避免首屏卡在「未解锁」
+    if ((!raw || !raw.episode) && cur <= 0 && typeof localStorage !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const k = localStorage.key(i)
+        if (!k || !k.startsWith('jnao_academy_sector_')) continue
+        try {
+          const cand = JSON.parse(localStorage.getItem(k) || 'null')
+          if (cand && cand.episode && !cand.fake) {
+            raw = cand
+            break
+          }
+        } catch (_) { /* ignore */ }
+      }
+    }
+    if (!raw || raw.fake || !raw.episode) return null
     const cachedUid = Number(raw.user_id || 0)
     // 有当前用户时：必须带匹配的 user_id，旧无 uid 缓存一律丢弃
     if (cur > 0 && cachedUid !== cur) return null

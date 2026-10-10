@@ -266,7 +266,7 @@ async def send_message(
     from datetime import datetime
 
     from app.db.models import ConsultChannel
-    from app.services import consult_agent
+    from app.agents import consult as consult_agent
 
     conv = consult_service.get_accessible_conversation(
         db, conversation_id=conversation_id, parent_user_id=user_id

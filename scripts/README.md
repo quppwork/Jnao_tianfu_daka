@@ -29,7 +29,7 @@
 部署（在**宝塔终端**执行；`deploy-baota.sh` 会自动叠加 logging compose）：
 
 ```bash
-cd /www/wwwroot/jnao_daka
+cd /data/wwwroot/jnao_daka
 bash scripts/deploy-baota.sh
 # 等价于:
 # docker compose -f docker-compose.prod.yml -f docker-compose.logging.yml --env-file .env.production up -d --build

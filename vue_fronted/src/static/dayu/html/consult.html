@@ -198,13 +198,13 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
 <div class="phone">
 
   <div class="chat-head">
-    <div class="ptop">
+  <div class="ptop">
       <div class="brand">在线咨询<small>CONSULT · WebSocket <span class="wsdot" id="wsDot">● 连接中</span></small></div>
-      <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
-    </div>
+    <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+  </div>
 
     <div id="errBanner" class="errbanner" hidden></div>
-    <div class="agents" id="agRow"></div>
+  <div class="agents" id="agRow"></div>
     <div class="gbar" id="gbar" hidden></div>
     <div class="duty" id="duty" hidden></div>
     <div class="cv-t" id="cvT"></div>
@@ -212,8 +212,8 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
   </div>
 
   <div class="chat-scroll" id="chatScroll">
-    <div class="msgs" id="cvMsgs"></div>
-    <div id="cvBoard"></div>
+  <div class="msgs" id="cvMsgs"></div>
+  <div id="cvBoard"></div>
   </div>
 
   <div class="at-panel" id="atPanel" aria-hidden="true">
@@ -679,7 +679,7 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
     if(rerender && conv && conv.id === conversationId) renderMsgs();
   }
 
-  function renderRow(){
+function renderRow(){
     document.getElementById('agRow').innerHTML = channels.map(function(a){
       var pulse = boardPulse[a.code] ? ' pulse' : '';
       var on = a.code === curCode ? ' on' : '';
@@ -695,7 +695,7 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
         '<div class="'+avCls+'" data-code="'+esc(a.code)+'"'+avStyle+'>'+avInner+'</div>'+
         '<span>'+esc(a.title)+'</span>'+
         '<span class="sk">'+esc(a.skill||'')+'</span></div>';
-    }).join('');
+  }).join('');
     document.querySelectorAll('#agRow .ag').forEach(function(el){
       var code = el.getAttribute('data-code');
       var av = el.querySelector('.av');
@@ -797,7 +797,7 @@ html,body{height:100%;overflow:hidden;background:#0D111F;color:#EDEBE4;font-fami
       return '<div class="msg">'+avatarHtml(personaCode, atName, mcolor)+
         '<div class="bd"><div class="who">'+esc(who)+(badge?'<i>'+badge+'</i>':'')+'</div>'+
         bubbleBody(m, false)+'</div></div>';
-    }).join('');
+  }).join('');
     box.querySelectorAll('.fups button[data-chip]').forEach(function(btn){
       btn.onclick = function(){
         var t = btn.getAttribute('data-chip') || '';

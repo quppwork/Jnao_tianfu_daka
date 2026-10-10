@@ -3,7 +3,7 @@
 #
 # 宝塔计划任务:
 #   周期: 每周日 04:00
-#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/cleanup_logs.sh
+#   脚本: /bin/bash /data/wwwroot/jnao_daka/scripts/cron/cleanup_logs.sh
 
 set -euo pipefail
 

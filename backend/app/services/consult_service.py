@@ -1,4 +1,4 @@
-"""在线咨询 — 配置 / IM 适配 / Agent stub / 业务服务。"""
+"""在线咨询 — 配置 / IM 适配 / 会话业务；出话见 agents.consult.runner。"""
 
 from __future__ import annotations
 
@@ -35,8 +35,6 @@ def load_consult_config() -> dict[str, Any]:
         "im_bot_user_id": oi["bot_user_id"],
         "mq_url": (os.getenv("CONSULT_MQ_URL") or "").strip(),
         "agent_enabled": (os.getenv("CONSULT_AGENT_ENABLED", "1").strip() not in ("0", "false", "False")),
-        # 默认关 stub；正式出话走 consult_agent → Harness
-        "stub_reply": (os.getenv("CONSULT_STUB_REPLY", "0").strip() in ("1", "true", "True")),
     }
 
 
@@ -138,7 +136,7 @@ class ImAdapter:
 _im = ImAdapter()
 
 
-# ── Agent Worker stub ───────────────────────────────────────────────────────
+# ── Agent 任务入队（出话由 api/consult → agents.consult.runner）──────────────
 
 
 def enqueue_agent_job(
@@ -177,9 +175,7 @@ def enqueue_agent_job(
     if cfg["mq_url"]:
         # TODO: publish to MQ
         pass
-    # stub 已废弃：process_inline 不再写占位回复，正式出话走 consult_agent
-    _ = process_inline
-
+    _ = process_inline  # 兼容旧调用方；内联出话已迁到 API → Agent runner
     return job
 
 

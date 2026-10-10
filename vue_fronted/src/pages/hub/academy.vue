@@ -68,10 +68,24 @@ function reload({ force = false } = {}) {
   episodeId = resolveAcademyEpisodeId(queryEp)
   if (queryEp) rememberLastAcademyEpisode(queryEp)
 
+  // 先灌本地 sector（含 unlocked），再等接口；避免首屏长时间停在「看完才能进讨论」
+  const cached = readAcademyCache()
+  if (cached?.episode) {
+    applySector(cached, { force: false })
+  }
+
   const have = String(hydrate.academy?.episode?.id || '')
   // 底栏软切回：已有同集且非强制 → 不请求覆盖（iframe DOM 仍在）
   if (!force && have && (!episodeId || episodeId === have)) {
     rememberLastAcademyEpisode(have)
+    // 仍后台刷新一次解锁态（首次进页缓存可能偏旧）
+    if (!force && !loading) {
+      loading = true
+      loadAcademySector(have || episodeId)
+        .then((data) => applySector(data, { force: false }))
+        .catch((e) => console.warn('[academy] sector failed', e?.message || e))
+        .finally(() => { loading = false })
+    }
     return
   }
 

@@ -1,6 +1,6 @@
 # 宝塔计划任务（生产环境）
 
-项目路径以 **`/www/wwwroot/jnao_daka`** 为例；按实际部署目录替换。
+线上项目路径：**`/data/wwwroot/jnao_daka`**（数据盘真实目录，非 `/www` 软链）。
 
 ## 前置条件
 
@@ -9,8 +9,8 @@
 3. 脚本可执行（首次部署后执行一次）：
 
 ```bash
-chmod +x /www/wwwroot/jnao_daka/scripts/cron/*.sh
-mkdir -p /www/wwwroot/jnao_daka/logs
+chmod +x /data/wwwroot/jnao_daka/scripts/cron/*.sh
+mkdir -p /data/wwwroot/jnao_daka/logs
 ```
 
 ---
@@ -19,11 +19,11 @@ mkdir -p /www/wwwroot/jnao_daka/logs
 
 | # | 任务名称 | 周期 | 执行脚本 |
 |---|----------|------|----------|
-| 1 | OSS 媒体同步 | 每天 **03:30** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_oss_catalog.sh` |
-| 2 | Cron 日志截断 | 每周日 **04:00** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/cleanup_logs.sh` |
-| 3 | QA 拍图清理 | 每周日 **04:10** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/cleanup_qa_uploads.sh` |
-| 4 | 聊天历史归档 | 每月 1 日 **04:15** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh` |
-| 5 | Backend 重启（可选） | 每周日 **04:20** | `/bin/bash /www/wwwroot/jnao_daka/scripts/cron/restart_backend.sh` |
+| 1 | OSS 媒体同步 | 每天 **03:30** | `/bin/bash /data/wwwroot/jnao_daka/scripts/cron/sync_oss_catalog.sh` |
+| 2 | Cron 日志截断 | 每周日 **04:00** | `/bin/bash /data/wwwroot/jnao_daka/scripts/cron/cleanup_logs.sh` |
+| 3 | QA 拍图清理 | 每周日 **04:10** | `/bin/bash /data/wwwroot/jnao_daka/scripts/cron/cleanup_qa_uploads.sh` |
+| 4 | 聊天历史归档 | 每月 1 日 **04:15** | `/bin/bash /data/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh` |
+| 5 | Backend 重启（可选） | 每周日 **04:20** | `/bin/bash /data/wwwroot/jnao_daka/scripts/cron/restart_backend.sh` |
 
 ### 暂不配置（微信一键登录数据暂停更新）
 
@@ -49,7 +49,7 @@ mkdir -p /www/wwwroot/jnao_daka/logs
 - **脚本内容**：
 
 ```bash
-/bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_oss_catalog.sh
+/bin/bash /data/wwwroot/jnao_daka/scripts/cron/sync_oss_catalog.sh
 ```
 
 ### 3. 添加「Cron 日志截断」
@@ -60,7 +60,7 @@ mkdir -p /www/wwwroot/jnao_daka/logs
 - **脚本内容**：
 
 ```bash
-/bin/bash /www/wwwroot/jnao_daka/scripts/cron/cleanup_logs.sh
+/bin/bash /data/wwwroot/jnao_daka/scripts/cron/cleanup_logs.sh
 ```
 
 ### 4. 添加「QA 拍图清理」
@@ -71,7 +71,7 @@ mkdir -p /www/wwwroot/jnao_daka/logs
 - **脚本内容**：
 
 ```bash
-/bin/bash /www/wwwroot/jnao_daka/scripts/cron/cleanup_qa_uploads.sh
+/bin/bash /data/wwwroot/jnao_daka/scripts/cron/cleanup_qa_uploads.sh
 ```
 
 保留天数可在 `.env.production` 增加（可选）：
@@ -88,7 +88,7 @@ QA_UPLOAD_RETAIN_DAYS=30
 - **脚本内容**：
 
 ```bash
-/bin/bash /www/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh
+/bin/bash /data/wwwroot/jnao_daka/scripts/cron/archive_chat_history.sh
 ```
 
 可选环境变量（写入 `.env.production`）：
@@ -110,7 +110,7 @@ CHAT_ARCHIVE_BATCH_SIZE=100
 - **脚本内容**：
 
 ```bash
-/bin/bash /www/wwwroot/jnao_daka/scripts/cron/restart_backend.sh
+/bin/bash /data/wwwroot/jnao_daka/scripts/cron/restart_backend.sh
 ```
 
 ---
@@ -128,7 +128,7 @@ CHAT_ARCHIVE_BATCH_SIZE=100
 查看示例：
 
 ```bash
-tail -30 /www/wwwroot/jnao_daka/logs/sync_oss_catalog.log
+tail -30 /data/wwwroot/jnao_daka/logs/sync_oss_catalog.log
 ```
 
 ---
@@ -136,7 +136,7 @@ tail -30 /www/wwwroot/jnao_daka/logs/sync_oss_catalog.log
 ## 手动验证（SSH）
 
 ```bash
-cd /www/wwwroot/jnao_daka
+cd /data/wwwroot/jnao_daka
 
 # OSS 同步
 /bin/bash scripts/cron/sync_oss_catalog.sh

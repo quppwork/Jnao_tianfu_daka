@@ -4,7 +4,7 @@
 # 宝塔计划任务示例:
 #   任务类型: Shell
 #   执行周期: 每小时（或每 30 分钟）
-#   脚本: /bin/bash /www/wwwroot/jnao_daka/scripts/cron/sync_wework.sh
+#   脚本: /bin/bash /data/wwwroot/jnao_daka/scripts/cron/sync_wework.sh
 #
 # 不要只靠 --skip-served：缓存丢失时脚本会自动改拉 contact_list。
 # 缓存写在容器卷 /app/data/qywx_export（docker volume backend_data）。

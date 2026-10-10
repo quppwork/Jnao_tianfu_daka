@@ -1094,7 +1094,8 @@ try {
       _cachedSector = null;
     }
   }
-  if (_cachedSector && _cachedSector.episode && _cachedSector.episode.unlocked) {
+  // 有缓存就立刻灌给 boot（含 unlocked=false），勿等父页 /sector，否则首屏会卡在锁定态
+  if (_cachedSector && _cachedSector.episode) {
     window.__ACADEMY_CACHED_SECTOR = _cachedSector;
   }
   // 不再自动 startTeaser：假消息会让讨论区看起来像已打开
@@ -1139,5 +1140,5 @@ try {
 <script src="/static/dayu/html/academy/channel.js?v=20261009c1"></script>
 <script src="/static/dayu/html/academy/story.js?v=20261008c1"></script>
 <script src="/static/dayu/html/academy/courses.js?v=20261008c1"></script>
-<script src="/static/dayu/html/academy/boot.js?v=20261009c1"></script>
+<script src="/static/dayu/html/academy/boot.js?v=20261010c1"></script>
 </body></html>
