@@ -31,6 +31,20 @@ _REACT_LINE = re.compile(
 _THOUGHT_BLOCK = re.compile(
     r"(?is)\bThought\s*[:：].*?(?=\b(?:Action|Observation|Say)\s*[:：]|\Z)"
 )
+# 辅导规范被模型原样念出来（如「执行，一步一问：」）
+_COACH_META_LINE = re.compile(
+    r"(?im)^\s*(?:"
+    r"执行[，,\s]*一步一问|"
+    r"一步一问[：:].*|"
+    r"辅导姿态[：:].*|"
+    r"审题\s*[→\->]+\s*定战术\s*[→\->]+\s*执行|"
+    r"【?(?:理科|文科|外语)?答题规范.*|"
+    r"人物性格提示词.*"
+    r")\s*$"
+)
+_COACH_META_PREFIX = re.compile(
+    r"(?is)^\s*(?:执行[，,\s]*一步一问|一步一问)\s*[：:]\s*"
+)
 
 # 追加通用注入句式（中英）
 _EXTRA_INJECTION = (
@@ -89,8 +103,15 @@ def strip_internal_scratch(text: str) -> str:
             if line:
                 lines.append(line)
         out = "\n".join(lines).strip()
-        return out or ""
-    return raw
+        raw = out or ""
+    # 去掉「执行，一步一问」等规范标题行 / 文首念稿
+    raw = _COACH_META_PREFIX.sub("", raw)
+    kept = []
+    for line in raw.splitlines():
+        if _COACH_META_LINE.match(line.strip()):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
 
 
 def sanitize_public_reply(text: str, *, profile: str | None = None) -> str:

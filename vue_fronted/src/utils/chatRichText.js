@@ -1,19 +1,21 @@
 /**
  * 聊天气泡富文本：Markdown 轻量语法 + KaTeX 公式
  * 支持 \( \)、\[ \]、$ $、$$ $$，以及模型常见的「裸 LaTeX」行/片段
- * katex 按需动态加载，避免主包强依赖。
+ *
+ * KaTeX 改为同步静态导入：手机微信里动态 import 分片常失败，
+ * 失败时会退化成带青底的 `\(...\)` 源码胶囊（线上已踩坑）。
  */
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 
-let katexMod = null
+let katexMod = katex
 let katexLoading = null
-let katexCssLoaded = false
+let katexCssLoaded = true
 /** 加载完成后递增，页面可依赖此值触发 v-html 重算 */
-let katexEpoch = 0
+let katexEpoch = 1
 
 function loadKatexCss() {
-  if (katexCssLoaded) return
   katexCssLoaded = true
-  import('katex/dist/katex.min.css').catch(() => {})
 }
 
 export function getKatexEpoch() {

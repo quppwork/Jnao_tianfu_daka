@@ -11,6 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.agents.qa.clarify import clarification_reply, needs_stem_clarification
 from app.agents.qa.clarify_guide import wont_guide_reply
+from app.agents.qa.clarify_ocr import assess_ocr_gate
 from app.agents.qa.memory import QaMemory, load_session_passage, save_session_passage
 from app.agents.qa.prompt_builder import (
     build_learner_context_block,
@@ -22,11 +23,11 @@ from app.agents.qa.strategy import resolve_qa_strategy, strategy_to_prompt_block
 from app.agents.qa.trace import TurnTimer
 from app.agents.shared.stage import infer_school_stage
 from app.db.models import ChildUser, QaMessage, QaSession, TalentAssessment
+from app.harness.safety import sanitize_public_reply
 from app.services.assessment_service import resolve_effective_talent
 from app.services.ai_output_guard import (
     is_prompt_injection_attempt,
     refusal_message,
-    sanitize_ai_reply,
 )
 from app.services.qa_coach import build_coach_metadata, fetch_recent_coach_context_for_prompt
 from app.services.qa_image_store import image_data_url
@@ -462,6 +463,53 @@ async def run_chat(
         message=message,
     )
 
+    # 拍题模糊 / 多题：先澄清（状态：awaiting_question_pick），不直接开讲
+    ocr_gate = assess_ocr_gate(ocr_preview, user_message=message) if has_image else None
+    if ocr_gate is not None:
+        user_row = QaMessage(
+            session_id=session.id,
+            role="user",
+            content=message,
+            image_url=image_url,
+            meta_json={"image_id": image_id} if image_id else None,
+        )
+        db.add(user_row)
+        if session.title == "新对话":
+            session.title = session_title_from_message(message)
+        reply = ocr_gate.reply
+        db.add(
+            QaMessage(
+                session_id=session.id,
+                role="assistant",
+                content=reply,
+                meta_json={
+                    "clarified": True,
+                    "ocr_gate": ocr_gate.status,
+                    "question_count": ocr_gate.question_count,
+                    "awaiting_question_pick": True,
+                },
+            )
+        )
+        db.commit()
+        svc.invalidate_qa_caches(child_user_id)
+        svc.emit_turn(
+            timer=timer,
+            child_user_id=child_user_id,
+            session_id=session.id,
+            subject=active_subject,
+            message=message,
+            reply=reply,
+            school_stage=school_stage,
+            clarified=True,
+        )
+        return svc.public_chat_payload(
+            session_id=session.id,
+            reply=reply,
+            talent=talent,
+            school_stage=school_stage,
+            clarified=True,
+        )
+
     rag_bundle = await _fetch_qa_rag_bundle(
         message,
         child_user_id=child_user_id,
@@ -548,7 +596,7 @@ async def run_chat(
 
     if not reply:
         reply = "抱歉，AI 暂时无法响应，请稍后再试。"
-    reply = sanitize_ai_reply(reply)
+    reply = sanitize_public_reply(reply, profile="qa")
 
     assistant_meta = svc.assistant_meta_for_storage(
         coach_meta,
@@ -844,6 +892,58 @@ async def run_chat_stream(
         yield ("error", str(e))
         return
 
+    ocr_gate = assess_ocr_gate(ocr_preview, user_message=message) if has_image else None
+    if ocr_gate is not None:
+        user_row = QaMessage(
+            session_id=session.id,
+            role="user",
+            content=message,
+            image_url=image_url,
+            meta_json={"image_id": image_id} if image_id else None,
+        )
+        db.add(user_row)
+        if session.title == "新对话":
+            session.title = session_title_from_message(message)
+        reply = ocr_gate.reply
+        db.add(
+            QaMessage(
+                session_id=session.id,
+                role="assistant",
+                content=reply,
+                meta_json={
+                    "clarified": True,
+                    "ocr_gate": ocr_gate.status,
+                    "question_count": ocr_gate.question_count,
+                    "awaiting_question_pick": True,
+                },
+            )
+        )
+        db.commit()
+        svc.invalidate_qa_caches(child_user_id)
+        svc.emit_turn(
+            timer=timer,
+            child_user_id=child_user_id,
+            session_id=session.id,
+            subject=active_subject,
+            message=message,
+            reply=reply,
+            school_stage=school_stage,
+            clarified=True,
+            stream=True,
+        )
+        yield ("token", reply)
+        yield (
+            "done",
+            svc.public_chat_payload(
+                session_id=session.id,
+                reply=reply,
+                talent=talent,
+                school_stage=school_stage,
+                clarified=True,
+            ),
+        )
+        return
+
     rag_bundle = await _fetch_qa_rag_bundle(
         message,
         child_user_id=child_user_id,
@@ -935,7 +1035,7 @@ async def run_chat_stream(
     reply = ((done or {}).get("reply") or "".join(parts) or "").strip()
     if not reply:
         reply = "抱歉，AI 暂时无法响应，请稍后再试。"
-    reply = sanitize_ai_reply(reply)
+    reply = sanitize_public_reply(reply, profile="qa")
     assistant_meta = svc.assistant_meta_for_storage(
         coach_meta,
         rag_used=rag_used,

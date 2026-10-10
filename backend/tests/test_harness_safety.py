@@ -34,6 +34,13 @@ def test_strip_thought_scratch():
     assert "Thought" not in sanitize_public_reply(raw, profile="academy")
 
 
+def test_strip_coach_meta_leak():
+    raw = "执行，一步一问：\n先把已知写清楚，再交叉相乘。"
+    cleaned = strip_internal_scratch(raw)
+    assert "一步一问" not in cleaned
+    assert "交叉相乘" in cleaned
+
+
 @pytest.mark.asyncio
 async def test_iter_agent_refuses_injection():
     from app.harness.loop import iter_agent

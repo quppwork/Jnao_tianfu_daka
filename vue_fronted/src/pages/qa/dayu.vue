@@ -1,5 +1,5 @@
 <template>
-  <view class="app" :class="{ lt: isLight, simple: simpleMode }">
+  <view class="app" :class="{ lt: isLight, simple: simpleMode, 'chat-focus': chatFocus }">
     <view class="topbar">
       <view class="brand">
         <view class="logo" />
@@ -9,15 +9,21 @@
         </view>
       </view>
       <view class="top-actions">
+        <view
+          v-if="hasUserTurn"
+          class="chip-g chip-mentor"
+          :class="{ on: mentorPeek }"
+          @tap="toggleMentorPeek"
+        >{{ mentorPeek ? '收起' : '导师' }}</view>
         <view class="gear" @tap="showSettings = true">⚙</view>
         <view class="chip-g" @tap="openHistory">历史</view>
       </view>
     </view>
 
-    <view class="mstage">
+    <view class="mstage" :aria-hidden="chatFocus ? 'true' : 'false'">
       <image class="mstage-img" :src="stageImageSrc" mode="aspectFill" />
       <view class="mgrad" />
-      <view v-if="loading" class="mlive">
+      <view v-if="loading && !chatFocus" class="mlive">
         <view class="dot" />
         <text class="mlive-t">正在回复你</text>
         <text class="mlive-dots" aria-hidden="true">
@@ -409,6 +415,17 @@ const mavaStyle = computed(() => {
 })
 const canSend = computed(() => !loading.value && !!(inputText.value.trim() || pendingImage.value))
 
+/** 对话中折叠大图/简介卡，把高度留给消息列表 */
+const mentorPeek = ref(false)
+const hasUserTurn = computed(() =>
+  !!pendingImage.value || messages.value.some((m) => m && m.role === 'user'),
+)
+const chatFocus = computed(() => hasUserTurn.value && !mentorPeek.value)
+function toggleMentorPeek() {
+  mentorPeek.value = !mentorPeek.value
+  if (!mentorPeek.value) nextTick(() => scrollChat())
+}
+
 const katexTick = ref(0)
 function formatHtml(text) {
   void katexTick.value
@@ -460,6 +477,7 @@ function scrollChat() {
 }
 
 function pushWelcome() {
+  mentorPeek.value = false
   const name = displayName.value
   messages.value = [{
     role: 'assistant',
@@ -652,6 +670,7 @@ async function switchSession(sessionId) {
       subject.value = sessSubject
     }
     qaSessionId.value = sessionId
+    mentorPeek.value = false
     const data = await fetchQaSession(uid, sessionId)
     const items = data.messages || []
     messages.value = items.length
@@ -793,6 +812,7 @@ async function sendMsg() {
     return
   }
 
+  mentorPeek.value = false
   abortRequested = false
   // 先立刻展示 blob 预览，再异步转 dataURL
   let displayImageUrl = pending?.preview || null
@@ -981,6 +1001,12 @@ onBeforeUnmount(() => {
   border-radius: 999px;
 }
 .app.lt .chip-g { color: #30904f; }
+.chip-mentor { font-size: 12px; padding: 5px 10px; }
+.chip-mentor.on {
+  background: rgba(111, 207, 142, 0.22);
+  color: #b8f0c8;
+}
+.app.lt .chip-mentor.on { color: #1f6b38; }
 
 .mstage {
   flex-shrink: 0;
@@ -992,6 +1018,7 @@ onBeforeUnmount(() => {
   max-height: min(28vh, 220px);
   background: linear-gradient(140deg, #141c2e, #0b0e14);
   border: 1.5px solid #2a3040;
+  transition: max-height 0.22s ease, opacity 0.2s ease, margin 0.2s ease, border-width 0.2s ease;
 }
 .app.lt .mstage {
   background: linear-gradient(140deg, #d1d9eb, #ebeef4);
@@ -1135,7 +1162,34 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   min-width: 0;
   box-sizing: border-box;
+  max-height: 200px;
+  opacity: 1;
+  transition: max-height 0.22s ease, opacity 0.2s ease, margin 0.2s ease, padding 0.2s ease, border-width 0.2s ease;
 }
+
+/* 对话专注：收起人物大图 + 简介卡，聊天区吃满剩余高度 */
+.app.chat-focus .mstage {
+  max-height: 0 !important;
+  aspect-ratio: auto;
+  margin-top: 0;
+  margin-bottom: 0;
+  opacity: 0;
+  border-width: 0;
+  pointer-events: none;
+}
+.app.chat-focus .mentor {
+  max-height: 0 !important;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  border-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.app.chat-focus .subs { margin-top: 6px; }
+.app.chat-focus .chat-scroll { margin-top: 4px; }
 .minfo {
   flex: 1;
   min-width: 0;
