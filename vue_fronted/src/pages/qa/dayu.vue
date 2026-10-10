@@ -322,7 +322,10 @@ import {
   buildPendingImageFromPath,
   extractClipboardImageFile,
   fileToDataUrl,
+  isMobileH5,
+  needsWebcamCapture,
   pendingFromImageFile,
+  pickImageViaNativeInput,
   putQaImageLocal,
 } from '@/utils/qaMedia.js'
 import { MAIN_TABS, switchMainTab } from '@/utils/mainTabs.js'
@@ -694,18 +697,41 @@ function setPendingImage(pending) {
 }
 
 async function onPickSource(source) {
+  if (loading.value) return
+  // 先关自定义底栏；手机 H5 立刻用原生 input（同步 click），避免微信二次菜单
   showImageSheet.value = false
   try {
+    if (typeof document !== 'undefined' && isMobileH5()) {
+      const pending = await pickImageViaNativeInput(source === 'camera' ? 'environment' : '')
+      setPendingImage(pending)
+      uni.showToast({ title: source === 'camera' ? '已拍摄，点发送提问' : '已选图片，点发送提问', icon: 'none' })
+      return
+    }
+    if (needsWebcamCapture(source)) {
+      const pending = await pickImageViaNativeInput('environment')
+      setPendingImage(pending)
+      uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
+      return
+    }
     const path = await chooseQuestionImage(source)
     if (!path) return
     setPendingImage(await buildPendingImageFromPath(path))
     uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
   } catch (e) {
-    if (e?.message && e.message !== 'cancel' && e?.code !== 'WEBCAM') {
-      uni.showToast({ title: e.message || '选图失败', icon: 'none' })
-    } else if (e?.code === 'WEBCAM') {
-      uni.showToast({ title: '当前环境请用相册选图', icon: 'none' })
+    if (e?.message === 'cancel') return
+    if (e?.code === 'WEBCAM') {
+      try {
+        const pending = await pickImageViaNativeInput('environment')
+        setPendingImage(pending)
+        uni.showToast({ title: '已选图片，点发送提问', icon: 'none' })
+      } catch (e2) {
+        if (e2?.message !== 'cancel') {
+          uni.showToast({ title: '无法打开相机，请用相册选图', icon: 'none' })
+        }
+      }
+      return
     }
+    uni.showToast({ title: e?.message || '选图失败', icon: 'none' })
   }
 }
 

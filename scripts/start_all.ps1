@@ -8,8 +8,20 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "[CLEAN] 清理旧进程..." -ForegroundColor Gray
 & "$PSScriptRoot\stop_all.ps1"
 
-Write-Host "[START] 打开后端窗口 (8012)..." -ForegroundColor Yellow
-Start-Process powershell.exe -ArgumentList @(
+# 优先 PowerShell 7，没有再回退 Windows PowerShell 5.1
+$shellExe = $null
+foreach ($cand in @(
+    (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
+    "$env:LOCALAPPDATA\Microsoft\WindowsApps\pwsh.exe",
+    "$env:ProgramFiles\PowerShell\7\pwsh.exe",
+    "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+)) {
+    if ($cand -and (Test-Path $cand)) { $shellExe = $cand; break }
+}
+if (-not $shellExe) { $shellExe = "powershell.exe" }
+
+Write-Host "[START] 打开后端窗口 (8012) via $([IO.Path]::GetFileName($shellExe))..." -ForegroundColor Yellow
+Start-Process $shellExe -ArgumentList @(
     "-NoExit",
     "-ExecutionPolicy", "Bypass",
     "-File", (Join-Path $PSScriptRoot "run_backend.ps1")
@@ -34,7 +46,7 @@ if (-not $ready) {
 }
 
 Write-Host "[START] 打开前端窗口 (5185)..." -ForegroundColor Yellow
-Start-Process powershell.exe -ArgumentList @(
+Start-Process $shellExe -ArgumentList @(
     "-NoExit",
     "-ExecutionPolicy", "Bypass",
     "-File", (Join-Path $PSScriptRoot "run_frontend.ps1")

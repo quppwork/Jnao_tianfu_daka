@@ -321,9 +321,17 @@ export async function ensureAlbumPermission() {
 
 /**
  * @param {'camera'|'album'} source
- * @returns {Promise<string>} tempFilePath
+ * @returns {Promise<string>} tempFilePath / blob URL
  */
 export async function chooseQuestionImage(source) {
+  // 手机浏览器 / 微信内置浏览器：用原生 <input type=file>，
+  // 避免 uni.chooseImage 再弹一层「拍摄 / 从手机相册选择」。
+  // input.click() 须在用户手势同步路径里触发，故此处不做 await 权限。
+  if (isMobileH5() && typeof document !== 'undefined') {
+    const picked = await pickImageViaNativeInput(source === 'camera' ? 'environment' : '')
+    return picked.path
+  }
+
   if (needsWebcamCapture(source)) {
     const err = new Error('webcam')
     err.code = 'WEBCAM'

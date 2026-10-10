@@ -1211,6 +1211,24 @@ async function onPickSource(source) {
   if (pickingImage.value) return
   closeImageSheet()
 
+  // 手机 H5 / 微信：原生 file input，不再走 uni.chooseImage（会二次弹「拍摄/相册」）
+  if (typeof document !== 'undefined' && isMobileH5()) {
+    pickingImage.value = true
+    try {
+      await setPendingFromNativePick(source === 'camera' ? 'environment' : '')
+      uni.showToast({
+        title: source === 'camera' ? '已拍摄，点发送提问' : '已选图片，点发送提问',
+        icon: 'none',
+      })
+    } catch (e) {
+      if (e.message && e.message !== 'cancel') {
+        uni.showToast({ title: e.message, icon: 'none', duration: 2500 })
+      }
+    }
+    pickingImage.value = false
+    return
+  }
+
   if (needsWebcamCapture(source)) {
     await openWebcam()
     return
