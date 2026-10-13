@@ -497,3 +497,85 @@ def _generate_default_report(data: dict, score_proj: dict) -> str:
 从今天开始，每天进步一点点。加油！"""
 
     return report
+
+
+def check_academic_plan_ready(
+    db: Session,
+    child_user_id: int,
+    *,
+    max_age_days: int = 90,
+) -> dict:
+    """学业规划闸门（PRD §4.3）。
+
+    个性化学科引导 / 同类题生成前调用。
+    过渡判定（尚无独立「已确认规划」落库表）：
+    - 天赋测评、训练打卡**不能单独**充当学业规划；
+    - 须同时具备：本人测评基线 + 近期训练痕迹 + 可解析阶段目标 + 目标学科/能力线索；
+    - 无训练计划行且无打卡时视为规划缺失。
+
+    Returns:
+        {ok, reason, missing, student_hint}
+    """
+    del max_age_days  # 正式表有 updated_at 后再做过期校验
+    if child_user_id < 1:
+        return {
+            "ok": False,
+            "reason": "need_login",
+            "missing": ["child_user_id"],
+            "student_hint": "请先登录后再开始个性化学科引导。",
+        }
+
+    assessment = get_latest_assessment(db, child_user_id)
+    data = _collect_training_data(db, child_user_id)
+    score_proj = _estimate_score_improvement(data)
+    stages = _build_goal_stages(data, score_proj)
+    checkins = int(data.get("total_checkins") or 0)
+    missing: list[str] = []
+
+    if not assessment and not data.get("talent_type"):
+        missing.append("talent_baseline")
+
+    plan_row = db.scalar(
+        select(TrainingPlan.id).where(TrainingPlan.child_user_id == child_user_id).limit(1)
+    )
+    # 既无训练计划、又几乎无打卡 → 不能进入个性化出题
+    if plan_row is None and checkins < 1:
+        missing.append("academic_plan_or_training")
+
+    if not stages:
+        missing.append("goal_stages")
+    has_target = bool(score_proj) or any(
+        str(s.get("goal") or s.get("title") or "").strip() for s in (stages or [])
+    )
+    if not has_target:
+        missing.append("target_subject_or_ability")
+
+    talent_only = bool(assessment or data.get("talent_type")) and checkins == 0 and plan_row is None
+    if talent_only:
+        # 明确禁止「只用测评顶替规划」
+        if "academic_plan_or_training" not in missing:
+            missing.append("academic_plan_or_training")
+
+    if missing:
+        return {
+            "ok": False,
+            "reason": "incomplete_plan",
+            "missing": missing,
+            "student_hint": (
+                "还没有可用的学业规划（不能只用测评或打卡代替）。"
+                "请先在「成长」生成学业规划并完成至少一次训练后，"
+                "再开始个性化学科引导与同类练习。题目可以先保存。"
+            ),
+            "generated_at": date.today().isoformat(),
+            "talent_only": talent_only,
+        }
+
+    return {
+        "ok": True,
+        "reason": "ready",
+        "missing": [],
+        "student_hint": "",
+        "generated_at": date.today().isoformat(),
+        "goal_stage_count": len(stages),
+        "talent_only": False,
+    }

@@ -28,6 +28,9 @@ class HarnessSettings:
     sandbox_deny: tuple[str, ...]
     mcp_deny: tuple[str, ...]
     mcp_expose: tuple[str, ...]
+    # 契约：入参 JSON Schema 校验；Evidence：结果哈希入账本
+    contract_validate: bool = True
+    evidence_record: bool = True
     protocol_version: str = "2024-11-05"
     server_name: str = "jnao-harness"
     server_version: str = "0.1.0"
@@ -64,6 +67,8 @@ def load_harness_settings() -> HarnessSettings:
         sandbox_deny=_csv("HARNESS_SANDBOX_DENY"),
         mcp_deny=_csv("HARNESS_MCP_DENY"),
         mcp_expose=_csv("HARNESS_MCP_EXPOSE"),
+        contract_validate=_flag("HARNESS_CONTRACT", "1"),
+        evidence_record=_flag("HARNESS_EVIDENCE", "1"),
     )
 
 

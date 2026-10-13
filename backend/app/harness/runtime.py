@@ -28,6 +28,37 @@ def _traced(result: ToolResult, *, profile: str | None) -> ToolResult:
     return result
 
 
+def _with_evidence(
+    result: ToolResult,
+    *,
+    profile: str | None,
+    record: bool,
+) -> ToolResult:
+    """结果入 Evidence 账本（可关 HARNESS_EVIDENCE=0）。"""
+    if not record:
+        return result
+    try:
+        from app.harness.evidence import create_evidence
+
+        body = dict(result.data)
+        if result.error:
+            body.setdefault("error", result.error)
+        ev = create_evidence(
+            tool=result.name,
+            payload=body,
+            ok=result.ok,
+            profile=profile or "",
+            meta={"isolation": result.isolation, "duration_ms": result.duration_ms},
+        )
+        result.evidence_id = ev.id
+        result.content_sha256 = ev.content_sha256
+        if isinstance(result.data, dict):
+            result.data = {**result.data, "evidence_id": ev.id, "content_sha256": ev.content_sha256}
+    except Exception:
+        logger.exception("evidence record failed for %s", result.name)
+    return result
+
+
 async def call_tool(
     name: str,
     args: dict[str, Any] | None = None,
@@ -42,8 +73,10 @@ async def call_tool(
         context_from_args,
         reset_context,
     )
+    from app.harness.contract import validate_tool_args
 
     t0 = time.perf_counter()
+    cfg = load_harness_settings()
     spec = get_tool(name)
     payload = dict(args or {})
     if spec is None:
@@ -63,6 +96,20 @@ async def call_tool(
             ),
             profile=profile,
         )
+
+    if cfg.contract_validate:
+        cerr = validate_tool_args(name, spec.input_schema, payload)
+        if cerr:
+            return _traced(
+                ToolResult(
+                    ok=False,
+                    name=name,
+                    error=cerr.as_text(),
+                    isolation=spec.isolation,
+                    duration_ms=int((time.perf_counter() - t0) * 1000),
+                ),
+                profile=profile,
+            )
 
     if spec.permission == "confirm":
         token = str(payload.pop("confirm_token", "") or "")
@@ -94,7 +141,6 @@ async def call_tool(
             )
 
     isolation = spec.isolation
-    cfg = load_harness_settings()
     built = ctx if isinstance(ctx, ToolContext) else context_from_args(payload, profile=profile)
     if not built.profile:
         built.profile = profile or ""
@@ -112,13 +158,17 @@ async def call_tool(
             err = None if ok else str(data.get("error") or "sandbox failed")
             ms = int((time.perf_counter() - t0) * 1000)
             return _traced(
-                ToolResult(
-                    ok=ok,
-                    name=name,
-                    data=data if isinstance(data, dict) else {"result": data},
-                    error=err,
-                    isolation=f"process:{cfg.sandbox}",
-                    duration_ms=ms,
+                _with_evidence(
+                    ToolResult(
+                        ok=ok,
+                        name=name,
+                        data=data if isinstance(data, dict) else {"result": data},
+                        error=err,
+                        isolation=f"process:{cfg.sandbox}",
+                        duration_ms=ms,
+                    ),
+                    profile=profile,
+                    record=cfg.evidence_record,
                 ),
                 profile=profile,
             )
@@ -131,13 +181,17 @@ async def call_tool(
         err = None if ok else str(data.get("error") or "tool failed")
         ms = int((time.perf_counter() - t0) * 1000)
         return _traced(
-            ToolResult(
-                ok=ok,
-                name=name,
-                data=data,
-                error=err,
-                isolation="none",
-                duration_ms=ms,
+            _with_evidence(
+                ToolResult(
+                    ok=ok,
+                    name=name,
+                    data=data,
+                    error=err,
+                    isolation="none",
+                    duration_ms=ms,
+                ),
+                profile=profile,
+                record=cfg.evidence_record,
             ),
             profile=profile,
         )
@@ -145,12 +199,16 @@ async def call_tool(
         logger.warning("harness sandbox %s: %s", name, e)
         ms = int((time.perf_counter() - t0) * 1000)
         return _traced(
-            ToolResult(
-                ok=False,
-                name=name,
-                error=str(e)[:300],
-                isolation=f"process:{cfg.sandbox}",
-                duration_ms=ms,
+            _with_evidence(
+                ToolResult(
+                    ok=False,
+                    name=name,
+                    error=str(e)[:300],
+                    isolation=f"process:{cfg.sandbox}",
+                    duration_ms=ms,
+                ),
+                profile=profile,
+                record=cfg.evidence_record,
             ),
             profile=profile,
         )
@@ -158,12 +216,16 @@ async def call_tool(
         logger.exception("harness tool %s failed", name)
         ms = int((time.perf_counter() - t0) * 1000)
         return _traced(
-            ToolResult(
-                ok=False,
-                name=name,
-                error=str(e)[:300],
-                isolation=isolation,
-                duration_ms=ms,
+            _with_evidence(
+                ToolResult(
+                    ok=False,
+                    name=name,
+                    error=str(e)[:300],
+                    isolation=isolation,
+                    duration_ms=ms,
+                ),
+                profile=profile,
+                record=cfg.evidence_record,
             ),
             profile=profile,
         )
@@ -177,6 +239,7 @@ def harness_status() -> dict[str, Any]:
     cfg = load_harness_settings()
     from app.harness.catalog import catalog_status
     from app.harness.control import controller
+    from app.harness.mcp_adapters import get_adapter_registry
 
     return {
         "sandbox": cfg.sandbox,
@@ -185,6 +248,9 @@ def harness_status() -> dict[str, Any]:
         "tools": [t.name for t in list_tool_specs()],
         "server": cfg.server_name,
         "version": cfg.server_version,
+        "contract_validate": cfg.contract_validate,
+        "evidence_record": cfg.evidence_record,
+        "external_mcp_adapters": get_adapter_registry().list_adapters(),
         "control_plane": {
             "runtime": cfg.sandbox,
             "keepalive": cfg.keepalive,

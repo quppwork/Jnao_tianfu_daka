@@ -64,7 +64,7 @@ async def test_symbolic_verify_and_bank_tools():
 
 @pytest.mark.asyncio
 async def test_run_solve_photo_mock_bank_hit(monkeypatch):
-    """无 API Key 时 OCR 模拟含 1+1 → 演示题库命中，不走 LLM。"""
+    """无 API Key 时 OCR 模拟含 1+1 → 题库命中走引导（不直接泄答案）。"""
     from app.harness.registry import reset_registry_for_tests
     from app.agents.solve.runner import run_solve_photo
 
@@ -72,12 +72,13 @@ async def test_run_solve_photo_mock_bank_hit(monkeypatch):
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     monkeypatch.delenv("XKW_API_KEY", raising=False)
     monkeypatch.setattr("app.services.doubao_client.is_configured", lambda: False)
-
-    result = await run_solve_photo(_tiny_jpeg(), user_id=1)
+    # 跳过学业规划闸（本用例只验题库引导）
+    result = await run_solve_photo(_tiny_jpeg(), user_id=None)
     assert result.get("ok") is True
-    assert result.get("source") == "question_bank"
+    assert result.get("source") == "question_bank_guided"
     assert result.get("profile") == "solve_science"
-    assert "2" in str(result.get("answer"))
+    assert result.get("bank_answer_withheld") is True
+    assert "条件" in str(result.get("answer"))
 
 
 @pytest.mark.asyncio
@@ -115,7 +116,7 @@ async def test_run_solve_photo_mock_demo_miss(monkeypatch):
 
     monkeypatch.setattr("app.harness.runtime.call_tool", fake_call)
 
-    result = await run_solve_photo(_tiny_jpeg(), user_id=1, subject_hint="历史")
+    result = await run_solve_photo(_tiny_jpeg(), user_id=None, subject_hint="历史")
     assert result.get("ok") is True
     assert result.get("source") == "mock_demo"
     assert result.get("profile") == "solve_humanities"
@@ -144,9 +145,20 @@ def test_solve_photo_api_sync(client, registered_user):
     )
     assert res.status_code == 200, res.text
     data = res.json()
-    assert data.get("ok") is True
-    assert data.get("source") in ("question_bank", "mock_demo", "llm_rag")
-    assert data.get("profile", "").startswith("solve_")
+    # 新用户无学业规划 → 闸门拦截；有规划时走引导/题库/LLM
+    assert data.get("source") in (
+        "need_academic_plan",
+        "question_bank_guided",
+        "question_bank",
+        "mock_demo",
+        "llm_rag",
+    )
+    if data.get("source") == "need_academic_plan":
+        assert data.get("ok") is False
+        assert data.get("ocr_text")
+    else:
+        assert data.get("ok") is True
+        assert data.get("profile", "").startswith("solve_")
 
 
 def test_solve_tools_registered():

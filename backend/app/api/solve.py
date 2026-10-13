@@ -74,6 +74,9 @@ async def solve_photo_sync(
         subject_hint=subject_hint,
         filename=image.filename or "photo.jpg",
     )
+    # 学业规划未就绪：仍 200，前端展示引导去补规划（OCR 可保存）
+    if result.get("source") == "need_academic_plan":
+        return result
     if result.get("ok") is False:
         raise HTTPException(400, result.get("error") or "解答失败")
     return result

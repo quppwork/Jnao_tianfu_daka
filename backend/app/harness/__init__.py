@@ -1,6 +1,7 @@
 """薄 Harness：Tool / MCP / 沙箱 + 统一 run_agent。会话表仍分域。"""
 
 from app.harness.client import GatewayMCPClient
+from app.harness.evidence import create_evidence, get_ledger
 from app.harness.llm import PROFILES, complete, complete_stream, profile_system, route
 from app.harness.loop import iter_agent, run_agent
 from app.harness.memory import fold_and_truncate, fold_overflow_history, truncate_history, window_for_model
@@ -16,8 +17,10 @@ __all__ = [
     "call_tool",
     "complete",
     "complete_stream",
+    "create_evidence",
     "fold_and_truncate",
     "fold_overflow_history",
+    "get_ledger",
     "handoff_packet",
     "harness_status",
     "iter_agent",

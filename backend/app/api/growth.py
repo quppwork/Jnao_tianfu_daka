@@ -143,8 +143,16 @@ async def get_academic_plan(
     if not refresh:
         cached = cache_get_json(key_growth(cache_key, child_user_id))
         if cached is not None:
+            # 闸门状态随训练变化，不走长缓存
+            if isinstance(cached, dict):
+                cached = dict(cached)
+                cached["plan_gate"] = academic_plan_service.check_academic_plan_ready(
+                    db, child_user_id
+                )
             return cached
     
     plan = await academic_plan_service.generate_academic_plan(db, child_user_id)
+    # PRD §4.3：附带个性化引导就绪状态（不单独充当规划正文）
+    plan["plan_gate"] = academic_plan_service.check_academic_plan_ready(db, child_user_id)
     cache_set_json(key_growth(cache_key, child_user_id), plan, ttl_env("CACHE_TTL_ACADEMIC_PLAN", 3600))
     return plan

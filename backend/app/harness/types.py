@@ -32,6 +32,8 @@ class ToolResult:
     error: str | None = None
     isolation: str = "none"
     duration_ms: int = 0
+    evidence_id: str | None = None
+    content_sha256: str | None = None
 
     def to_audit(self) -> dict[str, Any]:
         return {
@@ -40,6 +42,8 @@ class ToolResult:
             "error": self.error,
             "isolation": self.isolation,
             "duration_ms": self.duration_ms,
+            "evidence_id": self.evidence_id,
+            "content_sha256": self.content_sha256,
         }
 
     def to_mcp_content(self) -> dict[str, Any]:

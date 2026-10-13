@@ -62,6 +62,41 @@ async def run_solve_photo_stream(
         },
     )
 
+    # PRD §4.3：个性化学科引导 / 同类练习前校验学业规划（OCR 结果仍回传可保存）
+    plan_gate: dict[str, Any] | None = None
+    if user_id:
+        try:
+            from app.db.session import get_session_factory
+            from app.services.academic_plan_service import check_academic_plan_ready
+
+            s = get_session_factory()()
+            try:
+                plan_gate = check_academic_plan_ready(s, int(user_id))
+            finally:
+                s.close()
+        except Exception:
+            plan_gate = None
+        if plan_gate and not plan_gate.get("ok"):
+            hint = str(plan_gate.get("student_hint") or "请先完善学业规划。")
+            yield ("status", "需要先完善学业规划")
+            yield ("token", hint)
+            yield (
+                "done",
+                {
+                    "ok": False,
+                    "profile": profile,
+                    "domain": domain,
+                    "answer": hint,
+                    "steps": [],
+                    "knowledge_points": [],
+                    "source": "need_academic_plan",
+                    "ocr_text": ocr_text,
+                    "plan_gate": plan_gate,
+                    "mock": False,
+                },
+            )
+            return
+
     yield ("status", "正在检索题库…")
     bank = await call_tool(
         "search_question_bank",
@@ -70,37 +105,43 @@ async def run_solve_photo_stream(
     )
     bank_data = bank.data or {}
     if bank.ok and bank_data.get("hit"):
-        answer = str(bank_data.get("answer") or "").strip()
+        # PRD：默认不直接抛完整标准答案；先给线索引导
         steps = list(bank_data.get("steps") or [])
         kps = list(bank_data.get("knowledge_points") or [])
-        text = answer
-        if steps:
-            text += "\n\n【解析步骤】\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
+        guide = (
+            "题库里有相似题，我们先自己想，不先看完整答案。\n"
+            f"题干确认：{ocr_text[:280]}\n\n"
+            "请先告诉我：题目给出了哪些条件？要求求什么？"
+        )
         if kps:
-            text += "\n\n【知识点】" + "、".join(str(x) for x in kps)
-        yield ("token", text)
+            guide += "\n（相关知识点：" + "、".join(str(x) for x in kps[:5]) + "）"
+        if steps:
+            guide += "\n需要提示时再说「提示」，我再按步骤给线索。"
+        yield ("token", guide)
         yield (
             "done",
             {
                 "profile": profile,
                 "domain": domain,
-                "answer": answer,
+                "answer": guide,
                 "steps": steps,
                 "knowledge_points": kps,
-                "source": "question_bank",
+                "source": "question_bank_guided",
                 "bank_provider": bank_data.get("provider"),
                 "ocr_text": ocr_text,
+                "bank_answer_withheld": True,
                 "mock": bool(bank_data.get("mock")),
+                "plan_gate": plan_gate,
             },
         )
         return
 
     if not is_configured() and ocr_mock:
         demo = (
-            f"【模拟解答 · {profile}】\n"
+            f"【模拟引导 · {profile}】\n"
             f"题干：{ocr_text}\n\n"
-            "题库未命中。配置 DEEPSEEK_API_KEY 或 DASHSCOPE_API_KEY 后走真实生成；"
-            "也可配置 XKW_API_KEY 接学科网题库。"
+            "先指出已知条件和要求什么；需要时再要提示。"
+            "配置 DEEPSEEK_API_KEY 后走真实引导生成。"
         )
         yield ("token", demo)
         yield (
@@ -114,15 +155,17 @@ async def run_solve_photo_stream(
                 "source": "mock_demo",
                 "ocr_text": ocr_text,
                 "mock": True,
+                "plan_gate": plan_gate,
             },
         )
         return
 
-    yield ("status", "题库未命中，正在结合知识库生成…")
+    yield ("status", "正在结合知识库做线索引导…")
     system_extra = (
         f"【OCR 题干】\n{ocr_text}\n\n"
-        "请先 retrieve_kb（如需要），再分步骤解答；公式用 LaTeX。"
-        "若调用 search_question_bank 已命中则直接采用标准答案。"
+        "按学科引导流程：先确认题干 → 分步提问线索 → 让孩子作答；"
+        "默认不要一次给出完整原题标准答案；公式用 LaTeX。"
+        "可 retrieve_kb；提示逐级增加。"
     )
     if profile == "solve_science":
         system_extra += "关键数值推导可调用 symbolic_verify 校验。"
