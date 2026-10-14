@@ -47,3 +47,11 @@ export async function fetchAcademicPlan(userId, refresh = false) {
   return apiJson(withUser('/api/growth/academic-plan' + (refresh ? '?refresh=true' : ''), userId))
 }
 
+/** 确认当前学业规划 — 写入 plan_gate 放行记录 */
+export async function confirmAcademicPlan(userId, refresh = false) {
+  return apiJson(
+    withUser('/api/growth/academic-plan/confirm' + (refresh ? '?refresh=true' : ''), userId),
+    { method: 'POST' },
+  )
+}
+

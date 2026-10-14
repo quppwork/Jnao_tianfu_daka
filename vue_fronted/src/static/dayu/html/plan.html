@@ -232,6 +232,8 @@ function toggleTheme(){
       <a class="cb" href="answer.html">咨询集训名额 →</a>
     </div>
 
+    <div class="next" id="confirmPlanBtn" onclick="confirmPlan()" style="background:linear-gradient(135deg,#2d6cdf,#1a4fb8);margin-top:14px">✓ 确认规划（开启学科引导）</div>
+    <div class="prev" id="confirmPlanHint" style="opacity:.75;font-size:13px;margin-top:6px">确认后将写入已确认学业规划，拍照答疑与个性化学科引导才会放行</div>
     <div class="next" onclick="goStep(1)">重新测算</div>
   </div>
 
@@ -489,6 +491,15 @@ function genPlan(){
   }else{
     $('campBox').style.display='none';
   }
+}
+function confirmPlan(){
+  try{
+    if(window.parent && window.parent!==window){
+      window.parent.postMessage({type:'dayu-plan-confirm'}, '*');
+      return;
+    }
+  }catch(e){}
+  alert('请在 App 内打开学业规划页后再确认');
 }
 /* ================= 初始化 ================= */
 chipGroup('fTalent','talent');

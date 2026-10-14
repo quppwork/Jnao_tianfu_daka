@@ -567,6 +567,10 @@ class AcademyBotScript(Base):
     script_body: Mapped[str] = mapped_column(Text, default="")
     plot_summary: Mapped[str] = mapped_column(Text, default="")
     revision: Mapped[int] = mapped_column(Integer, default=1)
+    # PRD 版本化：draft | published | disabled
+    content_version: Mapped[str] = mapped_column(String(32), default="v1")
+    publish_status: Mapped[str] = mapped_column(String(16), default="draft")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
@@ -787,3 +791,51 @@ class ConsultBoardPost(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class AcademicPlanConfirm(Base):
+    """已确认学业规划（PRD §4.3）— 个性化学科引导的前置。"""
+
+    __tablename__ = "academic_plan_confirm"
+    __table_args__ = (
+        Index("idx_academic_plan_confirm_user", "child_user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    child_user_id: Mapped[int] = mapped_column(
+        ForeignKey("child_user.id"), nullable=False, unique=True
+    )
+    # draft | confirmed | expired
+    status: Mapped[str] = mapped_column(String(16), default="confirmed")
+    target_subject: Mapped[str | None] = mapped_column(String(64))
+    target_ability: Mapped[str | None] = mapped_column(String(64))
+    current_level: Mapped[str | None] = mapped_column(String(64))
+    stage_goal: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(32), default="growth_ai")
+    author: Mapped[str | None] = mapped_column(String(64))
+    plan_json: Mapped[dict | None] = mapped_column(JSON)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class HarnessEvidenceRow(Base):
+    """Harness 工具 Evidence 账本（持久化）。"""
+
+    __tablename__ = "harness_evidence"
+    __table_args__ = (
+        Index("idx_harness_evidence_tool_created", "tool", "created_at"),
+        Index("idx_harness_evidence_sha", "content_sha256"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    tool: Mapped[str] = mapped_column(String(64), nullable=False)
+    profile: Mapped[str] = mapped_column(String(32), default="")
+    ok: Mapped[int] = mapped_column(Integer, default=1)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

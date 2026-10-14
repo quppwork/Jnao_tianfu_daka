@@ -403,9 +403,12 @@
         <text class="plan-loading-text">AI 正在为你生成学业规划...</text>
       </view>
 
-      <!-- 底部刷新按钮 -->
-      <view class="plan-footer">
-        <view class="plan-refresh-btn" @click="openAcademicPlan(true)">
+      <!-- 底部：确认规划 + 刷新 -->
+      <view class="plan-footer" style="display:flex;gap:10px;">
+        <view class="plan-refresh-btn" style="flex:1;background:linear-gradient(135deg,#2d6cdf,#1a4fb8);" @click="confirmPlanFromModal">
+          <text>确认规划</text>
+        </view>
+        <view class="plan-refresh-btn" style="flex:1;" @click="openAcademicPlan(true)">
           <view class="plan-refresh-ic" v-html="ic('refresh-cw', 16)"></view>
           <text>刷新报告</text>
         </view>
@@ -425,6 +428,7 @@ import {
   fetchGrowthTier,
   fetchGrowthShare,
   fetchAcademicPlan,
+  confirmAcademicPlan,
 } from '@/utils/userApi.js'
 import {
   talentAvatarUrl,
@@ -809,6 +813,29 @@ async function copyShare() {
 // 打开学业规划 → 大宇 plan.html 复刻页（旧 Modal 前端已下线）
 async function openAcademicPlan(_refresh = false) {
   uni.navigateTo({ url: '/pages/plan/dayu' })
+}
+
+async function confirmPlanFromModal() {
+  try {
+    uni.showLoading({ title: '确认中...', mask: true })
+    const uid = await ensureChildUser()
+    const res = await confirmAcademicPlan(uid)
+    uni.hideLoading()
+    if (res?.plan_gate?.ok || res?.ok) {
+      uni.showToast({ title: '规划已确认', icon: 'none' })
+      if (academicPlan.value) {
+        academicPlan.value = { ...academicPlan.value, plan_gate: res.plan_gate }
+      }
+    } else {
+      uni.showToast({
+        title: res?.plan_gate?.student_hint || '确认未完成',
+        icon: 'none',
+      })
+    }
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: e?.message || '确认失败', icon: 'none' })
+  }
 }
 
 function closePlanModal() {

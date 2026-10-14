@@ -86,6 +86,21 @@ def apply_schema_patches(engine: Engine) -> None:
             "affect",
             "ALTER TABLE academy_room ADD COLUMN affect JSON",
         ),
+        (
+            "academy_bot_script",
+            "content_version",
+            "ALTER TABLE academy_bot_script ADD COLUMN content_version VARCHAR(32) DEFAULT 'v1'",
+        ),
+        (
+            "academy_bot_script",
+            "publish_status",
+            "ALTER TABLE academy_bot_script ADD COLUMN publish_status VARCHAR(16) DEFAULT 'draft'",
+        ),
+        (
+            "academy_bot_script",
+            "published_at",
+            "ALTER TABLE academy_bot_script ADD COLUMN published_at DATETIME",
+        ),
     ]
     dialect = engine.dialect.name
     for table, column, ddl in patches:

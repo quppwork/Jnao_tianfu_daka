@@ -63,6 +63,13 @@ async def lifespan(_app: FastAPI):
     )
     init_db()
     _seed_catalog_if_empty()
+    try:
+        from app.harness.mcp_adapters.echo_stub import maybe_register_echo_stub
+
+        if maybe_register_echo_stub():
+            logger.info("harness mcp echo stub registered")
+    except Exception:
+        logger.exception("harness mcp echo stub register failed")
     yield
 
 

@@ -26,7 +26,19 @@ FOUNDATION_RULES = """【知识根基 · 必守】
 - 有足够依据时：先给简洁结论，再解释依据；必要时点明资料名或页面入口。
 - 回答末尾给 2～3 条短追问方向（「如果你还想了解：」）。"""
 
-# 产品占位兜底（正式文案待业务确认，见 PRD §2.3 / §六）
+def _fallback_dayu() -> str:
+    from app.services.consult_kb_registry import fallback_for
+
+    return fallback_for("dayu")
+
+
+def _fallback_talent() -> str:
+    from app.services.consult_kb_registry import fallback_for
+
+    return fallback_for("talent")
+
+
+# 兼容旧导入名（文案以 config/consult_kb_registry.yaml 为准）
 DAYU_FALLBACK = (
     "我现在没有足够的已确认资料回答这个问题。"
     "你可以查看相关帮助页，或点击「联系人工」说明具体情况。"
@@ -36,15 +48,15 @@ TALENT_FALLBACK = (
     "你可以先查看本人的测评报告；需要结合个人情况解读时，请联系老师。"
 )
 
-DAYU_ANSWER_RULES = f"""【大宇入口 · 可答/禁答】
+DAYU_ANSWER_RULES = """【大宇入口 · 可答/禁答】
 可以答：产品功能、课程与服务说明、操作路径、已发布规则、常见问题；以及已发布知识库中的天赋总纲与路由建议。
 不能答：未发布政策；账户/订单争议的确定结论；无依据承诺；医疗、法律、财务等专业判断；替孩子贴死类型标签。
-未命中时：说明资料不足，引导帮助页或人工。占位话术：{DAYU_FALLBACK}"""
+未命中时：说明资料不足，引导帮助页或人工。兜底话术见系统注入的【未命中兜底】。"""
 
-TALENT_ANSWER_RULES = f"""【五者天赋顾问 · 可答/禁答】
+TALENT_ANSWER_RULES = """【五者天赋顾问 · 可答/禁答】
 可以答：经审核的概念、测评流程、报告字段解释、通用学习建议及常见疑问（须 retrieve_kb 有依据）。
 不能答：仅凭聊天给孩子贴类型标签；把测评当作诊断；推断资料未覆盖的个人能力；透露他人信息。
-未命中时：引导查看本人测评报告或申请专家解读。占位话术：{TALENT_FALLBACK}"""
+未命中时：引导查看本人测评报告或申请专家解读。兜底话术见系统注入的【未命中兜底】。"""
 
 
 @dataclass(frozen=True)
@@ -180,6 +192,8 @@ CONSULT_PERSONAS: dict[str, ConsultPersona] = {
 
 
 def consult_persona_system(code: str) -> str:
+    from app.services.consult_kb_registry import fallback_for, published_docs_for
+
     key = (code or "dayu").strip().lower()
     p = CONSULT_PERSONAS.get(key) or CONSULT_PERSONAS["dayu"]
     talent_line = (
@@ -188,11 +202,15 @@ def consult_persona_system(code: str) -> str:
         else "角色：家长咨询总协调大宇。"
     )
     entry_rules = DAYU_ANSWER_RULES if key == "dayu" else TALENT_ANSWER_RULES
+    docs = published_docs_for(key) or list(p.kb_docs)
+    fb = fallback_for(key)
     return "\n".join(
         [
             FOUNDATION_RULES,
             "",
             entry_rules,
+            "",
+            f"【未命中兜底】{fb}",
             "",
             f"你是「{p.title}」。{talent_line}",
             f"标语：{p.slogan}",
@@ -200,8 +218,10 @@ def consult_persona_system(code: str) -> str:
             f"专长：{p.focus}",
             f"家长沟通：{p.parenting_hook}",
             f"语气：{p.answer_style}",
-            "检索时优先覆盖文档：" + "、".join(p.kb_docs),
-            "需要事实时调用 retrieve_kb，query 可带上天赋名与卡点关键词。",
+            "检索时只引用已发布文档：" + "、".join(docs),
+            "需要事实时调用 retrieve_kb（arguments.kb_agent="
+            + ("dayu" if key == "dayu" else "talent")
+            + "），query 可带上天赋名与卡点关键词。",
             "留言板仅用于审核/人工升级，不是默认解题主流程。",
         ]
     )

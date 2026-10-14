@@ -28,9 +28,36 @@ def test_academic_plan_gate_rejects_empty(db_session):
     user = register_child(db_session, parent_phone="13900139991", nickname="规划闸童")
     gate = check_academic_plan_ready(db_session, user.id)
     assert gate["ok"] is False
-    assert gate["reason"] == "incomplete_plan"
-    assert gate.get("missing")
-    assert "学业规划" in (gate.get("student_hint") or "")
+    assert gate["reason"] == "need_confirm"
+    assert "academic_plan_confirm" in (gate.get("missing") or [])
+    assert "确认规划" in (gate.get("student_hint") or "") or "学业规划" in (
+        gate.get("student_hint") or ""
+    )
+
+
+def test_confirm_academic_plan_opens_gate(db_session):
+    from app.services.academic_plan_service import (
+        check_academic_plan_ready,
+        confirm_academic_plan,
+    )
+    from app.services.auth_service import register_child
+
+    user = register_child(db_session, parent_phone="13900139992", nickname="确认规划童")
+    plan = {
+        "student": {"talent_type": "思者", "overall_tier": 2},
+        "score_projection": {
+            "items": [{"subject": "数学计算", "estimated_boost": 5}],
+            "total_estimated_boost": 5,
+        },
+        "goal_stages": [
+            {"title": "近期", "hint": "每天完成必修打卡"},
+        ],
+    }
+    out = confirm_academic_plan(db_session, user.id, plan)
+    assert out["ok"] is True
+    gate = check_academic_plan_ready(db_session, user.id)
+    assert gate["ok"] is True
+    assert gate["reason"] == "confirmed"
 
 
 def test_academy_boundary_in_say_user_message():

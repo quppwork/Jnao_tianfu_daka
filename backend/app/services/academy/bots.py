@@ -162,6 +162,10 @@ def upload_script(
     script.script_body = (script_body or "").strip()
     script.plot_summary = (plot_summary or "").strip()
     script.revision = int(script.revision or 0) + 1
+    script.content_version = f"r{script.revision}"
+    # 上传后仍为草稿，需显式发布才算线上版本
+    if not (script.publish_status or "").strip():
+        script.publish_status = "draft"
     bot.revision = int(bot.revision or 1) + 1
     memories = []
     if script.script_body:
@@ -178,6 +182,50 @@ def upload_script(
     for row in memories:
         put_canon(bot.bot_id, row.kind, row.content, row.episode_id, row.revision)
     return BotChange(bot=bot, memories=memories, script=script)
+
+
+def publish_script(db: Session, bot_id: str, episode_id: str) -> BotChange:
+    """将当前剧本标为已发布（PRD 版本化最小闭环）。"""
+    from datetime import datetime
+
+    bot = get_bot(db, bot_id)
+    episode_id = episode_id.strip().upper()
+    script = db.scalar(
+        select(AcademyBotScript).where(
+            AcademyBotScript.bot_id == bot.bot_id,
+            AcademyBotScript.episode_id == episode_id,
+        )
+    )
+    if script is None or not (script.script_body or "").strip():
+        raise AcademyError("请先上传剧本正文再发布", status=400)
+    script.publish_status = "published"
+    script.published_at = datetime.now()
+    if not (script.content_version or "").strip():
+        script.content_version = f"r{int(script.revision or 1)}"
+    db.commit()
+    db.refresh(bot)
+    db.refresh(script)
+    return BotChange(bot=bot, memories=[], script=script)
+
+
+def list_script_versions(db: Session, episode_id: str | None = None) -> list[dict]:
+    """列出剧本版本状态（运营查看）。"""
+    q = select(AcademyBotScript)
+    if episode_id:
+        q = q.where(AcademyBotScript.episode_id == episode_id.strip().upper())
+    rows = list(db.scalars(q.order_by(AcademyBotScript.updated_at.desc())).all())
+    return [
+        {
+            "bot_id": r.bot_id,
+            "episode_id": r.episode_id,
+            "revision": r.revision,
+            "content_version": r.content_version,
+            "publish_status": r.publish_status or "draft",
+            "published_at": r.published_at.isoformat() if r.published_at else None,
+            "has_body": bool((r.script_body or "").strip()),
+        }
+        for r in rows
+    ]
 
 
 def perceive_session(self_bot_id: str, lines: list[dict]) -> list[dict]:

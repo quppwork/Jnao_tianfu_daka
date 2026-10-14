@@ -315,6 +315,7 @@ import {
   resolveQaImageUrl,
   sendQaMessageStream,
   uploadQaImage,
+  fetchAcademicPlan,
   errMessage,
 } from '@/utils/userApi.js'
 import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
@@ -689,8 +690,42 @@ async function switchSession(sessionId) {
   }
 }
 
+/** PRD §4.3：拍照发题前须已确认学业规划 */
+async function ensureAcademicPlanGate() {
+  try {
+    const uid = await ensureChildUser()
+    const plan = await fetchAcademicPlan(uid)
+    const gate = plan?.plan_gate
+    if (gate?.ok) return true
+    const hint =
+      gate?.student_hint ||
+      '请先在「成长 / 学业规划」生成并确认规划，再拍照发题。'
+    return await new Promise((resolve) => {
+      uni.showModal({
+        title: '需要先确认学业规划',
+        content: hint,
+        confirmText: '去规划',
+        cancelText: '取消',
+        success: (r) => {
+          if (r.confirm) {
+            uni.navigateTo({ url: '/pages/plan/dayu' })
+          }
+          resolve(false)
+        },
+        fail: () => resolve(false),
+      })
+    })
+  } catch (_) {
+    // 闸门接口失败时不阻断文本问答；仅提示
+    uni.showToast({ title: '规划状态暂不可用，请稍后再试拍照', icon: 'none' })
+    return false
+  }
+}
+
 async function pickImage() {
   if (loading.value) return
+  const ok = await ensureAcademicPlanGate()
+  if (!ok) return
   showImageSheet.value = true
 }
 
@@ -761,6 +796,8 @@ async function handleClipboardPaste(event) {
   if (!file) return
   event.preventDefault?.()
   event.stopPropagation?.()
+  const ok = await ensureAcademicPlanGate()
+  if (!ok) return
   try {
     setPendingImage(pendingFromImageFile(file))
     uni.showToast({ title: '已粘贴图片，点发送提问', icon: 'none' })
@@ -810,6 +847,10 @@ async function sendMsg() {
   if (!subject.value) {
     uni.showToast({ title: '先选一门学科频道', icon: 'none' })
     return
+  }
+  if (pending) {
+    const ok = await ensureAcademicPlanGate()
+    if (!ok) return
   }
 
   mentorPeek.value = false

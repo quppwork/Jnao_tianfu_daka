@@ -67,6 +67,16 @@ def init_db() -> None:
     from app.db.migrate import apply_schema_patches
 
     apply_schema_patches(engine)
+    # Evidence 默认落 SQL（测试可 set_ledger 覆盖回内存）
+    try:
+        import os
+
+        if os.getenv("HARNESS_EVIDENCE_SQL", "1").strip() not in ("0", "false", "False"):
+            from app.harness.evidence_sql import install_sql_evidence_ledger
+
+            install_sql_evidence_ledger()
+    except Exception:
+        pass
 
 
 def get_db() -> Generator[Session, None, None]:

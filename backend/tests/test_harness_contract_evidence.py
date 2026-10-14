@@ -117,3 +117,14 @@ async def test_external_adapter_registry():
     assert tools[0].name == "remote.echo"
     out = await reg.call("remote.echo", {"q": "hi"}, server="fake-mcp")
     assert out.ok and out.data.get("echo") == "hi"
+
+
+def test_echo_stub_registers_when_env(monkeypatch):
+    from app.harness.mcp_adapters import get_adapter_registry
+    from app.harness.mcp_adapters.echo_stub import maybe_register_echo_stub
+
+    get_adapter_registry().clear()
+    monkeypatch.setenv("HARNESS_MCP_ECHO_STUB", "1")
+    assert maybe_register_echo_stub() is True
+    assert "jnao-echo-stub" in get_adapter_registry().list_adapters()
+    get_adapter_registry().clear()

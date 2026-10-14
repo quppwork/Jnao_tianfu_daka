@@ -10,6 +10,8 @@ from app.services.academy.bots import (
     bot_payload,
     get_bot,
     list_bots,
+    list_script_versions,
+    publish_script,
     update_persona,
     upload_script,
 )
@@ -203,7 +205,42 @@ def academy_bot_script(
         _raise(err)
     payload = bot_payload(changed.bot, changed.memories)
     payload["episode_id"] = changed.script.episode_id if changed.script else episode_id
+    if changed.script:
+        payload["content_version"] = changed.script.content_version
+        payload["publish_status"] = changed.script.publish_status
     return payload
+
+
+@router.post("/bots/{bot_id}/episodes/{episode_id}/script/publish")
+def academy_bot_script_publish(
+    bot_id: str,
+    episode_id: str,
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        changed = publish_script(db, bot_id, episode_id)
+    except AcademyError as err:
+        _raise(err)
+    payload = bot_payload(changed.bot, changed.memories)
+    payload["episode_id"] = episode_id
+    if changed.script:
+        payload["content_version"] = changed.script.content_version
+        payload["publish_status"] = changed.script.publish_status
+        payload["published_at"] = (
+            changed.script.published_at.isoformat() if changed.script.published_at else None
+        )
+    return payload
+
+
+@router.get("/script-versions")
+def academy_script_versions(
+    episode_id: str | None = None,
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    del user_id
+    return {"items": list_script_versions(db, episode_id)}
 
 
 @router.post("/episodes/{episode_id}/chat")

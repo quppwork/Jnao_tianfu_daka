@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.shared.stage import STAGE_RULES, infer_school_stage
 from app.db.models import (
+    AcademicPlanConfirm,
     ChildUser,
     ContentItem,
     TrainingItem,
@@ -499,6 +500,91 @@ def _generate_default_report(data: dict, score_proj: dict) -> str:
     return report
 
 
+def get_confirmed_plan(db: Session, child_user_id: int) -> AcademicPlanConfirm | None:
+    return db.scalar(
+        select(AcademicPlanConfirm).where(AcademicPlanConfirm.child_user_id == child_user_id)
+    )
+
+
+def confirm_academic_plan(
+    db: Session,
+    child_user_id: int,
+    plan: dict | None = None,
+    *,
+    author: str | None = None,
+    max_age_days: int = 90,
+) -> dict:
+    """将生成的学业规划标记为已确认（落 academic_plan_confirm）。"""
+    from datetime import datetime, timedelta
+
+    plan = plan or {}
+    student = plan.get("student") if isinstance(plan.get("student"), dict) else {}
+    stages = plan.get("goal_stages") if isinstance(plan.get("goal_stages"), list) else []
+    score_proj = plan.get("score_projection") if isinstance(plan.get("score_projection"), dict) else {}
+    target_subject = ""
+    items = score_proj.get("items") if isinstance(score_proj.get("items"), list) else []
+    for item in items:
+        if isinstance(item, dict) and item.get("subject"):
+            target_subject = str(item.get("subject"))
+            break
+    if not target_subject:
+        # 兼容旧形态：score_projection 直接是 skill→info
+        for _k, v in score_proj.items():
+            if _k in ("items", "total_estimated_boost"):
+                continue
+            if isinstance(v, dict) and v.get("subject"):
+                target_subject = str(v.get("subject"))
+                break
+    stage_bits: list[str] = []
+    for s in stages[:4]:
+        if not isinstance(s, dict):
+            continue
+        bit = str(s.get("hint") or s.get("desc") or s.get("goal") or s.get("title") or "").strip()
+        if bit:
+            stage_bits.append(bit)
+    stage_goal = "；".join(stage_bits)
+    if not stage_goal:
+        sections = plan.get("sections") if isinstance(plan.get("sections"), dict) else {}
+        stage_goal = str(sections.get("plan") or "").strip()[:500]
+    if not stage_goal:
+        stage_goal = "完成近期训练打卡，并按学业规划推进薄弱环节"
+
+    row = get_confirmed_plan(db, child_user_id)
+    now = datetime.now()
+    if row is None:
+        row = AcademicPlanConfirm(child_user_id=child_user_id)
+        db.add(row)
+    row.status = "confirmed"
+    row.target_subject = target_subject or row.target_subject or "综合提分"
+    row.target_ability = (
+        str(student.get("talent_type") or row.target_ability or "").strip() or "待测评"
+    )
+    tier = student.get("overall_tier")
+    row.current_level = (
+        str(tier if tier is not None else (row.current_level or "1")).strip() or "1"
+    )
+    row.stage_goal = stage_goal or row.stage_goal
+    row.source = str(plan.get("source") or "growth_ai")[:32]
+    row.author = (author or "self").strip() or "self"
+    row.plan_json = plan
+    row.confirmed_at = now
+    row.expires_at = now + timedelta(days=max(1, max_age_days))
+    db.commit()
+    db.refresh(row)
+    return {
+        "ok": True,
+        "id": row.id,
+        "status": row.status,
+        "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        "target_subject": row.target_subject,
+        "target_ability": row.target_ability,
+        "current_level": row.current_level,
+        "stage_goal": row.stage_goal,
+        "author": row.author,
+    }
+
+
 def check_academic_plan_ready(
     db: Session,
     child_user_id: int,
@@ -507,16 +593,11 @@ def check_academic_plan_ready(
 ) -> dict:
     """学业规划闸门（PRD §4.3）。
 
-    个性化学科引导 / 同类题生成前调用。
-    过渡判定（尚无独立「已确认规划」落库表）：
-    - 天赋测评、训练打卡**不能单独**充当学业规划；
-    - 须同时具备：本人测评基线 + 近期训练痕迹 + 可解析阶段目标 + 目标学科/能力线索；
-    - 无训练计划行且无打卡时视为规划缺失。
-
-    Returns:
-        {ok, reason, missing, student_hint}
+    优先认 ``academic_plan_confirm`` 已确认且未过期记录。
+    天赋测评 / 打卡不能单独充当规划。
     """
-    del max_age_days  # 正式表有 updated_at 后再做过期校验
+    from datetime import datetime
+
     if child_user_id < 1:
         return {
             "ok": False,
@@ -525,57 +606,45 @@ def check_academic_plan_ready(
             "student_hint": "请先登录后再开始个性化学科引导。",
         }
 
+    row = get_confirmed_plan(db, child_user_id)
+    now = datetime.now()
+    if row and (row.status or "") == "confirmed":
+        if row.expires_at and row.expires_at < now:
+            return {
+                "ok": False,
+                "reason": "expired",
+                "missing": ["academic_plan_confirm"],
+                "student_hint": "学业规划已过期，请在「成长 / 学业规划」重新生成并确认。",
+                "confirmed": True,
+                "expired": True,
+            }
+        has_fields = bool(
+            (row.target_subject or row.target_ability)
+            and (row.stage_goal or row.current_level)
+        )
+        if has_fields:
+            return {
+                "ok": True,
+                "reason": "confirmed",
+                "missing": [],
+                "student_hint": "",
+                "confirmed": True,
+                "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+                "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+                "target_subject": row.target_subject,
+                "max_age_days": max_age_days,
+            }
+
     assessment = get_latest_assessment(db, child_user_id)
-    data = _collect_training_data(db, child_user_id)
-    score_proj = _estimate_score_improvement(data)
-    stages = _build_goal_stages(data, score_proj)
-    checkins = int(data.get("total_checkins") or 0)
-    missing: list[str] = []
-
-    if not assessment and not data.get("talent_type"):
-        missing.append("talent_baseline")
-
-    plan_row = db.scalar(
-        select(TrainingPlan.id).where(TrainingPlan.child_user_id == child_user_id).limit(1)
-    )
-    # 既无训练计划、又几乎无打卡 → 不能进入个性化出题
-    if plan_row is None and checkins < 1:
-        missing.append("academic_plan_or_training")
-
-    if not stages:
-        missing.append("goal_stages")
-    has_target = bool(score_proj) or any(
-        str(s.get("goal") or s.get("title") or "").strip() for s in (stages or [])
-    )
-    if not has_target:
-        missing.append("target_subject_or_ability")
-
-    talent_only = bool(assessment or data.get("talent_type")) and checkins == 0 and plan_row is None
-    if talent_only:
-        # 明确禁止「只用测评顶替规划」
-        if "academic_plan_or_training" not in missing:
-            missing.append("academic_plan_or_training")
-
-    if missing:
-        return {
-            "ok": False,
-            "reason": "incomplete_plan",
-            "missing": missing,
-            "student_hint": (
-                "还没有可用的学业规划（不能只用测评或打卡代替）。"
-                "请先在「成长」生成学业规划并完成至少一次训练后，"
-                "再开始个性化学科引导与同类练习。题目可以先保存。"
-            ),
-            "generated_at": date.today().isoformat(),
-            "talent_only": talent_only,
-        }
-
+    talent_only = bool(assessment) and get_confirmed_plan(db, child_user_id) is None
     return {
-        "ok": True,
-        "reason": "ready",
-        "missing": [],
-        "student_hint": "",
-        "generated_at": date.today().isoformat(),
-        "goal_stage_count": len(stages),
-        "talent_only": False,
+        "ok": False,
+        "reason": "need_confirm",
+        "missing": ["academic_plan_confirm"],
+        "student_hint": (
+            "请先在「成长」打开学业规划，核对后点击「确认规划」，"
+            "再开始个性化学科引导与同类练习。不能只用测评代替规划。"
+        ),
+        "confirmed": False,
+        "talent_only": talent_only,
     }

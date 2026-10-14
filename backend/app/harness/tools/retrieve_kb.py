@@ -20,6 +20,12 @@ async def retrieve_kb(args: dict[str, Any]) -> dict[str, Any]:
         prefer_docs = [x.strip() for x in prefer_raw.split(",") if x.strip()]
     elif isinstance(prefer_raw, list):
         prefer_docs = [str(x).strip() for x in prefer_raw if str(x).strip()]
+    # 咨询两套知识库：按 kb_agent=dayu|talent 只扫已发布文档
+    kb_agent = str(args.get("kb_agent") or "").strip().lower()
+    if not prefer_docs and kb_agent:
+        from app.services.consult_kb_registry import published_docs_for
+
+        prefer_docs = published_docs_for(kb_agent) or None
     if not prefer_docs:
         prefer_docs = list(FOUNDATION)
 
@@ -65,6 +71,10 @@ SPEC = ToolSpec(
             "prefer_docs": {
                 "type": "string",
                 "description": "优先文档，逗号分隔；天赋咨询默认 01/02/03",
+            },
+            "kb_agent": {
+                "type": "string",
+                "description": "dayu | talent：按咨询知识库注册表只检索已发布文档",
             },
         },
         "required": ["query"],
