@@ -1,7 +1,7 @@
 """家长引导 Agent 核（Agent 层）— Role/Goal/意图路由/出话。
 
 会话 CRUD、落库在 services.parent_guide_service；HTTP 在 api/parent.py。
-出话统一走 harness.turn.run_profile_turn(profile=parent_guide)。
+出话统一走 app.runtime.run_turn(profile=parent_guide)。
 """
 
 from __future__ import annotations
@@ -278,7 +278,7 @@ async def _parent_harness_reply(
 ) -> dict[str, Any]:
     from app.agents.guide.context import build_guide_context
     from app.harness.context import ToolContext
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
     from app.services.doubao_client import is_configured
 
     ctx = build_guide_context(db, child_user_id)

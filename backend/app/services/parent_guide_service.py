@@ -24,7 +24,9 @@ from app.agents.parent_guide.runner import (
     wants_live_child_data,
     wants_platform_kb,
 )
-from app.db.models import GuideMessage, GuideSession
+from app.db.models import GuideSession
+from app.memory import ThreadRef, get_thread_store
+from app.memory.protocols import DOMAIN_PARENT_GUIDE
 from app.services import guide_service, parent_service
 
 PARENT_SESSION_TITLE = "家长助手"
@@ -90,25 +92,30 @@ async def chat(
 ) -> dict[str, Any]:
     session = _get_or_create_parent_session(db, parent_id, session_id)
     history = _history_for_llm(session)
+    store = get_thread_store(db)
+    ref = ThreadRef(
+        domain=DOMAIN_PARENT_GUIDE,
+        owner_user_id=int(session.child_user_id),
+        thread_key=str(session.id),
+    )
 
-    db.add(GuideMessage(session_id=session.id, role="user", content=message))
+    store.append(ref, role="user", content=message, commit=True)
     if not session.title or session.title == PARENT_SESSION_TITLE:
         session.title = (message or "")[:30] or PARENT_SESSION_TITLE
-    db.commit()
+        db.commit()
 
     result = await run_parent_turn(
         db, parent_id, message, child_id=child_id, history=history
     )
     reply = result.get("reply") or ""
-    db.add(
-        GuideMessage(
-            session_id=session.id,
-            role="assistant",
-            content=reply,
-            meta_json=_assistant_meta(result),
-        )
+    store.append(
+        ref,
+        role="assistant",
+        content=reply,
+        meta=_assistant_meta(result),
+        commit=True,
     )
-    db.commit()
+    db.refresh(session)
     guide_service._archive_session_overflow(db, session)  # noqa: SLF001
 
     return {

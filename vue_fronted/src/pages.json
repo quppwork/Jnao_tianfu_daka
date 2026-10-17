@@ -246,6 +246,13 @@
             "navigationBarTitleText": "天赋报告",
             "navigationStyle": "custom"
           }
+        },
+        {
+          "path": "talent-chat",
+          "style": {
+            "navigationBarTitleText": "天赋解答",
+            "navigationStyle": "custom"
+          }
         }
       ]
     },

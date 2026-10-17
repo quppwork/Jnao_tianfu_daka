@@ -50,7 +50,7 @@ async def test_guide_retrieve_doubao_primary(monkeypatch):
         "app.harness.runtime.call_tool",
         new=AsyncMock(return_value=hit),
     ), patch(
-        "app.harness.turn.run_profile_turn",
+        "app.runtime.run_turn",
         new=AsyncMock(side_effect=_fake_turn),
     ), patch(
         "app.agents.guide.runner._try_bailian_direct_reply",
@@ -102,7 +102,7 @@ async def test_guide_skips_direct_when_generate_off(monkeypatch):
         "app.harness.runtime.call_tool",
         new=AsyncMock(return_value=miss),
     ), patch(
-        "app.harness.turn.run_profile_turn",
+        "app.runtime.run_turn",
         new=AsyncMock(return_value={"reply": "请去今日训练看看。", "tools_used": []}),
     ) as harness, patch(
         "app.agents.guide.kb_agent.guide_kb_agent_ready",

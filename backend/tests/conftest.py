@@ -35,16 +35,19 @@ from app.services.catalog_import import import_all_xet_catalogs
 
 @pytest.fixture(autouse=True)
 def _reset_test_isolation():
-    """每个用例清空内存限流/验证码，避免跨用例串扰。"""
+    """每个用例清空内存限流/验证码/Agent bundle，避免跨用例串扰。"""
+    from app.assemble import reset_bundle
     from app.services.auth_challenge_store import _lock, _mem
 
     with _lock:
         _mem.clear()
     reset_rate_limit_buckets()
+    reset_bundle()
     yield
     with _lock:
         _mem.clear()
     reset_rate_limit_buckets()
+    reset_bundle()
 
 
 @pytest.fixture

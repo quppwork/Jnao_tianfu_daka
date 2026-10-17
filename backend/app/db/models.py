@@ -154,6 +154,30 @@ class TalentAssessment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     child_user: Mapped["ChildUser"] = relationship(back_populates="assessments")
+    talent_chats: Mapped[list["ReportTalentMessage"]] = relationship(
+        back_populates="assessment",
+        order_by="ReportTalentMessage.id",
+        cascade="all, delete-orphan",
+    )
+
+
+class ReportTalentMessage(Base):
+    """成人报告天赋解答对话。一份报告一套记忆，键是 talent_assessment.id。"""
+
+    __tablename__ = "report_talent_message"
+    __table_args__ = (Index("idx_report_talent_message_assessment", "assessment_id", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    assessment_id: Mapped[int] = mapped_column(
+        ForeignKey("talent_assessment.id", ondelete="CASCADE"), nullable=False
+    )
+    child_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    retrieved: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    assessment: Mapped["TalentAssessment"] = relationship(back_populates="talent_chats")
 
 
 class TalentAssessmentArchive(Base):

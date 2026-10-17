@@ -11,7 +11,7 @@ from app.agents.academy.characters import CHARACTERS, get_character, system_prom
 
 async def chat_completion(*, system_prompt: str, user_message: str, **kwargs):
     """学院出话走 run_profile_turn；Scene Manager 仍在 room。"""
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
 
     del kwargs
     turn = await run_profile_turn(

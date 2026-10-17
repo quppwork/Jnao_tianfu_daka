@@ -22,7 +22,7 @@ async def run_solve_photo_stream(
     del filename  # 预留
     from app.harness.context import ToolContext
     from app.harness.runtime import call_tool
-    from app.harness.turn import run_profile_turn_stream
+    from app.runtime import run_turn_stream as run_profile_turn_stream
     from app.services.doubao_client import is_configured
 
     yield ("status", "正在压缩图片…")
@@ -267,7 +267,7 @@ async def _collect_turn(
     history: list[dict[str, Any]],
     max_steps: int,
 ) -> tuple[str, dict[str, Any] | None, str | None]:
-    from app.harness.turn import run_profile_turn_stream
+    from app.runtime import run_turn_stream as run_profile_turn_stream
 
     parts: list[str] = []
     done_payload: dict[str, Any] | None = None

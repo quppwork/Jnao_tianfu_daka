@@ -77,7 +77,7 @@ def test_chat_method_kb_injected_into_prompt(client: TestClient, child_with_asse
             return_value=_kb_result("知识库：系统训练优于单点刷题", sources=["天赋文档"])
         ),
     ), patch(
-        "app.harness.turn.run_profile_turn",
+        "app.runtime.run_turn",
         new=fake_turn,
     ):
         res = client.post(

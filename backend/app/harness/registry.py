@@ -44,6 +44,7 @@ def ensure_builtin_tools() -> None:
     if _BOOTSTRAPPED and _TOOLS:
         return
     from app.harness.tools import retrieve_kb as _rk
+    from app.harness.tools import talent_doc_rag as _tdr
     from app.harness.tools import sandbox_ping as _sp
     from app.harness.tools import guide_wrap as _gw
     from app.harness.tools import parent_ops as _po
@@ -56,6 +57,7 @@ def ensure_builtin_tools() -> None:
     from app.harness.tools import solve_ops as _so
 
     _rk.register()
+    _tdr.register()
     _sp.register()
     _gw.register()
     _po.register()

@@ -577,7 +577,9 @@ function makeReport(){
     show('sMz');
     requestAnimationFrame(()=>setTimeout(()=>document.querySelectorAll('#mzBars i').forEach(i=>i.style.width=i.dataset.w+'%'),60));
   }else{
-    location.href=mode==='kid'?'report-kid.html':'report-v3.html';
+    const page=mode==='kid'?'report-kid.html':'report-v3.html';
+    const q='lock=1&talent='+encodeURIComponent(top[0]);
+    location.href=page+'?'+q;
   }
 }
 function restart(){ show('sPick'); }

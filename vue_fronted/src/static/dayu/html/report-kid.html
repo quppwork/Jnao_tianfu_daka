@@ -1100,7 +1100,15 @@ function paintGrow(){
 const _swk=switchKid;
 switchKid=function(k,i){_swk(k,i);paintGrow();};
 
-switchKid('win');
+(function bootKid(){
+  const KEYMAP={学者:'study',思者:'think',行者:'act',德者:'virtue',赢者:'win'};
+  const raw=new URLSearchParams(location.search).get('talent')||'win';
+  const k=KEYMAP[raw]||(TALENT[raw]?raw:'win');
+  switchKid(k);
+  const date=(new URLSearchParams(location.search).get('date')||'').trim();
+  const el=document.querySelector('.h-date');
+  if(el) el.textContent=(date||'今日')+' · 儿童卷';
+})();
 </script>
 <script src="birthday.js"></script>
 <script>

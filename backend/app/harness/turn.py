@@ -1,7 +1,6 @@
-"""业务入口：所有 Agent 的模型+工具循环都走 run_agent。
+"""兼容入口 — 委托 app.runtime（组装后的 Executor）。
 
-会话表仍分域（guide_session / qa_session / consult_* / academy room）。
-产品闸门（答疑学科、作业跳转、学院选角）留在各 facade，不进内核。
+新代码请：from app.runtime import run_turn, run_turn_stream
 """
 
 from __future__ import annotations
@@ -9,28 +8,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.harness.agent_state import AgentState
 from app.harness.context import ToolContext
-from app.harness.loop import iter_agent, run_agent
 from app.harness.types import ToolResult
+from app.runtime.public import public_turn
 
-
-def _trace_rag(trace: list[dict[str, Any]]) -> bool:
-    names = {"retrieve_kb", "retrieve_qa_kb", "retrieve_qa_legacy"}
-    return any(t.get("name") in names and t.get("ok") for t in (trace or []))
-
-
-def _public_turn(state: AgentState, profile: str) -> dict[str, Any]:
-    return {
-        "reply": (state.reply or "").strip(),
-        "status": state.status,
-        "tools_used": list(state.tool_trace or []),
-        "rag_used": _trace_rag(state.tool_trace),
-        "thread_id": state.thread_id,
-        "pending_approvals": [p.to_dict() for p in state.pending_approvals],
-        "profile": profile,
-        "llm_calls": int((state.metadata or {}).get("llm_calls") or 0),
-    }
+# 旧测试 / patch 路径兼容
+_public_turn = public_turn
 
 
 async def run_profile_turn(
@@ -47,22 +30,22 @@ async def run_profile_turn(
     allow_tools: bool = True,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """一轮：system(+extra) → model → tools → reply。每轮 fresh，不复用内存 checkpoint。"""
-    state = await run_agent(
-        profile=profile,
-        user_message=user_message,
-        thread_id=thread_id,
+    from app.runtime import run_turn
+
+    return await run_turn(
+        profile,
+        user_message,
         history=history,
         ctx=ctx,
-        model=model,
-        max_steps=max_steps,
-        system_extra=system_extra or None,
+        system_extra=system_extra,
         system_override=system_override,
-        fresh=True,
+        max_steps=max_steps,
+        thread_id=thread_id,
+        model=model,
         allow_tools=allow_tools,
         metadata=metadata,
+        fresh=True,
     )
-    return _public_turn(state, profile)
 
 
 async def run_profile_turn_stream(
@@ -79,33 +62,23 @@ async def run_profile_turn_stream(
     allow_tools: bool = False,
     metadata: dict[str, Any] | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """门面流式入口：消费内核 route().stream 透传（token/done）。
+    from app.runtime import run_turn_stream
 
-    何时开流、SSE/WS 协议由各 facade API 决定，不进 harness 内核。
-    metadata.product_gate 可挂产品闸门短接（错科 / 不会引导等）。
-    """
-    async for kind, payload in iter_agent(
-        profile=profile,
-        user_message=user_message,
-        thread_id=thread_id,
+    async for item in run_turn_stream(
+        profile,
+        user_message,
         history=history,
         ctx=ctx,
-        model=model,
-        max_steps=max_steps,
-        system_extra=system_extra or None,
+        system_extra=system_extra,
         system_override=system_override,
-        fresh=True,
+        max_steps=max_steps,
+        thread_id=thread_id,
+        model=model,
         allow_tools=allow_tools,
         metadata=metadata,
+        fresh=True,
     ):
-        if kind == "token":
-            text = str(payload or "")
-            if text.startswith("[ERROR]"):
-                yield ("error", text)
-                return
-            yield ("token", text)
-        elif kind == "done":
-            yield ("done", _public_turn(payload, profile))
+        yield item
 
 
 def tool_result_brief(result: ToolResult | None) -> dict[str, Any]:

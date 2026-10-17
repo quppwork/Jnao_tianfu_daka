@@ -397,6 +397,27 @@ async def _handle_calls(
             _append_tool(state, call["id"], name, {"ok": False, "error": decision.reason})
             executed = True
             continue
+        # 组装层 GuardPolicy（budget / timeout / permissions 复合）
+        try:
+            from app.assemble import get_bundle
+
+            gd = get_bundle().guards.before_tool(
+                profile=state.profile,
+                tool=name,
+                arguments=args,
+                metadata=state.metadata or {},
+            )
+            if not gd.allowed:
+                _append_tool(
+                    state,
+                    call["id"],
+                    name,
+                    {"ok": False, "error": gd.reason or gd.code or "guard_denied"},
+                )
+                executed = True
+                continue
+        except Exception:
+            pass
         if spec and spec.permission == "confirm":
             from app.harness import approval
 

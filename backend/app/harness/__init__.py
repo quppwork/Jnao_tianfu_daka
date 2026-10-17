@@ -1,4 +1,8 @@
-"""薄 Harness：Tool / MCP / 沙箱 + 统一 run_agent。会话表仍分域。"""
+"""执行保障 + 工具 / MCP / 沙箱。
+
+业务出话请走 app.runtime.run_turn；本包保留 loop / tools / 兼容 turn shim。
+架构见 app.agents.ARCHITECTURE.md 与 app.assemble。
+"""
 
 from app.harness.client import GatewayMCPClient
 from app.harness.evidence import create_evidence, get_ledger
@@ -8,7 +12,9 @@ from app.harness.memory import fold_and_truncate, fold_overflow_history, truncat
 from app.harness.orchestration import ORCHESTRATION_MODE, handoff_packet
 from app.harness.runtime import call_tool, harness_status
 from app.harness.trace import emit as trace
-from app.harness.turn import run_profile_turn, run_profile_turn_stream
+# 兼容旧名；规范入口是 app.runtime.run_turn
+from app.runtime import run_turn as run_profile_turn
+from app.runtime import run_turn_stream as run_profile_turn_stream
 
 __all__ = [
     "ORCHESTRATION_MODE",

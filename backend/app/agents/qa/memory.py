@@ -186,12 +186,36 @@ class QaMemory:
         image_url: str | None = None,
         meta_json: dict | None = None,
     ) -> QaMessage:
-        row = QaMessage(
-            session_id=session_id,
+        """落库经统一 ThreadStore（commit=False，由 runner 统一提交）。"""
+        from app.memory import ThreadRef, get_thread_store
+        from app.memory.protocols import DOMAIN_QA
+
+        session = db.get(QaSession, session_id)
+        if session is None:
+            row = QaMessage(
+                session_id=session_id,
+                role=role,
+                content=content,
+                image_url=image_url,
+                meta_json=meta_json,
+            )
+            db.add(row)
+            return row
+        meta = dict(meta_json) if meta_json else {}
+        if image_url:
+            meta["image_url"] = image_url
+        tm = get_thread_store(db).append(
+            ThreadRef(
+                domain=DOMAIN_QA,
+                owner_user_id=int(session.child_user_id),
+                thread_key=str(session_id),
+            ),
             role=role,
             content=content,
-            image_url=image_url,
-            meta_json=meta_json,
+            meta=meta or None,
+            commit=False,
         )
-        db.add(row)
+        row = db.get(QaMessage, int(tm.id)) if tm.id is not None else None
+        if row is None:
+            raise RuntimeError("QaThreadStore.append 未返回有效消息")
         return row

@@ -61,7 +61,15 @@ def install_builtin_gates() -> None:
     global _INSTALLED
     if _INSTALLED:
         return
-    for profile in ("consult", "guide", "qa", "parent_guide", "academy", "harness"):
+    for profile in (
+        "consult",
+        "guide",
+        "qa",
+        "parent_guide",
+        "academy",
+        "harness",
+        "report_talent",
+    ):
         register_gate(profile, _empty_user_gate)
         register_gate(profile, _product_gate)
     _INSTALLED = True

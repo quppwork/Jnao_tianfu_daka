@@ -133,7 +133,7 @@ async def test_parent_kb_uses_retrieve_not_guide_kb(db_session):
         "app.services.doubao_client.is_configured",
         return_value=True,
     ), patch(
-        "app.harness.turn.run_profile_turn",
+        "app.runtime.run_turn",
         new=AsyncMock(
             return_value={
                 "reply": "家长版：赢者是目标导向。",

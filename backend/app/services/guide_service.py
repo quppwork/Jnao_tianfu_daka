@@ -8,9 +8,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import GuideMessage, GuideSession
+from app.memory import ThreadRef, get_thread_store
+from app.memory.protocols import DOMAIN_GUIDE
 
 # 首页对话框最多展示/保留的消息条数；超出部分拆入历史会话
 GUIDE_DIALOG_MESSAGE_LIMIT = 20
+
+
+def _thread_ref(session: GuideSession) -> ThreadRef:
+    return ThreadRef(
+        domain=DOMAIN_GUIDE,
+        owner_user_id=int(session.child_user_id),
+        thread_key=str(session.id),
+    )
 
 
 def _history_for_llm(session: GuideSession) -> list[dict]:
@@ -213,11 +223,10 @@ async def chat(
 
     session = _get_or_create_session(db, child_user_id, session_id)
     history = _history_for_llm(session)
+    store = get_thread_store(db)
+    ref = _thread_ref(session)
 
-    db.add(GuideMessage(session_id=session.id, role="user", content=message))
-    if not session.title or session.title == "首页助手":
-        session.title = message[:30]
-    db.commit()
+    store.append(ref, role="user", content=message, commit=True)
 
     if is_prompt_injection_attempt(message):
         result = _injection_refusal_result()
@@ -225,15 +234,14 @@ async def chat(
         result = await run_chat(db, child_user_id, message, history=history)
     reply = result["reply"]
 
-    db.add(
-        GuideMessage(
-            session_id=session.id,
-            role="assistant",
-            content=reply,
-            meta_json=_assistant_meta(result),
-        )
+    store.append(
+        ref,
+        role="assistant",
+        content=reply,
+        meta=_assistant_meta(result),
+        commit=True,
     )
-    db.commit()
+    db.refresh(session)
     _archive_session_overflow(db, session)
 
     return {
@@ -261,25 +269,23 @@ async def chat_stream(
 
     session = _get_or_create_session(db, child_user_id, session_id)
     history = _history_for_llm(session)
+    store = get_thread_store(db)
+    ref = _thread_ref(session)
 
-    db.add(GuideMessage(session_id=session.id, role="user", content=message))
-    if not session.title or session.title == "首页助手":
-        session.title = message[:30]
-    db.commit()
+    store.append(ref, role="user", content=message, commit=True)
 
     if is_prompt_injection_attempt(message):
         result = _injection_refusal_result()
         reply = result["reply"]
         yield ("token", reply)
-        db.add(
-            GuideMessage(
-                session_id=session.id,
-                role="assistant",
-                content=reply,
-                meta_json=_assistant_meta(result),
-            )
+        store.append(
+            ref,
+            role="assistant",
+            content=reply,
+            meta=_assistant_meta(result),
+            commit=True,
         )
-        db.commit()
+        db.refresh(session)
         _archive_session_overflow(db, session)
         yield ("done", {"session_id": session.id, **result})
         return
@@ -320,15 +326,14 @@ async def chat_stream(
             meta["situation_label"] = aligned["situation_label"]
     except Exception:
         pass
-    db.add(
-        GuideMessage(
-            session_id=session.id,
-            role="assistant",
-            content=reply,
-            meta_json=_assistant_meta(meta),
-        )
+    store.append(
+        ref,
+        role="assistant",
+        content=reply,
+        meta=_assistant_meta(meta),
+        commit=True,
     )
-    db.commit()
+    db.refresh(session)
     _archive_session_overflow(db, session)
     yield (
         "done",

@@ -79,3 +79,46 @@ def usage_wallet(
 ):
     """算力中心：家长+孩子本月 token 汇总 + 会员额度/充值余额账本。"""
     return build_wallet_payload(db, user_id)
+
+
+@router.get("/by-feature")
+def usage_by_feature(
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """各 Agent 板块模型费用汇总（低耦合 model_cost 组件）。"""
+    from app.model_cost import get_cost_recorder
+    from app.services.usage_recorder import resolve_billing_parent_id
+
+    ledger = get_cost_recorder()
+    me = [
+        {
+            "feature": s.feature,
+            "label": s.label,
+            "total_tokens": s.total_tokens,
+            "call_count": s.call_count,
+            "estimated_cost_milli": s.estimated_cost_milli,
+            "by_provider": s.by_provider,
+        }
+        for s in ledger.summarize(user_id=user_id, db=db)
+    ]
+    billing_parent_id = resolve_billing_parent_id(db, user_id)
+    household = None
+    if billing_parent_id:
+        household = [
+            {
+                "feature": s.feature,
+                "label": s.label,
+                "total_tokens": s.total_tokens,
+                "call_count": s.call_count,
+                "estimated_cost_milli": s.estimated_cost_milli,
+                "by_provider": s.by_provider,
+            }
+            for s in ledger.summarize(billing_parent_id=billing_parent_id, db=db)
+        ]
+    return {
+        "user_id": user_id,
+        "billing_parent_id": billing_parent_id,
+        "me": me,
+        "household": household,
+    }

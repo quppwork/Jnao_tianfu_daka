@@ -64,6 +64,13 @@ async def lifespan(_app: FastAPI):
     init_db()
     _seed_catalog_if_empty()
     try:
+        from app.assemble import wire_legacy_harness
+
+        wire_legacy_harness()
+        logger.info("agent bundle assembled (runtime + guards)")
+    except Exception:
+        logger.exception("agent bundle assemble failed")
+    try:
         from app.harness.mcp_adapters.echo_stub import maybe_register_echo_stub
 
         if maybe_register_echo_stub():

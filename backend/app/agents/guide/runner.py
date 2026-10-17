@@ -367,7 +367,7 @@ async def _qa_handoff_reply(
     history: list[dict] | None = None,
 ) -> str:
     """学科题意图：只做引导话术，不讲题。"""
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
     from app.services.doubao_client import is_configured
 
     if not is_configured():
@@ -480,7 +480,7 @@ async def _minimal_guide_reply(
     history: list[dict] | None = None,
 ) -> str:
     """KB Agent 未命中时的轻量兜底（无长人设/策略）。"""
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
     from app.services.doubao_client import is_configured
 
     if not is_configured():
@@ -508,7 +508,7 @@ async def run_chat(
 ) -> dict[str, Any]:
     """单轮回复。返回 reply + actions + tools_used。"""
     from app.harness.context import ToolContext
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
 
     timer = TurnTimer()
     ctx = _prepare_context(db, child_user_id)
@@ -959,7 +959,7 @@ async def run_chat_stream(
     yield ("status", "正在生成回复…")
     parts: list[str] = []
     from app.harness.context import ToolContext
-    from app.harness.turn import run_profile_turn_stream
+    from app.runtime import run_turn_stream as run_profile_turn_stream
 
     done: dict | None = None
     async for kind, payload in run_profile_turn_stream(

@@ -216,7 +216,7 @@ async def generate_consult_reply(
     群聊仅大宇应答；若 @ 了五者顾问，附带/改为「去单独咨询」引导。
     """
     from app.harness.context import ToolContext
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
     from app.services.consult_service import (
         build_dm_redirect_guide,
         parse_mentioned_bot_codes,

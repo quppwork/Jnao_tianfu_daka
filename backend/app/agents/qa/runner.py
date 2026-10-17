@@ -209,7 +209,7 @@ async def _run_product_gate(
     extra: dict[str, Any] | None = None,
 ) -> str:
     """产品闸门经 GateLook 短接（不调模型）；返回闸门 reply。"""
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
 
     gate = {"reply": reply, "code": code}
     if extra:
@@ -232,7 +232,7 @@ async def _stream_product_gate(
     extra: dict[str, Any] | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
     """流式产品闸门：经 iter_agent GateHook 吐 token，再由调用方补 done 业务字段。"""
-    from app.harness.turn import run_profile_turn_stream
+    from app.runtime import run_turn_stream as run_profile_turn_stream
 
     gate = {"reply": reply, "code": code}
     if extra:
@@ -572,7 +572,7 @@ async def run_chat(
 
     # 拍图：先经 harness MCP ocr_extract（见 _ocr_preview），出话统一走 run_profile_turn
     from app.harness.context import ToolContext
-    from app.harness.turn import run_profile_turn
+    from app.runtime import run_turn as run_profile_turn
 
     turn = await run_profile_turn(
         "qa",
@@ -1002,7 +1002,7 @@ async def run_chat_stream(
 
     parts: list[str] = []
     from app.harness.context import ToolContext
-    from app.harness.turn import run_profile_turn_stream
+    from app.runtime import run_turn_stream as run_profile_turn_stream
 
     done: dict | None = None
     async for kind, payload in run_profile_turn_stream(

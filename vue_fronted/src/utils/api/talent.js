@@ -1,9 +1,25 @@
 /**
  * talent API
  */
-import { apiJson, withUser } from './client.js'
+import { apiJson, withUser, requirePageAuth, NeedLoginError } from './client.js'
+import { readAuthSnapshot } from '../appSession.js'
 
 // ── 天赋测评 ──
+
+/** 报告/测评页：家长或学生，谁登录用谁（报告归属当前用户）。 */
+export async function ensureReportUser() {
+  const snap = readAuthSnapshot()
+  const preferParent =
+    snap.role === 'parent' || (!!snap.parent?.userId && !snap.student?.userId)
+  const order = preferParent ? ['parent', 'student'] : ['student', 'parent']
+  for (const kind of order) {
+    const session = kind === 'parent' ? snap.parent : snap.student
+    if (!session?.userId) continue
+    const auth = await requirePageAuth(kind)
+    if (auth.ok) return auth.userId
+  }
+  throw new NeedLoginError('请先登录后再查看报告')
+}
 
 export async function fetchAssessmentHistory(userId) {
   const data = await apiJson(withUser('/api/talent/assessment/history', userId))
@@ -12,6 +28,18 @@ export async function fetchAssessmentHistory(userId) {
 
 export async function fetchAssessmentReport(userId, assessmentId) {
   return apiJson(withUser(`/api/talent/assessment/${assessmentId}`, userId))
+}
+
+export async function fetchReportTalentChat(userId, assessmentId) {
+  return apiJson(withUser(`/api/talent/assessment/${assessmentId}/chat`, userId))
+}
+
+export async function sendReportTalentChat(userId, assessmentId, content) {
+  return apiJson(withUser(`/api/talent/assessment/${assessmentId}/chat`, userId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
 }
 
 export async function deleteAssessmentReport(userId, assessmentId) {

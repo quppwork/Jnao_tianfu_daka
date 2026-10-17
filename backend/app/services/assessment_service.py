@@ -653,6 +653,20 @@ def delete_assessment(db: Session, assessment_id: int, child_user_id: int) -> di
             deleted_at=datetime.now(timezone.utc),
         )
     )
+    from app.memory import ThreadRef, get_thread_store
+    from app.memory.protocols import DOMAIN_REPORT_TALENT
+
+    try:
+        get_thread_store(db).clear(
+            ThreadRef(
+                domain=DOMAIN_REPORT_TALENT,
+                owner_user_id=int(row.child_user_id),
+                thread_key=str(row.id),
+            ),
+            commit=False,
+        )
+    except PermissionError:
+        pass
     db.delete(row)
     db.commit()
     sync_child_user_talent(db, child_user_id)
