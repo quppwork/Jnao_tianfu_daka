@@ -1,7 +1,7 @@
 /**
  * talent API
  */
-import { apiJson, withUser, requirePageAuth, NeedLoginError } from './client.js'
+import { apiJson, withUser, requirePageAuth, NeedLoginError, streamPostSse } from './client.js'
 import { readAuthSnapshot } from '../appSession.js'
 
 // ── 天赋测评 ──
@@ -40,6 +40,15 @@ export async function sendReportTalentChat(userId, assessmentId, content) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
   })
+}
+
+/** 流式天赋解答：onToken 增量 / onReplace 整段替换 / onDone 权威消息 */
+export function streamReportTalentChat(userId, assessmentId, content, handlers = {}) {
+  return streamPostSse(
+    withUser(`/api/talent/assessment/${assessmentId}/chat/stream`, userId),
+    { content },
+    handlers,
+  )
 }
 
 export async function deleteAssessmentReport(userId, assessmentId) {

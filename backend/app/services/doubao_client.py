@@ -11,7 +11,18 @@ logger = get_logger("llm")
 
 DEFAULT_API_BASE = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-v4-pro"
+DEFAULT_FAST_MODEL = "deepseek-flash"
 DEFAULT_VISION_MODEL = "deepseek-flash"
+
+# 逻辑模型名 → 实际模型：业务/profile 只写 "fast" / "default"
+MODEL_ALIASES = {
+    "": "default",
+    "default": "default",
+    "pro": "default",
+    "slow": "default",
+    "fast": "fast",
+    "flash": "fast",
+}
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -46,14 +57,27 @@ def _cfg() -> dict:
     if key.startswith("${"):
         key = ""
     model = str(ds.get("model") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    fast = str(ds.get("fast_model") or DEFAULT_FAST_MODEL).strip() or DEFAULT_FAST_MODEL
     vision = str(ds.get("vision_model") or DEFAULT_VISION_MODEL).strip() or DEFAULT_VISION_MODEL
     return {
         "api_key": key,
         "api_base": _sanitize_api_base(ds.get("api_base")),
         "model": model,
+        "fast_model": fast,
         "vision_model": vision,
         "provider": "deepseek",
     }
+
+
+def resolve_model(name: str | None) -> str:
+    """把 profile 里的逻辑模型名（fast/default/具体名）解析成真实模型。"""
+    cfg = _cfg()
+    alias = MODEL_ALIASES.get(str(name or "").strip().lower(), "")
+    if alias == "fast":
+        return str(cfg.get("fast_model") or cfg["model"])
+    if alias == "default":
+        return cfg["model"]
+    return str(name).strip()
 
 
 def _build_messages(
@@ -191,19 +215,22 @@ async def chat_completion_message(
     max_tokens: int = 400,
     timeout: float = 30,
     feature: str | None = None,
+    model: str | None = None,
 ) -> dict | None:
     """DeepSeek /chat/completions：返回 assistant message（可含 tool_calls）。
 
     OpenAI 兼容：tools + tool_choice；用于 Guide 原生 function-calling 选工具。
+    model 支持逻辑名（"fast" / "default"）或具体模型名。
     """
     cfg = _cfg()
     if not cfg["api_key"]:
         return None
     if not messages:
         return None
+    used_model = resolve_model(model)
 
     payload: dict = {
-        "model": cfg["model"],
+        "model": used_model,
         "messages": messages,
         "max_tokens": max_tokens,
         # 工具选库也关 thinking，避免拖慢 Guide Agent
@@ -240,12 +267,12 @@ async def chat_completion_message(
             logger.error(
                 f"LLM tools error {resp.status_code}: {resp.text[:300]}"
             )
-            _record_doubao(api="chat.completions.tools", model=cfg["model"], usage=None, ok=False, feature=feature)
+            _record_doubao(api="chat.completions.tools", model=used_model, usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
         _record_doubao(
             api="chat.completions.tools",
-            model=cfg["model"],
+            model=used_model,
             usage=data.get("usage"),
             feature=feature,
         )
@@ -335,6 +362,7 @@ async def chat_completion_messages_stream(
     messages: list[dict],
     max_tokens: int = 500,
     feature: str | None = None,
+    model: str | None = None,
 ) -> AsyncIterator[str]:
     """按已组装 messages 流式输出；Harness loop 走这里。"""
     cfg = _cfg()
@@ -344,9 +372,10 @@ async def chat_completion_messages_stream(
     if not messages:
         yield "[ERROR] 空消息"
         return
+    used_model = resolve_model(model)
 
     payload = {
-        "model": cfg["model"],
+        "model": used_model,
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
@@ -372,7 +401,7 @@ async def chat_completion_messages_stream(
                     logger.error(f"LLM stream error {resp.status_code}: {body[:200]}")
                     _record_doubao(
                         api="chat.completions.stream",
-                        model=cfg["model"],
+                        model=used_model,
                         usage=None,
                         stream=True,
                         ok=False,
@@ -405,7 +434,7 @@ async def chat_completion_messages_stream(
         if yielded_any or usage_acc:
             _record_doubao(
                 api="chat.completions.stream",
-                model=cfg["model"],
+                model=used_model,
                 usage=usage_acc,
                 stream=True,
                 feature=feature,
@@ -418,6 +447,7 @@ async def chat_completion_messages_stream(
             tool_choice=None,
             max_tokens=max_tokens,
             feature=feature,
+            model=model,
         )
         full = str((msg or {}).get("content") or "")
         if full:

@@ -136,3 +136,31 @@ def retrieve_sync(
     except Exception as e:
         logger.warning("bailian retrieve usage record skipped: %s", e)
     return result
+
+
+DEFAULT_RETRIEVE_TIMEOUT_S = 12.0
+
+
+async def retrieve(
+    query: str,
+    *,
+    cfg: BailianConfig | None = None,
+    index_id: str | None = None,
+    top_n: int | None = None,
+    timeout_s: float = DEFAULT_RETRIEVE_TIMEOUT_S,
+) -> RagResult | None:
+    """异步 Retrieve — 官方 SDK 是阻塞调用，放线程池，超时不拖垮本轮出话。"""
+    import asyncio
+
+    from app.core.async_workers import run_sync
+
+    return await asyncio.wait_for(
+        run_sync(
+            retrieve_sync,
+            query,
+            cfg=cfg,
+            index_id=index_id,
+            top_n=top_n,
+        ),
+        timeout=timeout_s,
+    )

@@ -47,6 +47,13 @@ def load_settings() -> dict:
     if str(ds_model).startswith("${") or not str(ds_model).strip():
         ds_model = "deepseek-v4-pro"
     deepseek["model"] = str(ds_model).strip()
+    ds_fast = os.getenv(
+        "DEEPSEEK_FAST_MODEL",
+        deepseek.get("fast_model") or "deepseek-flash",
+    )
+    if str(ds_fast).startswith("${") or not str(ds_fast).strip():
+        ds_fast = "deepseek-flash"
+    deepseek["fast_model"] = str(ds_fast).strip()
     ds_vision = os.getenv(
         "DEEPSEEK_VISION_MODEL",
         deepseek.get("vision_model") or "deepseek-flash",

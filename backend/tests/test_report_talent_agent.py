@@ -200,8 +200,10 @@ def test_child_report_rejected(db):
     assert ei.value.status_code == 403
 
 
-def test_max_tool_rounds_constant():
-    assert agent.MAX_TOOL_ROUNDS == 5
+def test_tool_round_default_is_one():
+    """默认只查一次库：1 轮工具 + 回答，避免多轮拖垮首字。"""
+    assert agent.MAX_TOOL_ROUNDS == 1
+    assert agent.MAX_STEPS >= agent.MAX_TOOL_ROUNDS + 1
 
 
 def test_derive_citations_keyword_map():
@@ -246,3 +248,160 @@ async def test_chat_payload_carries_chips_and_citations(db):
     assert listed["chips"][0]["q"] == "学者怎么练"
     assistant_msgs = [m for m in listed["messages"] if m["role"] == "assistant"]
     assert assistant_msgs[0]["citations"] == ["五维能量星图"]
+
+# ── 新增：报告正文切片 / RAG 章节引用 / SSE ─────────────────────────────
+
+
+def test_report_context_slices_scores():
+    from app.services.report_talent_context import build_report_context
+
+    ctx = build_report_context(
+        {
+            "talent": "思者",
+            "check_talent": "思德",
+            "AttributeJs": '{"学者":2,"思者":3,"行者":2,"德者":2,"赢者":2}',
+            "results": {
+                "Ability": [
+                    {"abilityName": "执行力", "grade": 3, "value": 62, "desp": "<p>略</p>"},
+                    {"abilityName": "领导力", "grade": 2, "value": 57},
+                ],
+                "State": {"name": "无惧", "desp": "<p>状态说明</p>"},
+                "Talent": {"desp": "<p><strong>【天赋能力解读】</strong>思者重条理</p>"},
+                "TalentType": {"name": "机制应变型"},
+            },
+        },
+        "思者",
+    )
+    assert "思者" in ctx and "德者" in ctx
+    assert "执行力 62（3级）" in ctx
+    assert "领导力 57（2级）" in ctx
+    assert "无惧" in ctx and "机制应变型" in ctx
+    assert "<p>" not in ctx
+
+
+def test_report_context_empty_report():
+    from app.services.report_talent_context import build_report_context
+
+    assert build_report_context(None, "学者") == ""
+    assert build_report_context({}, "学者") == ""
+
+
+def test_sections_from_hits_uses_metadata():
+    from app.services.report_talent_sections import sections_from_hits
+
+    hits = [
+        {"title": "五维能量星图·执行力", "text": "正文"},
+        {"title": "名人堂", "doc_name": "榜样故事"},
+        {"title": "无关", "doc_name": "其他"},
+    ]
+    assert sections_from_hits(hits) == ["五维能量星图", "名人堂"]
+    assert sections_from_hits([]) == []
+    assert sections_from_hits(None) == []
+
+
+@pytest.mark.asyncio
+async def test_ask_citations_prefer_tool_hits(db):
+    row = _assessment(db, phone="13800000041")
+    with patch(
+        "app.runtime.run_turn",
+        new=AsyncMock(
+            return_value={
+                "reply": "库内提到先做目标拆解。",
+                "tools_used": [{"name": "talent_doc_retrieve", "ok": True}],
+                "citations": ["名人堂"],
+                "rag_used": True,
+                "llm_calls": 2,
+            }
+        ),
+    ):
+        out = await agent.ask(db, row, "怎么练")
+    assert out["assistant"]["citations"] == ["名人堂"]
+    listed = agent.list_messages(db, row)
+    assert listed["messages"][-1]["citations"] == ["名人堂"]
+
+
+def _stream_events(events):
+    async def _gen(*_args, **_kwargs):
+        for item in events:
+            yield item
+
+    return _gen
+
+
+@pytest.mark.asyncio
+async def test_ask_stream_tokens_then_done(db):
+    row = _assessment(db, phone="13800000042")
+    done = {
+        "reply": "第一步是阅读。",
+        "tools_used": [{"name": "talent_doc_retrieve", "ok": True}],
+        "citations": ["五维能量星图"],
+        "rag_used": True,
+        "llm_calls": 2,
+    }
+    with patch(
+        "app.runtime.run_turn_stream",
+        new=_stream_events(
+            [("token", "第一步"), ("token", "是阅读。"), ("done", done)]
+        ),
+    ):
+        items = [item async for item in agent.ask_stream(db, row, "学者怎么练")]
+
+    kinds = [k for k, _ in items]
+    assert kinds == ["token", "token", "done"]
+    assert items[-1][1]["assistant"]["content"] == "第一步是阅读。"
+    assert items[-1][1]["assistant"]["citations"] == ["五维能量星图"]
+
+    listed = agent.list_messages(db, row)
+    assert [m["role"] for m in listed["messages"]] == ["user", "assistant"]
+    assert listed["messages"][-1]["citations"] == ["五维能量星图"]
+
+
+@pytest.mark.asyncio
+async def test_ask_stream_refusal_replaces_streamed_text(db):
+    row = _assessment(db, phone="13800000043")
+    done = {
+        "reply": "我可以编一段。",
+        "tools_used": [{"name": "talent_doc_retrieve", "ok": False, "error": "empty"}],
+        "citations": [],
+        "rag_used": False,
+        "llm_calls": 2,
+    }
+    with patch(
+        "app.runtime.run_turn_stream",
+        new=_stream_events([("token", "我可以编一段。"), ("done", done)]),
+    ):
+        items = [item async for item in agent.ask_stream(db, row, "学者怎么练")]
+
+    kinds = [k for k, _ in items]
+    assert "replace" in kinds
+    assert items[kinds.index("replace")][1] == agent.REFUSAL
+    final = items[-1][1]
+    assert final["refused"] is True
+    assert final["assistant"]["content"] == agent.REFUSAL
+    assert final["assistant"]["citations"] == []
+
+
+def test_system_extra_carries_slices(db):
+    from app.db.models import TalentAssessment
+
+    user = ChildUser(
+        parent_phone="13800000044", nickname="测", role="student", password_hash="x"
+    )
+    db.add(user)
+    db.flush()
+    row = TalentAssessment(
+        child_user_id=user.id,
+        test_type=0,
+        talent_primary="学者",
+        report_json={
+            "results": {
+                "Ability": [{"abilityName": "执行力", "grade": 3, "value": 66}],
+            }
+        },
+    )
+    db.add(row)
+    db.commit()
+    extra = agent._system_extra(row)
+    assert "报告正文切片" in extra
+    assert "执行力 66（3级）" in extra
+    assert "尚未联调" not in extra

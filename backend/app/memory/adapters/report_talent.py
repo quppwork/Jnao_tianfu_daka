@@ -21,12 +21,18 @@ def _iso(dt: datetime | None) -> str | None:
 
 
 def _to_msg(row: ReportTalentMessage) -> ThreadMessage:
+    meta: dict[str, Any] = {"retrieved": int(row.retrieved or 0)}
+    stored = getattr(row, "meta_json", None)
+    if isinstance(stored, dict):
+        meta.update(stored)
+        # retrieved 以独立列为准，避免历史 meta 覆盖
+        meta["retrieved"] = int(row.retrieved or 0)
     return ThreadMessage(
         id=int(row.id),
         role=str(row.role or ""),
         content=str(row.content or ""),
         created_at=_iso(row.created_at),
-        meta={"retrieved": int(row.retrieved or 0)},
+        meta=meta,
     )
 
 
@@ -74,13 +80,19 @@ class ReportTalentThreadAdapter:
     ) -> ThreadMessage:
         aid = self._assessment_id(ref)
         self._assert_owner(aid, ref.owner_user_id)
-        retrieved = int((meta or {}).get("retrieved") or 0)
+        meta = dict(meta or {})
+        retrieved = int(meta.pop("retrieved", 0) or 0)
+        citations = meta.pop("citations", None)
+        extra: dict[str, Any] = dict(meta)
+        if isinstance(citations, list):
+            extra["citations"] = [str(c) for c in citations if str(c).strip()]
         row = ReportTalentMessage(
             assessment_id=aid,
             child_user_id=int(ref.owner_user_id),
             role=str(role or "").strip() or "user",
             content=str(content or ""),
             retrieved=retrieved,
+            meta_json=extra or None,
         )
         self._db.add(row)
         self._db.flush()

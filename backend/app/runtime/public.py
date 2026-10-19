@@ -18,13 +18,15 @@ def _trace_rag(trace: list[dict[str, Any]]) -> bool:
 
 
 def public_turn(state: AgentState, profile: str) -> dict[str, Any]:
+    meta = state.metadata or {}
     return {
         "reply": (state.reply or "").strip(),
         "status": state.status,
         "tools_used": list(state.tool_trace or []),
         "rag_used": _trace_rag(state.tool_trace),
+        "citations": [str(c) for c in (meta.get("citations") or []) if str(c).strip()],
         "thread_id": state.thread_id,
         "pending_approvals": [p.to_dict() for p in state.pending_approvals],
         "profile": profile,
-        "llm_calls": int((state.metadata or {}).get("llm_calls") or 0),
+        "llm_calls": int(meta.get("llm_calls") or 0),
     }

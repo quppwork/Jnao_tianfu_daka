@@ -104,7 +104,7 @@ PROFILES: dict[str, dict[str, Any]] = {
             "医疗法律投资等）时回复："
             "「抱歉我还不了解这部分内容，其他板块可能会有您需要的」"
             "禁止编造库外步骤与数字；需要换问法再查时由你决定是否再次调用工具；"
-            "单轮最多五次工具循环。"
+            "单轮最多一次查库：查到切片就据此作答，不要再补查第二次。"
         ),
         "knowledge": {
             "docs": [],
@@ -115,8 +115,10 @@ PROFILES: dict[str, dict[str, Any]] = {
         },
         "personas": {},
         "feature": "report_talent",
-        "max_tokens": 700,
-        "timeout": 45,
+        # 报告页问答：短答为主，快模型 + 小 max_tokens 压首字与总耗时
+        "model": "fast",
+        "max_tokens": 420,
+        "timeout": 25,
         "tools": ["talent_doc_retrieve"],
     },
 }
@@ -209,6 +211,7 @@ class LlmRoute:
             max_tokens=int(cfg.get("max_tokens") or 700),
             timeout=float(cfg.get("timeout") or 45),
             feature=f"harness.{self.profile}",
+            model=cfg.get("model"),
         )
         if not isinstance(msg, dict):
             return {"role": "assistant", "content": "暂时无法生成回复。"}
@@ -245,6 +248,7 @@ class LlmRoute:
             messages=messages,
             max_tokens=int(cfg.get("max_tokens") or 700),
             feature=f"harness.{self.profile}",
+            model=cfg.get("model"),
         ):
             yield tok
 

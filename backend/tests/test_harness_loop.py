@@ -243,3 +243,96 @@ async def test_loop_compacts_long_history():
     )
     assert seen
     assert seen[0] <= 22
+
+@pytest.mark.asyncio
+async def test_max_tool_rounds_forces_answer_without_tools():
+    """工具轮用完即撤 tools：模型必须直接出话，不再靠 max_steps 兜底。"""
+    from unittest.mock import AsyncMock, patch
+
+    class ToolHungry:
+        def __init__(self):
+            self.seen: list[list] = []
+
+        async def complete(self, messages, tools):
+            self.seen.append(list(tools or []))
+            if tools:
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "c1",
+                            "function": {
+                                "name": "retrieve_kb",
+                                "arguments": '{"query":"超脑阅读"}',
+                            },
+                        }
+                    ],
+                }
+            return {"role": "assistant", "content": "按已查到的切片作答。"}
+
+    fake = type("R", (), {})()
+    fake.rag_block = "超脑阅读每天练"
+    fake.nodes = []
+    fake.mode = "retrieve"
+
+    model = ToolHungry()
+    with patch("app.services.bailian.guide_rag_query", new=AsyncMock(return_value=fake)):
+        state = await run_agent(
+            profile="consult",
+            user_message="怎么练超脑阅读",
+            thread_id="t-rounds",
+            model=model,
+            max_steps=5,
+            max_tool_rounds=1,
+        )
+    assert state.status == "completed"
+    assert state.reply == "按已查到的切片作答。"
+    assert len(model.seen) == 2
+    assert model.seen[1] == []
+    assert state.metadata.get("tool_rounds") == 1
+
+
+@pytest.mark.asyncio
+async def test_tool_citations_collected_into_metadata():
+    from app.harness.registry import register_tool
+    from app.harness.types import ToolSpec
+
+    async def _handler(args):
+        return {"ok": True, "citations": ["名人堂", "天赋剧场"]}
+
+    register_tool(
+        ToolSpec(
+            name="fake_cite",
+            description="测试引用",
+            input_schema={"type": "object", "properties": {}, "additionalProperties": True},
+            handler=_handler,
+            profiles=("consult",),
+        )
+    )
+
+    class CiteModel:
+        def __init__(self):
+            self.n = 0
+
+        async def complete(self, messages, tools):
+            self.n += 1
+            if self.n == 1:
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"id": "c1", "function": {"name": "fake_cite", "arguments": "{}"}}
+                    ],
+                }
+            return {"role": "assistant", "content": "引用已带上。"}
+
+    state = await run_agent(
+        profile="consult",
+        user_message="看榜样的故事",
+        thread_id="t-cite",
+        model=CiteModel(),
+        max_steps=3,
+    )
+    assert state.status == "completed"
+    assert state.metadata.get("citations") == ["名人堂", "天赋剧场"]

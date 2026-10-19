@@ -31,6 +31,9 @@ async def emit_event_stream(
     async for kind, payload in gen:
         if kind == "token":
             yield sse_json({"type": "token", "content": payload})
+        elif kind == "replace":
+            # 已推流内容与最终口径不一致（如判为拒答）→ 前端整段替换
+            yield sse_json({"type": "replace", "content": str(payload or "")})
         elif kind == "status":
             msg = payload if isinstance(payload, str) else str(payload or "")
             if msg:

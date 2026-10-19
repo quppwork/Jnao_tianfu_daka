@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 
 from app.harness.rag_contract import (
@@ -15,6 +17,13 @@ from app.harness.rag_contract import (
 from app.harness.registry import register_tool
 from app.harness.types import ToolSpec
 from app.model_cost import AgentFeature, CostEvent, get_cost_recorder
+from app.services.report_talent_sections import sections_from_hits
+
+
+# 成功结果的进程内短缓存：(query, top_n) → (时间戳, payload)；失败不缓存
+_CACHE: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
+_CACHE_TTL_S = 300.0
+_CACHE_MAX = 128
 
 
 async def talent_doc_retrieve(args: dict[str, Any]) -> dict[str, Any]:
@@ -30,10 +39,33 @@ async def talent_doc_retrieve(args: dict[str, Any]) -> dict[str, Any]:
     top_n = int(args.get("top_n") or 3)
     top_n = max(1, min(8, top_n))
 
-    try:
-        from app.services.bailian.retrieve import retrieve_sync
+    cached = _CACHE.get((query, top_n))
+    if cached and time.monotonic() - cached[0] < _CACHE_TTL_S:
+        return cached[1]
 
-        result = retrieve_sync(query, index_id=TALENT_DOC_INDEX_ID, top_n=top_n)
+    # SDK 是阻塞调用：走 async 包装（线程池 + 超时），不卡事件循环
+    from app.services.bailian.retrieve import retrieve as retrieve_async
+
+    try:
+        result = await retrieve_async(query, index_id=TALENT_DOC_INDEX_ID, top_n=top_n)
+    except asyncio.TimeoutError:
+        get_cost_recorder().record(
+            CostEvent(
+                provider="bailian",
+                feature=AgentFeature.REPORT_TALENT,
+                api="retrieve",
+                model=TALENT_DOC_INDEX_ID,
+                metric_kind="est_rag",
+                call_count=1,
+                ok=False,
+                meta={"error": "TimeoutError"},
+            )
+        )
+        return fail_payload(
+            query=query,
+            error="retrieve timeout",
+            error_kind="timeout",
+        )
     except Exception as e:
         get_cost_recorder().record(
             CostEvent(
@@ -96,6 +128,8 @@ async def talent_doc_retrieve(args: dict[str, Any]) -> dict[str, Any]:
         "query": query,
         "hit_count": len(hits),
         "hits": hits,
+        # 命中的报告章节：门面据此出引用，不再猜正文关键词
+        "citations": sections_from_hits(hits),
     }
     if result.request_id:
         payload["request_id"] = str(result.request_id)
@@ -106,6 +140,9 @@ async def talent_doc_retrieve(args: dict[str, Any]) -> dict[str, Any]:
             error=out_err.as_text(),
             error_kind="contract_output",
         )
+    if len(_CACHE) >= _CACHE_MAX:
+        _CACHE.pop(next(iter(_CACHE)))
+    _CACHE[(query, top_n)] = (time.monotonic(), payload)
     return payload
 
 

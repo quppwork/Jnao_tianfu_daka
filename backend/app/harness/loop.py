@@ -148,6 +148,7 @@ async def run_agent(
     ctx: ToolContext | None = None,
     model: ModelAdapter | None = None,
     max_steps: int = 6,
+    max_tool_rounds: int | None = None,
     resume_tokens: list[str] | None = None,
     system_extra: str | None = None,
     system_override: str | None = None,
@@ -165,6 +166,7 @@ async def run_agent(
         ctx=ctx,
         model=model,
         max_steps=max_steps,
+        max_tool_rounds=max_tool_rounds,
         resume_tokens=resume_tokens,
         system_extra=system_extra,
         system_override=system_override,
@@ -187,6 +189,7 @@ async def iter_agent(
     ctx: ToolContext | None = None,
     model: ModelAdapter | None = None,
     max_steps: int = 6,
+    max_tool_rounds: int | None = None,
     resume_tokens: list[str] | None = None,
     system_extra: str | None = None,
     system_override: str | None = None,
@@ -283,13 +286,20 @@ async def iter_agent(
     adapter = model or DeepSeekAdapter(profile)
     tools = openai_tools_for_profile(profile) if allow_tools else []
     streamer = getattr(adapter, "complete_stream", None)
+    # 工具轮上限：用完就撤掉 tools，本轮模型必须直接出话（不再"步数用完"）
+    tool_rounds = 0
+    if max_tool_rounds is not None:
+        state.metadata["max_tool_rounds"] = int(max_tool_rounds)
 
     while state.status == "running" and state.step < state.max_steps:
         state.step += 1
         window, mem = window_for_model(state.messages, state.metadata.get("memory"))
         state.metadata["memory"] = mem
         t0 = time.perf_counter()
-        live = bool(callable(streamer) and not tools)
+        exhausted = max_tool_rounds is not None and tool_rounds >= int(max_tool_rounds)
+        tools_for_call = [] if exhausted else tools
+        # 无工具可用时才能真流式：tool_calls 走不了 token 流
+        live = bool(callable(streamer) and not tools_for_call)
         assistant: dict[str, Any]
         if live:
             chunks: list[str] = []
@@ -301,13 +311,13 @@ async def iter_agent(
                 yield ("token", text)
             assistant = {"role": "assistant", "content": "".join(chunks)}
         else:
-            assistant = await _complete_with_retry(adapter, window, tools)
+            assistant = await _complete_with_retry(adapter, window, tools_for_call)
         ms = int((time.perf_counter() - t0) * 1000)
         ok = bool(assistant.get("content") or assistant.get("tool_calls"))
         emit_trace("llm.complete", ms, ok, profile=profile)
         state.metadata["llm_calls"] = int(state.metadata.get("llm_calls") or 0) + 1
         state.messages.append(assistant)
-        calls = parse_tool_calls(assistant) if tools else []
+        calls = parse_tool_calls(assistant) if tools_for_call else []
         if not calls:
             state.reply = str(assistant.get("content") or "").strip()
             state.status = "completed"
@@ -317,6 +327,9 @@ async def iter_agent(
                     yield ("token", piece)
             break
         executed, paused = await _handle_calls(state, calls, ctx=ctx)
+        if executed:
+            tool_rounds += 1
+            state.metadata["tool_rounds"] = tool_rounds
         if paused:
             state.status = "awaiting_approval"
             break
@@ -440,9 +453,27 @@ async def _handle_calls(
             continue
         result = await call_tool(name, args, profile=state.profile, ctx=ctx)
         state.tool_trace.append(result.to_audit())
+        _collect_citations(state, result.data)
         _append_tool(state, call["id"], name, result.data | ({"error": result.error} if result.error else {}))
         executed = True
     return executed, paused
+
+
+def _collect_citations(state: AgentState, data: dict[str, Any] | None) -> None:
+    """工具可声明 citations（如 RAG 命中的报告章节）；循环内去重累积，供门面引用。"""
+    if not isinstance(data, dict):
+        return
+    raw = data.get("citations")
+    if not raw:
+        return
+    bucket = state.metadata.get("citations")
+    if not isinstance(bucket, list):
+        bucket = []
+        state.metadata["citations"] = bucket
+    for item in raw if isinstance(raw, (list, tuple)) else [raw]:
+        label = str(item or "").strip()
+        if label and label not in bucket:
+            bucket.append(label)
 
 
 async def _resume_approvals(

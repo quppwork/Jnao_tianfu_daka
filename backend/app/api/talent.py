@@ -1,6 +1,7 @@
 """天赋测试 API — JNAO 报告代理 + 测评落库"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,12 @@ from app.models.requests import ReportRequest
 from app.schemas.training import AssessmentOut
 from app.services import assessment_service
 from app.services.jnao_client import jnao_get_report, jnao_submit
-from app.services.report_talent_agent import ReportTalentError, ask, list_messages
+from app.services.report_talent_agent import (
+    ReportTalentError,
+    ask,
+    ask_stream,
+    list_messages,
+)
 
 router = APIRouter(prefix="/api/talent", tags=["talent"])
 
@@ -272,6 +278,37 @@ async def report_talent_chat_send(
         return await ask(db, row, req.content)
     except ReportTalentError as e:
         raise HTTPException(e.status_code, e.message) from e
+
+
+@router.post("/assessment/{assessment_id}/chat/stream")
+async def report_talent_chat_stream(
+    assessment_id: int,
+    req: ReportTalentChatIn,
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """SSE 流式天赋解答：token 增量 → done 带权威消息与 citations。
+
+    前端契约：`type` ∈ token | replace | error | done | [DONE]。
+    """
+    from app.core.sse import SSE_HEADERS, emit_event_stream, sse_done, sse_json
+
+    row = assessment_service.get_assessment_by_id(db, assessment_id, user_id)
+    if not row:
+        raise HTTPException(404, "测评记录不存在")
+
+    async def events():
+        try:
+            async for chunk in emit_event_stream(ask_stream(db, row, req.content)):
+                yield chunk
+        except ReportTalentError as e:
+            yield sse_json({"type": "error", "message": e.message})
+            yield sse_done()
+        except Exception:
+            yield sse_json({"type": "error", "message": "天赋解答暂时异常，请稍后再试"})
+            yield sse_done()
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.delete("/assessment/{assessment_id}")

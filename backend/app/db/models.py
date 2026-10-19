@@ -175,6 +175,8 @@ class ReportTalentMessage(Base):
     role: Mapped[str] = mapped_column(String(10), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     retrieved: Mapped[int] = mapped_column(Integer, default=0)
+    # citations（报告章节引用）等会话元数据；retrieved 仍保留为独立列便于查询
+    meta_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     assessment: Mapped["TalentAssessment"] = relationship(back_populates="talent_chats")

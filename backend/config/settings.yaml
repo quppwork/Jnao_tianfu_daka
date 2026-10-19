@@ -15,6 +15,8 @@ deepseek:
   api_key: "${DEEPSEEK_API_KEY}"
   api_base: "https://api.deepseek.com"
   model: "deepseek-v4-pro"
+  # 快模型：短回合（报告天赋解答等）用 flash，首字更快
+  fast_model: "deepseek-flash"
   vision_model: "deepseek-flash"
   timeout: 60.0
 

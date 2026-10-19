@@ -4,6 +4,7 @@
 <title>大宇智能体 · 天赋报告（V3 巨幕剧场版）</title>
 <link rel="stylesheet" href="/static/dayu/style.css"/>
 <script src="/static/dayu/assets/js/qrcode.min.js"></script>
+<script src="/static/dayu/js/sse-post.js?v=20261019a"></script>
 <style>
   body{background:#0E0708}
   .phone{background:linear-gradient(180deg,#1C0E10 0%,#120A0C 35%,#0B0E14 100%)}
@@ -921,12 +922,16 @@ function bootTalentChat(){
     autogrow(); input.focus();
   });
 
-  async function api(path, opts){
-    const headers=Object.assign({
+  function authHeaders(extra){
+    return Object.assign({
       'X-Child-User-Id': String(uid),
       'X-Session-Token': readToken(),
       'Authorization': 'Bearer '+readToken(),
-    }, (opts&&opts.headers)||{});
+    }, extra||{});
+  }
+
+  async function api(path, opts){
+    const headers=authHeaders(opts&&opts.headers);
     const res=await fetch(path+(path.indexOf('?')>=0?'&':'?')+'user_id='+uid, {
       method:(opts&&opts.method)||'GET',
       headers,
@@ -992,22 +997,62 @@ function bootTalentChat(){
     setBanner('', false);
     appendMsg({role:'user', content:text});
     showTyping();
-    try{
-      const data=await api('/api/talent/assessment/'+aid+'/chat', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({content:text}),
-      });
-      hideTyping();
-      const reply=(data.assistant&&data.assistant.content)||'（大宇暂时没有回应）';
-      appendMsg(Object.assign({}, data.assistant||{}, {role:'assistant', content:reply}));
+    function finish(m){
+      const reply=(m&&m.content)||'（大宇暂时没有回应）';
       if(sub) sub.textContent=reply.slice(0,14)+(reply.length>14?'…':'');
       if(!sheet.classList.contains('on')&&dot) dot.style.display='block';
+    }
+    let box=null, full='';
+    try{
+      /* 流式：token 增量渲染，replace 整段替换，done 以服务端权威消息为准 */
+      const done=await JnaoSse.post('/api/talent/assessment/'+aid+'/chat/stream?user_id='+uid, {
+        headers:authHeaders(),
+        body:{content:text},
+      }, {
+        onToken:function(piece){
+          if(!box){ hideTyping(); box=bubble('assistant',''); thread.appendChild(box); }
+          full+=piece;
+          box.innerHTML='<b>大宇：</b>'+esc(full);
+          scrollEnd();
+        },
+        onReplace:function(t){
+          full=t;
+          if(box) box.innerHTML='<b>大宇：</b>'+esc(full);
+        },
+      });
+      hideTyping();
+      const msg=done&&done.assistant;
+      if(!msg) throw new Error('流式响应中断');
+      if(box){ box.innerHTML='<b>大宇：</b>'+esc(msg.content||full); renderCites(msg); scrollEnd(); }
+      else appendMsg(msg);
+      finish(msg);
     }catch(e){
       hideTyping();
-      setBanner(e.message||'发送失败', true);
-      input.value=text;
-      autogrow();
+      if(box){
+        box.remove();
+        setBanner(e.message||'发送失败', true);
+        input.value=text;
+        autogrow();
+      }else{
+        /* 流式不可用或未出字：回退整段接口 */
+        try{
+          showTyping();
+          const data=await api('/api/talent/assessment/'+aid+'/chat', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({content:text}),
+          });
+          hideTyping();
+          const reply=(data.assistant&&data.assistant.content)||'（大宇暂时没有回应）';
+          appendMsg(Object.assign({}, data.assistant||{}, {role:'assistant', content:reply}));
+          finish({content:reply});
+        }catch(e2){
+          hideTyping();
+          setBanner(e2.message||'发送失败', true);
+          input.value=text;
+          autogrow();
+        }
+      }
     }finally{
       busy=false;
       autogrow();

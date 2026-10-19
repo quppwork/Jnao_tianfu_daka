@@ -39,6 +39,7 @@ TALENT_DOC_RETRIEVE_OUTPUT: dict[str, Any] = {
         "query": {"type": "string"},
         "hit_count": {"type": "integer"},
         "hits": {"type": "array"},
+        "citations": {"type": "array"},
         "request_id": {"type": "string"},
         "error": {"type": "string"},
         "error_kind": {"type": "string"},

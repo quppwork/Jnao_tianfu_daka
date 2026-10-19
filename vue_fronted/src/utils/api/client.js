@@ -530,6 +530,7 @@ export async function streamPostSse(url, body, handlers = {}) {
   const onDone = handlers.onDone
   const onError = handlers.onError
   const onStatus = handlers.onStatus
+  const onReplace = handlers.onReplace
   const signal = handlers.signal
   const userId = extractUserIdFromUrl(url)
   const headers = mergeAuthHeaders(
@@ -592,6 +593,8 @@ export async function streamPostSse(url, body, handlers = {}) {
         if (typeof onToken === 'function') onToken(evt.content, evt)
       } else if (evt.type === 'status' && (evt.message || evt.content)) {
         if (typeof onStatus === 'function') onStatus(evt.message || evt.content, evt)
+      } else if (evt.type === 'replace') {
+        if (typeof onReplace === 'function') onReplace(evt.content || '', evt)
       } else if (evt.type === 'done') {
         finalPayload = evt
         if (typeof onDone === 'function') onDone(evt)

@@ -22,6 +22,7 @@
         <view
           v-for="m in messages"
           :id="'msg-' + m.id"
+          v-show="m.content"
           :key="m.id"
           class="cd-b"
           :class="m.role === 'user' ? 'me' : 'ai'"
@@ -61,6 +62,7 @@ import {
   ensureReportUser,
   fetchReportTalentChat,
   sendReportTalentChat,
+  streamReportTalentChat,
 } from '@/utils/userApi.js'
 
 const props = defineProps({
@@ -123,15 +125,46 @@ async function onSend() {
   if (!text || !canSend.value || sending.value) return
   sending.value = true
   draft.value = ''
+  const base = messages.value.length
+  const pendingUser = { id: 'pending-user', role: 'user', content: text }
+  const pendingAi = { id: 'pending-ai', role: 'assistant', content: '' }
+  let received = false
   try {
-    const data = await sendReportTalentChat(userId, aid.value, text)
-    if (data?.user) messages.value.push(data.user)
-    if (data?.assistant) messages.value.push(data.assistant)
-    const last = messages.value[messages.value.length - 1]
-    bumpScroll(last ? `msg-${last.id}` : 'msg-end')
+    messages.value.push(pendingUser, pendingAi)
+    bumpScroll('msg-end')
+    const done = await streamReportTalentChat(userId, aid.value, text, {
+      onToken: piece => {
+        received = true
+        sending.value = false
+        messages.value[base + 1].content += piece
+        bumpScroll('msg-end')
+      },
+      onReplace: full => {
+        messages.value[base + 1].content = full
+      },
+    })
+    if (!done?.assistant) throw new Error('流式响应中断')
+    messages.value.splice(base, 2, done.user, done.assistant)
+    bumpScroll(`msg-${done.assistant.id}`)
   } catch (e) {
-    draft.value = text
-    uni.showToast({ title: e?.message || '发送失败', icon: 'none' })
+    messages.value.splice(base)
+    if (received) {
+      draft.value = text
+      uni.showToast({ title: e?.message || '发送失败', icon: 'none' })
+    } else {
+      // 流式不可用（如非 H5 端）时回退到整段接口
+      try {
+        sending.value = true
+        const data = await sendReportTalentChat(userId, aid.value, text)
+        if (data?.user) messages.value.push(data.user)
+        if (data?.assistant) messages.value.push(data.assistant)
+        const last = messages.value[messages.value.length - 1]
+        bumpScroll(last ? `msg-${last.id}` : 'msg-end')
+      } catch (e2) {
+        draft.value = text
+        uni.showToast({ title: e2?.message || '发送失败', icon: 'none' })
+      }
+    }
   } finally {
     sending.value = false
   }

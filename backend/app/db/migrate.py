@@ -67,6 +67,11 @@ def apply_schema_patches(engine: Engine) -> None:
             "ALTER TABLE guide_message ADD COLUMN meta_json JSON",
         ),
         (
+            "report_talent_message",
+            "meta_json",
+            "ALTER TABLE report_talent_message ADD COLUMN meta_json JSON",
+        ),
+        (
             "qa_session",
             "meta_json",
             "ALTER TABLE qa_session ADD COLUMN meta_json JSON",
