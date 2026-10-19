@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -26,6 +27,8 @@ from app.services.report_talent_sections import (
 
 OPENING = "您好我是你的天赋解答助手，有什么疑问都可以通过对话框向我提问，我会为您解答。"
 REFUSAL = "抱歉我还不了解这部分内容，其他板块可能会有您需要的"
+
+REFUSAL_PREFIX = "抱歉我还不"
 
 PROFILE = "report_talent"
 # 工具轮默认 1 轮（查一次→直接出话）；max_steps 留出「查库 + 回答」两步余量
@@ -49,6 +52,19 @@ __all__ = [
     "ask_stream",
     "list_messages",
 ]
+
+
+# 寒暄/确认身份：唯一允许不查库直接作答的输入（整句匹配，其余一律查库）
+_SMALLTALK = re.compile(
+    r"^(你好|您好|嗨|哈喽|hi|hello|在吗|在不在|早|早上好|晚上好|谢谢|多谢|感谢|"
+    r"你是谁|你是干嘛的|你能做什么|再见|拜拜|好的|嗯|ok)[\s!！。.~～?？]*$",
+    re.IGNORECASE,
+)
+
+
+def needs_grounding(text: str) -> bool:
+    """除寒暄外，所有问题都必须以库内切片为据。"""
+    return not _SMALLTALK.match((text or "").strip())
 
 
 def _derive_citations(content: str) -> list[str]:
@@ -169,6 +185,9 @@ def _finalize_reply(raw: str, tool_info: dict) -> tuple[str, int, bool]:
             return text, 0, False
         return REFUSAL, 0, True
     if tool_info["any_ok"] and text:
+        # 模型自拟拒答（措辞可能略有出入）→ 统一口径，且不算「已命中作答」
+        if text.startswith(REFUSAL_PREFIX):
+            return REFUSAL, 0, True
         return text, 1, False
     return REFUSAL, 0, True
 
@@ -212,11 +231,15 @@ def _tool_context(db: Session, row: TalentAssessment) -> ToolContext:
     )
 
 
-def _turn_meta(row: TalentAssessment) -> dict[str, Any]:
-    return {
+def _turn_meta(row: TalentAssessment, text: str) -> dict[str, Any]:
+    meta: dict[str, Any] = {
         "assessment_id": row.id,
         "feature": AgentFeature.REPORT_TALENT,
     }
+    if needs_grounding(text):
+        # 业务声明：非寒暄问题必须先查库；执行由 Harness 内核保证
+        meta["force_tool"] = {"name": TOOL_NAME, "args": {"query": text}}
+    return meta
 
 
 def _begin(db: Session, row: TalentAssessment, text: str):
@@ -287,7 +310,7 @@ async def ask(db: Session, row: TalentAssessment, content: str) -> dict:
             max_tool_rounds=MAX_TOOL_ROUNDS,
             thread_id=f"report-talent-{row.id}",
             allow_tools=True,
-            metadata=_turn_meta(row),
+            metadata=_turn_meta(row, text),
         )
     except Exception as e:
         db.rollback()
@@ -337,7 +360,7 @@ async def ask_stream(
             max_tool_rounds=MAX_TOOL_ROUNDS,
             thread_id=f"report-talent-{row.id}",
             allow_tools=True,
-            metadata=_turn_meta(row),
+            metadata=_turn_meta(row, text),
         ):
             if kind == "token":
                 piece = str(payload or "")

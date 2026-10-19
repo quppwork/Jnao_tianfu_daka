@@ -291,6 +291,36 @@ async def iter_agent(
     if max_tool_rounds is not None:
         state.metadata["max_tool_rounds"] = int(max_tool_rounds)
 
+    # 强制首轮工具：由 Agent 门面声明（metadata.force_tool），内核代为执行，
+    # 结果进上下文后模型才出话——"该查必查"不再依赖模型自觉。仍走白名单/策略/审计。
+    forced = state.metadata.pop("force_tool", None) if state.step == 0 else None
+    if tools and isinstance(forced, dict) and str(forced.get("name") or "").strip():
+        fname = str(forced["name"]).strip()
+        fargs = forced.get("args") if isinstance(forced.get("args"), dict) else {}
+        state.messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "forced-1",
+                        "type": "function",
+                        "function": {
+                            "name": fname,
+                            "arguments": json.dumps(fargs, ensure_ascii=False),
+                        },
+                    }
+                ],
+            }
+        )
+        executed, _ = await _handle_calls(
+            state, [{"id": "forced-1", "name": fname, "args": fargs}], ctx=ctx
+        )
+        if executed:
+            tool_rounds += 1
+            state.metadata["tool_rounds"] = tool_rounds
+            state.metadata["forced_tool"] = fname
+
     while state.status == "running" and state.step < state.max_steps:
         state.step += 1
         window, mem = window_for_model(state.messages, state.metadata.get("memory"))

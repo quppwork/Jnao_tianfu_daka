@@ -336,3 +336,78 @@ async def test_tool_citations_collected_into_metadata():
     )
     assert state.status == "completed"
     assert state.metadata.get("citations") == ["名人堂", "天赋剧场"]
+
+
+@pytest.mark.asyncio
+async def test_force_tool_runs_before_model_even_if_model_skips_tools():
+    """metadata.force_tool：首轮由内核先执行工具，模型不再有机会"跳过查库"。"""
+    from app.harness.registry import register_tool
+    from app.harness.types import ToolSpec
+
+    calls: list[dict] = []
+
+    async def _handler(args):
+        calls.append(dict(args))
+        return {"ok": True, "citations": ["五维能量星图"], "hits": ["切片"]}
+
+    register_tool(
+        ToolSpec(
+            name="fake_force",
+            description="测试强制工具",
+            input_schema={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+            handler=_handler,
+            profiles=("consult",),
+        )
+    )
+
+    class SkipTools:
+        def __init__(self):
+            self.windows: list[list] = []
+            self.tools_seen: list[list] = []
+
+        async def complete(self, messages, tools):
+            self.windows.append(list(messages))
+            self.tools_seen.append(list(tools or []))
+            return {"role": "assistant", "content": "据切片作答。"}
+
+    model = SkipTools()
+    state = await run_agent(
+        profile="consult",
+        user_message="五者是什么",
+        thread_id="t-force",
+        model=model,
+        max_steps=3,
+        max_tool_rounds=1,
+        metadata={"force_tool": {"name": "fake_force", "args": {"query": "五者是什么"}}},
+    )
+    assert state.status == "completed"
+    assert calls == [{"query": "五者是什么"}]
+    # 模型只被调用一次，且那一次已能看到工具结果、且不再带 tools
+    assert len(model.windows) == 1
+    assert any(m.get("role") == "tool" for m in model.windows[0])
+    assert model.tools_seen == [[]]
+    assert state.metadata.get("llm_calls") == 1
+    assert state.metadata.get("tool_rounds") == 1
+    assert state.metadata.get("citations") == ["五维能量星图"]
+    assert any(t.get("name") == "fake_force" for t in state.tool_trace)
+
+
+@pytest.mark.asyncio
+async def test_force_tool_denied_by_policy_does_not_crash():
+    """强制工具也走白名单/策略：不在 profile 内就按失败处理，模型照常出话。"""
+    model = QueueModel([{"role": "assistant", "content": "直接回答。"}])
+    state = await run_agent(
+        profile="consult",
+        user_message="hi",
+        thread_id="t-force-deny",
+        model=model,
+        max_steps=3,
+        metadata={"force_tool": {"name": "no_such_tool", "args": {}}},
+    )
+    assert state.status == "completed"
+    assert state.reply == "直接回答。"

@@ -405,3 +405,40 @@ def test_system_extra_carries_slices(db):
     assert "报告正文切片" in extra
     assert "执行力 66（3级）" in extra
     assert "尚未联调" not in extra
+
+
+def test_needs_grounding_skips_only_smalltalk():
+    for q in ("五者是什么", "学者怎么练", "这份报告怎么看", "我的执行力为什么低"):
+        assert agent.needs_grounding(q) is True
+    for q in ("你好", "您好！", "在吗", "谢谢", "你是谁", "再见~", "hi", "Hello"):
+        assert agent.needs_grounding(q) is False
+
+
+@pytest.mark.asyncio
+async def test_ask_forces_retrieval_for_non_smalltalk_only(db):
+    row = _assessment(db, phone="13800000031")
+    turn = {
+        "reply": "五者是一套诊断体系。",
+        "tools_used": [{"name": "talent_doc_retrieve", "ok": True}],
+        "rag_used": True,
+        "llm_calls": 1,
+    }
+    mock = AsyncMock(return_value=turn)
+    with patch("app.runtime.run_turn", new=mock):
+        await agent.ask(db, row, "五者是什么")
+    forced = mock.call_args.kwargs["metadata"]["force_tool"]
+    assert forced == {"name": agent.TOOL_NAME, "args": {"query": "五者是什么"}}
+
+    mock2 = AsyncMock(return_value={**turn, "tools_used": [], "rag_used": False})
+    with patch("app.runtime.run_turn", new=mock2):
+        await agent.ask(db, row, "你好")
+    assert "force_tool" not in mock2.call_args.kwargs["metadata"]
+
+
+def test_refusal_text_after_successful_retrieval_is_normalized():
+    """库有命中、模型却自拟拒答：对外统一口径，且不算「已命中作答」。"""
+    info = {"called": True, "any_ok": True, "all_failed": False, "failures": []}
+    reply, retrieved, refused = agent._finalize_reply("抱歉我还不太了解这部分内容", info)
+    assert (reply, retrieved, refused) == (agent.REFUSAL, 0, True)
+    reply, retrieved, refused = agent._finalize_reply("五者是一套诊断体系。", info)
+    assert (retrieved, refused) == (1, False)
