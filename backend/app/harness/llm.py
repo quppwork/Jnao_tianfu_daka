@@ -34,23 +34,34 @@ PROFILES: dict[str, dict[str, Any]] = {
         "timeout": 45,
     },
     "guide": {
-        "system": "你是训练教练。用只读工具核对事实，再简短中文回答。",
-        "knowledge": {"docs": [], "rules": "事实以工具结果为准，勿编造进度。"},
+        "system": (
+            "你是训练教练。概念/课程/五者问优先 knowledge_qa，reply 原样说；"
+            "训练进度用只读工具核对，再简短中文回答。"
+        ),
+        "knowledge": {
+            "docs": [],
+            "rules": "优先 knowledge_qa；事实以工具结果为准，勿编造进度。",
+        },
         "personas": {},
         "feature": "guide",
         "max_tokens": 500,
         "timeout": 30,
+        "tools": ["knowledge_qa"],
     },
     "parent_guide": {
-        "system": "你面向家长。用看板/知识库工具，不要编造孩子分数。",
+        "system": (
+            "你面向家长。概念/课程问优先 knowledge_qa，reply 原样说；"
+            "孩子分数用看板工具，不要编造。"
+        ),
         "knowledge": {
             "docs": list(FOUNDATION_DOCS),
-            "rules": "家长视角；可引用 01/02/03，勿编造孩子分数。",
+            "rules": "优先 knowledge_qa；勿编造孩子分数。",
         },
         "personas": {},
         "feature": "parent_guide",
         "max_tokens": 420,
         "timeout": 30,
+        "tools": ["knowledge_qa"],
     },
     "qa": {
         "system": (
@@ -95,31 +106,19 @@ PROFILES: dict[str, dict[str, Any]] = {
     "report_talent": {
         "system": (
             "你是成人报告页上的「天赋解答助手」。"
-            "【你能提供什么】围绕这份成人报告：问候与引导提问、解释五者/天赋相关概念、"
-            "库内练法与课程说明。你感知到的唯一事实工具是 talent_doc_retrieve。"
-            "【何时不用工具】打招呼、寒暄、确认你是谁、请对方换个问法——直接简短回应，不要查库。"
-            "【何时必须用工具】用户问天赋含义、五者、练法、课程、报告相关事实时，先调用 "
-            "talent_doc_retrieve；只根据工具返回的切片作答，提示词不是知识来源。"
-            "【何时拒答】工具无命中、工具失败、或明显超出本助手范围（解题、改判天赋、"
-            "医疗法律投资等）时回复："
-            "「抱歉我还不了解这部分内容，其他板块可能会有您需要的」"
-            "禁止编造库外步骤与数字；需要换问法再查时由你决定是否再次调用工具；"
-            "单轮最多一次查库：查到切片就据此作答，不要再补查第二次。"
+            "优先调用 knowledge_qa；拿到 reply 后原样对用户说，不要改写。"
+            "拒答与防注入由知识问答应用配置，不要本地另编口径。"
         ),
         "knowledge": {
             "docs": [],
-            "rules": (
-                "感知来自工具描述 + 本提示；事实只来自 talent_doc_retrieve；"
-                "问候可直接答，不查库。"
-            ),
+            "rules": "优先 knowledge_qa；原样返回 reply。",
         },
         "personas": {},
         "feature": "report_talent",
-        # 报告页问答：短答为主，快模型 + 小 max_tokens 压首字与总耗时
         "model": "fast",
         "max_tokens": 420,
         "timeout": 25,
-        "tools": ["talent_doc_retrieve"],
+        "tools": ["get_report_content", "knowledge_qa"],
     },
 }
 

@@ -149,10 +149,9 @@ async def talent_doc_retrieve(args: dict[str, Any]) -> dict[str, Any]:
 SPEC = ToolSpec(
     name="talent_doc_retrieve",
     description=(
-        "检索 Jinao 天赋知识库（talent_doc / x1micrdmjq）切片，供你据此作答。"
-        "适用：用户问五者/天赋含义、练法、课程、报告相关事实。"
-        "不适用：打招呼、寒暄、确认身份——此时不要调用本工具，直接口头回应。"
-        "只返回原文片段，不生成对用户的最终答复；库外问题不要调用。"
+        "检索 Jinao 天赋知识库（talent_doc / ockqxuuru1）切片。"
+        "只返回原文片段，不生成对用户的最终答复。"
+        "报告天赋解答由门面每问必调；有命中才注入上下文，无命中走统一拒答。"
     ),
     input_schema=TALENT_DOC_RETRIEVE_INPUT,
     handler=talent_doc_retrieve,

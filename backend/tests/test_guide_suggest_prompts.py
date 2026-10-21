@@ -1,4 +1,4 @@
-"""guide_suggest_prompts unit tests"""
+"""兼容旧 guide_suggest_prompts 入口。"""
 
 from app.services.guide_suggest_prompts import (
     _KB_DOC_PROMPTS,

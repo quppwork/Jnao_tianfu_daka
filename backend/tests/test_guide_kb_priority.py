@@ -33,9 +33,26 @@ async def test_rag_miss_uses_template_not_doubao(monkeypatch):
     monkeypatch.setenv("GUIDE_RAG_ENABLED", "1")
     monkeypatch.setenv("BAILIAN_RAG_GENERATE", "0")
 
+    from app.harness.types import ToolResult
+
+    kq_miss = ToolResult(ok=False, name="knowledge_qa", error="empty", data={})
+    retrieve_miss = ToolResult(
+        ok=True,
+        name="retrieve_kb",
+        data={"rag_used": False, "rag_block": "", "sources": []},
+    )
+
+    async def _call(name, *_a, **_k):
+        if name == "knowledge_qa":
+            return kq_miss
+        return retrieve_miss
+
     with patch(
         "app.services.bailian.guide_rag_query",
         new=AsyncMock(return_value=None),
+    ), patch(
+        "app.harness.runtime.call_tool",
+        new=AsyncMock(side_effect=_call),
     ), patch(
         "app.agents.guide.kb_agent.guide_kb_agent_ready",
         return_value=False,

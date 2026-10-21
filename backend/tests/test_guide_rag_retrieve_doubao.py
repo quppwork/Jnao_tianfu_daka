@@ -1,4 +1,4 @@
-"""引导页 Retrieve → 豆包 主链路测试。"""
+"""引导页：优先 Agent 工具 knowledge_qa 原样返回。"""
 
 from unittest.mock import AsyncMock, patch
 
@@ -8,57 +8,23 @@ from app.harness.types import ToolResult
 
 
 @pytest.mark.asyncio
-async def test_guide_retrieve_doubao_primary(monkeypatch):
+async def test_guide_knowledge_qa_primary(monkeypatch):
     monkeypatch.setenv("GUIDE_RAG_ENABLED", "1")
-    monkeypatch.setenv("BAILIAN_RAG_GENERATE", "0")
-    monkeypatch.setenv("BAILIAN_INDEX_ID", "idx-doc")
-    monkeypatch.setenv("BAILIAN_WORKSPACE_ID", "ws-test")
-    monkeypatch.setenv("OSS_ACCESS_KEY_ID", "ak")
-    monkeypatch.setenv("OSS_ACCESS_KEY_SECRET", "sk")
-
-    captured: dict = {}
-
-    def _fake_system_prompt(
-        db,
-        child_user_id,
-        *,
-        tool_block="",
-        memory_block="",
-        rag_block="",
-        message="",
-    ):
-        captured["rag_block"] = rag_block
-        captured["tool_block"] = tool_block
-        return "SYSTEM"
-
-    async def _fake_turn(profile, user_message, **kwargs):
-        captured["system"] = kwargs.get("system_override")
-        captured["user"] = user_message
-        return {"reply": "先从扫读练起，抓关键词再理解，去今日训练试试。", "rag_used": False, "tools_used": []}
 
     hit = ToolResult(
         ok=True,
-        name="retrieve_kb",
+        name="knowledge_qa",
         data={
-            "rag_used": True,
-            "rag_block": "超脑阅读从扫读开始，先抓关键词。",
-            "sources": ["训练手册"],
+            "ok": True,
+            "reply": "超脑阅读从扫读开始，先抓关键词。",
+            "aid": "aid-x",
         },
     )
 
     with patch(
         "app.harness.runtime.call_tool",
         new=AsyncMock(return_value=hit),
-    ), patch(
-        "app.runtime.run_turn",
-        new=AsyncMock(side_effect=_fake_turn),
-    ), patch(
-        "app.agents.guide.runner._try_bailian_direct_reply",
-        new=AsyncMock(),
-    ) as direct, patch(
-        "app.agents.guide.runner.build_kb_primary_system_prompt",
-        side_effect=_fake_system_prompt,
-    ), patch(
+    ) as mock_tool, patch(
         "app.agents.guide.kb_agent.guide_kb_agent_ready",
         return_value=False,
     ), patch(
@@ -68,24 +34,26 @@ async def test_guide_retrieve_doubao_primary(monkeypatch):
         return_value=([], ""),
     ), patch(
         "app.agents.guide.runner._meta_from_ctx",
-        return_value={"situation": "ready_to_train", "actions": []},
+        side_effect=lambda *_a, tools_used=None, **_k: {
+            "situation": "ready_to_train",
+            "actions": [],
+            "tools_used": list(tools_used or []),
+        },
     ):
         from app.agents.guide.runner import run_chat
 
         result = await run_chat(object(), 1, "超脑阅读怎么练")
 
+    assert mock_tool.await_count == 1
+    assert mock_tool.call_args.args[0] == "knowledge_qa"
     assert "扫读" in result["reply"]
-    assert result.get("rag_source") == "retrieve_doubao"
-    assert result.get("rag_sources")
+    assert result.get("rag_source") == "knowledge_qa"
     assert result.get("pipeline_path") == "legacy_rag"
-    direct.assert_not_called()
-    assert "超脑阅读从扫读开始" in captured["rag_block"]
-    # 业务工具已迁入 Harness，前置 tool_block 为空
-    assert captured.get("tool_block") == ""
+    assert result["tools_used"][0]["name"] == "knowledge_qa"
 
 
 @pytest.mark.asyncio
-async def test_guide_skips_direct_when_generate_off(monkeypatch):
+async def test_guide_knowledge_qa_miss_falls_to_template(monkeypatch):
     monkeypatch.setenv("GUIDE_RAG_ENABLED", "1")
     monkeypatch.setenv("BAILIAN_RAG_GENERATE", "0")
     monkeypatch.setenv("BAILIAN_INDEX_ID", "idx-doc")
@@ -93,14 +61,30 @@ async def test_guide_skips_direct_when_generate_off(monkeypatch):
     monkeypatch.setenv("OSS_ACCESS_KEY_ID", "ak")
     monkeypatch.setenv("OSS_ACCESS_KEY_SECRET", "sk")
 
-    miss = ToolResult(ok=True, name="retrieve_kb", data={"rag_used": False, "rag_block": "", "sources": []})
+    miss = ToolResult(
+        ok=False,
+        name="knowledge_qa",
+        error="empty",
+        data={"ok": False, "error_kind": "empty"},
+    )
+    # 后续 legacy retrieve 也 miss
+    retrieve_miss = ToolResult(
+        ok=True,
+        name="retrieve_kb",
+        data={"rag_used": False, "rag_block": "", "sources": []},
+    )
+
+    async def _call(name, *_a, **_k):
+        if name == "knowledge_qa":
+            return miss
+        return retrieve_miss
 
     with patch(
         "app.agents.guide.runner._try_bailian_direct_reply",
         new=AsyncMock(return_value=("不应出现", True)),
     ) as direct, patch(
         "app.harness.runtime.call_tool",
-        new=AsyncMock(return_value=miss),
+        new=AsyncMock(side_effect=_call),
     ), patch(
         "app.runtime.run_turn",
         new=AsyncMock(return_value={"reply": "请去今日训练看看。", "tools_used": []}),

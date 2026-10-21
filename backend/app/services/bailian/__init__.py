@@ -99,7 +99,7 @@ async def guide_rag_query(query: str, *, timeout: float = 20) -> RagResult | Non
 async def training_rag_query(query: str, *, timeout: float = 20) -> RagResult | None:
     """训练页专用检索。
 
-    单库阶段与引导页共用 BAILIAN_INDEX_ID（x1micrdmjq）；
+    单库阶段与引导页共用 BAILIAN_INDEX_ID（ockqxuuru1）；
     双库且配置了 video_index_id 时仍查视频库。
     """
     from app.services.kb_policy import kb_single_source

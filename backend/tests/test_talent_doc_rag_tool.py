@@ -24,7 +24,7 @@ async def test_empty_hits():
     assert out["ok"] is False
     assert out["error_kind"] == "empty"
     assert out["source_key"] == "talent_doc"
-    assert out["index_id"] == "x1micrdmjq"
+    assert out["index_id"] == "ockqxuuru1"
 
 
 @pytest.mark.asyncio

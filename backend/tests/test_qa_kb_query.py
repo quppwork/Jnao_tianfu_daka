@@ -1,4 +1,4 @@
-"""学科答疑 — 多轮检索问句测试（单库 x1micrdmjq）。"""
+"""学科答疑 — 多轮检索问句测试（单库 ockqxuuru1）。"""
 
 from app.services.qa_kb_query import (
     build_qa_kb_rounds,

@@ -17,7 +17,10 @@
       <view v-else-if="loading" class="cd-banner">正在打开这份报告的对话…</view>
       <template v-else>
         <view id="msg-open" class="cd-b ai">
-          <text><text class="cd-name">大宇：</text>{{ opening }}</text>
+          <view class="cd-rich">
+            <text class="cd-name">大宇：</text>
+            <view class="chat-rich" v-html="formatGuideRichHtml(opening)" />
+          </view>
         </view>
         <view
           v-for="m in messages"
@@ -28,7 +31,10 @@
           :class="m.role === 'user' ? 'me' : 'ai'"
         >
           <text v-if="m.role === 'user'">{{ m.content }}</text>
-          <text v-else><text class="cd-name">大宇：</text>{{ m.content }}</text>
+          <view v-else class="cd-rich">
+            <text class="cd-name">大宇：</text>
+            <view class="chat-rich" v-html="formatGuideRichHtml(m.content)" />
+          </view>
         </view>
         <view v-if="sending" class="cd-banner soft">大宇正在查阅…</view>
         <view id="msg-end" class="cd-tail" />
@@ -58,6 +64,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { formatGuideRichHtml } from '@/utils/chatRichText.js'
 import {
   ensureReportUser,
   fetchReportTalentChat,
@@ -255,13 +262,13 @@ defineExpose({ reload: loadThread })
   padding: 9px 12px;
   margin-bottom: 8px;
   word-break: break-word;
-  white-space: pre-wrap;
 }
 .cd-b.me {
   margin-left: auto;
   background: linear-gradient(135deg, #e05252, #b03a3e);
   color: #fff;
   border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
 }
 .cd-b.ai {
   background: rgba(255, 255, 255, 0.07);
@@ -272,6 +279,55 @@ defineExpose({ reload: loadThread })
 .cd-name {
   color: #f0a3a3;
   font-weight: 700;
+  display: inline;
+}
+.cd-rich {
+  display: block;
+}
+.chat-rich :deep(strong),
+.chat-rich :deep(b) {
+  color: #f5d9a8;
+  font-weight: 800;
+}
+.chat-rich :deep(.gd-p) {
+  margin: 0 0 8px;
+}
+.chat-rich :deep(.gd-p:last-child) {
+  margin-bottom: 0;
+}
+.chat-rich :deep(.gd-sec) {
+  margin: 10px 0 6px;
+  padding-left: 8px;
+  border-left: 3px solid rgba(143, 195, 232, 0.65);
+  font-weight: 800;
+  color: #e8eef7;
+}
+.chat-rich :deep(.gd-ul),
+.chat-rich :deep(.gd-ol) {
+  margin: 6px 0 8px;
+  padding-left: 1.2em;
+}
+.chat-rich :deep(.gd-ul) {
+  list-style: disc;
+}
+.chat-rich :deep(.gd-ol) {
+  list-style: decimal;
+}
+.chat-rich :deep(.gd-ul li),
+.chat-rich :deep(.gd-ol li) {
+  margin: 4px 0;
+}
+.chat-rich :deep(.gd-h) {
+  margin: 10px 0 6px;
+  font-weight: 800;
+  color: #e8eef7;
+}
+.chat-rich :deep(.gd-quote) {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(143, 195, 232, 0.4);
+  background: rgba(143, 195, 232, 0.08);
+  border-radius: 0 8px 8px 0;
 }
 .cd-banner {
   margin: 6px 0 10px;

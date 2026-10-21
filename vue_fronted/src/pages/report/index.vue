@@ -77,7 +77,7 @@ onLoad(async (opts) => {
   } catch (_) { /* 拉不到档案时按入口参数 */ }
   if (isAdult == null) isAdult = false
   const key = TALENT_KEY[talent] || talent || ''
-  const q = new URLSearchParams({ lock: '1', v: 'rpt3' })
+  const q = new URLSearchParams({ lock: '1', v: 'rpt4' })
   if (key) q.set('talent', key)
   if (name) q.set('name', name)
   if (date) q.set('date', date)

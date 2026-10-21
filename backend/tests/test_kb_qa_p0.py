@@ -12,7 +12,7 @@ def test_kb_registry_loads_two_sources():
     video = reg.get("video_practice")
     doc = reg.get("talent_doc")
     assert video and video.aid.startswith("aid-")
-    assert doc and doc.index_id == "x1micrdmjq"
+    assert doc and doc.index_id == "ockqxuuru1"
     assert "开口窍" in video.tags
 
 

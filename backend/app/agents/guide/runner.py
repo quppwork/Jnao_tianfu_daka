@@ -521,6 +521,40 @@ async def run_chat(
 
     path = resolve_guide_path(message, kb_agent_ready=guide_kb_agent_ready())
 
+    # 优先 Agent 工具 knowledge_qa（百炼知识问答直出，原样返回；Harness 只审计调用）
+    if path is not GuidePath.QA_HANDOFF:
+        from app.harness.runtime import call_tool
+
+        kq = await call_tool(
+            "knowledge_qa",
+            {"query": message},
+            profile="guide",
+            ctx=ToolContext(db=db, child_user_id=child_user_id, profile="guide"),
+        )
+        text = str((kq.data or {}).get("reply") or "").strip() if kq.ok else ""
+        if text:
+            tools_used = [kq.to_audit()]
+            meta = _meta_from_ctx(ctx, message=message, tools_used=tools_used, reply=text)
+            meta["rag_used"] = True
+            meta["rag_source"] = "knowledge_qa"
+            leak_hits = scan_guide_leaks(text)
+            emit_guide_trace(
+                build_turn_trace(
+                    child_user_id=child_user_id,
+                    message=message,
+                    tools_used=tools_used,
+                    duration_ms=timer.ms(),
+                    situation=meta.get("situation"),
+                    next_action=meta.get("next_action"),
+                    reply=text,
+                    leak_hits=leak_hits,
+                    stream=False,
+                )
+            )
+            return finalize_guide_payload(
+                reply=text, meta=meta, path=GuidePath.LEGACY_RAG
+            )
+
     # 学科解题类：豆包引导 → 学科答疑按钮（不进知识库 / 不贴今日训练）
     if path is GuidePath.QA_HANDOFF:
         text = await _qa_handoff_reply(message, history=hist)
@@ -766,6 +800,71 @@ async def run_chat_stream(
             )
         )
         return
+
+    # 与 run_chat 对齐：优先 knowledge_qa 流式直出（原样 token）
+    if path is not GuidePath.QA_HANDOFF:
+        from app.harness.context import ToolContext
+        from app.services.bailian.config import load_bailian_config
+        from app.services.bailian.knowledge_chat import knowledge_chat_stream
+        from app.services.kb_policy import knowledge_qa_aid
+
+        yield ("status", "正在查询知识库…")
+        cfg = load_bailian_config()
+        aid = knowledge_qa_aid()
+        parts: list[str] = []
+        final = None
+        try:
+            async for kind, payload in knowledge_chat_stream(
+                message, aid=aid, cfg=cfg, timeout=90
+            ):
+                if kind == "token":
+                    piece = str(payload or "")
+                    if piece:
+                        parts.append(piece)
+                        yield ("token", piece)
+                elif kind == "result":
+                    final = payload
+        except Exception as e:
+            logger.warning("guide knowledge_qa stream failed: %s", e)
+            final = None
+
+        reply = (
+            str(getattr(final, "reply", "") or "").strip()
+            or "".join(parts).strip()
+        )
+        if reply:
+            tools_used = [
+                {
+                    "name": "knowledge_qa",
+                    "ok": True,
+                    "aid": getattr(final, "aid", None) or aid,
+                    "request_id": getattr(final, "request_id", None),
+                }
+            ]
+            meta = _meta_from_ctx(
+                ctx, message=message, tools_used=tools_used, reply=reply
+            )
+            meta["rag_used"] = True
+            meta["rag_source"] = "knowledge_qa"
+            meta["pipeline_path"] = GuidePath.LEGACY_RAG.value
+            yield ("meta", meta)
+            if not parts:
+                yield ("token", reply)
+            leak_hits = scan_guide_leaks(reply)
+            emit_guide_trace(
+                build_turn_trace(
+                    child_user_id=child_user_id,
+                    message=message,
+                    tools_used=tools_used,
+                    duration_ms=timer.ms(),
+                    situation=meta.get("situation"),
+                    next_action=meta.get("next_action"),
+                    reply=reply,
+                    leak_hits=leak_hits,
+                    stream=True,
+                )
+            )
+            return
 
     if path is GuidePath.KB_AGENT:
         yield ("status", "知识库助手处理中，稍候…")

@@ -282,9 +282,39 @@ async def _parent_harness_reply(
     from app.services.doubao_client import is_configured
 
     ctx = build_guide_context(db, child_user_id)
+    # 非 live：优先 knowledge_qa 原样返回（拒答/防注入由控制台应用配置）
+    if not live:
+        from app.harness.context import ToolContext
+        from app.harness.runtime import call_tool
+
+        kq = await call_tool(
+            "knowledge_qa",
+            {"query": message},
+            profile="parent_guide",
+            ctx=ToolContext(
+                db=db, child_user_id=child_user_id, profile="parent_guide"
+            ),
+        )
+        text = str((kq.data or {}).get("reply") or "").strip() if kq.ok else ""
+        if text:
+            return {
+                "reply": text,
+                "actions": _parent_actions(
+                    message, live=False, kb=True, child_id=child_user_id
+                ),
+                "tools_used": [kq.to_audit()],
+                "rag_used": True,
+                "rag_source": "knowledge_qa",
+                "focus_child_id": child_user_id,
+                "situation": ctx.situation,
+                "next_action": (
+                    "parent_pcourse" if wants_course_kb(message) else None
+                ),
+            }
+
     extra = (
         f"{PARENT_SYSTEM}\n\n【孩子情境】\n{ctx.to_prompt_block()}\n\n"
-        "概念/课程问请 retrieve_kb；训练打卡/报告问请用 get_today_plan、"
+        "概念/课程问请 knowledge_qa；训练打卡/报告问请用 get_today_plan、"
         "get_checkin_timeline、get_talent_report_summary。不要编造分数。"
     )
     reply = ""

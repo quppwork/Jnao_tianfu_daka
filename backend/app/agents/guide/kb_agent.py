@@ -224,7 +224,7 @@ def _should_skip_kb_query(message: str) -> bool:
 def pick_source_by_tags(message: str) -> KnowledgeSource | None:
     """标签命中或启发式选库。
 
-    单库模式（默认）：一律 talent_doc（x1micrdmjq）。
+    单库模式（默认）：一律 talent_doc（ockqxuuru1）。
     """
     from app.services.kb_policy import active_kb_source_key, kb_single_source
 

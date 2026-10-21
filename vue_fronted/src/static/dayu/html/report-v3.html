@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="/static/dayu/style.css"/>
 <script src="/static/dayu/assets/js/qrcode.min.js"></script>
 <script src="/static/dayu/js/sse-post.js?v=20261019a"></script>
+<script src="/static/dayu/js/guide-rich.js?v=20261021d"></script>
 <style>
   body{background:#0E0708}
   .phone{background:linear-gradient(180deg,#1C0E10 0%,#120A0C 35%,#0B0E14 100%)}
@@ -317,10 +318,20 @@
   .tc-banner{font-size:12px;color:#7F8FA6;padding:6px 14px 0}
   .tc-banner.err{color:#F0A3A3}
   .tc-thread{flex:1;overflow-y:auto;padding:12px 12px 6px;scrollbar-width:thin}
-  .tc-b{max-width:84%;font-size:15px;line-height:1.65;border-radius:13px;padding:9px 12px;margin-bottom:8px;word-break:break-word;white-space:pre-wrap}
-  .tc-b.me{margin-left:auto;background:linear-gradient(135deg,#E05252,#B03A3E);color:#fff;border-bottom-right-radius:4px}
+  .tc-b{max-width:84%;font-size:15px;line-height:1.65;border-radius:13px;padding:9px 12px;margin-bottom:8px;word-break:break-word}
+  .tc-b.me{margin-left:auto;background:linear-gradient(135deg,#E05252,#B03A3E);color:#fff;border-bottom-right-radius:4px;white-space:pre-wrap}
   .tc-b.ai{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#E6E0DA;border-bottom-left-radius:4px}
-  .tc-b.ai b{color:#F0A3A3}
+  .tc-b.ai>b.cd-name,.tc-b.ai .cd-name{color:#F0A3A3;font-weight:700}
+  .tc-b.ai .chat-rich strong,.tc-b.ai .chat-rich b{color:#F5D9A8;font-weight:800}
+  .tc-b.ai .chat-rich .gd-p{margin:0 0 8px}
+  .tc-b.ai .chat-rich .gd-p:last-child{margin-bottom:0}
+  .tc-b.ai .chat-rich .gd-sec{margin:10px 0 6px;padding-left:8px;border-left:3px solid rgba(143,195,232,.65);font-weight:800;color:#E8EEF7}
+  .tc-b.ai .chat-rich .gd-ul,.tc-b.ai .chat-rich .gd-ol{margin:6px 0 8px;padding-left:1.2em}
+  .tc-b.ai .chat-rich .gd-ul{list-style:disc}
+  .tc-b.ai .chat-rich .gd-ol{list-style:decimal}
+  .tc-b.ai .chat-rich .gd-ul li,.tc-b.ai .chat-rich .gd-ol li{margin:4px 0}
+  .tc-b.ai .chat-rich .gd-h{margin:10px 0 6px;font-weight:800;color:#E8EEF7}
+  .tc-b.ai .chat-rich .gd-quote{margin:8px 0;padding:8px 10px;border-left:3px solid rgba(143,195,232,.4);background:rgba(143,195,232,.08);border-radius:0 8px 8px 0}
   .tc-cite{display:inline-flex;align-items:center;gap:4px;margin:0 8px 10px 0;font-size:11px;padding:4px 10px;border-radius:99px;cursor:pointer;background:rgba(78,160,216,.15);border:1px solid rgba(78,160,216,.4);color:#8FC3E8}
   .tc-b.tc-typing{display:inline-flex;gap:4px;padding:12px 14px}
   .tc-typing i{width:6px;height:6px;border-radius:50%;background:#8FC3E8;opacity:.35;animation:tcp 1s infinite}
@@ -759,6 +770,13 @@ function bootTalentChat(){
   function esc(s){
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+  /** 百炼加粗标记：成对剥正文，残留 * 一律去掉（不依赖 guide-rich 是否加载成功） */
+  function peelMdStars(s){
+    var t=String(s||'').replace(/\uFF0A/g,'*');
+    t=t.replace(/\*\*\s*([^*]+?)\s*\*\*/g,'$1');
+    t=t.replace(/\*+/g,'');
+    return t;
+  }
 
   /* ---- 天赋名 / 报告章节锚点（chips 与「引用」联动用） ---- */
   function talentName(){
@@ -805,12 +823,32 @@ function bootTalentChat(){
     });
   }
 
+  function richHtml(raw){
+    try{
+      var fn=window.__jnaoFormatGuideRichHtml||window.formatGuideRichHtml;
+      if(typeof fn==='function'){
+        var html=fn(raw);
+        // 旧缓存/异常渲染仍可能把 * 留在文本节点；只剥文本，不动标签
+        if(html&&html.indexOf('*')!==-1){
+          html=html.replace(/>([^<]*)/g,function(_m, text){
+            return '>'+String(text).replace(/\*/g,'');
+          });
+        }
+        return html;
+      }
+    }catch(e){}
+    return esc(peelMdStars(raw));
+  }
   function bubble(role, text){
     const d=document.createElement('div');
     d.className='tc-b '+(role==='user'?'me':'ai');
     if(role==='user') d.textContent=text;
-    else d.innerHTML='<b>大宇：</b>'+esc(text);
+    else d.innerHTML='<b class="cd-name">大宇：</b><div class="chat-rich">'+richHtml(text)+'</div>';
     return d;
+  }
+  function setAiBubbleHtml(box, text){
+    if(!box) return;
+    box.innerHTML='<b class="cd-name">大宇：</b><div class="chat-rich">'+richHtml(text)+'</div>';
   }
   function appendMsg(m){
     if(!m||!m.content) return;
@@ -1012,18 +1050,18 @@ function bootTalentChat(){
         onToken:function(piece){
           if(!box){ hideTyping(); box=bubble('assistant',''); thread.appendChild(box); }
           full+=piece;
-          box.innerHTML='<b>大宇：</b>'+esc(full);
+          setAiBubbleHtml(box, full);
           scrollEnd();
         },
         onReplace:function(t){
           full=t;
-          if(box) box.innerHTML='<b>大宇：</b>'+esc(full);
+          if(box) setAiBubbleHtml(box, full);
         },
       });
       hideTyping();
       const msg=done&&done.assistant;
       if(!msg) throw new Error('流式响应中断');
-      if(box){ box.innerHTML='<b>大宇：</b>'+esc(msg.content||full); renderCites(msg); scrollEnd(); }
+      if(box){ setAiBubbleHtml(box, msg.content||full); renderCites(msg); scrollEnd(); }
       else appendMsg(msg);
       finish(msg);
     }catch(e){

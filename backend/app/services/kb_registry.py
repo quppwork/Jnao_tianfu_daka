@@ -21,8 +21,12 @@ _REGISTRY_PATH = _ROOT / "config" / "kb_registry.yaml"
 _LEGACY_REGISTRY_PATH = _ROOT / "data" / "kb_registry.yaml"
 
 # env 可覆盖 registry 中的 aid（便于生产不改 yaml）
+# talent_doc：优先 BAILIAN_KB_QA_AID，兼容旧名 BAILIAN_KB_QA_DOC_AID
 _ENV_AID_KEYS = {
     "video_practice": "BAILIAN_KB_QA_VIDEO_AID",
+    "talent_doc": "BAILIAN_KB_QA_AID",
+}
+_ENV_AID_KEYS_FALLBACK = {
     "talent_doc": "BAILIAN_KB_QA_DOC_AID",
 }
 _ENV_INDEX_KEYS = {
@@ -88,6 +92,10 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
     idx_env = _ENV_INDEX_KEYS.get(key)
     if aid_env:
         v = (os.getenv(aid_env) or "").strip()
+        if not v:
+            fb = _ENV_AID_KEYS_FALLBACK.get(key)
+            if fb:
+                v = (os.getenv(fb) or "").strip()
         if v:
             raw = {**raw, "aid": v}
     if idx_env:

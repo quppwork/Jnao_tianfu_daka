@@ -41,7 +41,7 @@ def extract_qa_skill_focus(message: str) -> str | None:
 
 
 def pick_qa_kb_source_key(message: str) -> str:
-    """选源：单库模式下固定 talent_doc（x1micrdmjq）。"""
+    """选源：单库模式下固定 talent_doc（ockqxuuru1）。"""
     if kb_single_source():
         return active_kb_source_key()
     text = (message or "").strip()
@@ -84,7 +84,7 @@ def build_qa_kb_rounds(
     ]
 
     if kb_single_source():
-        # 单库：同库再补一条学科问句，仍指向 x1micrdmjq
+        # 单库：同库再补一条学科问句，仍指向 ockqxuuru1
         if subj and skill:
             rounds.append(
                 {

@@ -360,14 +360,27 @@ def test_execute_tools_audit(db_session):
 
 
 @pytest.mark.asyncio
-async def test_run_chat_uses_tools(db_session, mock_doubao):
+async def test_run_chat_prefers_knowledge_qa(db_session, mock_doubao):
+    """概念/进度问：优先 Agent 工具 knowledge_qa，原样返回。"""
+    from unittest.mock import AsyncMock, patch
+
+    from app.harness.types import ToolResult
+
     user = register_child(db_session, parent_phone="1390000b106", nickname="对话工具")
-    result = await run_chat(
-        db_session, user.id, "我的天赋测评过了吗", history=[]
+    hit = ToolResult(
+        ok=True,
+        name="knowledge_qa",
+        data={"ok": True, "reply": "还没测评的话，先去天赋测评看看。", "aid": "aid-x"},
     )
-    assert result["reply"]
-    used = {t["name"] for t in result["tools_used"]}
-    assert used & {"get_profile", "get_talent_report_summary"}
+    with patch("app.harness.runtime.call_tool", new=AsyncMock(return_value=hit)) as mock_tool:
+        result = await run_chat(
+            db_session, user.id, "我的天赋测评过了吗", history=[]
+        )
+    assert mock_tool.await_count == 1
+    assert mock_tool.call_args.args[0] == "knowledge_qa"
+    assert result["reply"] == "还没测评的话，先去天赋测评看看。"
+    assert result["tools_used"][0]["name"] == "knowledge_qa"
+    assert result.get("rag_source") == "knowledge_qa"
     assert result["actions"] and result["actions"][0]["target"] in ("talent", "report")
 
 

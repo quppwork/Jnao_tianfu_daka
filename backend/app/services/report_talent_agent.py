@@ -1,7 +1,7 @@
-"""成人报告天赋解答 — LLM ReAct + talent_doc_retrieve 工具，按报告 ID 记忆。
+"""成人报告天赋解答 — 优先调用 Agent 工具 knowledge_qa，原样返回。
 
 会话落库只经 app.memory.ThreadStore（domain=report_talent）。
-不绑学生/家长角色：只要能打开这份报告即可。
+拒答 / 防注入由百炼知识问答应用配置；本门面不做二次改写。
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from app.harness.rag_contract import TALENT_DOC_SOURCE_KEY
 from app.memory import ThreadRef, get_thread_store
 from app.memory.protocols import DOMAIN_REPORT_TALENT, ThreadMessage
 from app.model_cost import AgentFeature, get_cost_recorder
-from app.services.report_talent_context import build_report_context
 from app.services.report_talent_sections import (
     MAX_CITATIONS,
     REPORT_SECTIONS,
@@ -26,20 +25,18 @@ from app.services.report_talent_sections import (
 )
 
 OPENING = "您好我是你的天赋解答助手，有什么疑问都可以通过对话框向我提问，我会为您解答。"
-REFUSAL = "抱歉我还不了解这部分内容，其他板块可能会有您需要的"
-
-REFUSAL_PREFIX = "抱歉我还不"
+# 仅工具调用失败（链路挂了）时的兜底；业务拒答以知识问答应用原文为准
+TOOL_FAIL = "天赋解答暂时不可用，请稍后再试"
 
 PROFILE = "report_talent"
-# 工具轮默认 1 轮（查一次→直接出话）；max_steps 留出「查库 + 回答」两步余量
 MAX_TOOL_ROUNDS = 1
-MAX_STEPS = 4
+MAX_STEPS = 2
 HISTORY_LIMIT = 12
-TOOL_NAME = "talent_doc_retrieve"
+TOOL_NAME = "knowledge_qa"
 
 __all__ = [
     "OPENING",
-    "REFUSAL",
+    "TOOL_FAIL",
     "PROFILE",
     "MAX_TOOL_ROUNDS",
     "MAX_STEPS",
@@ -54,36 +51,25 @@ __all__ = [
 ]
 
 
-# 寒暄/确认身份：唯一允许不查库直接作答的输入（整句匹配，其余一律查库）
-_SMALLTALK = re.compile(
-    r"^(你好|您好|嗨|哈喽|hi|hello|在吗|在不在|早|早上好|晚上好|谢谢|多谢|感谢|"
-    r"你是谁|你是干嘛的|你能做什么|再见|拜拜|好的|嗯|ok)[\s!！。.~～?？]*$",
-    re.IGNORECASE,
-)
-
-
-def needs_grounding(text: str) -> bool:
-    """除寒暄外，所有问题都必须以库内切片为据。"""
-    return not _SMALLTALK.match((text or "").strip())
-
-
 def _derive_citations(content: str) -> list[str]:
-    """从助手回复正文派生报告章节引用（保守：最多 MAX_CITATIONS 个）。
-
-    RAG 命中带 citations 时以命中为准；本函数只做历史/兜底。
-    """
-    return derive_by_keywords(content, exclude=REFUSAL)
+    return derive_by_keywords(content, exclude=TOOL_FAIL)
 
 
-def _suggested_chips(talent: str) -> list[dict]:
-    """报告专属情景问题，跟随该报告的主天赋。"""
-    t = (talent or "").strip() or "这个天赋"
-    return [
-        {"q": f"{t}怎么练", "hot": True},
-        {"q": "这份报告怎么看", "hot": True},
-        {"q": f"{t}适合什么职业"},
-        {"q": "五者是什么"},
-    ]
+def _suggested_chips(
+    talent: str,
+    *,
+    user_id: int | None = None,
+    visit_key: str | None = None,
+) -> list[dict]:
+    """报告页 20 池轮换抽 4 条；与引导页池隔离。"""
+    from app.suggest_prompts import report_suggest_chips
+
+    return report_suggest_chips(
+        talent,
+        limit=4,
+        user_id=user_id,
+        visit_key=visit_key,
+    )
 
 
 class ReportTalentError(Exception):
@@ -136,60 +122,14 @@ def list_messages(db: Session, row: TalentAssessment) -> dict:
         "talent_primary": row.talent_primary or "",
         "test_type": int(row.test_type or 0),
         "source_key": TALENT_DOC_SOURCE_KEY,
-        "chips": _suggested_chips(row.talent_primary),
+        "chips": _suggested_chips(
+            row.talent_primary or "",
+            user_id=int(row.child_user_id),
+            # visit_key 缺省 → 每次打开报告对话换一批
+            visit_key=None,
+        ),
         "messages": [_message_out(m) for m in rows],
     }
-
-
-def _history_for_model(rows: list[ThreadMessage]) -> list[dict]:
-    out: list[dict] = []
-    for m in rows[-HISTORY_LIMIT:]:
-        if m.role not in ("user", "assistant"):
-            continue
-        out.append({"role": m.role, "content": m.content})
-    return out
-
-
-def _inspect_tool_trace(trace: list[dict] | None) -> dict:
-    """检查本轮工具：失败 / 空命中 / 成功。"""
-    calls = [t for t in (trace or []) if t.get("name") == TOOL_NAME]
-    if not calls:
-        return {
-            "called": False,
-            "any_ok": False,
-            "all_failed": False,
-            "failures": [],
-        }
-    failures = [t for t in calls if not t.get("ok")]
-    return {
-        "called": True,
-        "any_ok": any(t.get("ok") for t in calls),
-        "all_failed": len(failures) == len(calls),
-        "failures": [
-            {"error": t.get("error"), "duration_ms": t.get("duration_ms")}
-            for t in failures
-        ],
-    }
-
-
-def _finalize_reply(raw: str, tool_info: dict) -> tuple[str, int, bool]:
-    """门面只校验工具结果，不替模型做意图拦截。
-
-    - 未调工具：采信模型直接回复（问候 / 引导提问等感知内能力）
-    - 调了且有成功命中：采信模型回复，标记 retrieved
-    - 调了但全失败 / 无命中：强制拒答口径
-    """
-    text = (raw or "").strip()
-    if not tool_info["called"]:
-        if text:
-            return text, 0, False
-        return REFUSAL, 0, True
-    if tool_info["any_ok"] and text:
-        # 模型自拟拒答（措辞可能略有出入）→ 统一口径，且不算「已命中作答」
-        if text.startswith(REFUSAL_PREFIX):
-            return REFUSAL, 0, True
-        return text, 1, False
-    return REFUSAL, 0, True
 
 
 def _clean_question(content: str) -> str:
@@ -201,24 +141,13 @@ def _clean_question(content: str) -> str:
     return text
 
 
-def _system_extra(row: TalentAssessment) -> str:
-    """报告身份 + 报告正文切片：分数/五维以切片为准，不给「还没拿到数据」留口子。"""
-    talent = (row.talent_primary or "").strip()
-    parts = [
-        f"当前报告 ID={row.id}。",
-        f"报告主天赋标注为「{talent or '未标明'}」（仅作指代，不是库外事实）。",
-    ]
-    slice_text = build_report_context(
-        row.report_json if isinstance(row.report_json, dict) else None, talent
-    )
-    if slice_text:
-        parts.append("【报告正文切片 · 本报告唯一事实来源】\n" + slice_text)
-        parts.append(
-            "切片里已有的分数、五维、状态、天赋解读可直接引用；切片没有的数字不要编。"
-        )
-    else:
-        parts.append("本报告暂无可用正文切片；不要编造分数、五维数值或职业清单。")
-    return "".join(parts)
+_BOLD_SPACED = re.compile(r"\*\*\s*(.+?)\s*\*\*", re.DOTALL)
+
+
+def _normalize_kb_reply(text: str) -> str:
+    """百炼常见 `** “标题” **` → 标准 `**标题**`，方便前端加粗。"""
+    t = (text or "").replace("\uFF0A", "*")
+    return _BOLD_SPACED.sub(lambda m: f"**{m.group(1).strip()}**", t)
 
 
 def _tool_context(db: Session, row: TalentAssessment) -> ToolContext:
@@ -231,19 +160,25 @@ def _tool_context(db: Session, row: TalentAssessment) -> ToolContext:
     )
 
 
-def _turn_meta(row: TalentAssessment, text: str) -> dict[str, Any]:
-    meta: dict[str, Any] = {
-        "assessment_id": row.id,
-        "feature": AgentFeature.REPORT_TALENT,
-    }
-    if needs_grounding(text):
-        # 业务声明：非寒暄问题必须先查库；执行由 Harness 内核保证
-        meta["force_tool"] = {"name": TOOL_NAME, "args": {"query": text}}
-    return meta
+def _compose_kb_query(row: TalentAssessment, user_text: str) -> str:
+    """本份报告摘要 + 用户原问 → 交给 knowledge_qa（整份/局部由问句体现）。"""
+    from app.services.report_talent_context import build_report_context
+
+    report = row.report_json if isinstance(row.report_json, dict) else {}
+    summary = build_report_context(report, getattr(row, "talent_primary", None))
+    q = (user_text or "").strip()
+    if not summary:
+        return q
+    return (
+        "【本份测评报告摘要】\n"
+        f"{summary}\n\n"
+        "【用户问题】\n"
+        f"{q}\n\n"
+        "请结合报告摘要与知识库作答；报告里没有的分数/结论不要编造。"
+    )
 
 
 def _begin(db: Session, row: TalentAssessment, text: str):
-    """用户句先落库（未 commit，等助手句一起提交）。"""
     store = get_thread_store(db)
     ref = _thread_ref(row)
     prior = store.list_messages(ref, limit=200)
@@ -252,151 +187,205 @@ def _begin(db: Session, row: TalentAssessment, text: str):
     return store, ref, prior, user
 
 
-def _resolve_reply(turn: dict[str, Any]) -> tuple[str, int, bool, dict]:
-    """门面只校验工具结果，不替模型做意图拦截。"""
-    tool_info = _inspect_tool_trace(turn.get("tools_used"))
-    if tool_info["called"] and tool_info["all_failed"]:
-        return REFUSAL, 0, True, tool_info
-    reply, retrieved, refused = _finalize_reply(str(turn.get("reply") or ""), tool_info)
-    return reply, retrieved, refused, tool_info
-
-
-def _citations_for(turn: dict[str, Any], reply: str, refused: bool) -> list[str]:
-    """优先用 RAG 命中章节；老路径 / 未带 citations 时退回正文关键词。"""
-    if refused:
-        return []
-    raw = turn.get("citations")
-    if isinstance(raw, list):
-        cites = [str(c).strip() for c in raw if str(c).strip()]
-        if cites:
-            return cites[:MAX_CITATIONS]
-    return _derive_citations(reply)
-
-
 def _payload(
     user: ThreadMessage,
     assistant: ThreadMessage,
-    turn: dict[str, Any],
+    *,
+    tools_used: list[dict],
+    tool_check: dict,
     refused: bool,
-    tool_info: dict,
+    llm_calls: int = 0,
 ) -> dict:
     return {
         "user": _message_out(user),
         "assistant": _message_out(assistant),
         "refused": refused,
-        "tools_used": turn.get("tools_used") or [],
-        "tool_check": tool_info,
-        "llm_calls": turn.get("llm_calls") or 0,
-        "rag_used": bool(turn.get("rag_used")),
+        "tools_used": tools_used,
+        "tool_check": tool_check,
+        "llm_calls": llm_calls,
+        "rag_used": bool(tool_check.get("any_ok")),
         "profile": PROFILE,
     }
 
 
+def _audit_ok(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": TOOL_NAME,
+        "ok": True,
+        "aid": data.get("aid"),
+        "request_id": data.get("request_id"),
+    }
+
+
+def _audit_fail(error: str | None = None, error_kind: str | None = None) -> dict[str, Any]:
+    return {
+        "name": TOOL_NAME,
+        "ok": False,
+        "error": error,
+        "error_kind": error_kind,
+    }
+
+
 async def ask(db: Session, row: TalentAssessment, content: str) -> dict:
+    """优先 knowledge_qa；成功则原样落库返回，不再经本地 LLM 改写。"""
     _require_adult(row)
     text = _clean_question(content)
-    store, ref, prior, user = _begin(db, row, text)
+    store, ref, _prior, user = _begin(db, row, text)
 
-    from app.runtime import run_turn as run_profile_turn
+    from app.harness.runtime import call_tool
 
+    kb_query = _compose_kb_query(row, text)
     try:
-        turn = await run_profile_turn(
-            PROFILE,
-            text,
-            history=_history_for_model(prior),
+        result = await call_tool(
+            TOOL_NAME,
+            {"query": kb_query},
+            profile=PROFILE,
             ctx=_tool_context(db, row),
-            system_extra=_system_extra(row),
-            max_steps=MAX_STEPS,
-            max_tool_rounds=MAX_TOOL_ROUNDS,
-            thread_id=f"report-talent-{row.id}",
-            allow_tools=True,
-            metadata=_turn_meta(row, text),
         )
     except Exception as e:
         db.rollback()
         raise ReportTalentError(f"助手暂时无法作答：{type(e).__name__}", 503) from e
 
-    turn = turn if isinstance(turn, dict) else {}
-    reply, retrieved, refused, tool_info = _resolve_reply(turn)
-    citations = _citations_for(turn, reply, refused)
+    data = result.data if result.ok else {}
+    reply = _normalize_kb_reply(str(data.get("reply") or "").strip())
+    if result.ok and reply:
+        tools_used = [_audit_ok(data)]
+        tool_check = {"called": True, "any_ok": True, "all_failed": False, "failures": []}
+        assistant = store.append(
+            ref,
+            role="assistant",
+            content=reply,
+            meta={"retrieved": 1, "citations": []},
+            commit=True,
+        )
+        return _payload(
+            user,
+            assistant,
+            tools_used=tools_used,
+            tool_check=tool_check,
+            refused=False,
+        )
 
+    # 链路失败：不替知识问答编业务拒答
+    tools_used = [
+        _audit_fail(
+            error=result.error or data.get("error"),
+            error_kind=data.get("error_kind"),
+        )
+    ]
+    tool_check = {
+        "called": True,
+        "any_ok": False,
+        "all_failed": True,
+        "failures": [{"error": tools_used[0].get("error")}],
+    }
     assistant = store.append(
         ref,
         role="assistant",
-        content=reply,
-        meta={"retrieved": retrieved, "citations": citations},
+        content=TOOL_FAIL,
+        meta={"retrieved": 0, "citations": []},
         commit=True,
     )
-    return _payload(user, assistant, turn, refused, tool_info)
+    return _payload(
+        user,
+        assistant,
+        tools_used=tools_used,
+        tool_check=tool_check,
+        refused=True,
+    )
 
 
 async def ask_stream(
     db: Session, row: TalentAssessment, content: str
 ) -> AsyncIterator[tuple[str, Any]]:
-    """SSE 版：先查一次库，最终答复真流式；done 里带落库后的权威消息。
-
-    token  —— 增量正文（前端先渲染）
-    replace —— 判为拒答时整段替换成统一口径
-    error  —— 本轮失败（不落库助手句）
-    done   —— {user, assistant, refused, citations, ...}，以这里为准
-    """
+    """SSE：知识问答流式 token 原样推送；done 带落库权威消息。"""
     _require_adult(row)
     text = _clean_question(content)
-    store, ref, prior, user = _begin(db, row, text)
+    store, ref, _prior, user = _begin(db, row, text)
 
-    from app.runtime import run_turn_stream
+    from app.services.bailian.config import load_bailian_config
+    from app.services.bailian.knowledge_chat import knowledge_chat_stream
+    from app.services.kb_policy import knowledge_qa_aid
 
+    cfg = load_bailian_config()
+    aid = knowledge_qa_aid()
+    kb_query = _compose_kb_query(row, text)
     parts: list[str] = []
-    done_turn: dict[str, Any] | None = None
+    final = None
 
     try:
-        async for kind, payload in run_turn_stream(
-            PROFILE,
-            text,
-            history=_history_for_model(prior),
-            ctx=_tool_context(db, row),
-            system_extra=_system_extra(row),
-            max_steps=MAX_STEPS,
-            max_tool_rounds=MAX_TOOL_ROUNDS,
-            thread_id=f"report-talent-{row.id}",
-            allow_tools=True,
-            metadata=_turn_meta(row, text),
+        async for kind, payload in knowledge_chat_stream(
+            kb_query, aid=aid, cfg=cfg, timeout=90
         ):
             if kind == "token":
                 piece = str(payload or "")
-                if piece.startswith("[ERROR]"):
-                    db.rollback()
-                    yield ("error", piece)
-                    return
-                parts.append(piece)
-                yield ("token", piece)
-            elif kind == "error":
-                db.rollback()
-                yield ("error", payload)
-                return
-            elif kind == "done" and isinstance(payload, dict):
-                done_turn = payload
+                if piece:
+                    parts.append(piece)
+                    yield ("token", piece)
+            elif kind == "result":
+                final = payload
     except Exception as e:
         db.rollback()
         yield ("error", f"助手暂时无法作答：{type(e).__name__}")
         return
 
-    turn = dict(done_turn or {})
-    streamed = "".join(parts).strip()
-    if streamed and not str(turn.get("reply") or "").strip():
-        turn["reply"] = streamed
+    reply = _normalize_kb_reply(
+        str(getattr(final, "reply", "") or "").strip() or "".join(parts).strip()
+    )
+    if reply:
+        tools_used = [
+            _audit_ok(
+                {
+                    "aid": getattr(final, "aid", None) or aid,
+                    "request_id": getattr(final, "request_id", None),
+                }
+            )
+        ]
+        tool_check = {"called": True, "any_ok": True, "all_failed": False, "failures": []}
+        assistant = store.append(
+            ref,
+            role="assistant",
+            content=reply,
+            meta={"retrieved": 1, "citations": []},
+            commit=True,
+        )
+        yield (
+            "done",
+            _payload(
+                user,
+                assistant,
+                tools_used=tools_used,
+                tool_check=tool_check,
+                refused=False,
+            ),
+        )
+        return
 
-    reply, retrieved, refused, tool_info = _resolve_reply(turn)
-    citations = _citations_for(turn, reply, refused)
-    if refused and streamed and streamed != reply:
-        yield ("replace", reply)
-
+    if not parts:
+        yield ("token", TOOL_FAIL)
+    else:
+        yield ("replace", TOOL_FAIL)
+    tools_used = [_audit_fail(error="知识问答无回复", error_kind="empty")]
+    tool_check = {
+        "called": True,
+        "any_ok": False,
+        "all_failed": True,
+        "failures": [{"error": "empty"}],
+    }
     assistant = store.append(
         ref,
         role="assistant",
-        content=reply,
-        meta={"retrieved": retrieved, "citations": citations},
+        content=TOOL_FAIL,
+        meta={"retrieved": 0, "citations": []},
         commit=True,
     )
-    yield ("done", _payload(user, assistant, turn, refused, tool_info))
-
+    yield (
+        "done",
+        _payload(
+            user,
+            assistant,
+            tools_used=tools_used,
+            tool_check=tool_check,
+            refused=True,
+        ),
+    )

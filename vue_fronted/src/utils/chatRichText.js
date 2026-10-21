@@ -415,17 +415,18 @@ function findNextDelimiterIndex(src, from) {
 }
 
 function normalizeMdMarkers(text) {
-  // 模型偶发全角标记，先归一再解析
+  // 模型偶发全角/零宽标记，先归一再解析（避免 ** 成对失败露出星号）
   return String(text || '')
     .replace(/\uFF0A/g, '*') // ＊
     .replace(/\uFF03/g, '#') // ＃
     .replace(/\u2014{3,}/g, '---') // ——— → hr
+    .replace(/\*(?:[\u200B\u200C\u200D\uFEFF]+)\*/g, '**')
 }
 
 function applyInlineMarkdown(html) {
   let out = html
-  // 先 ** 再单层 *斜体*，避免把 ** 拆坏
-  out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  // 允许 ** 内侧空格（百炼常见：`**标题 **`）
+  out = out.replace(/\*\*\s*(.+?)\s*\*\*/g, '<strong>$1</strong>')
   out = out.replace(/(^|[\s，。；：、])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
   out = out.replace(/`([^`\n]+)`/g, '<code class="qa-code">$1</code>')
   out = out.replace(
@@ -436,6 +437,8 @@ function applyInlineMarkdown(html) {
     /（(主语|谓语|宾语|定语|状语|补语|表语)）/g,
     '<span class="qa-tag">$1</span>',
   )
+  // 消化未成对的残留 **
+  out = out.replace(/\*\*/g, '')
   return out
 }
 
@@ -672,8 +675,12 @@ export function sanitizeGuideReply(raw) {
 
 function guideInline(text) {
   let html = renderLatexInPlainText(String(text || ''))
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>')
+  // 允许 ** 内侧空格（百炼常见：`** “标题” **`）
+  html = html.replace(/\*\*\s*(.+?)\s*\*\*/g, '<strong>$1</strong>')
+  // 不用 lookbehind：旧 WebView 抛错会导致整段回退成纯文本，星号原样露出
+  html = html.replace(/(^|[\s，。；：、])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+  // 加粗/斜体转换后仍残留的 * 一律去掉（天赋对话几乎无数学乘号）
+  html = html.replace(/\*/g, '')
   return html
 }
 
@@ -685,7 +692,7 @@ function isGuideBlockStart(line) {
   if (/^[-*•]\s+/.test(t)) return true
   if (/^\d+[.、)\]]\s+/.test(t)) return true
   if (t.startsWith('>')) return true
-  if (/^\*\*.+\*\*\s*[:：]?$/.test(t)) return true
+  if (/^(?:[^*\n]{1,8}\s+)?\*\*\s*.+\s*\*\*\s*[:：]?$/.test(t)) return true
   if (isGuideTableRow(t)) return true
   return false
 }
@@ -738,7 +745,9 @@ function renderGuideTable(rows) {
 /** 首页引导 AI 回复 → DeepSeek 风格 HTML */
 export function formatGuideRichHtml(raw) {
   if (!raw) return ''
-  const lines = sanitizeGuideReply(raw).replace(/\r\n/g, '\n').split('\n')
+  const lines = normalizeMdMarkers(sanitizeGuideReply(raw))
+    .replace(/\r\n/g, '\n')
+    .split('\n')
   const out = []
   let i = 0
 
@@ -764,7 +773,10 @@ export function formatGuideRichHtml(raw) {
       continue
     }
 
-    const section = trimmed.match(/^\*\*(.+?)\*\*\s*[:：]?$/)
+    // 允许「🔍 **1. 标题 **」：emoji 前缀 + ** 内侧空格
+    const section = trimmed.match(
+      /^(?:[^*\n]{1,8}\s+)?\*\*\s*(.+?)\s*\*\*\s*[:：]?$/,
+    )
     if (section) {
       out.push(`<div class="gd-sec">${guideInline(section[1])}</div>`)
       i += 1

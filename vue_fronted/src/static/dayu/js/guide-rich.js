@@ -23,10 +23,21 @@
     return t.trim();
   }
 
+  function normalizeMdMarkers(text) {
+    return String(text || '')
+      .replace(/\uFF0A/g, '*')
+      .replace(/\uFF03/g, '#')
+      .replace(/\*(?:[\u200B\u200C\u200D\uFEFF]+)\*/g, '**');
+  }
+
   function guideInline(text) {
     var html = escapeHtml(String(text || ''));
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+    // 允许 ** 内侧空格（百炼常见：`** “标题” **`）
+    html = html.replace(/\*\*\s*(.+?)\s*\*\*/g, '<strong>$1</strong>');
+    // 不用 lookbehind：旧 WebView 抛错 → report-v3 richHtml 回退 esc，星号原样露出
+    html = html.replace(/(^|[\s，。；：、])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+    // 加粗/斜体转换后仍残留的 * 一律去掉（天赋对话几乎无数学乘号）
+    html = html.replace(/\*/g, '');
     return html;
   }
 
@@ -60,7 +71,7 @@
     if (/^[-*•]\s+/.test(t)) return true;
     if (/^\d+[.、)\]]\s+/.test(t)) return true;
     if (t.startsWith('>')) return true;
-    if (/^\*\*.+\*\*\s*[:：]?$/.test(t)) return true;
+    if (/^(?:[^*\n]{1,8}\s+)?\*\*\s*.+\s*\*\*\s*[:：]?$/.test(t)) return true;
     if (isGuideTableRow(t)) return true;
     return false;
   }
@@ -100,7 +111,9 @@
 
   function formatGuideRichHtml(raw) {
     if (!raw) return '';
-    var lines = sanitizeGuideReply(raw).replace(/\r\n/g, '\n').split('\n');
+    var lines = normalizeMdMarkers(sanitizeGuideReply(raw))
+      .replace(/\r\n/g, '\n')
+      .split('\n');
     var out = [];
     var i = 0;
 
@@ -129,7 +142,9 @@
         continue;
       }
 
-      var section = trimmed.match(/^\*\*(.+?)\*\*\s*[:：]?$/);
+      var section = trimmed.match(
+        /^(?:[^*\n]{1,8}\s+)?\*\*\s*(.+?)\s*\*\*\s*[:：]?$/,
+      );
       if (section) {
         out.push('<div class="gd-sec">' + guideInline(section[1]) + '</div>');
         i += 1;
