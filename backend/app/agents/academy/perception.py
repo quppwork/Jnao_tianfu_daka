@@ -225,18 +225,28 @@ def act_index(episode_id: str) -> int:
 
 
 def time_box(character_key: str, episode_id: str, episode_title: str) -> str:
-    """给模型的时间约束。未走到的幕名和禁词都写明。"""
+    """给模型的时间约束。优先 knowledge.character_beats；禁止当台词复读。"""
+    from app.agents.academy.knowledge import boundary_line, character_perspective, get_knowledge
     from app.agents.academy.packs import pack_sense
 
     raw = (episode_id or "").strip().upper()
+    know = get_knowledge(raw)
+    perspective = character_perspective(know, character_key)
     sense_map = pack_sense(raw) or EPISODE_SENSE.get(raw, {})
-    sense = sense_map.get(character_key) or "这一集你只记得自己在场。"
+    sense = (
+        perspective
+        or sense_map.get(character_key)
+        or "这一集你只记得自己在场。"
+    )
+    bound = boundary_line(know)
+    bound_line = f"\n本集边界：{bound}" if bound else ""
     if raw in SPECIAL_BOX:
         return (
             f"你是画中人，正站在《{episode_title}》这一集里，不是旁白。\n"
             f"这一集是特辑：{SPECIAL_BOX[raw]}。课堂事实题可用常识答准，再用自己的话；不要只背样例或只抛新问题。\n"
             f"不要提主线地宫、五角迷宫、站桩考核或其他还没在本集出现的关卡。\n"
-            f"这一集你的感受：{sense}"
+            f"这一集你的视角（供即兴，勿照念）：{sense}"
+            f"{bound_line}"
         )
     index = act_index(episode_id)
     lived = [ACTS[i][2] for i in range(index + 1)]
@@ -244,7 +254,7 @@ def time_box(character_key: str, episode_id: str, episode_title: str) -> str:
     banned: list[str] = []
     for i in range(index + 1, len(ACTS)):
         banned.extend(ACTS[i][3])
-    if not sense_map.get(character_key):
+    if not perspective and not sense_map.get(character_key):
         sense = ACT_SENSE.get(character_key, ("",))[index]
     growth = GROWTH.get(character_key, ("",))[index]
     future_text = "、".join(future) if future else "没有"
@@ -253,8 +263,9 @@ def time_box(character_key: str, episode_id: str, episode_title: str) -> str:
         f"你是画中人，正站在《{episode_title}》这一集里，不是旁白。\n"
         f"你只经历过：{'、'.join(lived)}。\n"
         f"还没发生、不许提：{future_text}。禁词：{ban_text}。\n"
-        f"这一集你的感受：{sense}\n"
+        f"这一集你的视角（供即兴，勿照念）：{sense}\n"
         f"走到这里你变成了：{growth}"
+        f"{bound_line}"
     )
 
 

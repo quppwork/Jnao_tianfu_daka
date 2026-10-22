@@ -1,4 +1,4 @@
-"""天赋学院知识注入：全局图认知 + 可选百炼检索。不做台词兜底。"""
+"""天赋学院知识注入：分集料包（本地）+ 全局图认知 + 可选百炼检索。不做台词兜底。"""
 
 from __future__ import annotations
 
@@ -43,6 +43,10 @@ def clip_notes(chunks: list[str], episode_id: str) -> str:
         later = [int(n) for n in _EP.findall(text) if int(n) > current]
         if later:
             continue
+        # 特辑 cutoff（EH*/ES*）时，clip 以传入 id 文本是否自称更晚集为准
+        eid = (episode_id or "").strip().upper()
+        if eid.startswith("E") and eid[1:].isdigit():
+            pass
         kept.append(text)
         if len(kept) >= 3:
             break
@@ -59,38 +63,30 @@ async def drama_notes(
     knowledge_cutoff: str = "",
 ) -> str:
     """
-    角色认知 = 全局图（必选） + 百炼检索（可选）。
+    角色认知 = 分集料包（本地）+ 全局图 + 可选百炼。
     无命中则返回空字符串，禁止用样例台词填充。
     """
     del names
+    from app.agents.academy.knowledge import compose_episode_notes
+
     cutoff = (knowledge_cutoff or episode_id or "").strip().upper()
     bits: list[str] = []
+
+    episode_block = await compose_episode_notes(
+        episode_id=episode_id,
+        episode_title=episode_title,
+        user_text=user_text,
+        character_key=character_key,
+        knowledge_cutoff=cutoff,
+    )
+    if episode_block:
+        bits.append(episode_block)
+
     known = character_knowledge(character_key, cutoff=cutoff) if character_key else ""
     if known:
         bits.append(known)
     mood = character_mood(character_key, episode_id) if character_key else ""
     if mood:
         bits.append(mood)
-
-    index_id = academy_kb()["index_id"]
-    if index_id:
-        query = " ".join(
-            part
-            for part in (episode_id, episode_title, (user_text or "")[:60])
-            if part
-        ).strip()
-        if query:
-            try:
-                from app.services.bailian import rag_query
-
-                result = await rag_query(
-                    query, index_id=index_id, top_n=4, timeout=8, mode="retrieve"
-                )
-                if result is not None and result.nodes:
-                    clipped = clip_notes([node.text for node in result.nodes], episode_id)
-                    if clipped:
-                        bits.append(clipped)
-            except Exception as e:
-                logger.warning("academy drama retrieve failed: %s", e)
 
     return "\n".join(bits)[:900]

@@ -157,6 +157,13 @@ def pack_fit(episode_id: str) -> dict[str, tuple[str, ...]]:
 
 
 def pack_synopsis(episode_id: str | None) -> str:
+    """优先 knowledge.yaml；否则回落 pack.plot.synopsis。"""
+    from app.agents.academy.knowledge import get_knowledge, knowledge_synopsis
+
+    know = get_knowledge(episode_id)
+    text = knowledge_synopsis(know, limit=200)
+    if text:
+        return text
     pack = get_pack(episode_id)
     if not pack or not isinstance(pack.plot, dict):
         return ""
@@ -168,7 +175,12 @@ def pack_fact_seed(
     user_ask: str | None,
     character_key: str = "",
 ) -> str:
-    """按用户问句匹配剧集包事实种子。对不上则返回空，禁止拿别的题顶上。"""
+    """事实锚点：优先 knowledge.facts，再回落 pack.plot.facts。对不上返回空。"""
+    from app.agents.academy.knowledge import get_knowledge, knowledge_fact_seed
+
+    seeded = knowledge_fact_seed(get_knowledge(episode_id), user_ask, character_key)
+    if seeded:
+        return seeded
     pack = get_pack(episode_id)
     if not pack:
         return ""
@@ -197,3 +209,9 @@ def pack_fact_seed(
 
 def clear_pack_cache() -> None:
     all_packs.cache_clear()
+    try:
+        from app.agents.academy.knowledge import clear_knowledge_cache
+
+        clear_knowledge_cache()
+    except Exception:
+        pass

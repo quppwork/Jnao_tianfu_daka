@@ -1,4 +1,4 @@
-"""一轮讨论准备 — 对齐 D:\\11 的 prepare_turn：先理解再答，多人共用。"""
+"""一轮讨论准备 — 先理解再答，多人共用；台词由模型即兴，料包只作边界与锚点。"""
 
 from __future__ import annotations
 
@@ -14,8 +14,11 @@ _HISTORY = re.compile(
     r"种姓|科举|黄巢|称帝|皇帝|大齐|历史|为什么|为啥|当上|有没有|吗|诗|黄金甲|榜|大旱"
 )
 _ORAL = re.compile(r"^(那个|就是|嗯+|啊+|呃+|请问|我想问一下|我想问|帮我|你们能帮我)")
-# 「谁跟我一组」是找人，不是问怎么练
 _INVITE = re.compile(r"谁跟我|跟我一组|一起站|一起练|组队|有人陪|谁陪|拉我一组|谁来")
+
+_OPEN = (
+    "用角色卡口气即兴说，像真人同学；不要说明书腔、不要背诵要点原文、不要夸张表演。"
+)
 
 
 def is_invite(ask: str) -> bool:
@@ -30,6 +33,7 @@ class TurnContext:
     standalone_query: str
     skill: str
     reasoning_mode: str  # direct | react
+    episode_id: str = ""
     synopsis: str = ""
     fact_default: str = ""
     facts_by_char: dict[str, str] = field(default_factory=dict)
@@ -70,7 +74,6 @@ def _pick_skill(ask: str) -> str:
 
 
 def _reasoning_mode(skill: str, ask: str) -> str:
-    """对齐 D11：寒暄直接回；事实/历史/总结走 ReAct（先接地再出话）。"""
     if skill in ("greet", "redirect_qa"):
         return "direct"
     if skill in ("summary", "answer") or _HISTORY.search(ask or ""):
@@ -104,6 +107,7 @@ def prepare_turn(
         standalone_query=ask or raw,
         skill=skill,
         reasoning_mode=_reasoning_mode(skill, ask or raw),
+        episode_id=(episode_id or "").strip().upper(),
         synopsis=synopsis or pack_synopsis(episode_id),
         fact_default=default,
         facts_by_char=facts,
@@ -112,42 +116,53 @@ def prepare_turn(
 
 
 def turn_instruction(ctx: TurnContext, *, character_key: str = "", index: int = 0) -> str:
-    """写进 reason/say 的共享指令（类似 D11 skill policy + 接地）。"""
+    """写进 reason/say 的共享指令。"""
+    from app.agents.academy.knowledge import boundary_line, get_knowledge
+
     ask = ctx.standalone_query or ctx.raw_ask
     skill = ctx.skill
     fact = ctx.fact_for(character_key)
     synopsis = (ctx.synopsis or "").strip()
     lead = index == 0
+    bound = boundary_line(get_knowledge(ctx.episode_id))
+    bound_hint = f" 本集边界：{bound}。" if bound else ""
+
     if skill == "greet":
-        body = "感知：打招呼。先回问候，不要提剧情或训练。"
+        body = (
+            "感知：打招呼。先回问候或接一句轻松闲聊；"
+            "不要提训练要领、不要背剧情口号。"
+            f"{_OPEN}"
+        )
     elif skill == "summary":
         body = (
             "感知：要总结这一集。"
-            f"用口语概括，禁止改答别的题。梗概：{synopsis or '只讲本集见过的。'}"
+            f"用口语概括，禁止改答别的题。梗概仅供参考：{synopsis or '只讲本集见过的。'}。"
+            f"{_OPEN}{bound_hint}"
         )
     elif skill == "redirect_qa":
         body = "感知：学科题。不要讲题、不要给答案，让对方去学科答疑。"
     elif skill == "comfort":
-        body = "感知：情绪低。先接住，再可轻轻贴本集。"
+        body = f"感知：情绪低。先接住，再可轻轻贴本集。{_OPEN}{bound_hint}"
     elif skill == "train":
         if is_invite(ask):
             body = (
                 f"感知：孩子在找人组队——「{ask}」。"
                 "你是频道里的真人同学，正面表态：跟不跟、算不算你一个。"
-                "用自己的口气应邀即可。禁止讲站桩要领、禁止说明书腔、禁止『我听着』、禁止改答别的题。"
+                "用自己的口气应邀即可。禁止讲训练要领、禁止说明书腔、禁止『我听着』、禁止改答别的题。"
             )
         else:
-            body = "感知：问训练。用做过的那一下接，不要说明书腔。"
+            body = f"感知：问训练。用做过的那一下接，不要说明书腔。{_OPEN}"
     else:
         if fact:
             body = (
                 f"感知：事实/历史题。必须正面答「{ask}」。"
-                f"先用常识说准，可用要点：{fact}。禁止改题、禁止背别的样例。"
+                f"先用常识说准，要点仅供参考：{fact}。禁止改题、禁止照念要点。"
+                f"{_OPEN}{bound_hint}"
             )
         else:
             body = (
-                f"感知：要答「{ask}」。没有现成要点也要用常识正面答，"
-                "禁止拿别的题或样例硬顶。"
+                f"感知：要答「{ask}」。围绕本集已知内容即兴正面答，"
+                f"禁止拿别的集或样例硬顶。{_OPEN}{bound_hint}"
             )
     if ctx.reasoning_mode == "react":
         body += " 你用 ReAct：先 Thought/Action，再根据 Observation 出口语。"
