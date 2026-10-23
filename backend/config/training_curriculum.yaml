@@ -185,11 +185,14 @@ decay_rules:
 # 七、捆绑配置（§8）
 # ══════════════════════════════════════════════════
 
+# 捆绑 ID 与现网测试一致：B2=扫描+运算、B3=影像+运算、B4=运算+极学、B1=多元+运算（永远最后）
+# 产品文档 cfg_bundle 的 B1–B4 命名不同，以本表 + always_last 为准落地
 bundles:
   tier_3:
     - id: B1
       skills: [多元感知, 极速运算]
       cost_slots: 2
+      always_last: true
     - id: B2
       skills: [扫描速记, 极速运算]
       cost_slots: 2

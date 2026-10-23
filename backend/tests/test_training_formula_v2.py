@@ -136,6 +136,24 @@ class TestTier3Bundle:
                                              "极速运算": 1, "极速学习": 1})
         assert result["strategy"] == "weight_with_bundle"
         assert result["bundle_id"] in ("B1", "B2", "B3", "B4")
+        assert result["schedule_engine"] == "bundle"
+        assert isinstance(result.get("annotations"), list)
+
+    def test_tier3_never_picks_B1_when_others_feasible(self):
+        """多元感知捆绑 always_last：有其他可行组时不选 B1"""
+        result = expand_formula(
+            120,
+            overall_tier=3,
+            grade_band="primary_low",
+            skill_tiers={
+                "影像追忆": 2,
+                "扫描速记": 2,
+                "极速运算": 2,
+                "极速学习": 2,
+            },
+        )
+        assert result["bundle_id"] != "B1"
+        assert result["bundle_id"] in ("B2", "B3", "B4")
 
     def test_tier3_bundle_contains_极速运算(self):
         result = expand_formula(120, overall_tier=3, grade_band="primary_low",

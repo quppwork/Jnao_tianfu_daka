@@ -277,6 +277,7 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
     has_checkin = _plan_has_any_checkin(db, plan) if db is not None else False
     plan_customized = bool(getattr(plan, "plan_customized", 0))
     can_customize = _can_customize_plan(db, plan, now=now) if db is not None else False
+    assist = plan.schedule_assist_json if isinstance(plan.schedule_assist_json, dict) else {}
     return {
         "plan_id": plan.id,
         "plan_date": plan.plan_date,
@@ -309,6 +310,19 @@ def _plan_to_response(plan: TrainingPlan, *, now: datetime | None = None, db: Se
         "day_locked": locked,
         "globally_cutoff": globally_cutoff,
         "pending_confirm": _pending_confirm_flag(db, plan, timer_fields.get("timer_phase")),
+        "cohort": assist.get("cohort"),
+        "plan_mode": assist.get("plan_mode"),
+        "recipe_id": assist.get("recipe_id"),
+        "brain_ratio": assist.get("brain_ratio"),
+        "subject_ratio": assist.get("subject_ratio"),
+        "schedule_engine": assist.get("schedule_engine"),
+        "overall_grade_used": assist.get("overall_grade_used"),
+        "extras": assist.get("extras") or [],
+        "annotations": assist.get("annotations") or [],
+        "bundle_id": assist.get("bundle_id"),
+        "elective_offers": assist.get("elective_offers") or [],
+        "subject_slots": assist.get("subject_slots") or [],
+        "recipe_variant": assist.get("recipe_variant"),
         **meta,
         **timer_fields,
     }

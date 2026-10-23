@@ -221,6 +221,7 @@ def _select_bundle(bundles: list[dict], ctx: PlanContext) -> dict:
     选捆绑：搭档技能个体 Tier 最低的优先（需要更多练习）。
     同 Tier 按技能编码字母序 A > B > C > D > E。
     选修技能不参与比较。
+    always_last=true（多元感知组）仅在无其他可行捆绑时选用。
     """
     def _key(bundle: dict) -> tuple[int, str]:
         tiers: list[int] = []
@@ -234,7 +235,9 @@ def _select_bundle(bundles: list[dict], ctx: PlanContext) -> dict:
         first_code = min(codes) if codes else "Z"
         return (min_tier, first_code)
 
-    return min(bundles, key=_key)
+    primary = [b for b in bundles if not b.get("always_last")]
+    pool = primary if primary else bundles
+    return min(pool, key=_key)
 
 
 def _build_decay_map(tier: int, cfg: dict) -> dict[str, float]:
@@ -463,19 +466,28 @@ def _ctx_to_result(ctx: PlanContext, strategy_name: str,
     all_codes = list(ctx.bundle_skills) + list(ctx.selected)
 
     # 上级要求：≥2h 追加高效作业/极速学习（≥3阶替换）
+    extras_raw: list[str] = []
     for _ in range(ctx.homework_count):
         if ctx.homework_skill:
-            all_codes.append(ctx.homework_skill)
+            extras_raw.append(ctx.homework_skill)
 
     # ≥480min 追加精力恢复
     if ctx.planned_minutes >= 480:
-        all_codes.append("精力恢复")
+        extras_raw.append("精力恢复")
+
+    all_codes.extend(extras_raw)
 
     # 映射为中文名
     slot_mapping: dict = cfg.get("slot_mapping", {})
     resolved: list[str] = []
     for code in all_codes:
         resolved.append(slot_mapping.get(code, CODE_SKILL.get(code, code)))
+
+    extras = [
+        slot_mapping.get(code, CODE_SKILL.get(code, code)) for code in extras_raw
+    ]
+    # bundle 配置为中文名；selected 为字母码，此处只回传捆绑技能中文名
+    bundle_skills = [str(s) for s in ctx.bundle_skills]
 
     # 构建 elective_notes（保持向后兼容的格式）
     elective_rules: dict = cfg.get("elective_rules", {})
@@ -491,16 +503,29 @@ def _ctx_to_result(ctx: PlanContext, strategy_name: str,
 
     # 初高中 C 标注（向后兼容 c_note）
     c_note = None
+    annotations: list[str] = []
     for gn in ctx.grade_notes:
         if gn.get("skill") == "扫描速记":
             c_note = gn.get("mark")
+        mark = gn.get("mark")
+        sk = gn.get("skill")
+        if sk and mark:
+            annotations.append(f"{sk}{mark}" if mark.startswith("不") else f"{sk}·{mark}")
+    if ctx.bundle_id:
+        annotations.append(f"捆绑组：{ctx.bundle_id}")
+    if ctx.exam_note:
+        annotations.append(str(ctx.exam_note))
 
     result: dict = {
         "slots": resolved,
+        "extras": extras,
+        "bundle_skills": bundle_skills,
         "elective_notes": elective_notes,
         "c_note": c_note,
         "exam_note": ctx.exam_note,
         "minutes": ctx.planned_minutes,
+        "annotations": annotations,
+        "schedule_engine": "bundle" if ctx.bundle_id else "weight",
         # ── v3.0 新增字段 ──
         "strategy": strategy_name,
         "bundle_id": ctx.bundle_id,

@@ -83,6 +83,19 @@ class TrainingTodayResponse(BaseModel):
     lesson_day: int | None = None
     training_day_number: int | None = None
     schedule_mode: str | None = None
+    cohort: str | None = None
+    plan_mode: str | None = None
+    recipe_id: str | None = None
+    brain_ratio: float | None = None
+    subject_ratio: float | None = None
+    schedule_engine: str | None = None
+    overall_grade_used: int | None = None
+    extras: list[str] = Field(default_factory=list)
+    annotations: list[str] = Field(default_factory=list)
+    bundle_id: str | None = None
+    elective_offers: list[str] = Field(default_factory=list)
+    subject_slots: list[str] = Field(default_factory=list)
+    recipe_variant: str | None = None
     optional_offers: list[OptionalOfferOut] = Field(default_factory=list)
     timer_phase: str | None = None
     timer_end_at: str | None = None

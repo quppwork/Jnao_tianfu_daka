@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.content_meta import parse_item_instruction
 from app.services.training.common import TrainingError, invalidate_plan_cache
+from app.services.dev_clock import resolve_training_now
 from app.services.training_day import is_plan_globally_cutoff
 
 # 选修置顶顺序：感知力(多元感知) > 开口窍
@@ -83,7 +84,8 @@ def append_elective_item(
     plan = db.get(TrainingPlan, plan_id)
     if not plan or plan.child_user_id != child_user_id:
         raise TrainingError("训练计划不存在", 404)
-    if is_plan_globally_cutoff(plan):
+    now = resolve_training_now(db, child_user_id)
+    if is_plan_globally_cutoff(plan, now=now):
         raise TrainingError("训练日已于凌晨4点截止", 403)
 
     # 去重：同一技能已在方案中则跳过（含无 content_item_id 的占位项）

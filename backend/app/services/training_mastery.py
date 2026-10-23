@@ -290,7 +290,11 @@ def process_checkin_progress(
     talent_code: int,
     grade: str | None,
 ) -> dict:
-    """打卡提交后：遍历所有技能 → 判定达标 → 更新连续计数 → 处理晋级。
+    """打卡提交后：按本次提交的技能判定达标 → 更新连续计数 → 处理晋级。
+
+    规则：
+    - 只结算「本次 cards」里出现的技能，避免同日其它未打卡技能被误判未达标而清零；
+    - 同一训练日同一技能已达标计过一次后，再交卡不再累加连续次数（防多槽重复计）。
 
     Returns:
         {
@@ -303,35 +307,46 @@ def process_checkin_progress(
     state = get_training_progress(child)
     grade_band = _grade_band(grade)
 
-    # 收集本方案所有打卡卡片（含即将写入的 cards）
+    prior_cards = _collect_plan_checkin_cards(db, child.id, plan.id, extra_cards=None)
     all_cards = _collect_plan_checkin_cards(db, child.id, plan.id, extra_cards=cards)
 
-    # 汇总今天涉及的所有技能
-    skills_today = _extract_skills_from_plan(plan, db)
+    skills_in_submit = {
+        str(c.get("name") or "").strip()
+        for c in (cards or [])
+        if str(c.get("name") or "").strip()
+    }
 
     skill_results: dict[str, dict] = {}
 
-    for skill in sorted(skills_today):
+    for skill in sorted(skills_in_submit):
         if not skill or skill == "训练":
             continue
 
         tier_before = get_skill_tier(state, skill)
+        prior_passed = bool(
+            evaluate_skill_any_card(skill, tier_before, grade_band, prior_cards).get("passed")
+        )
         eval_result = evaluate_skill_any_card(skill, tier_before, grade_band, all_cards)
 
-        # 本次是第几次尝试（处理前的连续次数 + 1）
         consecutive_before = get_consecutive_pass(state, skill)
         attempt_number = consecutive_before + 1
         passed = bool(eval_result.get("passed"))
         tier_advanced = False
         oss_advanced = False
         tier_after = tier_before
+        counted_today = False
 
         if passed:
-            bump_consecutive_pass(state, skill)
-            oss_advanced = bump_oss_after_pass(db, talent_code, state, skill)
-            if get_consecutive_pass(state, skill) >= 3:
-                tier_after = advance_skill_tier(state, skill)
-                tier_advanced = True
+            if prior_passed:
+                # 同日已计过达标：保持连续次数，不重复 bump / 晋级
+                counted_today = False
+            else:
+                counted_today = True
+                bump_consecutive_pass(state, skill)
+                oss_advanced = bump_oss_after_pass(db, talent_code, state, skill)
+                if get_consecutive_pass(state, skill) >= 3:
+                    tier_after = advance_skill_tier(state, skill)
+                    tier_advanced = True
         else:
             reset_consecutive_pass(state, skill)
 
@@ -344,6 +359,8 @@ def process_checkin_progress(
             "oss_advanced": oss_advanced,
             "attempt_number": attempt_number,
             "was_deciding": attempt_number >= 3,
+            "counted_today": counted_today,
+            "already_passed_today": prior_passed,
             "threshold_detail": eval_result,
         }
 

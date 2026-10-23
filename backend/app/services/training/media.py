@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.models import TrainingItem, TrainingPlan
 from app.services.content_meta import parse_item_instruction
 from app.services.training.common import WATCH_COMPLETE_PCT, TrainingError, _today, invalidate_plan_cache
+from app.services.dev_clock import resolve_training_now
 from app.services.training_day import is_plan_globally_cutoff
 
 def _item_is_video(item: TrainingItem) -> bool:
@@ -72,7 +73,8 @@ def mark_today_media_exhausted(
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan:
         raise TrainingError("训练计划不存在", 404)
-    if is_plan_globally_cutoff(plan):
+    now = resolve_training_now(db, child_user_id)
+    if is_plan_globally_cutoff(plan, now=now):
         raise TrainingError("训练日已于凌晨4点截止", 403)
     mark_plan_media_exhausted(db, plan)
     db.refresh(plan)
@@ -94,7 +96,8 @@ def record_watch_progress(
     plan = db.get(TrainingPlan, item.plan_id)
     if not plan or plan.child_user_id != child_user_id:
         raise TrainingError("训练项不存在", 404)
-    if is_plan_globally_cutoff(plan):
+    now = resolve_training_now(db, child_user_id)
+    if is_plan_globally_cutoff(plan, now=now):
         raise TrainingError("训练日已于凌晨4点截止", 403)
 
     watched = max(0.0, float(watched_sec))

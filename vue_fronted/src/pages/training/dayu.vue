@@ -136,8 +136,12 @@
           <text class="cnt-s">个技能任务</text>
           <text class="cnt-m">{{ gateMeta }}</text>
         </view>
-        <view v-for="(it, i) in displayItems" :key="it.id || i" class="gitem" :class="{ opt: it._elective }">
-          <view class="n">{{ it._elective ? '选' : String(i + 1) }}</view>
+        <view v-if="planRecipeHint" class="plan-hint">{{ planRecipeHint }}</view>
+        <view v-if="planAnnotations.length" class="plan-notes">
+          <text v-for="(n, ni) in planAnnotations" :key="ni" class="plan-note">{{ n }}</text>
+        </view>
+        <view v-for="(it, i) in displayItems" :key="it.id || i" class="gitem" :class="{ opt: it._elective, subj: it._subject }">
+          <view class="n">{{ it._elective ? '选' : (it._subject ? '学' : String(i + 1)) }}</view>
           <text class="gn">{{ gateItemLabel(it) }}</text>
           <text class="st">{{ it._status }}</text>
         </view>
@@ -579,12 +583,12 @@ const tabs = MAIN_TABS
 const presets = [
   { m: 30, label: '30分钟' },
   { m: 60, label: '1小时' },
+  { m: 90, label: '90分钟' },
   { m: 120, label: '2小时' },
+  { m: 180, label: '3小时' },
   { m: 240, label: '4小时' },
   { m: 360, label: '6小时' },
   { m: 480, label: '8小时' },
-  { m: 600, label: '10小时' },
-  { m: 40, label: '40分钟' },
 ]
 
 const SKILL_META = {
@@ -601,6 +605,11 @@ const SKILL_META = {
   感知力: { emoji: '🎧', img: '/static/dayu/assets/miji/mj-tfsd.jpg', mj: '六感神剑' },
   开口窍: { emoji: '🗣️', img: '/static/dayu/assets/miji/mj-scyj.jpg', mj: '心门九剑' },
   精力恢复: { emoji: '🍃', img: '/static/dayu/assets/miji/mj-jlhf.jpg', mj: '呼吸打坐' },
+  学科方案: { emoji: '📝', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '学科方案' },
+  三错一讲: { emoji: '🔎', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '三错一讲' },
+  学科复盘: { emoji: '📋', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '学科复盘' },
+  文科奥秘: { emoji: '📚', img: '/static/dayu/assets/miji/mj-cnyd.jpg', mj: '文科奥秘' },
+  理科奥秘: { emoji: '🔬', img: '/static/dayu/assets/miji/sys-contest.jpg', mj: '理科奥秘' },
 }
 const DEFAULT_META = { emoji: '⚔️', img: '/static/dayu/assets/miji/mj-tfsd.jpg', mj: '今日修炼' }
 
@@ -1107,10 +1116,14 @@ const displayItems = computed(() => {
       state = 'done'
       status = '已完成 ✓'
     }
+    const inst = parseItemInstructions(it.instructions)
+    const sk = skillOf(it)
+    const subjectSet = new Set(['学科方案', '三错一讲', '学科复盘', '学科练习'])
     return {
       ...it,
-      _skill: skillOf(it),
+      _skill: sk,
       _elective: isElective(it),
+      _subject: inst.content_type === 'subject' || subjectSet.has(sk) || it.ability_type === 'subject',
       _done: done,
       _pct: pct,
       _state: state,
@@ -1124,6 +1137,39 @@ const gateMeta = computed(() => {
   const elect = list.filter((i) => i._elective).length
   const core = list.length - elect
   return `必闯${core}关 · 选修${elect}关 · ≈${plannedMins.value}分钟`
+})
+
+const COHORT_LABEL = {
+  experience: '体验学员',
+  venue_new: '会场新学员',
+  new_student: '新学员',
+  regular: '老学员',
+  rocket: '火箭营',
+  blackhorse: '黑马营',
+}
+const MODE_LABEL = {
+  standard: '标准训练',
+  academic: '学业规划',
+  rocket: '火箭营方案',
+  blackhorse: '黑马营方案',
+  custom: '个性化定制',
+}
+
+const planRecipeHint = computed(() => {
+  const p = plan.value
+  if (!p) return ''
+  const cohort = COHORT_LABEL[p.cohort] || ''
+  const mode = MODE_LABEL[p.plan_mode] || ''
+  const engine = p.schedule_engine === 'fixed' ? '固定配方' : (p.schedule_engine === 'bundle' ? '三段捆绑' : '权重排课')
+  const bits = [cohort, mode, engine].filter(Boolean)
+  if (p.recipe_id) bits.push(p.recipe_id)
+  return bits.length ? bits.join(' · ') : ''
+})
+
+const planAnnotations = computed(() => {
+  const raw = plan.value?.annotations
+  if (!Array.isArray(raw)) return []
+  return raw.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 6)
 })
 
 const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
@@ -2584,6 +2630,26 @@ onUnmounted(() => {
   display: flex; align-items: center; justify-content: center; flex: none;
 }
 .gitem.opt .n { background: rgba(201, 168, 105, 0.15); color: #c9a869; }
+.gitem.subj .n { background: rgba(90, 140, 200, 0.18); color: #5a8cc8; }
+.plan-hint {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  color: #8b93a5;
+  line-height: 1.4;
+}
+.plan-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.plan-note {
+  font-size: 11px;
+  color: #6b7280;
+  background: rgba(139, 147, 165, 0.12);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
 .gn { flex: 1; }
 .st { margin-left: auto; font-size: 11.5px; color: #5a6274; font-weight: 700; }
 .editline {

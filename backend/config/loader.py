@@ -123,6 +123,16 @@ def load_training_curriculum() -> dict:
 
 
 @lru_cache(maxsize=1)
+def load_training_recipes() -> dict:
+    """返回 training_recipes.yaml — 分群 / 方案模式 / 固定配方"""
+    path = _CONFIG_DIR / "training_recipes.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("training_recipes.yaml")
+    return data if isinstance(data, dict) else {}
+
+
+@lru_cache(maxsize=1)
 def load_training_tier_thresholds() -> dict:
     """🆕 v2.0 返回 training_tier_thresholds.yaml — 技能 Tier×学段→达标阈值"""
     path = _CONFIG_DIR / "training_tier_thresholds.yaml"

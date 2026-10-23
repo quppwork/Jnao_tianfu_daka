@@ -22,9 +22,9 @@ from app.services.training_video_attach import attach_videos_to_plan_items
 from app.services.training_child_guide import build_coach_text_for_plan
 from app.services.training_formula_engine import (
     duration_slot,
-    expand_formula,
     HistoryEntry,
 )
+from app.services.training.planner import plan_today_slots
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
@@ -200,13 +200,15 @@ async def populate_plan_items(
 
     history = _collect_schedule_history(db, child_user_id, plan_date)
 
-    # 公式引擎展开技能组合
-    formula_result = expand_formula(
+    # 分群 + 方案模式 → 槽位（体验/营期走固定配方；默认走现网权重引擎）
+    formula_result = plan_today_slots(
+        child,
         planned_minutes,
         overall_tier=o_tier,
         grade_band=grade_band,
         skill_tiers=skill_tiers,
         history=history,
+        db=db,
     )
     slots = formula_result["slots"]
 
@@ -238,12 +240,23 @@ async def populate_plan_items(
                 return item
         return None
 
+    bundle_set = set(formula_result.get("bundle_skills") or [])
+    extras_queue = list(formula_result.get("extras") or [])
+    grade_mark_map = {
+        str(g.get("skill")): str(g.get("mark") or "")
+        for g in (formula_result.get("grade_notes") or [])
+        if isinstance(g, dict) and g.get("skill")
+    }
+
     def _add_item(
         *,
         content: ContentItem | None = None,
         skill_name: str = "",
         is_elective: bool = False,
         blocks_next: bool = True,
+        is_bundle: bool = False,
+        is_extra: bool = False,
+        grade_mark: str | None = None,
     ) -> None:
         nonlocal sort_order
         if content:
@@ -254,6 +267,10 @@ async def populate_plan_items(
                 payload["skill"] = meta.get("skill") or skill_name
                 payload["item_type"] = "elective" if is_elective else "required"
                 payload["blocks_next"] = blocks_next
+                payload["is_bundle"] = bool(is_bundle)
+                payload["is_extra"] = bool(is_extra)
+                if grade_mark:
+                    payload["grade_mark"] = grade_mark
                 inst = json.dumps(payload, ensure_ascii=False)
             except Exception:
                 pass
@@ -274,6 +291,17 @@ async def populate_plan_items(
             )
         else:
             # 占位：OSS 中找不到该技能的音频
+            ph = {
+                "block": "A",
+                "content_type": "placeholder",
+                "skill": skill_name,
+                "item_type": "elective" if is_elective else "required",
+                "blocks_next": blocks_next,
+                "is_bundle": bool(is_bundle),
+                "is_extra": bool(is_extra),
+            }
+            if grade_mark:
+                ph["grade_mark"] = grade_mark
             db.add(
                 TrainingItem(
                     plan_id=plan.id,
@@ -281,30 +309,94 @@ async def populate_plan_items(
                     ability_type="placeholder",
                     title=f"{skill_name}（待同步）",
                     duration_min=0,
-                    instructions=item_instruction("A", "placeholder"),
+                    instructions=json.dumps(ph, ensure_ascii=False),
                     checkin_status="pending",
                 )
             )
         sort_order += 1
 
     # v3.0: 精力恢复已由引擎在 _ctx_to_result 中追加，此处不再重复
-    # 遍历公式槽位，为每个技能取对应 OSS 音频
     elective_rules = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum().get("elective_rules") or {}
+    SUBJECT_SKILLS = frozenset({"学科方案", "三错一讲", "学科复盘", "学科练习"})
     for skill_name in slots:
+        is_subject = skill_name in SUBJECT_SKILLS
         is_elective = skill_name in elective_rules
         er = elective_rules.get(skill_name, {})
-        blocks_next = not is_elective  # 选修不阻塞
+        blocks_next = not is_elective and not is_subject
         if is_elective:
             blocks_next = er.get("blocks_next", False)
 
-        content = _find_content_for_skill(skill_name)
-        _add_item(content=content, skill_name=skill_name, is_elective=is_elective, blocks_next=blocks_next)
+        is_extra = False
+        if extras_queue and skill_name == extras_queue[0]:
+            is_extra = True
+            extras_queue.pop(0)
+
+        content = None if is_subject else _find_content_for_skill(skill_name)
+        if is_subject:
+            # 学业占位：无 OSS，写入可打卡学科项
+            ph = {
+                "block": "S",
+                "content_type": "subject",
+                "skill": skill_name,
+                "item_type": "required",
+                "blocks_next": False,
+                "is_bundle": False,
+                "is_extra": False,
+                "assess_mode": "pass_on_submit",
+            }
+            db.add(
+                TrainingItem(
+                    plan_id=plan.id,
+                    sort_order=sort_order,
+                    ability_type="subject",
+                    title=skill_name,
+                    duration_min=30,
+                    instructions=json.dumps(ph, ensure_ascii=False),
+                    checkin_status="pending",
+                )
+            )
+            sort_order += 1
+            continue
+
+        _add_item(
+            content=content,
+            skill_name=skill_name,
+            is_elective=is_elective,
+            blocks_next=blocks_next,
+            is_bundle=skill_name in bundle_set and not is_extra,
+            is_extra=is_extra,
+            grade_mark=grade_mark_map.get(skill_name) or None,
+        )
 
     # 匹配视频：为有对应视频的技能附加 video_url
     _attach_videos_to_items(db, plan)
 
     plan.planned_minutes = planned_minutes
     plan.media_exhausted = 0
+    # 排课元数据写入 schedule_assist_json（对齐算法文档 daily_plan / 回放）
+    plan.schedule_assist_json = {
+        "cohort": formula_result.get("cohort"),
+        "plan_mode": formula_result.get("plan_mode"),
+        "mix_preference": formula_result.get("mix_preference"),
+        "brain_ratio": formula_result.get("brain_ratio"),
+        "subject_ratio": formula_result.get("subject_ratio"),
+        "recipe_id": formula_result.get("recipe_id"),
+        "strategy": formula_result.get("strategy"),
+        "schedule_engine": formula_result.get("schedule_engine"),
+        "overall_grade_used": formula_result.get("overall_grade_used", o_tier),
+        "bundle_id": formula_result.get("bundle_id"),
+        "bundle_skills": formula_result.get("bundle_skills") or [],
+        "extras": formula_result.get("extras") or [],
+        "annotations": formula_result.get("annotations") or [],
+        "exam_note": formula_result.get("exam_note"),
+        "c_note": formula_result.get("c_note"),
+        "reason": formula_result.get("reason"),
+        "cohort_source": formula_result.get("cohort_source"),
+        "frozen": True,
+        "elective_offers": formula_result.get("elective_offers") or [],
+        "subject_slots": formula_result.get("subject_slots") or [],
+        "recipe_variant": formula_result.get("recipe_variant"),
+    }
     db.flush()
     plan = db.scalar(
         select(TrainingPlan).options(selectinload(TrainingPlan.items)).where(TrainingPlan.id == plan.id)
@@ -324,6 +416,18 @@ async def populate_plan_items(
         "bundle_note": formula_result.get("bundle_note"),
         "grade_notes": formula_result.get("grade_notes", []),
         "reason": formula_result.get("reason"),
+        "cohort": formula_result.get("cohort"),
+        "plan_mode": formula_result.get("plan_mode"),
+        "recipe_id": formula_result.get("recipe_id"),
+        "brain_ratio": formula_result.get("brain_ratio"),
+        "subject_ratio": formula_result.get("subject_ratio"),
+        "schedule_engine": formula_result.get("schedule_engine"),
+        "overall_grade_used": formula_result.get("overall_grade_used", o_tier),
+        "extras": formula_result.get("extras") or [],
+        "annotations": formula_result.get("annotations") or [],
+        "bundle_id": formula_result.get("bundle_id"),
+        "elective_offers": formula_result.get("elective_offers") or [],
+        "recipe_variant": formula_result.get("recipe_variant"),
     }
 
 

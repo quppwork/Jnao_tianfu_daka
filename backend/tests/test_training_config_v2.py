@@ -121,6 +121,13 @@ class TestCurriculumV3:
         assert b2["grade_note"]["junior"] == "不推荐"
         assert b2["grade_note"]["senior"] == "不推荐"
 
+    def test_bundle_B1_always_last(self):
+        """多元感知捆绑永远最后（对齐排课进阶 / 算法 cfg_bundle）"""
+        cur = load_training_curriculum()
+        b1 = [b for b in cur["bundles"]["tier_3"] if b["id"] == "B1"][0]
+        assert b1.get("always_last") is True
+        assert "多元感知" in b1["skills"]
+
     # ── 学段标注 ──
 
     def test_grade_notes_junior(self):
@@ -172,9 +179,13 @@ class TestTierThresholds:
         assert ar["reset_on_fail"] is True
         assert ar["per_skill_independent"] is True
 
-    def test_six_skills_configured(self):
+    def test_core_skills_configured(self):
         th = load_training_tier_thresholds()
-        assert len(th["tier_thresholds"]) == 6
+        keys = th["tier_thresholds"]
+        for sk in ("超脑阅读", "影像追忆", "扫描速记", "极速运算", "极速学习", "高效作业"):
+            assert sk in keys
+        # 合并落地后可含文科/理科/学业占位
+        assert len(keys) >= 6
 
     def test_grade_bands_four_levels(self):
         th = load_training_tier_thresholds()
