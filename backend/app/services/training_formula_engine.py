@@ -362,11 +362,21 @@ def greedy_fill(ctx: PlanContext, cfg: dict) -> PlanContext:
     )
     threshold = float(cfg.get("decay_rules", {}).get("threshold", 0.01))
 
+    base_weights = dict(cfg["tier_weights"].get(f"tier_{ctx.tier}", {}))
     selected: list[str] = []
     for _ in range(remaining):
         candidates = {k: v for k, v in weights.items() if v >= threshold}
         if not candidates:
-            break
+            # 衰减殆尽仍有名额：软重置权重池，避免高阶长训空槽/少槽
+            if not base_weights:
+                break
+            weights = {
+                k: max(float(v), threshold)
+                for k, v in base_weights.items()
+            }
+            candidates = dict(weights)
+            if not candidates:
+                break
         best = max(candidates, key=candidates.get)
         selected.append(best)
         d = decay_map.get(best, 0.7)
@@ -578,6 +588,13 @@ def expand_formula(
             "slots": [], "elective_notes": [], "c_note": None,
             "exam_note": None, "minutes": planned_minutes,
         }
+
+    # 七至九阶关门：展示段位可到九，排课权重最高用到六阶
+    try:
+        overall_tier = int(overall_tier)
+    except (TypeError, ValueError):
+        overall_tier = 1
+    overall_tier = max(1, min(overall_tier, 6))
 
     tier_key = f"tier_{overall_tier}"
     ctx = PlanContext(

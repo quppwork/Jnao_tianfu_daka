@@ -20,6 +20,7 @@ from app.services.child_training_state import (
     get_skill_oss_position,
     get_skill_tier,
     reset_consecutive_pass,
+    set_consecutive_pass,
     set_skill_oss_position,
     state_summary,
 )
@@ -30,6 +31,11 @@ from config.loader import load_training_tier_thresholds
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
     from app.db.models import ChildUser, TrainingPlan
+
+# 标准未定稿：可排课、交卡即过，但不自动升段（需求口径）
+NO_AUTO_TIER_ADVANCE_SKILLS = frozenset(
+    {"文科奥秘", "理科奥秘", "天赋绘画", "音乐灵感"}
+)
 
 
 # ── 辅助 ──────────────────────────────────────────
@@ -150,16 +156,25 @@ def evaluate_card(
 
     if rtype == "recall":
         words = _card_field_num(card, "wordCount", "words")
-        acc = _card_field_num(card, "accuracy", "accuracy_pct") or 0
+        has_acc = any(k in card and card.get(k) not in (None, "") for k in ("accuracy", "accuracy_pct"))
+        acc = _card_field_num(card, "accuracy", "accuracy_pct")
         required_words = int(threshold.get("words") or 0)
         required_acc = int(threshold.get("accuracy_pct") or 0)
 
+        missing: list[str] = []
+        if words is None:
+            missing.append("字数")
+        if not has_acc or acc is None:
+            missing.append("准确度")
         base["words"] = words
         base["required_words"] = required_words
-        base["accuracy_pct"] = acc
+        base["accuracy_pct"] = acc if acc is not None else 0
         base["required_accuracy_pct"] = required_acc
+        if missing:
+            base["detail"] = f"缺字段：{'、'.join(missing)}"
+            return base
         words_ok = words is not None and words >= required_words
-        acc_ok = acc >= required_acc
+        acc_ok = acc is not None and acc >= required_acc
         base["passed"] = words_ok and acc_ok
         base["detail"] = (
             f"达标：{words:g}字/{acc:g}%准确度"
@@ -169,11 +184,20 @@ def evaluate_card(
         return base
 
     if rtype == "memory":
-        words = _card_field_num(card, "wordCount", "words") or 0
-        minutes = _card_field_num(card, "time", "minutes") or 1
+        words = _card_field_num(card, "wordCount", "words")
+        minutes = _card_field_num(card, "time", "minutes")
         reverse = card.get("reverseRecite", False)
         required_wpm = int(threshold.get("words_per_min") or 0)
         require_reverse = bool(threshold.get("reverse_recite", False))
+
+        missing: list[str] = []
+        if words is None:
+            missing.append("字数")
+        if minutes is None or minutes <= 0:
+            missing.append("时间")
+        if missing:
+            base["detail"] = f"缺字段：{'、'.join(missing)}"
+            return base
 
         actual_wpm = words / max(minutes, 0.01)
         base["words_per_min"] = round(actual_wpm, 1)
@@ -345,8 +369,14 @@ def process_checkin_progress(
                 bump_consecutive_pass(state, skill)
                 oss_advanced = bump_oss_after_pass(db, talent_code, state, skill)
                 if get_consecutive_pass(state, skill) >= 3:
-                    tier_after = advance_skill_tier(state, skill)
-                    tier_advanced = True
+                    if skill in NO_AUTO_TIER_ADVANCE_SKILLS:
+                        # 标准未定：连续顶到 3 但不升段
+                        set_consecutive_pass(state, skill, 3)
+                        tier_after = tier_before
+                        tier_advanced = False
+                    else:
+                        tier_after = advance_skill_tier(state, skill)
+                        tier_advanced = True
         else:
             reset_consecutive_pass(state, skill)
 

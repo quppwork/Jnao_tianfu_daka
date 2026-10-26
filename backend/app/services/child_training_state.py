@@ -30,8 +30,11 @@ if TYPE_CHECKING:
 
 STATE_KEY = "training_progress"
 
-# 5 个必修技能
+# 5 个必修技能（参与整体段位最低原则）
 REQUIRED_SKILLS = ("超脑阅读", "影像追忆", "扫描速记", "极速运算", "极速学习")
+
+# 五六阶可排技能：进度需持久化，但不默认参与整体段位（见 get_skills_with_records）
+EXTENDED_SKILLS = ("文科奥秘", "理科奥秘", "天赋绘画", "音乐灵感")
 
 # OSS 默认起始位置（通用；极速学习行者/德者从 stage 3 开始由 OSS 查询时动态调整）
 DEFAULT_OSS_START: dict[str, tuple[int, int]] = {
@@ -94,6 +97,19 @@ def get_training_progress(child: ChildUser) -> dict:
             "part_listen_count": int(sd.get("part_listen_count") or 0),
             "part_first_listen_at": sd.get("part_first_listen_at"),
         }
+    # 扩展技能：仅在已有进度时读出，避免默认占位拉低整体段位
+    for sk in EXTENDED_SKILLS:
+        if sk not in skills_raw:
+            continue
+        sd = skills_raw.get(sk) or {}
+        skills[sk] = {
+            "tier": int(sd.get("tier") or 1),
+            "oss_stage": int(sd.get("oss_stage") if sd.get("oss_stage") is not None else 0),
+            "oss_part": int(sd.get("oss_part") if sd.get("oss_part") is not None else 0),
+            "consecutive_pass": int(sd.get("consecutive_pass") or 0),
+            "part_listen_count": int(sd.get("part_listen_count") or 0),
+            "part_first_listen_at": sd.get("part_first_listen_at"),
+        }
     return {
         "skills": skills,
         "training_days": int(raw.get("training_days") or 0),
@@ -117,19 +133,20 @@ def save_training_progress(db: Session, child: ChildUser, state: dict) -> dict:
 
 
 def _clean_skills_for_save(skills: dict) -> dict:
-    """保存前清理：只保留 REQUIRED_SKILLS + 必要字段"""
+    """保存前清理：必修 + 扩展技能进度字段"""
     out = {}
-    for sk in REQUIRED_SKILLS:
-        if sk in skills:
-            sd = skills[sk]
-            out[sk] = {
-                "tier": int(sd.get("tier") or 1),
-                "oss_stage": int(sd.get("oss_stage") or 0),
-                "oss_part": int(sd.get("oss_part") or 0),
-                "consecutive_pass": int(sd.get("consecutive_pass") or 0),
-                "part_listen_count": int(sd.get("part_listen_count") or 0),
-                "part_first_listen_at": sd.get("part_first_listen_at"),
-            }
+    for sk in (*REQUIRED_SKILLS, *EXTENDED_SKILLS):
+        if sk not in skills:
+            continue
+        sd = skills[sk]
+        out[sk] = {
+            "tier": int(sd.get("tier") or 1),
+            "oss_stage": int(sd.get("oss_stage") or 0),
+            "oss_part": int(sd.get("oss_part") or 0),
+            "consecutive_pass": int(sd.get("consecutive_pass") or 0),
+            "part_listen_count": int(sd.get("part_listen_count") or 0),
+            "part_first_listen_at": sd.get("part_first_listen_at"),
+        }
     return out
 
 

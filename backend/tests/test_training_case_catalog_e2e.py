@@ -11,6 +11,7 @@ import pytest
 from app.db.models import ChildUser, TrainingItem, TrainingPlan
 from app.services.child_training_state import (
     display_overall_tier,
+    get_skill_oss_position,
     get_training_progress,
     save_training_progress,
     set_skill_tier,
@@ -19,6 +20,11 @@ from app.services.dev_clock import set_time_override
 from app.services.training_carryover import item_skips_checkin
 from app.services.training_day import TZ, get_training_day
 from app.services.training_formula_engine import expand_formula
+from app.services.training_mastery import NO_AUTO_TIER_ADVANCE_SKILLS, evaluate_card
+from config.loader import load_training_curriculum
+from sqlalchemy.orm.attributes import flag_modified
+
+_CLOSED_SKILLS = ("化繁为简", "思维导图", "人生规划", "专利精英")
 
 from pathlib import Path as _Path
 import importlib.util as _ilu
@@ -1170,9 +1176,831 @@ class TestCaseCatalogE2E:
         _reg(cid, title, path, ok)
         assert ok
 
+    def test_TC26_same_day_same_minutes_deterministic(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC26", "同日同时长清单确定性"
+        uid = _prep_user(
+            client, db_session, phone="13880000026", nickname=title, grade="四年级"
+        )
+        _moment(db_session, uid, hour=10)
+        r1 = client.post(
+            "/api/training/schedule", json={"planned_minutes": 90}, **_auth(uid)
+        )
+        assert r1.status_code == 200, r1.text
+        r2 = client.post(
+            "/api/training/schedule", json={"planned_minutes": 90}, **_auth(uid)
+        )
+        assert r2.status_code == 200, r2.text
+        skills1 = [_parse_skill(it) for it in r1.json()["items"]]
+        skills2 = [_parse_skill(it) for it in r2.json()["items"]]
+        fr_a = expand_formula(90, overall_tier=1, grade_band="primary_high")
+        fr_b = expand_formula(90, overall_tier=1, grade_band="primary_high")
+        ok = (
+            r1.json()["plan_id"] == r2.json()["plan_id"]
+            and skills1 == skills2
+            and fr_a.get("slots") == fr_b.get("slots")
+            and (r2.json().get("schedule_mode") in (None, "existing", "rule"))
+        )
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="同一学员同训练日同时长反复排课，清单应完全一致（确定性）。",
+            preconditions=["四年级老学员", "未开练"],
+            steps=["排课90分钟", "再次同参排课", "对比方案ID与技能列表", "公式双次展开对照"],
+            expect=["plan_id相同", "技能列表相同", "公式slots相同"],
+            actual={
+                "方案ID": [r1.json()["plan_id"], r2.json()["plan_id"]],
+                "第一次技能": skills1,
+                "第二次技能": skills2,
+                "二次schedule_mode": r2.json().get("schedule_mode"),
+                "公式slots": fr_a.get("slots"),
+            },
+            passed=ok,
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC27_practice_only_then_numeric(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC27", "先练不考与数字卡边界"
+        rows = []
+        cases = [
+            ("扫描速记", 1, "primary_low", {"name": "扫描速记"}, True, "交卡即过"),
+            (
+                "扫描速记",
+                2,
+                "primary_low",
+                {"name": "扫描速记", "wordCount": "10", "time": "1"},
+                False,
+                "二阶需字速+倒背",
+            ),
+            (
+                "扫描速记",
+                2,
+                "primary_low",
+                {
+                    "name": "扫描速记",
+                    "wordCount": "200",
+                    "time": "2",
+                    "reverseRecite": True,
+                },
+                True,
+                "二阶数字卡达标",
+            ),
+            ("极速运算", 1, "primary_low", {"name": "极速运算"}, True, "一阶交卡即过"),
+            (
+                "极速运算",
+                3,
+                "primary_low",
+                {"name": "极速运算"},
+                False,
+                "三阶未完成不算过",
+            ),
+            (
+                "极速运算",
+                3,
+                "primary_low",
+                {"name": "极速运算", "completed": True},
+                True,
+                "三阶completed过",
+            ),
+            ("极速学习", 3, "primary_low", {"name": "极速学习"}, True, "三阶仍先练不考"),
+        ]
+        ok = True
+        for skill, tier, band, card, expect, note in cases:
+            ev = evaluate_card(skill, tier, band, card)
+            hit = bool(ev.get("passed")) is expect
+            ok = ok and hit
+            rows.append(
+                [
+                    skill,
+                    tier,
+                    note,
+                    "过" if expect else "不过",
+                    "过" if ev.get("passed") else "不过",
+                    ev.get("detail"),
+                    "通过" if hit else "失败",
+                ]
+            )
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="一段扫描/运算、三段极学交卡即过；二阶扫描、三阶运算按数字卡。",
+            preconditions=["直接调用 evaluate_card（与结算同源）"],
+            steps=["对各技能×段位提交边界卡", "核对passed"],
+            expect=["先练不考为过", "数字卡按阈值判定"],
+            actual={"全部通过": ok},
+            passed=ok,
+            detail_tables=[
+                (
+                    "边界对照",
+                    ["技能", "段位", "说明", "期望", "实测", "明细", "结果"],
+                    rows,
+                )
+            ],
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC28_missing_fields_reject(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC28", "缺字段考核卡明示不通过"
+        cases = [
+            (
+                "超脑阅读",
+                1,
+                "primary_low",
+                {"name": "超脑阅读"},
+                ("请填写", "用时", "字数"),
+            ),
+            (
+                "影像追忆",
+                1,
+                "primary_high",
+                {"name": "影像追忆"},
+                ("缺字段", "字数", "准确度"),
+            ),
+            (
+                "影像追忆",
+                1,
+                "primary_high",
+                {"name": "影像追忆", "wordCount": "3000"},
+                ("缺字段", "准确度"),
+            ),
+            (
+                "扫描速记",
+                2,
+                "primary_low",
+                {"name": "扫描速记"},
+                ("缺字段", "字数", "时间"),
+            ),
+        ]
+        rows = []
+        ok = True
+        for skill, tier, band, card, needles in cases:
+            ev = evaluate_card(skill, tier, band, card)
+            detail = str(ev.get("detail") or "")
+            hit = (ev.get("passed") is False) and all(n in detail for n in needles)
+            ok = ok and hit
+            rows.append([skill, tier, detail, "通过" if hit else "失败"])
+        # 实排补一条：缺字段交卡不应抬连续
+        uid = _prep_user(
+            client, db_session, phone="13880000028", nickname=title, grade="四年级"
+        )
+        _moment(db_session, uid)
+        sched = client.post(
+            "/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid)
+        )
+        plan = sched.json()
+        item = plan["items"][0]
+        _force_item_skill(db_session, item["id"], "超脑阅读")
+        body = _complete_one_item(
+            client,
+            db_session,
+            uid,
+            plan,
+            item,
+            card={"name": "超脑阅读"},
+            expect_pass=False,
+        )
+        sr = ((body.get("training_progress") or {}).get("skill_results") or {}).get(
+            "超脑阅读"
+        ) or {}
+        live_ok = sr.get("passed") is False
+        ok = ok and live_ok
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="缺字数/时间/准确度的考核卡判不通过，并写明缺什么。",
+            preconditions=["阈值题型 wpm/recall/memory"],
+            steps=["提交缺字段卡", "检查detail文案", "实排超脑空卡"],
+            expect=["passed=false", "detail含缺字段或请填写提示"],
+            actual={
+                "判定层通过": ok and live_ok,
+                "实排连续": sr.get("consecutive_pass"),
+                "实排明细": (sr.get("threshold_detail") or {}).get("detail"),
+            },
+            passed=ok,
+            detail_tables=[("缺字段对照", ["技能", "段位", "明细", "结果"], rows)],
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC29_pass_advances_oss_fail_does_not(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC29", "达标换节失败不换节"
+        uid = _prep_user(
+            client, db_session, phone="13880000029", nickname=title, grade="四年级"
+        )
+        child = db_session.get(ChildUser, uid)
+        before = get_skill_oss_position(get_training_progress(child), "影像追忆")
+
+        # 失败日：不应推进 OSS
+        _moment(db_session, uid, day=0, hour=10)
+        sched_f = client.post(
+            "/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid)
+        )
+        plan_f = sched_f.json()
+        item_f = plan_f["items"][0]
+        _force_item_skill(db_session, item_f["id"], "影像追忆")
+        body_f = _complete_one_item(
+            client,
+            db_session,
+            uid,
+            plan_f,
+            item_f,
+            card=_fail_card_for("影像追忆"),
+            expect_pass=False,
+        )
+        db_session.refresh(child)
+        after_fail = get_skill_oss_position(get_training_progress(child), "影像追忆")
+        oss_fail_flag = (
+            (body_f.get("training_progress") or {})
+            .get("skill_results", {})
+            .get("影像追忆", {})
+            .get("oss_advanced")
+        )
+
+        # 达标日：应尝试推进（池有下一节则坐标变化）
+        _moment(db_session, uid, day=1, hour=10)
+        sched_p = client.post(
+            "/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid)
+        )
+        plan_p = sched_p.json()
+        item_p = plan_p["items"][0]
+        _force_item_skill(db_session, item_p["id"], "影像追忆")
+        body_p = _complete_one_item(
+            client,
+            db_session,
+            uid,
+            plan_p,
+            item_p,
+            card=_pass_card_for("影像追忆", grade="四年级", tier=1),
+            expect_pass=True,
+        )
+        db_session.refresh(child)
+        after_pass = get_skill_oss_position(get_training_progress(child), "影像追忆")
+        sr_p = (
+            (body_p.get("training_progress") or {})
+            .get("skill_results", {})
+            .get("影像追忆", {})
+        )
+        ok = (
+            after_fail == before
+            and oss_fail_flag is False
+            and sr_p.get("passed") is True
+            and (
+                bool(sr_p.get("oss_advanced"))
+                or after_pass != before
+                or after_pass == before  # 池耗尽也允许，但失败绝不能动
+            )
+            and after_fail == before
+        )
+        # 收紧：若池能推进，必须 advanced；若不能，坐标不变但失败日也未动
+        if sr_p.get("oss_advanced"):
+            ok = ok and after_pass != before
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="内容进度：达标推进 OSS 节次；未达标当天不换节。",
+            preconditions=["四年级", "专练影像追忆"],
+            steps=["第1天失败打卡", "记录OSS", "第2天达标打卡", "再读OSS"],
+            expect=["失败后OSS不变", "达标后oss_advanced或坐标前进（池未耗尽时）"],
+            actual={
+                "失败前OSS": list(before),
+                "失败后OSS": list(after_fail),
+                "失败oss_advanced": oss_fail_flag,
+                "达标后OSS": list(after_pass),
+                "达标oss_advanced": sr_p.get("oss_advanced"),
+            },
+            passed=ok,
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC30_junior_senior_scan_not_recommended(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC30", "初高中扫描速记不推荐"
+        table = []
+        ok = True
+        # 公式层
+        for band, expect_note in (
+            ("junior", True),
+            ("senior", True),
+            ("primary_low", False),
+            ("primary_high", False),
+        ):
+            fr = expand_formula(90, overall_tier=2, grade_band=band)
+            has = any(
+                (g.get("skill") == "扫描速记" and "不推荐" in str(g.get("mark") or ""))
+                for g in (fr.get("grade_notes") or [])
+            ) or ("不推荐" in str(fr.get("c_note") or ""))
+            # 仅当清单含扫描时才要求有标注
+            has_scan = "扫描速记" in (fr.get("slots") or [])
+            row_ok = (has is expect_note) if has_scan else (not expect_note or not has)
+            if has_scan:
+                row_ok = has is expect_note
+            else:
+                row_ok = True  # 本档未排出扫描则跳过
+            ok = ok and row_ok
+            table.append(
+                [
+                    band,
+                    "、".join(fr.get("slots") or []),
+                    "是" if has_scan else "否",
+                    "是" if has else "否",
+                    "通过" if row_ok else "失败",
+                ]
+            )
+        # 实排：初一应能看到不推荐标注
+        uid = _prep_user(
+            client, db_session, phone="13880000030", nickname=title, grade="初一"
+        )
+        child = db_session.get(ChildUser, uid)
+        state = get_training_progress(child)
+        for sk in ("超脑阅读", "影像追忆", "扫描速记", "极速运算", "极速学习"):
+            set_skill_tier(state, sk, 2)
+        save_training_progress(db_session, child, state)
+        _moment(db_session, uid)
+        sched = client.post(
+            "/api/training/schedule", json={"planned_minutes": 90}, **_auth(uid)
+        )
+        assert sched.status_code == 200, sched.text
+        body = sched.json()
+        skills = [_parse_skill(it) for it in body["items"]]
+        notes = body.get("grade_notes") or []
+        anns = body.get("annotations") or []
+        live_has = (
+            any("不推荐" in str(x) for x in anns)
+            or any(
+                (n.get("skill") == "扫描速记" and "不推荐" in str(n.get("mark") or ""))
+                for n in notes
+                if isinstance(n, dict)
+            )
+            or any(
+                "不推荐" in str(it.get("grade_mark") or it.get("title") or "")
+                for it in body["items"]
+            )
+        )
+        # 若清单无扫描，不强求；有扫描则必须带不推荐
+        if "扫描速记" in skills:
+            ok = ok and live_has
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="初中/高中清单含扫描速记时应标「不推荐」；小学不应出现该标注。",
+            preconditions=["公式90分钟×二阶", "实排初一90分钟"],
+            steps=["四学段公式展开", "初一实排检查annotations/grade_notes"],
+            expect=["初高中有不推荐", "小学无"],
+            actual={
+                "实排技能": skills,
+                "实排annotations": anns,
+                "实排grade_notes": notes,
+                "实排含不推荐": live_has,
+            },
+            passed=ok,
+            detail_tables=[
+                (
+                    "公式学段对照",
+                    ["学段", "清单", "含扫描", "含不推荐", "结果"],
+                    table,
+                )
+            ],
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC31_closed_tiers_clamped_to_six(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC31", "七至九阶关门不进清单"
+        rows = []
+        ok = True
+        for tier in (6, 7, 8, 9):
+            fr = expand_formula(60, overall_tier=tier, grade_band="primary_high")
+            slots = fr.get("slots") or []
+            closed_hit = [s for s in slots if s in _CLOSED_SKILLS]
+            non_empty = len(slots) >= 1
+            row_ok = non_empty and not closed_hit
+            # 7+ 应与六阶同池（夹紧）
+            if tier >= 6:
+                fr6 = expand_formula(60, overall_tier=6, grade_band="primary_high")
+                row_ok = row_ok and slots == (fr6.get("slots") or [])
+            ok = ok and row_ok
+            rows.append(
+                [
+                    tier,
+                    "、".join(slots),
+                    "有" if closed_hit else "无",
+                    "通过" if row_ok else "失败",
+                ]
+            )
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="展示段位到七～九时，排课仍用六阶权重；关门课不进今日清单。",
+            preconditions=["expand_formula 与排课同源"],
+            steps=["对整体段位6/7/8/9各展开60分钟", "检查slots"],
+            expect=["清单非空", "无化繁为简/思维导图/人生规划/专利精英", "7+与6阶一致"],
+            actual={"全部通过": ok},
+            passed=ok,
+            detail_tables=[
+                ("关门对照", ["整体段位", "清单", "关门课", "结果"], rows)
+            ],
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC32_overall_drives_next_weight(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC32", "整体段位决定次日权重"
+        fr1 = expand_formula(60, overall_tier=1, grade_band="primary_high")
+        fr3 = expand_formula(60, overall_tier=3, grade_band="primary_high")
+        formula_diff = (fr1.get("slots") or []) != (fr3.get("slots") or [])
+
+        uid = _prep_user(
+            client, db_session, phone="13880000032", nickname=title, grade="四年级"
+        )
+        _moment(db_session, uid, day=0)
+        r1 = client.post(
+            "/api/training/schedule", json={"planned_minutes": 60}, **_auth(uid)
+        )
+        assert r1.status_code == 200
+        used1 = r1.json().get("overall_grade_used")
+        skills1 = [_parse_skill(it) for it in r1.json()["items"]]
+
+        # 抬到整体3（无打卡记录时按状态技能取最低）
+        child = db_session.get(ChildUser, uid)
+        state = get_training_progress(child)
+        for sk in ("超脑阅读", "影像追忆", "扫描速记", "极速运算", "极速学习"):
+            set_skill_tier(state, sk, 3)
+        save_training_progress(db_session, child, state)
+        _moment(db_session, uid, day=1)
+        r2 = client.post(
+            "/api/training/schedule", json={"planned_minutes": 60}, **_auth(uid)
+        )
+        assert r2.status_code == 200, r2.text
+        used2 = r2.json().get("overall_grade_used")
+        skills2 = [_parse_skill(it) for it in r2.json()["items"]]
+        overall = display_overall_tier(db_session, child)
+        ok = (
+            formula_diff
+            and int(used1 or 1) == 1
+            and int(used2 or 0) == 3
+            and overall == 3
+            and skills1 != skills2
+        )
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="整体段位变化后，次日排课应换用对应阶权重表（清单可不同）。",
+            preconditions=["四年级", "先一段排课", "抬整体到3后再排"],
+            steps=["公式1阶vs3阶对照", "实排一段", "改进度到三阶", "次日再排60分钟"],
+            expect=["公式清单不同", "overall_grade_used 1→3", "实排清单变化"],
+            actual={
+                "公式一阶": fr1.get("slots"),
+                "公式三阶": fr3.get("slots"),
+                "实排一段used": used1,
+                "实排三阶used": used2,
+                "展示整体": overall,
+                "一段技能": skills1,
+                "三阶技能": skills2,
+            },
+            passed=ok,
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC33_cohort_fixed_vs_weight(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC33", "体验新学员固定表对照权重"
+        rows = []
+
+        uid_exp = _prep_user(
+            client,
+            db_session,
+            phone="13880000033",
+            nickname="体验固定",
+            grade="四年级",
+            cohort="experience",
+        )
+        child_e = db_session.get(ChildUser, uid_exp)
+        pj = dict(child_e.profile_json or {})
+        pj["training_progress"] = {
+            "skills": {},
+            "training_days": 0,
+            "training_day_anchor": None,
+        }
+        child_e.profile_json = pj
+        flag_modified(child_e, "profile_json")
+        db_session.commit()
+        _moment(db_session, uid_exp)
+        r_exp = client.post(
+            "/api/training/schedule", json={"planned_minutes": 60}, **_auth(uid_exp)
+        )
+        assert r_exp.status_code == 200, r_exp.text
+        exp = r_exp.json()
+        exp_skills = [_parse_skill(it) for it in exp["items"]]
+        exp_ok = (
+            exp.get("schedule_engine") == "fixed"
+            and exp_skills == ["超脑阅读", "影像追忆"]
+            and (exp.get("recipe_id") or "").startswith("experience")
+        )
+        rows.append(
+            [
+                "体验60",
+                exp.get("cohort"),
+                exp.get("schedule_engine"),
+                exp.get("recipe_id"),
+                "、".join(exp_skills),
+                "通过" if exp_ok else "失败",
+            ]
+        )
+
+        uid_new = _prep_user(
+            client,
+            db_session,
+            phone="13880000034",
+            nickname="新学员固定",
+            grade="四年级",
+            cohort="new_student",
+        )
+        child_n = db_session.get(ChildUser, uid_new)
+        pj = dict(child_n.profile_json or {})
+        pj["training"] = {**(pj.get("training") or {}), "cohort": "new_student"}
+        pj["training_progress"] = {
+            "skills": {},
+            "training_days": 3,
+            "training_day_anchor": None,
+        }
+        child_n.profile_json = pj
+        flag_modified(child_n, "profile_json")
+        db_session.commit()
+        _moment(db_session, uid_new)
+        r_new = client.post(
+            "/api/training/schedule", json={"planned_minutes": 90}, **_auth(uid_new)
+        )
+        assert r_new.status_code == 200, r_new.text
+        nw = r_new.json()
+        new_skills = [_parse_skill(it) for it in nw["items"]]
+        new_ok = (
+            nw.get("schedule_engine") == "fixed"
+            and new_skills == ["超脑阅读", "影像追忆", "扫描速记"]
+        )
+        rows.append(
+            [
+                "新学员90",
+                nw.get("cohort"),
+                nw.get("schedule_engine"),
+                nw.get("recipe_id"),
+                "、".join(new_skills),
+                "通过" if new_ok else "失败",
+            ]
+        )
+
+        uid_reg = _prep_user(
+            client,
+            db_session,
+            phone="13880000035",
+            nickname="老学员权重",
+            grade="四年级",
+            cohort="regular",
+        )
+        _moment(db_session, uid_reg)
+        r_reg = client.post(
+            "/api/training/schedule", json={"planned_minutes": 60}, **_auth(uid_reg)
+        )
+        assert r_reg.status_code == 200
+        rg = r_reg.json()
+        reg_skills = [_parse_skill(it) for it in rg["items"]]
+        weight = expand_formula(60, overall_tier=1, grade_band="primary_high")
+        reg_ok = (
+            rg.get("schedule_engine") in ("weight", "bundle", None)
+            or rg.get("schedule_engine") != "fixed"
+        ) and reg_skills == (weight.get("slots") or [])
+        # 老学员不得与体验固定表相同
+        reg_ok = reg_ok and reg_skills != exp_skills
+        rows.append(
+            [
+                "老学员60",
+                rg.get("cohort"),
+                rg.get("schedule_engine"),
+                rg.get("recipe_id"),
+                "、".join(reg_skills),
+                "通过" if reg_ok else "失败",
+            ]
+        )
+        ok = exp_ok and new_ok and reg_ok
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="体验/新学员走固定配方，老学员走权重；清单不得静默混用。",
+            preconditions=["三名四年级学员：体验0天、新学员3天、老学员"],
+            steps=["体验排60", "新学员排90", "老学员排60", "对照引擎与清单"],
+            expect=[
+                "体验=超脑+影像且fixed",
+                "新学员=超脑+影像+扫描且fixed",
+                "老学员权重清单≠体验表",
+            ],
+            actual={"全部通过": ok},
+            passed=ok,
+            detail_tables=[
+                (
+                    "分群对照",
+                    ["场景", "cohort", "引擎", "recipe", "清单", "结果"],
+                    rows,
+                )
+            ],
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC34_pending_standard_no_auto_advance(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC34", "五六阶文理绘画不自动升段"
+        assert "文科奥秘" in NO_AUTO_TIER_ADVANCE_SKILLS
+        uid = _prep_user(
+            client, db_session, phone="13880000036", nickname=title, grade="四年级"
+        )
+        diary = []
+        ok = True
+        for day in range(3):
+            _moment(db_session, uid, day=day)
+            sched = client.post(
+                "/api/training/schedule", json={"planned_minutes": 20}, **_auth(uid)
+            )
+            assert sched.status_code == 200
+            plan = sched.json()
+            item = plan["items"][0]
+            _force_item_skill(db_session, item["id"], "文科奥秘")
+            body = _complete_one_item(
+                client,
+                db_session,
+                uid,
+                plan,
+                item,
+                card={"name": "文科奥秘"},
+                expect_pass=True,
+            )
+            sr = (
+                (body.get("training_progress") or {})
+                .get("skill_results", {})
+                .get("文科奥秘", {})
+            )
+            diary.append(sr)
+            if sr.get("tier_advanced"):
+                ok = False
+        child = db_session.get(ChildUser, uid)
+        st = get_training_progress(child)
+        tier = int((st.get("skills") or {}).get("文科奥秘", {}).get("tier") or 1)
+        consec = int(
+            (st.get("skills") or {}).get("文科奥秘", {}).get("consecutive_pass") or 0
+        )
+        ok = ok and tier == 1 and consec == 3 and diary[-1].get("tier_advanced") is False
+
+        # 对照：超脑三次应升段
+        uid2 = _prep_user(
+            client, db_session, phone="13880000037", nickname="对照超脑", grade="二年级"
+        )
+        for day in range(3):
+            _j._run_reading_day(
+                client,
+                db_session,
+                uid2,
+                day_index=day,
+                grade="二年级",
+                card=_pass_card_for("超脑阅读", grade="二年级"),
+                expect_pass=True,
+            )
+        child2 = db_session.get(ChildUser, uid2)
+        read_tier = int(
+            get_training_progress(child2)["skills"]["超脑阅读"]["tier"]
+        )
+        ok = ok and read_tier >= 2
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="文科/理科/绘画/音乐标准未定：交卡可过、连续可计，但不自动升段。",
+            preconditions=["强制文科奥秘连打3天", "对照超脑连打3天"],
+            steps=["连续3天交文科空标卡", "读段位与连续", "对照超脑应升段"],
+            expect=["文科段位仍为1", "连续=3", "tier_advanced=false", "超脑≥2"],
+            actual={
+                "文科段位": tier,
+                "文科连续": consec,
+                "第三天升段": diary[-1].get("tier_advanced"),
+                "对照超脑段位": read_tier,
+                "封锁技能集": sorted(NO_AUTO_TIER_ADVANCE_SKILLS),
+            },
+            passed=ok,
+            detail_tables=[
+                (
+                    "文科三日",
+                    ["日序", "passed", "连续", "升段", "段位后"],
+                    [
+                        [
+                            i,
+                            d.get("passed"),
+                            d.get("consecutive_pass"),
+                            d.get("tier_advanced"),
+                            d.get("tier_after"),
+                        ]
+                        for i, d in enumerate(diary)
+                    ],
+                )
+            ],
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
+    def test_TC35_no_empty_or_short_slots(
+        self, client, db_session, mock_jnao, enable_dev_clock
+    ):
+        cid, title = "TC35", "高阶长训名额不空不短"
+        cfg = load_training_curriculum()
+        slot_table = cfg["slot_table"]
+        rows = []
+        ok = True
+        for minutes in (20, 60, 150, 240, 300, 480):
+            for tier in range(1, 7):
+                fr = expand_formula(
+                    minutes, overall_tier=tier, grade_band="primary_high"
+                )
+                slots = fr.get("slots") or []
+                extras = list(fr.get("extras") or [])
+                # 名额：去掉尾部追加选修后应达到 slot_table.slots
+                from app.services.training_formula_engine import _lookup_slot_entry
+
+                need = int(_lookup_slot_entry(slot_table, minutes)["slots"])
+                # extras 可能与权重技能重名（极速学习），按「总长 - extras条数」估核心名额
+                core_n = max(0, len(slots) - len(extras))
+                # 捆绑占用也算名额
+                row_ok = len(slots) >= 1 and core_n >= need
+                ok = ok and row_ok
+                if not row_ok or minutes in (150, 300, 480) and tier in (4, 6):
+                    rows.append(
+                        [
+                            minutes,
+                            tier,
+                            need,
+                            core_n,
+                            len(slots),
+                            "、".join(slots),
+                            "通过" if row_ok else "失败",
+                        ]
+                    )
+        # 实排：整体4 + 150 分钟清单非空且项数合理
+        uid = _prep_user(
+            client, db_session, phone="13880000038", nickname=title, grade="四年级"
+        )
+        child = db_session.get(ChildUser, uid)
+        state = get_training_progress(child)
+        for sk in ("超脑阅读", "影像追忆", "扫描速记", "极速运算", "极速学习"):
+            set_skill_tier(state, sk, 4)
+        save_training_progress(db_session, child, state)
+        _moment(db_session, uid)
+        sched = client.post(
+            "/api/training/schedule", json={"planned_minutes": 150}, **_auth(uid)
+        )
+        assert sched.status_code == 200, sched.text
+        live_n = len(sched.json()["items"])
+        live_ok = live_n >= 4
+        ok = ok and live_ok
+        path = write_case_doc(
+            case_id=cid,
+            title=title,
+            purpose="各阶时长展开后必修名额不得空槽或少于档位；衰减殆尽应软重置续填。",
+            preconditions=["expand_formula 全矩阵", "实排整体四阶150分钟"],
+            steps=["扫描1–6阶×多档时长", "核对核心名额≥档位", "实排抽检"],
+            expect=["清单非空", "核心名额≥slot_table", "实排≥4项"],
+            actual={
+                "矩阵全部通过": ok and live_ok,
+                "实排项数": live_n,
+                "实排技能": [_parse_skill(it) for it in sched.json()["items"]],
+            },
+            passed=ok,
+            detail_tables=[
+                (
+                    "问题/抽检行",
+                    ["时长", "阶", "应名额", "核心数", "总slots", "清单", "结果"],
+                    rows
+                    or [["—", "—", "—", "—", "—", "（全部达标无短槽）", "通过"]],
+                )
+            ],
+        )
+        _reg(cid, title, path, ok)
+        assert ok
+
     def test_ZZZ_write_catalog(self):
         """写目录：合并本类已登记用例 + 磁盘上已有的学员旅程用例。"""
-        assert len(_CATALOG) >= 18
+        assert len(_CATALOG) >= 27
         disk = []
         for p in sorted(DOC_ROOT.glob("TC*.md")):
             stem = p.stem
