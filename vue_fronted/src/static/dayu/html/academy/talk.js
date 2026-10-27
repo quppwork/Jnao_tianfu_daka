@@ -9,8 +9,13 @@
     + '.talkpan{position:absolute;left:12px;right:12px;bottom:calc(100% + 4px);width:auto;max-width:none;transform:none;background:#121826;border:1px solid #2A3040;border-radius:14px;padding:8px;z-index:40;max-height:min(240px,42vh);overflow:auto;box-sizing:border-box}'
     + '.talkpan button{border:none;background:#1A2233;color:#E4E8F0;border-radius:10px;padding:8px 10px;margin:4px;font-size:13px;font-weight:800;cursor:pointer}'
     + '.talkpan button i{font-style:normal;color:#8b93a5;font-size:10px;margin-left:4px;font-weight:700}'
-    + '.emtab{font-size:11px;color:#8b93a5;font-weight:800;padding:4px 6px}.ems{display:flex;flex-wrap:wrap}'
-    + '.ems button{font-size:22px;background:transparent;padding:4px 6px}.ems.bigs button{font-size:34px}'
+    + '.ems{display:flex;flex-wrap:wrap}'
+    + '.ems button{font-size:26px;background:transparent;padding:4px 6px}'
+    + '.pluspan{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:none;overflow:visible}'
+    + '.pluspan button{display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;padding:8px 4px;margin:0}'
+    + '.pluspan button b{width:52px;height:52px;border-radius:14px;background:#1A2233;border:1px solid #2A3040;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:400;font-style:normal}'
+    + '.pluspan button span{font-size:11px;color:#8b93a5;font-weight:700}'
+    + 'html.lt .pluspan button b{background:#d4dbe9;border-color:#c2cadc}'
     + '.mq{border-left:3px solid rgba(201,168,105,.9);padding:0 0 4px 8px;margin-bottom:4px}'
     + '.mq b{display:block;font-size:10px;opacity:.8}.mq span{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;opacity:.85}'
     + '.msticker{font-size:42px;line-height:1.15}.mb .at{color:#8EBEFF;font-weight:800}.msg.me .mb .at{color:#FFF3C4}'
@@ -90,12 +95,44 @@
 
   function $(id) { return document.getElementById(id) }
 
+  function syncSendUi() {
+    var inp = $('inp')
+    var bar = document.querySelector('.inbar')
+    if (!bar) return
+    // 只看输入框是否有内容（含表情），有内容就换出发送键
+    var has = !!(inp && String(inp.value || '').trim())
+    bar.classList.toggle('has-text', has)
+    // 直接改 style，避免 html.lt / 旧 CSS 特异性把「发送」继续 display:none
+    var send = bar.querySelector('.send')
+    var plusBtn = bar.querySelector('.ib.plus')
+    if (send) {
+      send.style.display = has ? 'flex' : 'none'
+      send.style.alignItems = 'center'
+      send.style.justifyContent = 'center'
+    }
+    if (plusBtn) plusBtn.style.display = has ? 'none' : ''
+    if (has) {
+      var plus = $('plusPanel')
+      if (plus) plus.hidden = true
+    }
+  }
+
+  function toastSoon(title) {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'dayu-toast', title: title || '功能即将开放' }, '*')
+      }
+    } catch (e) {}
+  }
+
   function hidePickers() {
     var at = $('atPanel')
     var em = $('emPanel')
+    var plus = $('plusPanel')
     var shade = $('talkshade')
     if (at) at.hidden = true
     if (em) em.hidden = true
+    if (plus) plus.hidden = true
     if (shade) shade.hidden = true
   }
 
@@ -259,12 +296,19 @@
   function insertAtCursor(token) {
     var inp = $('inp')
     if (!inp || inp.disabled) return
-    var start = inp.selectionStart || inp.value.length
-    var end = inp.selectionEnd || start
+    token = String(token || '')
+    if (!token) return
+    var start = (typeof inp.selectionStart === 'number') ? inp.selectionStart : inp.value.length
+    var end = (typeof inp.selectionEnd === 'number') ? inp.selectionEnd : start
     inp.value = inp.value.slice(0, start) + token + inp.value.slice(end)
     var next = start + token.length
-    inp.focus()
-    if (inp.setSelectionRange) inp.setSelectionRange(next, next)
+    try { inp.focus() } catch (e0) {}
+    try { if (inp.setSelectionRange) inp.setSelectionRange(next, next) } catch (e1) {}
+    // 程序改 value 不会触发 input；派发事件后仍强制 sync
+    try {
+      inp.dispatchEvent(new Event('input', { bubbles: true }))
+    } catch (e) {}
+    syncSendUi()
   }
 
   function mention(key) {
@@ -336,7 +380,9 @@
       return '<button type="button" data-key="' + esc(item.key) + '">' + esc(item.name) + '<i>' + esc(item.tag) + '</i></button>'
     }).join(''))
     var emo = $('emPanel')
+    var plus = $('plusPanel')
     if (emo) emo.hidden = true
+    if (plus) plus.hidden = true
     if (!panel) return
     panel.hidden = false
     showShade()
@@ -347,31 +393,51 @@
     }
   }
 
-  function openEmoji(list) {
-    var faces = list && list.length ? list : PACK
-    var small = faces.map(function (face) {
-      return '<button type="button" data-face="' + face + '">' + face + '</button>'
-    }).join('')
-    var big = faces.slice(0, 16).map(function (face) {
-      return '<button type="button" class="big" data-big="' + face + '">' + face + '</button>'
-    }).join('')
-    var panel = renderPanel('emPanel', '<div class="emtab">小表情</div><div class="ems">' + small + '</div><div class="emtab">大表情</div><div class="ems bigs">' + big + '</div>')
+  function openPlus() {
+    var panel = renderPanel(
+      'plusPanel',
+      '<button type="button" data-act="album"><b>🖼</b><span>相册</span></button>'
+        + '<button type="button" data-act="camera"><b>📷</b><span>拍摄</span></button>'
+        + '<button type="button" data-act="file"><b>📎</b><span>文件</span></button>'
+    )
     var at = $('atPanel')
+    var em = $('emPanel')
     if (at) at.hidden = true
+    if (em) em.hidden = true
     if (!panel) return
     panel.hidden = false
     showShade()
     panel.onclick = function (event) {
       var btn = event.target.closest('button')
       if (!btn) return
-      if (btn.getAttribute('data-big')) {
-        pendingSticker = btn.getAttribute('data-big')
-        closePanels()
-        if (typeof root.sendFree === 'function') root.sendFree()
-        return
-      }
-      insertAtCursor(btn.getAttribute('data-face') || '')
+      var act = btn.getAttribute('data-act')
       closePanels()
+      if (act === 'album') toastSoon('相册即将开放')
+      else if (act === 'camera') toastSoon('拍摄即将开放')
+      else if (act === 'file') toastSoon('文件即将开放')
+    }
+  }
+
+  function openEmoji(list) {
+    var faces = list && list.length ? list : PACK
+    var cells = faces.map(function (face) {
+      return '<button type="button" data-face="' + face + '">' + face + '</button>'
+    }).join('')
+    var panel = renderPanel('emPanel', '<div class="ems">' + cells + '</div>')
+    var at = $('atPanel')
+    var plus = $('plusPanel')
+    if (at) at.hidden = true
+    if (plus) plus.hidden = true
+    if (!panel) return
+    panel.hidden = false
+    showShade()
+    panel.onclick = function (event) {
+      var btn = event.target.closest('button')
+      if (!btn) return
+      var face = btn.getAttribute('data-face') || String(btn.textContent || '').trim()
+      insertAtCursor(face)
+      closePanels()
+      syncSendUi()
     }
   }
 
@@ -382,11 +448,6 @@
     if (!bar || !inp) return
     var dock = $('chatDock') || bar.parentNode
     if (dock && dock.style) dock.style.position = dock.style.position || ''
-
-    function syncSendUi() {
-      var has = !!(inp && String(inp.value || '').trim())
-      bar.classList.toggle('has-text', has)
-    }
 
     var voice = document.createElement('button')
     voice.type = 'button'
@@ -409,7 +470,7 @@
 
     var plus = document.createElement('button')
     plus.type = 'button'
-    plus.id = 'atBtn'
+    plus.id = 'plusBtn'
     plus.className = 'ib plus'
     plus.textContent = '＋'
     plus.setAttribute('aria-label', '更多')
@@ -439,8 +500,13 @@
     emPanel.id = 'emPanel'
     emPanel.className = 'talkpan'
     emPanel.hidden = true
+    var plusPanel = document.createElement('div')
+    plusPanel.id = 'plusPanel'
+    plusPanel.className = 'talkpan pluspan'
+    plusPanel.hidden = true
     host.insertBefore(atPanel, bar)
     host.insertBefore(emPanel, bar)
+    host.insertBefore(plusPanel, bar)
     if (typeof root.syncChatDock === 'function') root.syncChatDock()
     var shade = document.createElement('div')
     shade.id = 'talkshade'
@@ -463,8 +529,8 @@
       } catch (e) {}
     }
     plus.onclick = function () {
-      if ($('atPanel') && !$('atPanel').hidden) closePanels()
-      else openAt()
+      if ($('plusPanel') && !$('plusPanel').hidden) closePanels()
+      else openPlus()
     }
     em.onclick = function () {
       if ($('emPanel') && !$('emPanel').hidden) {
@@ -481,6 +547,7 @@
     }
     inp.addEventListener('input', function () {
       syncSendUi()
+      // @ 仍靠输入触发人选面板；＋ 只做相册/拍摄/文件
       if (/@[^\s@]*$/.test(inp.value)) openAt()
     })
     inp.addEventListener('focus', function () {
@@ -495,7 +562,6 @@
     bind: bind,
     collect: function (text) {
       var raw = String(text || '').trim()
-      // 只有点「大表情」才会带 pendingSticker；小表情只插入输入框，按普通字号发出
       return {
         text: raw,
         mention: resolveMention(raw || text || '') || undefined,
@@ -509,6 +575,7 @@
       pendingMention = ''
       paintQuoteBar()
       closePanels()
+      syncSendUi()
     }
   }
 

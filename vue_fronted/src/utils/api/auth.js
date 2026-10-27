@@ -67,6 +67,18 @@ function _storeAuth(data) {
   }
   resetSessionExpiryGuard()
   markFreshLogin()
+  // 学生登录后预拉学院 sector，减少进天赋学院时「未解锁 → 进讨论组」闪变
+  if (role === 'student' && data.child_user_id) {
+    try {
+      import('../academy/sector.js')
+        .then((m) => {
+          if (m && typeof m.prefetchAcademySectorAfterLogin === 'function') {
+            m.prefetchAcademySectorAfterLogin()
+          }
+        })
+        .catch(() => {})
+    } catch (_) { /* ignore */ }
+  }
 }
 
 export function _readStoredRole() {

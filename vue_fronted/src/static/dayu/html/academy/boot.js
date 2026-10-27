@@ -15,6 +15,13 @@
       }
     } catch (eKeep) { /* ignore */ }
     ns.state = payload
+    // 仅网络 sector 才确认锁定态；本地缓存未解锁时保持 pending，避免闪锁
+    try {
+      if (payload._live && payload.episode && payload.episode.id) {
+        ns.sectorLiveOk = true
+        ns.sectorLiveId = String(payload.episode.id)
+      }
+    } catch (eLive) { /* ignore */ }
     if (ns.bindChannel) ns.bindChannel()
     if (ns.paintChannel) ns.paintChannel(payload)
     if (ns.paintStory) ns.paintStory(payload)
@@ -25,9 +32,14 @@
         try { uid = localStorage.getItem('jnao_child_user_id') || '' } catch (e0) { /* ignore */ }
         if (!uid && payload.user_id) uid = String(payload.user_id)
         localStorage.removeItem('jnao_academy_sector')
+        var toStore = payload
+        try {
+          toStore = JSON.parse(JSON.stringify(payload))
+          delete toStore._live
+        } catch (eClone) { toStore = payload }
         localStorage.setItem(
           uid ? ('jnao_academy_sector_' + uid) : 'jnao_academy_sector',
-          JSON.stringify(payload)
+          JSON.stringify(toStore)
         )
       } catch (e) { /* ignore */ }
     }

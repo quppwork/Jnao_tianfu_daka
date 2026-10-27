@@ -89,16 +89,11 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
   </div>
 
   <div class="card">
-    <div class="ct">📚 十门训练课进度</div>
-    <div class="cs">按功法课序 · 吸照大法进行中</div>
-    <div class="cr"><span class="nm">吸照大法</span><div class="bar"><i style="width:60%"></i></div><span class="pc">60%</span></div>
-    <div class="cr"><span class="nm">左右互搏</span><div class="bar"><i style="width:35%"></i></div><span class="pc">35%</span></div>
-    <div class="cr"><span class="nm">太极神功</span><div class="bar"><i style="width:20%"></i></div><span class="pc">20%</span></div>
-    <div class="cr"><span class="nm">昙花宝典</span><div class="bar"><i style="width:10%"></i></div><span class="pc">10%</span></div>
-    <div class="cr"><span class="nm">呼吸打坐</span><div class="bar"><i style="width:15%"></i></div><span class="pc">15%</span></div>
-    <div class="cr"><span class="nm">心门九剑</span><div class="bar"><i style="width:0%"></i></div><span class="pc">未开</span></div>
-    <div class="cr"><span class="nm">AI指挥官</span><div class="bar"><i style="width:5%"></i></div><span class="pc">5%</span></div>
-    <div class="cr"><span class="nm">九阳绝学</span><div class="bar"><i style="width:0%"></i></div><span class="pc">未开</span></div>
+    <div class="ct">📚 技能段位进度</div>
+    <div class="cs" id="skillsCs">同步自今日修炼打卡 · 按九段折算进度</div>
+    <div id="skillsProgress">
+      <div class="cr" style="opacity:.7"><span class="nm">加载中</span><div class="bar"><i style="width:0%"></i></div><span class="pc">…</span></div>
+    </div>
   </div>
 
   <div class="card">
@@ -292,6 +287,21 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
         return '<div class="' + cls + '"><i style="height:' + h + '%"></i><span>' + (b.label || '') + '</span></div>';
       }).join('') : '<div class="b dn"><i style="height:8%"></i><span>暂无</span></div>';
     }
+    var skills = data.skills_progress || [];
+    var skHost = $('skillsProgress');
+    if(skHost){
+      if(!skills.length){
+        skHost.innerHTML = '<div class="cr" style="opacity:.75"><span class="nm" style="width:auto;flex:1">暂无技能进度</span><span class="pc" style="width:auto">去今日修炼打卡后可见</span></div>';
+      } else {
+        skHost.innerHTML = skills.map(function(s){
+          var pct = Math.max(0, Math.min(100, Number(s.percent) || 0));
+          var lab = s.label || (s.active ? (String(s.tier || 1) + '段') : '未开');
+          return '<div class="cr"><span class="nm">' + (s.name || '技能') + '</span>'
+            + '<div class="bar"><i style="width:' + pct + '%"></i></div>'
+            + '<span class="pc">' + lab + '</span></div>';
+        }).join('');
+      }
+    }
     var insight = (data.insight && data.insight.text) || '';
     if($('insightNote')){
       $('insightNote').innerHTML = insight
@@ -355,6 +365,7 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
             insight: full.insight || data.insight,
             metrics: full.metrics || data.metrics,
             week_bars: full.week_bars || data.week_bars,
+            skills_progress: full.skills_progress || data.skills_progress,
             tier: full.tier || data.tier,
             child: full.child || data.child,
             sync_hint: full.sync_hint || data.sync_hint,

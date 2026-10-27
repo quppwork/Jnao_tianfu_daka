@@ -207,6 +207,17 @@ async def child_dashboard(
     )
 
 
+@router.get("/courses")
+def parent_courses_catalog(
+    user_id: int = Depends(_require_parent_id),
+    db: Session = Depends(get_db),
+):
+    """家长课堂目录（独立域；正片/进度写入后续扩展）。"""
+    from app.services import parent_course_service
+
+    return parent_course_service.list_courses(db, user_id)
+
+
 @router.get("/assessments/history")
 def parent_assessment_history(
     child_id: int | None = None,

@@ -12,16 +12,21 @@ import { reactive, ref } from 'vue'
 import DayuFrame from '@/components/dayu-frame/dayu-frame.vue'
 import {
   loadAcademySector,
+  peekAcademyLiveSector,
   readAcademyCache,
   rememberLastAcademyEpisode,
   resolveAcademyEpisodeId,
+  warmAcademySector,
 } from '@/utils/academy/sector.js'
 
-const hydrate = reactive({ academy: readAcademyCache() })
+const hydrate = reactive({
+  academy: peekAcademyLiveSector() || readAcademyCache(),
+})
 const collapseSignal = ref(0)
 let episodeId = ''
 let lastHydrateId = String(hydrate.academy?.episode?.id || '')
 let loading = false
+let reloadSeq = 0
 
 function readEpisodeQuery(query) {
   const q = query || {}
@@ -48,13 +53,21 @@ function applySector(data, { force = false } = {}) {
   if (!force && prevId && prevId === nextId && hydrate.academy?.episode) {
     const prev = hydrate.academy
     const ep = { ...prev.episode, ...data.episode }
-    // 解锁以服务端为准，避免本地误标 unlocked 后反复打 /open → 403 刷屏
-    ep.unlocked = !!data.episode.unlocked
+    const live = !!data._live
+    // 直播接口以服务端为准；缓存灌入时勿把本地已解锁盖回 false
+    if (live) {
+      ep.unlocked = !!data.episode.unlocked
+    } else if (prev.episode.unlocked && !data.episode.unlocked) {
+      ep.unlocked = true
+    } else {
+      ep.unlocked = !!data.episode.unlocked
+    }
     if (prev.episode.play_url && !ep.play_url) ep.play_url = prev.episode.play_url
     hydrate.academy = {
       ...prev,
       ...data,
       episode: ep,
+      _live: live || !!prev._live,
     }
   } else {
     hydrate.academy = data
@@ -63,38 +76,52 @@ function applySector(data, { force = false } = {}) {
   episodeId = nextId
 }
 
-function reload({ force = false } = {}) {
+async function reload({ force = false } = {}) {
   const queryEp = pageEpisodeId()
   episodeId = resolveAcademyEpisodeId(queryEp)
   if (queryEp) rememberLastAcademyEpisode(queryEp)
 
-  // 先灌本地 sector（含 unlocked），再等接口；避免首屏长时间停在「看完才能进讨论」
-  const cached = readAcademyCache()
-  if (cached?.episode) {
-    applySector(cached, { force: false })
+  const seq = ++reloadSeq
+  const want = episodeId || String(hydrate.academy?.episode?.id || '')
+  const wantU = String(want || '').toUpperCase()
+  const matchesWant = (data) => {
+    if (!data?.episode) return false
+    if (!wantU) return true
+    return String(data.episode.id || '').toUpperCase() === wantU
+  }
+  // 优先用切 Tab 预热留下的 _live；指定 ?ep= 时必须同集，避免历史剧情跳错集
+  const live = peekAcademyLiveSector()
+  if (matchesWant(live)) {
+    applySector(live, { force: false })
+  } else {
+    const cached = readAcademyCache()
+    if (cached?.episode?.unlocked && matchesWant(cached)) applySector(cached, { force: false })
   }
 
-  const have = String(hydrate.academy?.episode?.id || '')
-  // 底栏软切回：已有同集且非强制 → 不请求覆盖（iframe DOM 仍在）
-  if (!force && have && (!episodeId || episodeId === have)) {
-    rememberLastAcademyEpisode(have)
-    // 仍后台刷新一次解锁态（首次进页缓存可能偏旧）
-    if (!force && !loading) {
-      loading = true
-      loadAcademySector(have || episodeId)
-        .then((data) => applySector(data, { force: false }))
-        .catch((e) => console.warn('[academy] sector failed', e?.message || e))
-        .finally(() => { loading = false })
+  if (loading && !force) {
+    try {
+      const data = await warmAcademySector(480, want)
+      if (seq !== reloadSeq) return
+      if (matchesWant(data)) applySector(data, { force: false })
+    } catch (e) {
+      console.warn('[academy] sector wait failed', e?.message || e)
     }
     return
   }
 
-  if (loading) return
   loading = true
-  loadAcademySector(episodeId)
-    .then((data) => applySector(data, { force }))
-    .catch((e) => console.warn('[academy] sector failed', e?.message || e))
-    .finally(() => { loading = false })
+  try {
+    // 进页再短等一轮：切 Tab 已预热时通常立刻命中；冷进页最多约 0.5s
+    const data = force
+      ? await loadAcademySector(want)
+      : await warmAcademySector(520, want)
+    if (seq !== reloadSeq) return
+    if (matchesWant(data)) applySector(data, { force })
+  } catch (e) {
+    console.warn('[academy] sector failed', e?.message || e)
+  } finally {
+    if (seq === reloadSeq) loading = false
+  }
 }
 
 onLoad((query) => {
@@ -103,9 +130,9 @@ onLoad((query) => {
   if (q) rememberLastAcademyEpisode(q)
 })
 
-onShow(() => {
-  // 每次进学院：收起讨论，需用户手动点进（含底栏软切回）
+onShow(async () => {
+  // 先对齐 sector，再收起讨论，减少未对齐时的可点空窗
+  await reload({ force: false })
   collapseSignal.value += 1
-  reload({ force: false })
 })
 </script>

@@ -20,6 +20,8 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
 .ckin b{font-size:17px;color:#F5D9A8}
 .ckin span{display:block;font-size:14px;color:#B9C0CF;margin-top:2px}
 .ckin .go{margin-left:auto;flex:none;font-size:16px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:7px 14px;cursor:pointer}
+.preview-banner{margin:10px 18px 0;padding:10px 12px;border-radius:12px;border:1px dashed rgba(201,162,39,.45);background:rgba(201,162,39,.08);font-size:13px;line-height:1.55;color:#C9CFDC}
+.preview-banner b{color:#F5D9A8}
 /* 帖子 */
 .post{margin:12px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:14px}
 .post .ph{display:flex;align-items:center;gap:10px}
@@ -140,6 +142,8 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
     <div class="brand">天赋社区<small>TALENT COMMUNITY</small></div>
     <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
   </div>
+
+  <div class="preview-banner">当前为<strong>预览版</strong>：底栏与频道可正常切换；发帖 / 关注 / 打卡榜等社交能力后续开放。孩子训练数据请看「数据分析」。</div>
 
   <div class="tabs" id="tabs">
     <div class="on" data-v="feed">推荐</div><div data-v="follow">关注</div><div data-v="daka">打卡</div><div data-v="qna">问答</div>
@@ -307,6 +311,25 @@ function goV(v){
 }
 document.querySelectorAll('#tabs div').forEach(d=>d.onclick=()=>goV(d.dataset.v));
 vFeed();
+(function(){
+  function soon(title){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-toast', title: title || '功能即将开放'}, '*');
+        return;
+      }
+    }catch(e){}
+    try{ alert(title || '功能即将开放'); }catch(e2){}
+  }
+  var fab = document.getElementById('fab');
+  if(fab) fab.onclick = function(){ soon('发帖即将开放 · 当前为社区预览'); };
+  document.addEventListener('click', function(e){
+    var go = e.target.closest && e.target.closest('.ckin .go');
+    if(!go) return;
+    e.preventDefault();
+    soon('社区打卡即将开放 · 孩子训练请去「数据分析」或训练账户');
+  }, true);
+})();
 </script>
 
 

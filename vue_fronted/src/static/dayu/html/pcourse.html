@@ -45,6 +45,8 @@ body{scrollbar-width:none;-ms-overflow-style:none;background:#0D111F;color:#EDEB
 .consult b{font-size:17px;font-weight:900;color:#9AD9FF}
 .consult span{display:block;font-size:14px;color:#8B93A5;margin-top:2px}
 .consult .st{margin-left:auto;flex:none;font-size:14px;font-weight:800;color:#3FB950}
+.preview-banner{margin:10px 18px 0;padding:10px 12px;border-radius:12px;border:1px dashed rgba(201,162,39,.45);background:rgba(201,162,39,.08);font-size:13px;line-height:1.55;color:#C9CFDC}
+.preview-banner b{color:#F5D9A8}
 /* 底栏 */
 .foot{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}.foot a{text-align:center;color:#8B93A5;font-size:11px;flex:1;text-decoration:none;padding:0}.foot a.on{color:#F5D9A8;font-weight:700}.foot a img{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}
 body::-webkit-scrollbar{display:none;width:0;height:0}
@@ -60,14 +62,16 @@ body::-webkit-scrollbar{display:none;width:0;height:0}
 
   <div class="hd"><b>家长课堂</b><small>张无忌家长的课程体系 · 6 门必修课 · 学了就会用</small></div>
 
+  <div class="preview-banner">当前为<strong>课程目录预览</strong>：可浏览章节结构；正片点播与进度同步后续接入。听课卡住可先「一键咨询」。</div>
+
   <a class="consult" href="consult.html">
     <div class="ci">📞</div>
     <div><b>听课卡住了？一键咨询</b><span>值班导师真人 1 对 1 · 留言必回</span></div>
     <span class="st">● 在线</span>
   </a>
 
-  <div class="sec">🎓 我的课程 <span>已开通 6 门</span></div>
-  <div id="clist"></div>
+  <div class="sec">🎓 我的课程 <span id="cOpened">加载中…</span></div>
+  <div id="clist"><div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">正在同步课程目录…</div></div>
 
   <div class="foot">
     <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
@@ -79,43 +83,109 @@ body::-webkit-scrollbar{display:none;width:0;height:0}
 
 </div>
 <script>
-/* st: done=已学讲数, now=当前讲(0起,-1无), list=章节目录 */
-const COURSES=[
- {ic:'💞',name:'亲子关系',sub:'懂孩子的天赋语言 · 12讲',done:4,now:4,nowTm:'学到 08:32',v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/adv/love-together.png) center/cover no-repeat',tt:'《亲子关系》系列介绍 · 张宇老师主讲',dur:'03:12'},
-  list:['懂孩子的天赋语言','五者天赋亲子密码','倾听：先接住情绪','冲段期的情绪陪伴','赞美的话怎么说','孩子发脾气时的三句话','青春期前的关系存款','孩子说谎怎么办','和思者型孩子聊未来','和赢者型孩子定规则','和德者型孩子谈感受','开一场家庭会议']},
- {ic:'🏠',name:'家庭教育',sub:'家庭环境的隐形课程 · 10讲',done:2,now:2,nowTm:'学到 03:15',v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/bg-study.png) center/cover no-repeat',tt:'《家庭教育》系列介绍 · 善雨老师主讲',dur:'02:48'},
-  list:['家庭是隐形课程','书房里的仪式感','屏幕时间的约定','全家作息与训练时段','家务里的责任感','奖励与惩罚的边界','二胎家庭的天赋差异','隔代教育怎么借力','家庭会议实操','父母的自我成长']},
- {ic:'📜',name:'传统文化',sub:'五道智慧 · 立德树人 · 16讲',done:0,now:0,nowTm:'未开始',v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/mentor-chinese.png) center/cover no-repeat',tt:'《传统文化》系列介绍 · 秦念国老师主讲',dur:'04:05'},
-  list:['五道智慧开篇','德者：厚德载物','思者：思接千载','赢者：赢在格局','行者：行稳致远','学者：学而不厌','《论语》里的学习观','《大学》与修身','阳明心学与知行合一','汉字里的教育智慧','节气里的家风','古人的专注力训练','书道与心性','孝道新解','家国情怀','结业：写一封家书']},
- {ic:'🧬',name:'天赋导师技能',sub:'五者天赋解读 · 成为孩子的伯乐 · 20讲',done:0,now:-1,v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/parent-team.jpg) center/cover no-repeat',tt:'《天赋导师技能》系列介绍 · 导师团联合主讲',dur:'05:20'},
-  list:['天赋导师的角色','五者天赋总览','思者行为观察清单','赢者行为观察清单','德者行为观察清单','行者行为观察清单','学者行为观察清单','天赋报告逐页解读','段位体系与家长配合','训练数据的读法','有效率下降的信号','冲段期陪伴手册','常见问题答疑（上）','常见问题答疑（下）','家庭训练角搭建','记录与反馈话术','案例课：思者型家庭','案例课：赢者型家庭','案例课：德者型家庭','结业考核与认证']},
- {ic:'🚀',name:'事业指导',sub: '如何开展天赋教育事业 · 蓝海路径 · 8讲',done:0,now:-1,v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/biz-share.jpg) center/cover no-repeat',tt:'《事业指导》系列介绍 · 把经验变成事业',dur:'03:40'},
-  list:['天赋教育蓝海全景','从家长到推广者','第一场分享会怎么开','社群运营基本功','老带新的转介绍设计','线下活动落地手册','收益体系与合规','事业规划一对一']},
- {ic:'🧰',name:'天赋测试工具培训',sub:'测评工具实操 · 报告解读 · 6讲',done:0,now:-1,v:{bg:'linear-gradient(180deg,rgba(8,10,18,.1),rgba(8,10,18,.68)),url(/static/dayu/assets/pcourse-tools.jpg) center/cover no-repeat',tt:'《工具培训》系列介绍 · 测评工具上手演示',dur:'02:30'},
-  list:['测评工具总览与开通','孩子测试·代作答实操','成人自测与关系测试','报告解读三步法','用报告定制训练计划','工具考核与授权']},
-];
-document.getElementById('clist').innerHTML=COURSES.map(c=>{
-  const total=c.list.length, pct=Math.round(c.done/total*100);
-  const chaps=c.list.map((t,i)=>{
-    if(i<c.done)return `<div class="chap done"><span class="dot">✓</span>第 ${i+1} 讲 · ${t}<span class="tm">已学</span></div>`;
-    if(i===c.now&&c.now>=c.done)return `<div class="chap now"><span class="dot">▶</span>第 ${i+1} 讲 · ${t}<span class="tm">${c.nowTm||'待开始'}</span></div>`;
-    return `<div class="chap todo"><span class="dot">·</span>第 ${i+1} 讲 · ${t}<span class="tm">未学</span></div>`;
-  }).join('');
-  const goTxt=c.done>0?`继续听课 ›`:`开始学习 ›`;
-  const goMsg=c.done>0?`快捷听课入口：继续《${c.list[Math.min(c.done,total-1)]}》\n\n播放器接入中，敬请期待 ✨`:`《${c.name}》第 1 讲：${c.list[0]}\n\n播放器接入中，敬请期待 ✨`;
-  const intro=c.v?`<div class="cintro" style="background:${c.v.bg}" onclick="alert('${c.v.tt}\n\n介绍片播放中…（演示）')"><span style="opacity:.85">${c.ic}</span><span class="ply">▶</span><span class="vtt">${c.v.tt}</span><span class="dur">${c.v.dur}</span></div>`:'';
-  return `<div class="my">
-    ${intro}
-    <div class="row">
-      <div class="ic">${c.ic}</div>
-      <div><h3>${c.name}</h3><div class="sub">${c.sub}（已开通）</div></div>
-      <a class="go" href="javascript:;" onclick="alert('${goMsg}')">${goTxt}</a>
-    </div>
-    <div class="pbar"><i style="width:${pct}%"></i></div>
-    <div class="ptxt">已学 ${c.done} / ${total} 讲 · ${pct}%</div>
-    <div class="chaps">${chaps}</div>
-  </div>`;
-}).join('');
+(function(){
+  function toast(title){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-toast', title: title}, '*');
+        return;
+      }
+    }catch(e){}
+    try{ alert(title); }catch(e2){}
+  }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        if(o && o.role === 'parent' && o.user_id) return parseInt(o.user_id, 10) || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function authHeaders(){
+    var h = { 'Content-Type': 'application/json' };
+    try{
+      var did = localStorage.getItem('jnao_device_id');
+      if(did) h['X-Device-Id'] = did;
+      var token = localStorage.getItem('jnao_access_token') || localStorage.getItem('jnao_session_token');
+      if(token) h.Authorization = 'Bearer ' + token;
+    }catch(e){}
+    return h;
+  }
+  function esc(s){
+    return String(s || '').replace(/[&<>"']/g, function(ch){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
+    });
+  }
+  function paint(data){
+    var list = (data && data.courses) || [];
+    var opened = document.getElementById('cOpened');
+    if(opened) opened.textContent = '已开通 ' + (data.opened_count != null ? data.opened_count : list.length) + ' 门';
+    var host = document.getElementById('clist');
+    if(!host) return;
+    if(!list.length){
+      host.innerHTML = '<div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">暂无课程目录</div>';
+      return;
+    }
+    host.innerHTML = list.map(function(c){
+      var lessons = c.lessons || [];
+      var total = c.total || lessons.length;
+      var done = Math.max(0, Math.min(total, Number(c.done) || 0));
+      var pct = total ? Math.round(done / total * 100) : 0;
+      var now = Number(c.now);
+      if(!(now >= 0)) now = done < total ? done : -1;
+      var chaps = lessons.map(function(t, i){
+        if(i < done) return '<div class="chap done"><span class="dot">✓</span>第 '+(i+1)+' 讲 · '+esc(t)+'<span class="tm">已学</span></div>';
+        if(i === now) return '<div class="chap now"><span class="dot">▶</span>第 '+(i+1)+' 讲 · '+esc(t)+'<span class="tm">待学</span></div>';
+        return '<div class="chap todo"><span class="dot">·</span>第 '+(i+1)+' 讲 · '+esc(t)+'<span class="tm">未学</span></div>';
+      }).join('');
+      var goTxt = done > 0 ? '继续听课 ›' : '开始学习 ›';
+      var intro = c.intro || {};
+      var introHtml = intro.bg
+        ? ('<div class="cintro" data-act="intro" data-title="'+esc(intro.title||'')+'" style="background:'+intro.bg+'">'
+          + '<span style="opacity:.85">'+esc(c.icon||'📚')+'</span><span class="ply">▶</span>'
+          + '<span class="vtt">'+esc(intro.title||'')+'</span><span class="dur">'+esc(intro.duration||'')+'</span></div>')
+        : '';
+      return '<div class="my" data-cid="'+esc(c.id)+'">'
+        + introHtml
+        + '<div class="row"><div class="ic">'+esc(c.icon||'📚')+'</div>'
+        + '<div><h3>'+esc(c.name)+'</h3><div class="sub">'+esc(c.sub)+'（已开通）</div></div>'
+        + '<a class="go" href="javascript:;" data-act="play">'+goTxt+'</a></div>'
+        + '<div class="pbar"><i style="width:'+pct+'%"></i></div>'
+        + '<div class="ptxt">已学 '+done+' / '+total+' 讲 · '+pct+'%</div>'
+        + '<div class="chaps">'+chaps+'</div></div>';
+    }).join('');
+    host.onclick = function(e){
+      var btn = e.target.closest && e.target.closest('[data-act]');
+      if(!btn) return;
+      e.preventDefault();
+      toast(btn.getAttribute('data-act') === 'intro'
+        ? ((btn.getAttribute('data-title') || '介绍片') + ' · 正片播放后续开放')
+        : '正片点播后续开放 · 可先「一键咨询」');
+    };
+  }
+  async function load(){
+    var pid = parentUserId();
+    var host = document.getElementById('clist');
+    if(!pid){
+      if(host) host.innerHTML = '<div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">请先登录家长账号</div>';
+      return;
+    }
+    try{
+      var res = await fetch('/api/parent/courses?user_id=' + encodeURIComponent(pid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      paint(await res.json());
+    }catch(err){
+      if(host) host.innerHTML = '<div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">目录暂时不可用，请稍后重试</div>';
+    }
+  }
+  load();
+})();
 </script>
 <script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:17px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{try{if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-back'},'*');return;}}catch(e){}location.href='parent.html';}};document.body.appendChild(b);})();</script>
 

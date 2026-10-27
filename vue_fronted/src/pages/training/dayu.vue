@@ -136,7 +136,7 @@
           <text class="cnt-s">个技能任务</text>
           <text class="cnt-m">{{ gateMeta }}</text>
         </view>
-        <view v-if="planRecipeHint" class="plan-hint">{{ planRecipeHint }}</view>
+        <view v-if="devToolsAvailable && planRecipeHint" class="plan-hint">{{ planRecipeHint }}</view>
         <view v-if="planAnnotations.length" class="plan-notes">
           <text v-for="(n, ni) in planAnnotations" :key="ni" class="plan-note">{{ n }}</text>
         </view>
@@ -271,7 +271,8 @@
             <text class="smj">秘籍 · {{ skillMeta(it._skill).mj }}</text>
             <view class="sname">
               <text class="sn">{{ it._skill }}</text>
-              <text v-if="it._done" class="tag">已完成</text>
+              <text v-if="it._needsFill" class="tag">可补卡</text>
+              <text v-else-if="it._done" class="tag">已完成</text>
             </view>
             <view
               v-if="it.video_url && inlineVideoId !== String(it.id) && it._state !== 'locked' && !isMediaLocked"
@@ -320,7 +321,7 @@
               <view class="vid zd" @click="openCheckin(it)">
                 <text>✅</text>
                 <view>
-                  <text class="vb">提交打卡</text>
+                  <text class="vb">{{ checkinBtnLabel(it) }}</text>
                   <text class="vs">{{ guideSub(it) }}</text>
                 </view>
               </view>
@@ -384,8 +385,8 @@
     <!-- 打卡弹层：手机居中小卡，正文可滚，避免键盘挡住 -->
     <view v-if="checkinOpen" class="overlay checkin-overlay" @click="closeCheckin">
       <view class="sheet checkin-sheet" @click.stop>
-        <text class="sheet-t">{{ checkinEditing ? '修改打卡' : '提交打卡' }} · {{ checkinSkill }}</text>
-        <text class="checkin-hint">记录今日完成</text>
+        <text class="sheet-t">{{ checkinSheetTitle }} · {{ checkinSkill }}</text>
+        <text class="checkin-hint">{{ checkinSheetHint }}</text>
         <scroll-view scroll-y class="checkin-body" :show-scrollbar="false">
           <view class="field-row" :class="{ 'one-col': !showWord }">
             <view class="field" :class="{ 'field-half': showWord }" @click.stop>
@@ -424,9 +425,10 @@
             <text class="fl">准确率(%)</text>
             <input
               class="fi-input"
+              :class="{ 'fi-input-err': accError }"
               type="digit"
               :value="form.accuracy"
-              placeholder="如：90"
+              placeholder="如：90（最高100）"
               placeholder-class="fi-ph"
               @input="onFormInput('accuracy', $event)"
               @focus="onCheckinFieldFocus"
@@ -434,6 +436,7 @@
               @mousedown.stop
               @touchstart.stop
             />
+            <text v-if="accError" class="fi-err">准确率不能大于 100</text>
           </view>
           <view class="field" @click.stop>
             <text class="fl">备注</text>
@@ -472,6 +475,22 @@
           <view class="btn checkin-submit" :class="{ dim: checkinBusy }" @click="submitCheckin">
             {{ checkinSubmitLabel }}
           </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 字速偏高确认：必须盖在打卡框之上（勿用 uni.showModal，H5 会被打卡层压住） -->
+    <view v-if="speedConfirmOpen" class="overlay speed-confirm-overlay" @click="cancelSpeedConfirm">
+      <view class="sheet speed-confirm-sheet" @click.stop>
+        <text class="sheet-t">字速偏高，请确认</text>
+        <text class="speed-confirm-text">{{ speedConfirmText }}</text>
+        <view class="speed-confirm-actions">
+          <view class="speed-confirm-btn ghost" @click="cancelSpeedConfirm">再改改</view>
+          <view
+            class="speed-confirm-btn primary"
+            :class="{ dim: checkinBusy }"
+            @click="confirmSpeedAndSubmit"
+          >确认打卡</view>
         </view>
       </view>
     </view>
@@ -572,7 +591,12 @@ import {
 import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState, talentAvatarUrl, talentThemeColor } from '@/utils/talentState.js'
 import { resolvePlanItemSkill, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
 import { MAIN_TABS, switchMainTab } from '@/utils/mainTabs.js'
-import { ATTITUDE_SCORES, attitudeDescFor, emptyCheckinForm } from '@/composables/useTrainingCheckin.js'
+import {
+  ATTITUDE_SCORES,
+  abnormalWordSpeed,
+  attitudeDescFor,
+  emptyCheckinForm,
+} from '@/composables/useTrainingCheckin.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { isClassicUi } from '@/utils/uiSkin.js'
 
@@ -758,6 +782,9 @@ const checkinFocus = ref(false)
 const checkinItemId = ref(null)
 const checkinSkill = ref('')
 const checkinBusy = ref(false)
+const accError = ref(false)
+const speedConfirmOpen = ref(false)
+const speedConfirmText = ref('')
 /** item_id -> 今日打卡记录（二次打开回填 / 修改） */
 const checkinByItemId = ref({})
 const form = reactive(emptyCheckinForm())
@@ -769,9 +796,27 @@ const checkinEditing = computed(() => {
   if (id == null) return false
   return !!checkinByItemId.value[String(id)]
 })
+const checkinNeedsFill = computed(() => {
+  const id = checkinItemId.value
+  if (id == null || checkinEditing.value) return false
+  const it = findItem(id)
+  return !!(it && itemDone(it) && isElective(it))
+})
+const checkinSheetTitle = computed(() => {
+  if (checkinEditing.value) return '修改打卡'
+  if (checkinNeedsFill.value) return '补填打卡'
+  return '提交打卡'
+})
+const checkinSheetHint = computed(() => {
+  if (checkinEditing.value) return '可修改今日记录'
+  if (checkinNeedsFill.value) return '选修已解锁，补填真实练习记录'
+  return '记录今日完成'
+})
 const checkinSubmitLabel = computed(() => {
   if (checkinBusy.value) return '提交中…'
-  return checkinEditing.value ? '保存修改' : '提交打卡'
+  if (checkinEditing.value) return '保存修改'
+  if (checkinNeedsFill.value) return '确认补填'
+  return '提交打卡'
 })
 
 const items = computed(() => plan.value?.items || [])
@@ -962,6 +1007,10 @@ function syncTimerFromPlan(data) {
 function onFormInput(key, e) {
   const v = e?.detail?.value ?? e?.target?.value ?? ''
   form[key] = v
+  if (key === 'accuracy') {
+    const n = parseFloat(v)
+    accError.value = !!(v !== '' && !Number.isNaN(n) && n > 100)
+  }
 }
 
 /** 原版训练页配合度表情格（替代滑条） */
@@ -983,10 +1032,24 @@ function onCheckinFieldFocus(e) {
 }
 
 function closeCheckin() {
+  speedConfirmOpen.value = false
+  speedConfirmText.value = ''
   checkinOpen.value = false
   checkinFocus.value = false
   checkinItemId.value = null
   checkinSkill.value = ''
+  accError.value = false
+}
+
+function cancelSpeedConfirm() {
+  speedConfirmOpen.value = false
+  speedConfirmText.value = ''
+}
+
+function confirmSpeedAndSubmit() {
+  speedConfirmOpen.value = false
+  speedConfirmText.value = ''
+  doSubmitCheckin({ speedAbnormal: true })
 }
 
 function skillMeta(name) {
@@ -1032,8 +1095,18 @@ function itemDone(item) {
 /** 与后端 is_item_media_complete 一致：有 audio_url 时只看音频进度 */
 function itemNeedsAudioListen(item) {
   if (!item) return false
+  // 选修/感知力：后端免听满门槛，前端对齐
+  if (isElective(item)) return false
   if (item.item_type === 'perception' || item.item_type === 'placeholder') return false
+  const inst = parseItemInstructions(item.instructions)
+  if (inst.item_type === 'perception' || inst.item_type === 'elective') return false
   return !!item.audio_url
+}
+
+function checkinBtnLabel(it) {
+  if (it?._needsFill) return '补填打卡'
+  if (it?._done) return '修改打卡'
+  return '提交打卡'
 }
 
 function audioWatchPct(item) {
@@ -1063,6 +1136,11 @@ function isListenReady(item) {
 
 function weaponSub(it) {
   if (it._state === 'locked') return '关卡逐个解锁'
+  if (it._needsFill) {
+    return isMediaLocked.value
+      ? '时长已到 · 可补填打卡'
+      : '选修已解锁 · 可补填打卡'
+  }
   if (isMediaLocked.value) return '时长已到 · 音视频已锁定'
   if (it._done) return '已打卡，可回看训练'
   if (itemNeedsAudioListen(it)) {
@@ -1076,6 +1154,9 @@ function weaponSub(it) {
 }
 
 function guideSub(it) {
+  if (it._needsFill) {
+    return isMediaLocked.value ? '时长已到 · 请补填打卡' : '尚未填写 · 点此补填'
+  }
   if (it._done) return '已完成 · 可再查看 / 修改'
   if (isMediaLocked.value) return '时长已到 · 仍可补打卡'
   if (itemNeedsAudioListen(it) && !isListenReady(it)) {
@@ -1086,6 +1167,7 @@ function guideSub(it) {
 
 function weaponTitle(it) {
   if (it._state === 'locked') return '🔒 先完成上一关'
+  if (it._needsFill) return isMediaLocked.value ? '🔒 时长已到 · 可补卡' : '选修可补卡'
   if (isMediaLocked.value) return '🔒 时长已到 · 不可再听看'
   if (it._done) return '再练一遍 / 查看'
   return '拔出超级武器 · 开始训练'
@@ -1104,11 +1186,15 @@ const displayItems = computed(() => {
   return items.value.map((it, i) => {
     const done = itemDone(it)
     const pct = itemPct(it)
+    const hasRecord = !!checkinByItemId.value[String(it.id)]
+    const elective = isElective(it)
+    // 选修可能被自动标 done 但尚无真实打卡记录 → 仍可补填
+    const needsFill = done && elective && !hasRecord
     let state = 'locked'
     let status = '待解锁'
     if (done) {
-      state = 'done'
-      status = '已完成 ✓'
+      state = needsFill ? 'active' : 'done'
+      status = needsFill ? '可补卡' : '已完成 ✓'
     } else if (i === fa) {
       state = 'active'
       status = pct > 0 ? `进行中 · ${pct}%` : '当前任务'
@@ -1122,9 +1208,10 @@ const displayItems = computed(() => {
     return {
       ...it,
       _skill: sk,
-      _elective: isElective(it),
+      _elective: elective,
       _subject: inst.content_type === 'subject' || subjectSet.has(sk) || it.ability_type === 'subject',
-      _done: done,
+      _done: done && !needsFill,
+      _needsFill: needsFill,
       _pct: pct,
       _state: state,
       _status: status,
@@ -1951,12 +2038,60 @@ async function openCheckin(it) {
     form.note = ''
     form.attitude = 60
   }
+  accError.value = false
   checkinOpen.value = true
   checkinFocus.value = false
   setTimeout(() => { checkinFocus.value = true }, 80)
 }
 
-async function submitCheckin() {
+function validateCheckinForm() {
+  const skill = checkinSkill.value || '训练'
+  const raw = findItem(checkinItemId.value)
+  const existing = checkinByItemId.value[String(checkinItemId.value)]
+  if (!existing && !devMode.value && !isMediaLocked.value && raw && !isListenReady(raw)) {
+    return { ok: false, message: `请先听完训练音频（需达到 90%，当前 ${audioWatchPct(raw).toFixed(0)}%）` }
+  }
+  if (showWord.value && !String(form.time || '').trim()) {
+    return { ok: false, message: '请填写用时' }
+  }
+  if (showWord.value && !String(form.wordCount || '').trim()) {
+    return { ok: false, message: '请填写字数' }
+  }
+  if (showAcc.value && !String(form.accuracy || '').trim()) {
+    return { ok: false, message: '请填写准确率' }
+  }
+  if (showAcc.value) {
+    const acc = parseFloat(form.accuracy)
+    if (!Number.isNaN(acc) && acc > 100) {
+      accError.value = true
+      return { ok: false, message: '准确率不能大于 100' }
+    }
+    accError.value = false
+  }
+  const speed = showWord.value
+    ? abnormalWordSpeed(skill, form.time, form.wordCount)
+    : null
+  return { ok: true, skill, raw, existing, speed }
+}
+
+function submitCheckin() {
+  if (!checkinItemId.value || checkinBusy.value || !plan.value?.plan_id) return
+  const v = validateCheckinForm()
+  if (!v.ok) {
+    uni.showToast({ title: v.message, icon: 'none', duration: 2800 })
+    return
+  }
+  if (v.speed) {
+    speedConfirmText.value =
+      `${v.skill} 约 ${v.speed.wpm} 字/分，高于晋升参考上限 ${v.speed.limit} 字/分。`
+      + '仍可作为今日打卡提交，系统会记录该偏高项。确认提交吗？'
+    speedConfirmOpen.value = true
+    return
+  }
+  doSubmitCheckin({ speedAbnormal: false })
+}
+
+async function doSubmitCheckin({ speedAbnormal = false } = {}) {
   if (!checkinItemId.value || checkinBusy.value || !plan.value?.plan_id) return
   checkinBusy.value = true
   try {
@@ -1967,27 +2102,27 @@ async function submitCheckin() {
     const skill = checkinSkill.value || '训练'
     const raw = findItem(checkinItemId.value)
     const existing = checkinByItemId.value[String(checkinItemId.value)]
-    if (!existing && !devMode.value && !isMediaLocked.value && raw && !isListenReady(raw)) {
-      throw new Error(`请先听完训练音频（需达到 90%，当前 ${audioWatchPct(raw).toFixed(0)}%）`)
+    const speed = showWord.value
+      ? abnormalWordSpeed(skill, form.time, form.wordCount)
+      : null
+    const card = {
+      name: skill,
+      time: form.time,
+      wordCount: form.wordCount,
+      accuracy: form.accuracy,
+      note: form.note,
+      completed: true,
     }
-    if (showWord.value && !String(form.wordCount || '').trim()) {
-      throw new Error('请填写字数')
-    }
-    if (showAcc.value && !String(form.accuracy || '').trim()) {
-      throw new Error('请填写准确率')
+    if (speedAbnormal && speed) {
+      card.speed_abnormal = true
+      card.words_per_min = speed.wpm
+      card.word_speed_limit = speed.limit
     }
     const payload = {
       ability_type: skill,
       content: form.note || `${skill}打卡`,
       attitude_pct: form.attitude,
-      cards: [{
-        name: skill,
-        time: form.time,
-        wordCount: form.wordCount,
-        accuracy: form.accuracy,
-        note: form.note,
-        completed: true,
-      }],
+      cards: [card],
     }
     let res
     if (existing?.id) {
@@ -2001,7 +2136,6 @@ async function submitCheckin() {
     }
     if (raw) raw.checkin_status = 'done'
     if (plan.value && res.plan_status) plan.value.status = res.plan_status
-    // 立刻写回本地缓存，二次打开可立刻看到刚填的内容
     const itemKey = String(checkinItemId.value)
     checkinByItemId.value = {
       ...checkinByItemId.value,
@@ -3223,6 +3357,51 @@ onUnmounted(() => {
   padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
   background: rgba(5, 8, 16, 0.62);
 }
+.speed-confirm-overlay {
+  align-items: center;
+  justify-content: center;
+  z-index: 10030;
+  background: rgba(5, 8, 16, 0.55);
+  padding: 16px;
+}
+.speed-confirm-sheet {
+  width: min(100%, 320px);
+  margin: 0 auto;
+  border-radius: 16px;
+  padding: 18px 16px 14px;
+  background: linear-gradient(180deg, #1a2233 0%, #121826 100%);
+  border: 1.5px solid #2a3040;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+.speed-confirm-text {
+  display: block;
+  margin: 10px 0 16px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #c5cad6;
+}
+.speed-confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+.speed-confirm-btn {
+  flex: 1;
+  text-align: center;
+  border-radius: 12px;
+  padding: 11px 8px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.speed-confirm-btn.ghost {
+  background: transparent;
+  border: 1.5px solid #2a3040;
+  color: #c5cad6;
+}
+.speed-confirm-btn.primary {
+  background: #2e6be6;
+  color: #fff;
+}
+.speed-confirm-btn.dim { opacity: 0.55; pointer-events: none; }
 .checkin-sheet {
   width: min(100%, 360px);
   max-height: min(62vh, 520px);
@@ -3526,6 +3705,16 @@ onUnmounted(() => {
   height: 44px;
   line-height: 22px;
   pointer-events: auto;
+}
+.fi-input.fi-input-err {
+  border-color: #e05a5a;
+}
+.fi-err {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #e05a5a;
+  font-weight: 600;
 }
 .fi-ph {
   color: rgba(139, 147, 165, 0.72);

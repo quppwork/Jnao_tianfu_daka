@@ -3,6 +3,14 @@
 from app.db.models import TrainingPlan, TrainingRecord
 from app.services.datetime_fmt import format_cst
 
+# 字/分钟软上限（对齐晋升表最高合理档；超限可打卡，写入 speed_abnormal）
+WORD_SPEED_SOFT_LIMITS: dict[str, float] = {
+    "超脑阅读": 1000,  # tier2 senior 5000/5
+    "影像追忆": 1200,  # tier4 junior 12000/10（不含五阶极端）
+    "扫描速记": 300,
+}
+
+
 def _card_summary(c: dict) -> str:
     name = c.get("name") or ""
     if name == "极速运算":
@@ -58,6 +66,30 @@ def _summarize_notes(cards: list[dict]) -> str | None:
     return "；".join(parts) if parts else None
 
 
+def _stamp_word_speed(c: dict) -> None:
+    """按用时/字数打标：超晋升参考上限 → speed_abnormal + words_per_min。"""
+    name = str(c.get("name") or "")
+    limit = WORD_SPEED_SOFT_LIMITS.get(name)
+    if not limit:
+        c.pop("speed_abnormal", None)
+        return
+    try:
+        minutes = float(c.get("time") or 0)
+        words = float(c.get("wordCount") or 0)
+    except (TypeError, ValueError):
+        return
+    if minutes <= 0 or words <= 0:
+        return
+    wpm = words / minutes
+    c["words_per_min"] = round(wpm, 1)
+    if wpm > limit or c.get("speed_abnormal") is True:
+        c["speed_abnormal"] = True
+        c["word_speed_limit"] = limit
+    else:
+        c.pop("speed_abnormal", None)
+        c.pop("word_speed_limit", None)
+
+
 def _sanitize_card(card: dict) -> dict:
     """清洗单张打卡卡片，防止脏数据入库"""
     c = dict(card)
@@ -83,6 +115,7 @@ def _sanitize_card(card: dict) -> dict:
         val = c.get(field)
         if isinstance(val, str) and len(val) > limit:
             c[field] = val[:limit]
+    _stamp_word_speed(c)
     return c
 
 

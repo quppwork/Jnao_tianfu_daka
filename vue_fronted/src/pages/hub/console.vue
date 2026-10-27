@@ -1,5 +1,5 @@
 <template>
-  <dayu-frame page="milestone.html?v=console6" :hydrate="hydrate" />
+  <dayu-frame page="milestone.html?v=console7" :hydrate="hydrate" />
 </template>
 
 <script setup>

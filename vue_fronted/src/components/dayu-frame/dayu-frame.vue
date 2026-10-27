@@ -92,7 +92,7 @@ const emit = defineEmits(['parent', 'student', 'account', 'theme'])
 const src = computed(() => {
   const file = props.page || ''
   const rev =
-    file === 'drama.html' ? '20261008ep4' :
+    file === 'drama.html' ? '20261026sync1' :
     file === 'consult.html' ? '20261008b1' : ''
   return `/static/dayu/html/${file}${rev ? `?v=${rev}` : ''}`
 })
@@ -198,8 +198,11 @@ function syncFrameLayoutVars() {
             `transform:none!important;width:auto!important;max-width:none!important;margin:0 12px!important}`,
           ].join('')
         : [
+            // body 原 padding-bottom:140px 在 height:100% + overflow:hidden 下会挤出一段黑底空洞（中央电脑尤甚）
+            `html,body{padding-bottom:0!important;margin:0!important}`,
             `.phone,.wrap{overflow-x:hidden!important;overflow-y:auto!important;`,
             `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
+            `padding-bottom:calc(88px + ${sab})!important;`,
             `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
             `.phone::-webkit-scrollbar,.wrap::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
           ].join(''),

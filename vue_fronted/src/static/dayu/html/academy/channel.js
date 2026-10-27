@@ -8,6 +8,8 @@
   var openWarm = { id: '', uid: '', live: false, promise: null, data: null, blocked: false }
 
   function showEndOverlay() {
+    // 播完正片后才允许 joinChat 补报 progress；「同步中」条不可走此旁路
+    root.__academyAllowProgressUnlock = true
     var box = $('vbox')
     if (box) {
       box.classList.remove('playing')
@@ -46,23 +48,55 @@
     } catch (e) { /* ignore */ }
   }
 
+  /** 未知 ≠ 未解锁：pending 显示同步中，避免首屏先闪锁定再变讨论组 */
+  function unlockPhase(ep) {
+    if (!ep) return 'pending'
+    if (ep.unlocked) return 'unlocked'
+    var liveId = String(ns.sectorLiveId || '')
+    var epId = String(ep.id || '')
+    if (ns.sectorLiveOk && liveId && epId && liveId === epId) return 'locked'
+    return 'pending'
+  }
+
+  function markSectorLive(ep) {
+    if (!ep || !ep.id) return
+    ns.sectorLiveOk = true
+    ns.sectorLiveId = String(ep.id)
+  }
+
   function refreshUnlockChrome(ep) {
     if (!ep) return
-    var unlocked = !!ep.unlocked
+    var phase = unlockPhase(ep)
+    var unlocked = phase === 'unlocked'
+    var pending = phase === 'pending'
+    var locked = phase === 'locked'
     if ($('inp')) {
       $('inp').disabled = !joined
       if (!joined) {
-        $('inp').placeholder = unlocked ? '点击加入讨论' : '看完正片即可加入讨论'
+        $('inp').placeholder = unlocked
+          ? '点击加入讨论'
+          : pending
+            ? '正在同步本集进度…'
+            : '看完正片即可加入讨论'
       }
     }
     var lk2 = document.querySelector('#chatroom .lk2')
     var lk3 = document.querySelector('#chatroom .lk3')
     if (lk2) {
-      lk2.textContent = unlocked ? '本集已解锁，点「加入频道讨论」进入' : '看完正片，即可加入讨论'
+      lk2.textContent = unlocked
+        ? '本集已解锁，点「加入频道讨论」进入'
+        : pending
+          ? '正在同步本集进度…'
+          : '看完正片，即可加入讨论'
     }
     if (lk3) {
-      lk3.textContent = unlocked ? '加入频道讨论 →' : '看完正片即可加入讨论'
-      lk3.style.cursor = unlocked ? 'pointer' : ''
+      lk3.textContent = unlocked
+        ? '加入频道讨论 →'
+        : pending
+          ? '同步进度中…'
+          : '看完正片即可加入讨论'
+      lk3.style.cursor = unlocked ? 'pointer' : 'default'
+      lk3.style.pointerEvents = unlocked ? '' : 'none'
       lk3.onclick = unlocked
         ? function (ev) {
             try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e0) { /* ignore */ }
@@ -75,15 +109,34 @@
     if (browseJoin) {
       var phone = document.querySelector('.phone')
       var inBrowse = !!(phone && phone.classList.contains('browse-mode'))
-      browseJoin.classList.toggle('is-on', unlocked && inBrowse && !joined)
-      browseJoin.onclick = unlocked
-        ? function (ev) {
-            try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e4) { /* ignore */ }
-            if (joinGateBlocked()) return
-            if (typeof root.joinChat === 'function') root.joinChat()
-            else if (typeof joinChat === 'function') joinChat()
-          }
-        : null
+      var show = inBrowse && !joined
+      browseJoin.classList.toggle('is-on', unlocked && show)
+      browseJoin.classList.toggle('is-pending', pending && show)
+      browseJoin.classList.toggle('is-locked', locked && show)
+      try {
+        if (unlocked) {
+          browseJoin.innerHTML = '进入讨论组 →<small>本集已解锁，点这里和角色聊</small>'
+        } else if (pending) {
+          browseJoin.innerHTML = '同步进度中…<small>正在确认本集是否已解锁</small>'
+        } else {
+          browseJoin.innerHTML = '看完正片即可加入讨论<small>看完正片后再来聊</small>'
+        }
+      } catch (eBj2) { /* ignore */ }
+      // 仅后端确认已解锁时可点；pending / locked 一律不可进
+      if (unlocked) {
+        browseJoin.setAttribute('role', 'button')
+        browseJoin.setAttribute('aria-disabled', 'false')
+        browseJoin.onclick = function (ev) {
+          try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e4) { /* ignore */ }
+          if (joinGateBlocked()) return
+          if (typeof root.joinChat === 'function') root.joinChat()
+          else if (typeof joinChat === 'function') joinChat()
+        }
+      } else {
+        browseJoin.removeAttribute('role')
+        browseJoin.setAttribute('aria-disabled', 'true')
+        browseJoin.onclick = null
+      }
     }
   }
 
@@ -265,40 +318,7 @@
       phone.classList.remove('qq-chat', 'qq-peek', 'qq-sliding')
     }
     try { document.documentElement.style.removeProperty('--qq-top') } catch (e2) { /* ignore */ }
-    var unlocked = !!(ep && ep.unlocked)
-    if ($('inp')) {
-      $('inp').disabled = true
-      $('inp').placeholder = unlocked ? '点击加入讨论' : '看完正片即可加入讨论'
-    }
-    var lk2 = document.querySelector('#chatroom .lk2')
-    var lk3 = document.querySelector('#chatroom .lk3')
-    if (lk2) {
-      lk2.textContent = unlocked ? '本集已解锁，点「加入频道讨论」进入' : '看完正片，即可加入讨论'
-    }
-    if (lk3) {
-      lk3.textContent = unlocked ? '加入频道讨论 →' : '看完正片即可加入讨论'
-      lk3.style.cursor = unlocked ? 'pointer' : ''
-      lk3.onclick = unlocked
-        ? function (ev) {
-            try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e3) { /* ignore */ }
-            if (joinGateBlocked()) return
-            if (typeof root.joinChat === 'function') root.joinChat()
-            else if (typeof joinChat === 'function') joinChat()
-          }
-        : null
-    }
-    var browseJoin = $('browseJoin')
-    if (browseJoin) {
-      browseJoin.classList.toggle('is-on', unlocked)
-      browseJoin.onclick = unlocked
-        ? function (ev) {
-            try { if (ev) { ev.preventDefault(); ev.stopPropagation() } } catch (e4) { /* ignore */ }
-            if (joinGateBlocked()) return
-            if (typeof root.joinChat === 'function') root.joinChat()
-            else if (typeof joinChat === 'function') joinChat()
-          }
-        : null
-    }
+    refreshUnlockChrome(ep)
     if (typeof syncChatDock === 'function') syncChatDock()
     // 切集 / 点换集：绝不在这里 warm/open，避免异步回调把讨论又拉起来
   }
@@ -322,7 +342,10 @@
       phone.classList.remove('browse-mode', 'qq-peek')
     }
     var browseJoin = $('browseJoin')
-    if (browseJoin) browseJoin.classList.remove('is-on')
+    if (browseJoin) {
+      browseJoin.classList.remove('is-on', 'is-pending', 'is-locked')
+      browseJoin.onclick = null
+    }
     try { document.documentElement.style.setProperty('--qq-top', '0px') } catch (e) { /* ignore */ }
     if (typeof syncChatDock === 'function') syncChatDock()
     if (typeof showChips === 'function') {
@@ -575,6 +598,7 @@
       }
       resetChannelView()
       ns.state = data
+      markSectorLive(data.episode)
       try {
         localStorage.removeItem('jnao_academy_sector')
         localStorage.setItem(sectorCacheKey(), JSON.stringify(data))
@@ -834,13 +858,24 @@
         return
       }
       if (joinGateBlocked()) return
-      if (!ep.unlocked) {
-        // 播完了但本地/父页状态被冲掉时：补记一次进度再进
+      var phase = unlockPhase(ep)
+      // 未与后端对齐前禁止进房，也不允许偷报 progress=100 绕过
+      if (phase === 'pending') {
+        ns.toast('正在同步本集进度…')
+        return
+      }
+      if (!ep.unlocked || phase === 'locked') {
+        // 仅播完正片后的补记（由播放结束路径置位）；禁止点条「同步中」自行解锁
+        if (!root.__academyAllowProgressUnlock) {
+          ns.toast('看完正片才能加入讨论')
+          return
+        }
         if (root.__academyJoinUnlocking) return
         root.__academyJoinUnlocking = true
         ns.api('/api/academy/episodes/' + ep.id + '/progress', { percent: 100 })
           .then(function (data) {
             root.__academyJoinUnlocking = false
+            root.__academyAllowProgressUnlock = false
             if (data && (data.unlocked || Number(data.percent) >= 90)) {
               markUnlocked(data, ep)
               root.joinChat()
@@ -850,6 +885,7 @@
           })
           .catch(function () {
             root.__academyJoinUnlocking = false
+            root.__academyAllowProgressUnlock = false
             ns.toast('看完正片才能加入讨论')
           })
         return

@@ -1051,6 +1051,7 @@ import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
 import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
 import { isClassicUi } from '@/utils/uiSkin.js'
 import { switchMainTab } from '@/utils/mainTabs.js'
+import { findAbnormalWordSpeedCards } from '@/composables/useTrainingCheckin.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -3479,22 +3480,6 @@ const CARD_REQUIRED = {
   '扫描速记': { time: '训练用时', wordCount: '记住字数', materialName: '材料名称' },
   '极速运算': { time: '训练时长', count: '完成题数', accuracy: '正确率' },
 }
-/** 字/分钟软上限：仅提醒，不改达标算法 */
-const WORD_SPEED_SOFT_LIMIT = 800
-const WORD_SPEED_SKILLS = new Set(['超脑阅读', '影像追忆', '扫描速记'])
-
-function findAbnormalWordSpeedCards(cards) {
-  const names = []
-  for (const c of cards || []) {
-    if (!WORD_SPEED_SKILLS.has(c.name)) continue
-    const t = Number(c.time)
-    const w = Number(c.wordCount)
-    if (!(t > 0) || !(w > 0)) continue
-    if (w / t > WORD_SPEED_SOFT_LIMIT) names.push(c.name)
-  }
-  return names
-}
-
 function getRequired(cardName) { return CARD_REQUIRED[cardName] || { time: '训练时长', wordCount: '完成字数' } }
 function isRequired(cardName, field) { return field in (CARD_REQUIRED[cardName] || { time: 1, wordCount: 1 }) }
 function missingFields(card) {
@@ -3824,8 +3809,10 @@ async function submitForm() {
   const speedNames = findAbnormalWordSpeedCards(pickerCards.value)
   if (speedNames.length) {
     uni.showModal({
-      title: '确认训练数据',
-      content: speedNames.join('、') + ' 填写的字数相对用时偏高，确认是本次真实练习量吗？',
+      title: '字速偏高，请确认',
+      content:
+        speedNames.join('、')
+        + ' 每分钟字数高于晋升参考上限，仍可提交，系统会记录偏高项。确认作为今日打卡吗？',
       confirmText: '确认提交',
       cancelText: '再改改',
       success: (res) => {

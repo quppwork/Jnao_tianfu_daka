@@ -404,7 +404,26 @@ def get_dashboard(
         },
         "week_bars": week["week_bars"],
         "week_start": week["week_start"],
-        "skills_progress": None,  # 十门课一期保留前端演示
+        # 技能进度：来自 get_tier_brief（真实打卡/段位），非演示假数据
+        "skills_progress": [
+            {
+                "name": str(sk.get("name") or ""),
+                "tier": int(sk.get("tier") or 1),
+                "active": bool(sk.get("active")),
+                "percent": (
+                    min(100, max(0, int(round(int(sk.get("tier") or 1) / 9 * 100))))
+                    if sk.get("active")
+                    else 0
+                ),
+                "label": (
+                    f"{int(sk.get('tier') or 1)}段"
+                    if sk.get("active")
+                    else "未开"
+                ),
+            }
+            for sk in (brief.get("skills") or [])
+            if sk.get("name")
+        ],
         "insight": None,  # 由 async 接口填充
         "sync_hint": "实时更新 · 榜单每天 24:00 刷新",
         "synced_at": _now_cst().isoformat(),

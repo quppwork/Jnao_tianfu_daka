@@ -99,6 +99,17 @@ def submit_checkin(
         note=note,
     )
 
+    # 选修/免打卡项可能已被 auto_complete 标 done，但仍无真实 TrainingRecord → 允许补填
+    existing_rec = db.scalar(
+        select(TrainingRecord).where(
+            TrainingRecord.child_user_id == child_user_id,
+            TrainingRecord.plan_id == plan.id,
+            TrainingRecord.item_id == target_item.id,
+        )
+    )
+    if existing_rec is not None:
+        raise TrainingError("该项已完成打卡，请勿重复提交", 409)
+
     record = TrainingRecord(
         child_user_id=child_user_id,
         plan_id=plan.id,
@@ -113,16 +124,18 @@ def submit_checkin(
         files_json=cards,
     )
     db.add(record)
-    # 原子抢占：仅在未打卡时标记 done，防止并发重复提交
+    # 原子抢占：未 done 则标 done；已 done 的免打卡项（无记录）允许继续落库
     from sqlalchemy import update as sql_update
     claimed = db.execute(
         sql_update(TrainingItem)
         .where(TrainingItem.id == target_item.id, TrainingItem.checkin_status != "done")
         .values(checkin_status="done")
     )
-    if claimed.rowcount == 0:
+    if claimed.rowcount == 0 and not item_skips_checkin(target_item):
         db.rollback()
         raise TrainingError("该项已完成打卡，请勿重复提交", 409)
+    if claimed.rowcount == 0:
+        target_item.checkin_status = "done"
 
     # v2.0: 各技能独立打卡，不再按 block 批量标记完成。
     # pre-v2.0 的 block 批量逻辑已移除。
@@ -226,6 +239,7 @@ def update_checkin_record(
     if cards is not None:
         if not cards:
             return delete_checkin_record(db, child_user_id, record_id)
+        cards = [_sanitize_card(c) for c in cards]
         record.files_json = cards
         auto_ability, auto_time, auto_content, auto_result, auto_note = _apply_card_fields_to_record(
             cards=cards,

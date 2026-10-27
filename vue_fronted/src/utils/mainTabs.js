@@ -1,5 +1,7 @@
 /** 主流程底栏路由（大宇改版壳 + 现有业务页） */
 
+import { warmAcademySector } from './academy/sector.js'
+
 export const MAIN_TABS = [
   {
     key: 'guide',
@@ -136,7 +138,33 @@ function softNavigate(url) {
 }
 
 export function switchMainTab(path) {
-  softNavigate(path)
+  const full = withSlash(path)
+  const target = normalizeRoute(full)
+  if (!target) return
+  const cur = currentRoute()
+  const hasQuery = String(full).includes('?')
+  if (cur === target && !hasQuery) return
+
+  // 切到天赋学院：先短等 sector 与后端对齐，再导航（可略慢，少闪「同步中」）
+  if (target === 'pages/hub/academy' && cur !== target) {
+    const now = Date.now()
+    if (now < _navLockUntil) return
+    _navLockUntil = now + 1000
+    let ep = ''
+    try {
+      const q = full.split('?')[1] || ''
+      ep = String(new URLSearchParams(q).get('ep') || new URLSearchParams(q).get('episode_id') || '').trim()
+    } catch (_) { /* ignore */ }
+    warmAcademySector(560, ep)
+      .catch(() => {})
+      .finally(() => {
+        _navLockUntil = 0
+        softNavigate(full)
+      })
+    return
+  }
+
+  softNavigate(full)
 }
 
 /**

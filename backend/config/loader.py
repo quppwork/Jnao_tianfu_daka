@@ -142,6 +142,16 @@ def load_training_tier_thresholds() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+@lru_cache(maxsize=1)
+def load_parent_courses() -> dict:
+    """家长课堂目录 — 与训练/学院解耦"""
+    path = _CONFIG_DIR / "parent_courses.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("parent_courses.yaml")
+    return data if isinstance(data, dict) else {}
+
+
 # ============ Legacy (v1.0 兼容，后续废弃) ============
 
 @lru_cache(maxsize=1)
