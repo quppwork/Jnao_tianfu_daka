@@ -78,3 +78,6 @@ backend/tools/*loadtest*.csv
 
 # CodeGraph local index
 .codegraph/
+
+# 劲脑坐席独立项目本地副本（含 token，勿入库）
+jingnao-seat/

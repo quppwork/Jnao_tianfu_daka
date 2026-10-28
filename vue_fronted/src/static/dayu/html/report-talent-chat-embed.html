@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>问大宇 · 这份报告</title>
+<!--
+  iframe 嵌入页（成人报告天赋解答）
+  对方用法：
+    <iframe
+      src="https://YOUR_HOST/static/dayu/html/report-talent-chat-embed.html?assessment_id=123&user_id=456&token=JWT"
+      style="width:100%;height:100%;border:0;min-height:560px"
+      allow="clipboard-write"
+    ></iframe>
+  参数：assessment_id（必填）· user_id（必填）· token（必填，Bearer）· talent（可选，chips 兜底）· theme=lt（可选浅色）
+  父页可听：message.data.type ∈ jnao-embed-ready | jnao-embed-error | jnao-embed-close | jnao-embed-cite
+-->
+<script src="/static/dayu/js/sse-post.js?v=20261019a"></script>
+<script src="/static/dayu/js/guide-rich.js?v=20261021d"></script>
+<style>
+  :root{--app-max-width:480px}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#0B1220;color:#E8EEF7;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  html.lt,html.lt body{background:#F2F4FA;color:#251f19}
+  .wrap{height:100%;max-width:var(--app-max-width);margin:0 auto;display:flex;flex-direction:column;background:#0D1526}
+  html.lt .wrap{background:#F2F4FA}
+  .tc-head{display:flex;align-items:center;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,.06);flex:none}
+  .tc-t{font-size:15px;font-weight:900;color:#8FC3E8;letter-spacing:1px}
+  .tc-badge{font-size:10px;padding:2px 8px;border-radius:99px;margin-left:8px;background:rgba(78,160,216,.15);color:#8FC3E8;font-weight:700}
+  .tc-sub{display:block;width:100%;font-size:11px;color:#8FA2BA;padding:0 16px 8px;flex:none}
+  .tc-x{margin-left:auto;color:#7F8FA6;font-size:16px;cursor:pointer;padding:4px;background:none;border:0}
+  .tc-banner{font-size:12px;color:#7F8FA6;padding:6px 14px 0;flex:none}
+  .tc-banner.err{color:#F0A3A3}
+  .tc-thread{flex:1;overflow-y:auto;padding:12px 12px 6px;scrollbar-width:thin;min-height:0}
+  .tc-b{max-width:84%;font-size:15px;line-height:1.65;border-radius:13px;padding:9px 12px;margin-bottom:8px;word-break:break-word;animation:tcin .24s ease}
+  .tc-b.me{margin-left:auto;background:linear-gradient(135deg,#E05252,#B03A3E);color:#fff;border-bottom-right-radius:4px;white-space:pre-wrap}
+  .tc-b.ai{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#E6E0DA;border-bottom-left-radius:4px}
+  .tc-b.ai .cd-name{color:#F0A3A3;font-weight:700}
+  .tc-b.ai .chat-rich strong,.tc-b.ai .chat-rich b{color:#F5D9A8;font-weight:800}
+  .tc-b.ai .chat-rich .gd-p{margin:0 0 8px}
+  .tc-b.ai .chat-rich .gd-p:last-child{margin-bottom:0}
+  .tc-b.ai .chat-rich .gd-sec{margin:10px 0 6px;padding-left:8px;border-left:3px solid rgba(143,195,232,.65);font-weight:800;color:#E8EEF7}
+  .tc-b.ai .chat-rich .gd-ul,.tc-b.ai .chat-rich .gd-ol{margin:6px 0 8px;padding-left:1.2em}
+  .tc-b.ai .chat-rich .gd-ul{list-style:disc}
+  .tc-b.ai .chat-rich .gd-ol{list-style:decimal}
+  .tc-cite{display:inline-flex;align-items:center;gap:4px;margin:0 8px 10px 0;font-size:11px;padding:4px 10px;border-radius:99px;cursor:pointer;background:rgba(78,160,216,.15);border:1px solid rgba(78,160,216,.4);color:#8FC3E8}
+  .tc-b.tc-typing{display:inline-flex;gap:4px;padding:12px 14px}
+  .tc-typing i{width:6px;height:6px;border-radius:50%;background:#8FC3E8;opacity:.35;animation:tcp 1s infinite}
+  .tc-typing i:nth-child(2){animation-delay:.2s}
+  .tc-typing i:nth-child(3){animation-delay:.4s}
+  @keyframes tcp{50%{opacity:1;transform:translateY(-3px)}}
+  @keyframes tcin{from{opacity:0;transform:translateY(6px)}}
+  .tc-chips{display:flex;gap:8px;overflow-x:auto;padding:4px 12px 8px;scrollbar-width:none;flex:none}
+  .tc-chips::-webkit-scrollbar{display:none}
+  .tc-chip{flex:none;font-size:12px;padding:6px 12px;border-radius:99px;cursor:pointer;background:rgba(78,160,216,.1);border:1px solid rgba(78,160,216,.3);color:#8FC3E8}
+  .tc-chip.hot{background:rgba(224,82,82,.12);border-color:rgba(224,82,82,.45);color:#F0A3A3}
+  .tc-bar{display:flex;align-items:flex-end;gap:8px;margin:0 12px;padding:8px;flex:none;
+    background:rgba(255,255,255,.06);border:1.5px solid rgba(143,195,232,.35);border-radius:20px;
+    margin-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+  .tc-quote{flex:none;width:32px;height:32px;border-radius:50%;border:1px dashed rgba(143,195,232,.5);background:transparent;color:#8FC3E8;font-size:15px;cursor:pointer}
+  .tc-bar textarea{flex:1;border:0;outline:0;background:transparent;resize:none;font-size:15px;color:#E8EEF7;line-height:1.5;max-height:96px;font-family:inherit;padding:6px 0}
+  .tc-bar textarea::placeholder{color:#5A7B94}
+  .tc-send{flex:none;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#E05252,#B03A3E);color:#fff;font-size:15px;font-weight:900}
+  .tc-send:disabled{opacity:.4;cursor:default}
+  .tc-retry{margin-left:8px;font-size:12px;padding:2px 10px;border-radius:99px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;font-family:inherit}
+  html.lt .tc-t{color:#174b70}html.lt .tc-badge{background:rgba(39,121,177,.12);color:#174b70}
+  html.lt .tc-sub{color:#5a6b80}html.lt .tc-x{color:#8a97a8}
+  html.lt .tc-banner{color:#8a97a8}html.lt .tc-banner.err{color:#AD1F1F}
+  html.lt .tc-b.ai{background:rgba(20,20,20,.06);border-color:rgba(20,20,20,.1);color:#251f19}
+  html.lt .tc-b.ai .cd-name{color:#5c0f0f}
+  html.lt .tc-cite{background:rgba(39,121,177,.1);border-color:rgba(39,121,177,.4);color:#174b70}
+  html.lt .tc-chip{background:rgba(39,121,177,.08);border-color:rgba(39,121,177,.3);color:#174b70}
+  html.lt .tc-chip.hot{background:rgba(173,31,31,.08);border-color:rgba(173,31,31,.35);color:#AD1F1F}
+  html.lt .tc-bar{background:#fff;border-color:rgba(39,121,177,.3)}
+  html.lt .tc-bar textarea{color:#251f19}
+  html.lt .tc-quote{color:#174b70;border-color:rgba(39,121,177,.45)}
+</style>
+</head>
+<body>
+<div class="wrap" id="root">
+  <div class="tc-head">
+    <span class="tc-t">问大宇 · 这份报告</span>
+    <span class="tc-badge">报告专属</span>
+    <button class="tc-x" id="tcClose" type="button" aria-label="关闭">✕</button>
+  </div>
+  <div class="tc-sub" id="tcSub">报告专属 · 上下文已载入</div>
+  <div class="tc-banner" id="tcBanner">正在打开对话…</div>
+  <div class="tc-thread" id="tcThread"></div>
+  <div class="tc-chips" id="tcChips"></div>
+  <form class="tc-bar" id="tcForm" autocomplete="off">
+    <button type="button" class="tc-quote" id="tcQuote" title="引用天赋上下文">§</button>
+    <textarea id="tcInput" rows="1" maxlength="2000" placeholder="就这份报告，问点什么…" disabled></textarea>
+    <button type="submit" class="tc-send" id="tcSend" disabled>↑</button>
+  </form>
+</div>
+<script>
+(function () {
+  var OPENING = '您好我是你的天赋解答助手，有什么疑问都可以通过对话框向我提问，我会为您解答。';
+  var q = new URLSearchParams(location.search || '');
+  var aid = parseInt(q.get('assessment_id') || '', 10) || 0;
+  var talentQ = String(q.get('talent') || '').trim();
+  if (String(q.get('theme') || '').toLowerCase() === 'lt') document.documentElement.classList.add('lt');
+
+  var thread = document.getElementById('tcThread');
+  var banner = document.getElementById('tcBanner');
+  var chips = document.getElementById('tcChips');
+  var form = document.getElementById('tcForm');
+  var quoteBtn = document.getElementById('tcQuote');
+  var input = document.getElementById('tcInput');
+  var send = document.getElementById('tcSend');
+  var sub = document.getElementById('tcSub');
+  var closer = document.getElementById('tcClose');
+
+  var uid = 0;
+  var token = '';
+  var busy = false;
+  var serverChips = null;
+
+  function postParent(payload) {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(Object.assign({ source: 'jnao-report-talent-chat' }, payload), '*');
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function readQueryAuth() {
+    var u = parseInt(q.get('user_id') || '', 10) || 0;
+    var t = String(q.get('token') || q.get('access_token') || '').trim();
+    if (u) uid = u;
+    if (t) token = t;
+    try {
+      if (uid) sessionStorage.setItem('jnao_embed_uid', String(uid));
+      if (token) sessionStorage.setItem('jnao_embed_token', token);
+      // 避免 token 长期留在地址栏 / 浏览器历史
+      if (t && window.history && history.replaceState) {
+        var clean = new URL(location.href);
+        clean.searchParams.delete('token');
+        clean.searchParams.delete('access_token');
+        history.replaceState(null, '', clean.pathname + clean.search + clean.hash);
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function hydrateAuth() {
+    readQueryAuth();
+    if (!uid || !token) {
+      try {
+        uid = uid || parseInt(sessionStorage.getItem('jnao_embed_uid') || '', 10) || 0;
+        token = token || sessionStorage.getItem('jnao_embed_token') || '';
+      } catch (e) { /* ignore */ }
+    }
+    if (!uid || !token) {
+      try {
+        uid = uid || parseInt(localStorage.getItem('jnao_child_user_id') || localStorage.getItem('jnao_parent_user_id') || '', 10) || 0;
+        token = token || localStorage.getItem('jnao_access_token') || localStorage.getItem('jnao_session_token') || '';
+      } catch (e) { /* ignore */ }
+    }
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function peelMdStars(s) {
+    var t = String(s || '').replace(/\uFF0A/g, '*');
+    t = t.replace(/\*\*\s*([^*]+?)\s*\*\*/g, '$1');
+    return t.replace(/\*+/g, '');
+  }
+  function talentName() {
+    if (talentQ) return talentQ;
+    var t = (sub && sub.textContent) || '';
+    var m = t.replace(/天赋.*/, '').trim();
+    return m || '这个天赋';
+  }
+  function richHtml(raw) {
+    try {
+      var fn = window.__jnaoFormatGuideRichHtml || window.formatGuideRichHtml;
+      if (typeof fn === 'function') {
+        var html = fn(raw);
+        if (html && html.indexOf('*') !== -1) {
+          html = html.replace(/>([^<]*)/g, function (_m, text) {
+            return '>' + String(text).replace(/\*/g, '');
+          });
+        }
+        return html;
+      }
+    } catch (e) { /* ignore */ }
+    return esc(peelMdStars(raw));
+  }
+  function bubble(role, text) {
+    var d = document.createElement('div');
+    d.className = 'tc-b ' + (role === 'user' ? 'me' : 'ai');
+    if (role === 'user') d.textContent = text;
+    else d.innerHTML = '<b class="cd-name">大宇：</b><div class="chat-rich">' + richHtml(text) + '</div>';
+    return d;
+  }
+  function setAiBubbleHtml(box, text) {
+    if (!box) return;
+    box.innerHTML = '<b class="cd-name">大宇：</b><div class="chat-rich">' + richHtml(text) + '</div>';
+  }
+  function setBanner(msg, err) {
+    if (!banner) return;
+    banner.style.display = msg ? 'block' : 'none';
+    banner.className = 'tc-banner' + (err ? ' err' : '');
+    banner.textContent = msg || '';
+  }
+  function scrollEnd() {
+    try { thread.scrollTop = thread.scrollHeight; } catch (e) { /* ignore */ }
+  }
+  function showTyping() {
+    hideTyping();
+    var d = document.createElement('div');
+    d.className = 'tc-b ai tc-typing';
+    d.id = 'tcTyping';
+    d.innerHTML = '<i></i><i></i><i></i>';
+    thread.appendChild(d);
+    scrollEnd();
+  }
+  function hideTyping() {
+    var t = document.getElementById('tcTyping');
+    if (t) t.remove();
+  }
+  function renderCites(msg) {
+    var secs = null;
+    if (Array.isArray(msg.citations)) secs = msg.citations;
+    else if (msg.meta && Array.isArray(msg.meta.citations)) secs = msg.meta.citations;
+    secs = (secs || []).map(function (s) {
+      return typeof s === 'string' ? s : (s.section || s.label || '');
+    }).filter(Boolean);
+    secs.forEach(function (label) {
+      var c = document.createElement('button');
+      c.type = 'button';
+      c.className = 'tc-cite';
+      c.textContent = '§ 引用 · ' + label;
+      c.onclick = function () {
+        postParent({ type: 'jnao-embed-cite', section: label, assessment_id: aid });
+      };
+      thread.appendChild(c);
+    });
+  }
+  function appendMsg(m) {
+    if (!m || !m.content) return;
+    thread.appendChild(bubble(m.role === 'user' ? 'user' : 'assistant', m.content));
+    if (m.role !== 'user') renderCites(m);
+    scrollEnd();
+  }
+  function paint(opening, messages) {
+    setBanner('', false);
+    thread.innerHTML = '';
+    thread.appendChild(bubble('assistant', opening || OPENING));
+    (messages || []).forEach(appendMsg);
+    scrollEnd();
+  }
+  function buildChips() {
+    if (!chips) return;
+    var t = talentName();
+    var list = (Array.isArray(serverChips) && serverChips.length) ? serverChips : [
+      { q: t + '的优势是什么', hot: true },
+      { q: '这份报告怎么看', hot: true },
+      { q: '报告里的五维怎么看' },
+      { q: '执行力低怎么办' },
+    ];
+    chips.innerHTML = '';
+    list.forEach(function (c) {
+      var label = typeof c === 'string' ? c : (c.q || c.label || '');
+      if (!label) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tc-chip' + (c.hot ? ' hot' : '');
+      b.textContent = label;
+      b.onclick = function () {
+        input.value = label;
+        autogrow();
+        if (!send.disabled) form.requestSubmit();
+      };
+      chips.appendChild(b);
+    });
+  }
+  function autogrow() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 96) + 'px';
+    send.disabled = busy || input.disabled || !(input.value || '').trim();
+  }
+  function authHeaders(extra) {
+    return Object.assign({
+      'X-Child-User-Id': String(uid),
+      'X-Session-Token': token,
+      Authorization: 'Bearer ' + token,
+    }, extra || {});
+  }
+  async function api(path, opts) {
+    var headers = authHeaders(opts && opts.headers);
+    var res = await fetch(path + (path.indexOf('?') >= 0 ? '&' : '?') + 'user_id=' + uid, {
+      method: (opts && opts.method) || 'GET',
+      headers: headers,
+      body: opts && opts.body,
+      credentials: 'same-origin',
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(data.detail || data.message || ('请求失败 ' + res.status));
+    return data;
+  }
+
+  async function boot() {
+    hydrateAuth();
+    if (!aid) {
+      setBanner('缺少 assessment_id，无法打开报告对话', true);
+      postParent({ type: 'jnao-embed-error', message: 'missing assessment_id' });
+      return;
+    }
+    if (!uid || !token) {
+      setBanner('缺少 user_id 或 token，请由宿主页传入', true);
+      postParent({ type: 'jnao-embed-error', message: 'missing auth' });
+      return;
+    }
+    setBanner('正在打开对话…', false);
+    try {
+      var data = await api('/api/talent/assessment/' + aid + '/chat');
+      if (Array.isArray(data.chips)) serverChips = data.chips;
+      buildChips();
+      if (sub && data.talent_primary) sub.textContent = data.talent_primary + '天赋 · 报告专属对话';
+      paint(data.opening || OPENING, data.messages || []);
+      var n = (data.messages || []).length;
+      if (n) setBanner('已同步 ' + n + ' 条历史', false);
+      input.disabled = false;
+      autogrow();
+      postParent({ type: 'jnao-embed-ready', assessment_id: aid, user_id: uid, messages: n });
+    } catch (e) {
+      setBanner(e.message || '打不开对话', true);
+      postParent({ type: 'jnao-embed-error', message: e.message || 'boot failed' });
+      var r = document.createElement('button');
+      r.type = 'button';
+      r.className = 'tc-retry';
+      r.textContent = '重试';
+      r.onclick = function () { boot(); };
+      banner.appendChild(r);
+    }
+  }
+
+  input.addEventListener('input', autogrow);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      if (!send.disabled) form.requestSubmit();
+    }
+  });
+  if (quoteBtn) {
+    quoteBtn.addEventListener('click', function () {
+      var t = '关于我的“' + talentName() + '”天赋：';
+      input.value = ((input.value || '').replace(/\s+$/, '') + (input.value ? '\n' : '')) + t;
+      autogrow();
+      input.focus();
+    });
+  }
+  if (closer) {
+    closer.addEventListener('click', function () {
+      postParent({ type: 'jnao-embed-close', assessment_id: aid });
+    });
+  }
+
+  form.addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    if (busy || input.disabled) return;
+    var text = (input.value || '').trim();
+    if (!text) return;
+    busy = true;
+    send.disabled = true;
+    input.value = '';
+    autogrow();
+    setBanner('', false);
+    appendMsg({ role: 'user', content: text });
+    showTyping();
+    var box = null;
+    var full = '';
+    try {
+      var done = await JnaoSse.post('/api/talent/assessment/' + aid + '/chat/stream?user_id=' + uid, {
+        headers: authHeaders(),
+        body: { content: text },
+      }, {
+        onToken: function (piece) {
+          if (!box) { hideTyping(); box = bubble('assistant', ''); thread.appendChild(box); }
+          full += piece;
+          setAiBubbleHtml(box, full);
+          scrollEnd();
+        },
+        onReplace: function (t) {
+          full = t;
+          if (box) setAiBubbleHtml(box, full);
+        },
+      });
+      hideTyping();
+      var msg = done && done.assistant;
+      if (!msg) throw new Error('流式响应中断');
+      if (box) { setAiBubbleHtml(box, msg.content || full); renderCites(msg); scrollEnd(); }
+      else appendMsg(msg);
+      if (sub) {
+        var reply = msg.content || '';
+        sub.textContent = reply.slice(0, 14) + (reply.length > 14 ? '…' : '');
+      }
+    } catch (e) {
+      hideTyping();
+      if (box) {
+        box.remove();
+        setBanner(e.message || '发送失败', true);
+        input.value = text;
+        autogrow();
+      } else {
+        try {
+          showTyping();
+          var data = await api('/api/talent/assessment/' + aid + '/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: text }),
+          });
+          hideTyping();
+          var reply = (data.assistant && data.assistant.content) || '（大宇暂时没有回应）';
+          appendMsg(Object.assign({}, data.assistant || {}, { role: 'assistant', content: reply }));
+        } catch (e2) {
+          hideTyping();
+          setBanner(e2.message || '发送失败', true);
+          input.value = text;
+          autogrow();
+        }
+      }
+    } finally {
+      busy = false;
+      autogrow();
+    }
+  });
+
+  buildChips();
+  boot();
+})();
+</script>
+</body>
+</html>
