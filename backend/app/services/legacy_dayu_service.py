@@ -96,11 +96,12 @@ def fetch_test_result(
     if wx_user_id < 1:
         return None
     engine = _require_engine()
+    # 与线上一致：勿选可能不存在的 child_id 等扩展列
     if test_result_id and test_result_id > 0:
         sql = text(
             """
             SELECT id, uid, test_type, answer, property, talent, check_talent, results,
-                   status, delete_time, create_time, child_id
+                   status, delete_time, create_time
             FROM ys_dayu_test_result
             WHERE id = :rid AND uid = :uid AND status = 1 AND delete_time = 0
             LIMIT 1
@@ -112,7 +113,7 @@ def fetch_test_result(
         sql = text(
             f"""
             SELECT id, uid, test_type, answer, property, talent, check_talent, results,
-                   status, delete_time, create_time, child_id
+                   status, delete_time, create_time
             FROM ys_dayu_test_result
             WHERE uid = :uid AND status = 1 AND delete_time = 0 {type_clause}
             ORDER BY id DESC
