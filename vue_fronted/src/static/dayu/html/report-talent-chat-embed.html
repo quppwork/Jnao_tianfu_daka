@@ -6,14 +6,10 @@
 <title>问大宇 · 这份报告</title>
 <!--
   iframe 嵌入页（成人报告天赋解答）
-  对方用法：
-    <iframe
-      src="https://YOUR_HOST/static/dayu/html/report-talent-chat-embed.html?assessment_id=123&user_id=456&token=JWT"
-      style="width:100%;height:100%;border:0;min-height:560px"
-      allow="clipboard-write"
-    ></iframe>
-  参数：assessment_id（必填）· user_id（必填）· token（必填，Bearer）· talent（可选，chips 兜底）· theme=lt（可选浅色）
-  父页可听：message.data.type ∈ jnao-embed-ready | jnao-embed-error | jnao-embed-close | jnao-embed-cite
+  推荐（沿用 register-parent 的 ai_user_id + ai_session_id）：
+    ?user_id=&token=&dayu_test_result_id=
+  亦可直接传 assessment_id。打开时会按 dayu 测评自动关联报告，对方无需 ensure-report-chat。
+  父页可听：jnao-embed-ready | jnao-embed-error | jnao-embed-close | jnao-embed-cite
 -->
 <script src="/static/dayu/js/sse-post.js?v=20261019a"></script>
 <script src="/static/dayu/js/guide-rich.js?v=20261021d"></script>
@@ -58,8 +54,7 @@
   .tc-bar{display:flex;align-items:flex-end;gap:8px;margin:0 12px;padding:8px;flex:none;
     background:rgba(255,255,255,.06);border:1.5px solid rgba(143,195,232,.35);border-radius:20px;
     margin-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
-  .tc-quote{flex:none;width:32px;height:32px;border-radius:50%;border:1px dashed rgba(143,195,232,.5);background:transparent;color:#8FC3E8;font-size:15px;cursor:pointer}
-  .tc-bar textarea{flex:1;border:0;outline:0;background:transparent;resize:none;font-size:15px;color:#E8EEF7;line-height:1.5;max-height:96px;font-family:inherit;padding:6px 0}
+  .tc-bar textarea{flex:1;border:0;outline:0;background:transparent;resize:none;font-size:15px;color:#E8EEF7;line-height:1.5;max-height:96px;font-family:inherit;padding:6px 4px}
   .tc-bar textarea::placeholder{color:#5A7B94}
   .tc-send{flex:none;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#E05252,#B03A3E);color:#fff;font-size:15px;font-weight:900}
   .tc-send:disabled{opacity:.4;cursor:default}
@@ -74,7 +69,6 @@
   html.lt .tc-chip.hot{background:rgba(173,31,31,.08);border-color:rgba(173,31,31,.35);color:#AD1F1F}
   html.lt .tc-bar{background:#fff;border-color:rgba(39,121,177,.3)}
   html.lt .tc-bar textarea{color:#251f19}
-  html.lt .tc-quote{color:#174b70;border-color:rgba(39,121,177,.45)}
 </style>
 </head>
 <body>
@@ -89,7 +83,6 @@
   <div class="tc-thread" id="tcThread"></div>
   <div class="tc-chips" id="tcChips"></div>
   <form class="tc-bar" id="tcForm" autocomplete="off">
-    <button type="button" class="tc-quote" id="tcQuote" title="引用天赋上下文">§</button>
     <textarea id="tcInput" rows="1" maxlength="2000" placeholder="就这份报告，问点什么…" disabled></textarea>
     <button type="submit" class="tc-send" id="tcSend" disabled>↑</button>
   </form>
@@ -99,6 +92,8 @@
   var OPENING = '您好我是你的天赋解答助手，有什么疑问都可以通过对话框向我提问，我会为您解答。';
   var q = new URLSearchParams(location.search || '');
   var aid = parseInt(q.get('assessment_id') || '', 10) || 0;
+  var dayuTrId = parseInt(q.get('dayu_test_result_id') || q.get('test_result_id') || '', 10) || 0;
+  var wxUserId = parseInt(q.get('wx_user_id') || '', 10) || 0;
   var talentQ = String(q.get('talent') || '').trim();
   if (String(q.get('theme') || '').toLowerCase() === 'lt') document.documentElement.classList.add('lt');
 
@@ -106,7 +101,6 @@
   var banner = document.getElementById('tcBanner');
   var chips = document.getElementById('tcChips');
   var form = document.getElementById('tcForm');
-  var quoteBtn = document.getElementById('tcQuote');
   var input = document.getElementById('tcInput');
   var send = document.getElementById('tcSend');
   var sub = document.getElementById('tcSub');
@@ -304,18 +298,26 @@
 
   async function boot() {
     hydrateAuth();
-    if (!aid) {
-      setBanner('缺少 assessment_id，无法打开报告对话', true);
-      postParent({ type: 'jnao-embed-error', message: 'missing assessment_id' });
-      return;
-    }
     if (!uid || !token) {
       setBanner('缺少 user_id 或 token，请由宿主页传入', true);
       postParent({ type: 'jnao-embed-error', message: 'missing auth' });
       return;
     }
+    if (!aid && !dayuTrId) {
+      setBanner('缺少 dayu_test_result_id（或 assessment_id）', true);
+      postParent({ type: 'jnao-embed-error', message: 'missing report id' });
+      return;
+    }
     setBanner('正在打开对话…', false);
     try {
+      if (!aid && dayuTrId) {
+        var prepPath = '/api/talent/dayu-test/' + dayuTrId + '/prepare';
+        if (wxUserId) prepPath += '?wx_user_id=' + wxUserId;
+        var prep = await api(prepPath);
+        aid = parseInt(prep.assessment_id || 0, 10) || 0;
+        if (prep.talent_primary && !talentQ) talentQ = String(prep.talent_primary);
+        if (!aid) throw new Error('无法关联测评报告');
+      }
       var data = await api('/api/talent/assessment/' + aid + '/chat');
       if (Array.isArray(data.chips)) serverChips = data.chips;
       buildChips();
@@ -345,14 +347,6 @@
       if (!send.disabled) form.requestSubmit();
     }
   });
-  if (quoteBtn) {
-    quoteBtn.addEventListener('click', function () {
-      var t = '关于我的“' + talentName() + '”天赋：';
-      input.value = ((input.value || '').replace(/\s+$/, '') + (input.value ? '\n' : '')) + t;
-      autogrow();
-      input.focus();
-    });
-  }
   if (closer) {
     closer.addEventListener('click', function () {
       postParent({ type: 'jnao-embed-close', assessment_id: aid });

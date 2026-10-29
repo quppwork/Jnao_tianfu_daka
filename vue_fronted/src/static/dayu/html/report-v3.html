@@ -746,7 +746,7 @@ function bootTalentChat(){
   const aid=parseInt(q.get('assessment_id')||'',10)||0;
   const sheet=$('tcSheet'), mask=$('tcMask'), handle=$('tcHandle');
   const thread=$('tcThread'), banner=$('tcBanner'), chips=$('tcChips');
-  const form=$('tcForm'), quoteBtn=$('tcQuote'), input=$('tcInput'), send=$('tcSend');
+  const form=$('tcForm'), input=$('tcInput'), send=$('tcSend');
   const dot=$('tcDot'), sub=$('tcSub'), closer=$('tcClose');
   if(!sheet||!handle||!thread||!form||!input||!send) return;
 
@@ -954,12 +954,6 @@ function bootTalentChat(){
       if(!send.disabled) form.requestSubmit();
     }
   });
-  if(quoteBtn) quoteBtn.addEventListener('click', function(){
-    const t='关于我的“'+talentName()+'”天赋：';
-    input.value=((input.value||'').replace(/\s+$/,'')+(input.value?'\n':''))+t;
-    autogrow(); input.focus();
-  });
-
   function authHeaders(extra){
     return Object.assign({
       'X-Child-User-Id': String(uid),
@@ -1422,7 +1416,6 @@ switchTalent=function(k,instant){_sw(k,instant);paintAbil();};
   <div class="tc-thread" id="tcThread"></div>
   <div class="tc-chips" id="tcChips"></div>
   <form class="tc-bar" id="tcForm" autocomplete="off">
-    <button type="button" class="tc-quote" id="tcQuote" title="引用天赋上下文">§</button>
     <textarea id="tcInput" rows="1" maxlength="2000" placeholder="就这份报告，问点什么…" disabled></textarea>
     <button type="submit" class="tc-send" id="tcSend" disabled>↑</button>
   </form>

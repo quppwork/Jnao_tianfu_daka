@@ -11,9 +11,15 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.biz_log import biz_event
-from app.schemas.auth import PartnerJinnaoRegisterRequest, PartnerJinnaoRegisterResponse
+from app.schemas.auth import (
+    PartnerJinnaoEnsureReportChatRequest,
+    PartnerJinnaoEnsureReportChatResponse,
+    PartnerJinnaoRegisterRequest,
+    PartnerJinnaoRegisterResponse,
+)
 from app.services.member_registry_service import CHANNEL_JINNAO, REGISTER_SOURCE_JINNAO
 from app.services.parent_profile_service import register_parent_from_partner
+from app.services.partner_report_chat_service import ensure_report_chat
 
 logger = logging.getLogger("jnao")
 
@@ -82,3 +88,43 @@ def jinnao_register_parent(
         created=created,
         partner_ref=(req.partner_ref or None),
     )
+
+
+@router.post(
+    "/jinnao/ensure-report-chat",
+    response_model=PartnerJinnaoEnsureReportChatResponse,
+    dependencies=[Depends(require_jinnao_api_key)],
+)
+def jinnao_ensure_report_chat(
+    req: PartnerJinnaoEnsureReportChatRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """关联 db_fz_jingnao 家长/测评 → 本库报告 + JWT，供问大宇 iframe。
+
+    读：ys_dayu_parent_user、ys_dayu_test_result（LEGACY_DATABASE_URL）
+    写：jnao_daka.talent_assessment；回写 parent_user.ai_user_id / ai_session_id
+    """
+    out = ensure_report_chat(
+        db,
+        wx_user_id=req.wx_user_id,
+        test_result_id=req.test_result_id,
+        device_label=(req.device_label or "jinnao-embed"),
+    )
+    biz_event(
+        "partner.jinnao.ensure_report_chat",
+        uid=out["user_id"],
+        role="parent",
+        assessment_id=out["assessment_id"],
+        dayu_test_result_id=out["dayu_test_result_id"],
+        wx_user_id=out["wx_user_id"],
+        ip=getattr(request.client, "host", None) if request.client else None,
+    )
+    logger.info(
+        "partner ensure-report-chat wx=%s ai=%s assessment=%s dayu_tr=%s",
+        out["wx_user_id"],
+        out["user_id"],
+        out["assessment_id"],
+        out["dayu_test_result_id"],
+    )
+    return PartnerJinnaoEnsureReportChatResponse(**out)

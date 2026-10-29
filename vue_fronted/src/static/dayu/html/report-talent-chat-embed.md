@@ -1,197 +1,81 @@
-# 成人报告「问大宇」iframe 嵌入对接说明
+# 「问大宇 · 这份报告」iframe 嵌入说明
 
-> 版本：`prod-20261028-001` / commit `a1bc3c8`  
-> 站点：`https://jnaosoft.cn`  
-> 嵌入页：`/static/dayu/html/report-talent-chat-embed.html`
+面向宿主页开发。对话由劲脑侧提供并维护；宿主只需嵌页面并传入已有账号与测评参数。
 
-本文给**第三方宿主页**与**本方发版/联调**共用。走 iframe：**对方不必拷贝整站前端，也不必持有 Agent 密钥**。
+**嵌入页：**  
+`https://jnaosoft.cn/static/dayu/html/report-talent-chat-embed.html`
 
----
-
-## 1. 方案结论
-
-| 项 | 说明 |
-|----|------|
-| 嵌入方式 | 宿主页用 `<iframe>` 打开本方嵌入页 |
-| 对话能力 | 仍在本方域名执行（历史 / 流式 / 报告上下文） |
-| 对方职责 | 拼 URL 参数：`assessment_id`、`user_id`、`token` |
-| 本方职责 | 鉴权、Agent、知识库、落库记忆 |
+账号仍走已有接口：`POST /api/partner/jinnao/register-parent`（拿到本系统 `user_id`，写入你们库的 `ai_user_id`）。**不必再接新的 ensure 接口。**
 
 ---
 
-## 2. 线上地址
-
-| 用途 | URL |
-|------|-----|
-| 嵌入页 | `https://jnaosoft.cn/static/dayu/html/report-talent-chat-embed.html` |
-| 本说明（静态） | `https://jnaosoft.cn/static/dayu/html/report-talent-chat-embed.md` |
-| API 根 | `https://jnaosoft.cn`（iframe 内相对路径 `/api/...`） |
-
-本机联调前端：`http://127.0.0.1:5185/static/dayu/html/report-talent-chat-embed.html`
-
----
-
-## 3. iframe 示例
+## 1. 怎么嵌
 
 ```html
 <iframe
-  id="jnao-report-chat"
-  src="https://jnaosoft.cn/static/dayu/html/report-talent-chat-embed.html?assessment_id=123&user_id=456&token=JWT&talent=思者"
+  src="https://jnaosoft.cn/static/dayu/html/report-talent-chat-embed.html?user_id=AI用户ID&token=登录令牌&dayu_test_result_id=测评结果ID"
   style="width:100%;height:100%;min-height:560px;border:0;border-radius:16px"
   allow="clipboard-write"
   title="问大宇 · 这份报告"
 ></iframe>
 ```
 
-生产须 **HTTPS 嵌 HTTPS**。`token` 由宿主后端下发拼进 URL，**勿写死在前端仓库**。
+生产使用 **HTTPS**。`token` 由你们后端下发后拼进 URL，不要写死在前端，也不要把合作方 `X-Api-Key` 放到浏览器。
 
 ---
 
-## 4. URL 参数
+## 2. URL 参数
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `assessment_id` | 是 | 该份成人测评报告 ID |
-| `user_id` | 是 | 报告归属用户 ID |
-| `token` | 是 | 该用户有效登录 JWT（页内读入后会从地址栏清除） |
-| `talent` | 否 | 天赋名，如 `思者`（快捷问题兜底） |
-| `theme` | 否 | 传 `lt` 为浅色主题 |
+| `user_id` | 是 | 本系统用户 ID（`ys_dayu_parent_user.ai_user_id`，register-parent 返回的 `user_id`） |
+| `token` | 是 | 该用户登录 JWT（可存于 `ai_session_id`）；嵌入页读入后会从地址栏清除 |
+| `dayu_test_result_id` | 是* | `ys_dayu_test_result.id`（成人测评）。打开时会自动关联报告，无需你们再同步 |
+| `wx_user_id` | 否 | `ys_wx_member.id`；一般可不传（按 `ai_user_id` 反查） |
+| `assessment_id` | 否 | 本系统报告 ID；若已有可直接传，则不必传 `dayu_test_result_id` |
+| `talent` | 否 | 天赋名，如 `思者`（快捷提问兜底） |
+| `theme` | 否 | 传 `lt` 为浅色 |
 
-同义：`access_token` 可代替 `token`。
-
----
-
-## 5. 后端接口（iframe 已接好；对方一般不用自调）
-
-鉴权头（嵌入页已自动带）：
-
-- `Authorization: Bearer <token>`
-- `X-Session-Token: <token>`
-- `X-Child-User-Id: <user_id>`
-- Query：`user_id=<user_id>`
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/talent/assessment/{id}/chat` | 历史 + 开场白 + chips |
-| `POST` | `/api/talent/assessment/{id}/chat` | 整段回复（流式失败时回退） |
-| `POST` | `/api/talent/assessment/{id}/chat/stream` | SSE 流式 |
-
-`POST` 体：`{ "content": "用户问题" }`
-
-SSE 事件 `type`：`token` | `replace` | `status` | `done` | `error`，结束另有 `[DONE]`。
-
-归属校验：只能打开**当前用户有权查看**的报告，否则 404。
+\* `dayu_test_result_id` 与 `assessment_id` 二选一即可（推荐前者，用你们库已有字段）。  
+`access_token` / `test_result_id` 分别可代替 `token` / `dayu_test_result_id`。
 
 ---
 
-## 6. 父页 postMessage（可选）
+## 3. 与宿主页的消息（可选）
 
-嵌入页 → 宿主：
+嵌入页会向父页面 `postMessage`，`source` 固定为 `jnao-report-talent-chat`：
 
 ```js
 window.addEventListener('message', (ev) => {
   const d = ev.data;
   if (!d || d.source !== 'jnao-report-talent-chat') return;
-  switch (d.type) {
-    case 'jnao-embed-ready':  /* 打开成功：assessment_id, user_id, messages */ break;
-    case 'jnao-embed-error':  /* message */ break;
-    case 'jnao-embed-close':  /* 用户点 ✕ */ break;
-    case 'jnao-embed-cite':   /* section：报告章节名，宿主可跳转 */ break;
-  }
+  // d.type:
+  //   jnao-embed-ready  — 对话打开成功
+  //   jnao-embed-error  — 缺参或鉴权失败（见 d.message）
+  //   jnao-embed-close  — 用户点击关闭
+  //   jnao-embed-cite   — 用户点击「§ 引用 · 章节」（见 d.section）
 });
 ```
 
-| `type` | 含义 |
-|--------|------|
-| `jnao-embed-ready` | 对话打开成功 |
-| `jnao-embed-error` | 缺参 / 鉴权失败等 |
-| `jnao-embed-close` | 用户关闭 |
-| `jnao-embed-cite` | 点击「§ 引用 · 章节」 |
+---
+
+## 4. 职责划分
+
+| 劲脑侧（我们） | 宿主侧（你们） |
+|----------------|----------------|
+| 嵌入页、对话、流式回答 | 报告页放置 iframe |
+| 按 `dayu_test_result_id` 自动关联报告 | 传入 `user_id` + `token` + `dayu_test_result_id` |
+| Agent / 知识库 / 后续扩展 | 账号仍用 register-parent；按需听 postMessage |
+
+无需接入 Agent 内部实现，也无需持有模型密钥。
 
 ---
 
-## 7. 交付清单
+## 5. 联调自检
 
-### 本方每次开报告需提供给宿主
-
-1. `assessment_id`
-2. `user_id`
-3. 短时有效的 `token`
-4. 嵌入页完整 URL（见 §2）
-
-### 对方不需要
-
-- 百炼 / 豆包 API Key、Agent 提示词、仓库私钥
-- 整仓 `vue_fronted` 业务代码（iframe 已足够）
-
-### 可选：只读参考源码（非嵌入必需）
-
-| 文件 | 作用 |
-|------|------|
-| `vue_fronted/src/static/dayu/html/report-talent-chat-embed.html` | 嵌入页本体 |
-| `vue_fronted/src/static/dayu/js/sse-post.js` | SSE 客户端 |
-| `vue_fronted/src/static/dayu/js/guide-rich.js` | 富文本渲染 |
-| `vue_fronted/src/static/dayu/html/report-v3.html`（`#tcHandle` / `bootTalentChat`） | 报告页内抽屉原实现 |
-
-Vue 组件对照：`vue_fronted/src/components/report-talent-chat/report-talent-chat.vue`
+- iframe 能打开，参数正确时可看到开场白 / 历史  
+- 提问有回复  
+- 错误 `token` 会提示失败（或收到 `jnao-embed-error`）  
+- `ai_user_id` 已指向 register-parent 返回的用户  
 
 ---
-
-## 8. 宝塔发版备忘（本方运维）
-
-| 项 | 值 |
-|----|-----|
-| 域名 | `https://jnaosoft.cn`（`SITE_DOMAIN`） |
-| 代码目录 | `/data/wwwroot/jnao_daka` |
-| 分支 | `backend/dev` |
-| 发版 tag | `prod-20261028-001` |
-| commit | `a1bc3c8` |
-
-宝塔终端：
-
-```bash
-cd /data/wwwroot/jnao_daka
-git fetch origin --tags
-git checkout backend/dev
-git pull origin backend/dev
-
-test -f .env.production && echo "env ok" || echo "缺少 .env.production"
-sed -i 's/^JNAO_BUILD_ID=.*/JNAO_BUILD_ID=prod-20261028-001/' .env.production
-grep '^JNAO_BUILD_ID=' .env.production
-
-bash scripts/deploy-baota.sh
-docker compose -f docker-compose.prod.yml ps
-git log -1 --oneline
-```
-
-验收：
-
-```bash
-curl -sI "https://jnaosoft.cn/static/dayu/html/report-talent-chat-embed.html" | head -5
-curl -sI "https://jnaosoft.cn/static/dayu/html/report-talent-chat-embed.md" | head -5
-```
-
-回退：`git checkout prod-上一稳定 tag` 后同样 `deploy-baota.sh`（保留现网 `.env.production`）。
-
----
-
-## 9. 联调检查表
-
-- [ ] 嵌入页 HTTP 200
-- [ ] 带真实 `assessment_id` / `user_id` / `token` 能拉到历史
-- [ ] 发送问题有流式或整段回复
-- [ ] 错误 token 出现 `jnao-embed-error` 或横幅提示
-- [ ] 宿主监听 `jnao-embed-close` / `jnao-embed-cite`（若需要）
-
----
-
-## 10. 常见问题
-
-**Q：对方一定要前端代码才能嵌吗？**  
-A：不必。iframe + 参数即可。源码仅作 UI/协议参考。
-
-**Q：token 放在 query 安全吗？**  
-A：嵌入页读入后会 `replaceState` 清掉地址栏；仍建议短时 token，并由宿主后端签发，避免进前端仓库与长期日志。
-
-**Q：引用章节点了没反应？**  
-A：嵌入页通过 `jnao-embed-cite` 通知宿主；宿主报告页自行滚动到对应区块。

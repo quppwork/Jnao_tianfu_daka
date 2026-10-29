@@ -247,6 +247,27 @@ class ReportTalentChatIn(BaseModel):
     content: str = Field(..., max_length=2000)
 
 
+@router.get("/dayu-test/{dayu_test_result_id}/prepare")
+def prepare_dayu_test_for_chat(
+    dayu_test_result_id: int,
+    wx_user_id: int | None = None,
+    user_id: int = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """劲脑侧测评 id → 本库 assessment_id（嵌入页用，需已登录 JWT）。
+
+    对方继续用 register-parent 的 ai_user_id + ai_session_id，不必再调 ensure-report-chat。
+    """
+    from app.services.partner_report_chat_service import prepare_assessment_for_dayu_test
+
+    return prepare_assessment_for_dayu_test(
+        db,
+        user_id=user_id,
+        dayu_test_result_id=dayu_test_result_id,
+        wx_user_id=wx_user_id,
+    )
+
+
 @router.get("/assessment/{assessment_id}/chat")
 def report_talent_chat_history(
     assessment_id: int,

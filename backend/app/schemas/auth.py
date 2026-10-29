@@ -138,6 +138,33 @@ class PartnerJinnaoRegisterResponse(BaseModel):
     partner_ref: str | None = None
 
 
+class PartnerJinnaoEnsureReportChatRequest(BaseModel):
+    """把劲脑库成人测评同步到本库并签发问大宇嵌入参数。"""
+
+    wx_user_id: int = Field(
+        ...,
+        ge=1,
+        description="ys_dayu_parent_user.user_id / ys_dayu_test_result.uid（ys_wx_member.id）",
+    )
+    test_result_id: int | None = Field(
+        None,
+        ge=1,
+        description="ys_dayu_test_result.id；缺省取该用户最新成人测评",
+    )
+    device_label: str | None = Field("jinnao-embed", max_length=100)
+
+
+class PartnerJinnaoEnsureReportChatResponse(BaseModel):
+    user_id: int = Field(..., description="本系统用户 ID（写入 ys_dayu_parent_user.ai_user_id）")
+    assessment_id: int = Field(..., description="本系统 talent_assessment.id，iframe 必传")
+    access_token: str = Field(..., description="JWT，iframe 的 token 参数")
+    talent_primary: str = ""
+    dayu_test_result_id: int
+    wx_user_id: int
+    embed_path: str
+    embed_url: str
+
+
 class ParentProfileResponse(BaseModel):
     id: int
     parent_phone: str
