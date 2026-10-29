@@ -43,17 +43,22 @@ def fetch_parent_user_by_wx_id(wx_user_id: int) -> dict[str, Any] | None:
     if wx_user_id < 1:
         return None
     engine = _require_engine()
+    # 线上表可能无 talent/check_talent 列（天赋在 test_result），勿 SELECT 多余字段
     sql = text(
         """
         SELECT id, user_id, ai_user_id, ai_session_id, nickname, real_name, mobile,
-               talent, check_talent, delete_time
+               delete_time
         FROM ys_dayu_parent_user
         WHERE user_id = :uid AND delete_time = 0
         LIMIT 1
         """
     )
-    with engine.connect() as conn:
-        row = conn.execute(sql, {"uid": int(wx_user_id)}).mappings().first()
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(sql, {"uid": int(wx_user_id)}).mappings().first()
+    except Exception as e:
+        logger.exception("fetch_parent_user_by_wx_id failed")
+        raise LegacyDayuError(f"读取 ys_dayu_parent_user 失败: {e}", 502) from e
     return dict(row) if row else None
 
 
@@ -65,15 +70,19 @@ def fetch_parent_user_by_ai_id(ai_user_id: int) -> dict[str, Any] | None:
     sql = text(
         """
         SELECT id, user_id, ai_user_id, ai_session_id, nickname, real_name, mobile,
-               talent, check_talent, delete_time
+               delete_time
         FROM ys_dayu_parent_user
         WHERE ai_user_id = :aid AND delete_time = 0
         ORDER BY id DESC
         LIMIT 1
         """
     )
-    with engine.connect() as conn:
-        row = conn.execute(sql, {"aid": int(ai_user_id)}).mappings().first()
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(sql, {"aid": int(ai_user_id)}).mappings().first()
+    except Exception as e:
+        logger.exception("fetch_parent_user_by_ai_id failed")
+        raise LegacyDayuError(f"读取 ys_dayu_parent_user 失败: {e}", 502) from e
     return dict(row) if row else None
 
 
@@ -113,8 +122,12 @@ def fetch_test_result(
         params = {"uid": int(wx_user_id)}
         if adult_only:
             params["tt"] = DAYU_TEST_ADULT
-    with engine.connect() as conn:
-        row = conn.execute(sql, params).mappings().first()
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(sql, params).mappings().first()
+    except Exception as e:
+        logger.exception("fetch_test_result failed")
+        raise LegacyDayuError(f"读取 ys_dayu_test_result 失败: {e}", 502) from e
     return dict(row) if row else None
 
 
