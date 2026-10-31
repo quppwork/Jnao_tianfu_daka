@@ -30,8 +30,11 @@ if TYPE_CHECKING:
 
 STATE_KEY = "training_progress"
 
-# 5 个必修技能
+# 5 个必修技能（参与整体段位最低原则）
 REQUIRED_SKILLS = ("超脑阅读", "影像追忆", "扫描速记", "极速运算", "极速学习")
+
+# 五六阶可排技能：进度需持久化，但不默认参与整体段位（见 get_skills_with_records）
+EXTENDED_SKILLS = ("文科奥秘", "理科奥秘", "天赋绘画", "音乐灵感")
 
 # OSS 默认起始位置（通用；极速学习行者/德者从 stage 3 开始由 OSS 查询时动态调整）
 DEFAULT_OSS_START: dict[str, tuple[int, int]] = {
@@ -94,6 +97,19 @@ def get_training_progress(child: ChildUser) -> dict:
             "part_listen_count": int(sd.get("part_listen_count") or 0),
             "part_first_listen_at": sd.get("part_first_listen_at"),
         }
+    # 扩展技能：仅在已有进度时读出，避免默认占位拉低整体段位
+    for sk in EXTENDED_SKILLS:
+        if sk not in skills_raw:
+            continue
+        sd = skills_raw.get(sk) or {}
+        skills[sk] = {
+            "tier": int(sd.get("tier") or 1),
+            "oss_stage": int(sd.get("oss_stage") if sd.get("oss_stage") is not None else 0),
+            "oss_part": int(sd.get("oss_part") if sd.get("oss_part") is not None else 0),
+            "consecutive_pass": int(sd.get("consecutive_pass") or 0),
+            "part_listen_count": int(sd.get("part_listen_count") or 0),
+            "part_first_listen_at": sd.get("part_first_listen_at"),
+        }
     return {
         "skills": skills,
         "training_days": int(raw.get("training_days") or 0),
@@ -117,37 +133,37 @@ def save_training_progress(db: Session, child: ChildUser, state: dict) -> dict:
 
 
 def _clean_skills_for_save(skills: dict) -> dict:
-    """保存前清理：只保留 REQUIRED_SKILLS + 必要字段"""
+    """保存前清理：必修 + 扩展技能进度字段"""
     out = {}
-    for sk in REQUIRED_SKILLS:
-        if sk in skills:
-            sd = skills[sk]
-            out[sk] = {
-                "tier": int(sd.get("tier") or 1),
-                "oss_stage": int(sd.get("oss_stage") or 0),
-                "oss_part": int(sd.get("oss_part") or 0),
-                "consecutive_pass": int(sd.get("consecutive_pass") or 0),
-                "part_listen_count": int(sd.get("part_listen_count") or 0),
-                "part_first_listen_at": sd.get("part_first_listen_at"),
-            }
+    for sk in (*REQUIRED_SKILLS, *EXTENDED_SKILLS):
+        if sk not in skills:
+            continue
+        sd = skills[sk]
+        out[sk] = {
+            "tier": int(sd.get("tier") or 1),
+            "oss_stage": int(sd.get("oss_stage") or 0),
+            "oss_part": int(sd.get("oss_part") or 0),
+            "consecutive_pass": int(sd.get("consecutive_pass") or 0),
+            "part_listen_count": int(sd.get("part_listen_count") or 0),
+            "part_first_listen_at": sd.get("part_first_listen_at"),
+        }
     return out
 
 
 # ─── 整体 Tier ──────────────────────────────────────
 
 def overall_tier(state: dict) -> int:
-    """取所有技能 tier 的平均值后向下取整。
+    """最低原则：取所有活跃技能 tier 的最小值。
 
-    例: [1, 2, 3] → avg=2.0 → 2
-         [1, 1, 2, 2, 2] → avg=1.6 → 1
-         [5, 5, 3, 1, 1] → avg=3.0 → 3
+    例: [1, 2, 3] → 1
+         [2, 2, 3] → 2
+         [5, 5, 5] → 5
     """
     skills = state.get("skills") or {}
     tiers = [sd.get("tier", 1) for sd in skills.values() if isinstance(sd, dict)]
     if not tiers:
         return 1
-    import math
-    return math.floor(sum(tiers) / len(tiers))
+    return min(tiers)
 
 
 # ─── 按打卡记录过滤活跃技能 ───────────────────────────
@@ -199,6 +215,22 @@ def filter_active_skills(state: dict, skills_with_records: set[str]) -> dict:
     new_state = dict(state)
     new_state["skills"] = filtered
     return new_state
+
+
+def display_overall_tier(db: "Session", child: "ChildUser | None") -> int:
+    """全站展示用段位：只按有打卡记录的技能取最低阶。
+
+    打卡结算（training_mastery）、成长 /tier /summary、训练今日方案、
+    学业规划必须走这里，避免各接口自己 min(全部技能) 算出不同数字。
+    """
+    if child is None:
+        return 1
+    try:
+        state = get_training_progress(child)
+        skills_with_records = get_skills_with_records(db, child.id)
+        return overall_tier(filter_active_skills(state, skills_with_records))
+    except Exception:
+        return 1
 
 
 # ─── 单个技能状态 ───────────────────────────────────
@@ -419,6 +451,11 @@ def rotate_part_after_checkin(
 
     count = int(sd.get("part_listen_count", 0)) + 1
     sd["part_listen_count"] = count
+    # 缺时间戳则补写（含：本 part 首次计数；以及老数据有 count 无 first_at）
+    if not sd.get("part_first_listen_at"):
+        from datetime import datetime, timezone, timedelta
+
+        sd["part_first_listen_at"] = datetime.now(timezone(timedelta(hours=8))).isoformat()
 
     threshold = _part_rotation_threshold(student_type, sd)
     if count < threshold:

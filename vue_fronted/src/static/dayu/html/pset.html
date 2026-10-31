@@ -1,0 +1,340 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>我的 · 大宇智能体家长版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;min-height:100vh;min-height:100dvh;height:100vh;height:100dvh;padding-bottom:110px;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}.phone::-webkit-scrollbar{display:none;width:0;height:0}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:9px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.acctbtn{display:inline-block;font-size:11.5px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+/* 我的资料 */
+.me{margin:10px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:16px;display:flex;align-items:center;gap:13px}
+.me .av{width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,rgba(201,162,39,.3),rgba(201,162,39,.08));border:2px solid #C9A227;display:flex;align-items:center;justify-content:center;font-size:28px;flex:none}
+.me .inf b{font-size:17px;font-weight:900;display:inline}
+.me .inf span{display:block;font-size:10.5px;color:#8B93A5;margin-top:3px}
+.me .inf span.vip{display:inline-block;font-size:10px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:8px;padding:3px 9px;margin-left:0;vertical-align:3px;width:auto}
+.me .inf .vips{display:flex;gap:6px;margin-top:5px;flex-wrap:nowrap}
+/* 身份徽章行：算力会员+课程身份一目了然 */
+.idrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.idb{font-size:9.5px;font-weight:800;color:#C9CFDC;background:#0D1322;border:1px solid #2A3040;border-radius:99px;padding:4px 10px;text-decoration:none}
+.idb b{color:#F5D9A8}
+.idb.gold{color:#F5D9A8;border-color:rgba(201,162,39,.55);background:rgba(201,162,39,.1)}
+.idtip{font-size:8.5px;color:#5A6274;margin-top:6px}
+/* 孩子管理 */
+.kidrow{margin:12px 18px 0;background:linear-gradient(135deg,rgba(46,107,230,.14),rgba(46,107,230,.03));border:1.5px solid rgba(46,107,230,.4);border-radius:16px;padding:13px 15px;display:flex;align-items:center;gap:12px}
+.kidrow .kav{width:44px;height:44px;border-radius:50%;background:#171E2E;border:2px solid #2E6BE6;display:flex;align-items:center;justify-content:center;font-size:21px;flex:none;position:relative}
+.tb,.kidrow span.tb,.me span.tb{position:absolute;right:-4px;bottom:-4px;width:20px;height:20px;border-radius:50%;background:#0D111F;border:1.5px solid;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:900;line-height:1;z-index:2;padding:0;text-align:center}
+.kidrow b{font-size:14px;font-weight:900}
+.kidrow span{display:block;font-size:10px;color:#8B93A5;margin-top:2px}
+.kidrow .sw{margin-left:auto;flex:none;font-size:11px;font-weight:800;color:#9AD9FF;border:1px solid rgba(46,107,230,.5);border-radius:99px;padding:5px 12px;text-decoration:none}
+/* 分组 */
+.grp{margin:16px 18px 0}
+.grp .gt{font-size:11px;font-weight:800;color:#5A6274;letter-spacing:2px;margin:0 4px 8px}
+.lst{background:#131926;border:1.5px solid #2A3040;border-radius:16px;overflow:hidden}
+.lst a{display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid #1A2132;text-decoration:none;color:#EDEBE4;font-size:13.5px;font-weight:700}
+.lst a:last-child{border-bottom:none}
+.lst a .ic{width:22px;text-align:center;font-size:17px}
+.lst a .ar{margin-left:auto;color:#5A6274;font-weight:900}
+.lst a .vv{margin-left:auto;font-size:11px;color:#8B93A5}
+.lst a .vv+.ar{margin-left:6px}
+/* 事业发展双板块卡 */
+.bizcard{display:block;text-decoration:none;color:#EDEBE4;background:#131926;border:1.5px solid #2A3040;border-radius:18px;overflow:hidden}
+.bizv{position:relative;aspect-ratio:16/7.5;display:flex;align-items:center;justify-content:center;font-size:36px;cursor:pointer}
+.bizv .bply{position:absolute;width:46px;height:46px;border-radius:50%;background:rgba(13,17,31,.72);border:2px solid #F5D9A8;display:flex;align-items:center;justify-content:center;font-size:16px;color:#F5D9A8}
+.bizv .bvt{position:absolute;left:12px;bottom:9px;font-size:11px;font-weight:900;color:#fff;text-shadow:0 1px 5px rgba(0,0,0,.85)}
+.bizv .bdur{position:absolute;right:10px;bottom:9px;font-size:10px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 8px}
+.bizt{padding:12px 14px 13px}
+.bizt b{font-size:14.5px;font-weight:900}
+.bizt p{font-size:10.5px;color:#8B93A5;line-height:1.7;margin-top:5px}
+.bizt .bgo{display:inline-block;margin-top:9px;font-size:11px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:6px 15px}
+/* 底栏 */
+.foot{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}.foot a{text-align:center;color:#8B93A5;font-size:11px;flex:1;text-decoration:none;padding:0}.foot a.on{color:#F5D9A8;font-weight:700}.foot a img{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">我的<small>SETTINGS · 家长账户</small></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <a id="qpill" href="wallet.html" style="display:inline-flex;align-items:center;gap:5px;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:99px;padding:4px 11px;text-decoration:none" title="已用上游 token"><span style="font-size:11px">⚡</span><b id="qpillNum" style="font-size:11px;font-weight:900;color:#F5D9A8">—</b></a>
+      <span id="tokDev" style="font-size:10px;font-weight:700;color:#8B93A5;white-space:nowrap">tok …</span>
+      <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+    </div>
+  </div>
+
+  <div class="me">
+    <div class="av" style="padding:0;background:none;position:relative"><img src="/static/dayu/assets/avatar-parent.jpg" alt="家长头像" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"/><span class="tb" style="border-color:#C9A227;color:#C9A227" title="行者天赋">行</span></div>
+    <div class="inf">
+      <b id="parentName">家长</b>
+      <div class="vips"><span class="vip">天赋导师</span><span class="vip">合伙人</span><span class="vip" id="kidCountVip">孩子</span></div>
+      <span>家长账户 · 已实名认证</span>
+    </div>
+  </div>
+
+  <!-- 孩子账户：数据来自 /api/parent/children -->
+  <div class="grp">
+    <div class="gt">我的孩子账户（家长账户统管 · 孩子各自独立账号密码登录）</div>
+    <div id="kidList">
+      <div class="kidrow" id="kidListLoading" style="opacity:.7">
+        <div class="kav" style="border-color:#5A6274;font-size:14px;color:#8B93A5">…</div>
+        <div><b style="color:#8B93A5">加载孩子账户…</b><span>正在同步训练数据</span></div>
+      </div>
+    </div>
+    <div class="kidrow" style="margin-top:9px;border-style:dashed;background:rgba(46,107,230,.05)">
+      <div class="kav" style="border-color:#5A6274;font-size:16px;color:#8B93A5">＋</div>
+      <div><b style="color:#8B93A5">开通新的孩子账户</b><span>二宝三宝都能管 · 孩子用自己的账号密码登录训练端</span></div>
+      <a class="sw" href="kids-manage.html" style="border-color:#C9A227;color:#F5D9A8">去开通 ›</a>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">事业发展（课程学习请见「家长课堂」）</div>
+    <a class="bizcard" href="share.html">
+      <div class="bizv" style="background:linear-gradient(180deg,rgba(10,8,2,.05) 30%,rgba(10,8,2,.72)),url(/static/dayu/assets/biz-share.jpg) center/cover no-repeat"><span class="bply">▶</span><span class="bvt">《分享推广》板块介绍 · 会分享就有收入</span><span class="bdur">02:16</span></div>
+      <div class="bizt"><b>分享 · 推广素材库</b><p>怎么分享、分享什么、发给谁——海报/文案/打卡条素材库+工具包全配齐，支持满100人支持者领体验课、你得天赋币抵课程费，分享就是收入。</p><span class="bgo">进入板块 ›</span></div>
+    </a>
+    <a class="bizcard" href="career.html" style="margin-top:11px">
+      <div class="bizv" style="background:linear-gradient(180deg,rgba(2,6,14,.05) 30%,rgba(2,6,14,.72)),url(/static/dayu/assets/biz-career.jpg) center/cover no-repeat"><span class="bply">▶</span><span class="bvt">《招贤纳士》板块介绍 · 从家长到职业人</span><span class="bdur">03:05</span></div>
+      <div class="bizt"><b>招贤纳士 · 职业发展</b><p>合伙人（购买业务机会）+电话咨询/私域服务/专业交付/媒体营销/业务管理/企业高管六大职业——学课程、过考试、做实操，全部完成即可上岗。</p><span class="bgo">进入板块 ›</span></div>
+    </a>
+  </div>
+
+  <div class="grp">
+    <div class="gt">学习与服务</div>
+    <div class="lst">
+      <a href="wallet.html"><span class="ic">⚡</span>算力额度 · 会员充值<span class="vv" id="walletTokHint">查看已用 token</span><span class="ar">›</span></a>
+      <a href="records.html"><span class="ic">📋</span>全家测试报告<span class="ar">›</span></a>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">应用设置</div>
+    <div class="lst">
+      <a href="console.html" style="border:1.5px solid rgba(201,162,39,.55);border-radius:14px"><span class="ic">🖥️</span><b style="color:#F5D9A8">业务操作平台</b><span class="vv">按职业身份进入对应工作台</span><span class="ar">›</span></a>
+      <a href="kids-manage.html"><span class="ic">👨‍👩‍👧</span>孩子账户管理<span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">🔔</span>消息通知<span class="vv">训练提醒已开</span><span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">🔒</span>隐私与数据安全<span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">💬</span>意见反馈<span class="ar">›</span></a>
+      <a href="javascript:;"><span class="ic">ℹ️</span>关于大宇智能体<span class="vv">V1.0</span><span class="ar">›</span></a>
+    </div>
+  </div>
+
+  <div class="foot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a class="on" href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+
+</div>
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  var btnStudent = document.getElementById('btnStudent');
+  if(btnStudent){
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'kids-manage.html': '/pages/parent/index',
+      'wallet.html': '/pages/parent/wallet',
+      'console.html': '/pages/parent/console',
+      'index.html': '__student__'
+    };
+    var soon = {
+      'records.html': '测试报告即将开放',
+      'share.html': '分享推广即将开放',
+      'career.html': '招贤纳士即将开放'
+    };
+    if(soon[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(!post('dayu-toast', {title: soon[file]})){
+        try{ alert(soon[file]); }catch(err){}
+      }
+      return;
+    }
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      var path = map[file];
+      var qIdx = href.indexOf('?');
+      if(qIdx >= 0 && path.indexOf('?') < 0) path += href.slice(qIdx);
+      nav(path);
+    }
+  }, true);
+  function fmtTok(n){
+    n = Number(n) || 0;
+    if(n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if(n >= 1e4) return Math.round(n/1000) + 'k';
+    if(n >= 1000) return (n/1000).toFixed(1) + 'k';
+    return String(n);
+  }
+  function applyUsage(d){
+    if(!d) return;
+    var total = d.display_total_tokens != null ? Number(d.display_total_tokens) : 0;
+    var label = d.label || fmtTok(total);
+    var num = document.getElementById('qpillNum');
+    var chip = document.getElementById('tokDev');
+    var hint = document.getElementById('walletTokHint');
+    var meTok = (d.me && d.me.total_tokens) || 0;
+    var famTok = (d.billing && d.billing.total_tokens != null) ? d.billing.total_tokens : meTok;
+    var calls = (d.me && d.me.call_count) || 0;
+    if(num) num.textContent = label;
+    if(chip){
+      chip.textContent = '已用 ' + fmtTok(total) + ' · ' + calls + '次';
+      chip.title = '本人 ' + meTok + ' / 家计 ' + famTok;
+    }
+    if(hint) hint.textContent = '已用 ' + fmtTok(total) + ' tok';
+  }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        return (o.parent && o.parent.userId) || (o.role === 'parent' && o.userId) || 0;
+      }
+      var u = localStorage.getItem('jnao_user');
+      if(u){
+        var ju = JSON.parse(u);
+        if(ju.role === 'parent') return ju.user_id || ju.id || ju.child_user_id || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function authHeaders(){
+    var h = { Accept: 'application/json' };
+    try{
+      var tok = localStorage.getItem('jnao_access_token') ||
+        localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){
+          var o = JSON.parse(snap);
+          if(o.parent && o.parent.token) tok = o.parent.token;
+          else if(o.token) tok = o.token;
+        }
+      }
+      if(tok) h['Authorization'] = 'Bearer ' + tok;
+      var pid = parentUserId();
+      if(pid) h['X-Child-User-Id'] = String(pid);
+    }catch(e){}
+    return h;
+  }
+  var TALENT_COLOR = {
+    '学': '#4A7EC2', '思': '#3E8E5A', '赢': '#E05252', '德': '#A0754A', '行': '#C9A869'
+  };
+  var ORD = ['老大', '老二', '老三', '老四', '老五'];
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function renderKids(list){
+    var host = document.getElementById('kidList');
+    var vip = document.getElementById('kidCountVip');
+    if(vip) vip.textContent = list.length ? ('孩子×' + list.length) : '孩子';
+    if(!host) return;
+    if(!list.length){
+      host.innerHTML = '<div class="kidrow" style="opacity:.85">' +
+        '<div class="kav" style="border-color:#5A6274;font-size:16px;color:#8B93A5">∅</div>' +
+        '<div><b style="color:#8B93A5">暂无孩子账户</b><span>点下方「去开通」添加训练账号</span></div></div>';
+      return;
+    }
+    host.innerHTML = list.map(function(c, i){
+      var nick = c.nickname || '学员';
+      var ord = ORD[i] ? '（' + ORD[i] + '）' : '';
+      var ch = c.talent_char || (c.talent ? String(c.talent).charAt(0) : '·');
+      var color = TALENT_COLOR[ch] || '#2E6BE6';
+      var duan = c.duan_label || '筑基期·一段';
+      var mins = c.week_minutes != null ? Number(c.week_minutes) : 0;
+      var sub = duan + ' · 本周 ' + mins + ' 分钟';
+      if(!mins && c.training_days) sub = duan + ' · 已练 ' + c.training_days + ' 天';
+      var margin = i ? ' style="margin-top:9px;border-color:' + color + '"' : ' style="border-color:' + color + '"';
+      return '<div class="kidrow"' + margin + '>' +
+        '<div class="kav" style="border-color:' + color + '">🧒' +
+          '<span class="tb" style="border-color:' + color + ';color:' + color + '" title="' + esc(c.talent || '') + '">' + esc(ch) + '</span></div>' +
+        '<div><b>' + esc(nick) + esc(ord) + '</b><span>' + esc(sub) + '</span></div>' +
+        '<a class="sw" href="pdata.html?child_id=' + encodeURIComponent(c.id) + '">训练数据 ›</a></div>';
+    }).join('');
+  }
+  async function loadKids(){
+    var pid = parentUserId();
+    var host = document.getElementById('kidList');
+    if(!pid){
+      if(host) host.innerHTML = '<div class="kidrow"><div class="kav" style="border-color:#5A6274">!</div>' +
+        '<div><b style="color:#8B93A5">未登录家长账号</b><span>请先登录后再查看孩子</span></div></div>';
+      return;
+    }
+    try{
+      var res = await fetch('/api/parent/children?user_id=' + encodeURIComponent(pid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      var body = await res.json();
+      renderKids(body.children || []);
+    }catch(err){
+      if(host) host.innerHTML = '<div class="kidrow"><div class="kav" style="border-color:#E05252">!</div>' +
+        '<div><b style="color:#E05252">同步失败</b><span>请下拉刷新或稍后重试</span></div></div>';
+    }
+    try{
+      var pr = await fetch('/api/parent/profile?user_id=' + encodeURIComponent(pid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(pr.ok){
+        var p = await pr.json();
+        var nameEl = document.getElementById('parentName');
+        if(nameEl && (p.nickname || p.real_name)) nameEl.textContent = p.nickname || p.real_name;
+      }
+    }catch(e){}
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if(data && data.type === 'dayu-usage') applyUsage(data);
+    if(data && data.type === 'dayu-hydrate' && data.nickname){
+      var nameEl = document.getElementById('parentName');
+      if(nameEl && data.nickname) nameEl.textContent = data.nickname;
+    }
+  });
+  post('dayu-usage-request');
+  post('dayu-ready');
+  loadKids();
+})();
+</script>
+</body></html>

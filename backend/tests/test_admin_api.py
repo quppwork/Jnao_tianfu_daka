@@ -15,110 +15,236 @@ def _admin_login(client: TestClient) -> dict:
 def _auth_admin(data: dict) -> dict:
     uid = data["child_user_id"]
     token = data["session_token"]
-    return {"params": {"user_id": uid, "session_token": token}}
+    return {
+        "headers": {
+            "X-Child-User-Id": str(uid),
+            "X-Session-Token": token,
+        },
+    }
+
+
+def _seed_parent(db_session, phone: str, nickname: str) -> int:
+    from app.core.password import hash_password
+    from app.services.auth_service import ROLE_PARENT, register_child
+    from app.services.datetime_fmt import format_cst
+    from datetime import datetime
+    from app.services.training_day import TZ
+
+    now_iso = format_cst(datetime.now(TZ).replace(tzinfo=None))
+    user = register_child(
+        db_session,
+        parent_phone=phone,
+        nickname=nickname,
+        password=hash_password("123456"),
+        role=ROLE_PARENT,
+        child_quota=5,
+    )
+    user.profile_json = {
+        "parent": {
+            "real_name": nickname,
+            "phone_verified_at": now_iso,
+            "login_channel": "standard",
+        }
+    }
+    db_session.commit()
+    db_session.refresh(user)
+    return user.id
 
 
 class TestAdminApi:
+    def test_ensure_admin_retires_legacy_admins_and_sessions(self, db_session, monkeypatch):
+        from app.services import auth_service
+        from app.services.session_service import issue_session, validate_session
+
+        monkeypatch.setenv("ADMIN_LOGIN_NAME", "new_admin")
+        monkeypatch.setenv("ADMIN_PASSWORD", "1234567890123456")
+        legacy = auth_service.register_child(
+            db_session,
+            parent_phone="admin_legacy",
+            nickname="旧管理员",
+            login_name="pyx_legacy",
+            password="123456",
+            role=auth_service.ROLE_ADMIN,
+        )
+        legacy_token = issue_session(db_session, legacy)
+        assert validate_session(db_session, legacy.id, legacy_token)
+
+        kept = auth_service.ensure_admin_account(db_session)
+        assert kept.login_name == "new_admin"
+        assert auth_service.find_admin_by_login_name(db_session, "pyx_legacy") is None
+        legacy_row = db_session.get(type(legacy), legacy.id)
+        assert legacy_row.account_status == auth_service.ACCOUNT_DELETED
+        assert not validate_session(db_session, legacy.id, legacy_token)
+        assert auth_service.login_admin_by_password(db_session, "pyx_legacy", "123456") is None
+
+    def test_admin_restore_removed_parent_by_phone(self, client: TestClient, db_session):
+        from app.db.models import ChildUser
+        from app.services import auth_service
+
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        pid = _seed_parent(db_session, "19805031756", "qupp")
+        res = client.delete(f"/api/admin/parents/{pid}", **auth)
+        assert res.status_code == 200
+
+        row = db_session.get(ChildUser, pid)
+        assert row.account_status == "removed"
+
+        listed = client.get("/api/admin/parents", **auth)
+        assert not any(p["id"] == pid for p in listed.json()["parents"])
+
+        removed = client.get("/api/admin/parents/removed?q=qupp", **auth)
+        assert removed.status_code == 200
+        assert any(p["id"] == pid for p in removed.json()["parents"])
+
+        restore = client.post(
+            "/api/admin/parents/restore-by-phone",
+            json={"phone": "19805031756", "nickname": "qupp"},
+            **auth,
+        )
+        assert restore.status_code == 200, restore.text
+        data = restore.json()
+        assert data["parent_phone"] == "19805031756"
+        assert data["nickname"] == "qupp"
+
+        db_session.refresh(row)
+        assert row.account_status == "active"
+        assert row.parent_phone == "19805031756"
+
+    def test_admin_restore_hard_deleted_parent(self, client: TestClient, db_session):
+        from app.db.models import ChildUser
+        from app.services import auth_service
+
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        pid = _seed_parent(db_session, "19805031757", "hard_parent")
+        row = db_session.get(ChildUser, pid)
+        row.profile_json = {
+            **(row.profile_json or {}),
+            "archived_parent_phone": "19805031757",
+            "archived_nickname": "hard_parent",
+        }
+        row.parent_phone = f"__deleted_parent_{pid}"
+        row.account_status = auth_service.ACCOUNT_DELETED
+        row.deleted_at = row.created_at
+        db_session.commit()
+
+        restore = client.post(
+            "/api/admin/parents/restore-by-phone",
+            json={"phone": "19805031757"},
+            **auth,
+        )
+        assert restore.status_code == 200, restore.text
+        db_session.refresh(row)
+        assert row.account_status == "active"
+        assert row.parent_phone == "19805031757"
+
+    def test_admin_create_parent(self, client: TestClient, db_session):
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        res = client.post(
+            "/api/admin/parents",
+            json={
+                "parent_phone": "13900008888",
+                "nickname": "新家长",
+                "password": "123456",
+                "child_quota": 3,
+            },
+            **auth,
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["nickname"] == "新家长"
+
     def test_admin_login(self, client: TestClient):
         data = _admin_login(client)
         assert data["role"] == "admin"
 
-    def test_parent_delete_forbidden(self, client: TestClient):
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009901",
-                "nickname": "测家长",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+    def test_parent_delete_forbidden(self, client: TestClient, db_session):
+        pid = _seed_parent(db_session, "13900009901", "测家长")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_del", "nickname": "小孩", "password": "111111"},
+            json={"login_name": "kid_del", "nickname": "小孩", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
         res = client.delete(f"/api/parent/children/{cid}?user_id={pid}")
         assert res.status_code == 403
 
-    def test_unbound_child_cannot_login(self, client: TestClient):
+    def test_unbound_child_cannot_login(self, client: TestClient, db_session):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009902",
-                "nickname": "家长乙",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009902", "家长乙")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_unbind", "nickname": "解绑童", "password": "111111"},
+            json={"login_name": "kid_unbind", "nickname": "解绑童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
         client.delete(f"/api/admin/children/{cid}/bind", **auth)
         login = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_unbind", "password": "111111"},
+            json={"login_name": "kid_unbind", "password": "XiaoMing1"},
         )
         assert login.status_code == 403
 
-    def test_admin_delete_child_archived_and_reuse_login_name(self, client: TestClient, db_session):
+    def test_admin_delete_child_releases_login_name_for_fresh_register(
+        self, client: TestClient, db_session
+    ):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009903",
-                "nickname": "家长丙",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009903", "家长丙")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_hard", "nickname": "硬删童", "password": "111111"},
+            json={"login_name": "kid_hard", "nickname": "硬删童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
         res = client.delete(f"/api/admin/children/{cid}", **auth)
         assert res.status_code == 200
 
-        archived = db_session.get(__import__("app.db.models", fromlist=["ChildUser"]).ChildUser, cid)
-        assert archived is not None
-        assert archived.account_status == "deleted"
-        assert archived.profile_json.get("archived_login_name") == "kid_hard"
+        row = db_session.get(__import__("app.db.models", fromlist=["ChildUser"]).ChildUser, cid)
+        assert row is not None
+        assert row.account_status == "removed"
+        assert row.login_name == f"__removed_{cid}__"
+        assert (row.profile_json or {}).get("archived_login_name") == "kid_hard"
 
         login = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_hard", "password": "111111"},
+            json={"login_name": "kid_hard", "password": "XiaoMing1"},
         )
-        assert login.status_code == 401
+        assert login.status_code in (401, 403), login.text
 
         recreated = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_hard", "nickname": "新童", "password": "222222"},
+            json={"login_name": "kid_hard", "nickname": "新童", "password": "XiaoMing2"},
         )
-        assert recreated.status_code == 200
+        assert recreated.status_code == 200, recreated.text
+        assert recreated.json()["id"] != cid
         assert recreated.json()["login_name"] == "kid_hard"
+        assert recreated.json()["nickname"] == "新童"
 
-    def test_admin_update_quota(self, client: TestClient):
+    def test_parent_registers_fresh_child_after_admin_delete(self, client: TestClient, db_session):
+        """管理员软删后，家长可用同名账号注册全新孩子（新 id，非恢复旧号）。"""
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009904",
-                "nickname": "家长丁",
-                "password": "123456",
-                "role": "parent",
-            },
+        pid = _seed_parent(db_session, "13900009913", "家长回收")
+        old = client.post(
+            f"/api/parent/children?user_id={pid}",
+            json={"login_name": "kid_reclaim", "nickname": "回收童", "password": "XiaoMing1"},
+        ).json()
+        old_id = old["id"]
+        assert client.delete(f"/api/admin/children/{old_id}", **auth).status_code == 200
+
+        fresh = client.post(
+            f"/api/parent/children?user_id={pid}",
+            json={"login_name": "kid_reclaim", "nickname": "回收童新", "password": "XiaoMing2"},
         )
-        pid = reg.json()["child_user_id"]
+        assert fresh.status_code == 200, fresh.text
+        assert fresh.json()["id"] != old_id
+        assert fresh.json()["login_name"] == "kid_reclaim"
+        assert fresh.json()["nickname"] == "回收童新"
+
+    def test_admin_update_quota(self, client: TestClient, db_session):
+        admin = _admin_login(client)
+        auth = _auth_admin(admin)
+        pid = _seed_parent(db_session, "13900009904", "家长丁")
         res = client.put(
             f"/api/admin/parents/{pid}",
             json={"child_quota": 2},
@@ -134,8 +260,8 @@ class TestAdminApi:
         assert res.status_code == 200
         policy = res.json()["login_policy"]
         assert policy["admin_max_devices"] == 3
-        assert policy["parent_max_devices"] == 1
-        assert policy["student_max_devices"] == 1
+        assert policy["parent_max_devices"] == 5
+        assert policy["student_max_devices"] == 5
 
     def test_admin_settings_update(self, client: TestClient):
         admin = _admin_login(client)
@@ -148,22 +274,13 @@ class TestAdminApi:
         assert res.status_code == 200
         assert res.json()["login_policy"]["parent_max_devices"] == 2
 
-    def test_parent_detail_and_child_detail(self, client: TestClient):
+    def test_parent_detail_and_child_detail(self, client: TestClient, db_session):
         admin = _admin_login(client)
         auth = _auth_admin(admin)
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009905",
-                "nickname": "家长戊",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009905", "家长戊")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_detail", "nickname": "详情童", "password": "111111"},
+            json={"login_name": "kid_detail", "nickname": "详情童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
 
@@ -172,43 +289,66 @@ class TestAdminApi:
         pdata = pres.json()
         assert pdata["parent_phone"] == "13900009905"
         assert any(c["id"] == cid for c in pdata["children"])
+        assert "usage_billing" in pdata
+        assert "usage_me" in pdata
+        assert pdata["usage_billing"]["total_tokens"] == 0
+        kid = next(c for c in pdata["children"] if c["id"] == cid)
+        assert kid.get("usage_total_tokens", 0) == 0
+
+        from app.db.models import UpstreamUsageEvent
+
+        db_session.add(
+            UpstreamUsageEvent(
+                user_id=cid,
+                billing_parent_id=pid,
+                provider="doubao",
+                api="chat.completions",
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                call_count=1,
+                ok=1,
+            )
+        )
+        db_session.commit()
+
+        pres2 = client.get(f"/api/admin/parents/{pid}/detail", **auth)
+        assert pres2.status_code == 200
+        pdata2 = pres2.json()
+        assert pdata2["usage_billing"]["total_tokens"] == 15
+        kid2 = next(c for c in pdata2["children"] if c["id"] == cid)
+        assert kid2["usage_total_tokens"] == 15
 
         cres = client.get(f"/api/admin/children/{cid}/detail", **auth)
         assert cres.status_code == 200
         cdata = cres.json()
         assert cdata["login_name"] == "kid_detail"
         assert cdata["parent_id"] == pid
+        assert cdata["usage_me"]["total_tokens"] == 15
+        assert cdata["usage_billing"]["total_tokens"] == 15
 
-    def test_student_single_device_login(self, client: TestClient, db_session):
+    def test_student_multi_device_login(self, client: TestClient, db_session):
         from app.db.models import UserSession
         from sqlalchemy import select
 
-        reg = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13900009906",
-                "nickname": "家长己",
-                "password": "123456",
-                "role": "parent",
-            },
-        )
-        pid = reg.json()["child_user_id"]
+        pid = _seed_parent(db_session, "13900009906", "家长己")
         child = client.post(
             f"/api/parent/children?user_id={pid}",
-            json={"login_name": "kid_single", "nickname": "单端童", "password": "111111"},
+            json={"login_name": "kid_multi", "nickname": "多端童", "password": "XiaoMing1"},
         ).json()
         cid = child["id"]
 
         login1 = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_single", "password": "111111"},
+            json={"login_name": "kid_multi", "password": "XiaoMing1"},
         )
         assert login1.status_code == 200
         token1 = login1.json()["session_token"]
+        assert login1.json().get("access_token") == token1
 
         login2 = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_single", "password": "111111"},
+            json={"login_name": "kid_multi", "password": "XiaoMing1"},
         )
         assert login2.status_code == 200
         token2 = login2.json()["session_token"]
@@ -216,10 +356,10 @@ class TestAdminApi:
 
         from app.services.session_service import validate_session
 
-        assert not validate_session(db_session, cid, token1)
+        assert validate_session(db_session, cid, token1)
         assert validate_session(db_session, cid, token2)
 
         sessions = db_session.scalars(
             select(UserSession).where(UserSession.user_id == cid)
         ).all()
-        assert len(sessions) == 1
+        assert len(sessions) == 2

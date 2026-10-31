@@ -30,7 +30,7 @@
 
         :class="{ active: subject === s }"
 
-        @tap="subject = s"
+        @tap="onSubjectTap(s)"
 
       >
 
@@ -40,7 +40,28 @@
 
     </view>
 
+    <view v-if="guideHandoffBanner" class="qa-handoff-banner">
+      <view class="qa-handoff-main">
+        <text class="qa-handoff-title">来自首页引导</text>
+        <text class="qa-handoff-text">{{ guideHandoffBanner.hint || ('已切换到' + (guideHandoffBanner.subject || subject)) }}</text>
+      </view>
+      <view class="qa-handoff-close" @tap="guideHandoffBanner = null"><text>×</text></view>
+    </view>
 
+    <view v-if="needsGradeSetup" class="qa-grade-banner">
+      <text class="qa-grade-banner-text">请先选择年级，以便按学段辅导</text>
+      <picker mode="selector" :range="gradeOptions" @change="onQaGradePick">
+        <view class="qa-grade-picker"><text>{{ learnerGrade || '选择年级' }}</text></view>
+      </picker>
+    </view>
+
+    <view v-if="mismatchSuggest" class="qa-mismatch-banner">
+      <view class="qa-handoff-main">
+        <text class="qa-handoff-text">这道题更像「{{ mismatchSuggest }}」，点切换将自动重发上一问</text>
+      </view>
+      <view class="qa-mismatch-action" @tap="applySuggestedSubject"><text>切换并重发</text></view>
+      <view class="qa-handoff-close" @tap="dismissMismatchBanner"><text>×</text></view>
+    </view>
 
     <view class="chat-scroll" id="chatScroll">
 
@@ -63,16 +84,27 @@
 
           <view v-if="m.role === 'user'" class="bubble-user bubble-user-tail">
 
-            <img
-              v-if="m.imageUrl"
-              :src="m.imageUrl"
-              class="bubble-img"
-              loading="lazy"
-              @click.stop="previewMessageImage(i)"
-              @error="onMsgImageError(i)"
-            />
+            <view
+              v-if="m.imageUrl || m.hasImage"
+              class="bubble-img-wrap"
+              @click.stop="m.imageUrl && previewMessageImage(i)"
+            >
+              <img
+                v-if="m.imageUrl"
+                :src="m.imageUrl"
+                class="bubble-img"
+                loading="eager"
+                @error="onMsgImageError(i)"
+              />
+              <view v-else class="bubble-img-ph"><text>题目图片加载中…</text></view>
+            </view>
 
-            <text v-if="m.text && !(m.imageUrl && m.text === '请帮我看这道题')" class="bubble-text">{{ m.text }}</text>
+            <text
+              v-if="shouldShowUserBubbleText(m)"
+              class="bubble-text"
+              selectable
+              user-select
+            >{{ m.text }}</text>
 
           </view>
 
@@ -80,7 +112,23 @@
 
             <text class="bubble-sender">张宇老师</text>
 
-            <text class="bubble-text">{{ m.text }}</text>
+            <view
+              v-if="loading && i === messages.length - 1 && !m.text"
+              class="thinking-bbl"
+            >
+              <view class="thinking-dots" aria-hidden="true">
+                <view class="thinking-dot"></view>
+                <view class="thinking-dot"></view>
+                <view class="thinking-dot"></view>
+              </view>
+              <text class="thinking-label">老师思考中</text>
+            </view>
+
+            <view
+              v-else-if="m.text"
+              class="bubble-rich"
+              v-html="qaRichHtml(m.text)"
+            ></view>
 
           </view>
 
@@ -96,74 +144,58 @@
 
 
 
-      <view v-if="loading" class="msg-row msg-ai">
-
-
-        <view class="msg-body">
-
-          <view class="bubble-ai bubble-ai-tail typing-wrap">
-
-            <text class="typing-dots">思考中</text>
-
-          </view>
-
-        </view>
-
-      </view>
-
     </view>
 
-
+    <view v-if="showJumpLatest" class="jump-latest" @tap="scrollChat">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      <text>回到最新</text>
+    </view>
 
     <view class="composer">
 
-      <view v-if="pendingImage" class="pending-bubble-wrap">
-        <view class="pending-bubble">
-          <img
-            :src="pendingImage.preview"
-            class="pending-thumb"
-            @click="previewImage(pendingImage.preview)"
-          />
-          <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
+      <view v-if="pendingImage" class="pending-preview">
+        <view class="pending-bubble-wrap">
+          <view class="pending-bubble">
+            <img
+              v-if="pendingImage.preview"
+              :src="pendingImage.preview"
+              class="pending-thumb"
+              alt="题目预览"
+              @click="previewImage(pendingImage.preview)"
+              @error="onPendingThumbError"
+            />
+            <view v-else class="pending-thumb pending-thumb-ph"><text>预览</text></view>
+            <view class="pending-clear" @tap="clearPendingImage()"><text>✕</text></view>
+          </view>
         </view>
+        <text class="pending-send-hint">已附上题目图，点右侧蓝色 ↑ 发送</text>
       </view>
 
       <view class="input-panel">
-
-        <view class="input-wrap">
-
+        <view class="tool voice" @tap="toggleVoiceDesktop">🎤</view>
+        <view class="composer-main">
           <input
-
             class="chat-input"
-
             v-model="inputText"
-
-            placeholder="输入问题，也可拍照发题…"
-
+            placeholder="输入问题，也可粘贴/拍照发题…"
             :disabled="loading"
-
+            confirm-type="send"
             @confirm="sendMsg"
-
+            @paste="onInputPaste"
           />
-
-          <view class="input-btns">
-
-            <view class="btn-camera" @tap="openImageSheet">
-
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="3"/><circle cx="12" cy="13.5" r="3.5"/><circle cx="8" cy="9" r="1" fill="var(--text-dim)" stroke="none"/></svg>
-
+          <view class="composer-actions">
+            <view class="act cam" :class="{ 'btn-disabled': loading }" @tap="openImageSheet">
+              <text class="act-ic">📷</text>
             </view>
-
-            <view class="btn-send" :class="{ disabled: !canSend }" @tap="sendMsg">
-
-              <text style="color:#fff;font-size:14px;">➤</text>
-
+            <view v-if="loading" class="act send stop" @tap="stopStream()">
+              <text class="send-ic">■</text>
             </view>
-
+            <view v-else-if="canSend" class="act send" @tap="sendMsg()">
+              <text class="send-ic">↑</text>
+            </view>
+            <view v-else class="act plus"><text class="act-ic">＋</text></view>
           </view>
-
         </view>
-
       </view>
 
     </view>
@@ -264,10 +296,14 @@
 <script setup>
 
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
+import { studentHomeUrl, isClassicUi } from '@/utils/uiSkin.js'
 
 import {
 
   ensureChildUser,
+
+  requirePageAuth,
 
   fetchQaSessions,
 
@@ -295,7 +331,16 @@ import {
 
   gradeToSchoolStage,
 
+  errMessage,
+
 } from '@/utils/userApi.js'
+
+import { formatDateTimeShortShanghai } from '@/utils/datetime.js'
+import { normalizeQaSubject } from '@/utils/qaMentors.js'
+import 'katex/dist/katex.min.css'
+import '@/styles/qaBubbleRich.css'
+import { formatQaRichHtml, prefetchKatex, getKatexEpoch } from '@/utils/chatRichText.js'
+import { isStreamAborted, applyStreamStoppedHint } from '@/utils/chatStream.js'
 
 import {
   chooseQuestionImage,
@@ -305,7 +350,9 @@ import {
   buildPendingImageFromPath,
   browserCanUseCamera,
   pickImageViaNativeInput,
+  extractClipboardImageFile,
   fileToDataUrl,
+  pendingFromImageFile,
   putQaImageLocal,
   parseQaImageId,
   getQaImageLocal,
@@ -319,21 +366,27 @@ import {
   probeMicrophoneAccess,
 } from '@/utils/qaVoice.js'
 
-/** 语音暂搁置（H5 需 HTTPS + 手机证书，影响开发）；恢复时改为 true */
+/** 语音答疑暂不使用（TTS/ASR 未启用）；恢复时改为 true */
 const QA_VOICE_ENABLED = false
 
-
-
-const subjects = ['数学', '语文', '英语', '科学']
-const subjectEmoji = { 数学: '📐', 语文: '📖', 英语: '🔤', 科学: '🔬' }
+const gradeOptions = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三','高一','高二','高三']
+const subjects = ['理科', '文科', '外语', '科技', '书法']
 const subjectIcon = {
-  数学: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><path d="M6 4l6 14"/><path d="M18 4l-6 14"/></svg>',
-  语文: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
-  英语: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
-  科学: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  理科: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><path d="M6 4l6 14"/><path d="M18 4l-6 14"/></svg>',
+  文科: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
+  外语: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+  科技: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  书法: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 12c2 2 4 3 5 3s3-1 5-3"/><path d="M7 16c2 2 4 3 5 3s3-1 5-3"/></svg>',
 }
 
-const subject = ref('数学')
+const subject = ref('理科')
+
+/** Guide 深交接：学科 chip + 可选预填 */
+const guideHandoffBanner = ref(null)
+const pendingGuideHandoff = ref(false)
+/** 错频道：一键切到建议学科并重发上一问 */
+const mismatchSuggest = ref(null)
+const mismatchResendText = ref('')
 
 const userDisplayName = ref('我')
 
@@ -342,6 +395,13 @@ const inputText = ref('')
 const inputFocused = ref(false)
 
 const loading = ref(false)
+const katexTick = ref(0)
+function qaRichHtml(text) {
+  void katexTick.value
+  return formatQaRichHtml(text || '')
+}
+let streamAbort = null
+let abortRequested = false
 
 const qaSessionId = ref(null)
 
@@ -358,6 +418,8 @@ const showWebcam = ref(false)
 const showSessionSheet = ref(false)
 
 const sessionList = ref([])
+
+const showJumpLatest = ref(false)
 
 const deleteTargetId = ref(null)
 
@@ -396,14 +458,19 @@ const messages = ref([
 ])
 
 let qaLearnerDefaultApplied = false
+const needsGradeSetup = ref(false)
+const learnerGrade = ref('')
 
 
 
 const canSend = computed(() => !loading.value && (inputText.value.trim() || pendingImage.value))
 
-
-
-function goBack() { uni.navigateBack({ delta: 1 }) }
+function goBack() {
+  uni.navigateBack({
+    delta: 1,
+    fail: () => uni.reLaunch({ url: studentHomeUrl() }),
+  })
+}
 
 
 
@@ -461,7 +528,7 @@ function onMsgImageError(msgIndex) {
     m.imageUrl = m.serverImageUrl
     return
   }
-  if (!m.text || m.text === '请帮我看这道题') {
+  if (!m.text || isImageOnlyPlaceholder(m.text)) {
     m.text = '📷 题目图片（点击查看原图）'
   }
 }
@@ -687,35 +754,39 @@ function initBrowserSpeech() {
 
 
 async function ensureLearnerProfile(uid, profileData = null) {
-
   try {
-
     const profile = profileData || await fetchProfile(uid)
-
     const grade = profile.profile_json?.grade || profile.profile_json?.learner?.grade
-
     if (grade) {
-
+      learnerGrade.value = grade
+      needsGradeSetup.value = false
       await updateLearnerProfile(uid, {
-
         grade,
-
         school_stage: gradeToSchoolStage(grade),
-
       })
-
       return
-
     }
-
     if (qaLearnerDefaultApplied) return
-
-    await updateLearnerProfile(uid, { grade: '四年级', age: 10, school_stage: 'primary_high' })
-
+    needsGradeSetup.value = true
     qaLearnerDefaultApplied = true
-
   } catch (e) { /* ignore */ }
+}
 
+async function onQaGradePick(e) {
+  const grade = gradeOptions[e.detail.value]
+  if (!grade) return
+  try {
+    const uid = await ensureChildUser()
+    await updateLearnerProfile(uid, {
+      grade,
+      school_stage: gradeToSchoolStage(grade),
+    })
+    learnerGrade.value = grade
+    needsGradeSetup.value = false
+    uni.showToast({ title: '年级已保存', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: err.message || '保存失败', icon: 'none' })
+  }
 }
 
 
@@ -724,21 +795,42 @@ const DEFAULT_GREETING = { role: 'assistant', text: '你好！我是张宇老师
 
 
 
+/** 纯发图时的占位文案：历史里可能仍有，气泡不展示 */
+const IMAGE_ONLY_PLACEHOLDERS = new Set([
+  '请帮我看这道题',
+  '帮我看这道题',
+  '帮我看下',
+  '帮我看看',
+])
+
+function isImageOnlyPlaceholder(text) {
+  return IMAGE_ONLY_PLACEHOLDERS.has(String(text || '').trim())
+}
+
+function shouldShowUserBubbleText(m) {
+  const t = String(m?.text || '').trim()
+  if (!t) return false
+  // 有图且是占位句 → 只展示图片
+  if (m?.imageUrl && isImageOnlyPlaceholder(t)) return false
+  return true
+}
+
 function mapSessionMessages(data, uid) {
 
   if (!data.messages?.length) return [DEFAULT_GREETING]
 
-  return data.messages.map(m => ({
-
-    role: m.role === 'user' ? 'user' : 'assistant',
-
-    text: m.content,
-
-    imageUrl: resolveMessageImageDisplay(m.image_url, uid) || null,
-
-    imageId: parseQaImageId(m.image_url),
-
-  }))
+  return data.messages.map(m => {
+    const imageUrl = resolveMessageImageDisplay(m.image_url, uid) || null
+    let text = m.content || ''
+    if (imageUrl && isImageOnlyPlaceholder(text)) text = ''
+    return {
+      role: m.role === 'user' ? 'user' : 'assistant',
+      text,
+      imageUrl,
+      hasImage: Boolean(imageUrl),
+      imageId: parseQaImageId(m.image_url),
+    }
+  })
 
 }
 
@@ -788,6 +880,9 @@ async function loadSession(sessionId = null) {
     qaSessionId.value = sid
     const data = await fetchQaSession(uid, sid)
     messages.value = mapSessionMessages(data, uid)
+    await nextTick()
+    bindChatScroll()
+    scrollChat()
 
   } catch (e) { /* 新用户 */ }
 
@@ -796,15 +891,7 @@ async function loadSession(sessionId = null) {
 
 
 function formatSessionTime(iso) {
-
-  if (!iso) return ''
-
-  const d = new Date(iso)
-
-  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
-
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-
+  return formatDateTimeShortShanghai(iso)
 }
 
 
@@ -826,6 +913,82 @@ function closeSessionSheet() {
 }
 
 
+
+function dismissMismatchBanner() {
+  mismatchSuggest.value = null
+  mismatchResendText.value = ''
+}
+
+function onSubjectTap(s) {
+  const shouldResend = mismatchSuggest.value === s && !!mismatchResendText.value
+  const resend = mismatchResendText.value
+  subject.value = s
+  if (!shouldResend || loading.value) return
+  mismatchSuggest.value = null
+  mismatchResendText.value = ''
+  inputText.value = resend
+  nextTick(() => {
+    sendMsg()
+  })
+}
+
+async function applySuggestedSubject() {
+  if (!mismatchSuggest.value || !subjects.includes(mismatchSuggest.value)) {
+    mismatchSuggest.value = null
+    mismatchResendText.value = ''
+    return
+  }
+  const next = mismatchSuggest.value
+  const resend = mismatchResendText.value
+  subject.value = next
+  mismatchSuggest.value = null
+  mismatchResendText.value = ''
+  if (resend && !loading.value) {
+    uni.showToast({ title: `已切换到${next}，正在重发`, icon: 'none' })
+    inputText.value = resend
+    await nextTick()
+    await sendMsg()
+    return
+  }
+  uni.showToast({ title: `已切换到${next}`, icon: 'none' })
+}
+
+onLoad((opts) => {
+  // 大宇壳走 /pages/qa/dayu（自带图二底栏）；本页仅旧版原生答疑
+  if (!isClassicUi()) {
+    const qs = Object.entries(opts || {})
+      .filter(([, v]) => v != null && String(v).trim())
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v).trim())}`)
+      .join('&')
+    uni.reLaunch({ url: qs ? `/pages/qa/dayu?${qs}` : '/pages/qa/dayu' })
+    return
+  }
+  const from = String(opts?.from || '').trim()
+  let rawSubject = String(opts?.subject || '').trim()
+  let rawHint = String(opts?.hint || '').trim()
+  let rawQuery = String(opts?.query || '').trim()
+  try { if (rawSubject) rawSubject = decodeURIComponent(rawSubject) } catch (_) { /* keep */ }
+  try { if (rawHint) rawHint = decodeURIComponent(rawHint) } catch (_) { /* keep */ }
+  try { if (rawQuery) rawQuery = decodeURIComponent(rawQuery) } catch (_) { /* keep */ }
+  const nextSubject = (() => {
+    const n = normalizeQaSubject(rawSubject)
+    return subjects.includes(n) ? n : ''
+  })()
+  if (nextSubject) subject.value = nextSubject
+  const prefill = (rawQuery || rawHint).slice(0, 400)
+  if (from === 'guide' && (nextSubject || prefill)) {
+    pendingGuideHandoff.value = true
+    guideHandoffBanner.value = {
+      subject: nextSubject || '',
+      hint: (rawHint || prefill).slice(0, 60),
+      childId: String(opts?.child_id || '').trim(),
+      image: String(opts?.image || '').trim(),
+    }
+    if (prefill && !inputText.value) {
+      inputText.value = prefill.slice(0, 200)
+    }
+  }
+})
 
 async function startNewSession() {
 
@@ -877,6 +1040,7 @@ async function switchSession(sessionId) {
 
     await nextTick()
 
+    bindChatScroll()
     scrollChat()
 
   } catch (e) {
@@ -921,6 +1085,8 @@ async function confirmDeleteSession() {
 
     await deleteQaSession(uid, sessionId)
 
+    sessionList.value = sessionList.value.filter((s) => s.id !== sessionId)
+
     if (qaSessionId.value === sessionId) {
 
       qaSessionId.value = null
@@ -951,11 +1117,8 @@ async function confirmDeleteSession() {
 
 function openImageSheet() {
   if (pickingImage.value || loading.value) return
-  // 手机 H5：点相机直接进入全屏拍照（DeepSeek 式）
-  if (isWebH5() && isMobileH5()) {
-    openWebcam()
-    return
-  }
+  // 始终弹出 ActionSheet 让用户选择拍照或相册
+  // 手机 H5（HTTP）下 browserCanUseCamera 为 false，直接 openWebcam 会降级到纯拍照，丢失相册入口
   showImageSheet.value = true
 }
 
@@ -991,6 +1154,18 @@ function trackPendingPreview(preview) {
   if (preview?.startsWith('blob:')) messageBlobUrls.add(preview)
 }
 
+function onPendingThumbError() {
+  // blob 失效时尝试用 file 再生成预览，避免蓝条空壳
+  const p = pendingImage.value
+  if (!p?.file) return
+  try {
+    if (p.preview?.startsWith('blob:')) revokeBlobUrl(p.preview)
+    const preview = URL.createObjectURL(p.file)
+    trackPendingPreview(preview)
+    pendingImage.value = { ...p, preview, path: preview }
+  } catch (_) { /* ignore */ }
+}
+
 async function setPendingFromPick(path) {
   if (isWebH5()) {
     try {
@@ -1009,9 +1184,50 @@ async function setPendingFromNativePick(captureMode = 'environment') {
   pendingImage.value = pending
 }
 
+async function handleClipboardPaste(event) {
+  if (loading.value || typeof document === 'undefined') return
+  const file = extractClipboardImageFile(event)
+  if (!file) return
+  event.preventDefault?.()
+  event.stopPropagation?.()
+  try {
+    const pending = pendingFromImageFile(file)
+    // 换图时清掉上一张 blob，避免预览失效/占内存
+    const prev = pendingImage.value?.preview
+    if (prev?.startsWith('blob:') && prev !== pending.preview) revokeBlobUrl(prev)
+    trackPendingPreview(pending.preview)
+    pendingImage.value = pending
+    uni.showToast({ title: '已粘贴图片，点发送提问', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: errMessage(e, '粘贴图片失败'), icon: 'none' })
+  }
+}
+
+function onInputPaste(event) {
+  handleClipboardPaste(event)
+}
+
 async function onPickSource(source) {
   if (pickingImage.value) return
   closeImageSheet()
+
+  // 手机 H5 / 微信：原生 file input，不再走 uni.chooseImage（会二次弹「拍摄/相册」）
+  if (typeof document !== 'undefined' && isMobileH5()) {
+    pickingImage.value = true
+    try {
+      await setPendingFromNativePick(source === 'camera' ? 'environment' : '')
+      uni.showToast({
+        title: source === 'camera' ? '已拍摄，点发送提问' : '已选图片，点发送提问',
+        icon: 'none',
+      })
+    } catch (e) {
+      if (e.message && e.message !== 'cancel') {
+        uni.showToast({ title: e.message, icon: 'none', duration: 2500 })
+      }
+    }
+    pickingImage.value = false
+    return
+  }
 
   if (needsWebcamCapture(source)) {
     await openWebcam()
@@ -1164,11 +1380,14 @@ function revokeBlobUrl(url) {
 function clearPendingImage({ keepPreview } = {}) {
 
   const preview = pendingImage.value?.preview
+  const usedInChat = messages.value.some((m) => m?.imageUrl === preview)
 
-  if (preview?.startsWith('blob:') && preview !== keepPreview) {
-
+  if (
+    preview?.startsWith('blob:') &&
+    preview !== keepPreview &&
+    !usedInChat
+  ) {
     revokeBlobUrl(preview)
-
   }
 
   pendingImage.value = null
@@ -1325,46 +1544,63 @@ function stopVoice() {
 
 async function sendMsg() {
 
-  const text = inputText.value.trim() || (pendingImage.value ? '请帮我看这道题' : '')
-
-  if (!text || loading.value) return
-
-
-
-  const pending = pendingImage.value
-
-  let displayImageUrl = pending?.preview || null
-
-  if (pending) {
-    try {
-      const rawFile = await resolveImageFile(pending)
-      displayImageUrl = await fileToDataUrl(rawFile)
-    } catch (_) { /* keep blob preview */ }
+  if (needsGradeSetup.value) {
+    uni.showToast({ title: '请先选择年级', icon: 'none' })
+    return
   }
 
+  // 纯发图不塞「请帮我看这道题」：气泡只显示图片，后端允许 message 为空 + image_id
+  const text = inputText.value.trim()
+  const pending = pendingImage.value
+  if ((!text && !pending) || loading.value) return
+
+  abortRequested = false
+
+  // 先立刻用 blob 预览占位，再异步转 dataURL，避免发图瞬间气泡空白
+  let displayImageUrl = pending?.preview || null
   if (displayImageUrl?.startsWith('blob:')) {
     messageBlobUrls.add(displayImageUrl)
   }
 
   const userMsgIdx = messages.value.length
-
-  messages.value.push({ role: 'user', text, imageUrl: displayImageUrl })
+  messages.value.push({
+    role: 'user',
+    text,
+    imageUrl: displayImageUrl,
+    hasImage: Boolean(pending),
+  })
 
   inputText.value = ''
-
-  clearPendingImage({ keepPreview: displayImageUrl?.startsWith('blob:') ? displayImageUrl : null })
-
+  // 气泡还在用同一 blob 时不要 revoke
+  clearPendingImage({ keepPreview: displayImageUrl })
   loading.value = true
-
   await nextTick()
-
   scrollChat()
 
+  if (pending) {
+    try {
+      const rawFile = await resolveImageFile(pending)
+      const dataUrl = await fileToDataUrl(rawFile)
+      if (dataUrl && messages.value[userMsgIdx]) {
+        const old = messages.value[userMsgIdx].imageUrl
+        messages.value[userMsgIdx].imageUrl = dataUrl
+        if (old?.startsWith('blob:') && old !== dataUrl) revokeBlobUrl(old)
+      }
+    } catch (_) { /* 保留 blob 预览 */ }
+  }
 
+  let aiIdx = -1
 
   try {
 
     const uid = await ensureChildUser()
+
+    if (abortRequested) {
+      aiIdx = messages.value.length
+      messages.value.push({ role: 'assistant', text: '' })
+      applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
 
     let imageId = null
 
@@ -1375,25 +1611,37 @@ async function sendMsg() {
 
       const up = await uploadQaImage(uid, file)
 
+      if (abortRequested) {
+        aiIdx = messages.value.length
+        messages.value.push({ role: 'assistant', text: '' })
+        applyStreamStoppedHint(messages, aiIdx)
+        return
+      }
+
       imageId = up.image_id
 
       if (up.url && messages.value[userMsgIdx]) {
         messages.value[userMsgIdx].serverImageUrl = resolveQaImageUrl(up.url, uid)
         messages.value[userMsgIdx].imageId = imageId
-        if (displayImageUrl?.startsWith('data:')) {
-          putQaImageLocal(imageId, displayImageUrl)
+        const local = messages.value[userMsgIdx].imageUrl
+        if (local?.startsWith('data:')) {
+          putQaImageLocal(imageId, local)
         }
       }
 
     }
 
-    const aiIdx = messages.value.length
+    aiIdx = messages.value.length
     messages.value.push({ role: 'assistant', text: '' })
-    loading.value = false
     await nextTick()
     scrollChat()
 
-    await sendQaMessageStream(uid, text, qaSessionId.value, {
+    if (abortRequested) {
+      applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
+
+    const { promise, abort } = sendQaMessageStream(uid, text || '', qaSessionId.value, {
       subject: subject.value,
       image_id: imageId,
     }, {
@@ -1404,12 +1652,30 @@ async function sendMsg() {
       onDone(data) {
         qaSessionId.value = data.session_id
         if (data.reply) messages.value[aiIdx].text = data.reply
+        if (data.subject_mismatch && data.suggested_subject && subjects.includes(data.suggested_subject)) {
+          mismatchSuggest.value = data.suggested_subject
+          mismatchResendText.value = text
+        } else {
+          mismatchSuggest.value = null
+          mismatchResendText.value = ''
+        }
       },
     })
+    streamAbort = abort
+    const finalPayload = await promise
+    if (aiIdx >= 0 && !String(messages.value[aiIdx]?.text || '').trim()) {
+      const fallback = String(finalPayload?.reply || '').trim()
+      messages.value[aiIdx].text = fallback || '老师暂时没有回复，请再发一次试试～'
+    }
 
   } catch (e) {
 
-    const errText = e?.message || '请求失败，请稍后再试'
+    if (isStreamAborted(e)) {
+      if (aiIdx >= 0) applyStreamStoppedHint(messages, aiIdx)
+      return
+    }
+
+    const errText = errMessage(e, '请求失败，请稍后再试')
 
     if (messages.value.length && messages.value[messages.value.length - 1].role === 'assistant' && !messages.value[messages.value.length - 1].text) {
       messages.value[messages.value.length - 1].text = `出错了：${errText}`
@@ -1418,6 +1684,8 @@ async function sendMsg() {
     }
 
   } finally {
+    streamAbort = null
+    abortRequested = false
     loading.value = false
   }
 
@@ -1429,17 +1697,73 @@ async function sendMsg() {
 
 
 
-function scrollChat() {
-
-  const el = document.getElementById('chatScroll')
-
-  if (el) el.scrollTop = el.scrollHeight
-
+function stopStream() {
+  abortRequested = true
+  streamAbort?.()
 }
 
 
 
+function scrollChat() {
+  const run = () => {
+    const el = document.getElementById('chatScroll')
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    // 距底足够近时收起按钮
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (dist <= 80) showJumpLatest.value = false
+  }
+  nextTick(() => {
+    run()
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+    clearScrollChatTimers()
+    scrollChatTimers.push(setTimeout(run, 80))
+    scrollChatTimers.push(setTimeout(run, 320))
+  })
+}
+
+let chatScrollEl = null
+let scrollChatTimers = []
+
+function clearScrollChatTimers() {
+  scrollChatTimers.forEach((t) => clearTimeout(t))
+  scrollChatTimers = []
+}
+
+function onChatScroll() {
+  const el = chatScrollEl || document.getElementById('chatScroll')
+  if (!el) return
+  const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+  showJumpLatest.value = dist > 140
+}
+
+function bindChatScroll() {
+  const el = document.getElementById('chatScroll')
+  if (!el || el === chatScrollEl) return
+  chatScrollEl?.removeEventListener('scroll', onChatScroll)
+  chatScrollEl = el
+  chatScrollEl.addEventListener('scroll', onChatScroll, { passive: true })
+}
+
+onShow(() => {
+  // 从其他页返回时，若已有消息则滚到最新
+  if (messages.value.length > 1) {
+    nextTick(() => {
+      bindChatScroll()
+      scrollChat()
+    })
+  }
+})
+
 onMounted(async () => {
+  await prefetchKatex()
+  katexTick.value = getKatexEpoch()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('paste', handleClipboardPaste)
+  }
+
+  const auth = await requirePageAuth('student')
+  if (!auth) return
 
   try { localStorage.removeItem('jnao_learner_profile_set') } catch (_) {}
 
@@ -1467,7 +1791,14 @@ onMounted(async () => {
 
   }
 
-  loadSession()
+  if (pendingGuideHandoff.value) {
+    pendingGuideHandoff.value = false
+    await startNewSession()
+  } else {
+    await loadSession()
+  }
+  bindChatScroll()
+  scrollChat()
 
 })
 
@@ -1481,9 +1812,17 @@ onBeforeUnmount(() => {
 
   closeWebcam()
 
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('paste', handleClipboardPaste)
+  }
+
   messageBlobUrls.forEach((url) => revokeBlobUrl(url))
 
   clearPendingImage()
+
+  clearScrollChatTimers()
+  chatScrollEl?.removeEventListener('scroll', onChatScroll)
+  chatScrollEl = null
 
 })
 
@@ -1509,7 +1848,13 @@ onBeforeUnmount(() => {
 
   flex-direction: column;
 
+  position: relative;
+
   color: var(--text);
+
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+
+  box-sizing: border-box;
 
 }
 
@@ -1529,6 +1874,75 @@ onBeforeUnmount(() => {
 
   flex-shrink: 0;
 
+}
+
+.qa-handoff-banner,
+.qa-mismatch-banner,
+.qa-grade-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 10px 12px;
+  background: var(--accent-bg);
+  border: 1px solid rgba(88, 166, 255, 0.28);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.qa-grade-banner {
+  align-items: center;
+  justify-content: space-between;
+}
+.qa-grade-banner-text {
+  flex: 1;
+  color: var(--text);
+  font-size: 13px;
+}
+.qa-grade-picker {
+  padding: 4px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
+.qa-mismatch-banner {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.qa-handoff-main { flex: 1; min-width: 0; }
+.qa-handoff-title {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.qa-handoff-text {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.qa-mismatch-action {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.2);
+  cursor: pointer;
+}
+.qa-mismatch-action text { color: #b45309; font-size: 12px; font-weight: 700; }
+.qa-handoff-close {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
 }
 
 .nav-back {
@@ -1553,7 +1967,7 @@ onBeforeUnmount(() => {
 
 .nav-back:active { background: #f3f4f6; }
 
-.nav-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; color: var(--text); }
+.nav-title { flex: 1; text-align: left; font-size: 16px; font-weight: 600; color: var(--text); }
 
 .nav-spacer { width: 36px; }
 .nav-history { padding: 6px 12px; border-radius: 999px; background: var(--accent-bg); border: 1px solid rgba(88,166,255,0.2); cursor: pointer; }
@@ -1624,7 +2038,13 @@ onBeforeUnmount(() => {
 
   overflow-x: auto;
 
+  scrollbar-width: none;
+
+  -ms-overflow-style: none;
+
 }
+
+.subject-bar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 .subject-chip {
 
@@ -1788,10 +2208,10 @@ onBeforeUnmount(() => {
   position: relative;
   background: var(--accent);
   color: #fff;
-  border-radius: 32rpx;
-  border-bottom-right-radius: 8rpx;
-  padding: 20rpx 28rpx;
-  font-size: 28rpx;
+  border-radius: 14px;
+  border-bottom-right-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
   line-height: 1.55;
   word-break: break-word;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
@@ -1816,10 +2236,10 @@ onBeforeUnmount(() => {
 .bubble-ai {
   position: relative;
   background: var(--chat-ai-bg);
-  border-radius: 32rpx;
-  border-bottom-left-radius: 8rpx;
-  padding: 20rpx 28rpx;
-  font-size: 28rpx;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--text);
   word-break: break-word;
@@ -1835,53 +2255,122 @@ onBeforeUnmount(() => {
 }
 .bubble-ai .bubble-text { white-space: pre-wrap; color: var(--text); }
 
-
-
-.bubble-img {
-  width: auto;
-  max-width: 400rpx;
-  min-width: 160rpx;
-  height: auto;
-  max-height: 480rpx;
-  border-radius: 20rpx;
-  margin-bottom: 12rpx;
-  display: block;
-  object-fit: contain;
-  background: rgba(255, 255, 255, 0.08);
-  cursor: pointer;
+.thinking-bbl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 2px 0;
+}
+.thinking-dots { display: flex; align-items: center; gap: 4px; }
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: thinkingBounce 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.3s; }
+.thinking-label {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  animation: thinkingPulse 1.4s ease-in-out infinite;
+}
+@keyframes thinkingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes thinkingPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
 }
 
-/* 待发送预览：右对齐气泡，尾巴向下指向输入框 */
+/* 富文本分层样式见 @/styles/qaBubbleRich.css（非 scoped，才能作用到 v-html） */
+.bubble-user .bubble-text,
+.bubble-ai .bubble-text {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
+}
+
+.bubble-img-wrap {
+  width: 180px;
+  max-width: min(180px, 70vw);
+  min-height: 96px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+.bubble-img {
+  width: 100%;
+  height: auto;
+  min-height: 96px;
+  max-height: 240px;
+  display: block;
+  object-fit: cover;
+}
+.bubble-img-ph {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+.pending-thumb-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+/* 待发送预览：上图下文，固定缩略图尺寸，避免 flex 挤扁成蓝条 */
+.pending-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0 14px 8px;
+  gap: 6px;
+}
 .pending-bubble-wrap {
   display: flex;
   justify-content: flex-end;
-  padding: 0 14px 12px;
 }
 .pending-bubble {
   position: relative;
-  max-width: 400rpx;
+  width: 120px;
+  height: 120px;
   background: var(--accent);
-  border-radius: 16px;
+  border-radius: 14px;
   border-bottom-right-radius: 4px;
-  padding: 6px;
+  padding: 5px;
+  box-sizing: border-box;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  flex-shrink: 0;
 }
 .pending-bubble::after {
   content: '';
   position: absolute;
   right: -6px;
-  bottom: 10px;
+  bottom: 12px;
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
   border-left: 8px solid var(--accent);
 }
 .pending-thumb {
   width: 100%;
-  max-width: 360rpx;
-  max-height: 280rpx;
-  border-radius: 20rpx;
+  height: 100%;
+  border-radius: 10px;
   display: block;
   object-fit: cover;
+  background: rgba(0, 0, 0, 0.2);
 }
 .pending-clear {
   position: absolute;
@@ -1894,6 +2383,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 2;
 }
 .pending-clear text { color: #fff; font-size: 12px; line-height: 1; }
 
@@ -1945,54 +2435,117 @@ onBeforeUnmount(() => {
 
 .typing-wrap { padding: 4px 0; }
 
-.typing-dots {
-
-  color: #9ca3af;
-
-  font-size: 14px;
-
-  animation: pulse 1.2s ease-in-out infinite;
-
-}
-
-@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-
-
-
 .composer {
   flex-shrink: 0;
   padding: 20rpx 28rpx calc(20rpx + env(safe-area-inset-bottom));
   background: var(--bg-card);
   border-top: 1px solid var(--border);
 }
-.input-panel { }
-.input-wrap {
-  display: flex; align-items: center;
-  background: rgba(255,255,255,0.1);
-  border-radius: 48rpx; padding: 2px 2px 2px 28rpx;
-  border: 1px solid rgba(255,255,255,0.15);
+
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
 }
-[data-theme="white"] .input-wrap { background: #f3f4f6; border-color: #d1d5db; }
-.input-wrap .chat-input {
-  flex: 1; background: transparent; border: none; outline: none;
-  font-size: 14px; color: var(--text); height: 36px; line-height: 36px;
+[data-theme="white"] .jump-latest { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+.jump-latest text { color: var(--accent); font-size: 12px; font-weight: 600; }
+.jump-latest:active { opacity: 0.85; }
+.pending-send-hint {
+  display: block;
+  width: 100%;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-hint, #6b7280);
+  line-height: 1.35;
 }
-.input-wrap .chat-input::placeholder { color: var(--text-hint); }
-.input-btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.btn-camera {
-  width: 34px; height: 34px; border-radius: 50%;
+.input-panel {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+.input-panel .tool {
+  width: 36px; height: 44px; flex: none;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0.7;
+  font-size: 22px; color: var(--text-dim); cursor: pointer;
 }
-.btn-camera:active { opacity: 1; background: rgba(255,255,255,0.1); }
-.btn-send {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--accent);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; flex-shrink: 0;
+.input-panel .composer-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 22px;
+  background: var(--bg-input, rgba(255,255,255,0.08));
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  box-sizing: border-box;
 }
-.btn-send.disabled { opacity: 0.45; pointer-events: none; }
-.btn-send:active:not(.disabled) { opacity: 0.8; }
+[data-theme="white"] .input-panel .composer-main {
+  background: #fff;
+  border-color: #c8d0e0;
+}
+.input-panel .chat-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  border-radius: 0;
+  font-size: 15px;
+  color: var(--text);
+  height: 36px;
+  line-height: 36px;
+  padding: 0;
+  box-sizing: border-box;
+}
+.input-panel .chat-input::placeholder { color: var(--text-hint); }
+[data-theme="white"] .input-panel .chat-input { color: #1b1912; }
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.composer-actions .act {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.composer-actions .act-ic { font-size: 20px; line-height: 1; }
+.composer-actions .act.send {
+  background: #4d6bfe;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(77, 107, 254, 0.35);
+}
+.composer-actions .act.send.stop { background: #ef4444; box-shadow: none; }
+.composer-actions .send-ic {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+.btn-disabled { opacity: 0.45; pointer-events: none; }
 
 .sheet-mask {
 

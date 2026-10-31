@@ -22,9 +22,11 @@ def sanitize_text(value: str | None, *, max_len: int = 4000) -> str:
 def sanitize_subject(value: str | None) -> str | None:
     if not value:
         return None
-    allowed = {"数学", "语文", "英语", "科学"}
+    # 与 channel_policy / registry 同步；兼容旧名数学/语文…
+    from app.agents.qa.channel_policy import normalize_subject
+
     text = sanitize_text(value, max_len=20)
-    return text if text in allowed else None
+    return normalize_subject(text)
 
 
 def session_title_from_message(message: str) -> str:

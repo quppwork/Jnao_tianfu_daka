@@ -11,9 +11,54 @@
     <view v-else-if="detail" class="content">
       <view class="card">
         <text class="card-title">{{ detail.nickname }}</text>
+        <view v-if="detail.account_status && detail.account_status !== 'active'" class="status-banner">
+          <text>{{ detail.account_status === 'removed' ? '已从生产环境移出' : '账号已归档' }} · {{ formatTime(detail.removed_at) }}</text>
+        </view>
         <view class="row-line"><text class="label">手机号</text><text class="val">{{ detail.parent_phone }}</text></view>
         <view class="row-line"><text class="label">孩子名额</text><text class="val">{{ detail.children_count }} / {{ detail.child_quota }}</text></view>
         <view class="row-line"><text class="label">注册时间</text><text class="val">{{ formatTime(detail.created_at) }}</text></view>
+      </view>
+
+      <view class="card">
+        <text class="card-title">⚡ 上游 Token 用量</text>
+        <view class="row-line">
+          <text class="label">家计合计</text>
+          <text class="val usage-strong">{{ fmtTok(detail.usage_billing?.total_tokens) }} tok · {{ detail.usage_billing?.call_count || 0 }} 次</text>
+        </view>
+        <view class="row-line">
+          <text class="label">家长本人</text>
+          <text class="val">{{ fmtTok(detail.usage_me?.total_tokens) }} tok · {{ detail.usage_me?.call_count || 0 }} 次</text>
+        </view>
+        <view v-if="billingProviders.length" class="prov-row">
+          <text v-for="p in billingProviders" :key="p.provider" class="prov-chip">{{ p.provider }} {{ fmtTok(p.total_tokens) }}</text>
+        </view>
+        <text class="usage-hint">含豆包官方 token + 百炼估算；规格费不在此列</text>
+      </view>
+
+      <view v-if="detail.is_duplicate_account" class="warn-box">
+        <text class="warn-title">重复家长账号</text>
+        <text class="warn-text">该手机号存在多个家长账号，孩子列表已合并显示自主账号（ID {{ detail.canonical_parent_id }}）。</text>
+      </view>
+
+      <view v-if="detail.pending_unbound_count > 0" class="warn-box">
+        <text class="warn-title">待绑定孩子（{{ detail.pending_unbound_count }}）</text>
+        <text class="warn-text">同手机号下有孩子账号尚未绑定到该家长，需管理员确认后才会出现在列表中。</text>
+        <view v-for="c in detail.unbound_children" :key="c.id" class="warn-row">
+          <text class="warn-text">{{ c.nickname }} · {{ c.login_name }}</text>
+        </view>
+        <view class="btn-reconcile" @click="doReconcile"><text>确认绑定</text></view>
+      </view>
+
+      <view v-if="reconcileMsg" class="info-box">
+        <text class="info-text">{{ reconcileMsg }}</text>
+      </view>
+
+      <view v-if="detail.duplicate_parents?.length" class="warn-box">
+        <text class="warn-title">同手机号其他账号（{{ detail.duplicate_parents.length }}）</text>
+        <view v-for="d in detail.duplicate_parents" :key="d.id" class="warn-row">
+          <text class="warn-text">{{ d.nickname }} · ID {{ d.id }} · {{ d.children_count }} 个孩子</text>
+          <text class="act" @click="goParent(d.id)">查看</text>
+        </view>
       </view>
 
       <view class="section">
@@ -37,9 +82,14 @@
           <view class="main">
             <text class="name">{{ c.nickname }}（{{ c.login_name || '—' }}）</text>
             <text class="sub">训练 {{ c.training_days || 0 }} 天 · 打卡 {{ c.checkins || 0 }} 次</text>
+            <text class="sub usage-line">⚡ 已用 {{ fmtTok(c.usage_total_tokens) }} tok · {{ c.usage_call_count || 0 }} 次</text>
           </view>
           <text class="act">查看</text>
         </view>
+      </view>
+
+      <view v-if="detail.account_status && detail.account_status !== 'active'" class="btn-restore-wrap">
+        <view class="btn-reconcile" @click="doRestore"><text>恢复家长账号</text></view>
       </view>
     </view>
 
@@ -51,21 +101,24 @@
         <view class="field"><input v-model="form.password" placeholder="新密码（留空不改）" type="password" class="inp" /></view>
         <view class="field"><input v-model.number="form.child_quota" placeholder="孩子名额" type="number" class="inp" /></view>
         <view class="btn-primary" @click="save"><text>保存</text></view>
-        <view class="btn-danger" @click="confirmDelete"><text>删除家长（归档账号）</text></view>
+        <view class="btn-danger" @click="confirmDelete"><text>移出生产环境</text></view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
-  getAdminUserId,
+  requirePageAuth,
   fetchAdminParentDetail,
+  reconcileAdminParent,
   updateAdminParent,
   deleteAdminParent,
+  restoreAdminParent,
 } from '@/utils/userApi.js'
+import { formatTokenCount } from '@/utils/api/usage.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 
 const adminId = ref(null)
@@ -74,17 +127,26 @@ const loading = ref(true)
 const detail = ref(null)
 const showEdit = ref(false)
 const form = ref({})
+const reconcileMsg = ref('')
+
+const billingProviders = computed(() => detail.value?.usage_billing?.by_provider || [])
+
+function fmtTok(n) {
+  return formatTokenCount(n)
+}
 
 onLoad((q) => {
   parentId.value = Number(q.id)
 })
 
 onMounted(async () => {
-  adminId.value = getAdminUserId()
-  if (!adminId.value || !parentId.value) {
-    uni.redirectTo({ url: '/pages/admin/login' })
+  if (!parentId.value) {
+    goBack()
     return
   }
+  const auth = await requirePageAuth('admin')
+  if (!auth.ok) return
+  adminId.value = auth.userId
   await load()
 })
 
@@ -113,6 +175,22 @@ function goChild(id) {
   uni.navigateTo({ url: `/pages/admin/child-detail?id=${id}` })
 }
 
+function goParent(id) {
+  if (id === parentId.value) return
+  uni.redirectTo({ url: `/pages/admin/parent-detail?id=${id}` })
+}
+
+async function doReconcile() {
+  try {
+    const res = await reconcileAdminParent(adminId.value, parentId.value)
+    reconcileMsg.value = `已绑定 ${res.reconciled_count} 个孩子`
+    await load()
+    uni.showToast({ title: '绑定完成', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '绑定失败', icon: 'none' })
+  }
+}
+
 async function save() {
   const p = form.value
   const body = { nickname: p.nickname, parent_phone: p.parent_phone, child_quota: p.child_quota }
@@ -127,10 +205,20 @@ async function save() {
   }
 }
 
+async function doRestore() {
+  try {
+    await restoreAdminParent(adminId.value, parentId.value)
+    uni.showToast({ title: '已恢复', icon: 'none' })
+    await load()
+  } catch (e) {
+    uni.showToast({ title: e.message || '恢复失败', icon: 'none' })
+  }
+}
+
 function confirmDelete() {
   uni.showModal({
-    title: '危险操作',
-    content: '将归档该家长及名下孩子账号，业务数据会清除。确定？',
+    title: '移出确认',
+    content: '将从生产环境移出该家长（数据保留，微信/手机号可再次登录）。确定？',
     success: async (r) => {
       if (!r.confirm) return
       try {
@@ -157,6 +245,11 @@ function confirmDelete() {
 .row-line:last-child { border-bottom:none; }
 .label { color:var(--text-dim); font-size:13px; }
 .val { color:var(--text); font-size:13px; }
+.usage-strong { color:#f5d9a8; font-weight:700; }
+.usage-line { color:#c9a869 !important; }
+.usage-hint { display:block; margin-top:8px; font-size:11px; color:var(--text-dim); line-height:1.4; }
+.prov-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.prov-chip { font-size:11px; color:#c9cfdc; background:rgba(245,217,168,0.08); border:1px solid rgba(201,168,105,0.35); border-radius:99px; padding:3px 8px; }
 .section { margin-bottom:20px; }
 .section-title { display:block; color:var(--text); font-size:15px; font-weight:600; margin-bottom:10px; }
 .hint { color:var(--text-dim); font-size:12px; padding:8px 0; }
@@ -178,4 +271,15 @@ function confirmDelete() {
 .btn-primary text { color:#fff; font-weight:600; }
 .btn-danger { margin-top:8px; padding:12px; text-align:center; border-radius:10px; background:rgba(220,38,38,0.1); }
 .btn-danger text { color:#dc2626; font-size:13px; }
+.warn-box { background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); border-radius:12px; padding:12px; margin-bottom:12px; }
+.warn-title { display:block; color:#f59e0b; font-size:13px; font-weight:600; margin-bottom:6px; }
+.warn-text { display:block; color:var(--text-dim); font-size:12px; line-height:1.5; }
+.warn-row { display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
+.info-box { background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:12px; padding:10px 12px; margin-bottom:12px; }
+.btn-reconcile { margin-top:10px; background:#f59e0b; border-radius:10px; padding:10px; text-align:center; }
+.btn-reconcile text { color:#fff; font-size:13px; font-weight:600; }
+.info-text { color:#22c55e; font-size:12px; }
+.status-banner { background:rgba(220,38,38,0.08); border-radius:8px; padding:8px 10px; margin-bottom:10px; }
+.status-banner text { color:#dc2626; font-size:12px; }
+.btn-restore-wrap { margin-bottom:16px; }
 </style>

@@ -13,6 +13,7 @@ from app.services.catalog_import import import_catalog
 from app.services.child_training_state import get_skill_oss_position, get_training_progress
 from app.services.content_meta import content_display_title, parse_item_instruction, parse_item_meta
 from app.services.talent_content_pool import get_talent_content_pool
+from app.services.training_video_attach import attach_videos_to_plan_items
 
 
 def _find_perception_item(pool: list) -> object | None:
@@ -31,15 +32,23 @@ from app.services.training_curriculum import _find_lesson
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SUPPLEMENTARY_CATALOGS = (
     "xet_duoyuanganzhi_catalog.json",
+    "xet_video_catalog.json",
 )
 
 
 def ensure_supplementary_catalogs(db: Session) -> int:
-    """合并导入多元感知等补充目录（已有库也执行）"""
+    """合并导入多元感知、训练视频等补充目录（已有库也执行）"""
     total = 0
     for name in SUPPLEMENTARY_CATALOGS:
         path = PROJECT_ROOT / "docs" / "data" / name
-        if path.exists():
+        if not path.exists():
+            continue
+        if name == "xet_video_catalog.json":
+            from app.services.catalog_import import import_video_catalog, repair_video_oss_paths
+
+            total += import_video_catalog(db, path, replace=False)
+            repair_video_oss_paths(db)
+        else:
             total += import_catalog(db, path, replace=False)
     return total
 
@@ -63,8 +72,17 @@ def _attach_content_to_item(item: TrainingItem, content: ContentItem, *, skill: 
     item.instructions = json.dumps(inst, ensure_ascii=False)
 
 
-def repair_plan_media_items(db: Session, plan: TrainingPlan, talent_code: int) -> int:
-    """修复占位/无音频项：感知力、扫描速记等主辅练"""
+def repair_plan_media_items(
+    db: Session,
+    plan: TrainingPlan,
+    talent_code: int,
+    *,
+    attach_videos: bool = True,
+) -> int:
+    """修复占位/无音频项：感知力、扫描速记等主辅练。
+
+    attach_videos=False：已开练方案只补缺音频，不改 video_url，避免线上已排课被改媒体。
+    """
     from app.db.models import ChildUser
 
     pool = get_talent_content_pool(db, talent_code)
@@ -116,6 +134,10 @@ def repair_plan_media_items(db: Session, plan: TrainingPlan, talent_code: int) -
             _attach_content_to_item(item, found, skill=skill)
             changed += 1
 
+    if changed:
+        db.flush()
+    if attach_videos:
+        changed += attach_videos_to_plan_items(db, plan, only_missing=True)
     if changed:
         db.flush()
     return changed

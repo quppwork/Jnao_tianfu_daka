@@ -1,0 +1,162 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>历史剧情 · 天赋物语</title>
+<link rel="stylesheet" href="/static/dayu/style.css"/>
+<style>
+  body{background:#0B0E14}
+  /* ===== 顶部：幕海报横滑（滑动选幕）===== */
+  .banner{display:flex;margin:14px 18px 0;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:20px}
+  .banner::-webkit-scrollbar{display:none}
+  .bslide{flex:none;width:100%;scroll-snap-align:center;position:relative;border:1.5px solid #C9A869;border-radius:20px;overflow:hidden;margin-right:10px;background:#131926}
+  .bslide img{width:100%;height:150px;object-fit:cover;display:block}
+  .bslide .mask{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,14,20,.1),rgba(11,14,20,.9) 85%)}
+  .bslide .bt{position:absolute;left:16px;bottom:12px;right:16px}
+  .bslide .bt .no{font-size:9.5px;font-weight:800;letter-spacing:2px;color:#C9A869}
+  .bslide .bt b{font-size:20px;letter-spacing:3px;color:#F0DFB8;display:block;margin-top:1px}
+  .bslide .bt small{display:block;font-size:10px;color:#B8C0D0;margin-top:2px}
+  .bslide .stp{position:absolute;top:12px;right:12px;font-size:10px;font-weight:800;border-radius:99px;padding:4px 10px}
+  .bslide .stp.done{color:#0c2f1c;background:linear-gradient(135deg,#FFE9A8,#C9A227)}
+  .bslide .stp.ing{color:#04182c;background:linear-gradient(135deg,#BFE3FF,#4EA0D8)}
+  .bslide .stp.lockd{color:#B8C0D0;background:rgba(20,26,38,.85);border:1px dashed #3A4458}
+  .bslide.lockd img{filter:grayscale(.7) brightness(.55)}
+  /* 滑动提示点 */
+  .bdots{display:flex;justify-content:center;gap:5px;margin-top:8px}
+  .bdots i{width:5px;height:5px;border-radius:50%;background:#2A3347;transition:.3s}
+  .bdots i.on{background:#C9A869;transform:scale(1.35)}
+  .swipe-tip{text-align:center;font-size:9px;color:#4A5568;margin-top:4px;letter-spacing:.2em}
+  /* ===== 幕卡片（上一版结构）===== */
+  .sec{margin:14px 18px 0;font-size:13px;font-weight:900;color:#EDEBE4;display:flex;justify-content:space-between;align-items:baseline}
+  .sec span{font-size:10px;color:#5E6B84;font-weight:700}
+  .act{margin:10px 18px 0;background:#131926;border:1.5px solid #232B3D;border-radius:16px;position:relative;overflow:hidden;transition:.3s}
+  .act.done{border-color:rgba(201,162,39,.55)}
+  .act.ing{border-color:rgba(78,160,216,.55)}
+  .act.lockd{opacity:.55}
+  .act.open{box-shadow:0 0 18px rgba(201,168,105,.18)}
+  .arow{display:flex;gap:12px;padding:12px;cursor:pointer}
+  .poster{width:86px;height:116px;flex:none;border-radius:10px;object-fit:cover;border:1px solid rgba(255,255,255,.12)}
+  .ainfo{flex:1;min-width:0}
+  .ainfo .no{font-size:9.5px;font-weight:800;letter-spacing:2px;color:#C9A869}
+  .ainfo h3{margin:2px 0 4px;font-size:15.5px;color:#EDEBE4}
+  .ainfo p{margin:0;font-size:11px;line-height:1.7;color:#8B96AB}
+  .ainfo .epsn{margin-top:6px;font-size:9.5px;color:#5E6B84;font-weight:700}
+  .st{position:absolute;top:10px;right:10px;font-size:9px;font-weight:800;border-radius:99px;padding:3px 9px;z-index:2}
+  .st.done{color:#0c2f1c;background:linear-gradient(135deg,#FFE9A8,#C9A227)}
+  .st.ing{color:#04182c;background:linear-gradient(135deg,#BFE3FF,#4EA0D8)}
+  .st.lockd{color:#8B96AB;background:#1A2233;border:1px dashed #3A4458}
+  .act .bar{position:absolute;left:0;bottom:0;height:3px;background:linear-gradient(90deg,#C9A227,#FFE9A8)}
+  .act .fold{position:absolute;right:12px;bottom:8px;font-size:9px;color:#5E6B84;font-weight:800}
+  .act.open .fold{color:#C9A869}
+  /* 剧集展开 */
+  .eps{display:none;border-top:1px dashed #232B3D;padding:6px 12px 10px}
+  .act.open .eps{display:block}
+  .ep{display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid rgba(35,43,61,.5)}
+  .ep:last-child{border-bottom:none}
+  .ep .eno{flex:none;width:38px;font-size:10px;font-weight:900;color:#C9A869;font-variant-numeric:tabular-nums}
+  .ep .et{flex:1;min-width:0;font-size:11.5px;color:#B8C0D0}
+  .ep .et small{display:block;font-size:9px;color:#5E6B84;margin-top:1px}
+  .ep .est{flex:none;font-size:9px;font-weight:800;border-radius:99px;padding:3px 8px}
+  .ep.watched{cursor:pointer}
+  .ep.watched:active{background:rgba(111,211,167,.06)}
+  .ep.watched .est{color:#0c2f1c;background:linear-gradient(135deg,#BFF5DC,#6FD3A7)}
+  .ep.unw{opacity:.4}
+  .ep.unw .est{color:#8B96AB;background:#1A2233;border:1px dashed #3A4458}
+  .ep .rb{flex:none;font-size:9px;color:#6FD3A7;font-weight:800}
+  .tip{margin:12px 18px 0;font-size:10px;color:#5E6B84;line-height:1.8;text-align:center}
+</style>
+<style id="ltcss">html.lt /* 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色） */
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","MiSans",sans-serif}html.lt body{background:#f1f3f8;display:flex;justify-content:center;min-height:100vh}html.lt .phone{width:100%;max-width:var(--app-max-width, 480px);min-height:100vh;background:linear-gradient(180deg,#dce2ef 0%,#ebeef4 30%);position:relative;padding-bottom:96px}html.lt a{text-decoration:none;color:inherit}html.lt /* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 4px}html.lt .brand{display:flex;align-items:center;gap:10px}html.lt .brand .logo{width:44px;height:44px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 10px rgba(48,144,79,.4)}html.lt .brand .t1{font-size:19px;font-weight:800;color:#1b1912}html.lt .brand .t2{font-size:10px;color:#8b93a5;letter-spacing:2px}html.lt .chip-g{background:rgba(48,144,79,.12);border:1.5px solid #30904f;color:#30904f;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt .chip-gold{background:rgba(150,117,54,.12);border:1.5px solid #967536;color:#967536;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}html.lt /* 通用卡 */
+.card{background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;padding:14px 16px}html.lt .sec-t{font-size:18px;font-weight:900;color:#1b1912;margin:0 18px 10px;display:flex;align-items:center;gap:8px}html.lt .sub{font-size:12.5px;color:#5a6274;line-height:1.5}html.lt /* 大宇气泡 */
+.dayu{display:flex;gap:8px;align-items:flex-end;margin:12px 18px}html.lt .dayu .bear{width:52px;height:52px;border-radius:50%;background:url("/static/dayu/assets/avatar_sizhe.jpg") center/cover;border:2px solid #30904f;box-shadow:0 0 14px rgba(48,144,79,.45);flex:none}html.lt .bubble{background:#d4dbe9;border:1px solid #bfc5d5;border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:14px;color:#191d27;line-height:1.55}html.lt .bubble b{color:#30904f}html.lt /* 大按钮 */
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;background:#30904f;color:#ebeef4;border-radius:14px;padding:14px;font-size:17px;font-weight:900;margin:12px 18px}html.lt .cta.blue{background:#1956d1;color:#141414}html.lt .cta.gold{background:linear-gradient(90deg,#967536,#70561c);color:#f7f1e5}html.lt /* 底栏 */
+.foot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width, 480px);background:rgba(235,238,244,.94);backdrop-filter:blur(12px);border-top:1px solid #c2cadc;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}html.lt .foot a{text-align:center;color:#8b93a5;font-size:11px;flex:1}html.lt .foot a.on{color:#30904f;font-weight:700}html.lt .foot a span{display:block;font-size:19px;margin-bottom:1px}
+html.lt body{background:#ebeef4}html.lt /* ===== 顶部：幕海报横滑（滑动选幕）===== */
+  .banner{display:flex;margin:14px 18px 0;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:20px}html.lt .banner::-webkit-scrollbar{display:none}html.lt .bslide{flex:none;width:100%;scroll-snap-align:center;position:relative;border:1.5px solid #967536;border-radius:20px;overflow:hidden;margin-right:10px;background:#d9dfec}html.lt .bslide img{width:100%;height:150px;object-fit:cover;display:block}html.lt .bslide .mask{position:absolute;inset:0;background:linear-gradient(180deg,rgba(235,238,244,.1),rgba(235,238,244,.9) 85%)}html.lt .bslide .bt{position:absolute;left:16px;bottom:12px;right:16px}html.lt .bslide .bt .no{font-size:9.5px;font-weight:800;letter-spacing:2px;color:#967536}html.lt .bslide .bt b{font-size:20px;letter-spacing:3px;color:#47360f;display:block;margin-top:1px}html.lt .bslide .bt small{display:block;font-size:10px;color:#2f3747;margin-top:2px}html.lt .bslide .stp{position:absolute;top:12px;right:12px;font-size:10px;font-weight:800;border-radius:99px;padding:4px 10px}html.lt .bslide .stp.done{color:#d0f3e0;background:linear-gradient(135deg,#574100,#d8b136)}html.lt .bslide .stp.ing{color:#d3e7fb;background:linear-gradient(135deg,#002440,#2779b1)}html.lt .bslide .stp.lockd{color:#2f3747;background:rgba(217,223,235,.85);border:1px dashed #a7b1c5}html.lt .bslide.lockd img{filter:grayscale(.7) brightness(.55)}html.lt /* 滑动提示点 */
+  .bdots{display:flex;justify-content:center;gap:5px;margin-top:8px}html.lt .bdots i{width:5px;height:5px;border-radius:50%;background:#b8c1d5;transition:.3s}html.lt .bdots i.on{background:#967536;transform:scale(1.35)}html.lt .swipe-tip{text-align:center;font-size:9px;color:#97a2b5;margin-top:4px;letter-spacing:.2em}html.lt /* ===== 幕卡片（上一版结构）===== */
+  .sec{margin:14px 18px 0;font-size:13px;font-weight:900;color:#1b1912;display:flex;justify-content:space-between;align-items:baseline}html.lt .sec span{font-size:10px;color:#7b88a1;font-weight:700}html.lt .act{margin:10px 18px 0;background:#d9dfec;border:1.5px solid #c2cadc;border-radius:16px;position:relative;overflow:hidden;transition:.3s}html.lt .act.done{border-color:rgba(216,177,54,.55)}html.lt .act.ing{border-color:rgba(39,121,177,.55)}html.lt .act.lockd{opacity:.55}html.lt .act.open{box-shadow:0 0 18px rgba(150,117,54,.18)}html.lt .arow{display:flex;gap:12px;padding:12px;cursor:pointer}html.lt .poster{width:86px;height:116px;flex:none;border-radius:10px;object-fit:cover;border:1px solid rgba(20,20,20,.12)}html.lt .ainfo{flex:1;min-width:0}html.lt .ainfo .no{font-size:9.5px;font-weight:800;letter-spacing:2px;color:#967536}html.lt .ainfo h3{margin:2px 0 4px;font-size:15.5px;color:#1b1912}html.lt .ainfo p{margin:0;font-size:11px;line-height:1.7;color:#545f74}html.lt .ainfo .epsn{margin-top:6px;font-size:9.5px;color:#7b88a1;font-weight:700}html.lt .st{position:absolute;top:10px;right:10px;font-size:9px;font-weight:800;border-radius:99px;padding:3px 9px;z-index:2}html.lt .st.done{color:#d0f3e0;background:linear-gradient(135deg,#574100,#d8b136)}html.lt .st.ing{color:#d3e7fb;background:linear-gradient(135deg,#002440,#2779b1)}html.lt .st.lockd{color:#545f74;background:#ccd4e5;border:1px dashed #a7b1c5}html.lt .act .bar{position:absolute;left:0;bottom:0;height:3px;background:linear-gradient(90deg,#d8b136,#574100)}html.lt .act .fold{position:absolute;right:12px;bottom:8px;font-size:9px;color:#7b88a1;font-weight:800}html.lt .act.open .fold{color:#967536}html.lt /* 剧集展开 */
+  .eps{display:none;border-top:1px dashed #c2cadc;padding:6px 12px 10px}html.lt .act.open .eps{display:block}html.lt .ep{display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid rgba(194,202,220,.5)}html.lt .ep:last-child{border-bottom:none}html.lt .ep .eno{flex:none;width:38px;font-size:10px;font-weight:900;color:#967536;font-variant-numeric:tabular-nums}html.lt .ep .et{flex:1;min-width:0;font-size:11.5px;color:#2f3747}html.lt .ep .et small{display:block;font-size:9px;color:#7b88a1;margin-top:1px}html.lt .ep .est{flex:none;font-size:9px;font-weight:800;border-radius:99px;padding:3px 8px}html.lt .ep.watched{cursor:pointer}html.lt .ep.watched:active{background:rgba(44,144,100,.06)}html.lt .ep.watched .est{color:#d0f3e0;background:linear-gradient(135deg,#0a4027,#2c9064)}html.lt .ep.unw{opacity:.4}html.lt .ep.unw .est{color:#545f74;background:#ccd4e5;border:1px dashed #a7b1c5}html.lt .ep .rb{flex:none;font-size:9px;color:#2c9064;font-weight:800}html.lt .tip{margin:12px 18px 0;font-size:10px;color:#7b88a1;line-height:1.8;text-align:center}</style>
+<script>
+(function(){try{if(localStorage.getItem('jn_theme')==='lt')document.documentElement.classList.add('lt');}catch(e){}})();
+function toggleTheme(){
+  var h=document.documentElement,on=h.classList.toggle('lt');
+  try{localStorage.setItem('jn_theme',on?'lt':'dk');}catch(e){}
+  document.querySelectorAll('.themebtn').forEach(function(b){b.textContent=on?'🌙':'☀️';});
+}
+</script>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 顶部幕海报 · 横向滑动选幕 -->
+  <div class="banner" id="banner"></div>
+  <div class="bdots" id="bdots"></div>
+  <div class="swipe-tip">‹ 左右滑动海报 · 直接打开对应一幕 ›</div>
+
+  <div class="sec">🎬 剧情长卷 <span>看过的每一集都能回看</span></div>
+  <div id="acts"></div>
+
+  <div class="tip">看过一集，就自动多一条可回看记录 · 未开始的幕暂不展开</div>
+
+  <div class="foot">
+    <a href="index.html"><span class="fic"><img src="/static/dayu/assets/ic/robot.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>大宇AI</a>
+    <a href="train.html"><span class="fic"><img src="/static/dayu/assets/ic/map.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>今日修炼</a>
+    <a href="answer.html"><span class="fic"><img src="/static/dayu/assets/ic/cap.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>学科答疑</a>
+    <a href="drama.html"><span class="fic"><img src="/static/dayu/assets/ic/bubble.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>天赋学院</a>
+    <a href="milestone.html"><span class="fic"><img src="/static/dayu/assets/ic/computer.png" style="width:38px;height:38px;object-fit:contain;vertical-align:middle" alt=""/></span>中央电脑</a>
+  </div>
+
+</div>
+<script>
+/* 历史剧情：首屏占位，真实幕/集由 academy/story.js + boot hydrate 绘制（勿再写演示「已看完」） */
+document.addEventListener('DOMContentLoaded', function () {
+  var acts = document.getElementById('acts');
+  var banner = document.getElementById('banner');
+  if (banner && !banner.innerHTML.trim()) {
+    banner.innerHTML = '<div class="bslide" style="min-height:120px;display:flex;align-items:center;justify-content:center;color:#8B96AB;font-size:13px">正在同步剧情长卷…</div>';
+  }
+  if (acts && !acts.innerHTML.trim()) {
+    acts.innerHTML = '<div class="tip" style="margin-top:24px">加载学院进度中 · 可点集跳进「天赋学院」回看</div>';
+  }
+});
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-nav',path:'/pages/dayu/home'},'*');}else if(window.history.length>1){window.history.back();}else{location.href='index.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function nav(path){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-nav', path: path}, '*');
+        return;
+      }
+    }catch(e){}
+    location.href = path;
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {'index.html': '/pages/dayu/home', 'train.html': '/pages/training/dayu', 'answer.html': '/pages/qa/dayu', 'drama.html': '/pages/hub/academy', 'milestone.html': '/pages/hub/console', 'test.html': '/pages/talent/hub', 'history.html': '/pages/hub/story', 'courses.html': '/pages/hub/courses', 'parent.html': '/pages/parent/index', 'wallet.html': '/pages/hub/console', 'records.html': '/pages/talent/index?history=1', 'report-v3.html': '/pages/report/index?mode=adult', 'report-kid.html': '/pages/report/index?mode=kid', 'plan.html': '/pages/plan/dayu', 'relation.html': '/pages/talent/hub?stub=relation', 'birthday.html': '/pages/hub/console'};
+    if(map[file] || map[href]){
+      e.preventDefault();
+      e.stopPropagation();
+      nav(map[file] || map[href]);
+    }
+  }, true);
+  // personal test expand -> go real talent
+  window.__dayuGoTalent = function(){ nav('/pages/talent/index'); };
+})();
+</script>
+
+<script src="/static/dayu/html/academy/client.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/fake.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/channel.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/story.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/courses.js?v=20260919d"></script>
+<script src="/static/dayu/html/academy/boot.js?v=20260919d"></script>
+</body></html>

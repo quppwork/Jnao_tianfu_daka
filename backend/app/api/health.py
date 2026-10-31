@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from app.api import ai_proxy
+from app.core.runtime import ping_payload
 from app.db.session import get_session_factory
 from config import load_integration, load_settings
 
@@ -12,8 +13,8 @@ router = APIRouter(tags=["health"])
 
 @router.get("/api/ping")
 def ping():
-    """轻量存活探测 — 供启动脚本使用，不探测上游"""
-    return {"ok": True}
+    """轻量存活探测 — 含 boot_id（开发态强制重登用）"""
+    return ping_payload()
 
 
 def _check_database() -> dict:
@@ -78,6 +79,45 @@ async def health():
         "model": doubao_cfg.get("model"),
         "connected": is_configured(),
     }
+
+    from app.services.bailian import bailian_status
+
+    br = bailian_status()
+    integrations["bailian_rag"] = {
+        "status": "live" if br.get("ready") else "pending",
+        "description": "阿里云百炼知识库 RAG（Retrieve/Search → 豆包生成）",
+        "connected": bool(br.get("ready")),
+        **{k: br[k] for k in (
+            "mode", "index_id", "workspace_id", "retrieve_ready", "search_ready", "pipeline"
+        ) if k in br},
+    }
+
+    from app.harness.runtime import harness_status
+    from app.services import consult_service
+
+    hs = harness_status()
+    integrations["harness"] = {
+        "status": "live",
+        "description": "Harness 控制面+数据面：Gateway → 沙箱 Executor（默认本地 JSON stdio）",
+        "sandbox": hs.get("sandbox"),
+        "tools": hs.get("tools"),
+        "mcp_transport": hs.get("mcp_transport"),
+    }
+
+    im_ok = consult_service.im_configured()
+    integrations["consult"] = {
+        "status": "live",
+        "description": "在线咨询 · WebSocket 实时 + 业务库 SoT（OpenIM 可选）",
+        "realtime": "websocket",
+        "ws_path": "/api/parent/consult/ws",
+        "im_configured": im_ok,
+        "openim_optional": True,
+        "agent_enabled": consult_service.load_consult_config().get("agent_enabled"),
+    }
+    # 旧 enterprise_rag 代理：仅学科答疑遗留路径，引导页已切百炼
+    integrations["tianfu_rag"]["description"] = (
+        "【遗留】本地 enterprise_rag /chat（学科答疑）；引导页已改用 bailian_rag"
+    )
 
     overall = "ok" if db_ok["connected"] else "degraded"
     return {

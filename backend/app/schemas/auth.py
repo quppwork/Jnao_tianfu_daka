@@ -27,6 +27,172 @@ class AuthResponse(BaseModel):
     role: str = "student"
     login_name: str | None = None
     session_token: str | None = None
+    access_token: str | None = None
+    profile_complete: bool = True
+    missing_fields: list[str] = Field(default_factory=list)
+    login_channel: str = "standard"
+    account_ready: bool = True
+    next_step: str = "home"
+    gate_passed: bool = True
+    bind_ticket: str | None = None
+    must_change_password: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class WechatOAuthUrlResponse(BaseModel):
+    url: str
+    configured: bool = True
+
+
+class WechatConfigResponse(BaseModel):
+    configured: bool
+    app_id: str | None = None
+    bind_mobile_url: str | None = None
+    bind_mobile_return_url: str | None = None
+    use_external_bind_mobile: bool = False
+
+
+class WechatBindPhoneRequest(BaseModel):
+    bind_ticket: str = Field(..., min_length=8, max_length=128)
+    phone: str = Field(..., min_length=11, max_length=20)
+    sms_code: str = Field(..., min_length=4, max_length=8)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class WechatExternalBindRequest(BaseModel):
+    bind_ticket: str = Field(..., min_length=8, max_length=128)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class WechatSendBindSmsRequest(BaseModel):
+    bind_ticket: str = Field(..., min_length=8, max_length=128)
+    phone: str = Field(..., min_length=11, max_length=20)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class CaptchaResponse(BaseModel):
+    captcha_id: str
+    image_base64: str
+    image_format: str = "png"
+    expires_in: int = 120
+
+
+class SmsSendRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    scene: str = Field("login", pattern="^(login|register|bind)$")
+    captcha_id: str | None = Field(None, max_length=64)
+    captcha_code: str | None = Field(None, max_length=8)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class SmsSendResponse(BaseModel):
+    ok: bool = True
+    sent: bool = True
+    message: str = "若号码有效，验证码已发送"
+    hint: str | None = None
+    expires_in: int = 300
+    resend_after: int = 60
+    debug_code: str | None = None
+
+
+class SmsLoginRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    sms_code: str = Field(..., min_length=4, max_length=8)
+    device_id: str | None = Field(None, max_length=64)
+
+
+class SmsRegisterRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    sms_code: str = Field(..., min_length=4, max_length=8)
+    real_name: str = Field(..., min_length=2, max_length=20)
+    nickname: str = Field(..., min_length=2, max_length=20)
+    password: str = Field(..., min_length=8, max_length=128)
+    device_id: str | None = Field(None, max_length=64)
+    bind_ticket: str | None = Field(None, min_length=8, max_length=128)
+
+
+class PartnerJinnaoRegisterRequest(BaseModel):
+    """劲脑合作方免短信注册家长（参数与短信注册一致，去掉 sms_code）。"""
+    phone: str = Field(..., min_length=11, max_length=20)
+    real_name: str = Field(..., min_length=2, max_length=20)
+    nickname: str = Field(..., min_length=2, max_length=20)
+    password: str = Field(..., min_length=8, max_length=128)
+    partner_ref: str | None = Field(
+        None,
+        max_length=64,
+        description="劲脑侧用户标识，可选，便于排查关联",
+    )
+
+
+class PartnerJinnaoRegisterResponse(BaseModel):
+    user_id: int = Field(..., description="本系统家长用户 ID，可用于关联")
+    parent_phone: str
+    nickname: str
+    register_channel: str = "jinnao"
+    register_source: str = "劲脑"
+    created: bool = Field(..., description="true=新注册，false=手机号已存在并返回原账号")
+    partner_ref: str | None = None
+
+
+class PartnerJinnaoEnsureReportChatRequest(BaseModel):
+    """把劲脑库成人测评同步到本库并签发问大宇嵌入参数。"""
+
+    wx_user_id: int = Field(
+        ...,
+        ge=1,
+        description="ys_dayu_parent_user.user_id / ys_dayu_test_result.uid（ys_wx_member.id）",
+    )
+    test_result_id: int | None = Field(
+        None,
+        ge=1,
+        description="ys_dayu_test_result.id；缺省取该用户最新成人测评",
+    )
+    device_label: str | None = Field("jinnao-embed", max_length=100)
+
+
+class PartnerJinnaoEnsureReportChatResponse(BaseModel):
+    user_id: int = Field(..., description="本系统用户 ID（写入 ys_dayu_parent_user.ai_user_id）")
+    assessment_id: int = Field(..., description="本系统 talent_assessment.id，iframe 必传")
+    access_token: str = Field(..., description="JWT，iframe 的 token 参数")
+    talent_primary: str = ""
+    dayu_test_result_id: int
+    wx_user_id: int
+    embed_path: str
+    embed_url: str
+
+
+class ParentProfileResponse(BaseModel):
+    id: int
+    parent_phone: str
+    nickname: str
+    real_name: str | None = None
+    has_password: bool = False
+    phone_verified: bool = False
+    profile_complete: bool = True
+    missing_fields: list[str] = Field(default_factory=list)
+    login_channel: str = "standard"
+    account_ready: bool = True
+    next_step: str = "home"
+    gate_passed: bool = True
+    session_token: str | None = None
+
+
+class ParentProfileUpdateRequest(BaseModel):
+    nickname: str | None = Field(None, min_length=1, max_length=50)
+    real_name: str | None = Field(None, min_length=1, max_length=50)
+    password: str | None = Field(None, min_length=6, max_length=128)
+    old_password: str | None = Field(None, min_length=6, max_length=128)
+    require_password: bool = False
+
+
+class PhoneCheckRequest(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20)
+    captcha_id: str = Field(..., min_length=1, max_length=64)
+    captcha_code: str = Field(..., min_length=4, max_length=8)
 
 
 # 兼容旧引用
@@ -34,20 +200,20 @@ RegisterResponse = AuthResponse
 
 
 class CreateChildRequest(BaseModel):
-    login_name: str = Field(..., min_length=2, max_length=50)
-    nickname: str = Field(..., min_length=1, max_length=50)
-    password: str = Field(..., min_length=6, max_length=128)
+    login_name: str = Field(..., min_length=2, max_length=30)
+    nickname: str = Field(..., min_length=2, max_length=20)
+    password: str = Field(..., min_length=8, max_length=128)
     grade: str | None = Field(None, max_length=20)       # 🆕 年级
-    age: int | None = Field(None, ge=3, le=25)            # 🆕 年龄
+    age: int | None = Field(None, ge=3, le=120)            # 🆕 年龄（与前端 picker 一致）
     # --- 以下字段已建表，前端暂不使用，请勿删除 ---
     region: str | None = Field(None, max_length=50)       # 🆕 地区（前端暂不采集）
 
 
 class UpdateChildRequest(BaseModel):
-    nickname: str | None = Field(None, min_length=1, max_length=50)
-    password: str | None = Field(None, min_length=6, max_length=128)
+    nickname: str | None = Field(None, min_length=2, max_length=20)
+    password: str | None = Field(None, min_length=8, max_length=128)
     grade: str | None = Field(None, max_length=20)        # 🆕
-    age: int | None = Field(None, ge=3, le=25)            # 🆕
+    age: int | None = Field(None, ge=3, le=120)            # 🆕 年龄（与前端 picker 一致）
     region: str | None = Field(None, max_length=50)       # 🆕
 
 
@@ -56,11 +222,15 @@ class ChildSummaryOut(BaseModel):
     login_name: str | None
     nickname: str
     talent: str | None = None
+    talent_char: str | None = None
     training_days: int = 0
     checkins: int = 0
     grade: str | None = None
     age: int | None = None                                 # 🆕
     region: str | None = None                               # 🆕
+    overall_tier: int = 1
+    duan_label: str | None = None
+    week_minutes: int = 0
 
 
 class ParentChildrenResponse(BaseModel):

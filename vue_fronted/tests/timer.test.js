@@ -226,4 +226,49 @@ describe('计时器持久化 — 开始后不因页面跳转而重置', () => {
       expect(simulateTick(null)).toBeNull()
     })
   })
+
+  // ── 🆕 onShow localStorage 恢复 ──
+  describe('场景8: onShow 从 localStorage 恢复计时器', () => {
+    function simulateOnShowRestore(savedTimer, currentTimerPhase) {
+      // 模拟 onShow 恢复逻辑
+      if (currentTimerPhase === 'setup' && savedTimer && savedTimer.phase === 'running' && savedTimer.endAt) {
+        const remaining = Math.ceil((savedTimer.endAt - Date.now()) / 1000)
+        if (remaining > 0) {
+          return { phase: 'running', remaining, plannedSec: savedTimer.plannedSec || 0 }
+        }
+      }
+      return null
+    }
+
+    it('timerPhase=setup 且 localStorage 有运行中的计时器 → 恢复', () => {
+      const saved = { phase: 'running', endAt: Date.now() + 30 * 60 * 1000, plannedSec: 1800 }
+      const restored = simulateOnShowRestore(saved, 'setup')
+      expect(restored).not.toBeNull()
+      expect(restored.phase).toBe('running')
+      expect(restored.remaining).toBeGreaterThan(0)
+    })
+
+    it('timerPhase=running 时不触发恢复（已在运行）', () => {
+      const saved = { phase: 'running', endAt: Date.now() + 30 * 60 * 1000, plannedSec: 1800 }
+      const restored = simulateOnShowRestore(saved, 'running')
+      expect(restored).toBeNull()
+    })
+
+    it('localStorage 无数据 → 不恢复', () => {
+      const restored = simulateOnShowRestore(null, 'setup')
+      expect(restored).toBeNull()
+    })
+
+    it('localStorage 已过期 → 不恢复', () => {
+      const saved = { phase: 'running', endAt: Date.now() - 1000, plannedSec: 1800 }
+      const restored = simulateOnShowRestore(saved, 'setup')
+      expect(restored).toBeNull()
+    })
+
+    it('计时器已 expire → 不恢复', () => {
+      const saved = { phase: 'expired', endAt: null, plannedSec: 1800 }
+      const restored = simulateOnShowRestore(saved, 'setup')
+      expect(restored).toBeNull()
+    })
+  })
 })

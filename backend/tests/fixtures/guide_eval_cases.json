@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "id": "need_assessment",
+      "situation": "need_assessment",
+      "next_action": "talent",
+      "welcome_keywords": ["天赋"]
+    },
+    {
+      "id": "ready_to_train",
+      "situation": "ready_to_train",
+      "next_action": "train",
+      "welcome_keywords": ["今日训练"]
+    },
+    {
+      "id": "training_in_progress",
+      "situation": "training_in_progress",
+      "next_action": "train",
+      "welcome_keywords": ["继续"]
+    },
+    {
+      "id": "training_done",
+      "situation": "training_done",
+      "next_action": "growth",
+      "welcome_keywords": ["完成"]
+    },
+    {
+      "id": "sparse_return",
+      "situation": "sparse_return",
+      "next_action": "train",
+      "welcome_keywords": ["回来"]
+    }
+  ]
+}

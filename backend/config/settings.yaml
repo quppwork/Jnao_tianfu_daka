@@ -13,13 +13,18 @@ upstream:
 
 deepseek:
   api_key: "${DEEPSEEK_API_KEY}"
-  model: "deepseek-v4-flash"
-  timeout: 3.0
+  api_base: "https://api.deepseek.com"
+  model: "deepseek-v4-pro"
+  # 快模型：短回合（报告天赋解答等）用 flash，首字更快
+  fast_model: "deepseek-flash"
+  vision_model: "deepseek-flash"
+  timeout: 60.0
 
+# 豆包已停用；保留键位仅兼容旧 env，运行时不再读取
 doubao:
-  api_key: "${DOUBAO_API_KEY}"
-  api_base: "${DOUBAO_API_BASE}"
-  model: "${DOUBAO_CHAT_MODEL}"
+  api_key: ""
+  api_base: ""
+  model: ""
   timeout: 30.0
 
 # 各天赋固定训练视频（url 可为 OSS 或 /static/ 路径）
@@ -48,5 +53,21 @@ oss:
   bucket: "jnao-talent-ai"
   endpoint: "oss-cn-beijing.aliyuncs.com"
   prefix: "yinpin/"
+  prefixes:
+    - "yinpin/"
+    - "shipin/"
   signed_url: true
   sign_expires: 7200
+
+# 在线咨询 · 已选型 OpenIM（API/Secret 用环境变量注入）
+consult:
+  im_provider: "openim"
+  im_api_url: ""
+  im_ws_url: ""
+  im_secret: ""
+  im_admin_user: "imAdmin"
+  im_bot_user_id: "jnao_bot_dayu"
+  im_callback_token: ""
+  mq_url: ""
+  agent_enabled: true
+  stub_reply: true

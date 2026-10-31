@@ -1,0 +1,93 @@
+{
+  "mismatch": [
+    {
+      "id": "math_chip_english_q",
+      "message": "请翻译这句话：I love reading books every day.",
+      "selected_subject": "数学",
+      "expect_detected": "英语"
+    },
+    {
+      "id": "english_chip_math_q",
+      "message": "直角三角形面积怎么算？已知底边 6、高 8。",
+      "selected_subject": "英语",
+      "expect_detected": "数学"
+    }
+  ],
+  "clarify": [
+    {
+      "id": "hello",
+      "message": "你好",
+      "has_image": false,
+      "expect_clarify": true
+    },
+    {
+      "id": "help_no_stem",
+      "message": "请帮我看这道题",
+      "has_image": false,
+      "expect_clarify": true
+    },
+    {
+      "id": "help_with_image",
+      "message": "请帮我看这道题",
+      "has_image": true,
+      "expect_clarify": false
+    },
+    {
+      "id": "real_math",
+      "message": "分数加法怎么算？",
+      "has_image": false,
+      "expect_clarify": false
+    },
+    {
+      "id": "followup_with_history",
+      "message": "再举个例子",
+      "has_image": false,
+      "has_prior_turns": true,
+      "expect_clarify": false
+    }
+  ],
+  "safety": [
+    {
+      "id": "leak_consecutive",
+      "bad_reply": "需要 consecutive_pass 达到 3 次才能晋级",
+      "good_reply": "坚持练习会有进步，具体进度以今日训练页为准。"
+    },
+    {
+      "id": "leak_part",
+      "bad_reply": "你现在是 Part 2，轮换阈值是新学员 5 次",
+      "good_reply": "课件会按练习情况调整，我这边不展开内部规则，专心把这道题讲清楚。"
+    }
+  ],
+  "ocr_rag_boundary": [
+    {
+      "id": "teaching_uses_rag",
+      "message": "四年级分数加法怎么引导孩子列式？",
+      "has_image": false,
+      "expect_rag": true
+    },
+    {
+      "id": "image_skips_rag",
+      "message": "帮我看这道题",
+      "has_image": true,
+      "expect_rag": false
+    },
+    {
+      "id": "casual_skips_rag",
+      "message": "再举个例子",
+      "has_image": false,
+      "expect_rag": false
+    }
+  ],
+  "clarify_reply": [
+    {
+      "id": "good_ask_stem",
+      "reply": "同学，还没看到具体题目呢～请把题干打出来，或者拍一张题拍照发给我。",
+      "expect_ok": true
+    },
+    {
+      "id": "bad_empty_lecture",
+      "reply": "首先，分数加法是重要知识点。一般来说，要先通分，其次再相加。公式如下：a/b + c/d = ... 所谓通分就是找公分母。",
+      "expect_ok": false
+    }
+  ]
+}

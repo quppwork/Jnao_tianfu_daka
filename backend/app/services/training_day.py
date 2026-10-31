@@ -13,8 +13,15 @@ def training_now() -> datetime:
     return datetime.now(TZ)
 
 
+def _as_cst(now: datetime) -> datetime:
+    """统一为 CST aware，兼容 dev_clock 返回的 naive 北京时间。"""
+    if now.tzinfo is None:
+        return now.replace(tzinfo=TZ)
+    return now.astimezone(TZ)
+
+
 def get_training_day(now: datetime | None = None) -> date:
-    now = now or training_now()
+    now = _as_cst(now or training_now())
     if now.hour < RESET_HOUR:
         return now.date() - timedelta(days=1)
     return now.date()
@@ -38,7 +45,7 @@ def plan_new_day_at(plan_date: date) -> datetime:
 
 def is_in_day_transition(now: datetime | None = None) -> bool:
     """凌晨 4:00–4:05 日切冻结窗口"""
-    now = now or training_now()
+    now = _as_cst(now or training_now())
     start = datetime.combine(now.date(), time(RESET_HOUR, 0), tzinfo=TZ)
     end = start + timedelta(minutes=NEW_DAY_GRACE_MINUTES)
     return start <= now < end

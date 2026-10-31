@@ -12,12 +12,21 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { onLaunch } from '@dcloudio/uni-app'
+import { ref, onUnmounted } from 'vue'
+import { onLaunch, onShow } from '@dcloudio/uni-app'
+import { bootstrapAppSession, invalidatePageAuthCache } from '@/utils/userApi.js'
+import { rememberCurrentRoute, installAuthStorageSync } from '@/utils/appSession.js'
+import { startAppUpdateWatcher } from '@/utils/appUpdate.js'
 
 const showSplash = ref(false)
+let unbindStorageSync = null
 
 onLaunch(() => {
+  unbindStorageSync = installAuthStorageSync(() => {
+    invalidatePageAuthCache()
+  })
+  bootstrapAppSession().catch(() => {})
+  startAppUpdateWatcher()
   // Splash：同浏览器会话只展示一次；2分钟内回来走 bfcache 不展示
   const SESSION_KEY = 'jnao_splash_session'
   const ACTIVE_KEY = 'jnao_last_active'
@@ -44,6 +53,14 @@ onLaunch(() => {
       (navigator.deviceMemory || 8) <= 2
     if (reduce) document.documentElement.setAttribute('data-reduced-motion', '')
   } catch (_) {}
+})
+
+onShow(() => {
+  rememberCurrentRoute()
+})
+
+onUnmounted(() => {
+  unbindStorageSync?.()
 })
 </script>
 
@@ -78,6 +95,17 @@ onLaunch(() => {
   --app-max-width: 480px;  /* 仅对平板做上限，手机 360-430 不受影响 */
 }
 
+/* 底栏只保留页面自绘的 .foot，关掉官方 tabBar 残留 */
+uni-tabbar,
+.uni-tabbar,
+.uni-tabbar-bottom {
+  display: none !important;
+  height: 0 !important;
+}
+.uni-app--showtabbar uni-page-wrapper {
+  height: 100% !important;
+}
+
 /* 横屏手机：宽高比翻转，不限宽度 */
 @media (orientation: landscape) and (max-height: 500px) {
   :root {
@@ -85,10 +113,71 @@ onLaunch(() => {
   }
 }
 
-/* 全面屏 / 刘海屏 / 底部 Home Indicator 安全区 */
+/* 全面屏 / 刘海屏 / 底部 Home Indicator 安全区
+ * 微信内置浏览器顶部白条（域名栏）是微信原生 UI，网页无法隐藏；
+ * 这里不再额外叠加 padding-top，避免再挤占对话高度。
+ */
 body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: 0;
+}
+/* 仅非微信、且真正有刘海安全区时再补顶距（如 iOS 独立 PWA） */
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (display-mode: standalone) {
+    body { padding-top: env(safe-area-inset-top, 0px); }
+  }
+}
+
+/* 隐藏滚动条，仍可滚动；收回滚动条占位，避免右侧缺一块 */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-gutter: auto;
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+*,
+*::before,
+*::after {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+uni-app,
+uni-page,
+uni-page-wrapper,
+uni-page-body,
+uni-scroll-view,
+.uni-scroll-view,
+.uni-scroll-view-content,
+.dayu-iframe,
+.dayu-frame-wrap {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+uni-app::-webkit-scrollbar,
+uni-page::-webkit-scrollbar,
+uni-page-wrapper::-webkit-scrollbar,
+uni-page-body::-webkit-scrollbar,
+uni-scroll-view::-webkit-scrollbar,
+.uni-scroll-view::-webkit-scrollbar,
+.uni-scroll-view-content::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* ── 全局动画降级：系统偏好 或 低端设备 ── */

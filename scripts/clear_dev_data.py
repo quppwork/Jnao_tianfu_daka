@@ -4,12 +4,12 @@
 import os
 import sys
 
+from dotenv import load_dotenv
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BACKEND = os.path.join(ROOT, "backend")
 sys.path.insert(0, BACKEND)
 os.chdir(BACKEND)
-
-from dotenv import load_dotenv
 
 load_dotenv(".env", override=True)
 
@@ -17,9 +17,11 @@ from sqlalchemy import delete, text
 
 from app.db.models import (
     ChildUser,
+    DakaMember,
     GuideMessage,
     GuideSession,
     ParentChildBind,
+    ParentWechatBind,
     QaMessage,
     QaSession,
     TalentAssessment,
@@ -28,6 +30,7 @@ from app.db.models import (
     TrainingPlan,
     TrainingRecord,
     TrainingWindow,
+    UserSession,
 )
 from app.db.session import get_session_factory, init_db
 
@@ -42,6 +45,7 @@ def main() -> None:
         db.execute(delete(TrainingItem))         # FK→training_plan
         db.execute(delete(QaMessage))            # FK→qa_session
         db.execute(delete(GuideMessage))         # FK→guide_session
+        db.execute(delete(UserSession))          # FK→child_user
 
         # 2. 中间层
         db.execute(delete(QaSession))            # 引用 child_user_id
@@ -51,6 +55,8 @@ def main() -> None:
         db.execute(delete(TalentAssessment))      # FK→child_user
         db.execute(delete(TalentAssessmentArchive))
         db.execute(delete(ParentChildBind))       # FK→child_user (parent_id, child_id)
+        db.execute(delete(ParentWechatBind))      # FK→child_user
+        db.execute(delete(DakaMember))            # FK→child_user
 
         # 3. 根表
         db.execute(delete(ChildUser))

@@ -157,6 +157,17 @@ def reset_talent_assessment(db: Session, child_user_id: int) -> dict:
     }
 
 
+def reset_dev_clock(db: Session, child_user_id: int) -> dict:
+    """清除虚拟时钟，回归实际日期"""
+    clear_time_override(db, child_user_id)
+    db.commit()
+    return {
+        "action": "reset_clock",
+        "message": "虚拟时钟已清除，回归实际日期",
+        "status": get_dev_training_status(db, child_user_id),
+    }
+
+
 def simulate_4am_cutoff(db: Session, child_user_id: int) -> dict:
     """虚拟时钟快进到本训练日凌晨 4:00 全局截止；不移动 plan_date、不删昨日方案"""
     now = resolve_training_now(db, child_user_id)

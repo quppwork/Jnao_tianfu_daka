@@ -1,2 +1,2 @@
 @echo off
-powershell -ExecutionPolicy Bypass -File "%~dp0start_all.ps1"
+call "%~dp0_pwsh.cmd" -File "%~dp0start_all.ps1"

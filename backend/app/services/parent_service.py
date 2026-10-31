@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.password import hash_password
 from app.db.models import ChildUser
@@ -47,42 +48,80 @@ def create_child(
     age: int | None = None,
     region: str | None = None,
 ) -> ChildUser:
-    parent = _require_parent(db, parent_id)
+    from sqlalchemy import select
+
+    from app.core.nickname_policy import validate_login_name, validate_nickname
+    from app.core.password_policy import validate_password_strength
+
+    parent = _lock_parent_row(db, parent_id)
     if not auth_service.parent_can_add_child(db, parent):
         raise HTTPException(403, "孩子账号名额已满")
 
-    login_name = login_name.strip()
+    login_name = validate_login_name(login_name)
+    nickname = validate_nickname(nickname, field_label="孩子姓名", prefer_real_name=True)
+    password = validate_password_strength(password, field_label="登录密码")
+
     if auth_service.find_user_by_login_name(db, login_name):
         raise HTTPException(409, "该账号已被使用")
 
-    child = auth_service.register_child(
-        db,
-        parent_phone=parent.parent_phone,
-        nickname=nickname.strip(),
-        login_name=login_name,
-        password=password,
-        role=auth_service.ROLE_STUDENT,
-    )
-    auth_service.bind_parent_child(db, parent_id, child.id)
-    pj = dict(child.profile_json or {})
-    pj["parentName"] = parent.nickname
-    # 🆕 存储孩子基本信息
-    learner = dict(pj.get("learner") or {})
-    if grade is not None:
-        learner["grade"] = grade
-        pj["grade"] = grade
-    if age is not None:
-        learner["age"] = age
-        pj["age"] = age
-    if region is not None:
-        learner["region"] = region
-        pj["region"] = region
-    if learner:
-        pj["learner"] = learner
-    child.profile_json = pj
-    db.commit()
-    db.refresh(child)
-    return child
+    legacy_removed = auth_service.find_removed_student_by_login_name(db, login_name)
+    if legacy_removed:
+        auth_service.release_student_login_name(db, legacy_removed)
+
+    try:
+        child = auth_service.register_child(
+            db,
+            parent_phone=parent.parent_phone,
+            nickname=nickname.strip(),
+            login_name=login_name,
+            password=password,
+            role=auth_service.ROLE_STUDENT,
+            commit=False,
+        )
+        auth_service.bind_parent_child(db, parent_id, child.id, commit=False)
+        pj = dict(child.profile_json or {})
+        pj["parentName"] = parent.nickname
+        learner = dict(pj.get("learner") or {})
+        if grade is not None:
+            learner["grade"] = grade
+            pj["grade"] = grade
+        if age is not None:
+            learner["age"] = age
+            pj["age"] = age
+        if region is not None:
+            learner["region"] = region
+            pj["region"] = region
+        if learner:
+            pj["learner"] = learner
+        child.profile_json = pj
+        flag_modified(child, "profile_json")
+        db.commit()
+        db.refresh(child)
+        return child
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        from sqlalchemy.exc import IntegrityError
+
+        if isinstance(e, IntegrityError):
+            raise HTTPException(409, "该账号已被使用") from e
+        raise
+
+
+def _lock_parent_row(db: Session, parent_id: int) -> ChildUser:
+    from sqlalchemy import select
+
+    if db.bind.dialect.name == "mysql":
+        parent = db.scalar(
+            select(ChildUser).where(ChildUser.id == parent_id).with_for_update()
+        )
+    else:
+        parent = db.get(ChildUser, parent_id)
+    if not parent or parent.role != auth_service.ROLE_PARENT:
+        raise HTTPException(403, "需要家长账号")
+    return parent
 
 
 def update_child(
@@ -105,9 +144,13 @@ def update_child(
         raise HTTPException(404, "孩子不存在")
 
     if nickname is not None:
-        child.nickname = nickname.strip()
+        from app.core.nickname_policy import validate_nickname
+
+        child.nickname = validate_nickname(nickname, field_label="孩子姓名", prefer_real_name=True)
     if password is not None:
-        child.password_hash = hash_password(password)
+        from app.core.password_policy import validate_password_strength
+
+        child.password_hash = hash_password(validate_password_strength(password))
     # 🆕 更新孩子基本信息
     pj = dict(child.profile_json or {})
     learner = dict(pj.get("learner") or {})
@@ -123,9 +166,18 @@ def update_child(
     if learner:
         pj["learner"] = learner
     child.profile_json = pj
-    db.commit()
-    db.refresh(child)
-    return child
+    flag_modified(child, "profile_json")
+    try:
+        db.commit()
+        db.refresh(child)
+        return child
+    except Exception as e:
+        db.rollback()
+        from sqlalchemy.exc import IntegrityError
+
+        if isinstance(e, IntegrityError):
+            raise HTTPException(409, "保存失败：数据冲突，请刷新后重试") from e
+        raise
 
 
 def delete_child(db: Session, parent_id: int, child_id: int) -> None:

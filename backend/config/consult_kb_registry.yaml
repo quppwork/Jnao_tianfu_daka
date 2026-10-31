@@ -1,0 +1,58 @@
+# 在线咨询 · 两套知识库注册（PRD 2026-10）
+# status=published 才可检索引用；owner/reviewed_by/effective_* 供运营维护。
+# 兜底文案：产品确认的 v1 口径（可后续只改本文件）。
+
+version: "2026-10-14"
+
+agents:
+  dayu:
+    title: 大宇知识库
+    fallback: >-
+      我现在没有足够的已确认资料回答这个问题。你可以查看相关帮助页，或点击「联系人工」说明具体情况。
+    docs:
+      - name: 01-脑科学理论.md
+        status: published
+        version: "2026-10-01"
+        owner: product
+        reviewed_by: pending
+        audience: parent
+        effective_from: "2026-10-01"
+        effective_to: null
+      - name: 03-因材施教指南.md
+        status: published
+        version: "2026-10-01"
+        owner: product
+        reviewed_by: pending
+        audience: parent
+        effective_from: "2026-10-01"
+        effective_to: null
+
+  talent:
+    title: 五者天赋知识库
+    fallback: >-
+      仅凭这段描述，我不能判断孩子的天赋类型。你可以先查看本人的测评报告；需要结合个人情况解读时，请联系老师。
+    docs:
+      - name: 02-五者天赋体系.md
+        status: published
+        version: "2026-10-01"
+        owner: teaching
+        reviewed_by: pending
+        audience: parent
+        effective_from: "2026-10-01"
+        effective_to: null
+      - name: 01-脑科学理论.md
+        status: published
+        version: "2026-10-01"
+        owner: teaching
+        reviewed_by: pending
+        audience: parent
+        effective_from: "2026-10-01"
+        effective_to: null
+      - name: 03-因材施教指南.md
+        status: published
+        version: "2026-10-01"
+        owner: teaching
+        reviewed_by: pending
+        audience: parent
+        effective_from: "2026-10-01"
+        effective_to: null

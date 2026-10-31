@@ -1,6 +1,6 @@
 """Pydantic 请求/响应模型"""
 
-from datetime import date, time
+from datetime import date
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,7 @@ class TrainingItemOut(BaseModel):
 class WatchProgressRequest(BaseModel):
     watched_sec: float = Field(..., ge=0)
     duration_sec: float | None = Field(None, ge=0)
+    media: str | None = Field(None, description="audio|video；缺省按音频计入打卡进度")
 
 
 class WatchProgressResponse(BaseModel):
@@ -39,12 +40,15 @@ class WatchProgressResponse(BaseModel):
 
 
 class OptionalOfferOut(BaseModel):
+    """与 training_elective_service.get_elective_offers 对齐。"""
+
     skill: str
-    weight: float = 0
-    suggested: bool = False
-    content_type: str = "audio"
-    requires_confirm: bool = True
-    status: str = "pending"  # pending | accepted | declined
+    available: bool = False
+    reason: str = ""
+    has_checkin: bool = False
+    blocks_next: bool = True
+    checkin_fields: list = Field(default_factory=list)
+    display_order: str = "after_required"
 
 
 class TrainingTodayResponse(BaseModel):
@@ -63,8 +67,7 @@ class TrainingTodayResponse(BaseModel):
     can_customize_plan: bool = False
     has_checkin: bool = False
     items: list[TrainingItemOut]
-    overall_tier: int | None = None          # 🆕 v2.0
-    optional_offers: list[dict] | None = None
+    overall_tier: int | None = None
     day_locked: bool = False
     globally_cutoff: bool = False
     training_day: str | None = None
@@ -80,15 +83,34 @@ class TrainingTodayResponse(BaseModel):
     lesson_day: int | None = None
     training_day_number: int | None = None
     schedule_mode: str | None = None
+    cohort: str | None = None
+    plan_mode: str | None = None
+    recipe_id: str | None = None
+    brain_ratio: float | None = None
+    subject_ratio: float | None = None
+    schedule_engine: str | None = None
+    overall_grade_used: int | None = None
+    extras: list[str] = Field(default_factory=list)
+    annotations: list[str] = Field(default_factory=list)
+    bundle_id: str | None = None
+    elective_offers: list[str] = Field(default_factory=list)
+    subject_slots: list[str] = Field(default_factory=list)
+    recipe_variant: str | None = None
     optional_offers: list[OptionalOfferOut] = Field(default_factory=list)
     timer_phase: str | None = None
     timer_end_at: str | None = None
     timer_planned_seconds: int | None = None
     timer_remaining_seconds: int | None = None
+    pending_confirm: bool = False
 
 
 class ScheduleRequest(BaseModel):
-    planned_minutes: int = Field(..., ge=5, le=480, description="今日计划训练总时长（分钟）")
+    planned_minutes: int = Field(
+        ...,
+        ge=20,
+        le=480,
+        description="今日计划训练总时长（分钟）",
+    )
 
 
 class TalentVideoResponse(BaseModel):
@@ -128,8 +150,9 @@ class CheckinAdvanceDetail(BaseModel):
 
 class CheckinTrainingProgress(BaseModel):
     # ── v2.0 新字段 ──
-    overall_tier: int | None = None               # 🆕 整体 Tier
-    skill_results: dict | None = None             # 🆕 { skill: { tier_before, tier_after, passed, tier_advanced, ... } }
+    overall_tier: int | None = None  # 整体 Tier
+    # { skill: { tier_before, tier_after, passed, ... } }
+    skill_results: dict | None = None
     # ── v1.0 兼容（保留）──
     main_line: str | None = None
     main_line_from: str | None = None
@@ -242,6 +265,18 @@ class TrainingEntryResponse(BaseModel):
     new_day_ready: bool = True
 
 
+class TrainingHomeResponse(BaseModel):
+    """进页聚合：天赋摘要 + 今日方案（只读热路径）"""
+    needs_assessment: bool = False
+    has_assessment: bool = False
+    message: str | None = None
+    assessment_id: int | None = None
+    talent_primary: str | None = None
+    talent_tag: str | None = None
+    talent_code: int | None = None
+    plan: TrainingTodayResponse | None = None
+
+
 class WindowSetRequest(BaseModel):
     start_time: str = Field(..., description="HH:MM")
     end_time: str = Field(..., description="HH:MM")
@@ -274,4 +309,9 @@ class AssessmentOut(BaseModel):
 class PlanCustomizeRequest(BaseModel):
     """整体替换训练方案中的项目"""
     plan_id: int = Field(..., ge=1)
-    skills: list[str] = Field(..., min_length=1, max_length=10, description="按 sort_order 顺序的技能名列表，长度需与方案 items 一致")
+    skills: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=10,
+        description="按 sort_order 顺序的技能名列表，长度需与方案 items 一致",
+    )

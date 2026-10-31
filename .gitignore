@@ -1,7 +1,12 @@
 # 环境变量
 .env
+.env.production
 backend/.env
 backend/venv
+
+# Claude Code 本地记忆
+CLAUDE.md
+.claude/
 
 # Python
 .venv/
@@ -11,7 +16,7 @@ __pycache__/
 *.egg-info/
 *.egg
 .pytest_cache/
-backend/data/
+backend/data/*
 
 # SQLite databases
 data/*.db
@@ -32,7 +37,9 @@ vue_fronted/.cert/
 logs/
 backups/
 debug-*.log
-.cursor/debug-*.log
+
+# Cursor 本地规则/skills（对应 .claude，不入库）
+.cursor/
 
 # Build output
 dist/
@@ -40,8 +47,6 @@ dist/
 # Claude agent internals
 .agents/
 skills-lock.json
-
-参考
 
 # 设计预览（仅本地测试）
 vue_fronted/tests_fronted/
@@ -55,5 +60,24 @@ h5_fronted/
 *.avi
 *.mov
 *.wav
-*.oggdata/*.db
+*.ogg
 .trash/
+.mcp.json
+
+# docs 正文仅本地，不进远端；训练目录 JSON 仍入库供 catalog 使用
+docs/**
+!docs/data/
+!docs/data/**
+
+# 归档过期文档（仅本地）
+docs/过期文件/
+
+# 压测账号明文表（含密码，不入库）
+backend/tools/*loadtest*.csv
+
+
+# CodeGraph local index
+.codegraph/
+
+# 劲脑坐席独立项目本地副本（含 token，勿入库）
+jingnao-seat/

@@ -16,15 +16,65 @@
     </view>
 
     <view class="body">
+      <!-- 🆕 页面顶部信息行：天赋头像 + 孩子名字 + 「天赋 · 第N天」（原成长历程碑/段位椭圆） -->
+      <view v-if="talentLabel" class="hero-idbar">
+        <view class="hero-idbar-avatar" :style="{ borderColor: talentColor, backgroundImage: 'url(' + talentAvatarImg + ')' }"></view>
+        <view class="hero-idbar-main">
+          <text class="hero-idbar-title">{{ childNickname || talentLabel }}</text>
+        </view>
+        <view class="hero-tier-pill" :style="{ borderColor: talentColor }">
+          <text class="hero-tier-pill-num" :style="{ color: talentColor }">{{ heroPill }}</text>
+        </view>
+      </view>
+      <!-- 段位状态卡（六级九段） -->
+      <view v-if="tier" class="tier-card" @click="goGrowth">
+        <view class="tier-card-head">
+          <view class="tier-card-title">
+            <view class="tier-card-medal" v-html="tierMedalSvg"></view>
+            <text class="tier-card-name">{{ tier.title || tier.honor_level }}</text>
+            <text class="tier-card-tier">第{{ tier.overall_tier }}段</text>
+          </view>
+          <text v-if="tier.next_title" class="tier-card-next">距「{{ tier.next_title }}」还差 {{ tier.need }} 阶 →</text>
+          <text v-else class="tier-card-next top">已达最高段位 🎉</text>
+        </view>
+        <view class="tier-card-bar"><view class="tier-card-fill" :style="{ width: (tier.tier_percent || 0) + '%' }"></view></view>
+        <view class="tier-card-skills" v-if="tier.skills && tier.skills.length">
+          <view class="tier-card-skills-head">
+            <text class="tier-card-skills-title">训练项目段位</text>
+            <view class="tier-card-skills-rhs">
+              <text class="tier-card-skills-tip">连续达标 {{ tier.advance_pass || 3 }} 次升 1 段</text>
+              <view class="tier-info-btn" @click.stop="openTierRules">
+                <text>ⓘ</text>
+                <text class="tier-info-btn-label">晋级规则</text>
+              </view>
+            </view>
+          </view>
+          <view class="tier-skill" v-for="s in tier.skills" :key="s.name">
+            <view class="tier-skill-left">
+              <text class="tier-skill-name">{{ s.name }}</text>
+              <text class="tier-skill-tier" :class="{ muted: !s.active }">{{ s.active ? s.tier + '段' : '未开始' }}</text>
+            </view>
+            <view class="tier-skill-right">
+              <view class="tier-skill-dots" v-if="s.active" @click.stop="explainConsecutive(s)">
+                <view class="tier-skill-dot" v-for="i in (tier.advance_pass || 3)" :key="i" :class="{ on: i <= s.consecutive_pass }"></view>
+                <text class="tier-skill-dot-num">{{ s.consecutive_pass }}/{{ tier.advance_pass || 3 }}</text>
+              </view>
+              <text class="tier-skill-rule" :class="{ muted: !s.active }">{{ s.active ? s.rule_text : '训练后开启' }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="tier-card-foot"><text>九段进度 {{ tier.overall_tier }}/9</text><text>点击查看进阶之路</text></view>
+      </view>
       <!-- 今日训练时长 -->
       <view class="card time-card" :class="{ 'time-card-alert': redAlertActive }">
         <view class="time-header">
-          <text class="plan-label">⏰ 请选择训练时长</text>
+          <text class="plan-label">{{ timeCardTitle }}</text>
           <text v-if="timerPhase === 'running'" class="time-status-tag running">进行中</text>
           <text v-else-if="timerPhase === 'expired'" class="time-status-tag expired">已结束</text>
+          <text v-else-if="durationLocked && planJustGenerated" class="time-status-tag pending">待确认</text>
         </view>
 
-        <view v-if="timerPhase === 'setup'" class="time-setup">
+        <view v-if="timerPhase === 'setup' && !durationLocked" class="time-setup">
           <view v-if="showGuideArrow" class="guide-arrow">
             <text>👇 请选择训练时长</text>
           </view>
@@ -43,8 +93,13 @@
             </picker>
           </view>
           <view class="time-start-btn" :class="{ disabled: !canStartTimer }" @click="startTrainingTimer">
-            <text>开始训练</text>
+            <text>生成今日方案</text>
           </view>
+          <text class="time-setup-hint">{{ timeSetupHint }}</text>
+        </view>
+
+        <view v-else-if="timerPhase === 'setup' && durationLocked" class="time-locked">
+          <text class="time-locked-val">{{ lockedDurationLabel }}</text>
           <text class="time-setup-hint">{{ timeSetupHint }}</text>
         </view>
 
@@ -66,6 +121,10 @@
           <view v-if="devStatusText" class="dev-status">
             <text>{{ devStatusText }}</text>
           </view>
+          <view v-if="scheduleAssistDevText" class="dev-status dev-assist">
+            <text class="dev-section-label" style="margin-top:0">Agent 排课理由</text>
+            <text>{{ scheduleAssistDevText }}</text>
+          </view>
           <text class="dev-section-label">今日操作</text>
           <view class="dev-actions">
             <view class="dev-action dev-action-primary" @click="devResetToday"><text>🔄 重置今日</text></view>
@@ -76,6 +135,7 @@
           <view class="dev-actions">
             <view class="dev-action" @click="devSimulate4amCutoffAction"><text>🌙 模拟4点</text></view>
             <view class="dev-action" @click="devGoNextDay"><text>🌅 新一天</text></view>
+            <view class="dev-action" @click="devResetClockAction"><text>🕐 回归实际</text></view>
           </view>
           <text class="dev-section-label">进度 / 内容</text>
           <view class="dev-actions">
@@ -83,12 +143,26 @@
             <view class="dev-action" @click="devRefreshAiPlan"><text>🤖 刷新 AI</text></view>
             <view class="dev-action" @click="devUnlockNextPhase"><text>🔓 解锁下阶段</text></view>
           </view>
+          <text class="dev-section-label">提醒预览</text>
+          <view class="dev-actions">
+            <view class="dev-action" @click="devPreviewCongrats"><text>🎉 晋级成功</text></view>
+            <view class="dev-action" @click="devPreviewRegret"><text>😔 遗憾失败</text></view>
+          </view>
           <text class="dev-section-label">危险操作</text>
           <view class="dev-actions">
             <view class="dev-action dev-action-danger" @click="devClearAllHistory"><text>🗑 清空历史</text></view>
             <view class="dev-action dev-action-danger" @click="devResetTalentAction"><text>🧬 重置天赋</text></view>
           </view>
           <text class="dev-panel-hint">重置今日 = 仅删今日方案与计时 · 模拟4点 = 虚拟时钟快进到截止 · 新一天 = 快进到 4:05</text>
+        </view>
+      </view>
+
+      <!-- 🆕 时间预算卡下方：天赋头像 + 时间预算引导（仅在选择时长阶段显示，确认时长后隐藏） -->
+      <view v-if="timerPhase === 'setup' && !durationLocked" class="time-budget-tip">
+        <view class="time-budget-avatar" :style="{ borderColor: talentColor, backgroundImage: 'url(' + talentAvatarImg + ')' }"></view>
+        <view class="time-budget-bubble">
+          <text class="time-budget-title">先告诉我你今天的时间预算</text>
+          <text class="time-budget-sub">8小时有8小时的排法 · 30分钟有30分钟的排法</text>
         </view>
       </view>
 
@@ -108,7 +182,6 @@
                 <text class="mini-card-name">{{ c.name }}{{ c.phaseBlock ? ` · 训练${c.phaseBlock}` : '' }}</text>
                 <text class="mini-card-summary">{{ miniCardSummary(c) }}</text>
               </view>
-              <text class="mini-card-del" @click.stop="deleteCard(idx)">✕</text>
             </view>
           </view>
           <view class="summary-attitude">
@@ -126,10 +199,13 @@
         </template>
       </view>
 
-      <!-- Plan · 时间轴总览（开始训练后才显示） -->
-      <view v-if="timerPhase !== 'setup'" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
+      <!-- Plan · 时间轴总览（生成方案后或计时开始后显示） -->
+      <view v-if="timerPhase !== 'setup' || planJustGenerated" class="card plan-card" data-augmented-ui="tl-clip tr-clip br-clip bl-clip border">
         <view class="plan-header">
-          <text class="plan-label">📋 今日方案</text>
+          <view class="plan-header-left">
+            <text class="plan-label">📋 今日方案</text>
+            <text v-if="timerPhase !== 'setup' && !planJustGenerated" class="chip-gold">已确认 ✓</text>
+          </view>
           <text v-if="talentLabel && !entryLoading && !scheduleLoading" class="plan-header-meta">{{ planHeaderMeta }}</text>
         </view>
         <view v-if="scheduleLoading" class="plan-loading-wrap">
@@ -145,12 +221,6 @@
         </view>
 
         <!-- Done -->
-        <view v-else-if="planJustGenerated" class="plan-done-wrap">
-          <text class="plan-done-icon">✅</text>
-          <text class="plan-done-title">方案生成完毕</text>
-          <text class="plan-done-sub">请开始今日的训练</text>
-        </view>
-
         <!-- Plan content (loaded) -->
         <template v-else>
           <view v-if="todayPlan?.status === 'transition' || dayTransition" class="plan-transition-wrap">
@@ -197,7 +267,7 @@
               </view>
             </view>
           </view>
-          <view v-else class="plan-empty">
+          <view v-else class="plan-empty card-empty">
             <text class="plan-empty-text">{{ planEmptyHint }}</text>
           </view>
 
@@ -208,89 +278,124 @@
             <text class="plan-progress-text">{{ planCompletedCount }}/{{ planTotalCount }} 项已完成</text>
           </view>
 
-          <view v-if="coachGuideText" class="plan-ai-box">
-            <view class="plan-ai-header" @click="coachCollapsed = !coachCollapsed">
-              <text class="plan-ai-label">📋 今日怎么练</text>
-              <text class="plan-ai-hint">{{ coachCollapsed ? '▸ 点击展开内容' : '▾ 点击收起内容' }}</text>
-            </view>
-            <text v-if="!coachCollapsed" class="plan-ai-text">{{ coachGuideText }}</text>
-          </view>
           <text v-if="needAssessment" class="plan-warn" @click="goTalent">尚未完成天赋测评，点击前往测评 ›</text>
 
-          <!-- 🆕 选修开关 + 方案编辑 -->
-          <view style="display:flex;gap:8px;margin-top:8px;">
-            <view v-if="canCustomizePlan" class="elective-entry" style="flex:1;" @click="openPlanEditor">
-              <text>📝 编辑方案</text>
-            </view>
+          <!-- 确认今日方案 -->
+          <view v-if="planJustGenerated" class="btn-confirm-plan" style="margin-bottom:12px;" @click="confirmPlan">
+            <text>确认今日方案并开始训练</text>
+            <text class="btn-confirm-plan-sub">确认后解锁闯关地图 · 开始打卡后不可再修改</text>
           </view>
-          <view v-if="timerPhase !== 'setup' && todayPlan?.plan_id" class="elective-toggles">
-            <view class="elective-toggle-item" v-for="es in electiveSkills" :key="es.skill">
-              <text class="et-label">{{ es.label }}</text>
-              <view class="et-switch" :class="{ on: es.inPlan }" @click="toggleElective(es.skill)">
-                <view class="et-knob"></view>
+
+          <!-- 🆕 编辑方案 -->
+          <text class="plan-edit-guide">点击 ⓘ 查看解释说明</text>
+          <view v-if="canCustomizePlan" class="plan-edit-block">
+            <view class="plan-edit-bar" @click="openPlanEditor">
+              <view class="plan-edit-bar-text">
+                <text class="peb-title">📝 编辑方案</text>
               </view>
+              <view class="et-info" @click.stop="showElectiveInfoModal('edit_plan')"><text>ⓘ</text></view>
+              <text class="et-arrow">›</text>
+            </view>
+            <text class="plan-edit-tip">⚠️ 仅可编辑一次，开始打卡后不可再修改</text>
+          </view>
+
+          <!-- 🆕 选修环节 -->
+          <view v-if="(timerPhase !== 'setup' || planJustGenerated) && todayPlan?.plan_id" class="elective-toggles">
+            <text class="elective-section-label">🧩 可选修训练</text>
+            <view class="elective-toggle-item" v-for="es in electiveSkills" :key="es.skill">
+              <view class="et-main">
+                <text class="et-label">{{ es.label }}</text>
+                <view class="et-switch" :class="{ on: es.inPlan }" @click="toggleElective(es.skill)">
+                  <view class="et-knob"></view>
+                </view>
+                <view class="et-info" @click.stop="showElectiveInfoModal(es.skill)"><text>ⓘ</text></view>
+              </view>
+              <text class="et-desc">{{ es.desc }}</text>
+              <text v-if="es.inPlan && es.rankCN" class="et-pinned">📌 已置顶为第{{ es.rankCN }}关</text>
+            </view>
+      </view>
+        </template>
+      </view>
+
+      <!-- 🆕 今日方案下方：天赋头像 + 提示框（结构同时间预算卡下方，文字待替换） -->
+      <view v-if="timerPhase !== 'setup'" class="time-budget-tip">
+        <view class="time-budget-avatar" :style="{ borderColor: talentColor, backgroundImage: 'url(' + talentAvatarImg + ')' }"></view>
+        <view class="time-budget-bubble">
+          <text class="time-budget-title">方案已锁定！</text>
+          <text class="time-budget-sub">先过第一关（音频达到90%）即可打卡了哦</text>
+        </view>
+      </view>
+
+      <!-- 全部必修完成 -->
+      <view v-if="allRequiredDone" class="training-done-wrap">
+        <view class="btn-checkin" @click="showDoneConfirm = true">
+          <text class="btn-checkin-text">🎉 点击我进行自我评分哦～</text>
+        </view>
+      </view>
+
+      <!-- 闯关地图 -->
+      <view v-if="showTraining && timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" class="quest-map" :class="{ ended: timerPhase === 'expired' }" :style="{ '--qc': talentColor }">
+        <!-- 全部过关横幅 -->
+        <view v-if="questAllDone" class="quest-banner">
+          <text class="quest-banner-text">🎉 今日闯关全部完成！</text>
+        </view>
+
+        <template v-for="(phase, pi) in planPhases" :key="phase.block">
+          <!-- ===== 关卡卡片 ===== -->
+          <!-- 选修卡完成不消失，可继续回听；必修完成才消失 -->
+          <view v-if="phase.questNo !== null && (!phase.allDone || phase.isElective)" :id="'phase-block-' + phase.block" class="quest-level">
+            <!-- Z 字左右交替：关卡卡 + 视频卡分居中线两侧；图标骑在贯穿虚线上、半跨关卡卡顶部 -->
+            <view class="quest-media" :class="{ reversed: (phase.questNo % 2) === 0, locked: !phase.unlocked || isMediaLocked }">
+              <view class="qm-col qm-card-col">
+                <view v-if="phase.audioItem || phase.items[0]" class="qm-side qm-audio" @click="openPhaseMediaItem(phase.audioItem || phase.items[0], phase, phase.audioItem ? 'audio' : 'video')">
+                  <view class="qa-main">
+                    <text class="qa-status" :class="{ done: phase.allDone, locked: !phase.unlocked }">{{ questStatusText(phase) }}</text>
+                    <view v-if="phase.subtitle && phase.subtitle !== phase.skillName" class="qa-skill">
+                      <text>{{ phase.skillName || '训练' }}</text>
+                      <text v-if="phase.isElective" class="qa-tag">选修</text>
+                    </view>
+                    <text class="qa-name">{{ phase.subtitle || phase.skillName || '训练' }}</text>
+                    <text class="qa-desc">{{ questDescFor(phase) }}</text>
+                    <view class="qa-start" :class="{ locked: !phase.unlocked, done: phase.allDone }">
+                      <view class="qa-start-ic">{{ phase.allDone ? '✓' : '▶' }}</view>
+                      <view class="qa-start-body">
+                        <text class="qa-start-text">{{ questStartText(phase) }}</text>
+                        <text v-if="questSubText(phase)" class="qa-start-sub">{{ questSubText(phase) }}</text>
+                      </view>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <view class="qm-col qm-video-col">
+                <!-- 纯视频项（无音频）：视频即闯关本身，主卡已承载，不再重复渲染“先看视频”卡 -->
+                <view v-if="phase.videoItem && phase.audioItem" class="qm-side qm-video" @click.stop="openPhaseMediaItem(phase.videoItem, phase, 'video')">
+                  <view class="qm-video-ic"><text>📺</text></view>
+                  <view class="qm-video-body">
+                    <text class="qm-label">先看视频</text>
+                    <text class="qm-meta">教学示范<text v-if="phase.videoItem.duration_min"> · {{ phase.videoItem.duration_min }}分钟</text></text>
+                  </view>
+                </view>
+              </view>
+              <!-- 图标节点：绝对定位骑中线，中心对准关卡卡顶部边线（半跨卡顶） -->
+              <view class="quest-node" :class="{ done: phase.allDone, locked: !phase.unlocked, pulse: phase.unlocked && !phase.allDone && !isMediaLocked }">
+                <text class="quest-node-icon">{{ !phase.unlocked ? '🔒' : phase.questIcon }}</text>
+                <text v-if="phase.allDone" class="quest-node-star">⭐</text>
+              </view>
+            </view>
+
+            <!-- 打卡条：必修关都有；未解锁 / 未听完为灰色不可点 -->
+            <view v-if="!phase.isPercep && !phase.isElective" class="quest-checkin">
+              <view v-if="isPhaseListenDone(phase)" class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
+                <text class="btn-checkin-text">{{ phaseRecordIds[phase.block] ? '✏️ 修改打卡' : '✅ 点击我进行打卡哦！' }}</text>
+              </view>
+            </view>
+            <view v-else-if="phase.isPercep" class="quest-perception-tip">
+              <text v-if="phase.allDone">✅ 多元感知已完成 · 点击音频可回听</text>
+              <text v-else>点击音频即可完成多元感知训练</text>
             </view>
           </view>
         </template>
       </view>
-
-      <!-- 训练阶段（v2.0：逐个训练项） -->
-      <template v-if="timerPhase !== 'setup' && !dayTransition && todayPlan?.status !== 'transition'" v-for="(phase, pi) in planPhases" :key="phase.block">
-        <view v-if="pi > 0" class="divider"></view>
-        <view :id="'phase-block-' + phase.block" class="phase-section">
-          <text class="section-title" :class="{ dim: !phase.unlocked, elective: phase.isElective }">
-            {{ phase.label }}{{ phase.unlocked ? '' : ' 🔒' }}{{ phase.isElective ? ' 🆓' : '' }}
-          </text>
-
-          <view class="media-block" :class="{ locked: isPhaseMediaLocked(phase) }">
-            <view v-if="isPhaseMediaLocked(phase)" class="media-lock-overlay">
-              <text class="media-lock-text">{{ phaseMediaLockText(phase) }}</text>
-            </view>
-
-            <template v-if="phase.items.length">
-              <view class="step-grid">
-              <view
-                v-for="(item, idx) in phase.items"
-                :key="item.id || idx"
-                class="step"
-                :class="{
-                  'step-preview-locked': !phase.unlocked,
-                  'step-locked': phase.unlocked && isMediaLocked,
-                  'step-watched': phase.unlocked && isItemWatched(item),
-                }"
-                @click="openPhaseMediaItem(item, phase)"
-              >
-                <view class="step-num" :class="{ 'step-num-done': isItemWatched(item), dim: !phase.unlocked }">{{ idx + 1 }}</view>
-                <view class="step-content">
-                  <text class="step-label" :class="{ 'dim-text': !phase.unlocked }">{{ itemLabel(item) }}</text>
-                  <view class="step-box" :class="{ 'dim-box': !phase.unlocked }">{{ itemTypeEmoji(item) }} {{ item.title || '训练项' }}</view>
-                  <text class="step-time" :class="{ 'dim-text': !phase.unlocked }">{{ itemStepHint(item, phase) }}</text>
-                </view>
-              </view>
-              </view>
-            </template>
-            <view v-else class="step dim-step">
-              <view class="step-num dim">1</view>
-              <view class="step-content">
-                <text class="step-label dim-text">训练项</text>
-                <view class="step-box dim-box">暂无内容</view>
-                <text class="step-time dim-text">请先生成今日方案</text>
-              </view>
-            </view>
-          </view>
-
-          <text class="lock-tip">{{ phaseTip(phase) }}</text>
-
-          <view class="checkin-block" :class="{ locked: !canPhaseCheckin(phase) }">
-            <view v-if="!canPhaseCheckin(phase)" class="checkin-lock-overlay">
-              <text class="checkin-lock-text">{{ phaseCheckinLockText(phase) }}</text>
-            </view>
-            <view class="btn-checkin btn-cyber" data-augmented-ui="tl-clip br-clip border" @click="openPicker(phase.block)">
-              <text>{{ phase.allDone ? '✏️ 修改 ' + phase.block + ' 打卡' : '✅ 训练 ' + phase.block + ' 打卡' }}</text>
-            </view>
-          </view>
-        </view>
-      </template>
 
       <!-- 打卡弹窗（各阶段共用） -->
       <view v-if="showPicker && activePickerBlock" class="picker-overlay" @click="closePicker">
@@ -308,7 +413,7 @@
               <text class="pph-dot">◆</text>
             </view>
             <view class="picker-grid">
-              <view v-for="(item, ai) in abilities" :key="item" class="picker-item" :class="{ active: hasPickerCard(item), 'ability-spark': sparkAbi === ai }" @click="togglePickerCard(item, ai)">
+              <view v-for="(item, ai) in abilities" :key="item" class="picker-item" :class="{ active: hasPickerCard(item), disabled: allowedAbility && item !== allowedAbility, 'ability-spark': sparkAbi === ai }" @click="togglePickerCard(item, ai)">
                 <text class="pi-text">{{ item }}</text>
               </view>
             </view>
@@ -332,7 +437,7 @@
                 </view>
               </view>
               <view class="form-row">
-                <text class="form-label">时间</text>
+                <text class="form-label">时间<text class="req-star">*</text></text>
                 <input class="form-input" v-model="card.time" placeholder="训练时长（分钟）" type="number" />
               </view>
               <view class="form-row">
@@ -345,14 +450,14 @@
                 </view>
               </view>
               <view class="form-row">
-                <text class="form-label">结果</text>
+                <text class="form-label">结果<text class="req-star">*</text></text>
                 <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
                   <view style="display:flex;align-items:center;gap:6px;">
                     <input class="form-input" style="flex:1;min-width:0;" v-model="card.count" placeholder="题数" type="number" />
                     <text class="form-unit" style="width:24px;">题</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model="card.accuracy" placeholder="正确率" type="number" />
+                    <input class="form-input" :class="{ 'form-input-err': accErrorCards[idx]?.accuracy }" style="flex:1;min-width:0;" v-model="card.accuracy" placeholder="正确率" type="number" />
                     <text class="form-unit" style="width:24px;">%</text>
                   </view>
                 </view>
@@ -361,6 +466,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -376,6 +482,7 @@
               </view>
             </template>
             <template v-else-if="card.name === '扫描速记'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">材料类型</text>
                 <view class="form-tags">
@@ -385,15 +492,15 @@
                 </view>
               </view>
               <view class="form-row">
-                <text class="form-label">材料名称</text>
+                <text class="form-label">材料名称<text class="req-star">*</text></text>
                 <input class="form-input" v-model="card.materialName" :placeholder="card.materialType === '书' ? '如：《西游记》' : card.materialType === '文章' ? '如：作文《我的姐姐》' : '如：圆周率前100位'" />
               </view>
               <view class="form-row">
-                <text class="form-label">训练</text>
+                <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
-                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际用时约几分钟" type="number" />
                   <text class="form-unit">分钟</text>
-                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="记住" type="number" />
+                  <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="大约记住多少字" type="number" />
                   <text class="form-unit">字</text>
                 </view>
               </view>
@@ -410,7 +517,7 @@
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
                   <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardTime" placeholder="用时" type="number" />
                   <text class="form-unit">分钟</text>
-                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.forwardAcc" placeholder="正确率" type="number" />
+                  <input class="form-input" :class="{ 'form-input-err': accErrorCards[idx]?.forwardAcc }" style="flex:1;min-width:0;" v-model="card.forwardAcc" placeholder="正确率" type="number" />
                   <text class="form-unit">%</text>
                 </view>
               </view>
@@ -419,7 +526,7 @@
                 <view style="display:flex;align-items:center;gap:6px;flex:1;">
                   <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardTime" placeholder="用时" type="number" />
                   <text class="form-unit">分钟</text>
-                  <input class="form-input" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
+                  <input class="form-input" :class="{ 'form-input-err': accErrorCards[idx]?.backwardAcc }" style="flex:1;min-width:0;" v-model="card.backwardAcc" placeholder="正确率" type="number" />
                   <text class="form-unit">%</text>
                 </view>
               </view>
@@ -427,6 +534,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -438,10 +546,11 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+                <textarea class="form-textarea" v-model="card.note" placeholder="可选：卡在哪、感觉如何" style="height:50px;" />
               </view>
             </template>
             <template v-else-if="card.name === '影像追忆'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
                 <text class="form-label">使用工具</text>
                 <view class="form-tags">
@@ -451,26 +560,26 @@
                 </view>
               </view>
               <view class="form-row">
-                <text class="form-label">训练</text>
+                <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际用时约几分钟" type="number" />
                     <text class="form-unit" style="width:32px;">分钟</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="看完" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="大约看完多少字" type="number" />
                     <text class="form-unit" style="width:32px;">字</text>
                   </view>
                 </view>
               </view>
               <view class="form-row">
-                <text class="form-label">材料</text>
+                <text class="form-label">材料<text class="req-star">*</text></text>
                 <textarea class="form-textarea form-textarea-sm" v-model="card.content" placeholder="如：一卜语文重要知识点" />
               </view>
               <view class="form-row">
-                <text class="form-label">追忆率</text>
+                <text class="form-label">追忆率<text class="req-star">*</text></text>
                 <view class="form-inline">
-                  <input class="form-input short" v-model="card.accuracy" placeholder="正确率" type="number" />
+                  <input class="form-input short" :class="{ 'form-input-err': accErrorCards[idx]?.accuracy }" v-model="card.accuracy" placeholder="正确率" type="number" />
                   <text class="form-unit">%</text>
                 </view>
               </view>
@@ -478,6 +587,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -489,19 +599,20 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+                <textarea class="form-textarea" v-model="card.note" placeholder="可选：卡在哪、感觉如何" style="height:50px;" />
               </view>
             </template>
             <template v-else-if="card.name === '超脑阅读'">
+              <text class="form-soft-tip">填实际练习情况即可，不用刻意凑整数</text>
               <view class="form-row">
-                <text class="form-label">训练</text>
+                <text class="form-label">训练<text class="req-star">*</text></text>
                 <view style="display:flex;flex-direction:column;gap:6px;flex:1;">
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="用时" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.time" placeholder="实际阅读约几分钟" type="number" />
                     <text class="form-unit" style="width:32px;">分钟</text>
                   </view>
                   <view style="display:flex;align-items:center;gap:6px;">
-                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="完成" type="number" />
+                    <input class="form-input" style="flex:1;min-width:0;" v-model.number="card.wordCount" placeholder="本次大约阅读多少字" type="number" />
                     <text class="form-unit" style="width:32px;">字</text>
                   </view>
                 </view>
@@ -514,6 +625,7 @@
                 <text class="form-label">图片/视频</text>
                 <view class="form-file-wrap">
                   <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
+                  <text class="form-media-hint">🎁 上传打卡视频可额外获得积分哦</text>
                   <view v-if="card.files && card.files.length" class="file-previews">
                     <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
                       <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
@@ -525,39 +637,31 @@
               </view>
               <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea form-textarea-sm" v-model="card.note" placeholder="补充说明..." />
+                <textarea class="form-textarea form-textarea-sm" v-model="card.note" placeholder="可选：卡在哪、感觉如何" />
               </view>
             </template>
             <template v-else>
               <view class="form-row">
-                <text class="form-label">时间</text>
-                <input class="form-input" v-model="card.time" placeholder="训练时长/分钟" />
-              </view>
-              <view class="form-row">
-                <text class="form-label">内容</text>
-                <textarea class="form-textarea" v-model="card.content" placeholder="训练了什么内容？" />
-              </view>
-              <view class="form-row">
-                <text class="form-label">结果</text>
-                <textarea class="form-textarea" v-model="card.result" placeholder="训练效果如何？" />
-              </view>
-              <view class="form-row">
-                <text class="form-label">图片/视频</text>
-                <view class="form-file-wrap">
-                  <view class="file-btn" @click="pickPickerFile(idx)"><text>📷 选择文件</text></view>
-                  <text class="file-hint" v-if="!card.files.length">支持图片和视频</text>
-                  <view v-if="card.files.length" class="file-previews">
-                    <view v-for="(f,fi) in card.files" :key="fi" class="file-preview">
-                      <image v-if="f.type === 'image'" :src="f.url" mode="aspectFill" class="preview-img" />
-                      <video v-if="f.type === 'video'" :src="f.url" class="preview-video" />
-                      <text class="file-del" @click="removePickerFile(idx, fi)">✕</text>
-                    </view>
-                  </view>
+                <text class="form-label">时长<text class="req-star">*</text></text>
+                <view style="display:flex;align-items:center;gap:6px;flex:1;">
+                  <input class="form-input" v-model="card.time" placeholder="实际用时约几分钟" type="number" />
+                  <text class="form-unit">分</text>
                 </view>
               </view>
               <view class="form-row">
+                <text class="form-label">字数<text class="req-star">*</text></text>
+                <view style="display:flex;align-items:center;gap:6px;flex:1;">
+                  <input class="form-input" v-model="card.wordCount" placeholder="本次大约多少字" type="number" />
+                  <text class="form-unit">字</text>
+                </view>
+              </view>
+              <view class="form-row">
+                <text class="form-label">效果</text>
+                <input class="form-input" v-model="card.result" placeholder="训练效果" />
+              </view>
+              <view class="form-row">
                 <text class="form-label">备注</text>
-                <textarea class="form-textarea" v-model="card.note" placeholder="补充说明..." style="height:50px;" />
+                <input class="form-input" v-model="card.note" placeholder="可选补充说明" />
               </view>
             </template>
           </view>
@@ -586,6 +690,7 @@
       </view>
     </view>
 
+
     <!-- 🆕 方案编辑弹窗 -->
     <view v-if="showPlanEditor" class="picker-overlay" @click="closePlanEditor">
       <view class="picker-card plan-editor-modal" @click.stop>
@@ -606,42 +711,161 @@
         </view>
         <view v-if="editableItems.length" class="editor-actions">
           <view class="editor-btn secondary" @click="closePlanEditor"><text>取消</text></view>
-          <view class="editor-btn primary" @click="confirmCustomize"><text>确认修改</text></view>
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;" @click="confirmCustomize"><text>确认修改</text></view>
         </view>
       </view>
     </view>
 
-    <!-- Media Player Overlay -->
-    <view v-if="mediaPlayer.show" class="player-overlay" @click="closeMedia">
-      <view class="player-card" @click.stop>
+    <!-- 信息说明弹窗 -->
+    <view v-if="showInfoModal" class="picker-overlay" @click="showInfoModal = false">
+      <view class="picker-card confirm-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">{{ infoModalData.title }}</text>
+          <view class="modal-close" @click="showInfoModal = false">✕</view>
+        </view>
+        <text class="confirm-modal-text">{{ infoModalData.desc }}</text>
+        <text v-if="infoModalData.age" class="confirm-modal-text" style="margin-top:-8px;">{{ infoModalData.age }}</text>
+        <text v-if="infoModalData.how" class="confirm-modal-text" style="margin-top:-8px;">{{ infoModalData.how }}</text>
+        <view class="confirm-modal-actions">
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;" @click="showInfoModal = false"><text>知道了</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 确认修改方案弹窗 -->
+    <view v-if="showCustomizeConfirm" class="picker-overlay" @click="showCustomizeConfirm = false; pendingCustomize = null">
+      <view class="picker-card confirm-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">确认修改方案</text>
+          <view class="modal-close" @click="showCustomizeConfirm = false; pendingCustomize = null">✕</view>
+        </view>
+        <text class="confirm-modal-text">每个训练日仅可修改一次，打卡后不可再改。修改后将按所选技能重新匹配训练内容，请谨慎操作。确定继续吗？</text>
+        <view class="confirm-modal-actions">
+          <view class="editor-btn secondary" @click="showCustomizeConfirm = false; pendingCustomize = null"><text>取消</text></view>
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;" @click="doCustomize"><text>确认修改</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 提交确认弹窗 -->
+    <view v-if="showSubmitConfirm" class="picker-overlay" @click="showSubmitConfirm = false; pendingSubmitBlock = null">
+      <view class="picker-card confirm-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">确认提交打卡</text>
+          <view class="modal-close" @click="showSubmitConfirm = false; pendingSubmitBlock = null">✕</view>
+        </view>
+        <text class="confirm-modal-text">请确认填写内容准确无误。错误填写会影响后续课程推荐和训练效果。</text>
+        <view class="confirm-modal-actions">
+          <view class="editor-btn secondary" @click="showSubmitConfirm = false; pendingSubmitBlock = null"><text>再检查一下</text></view>
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;" @click="confirmSubmit"><text>确认提交</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 删除确认弹窗 -->
+    <view v-if="showDeleteConfirm" class="picker-overlay" style="z-index:650;" @click="cancelDeleteConfirm">
+      <view class="picker-card confirm-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title" style="color:#ef4444;">⚠️ 删除打卡记录</text>
+          <view class="modal-close" @click="cancelDeleteConfirm">✕</view>
+        </view>
+        <text class="confirm-modal-text">确定删除「{{ deleteTargetName }}」的打卡记录吗？删除后需重新按顺序打卡，该训练项会重新出现在下方列表中。</text>
+        <view class="confirm-modal-actions">
+          <view class="editor-btn secondary" @click="cancelDeleteConfirm"><text>取消</text></view>
+          <view class="btn-checkin" style="flex:1;padding:12px;margin:0;box-shadow:none;border-radius:10px;background:#ef4444;" @click="confirmDelete"><text>确定删除</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 完成确认弹窗 -->
+    <view v-if="showDoneConfirm" class="picker-overlay" @click="showDoneConfirm = false">
+      <view class="picker-card" style="max-width:360px;" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">今日配合度</text>
+          <view class="modal-close" @click="showDoneConfirm = false">✕</view>
+        </view>
+        <view class="sa-grid" style="padding:16px;">
+          <view v-for="s in scores" :key="s.pct" class="sa-item" :class="{ active: summaryAttitude === s.pct }" @click="summaryAttitude = s.pct">
+            <text class="sa-pct">{{ s.pct }}%</text>
+            <text class="sa-emoji">{{ s.emoji }}</text>
+          </view>
+        </view>
+        <view class="btn-checkin" style="margin:0;" @click="showDoneConfirm = false">
+          <text class="btn-checkin-text">确认完成</text>
+        </view>
+      </view>
+    </view>
+
+<!-- Media Player Overlay — 方案C 封面风；v-show 保留 video 实例与浏览器缓冲，避免每次重进全量加载 -->
+    <view v-show="mediaPlayer.show" class="player-overlay" @click="closeMedia">
+      <view class="player-card player-card-c" @click.stop>
+        <view class="player-cover">
+          <view v-if="mediaPlayer.type === 'video'" class="player-cover-video">
+            <video
+              v-if="videoSrc"
+              :key="'training-video-' + activeVideoItemId"
+              ref="trainingVideoEl"
+              class="training-video"
+              :src="videoSrc"
+              playsinline
+              webkit-playsinline
+              x5-playsinline
+              x5-video-player-type="h5"
+              preload="metadata"
+              @click.stop="toggleVideoPlay"
+              @timeupdate="onMediaTimeUpdate"
+              @loadedmetadata="onMediaLoadedMetadata"
+              @loadeddata="onVideoLoadedData"
+              @durationchange="onVideoDurationChange"
+              @seeking="onMediaSeeking"
+              @ratechange="lockMediaPlaybackRate"
+              @pause="onVideoPause"
+              @playing="onVideoPlaying"
+              @waiting="onVideoWaiting"
+              @canplay="onVideoCanPlay"
+              @ended="onMediaEnded"
+              @error="onTrainingVideoError"
+            />
+            <view v-if="videoLoading" class="player-video-loading">
+              <text class="player-video-loading-text">{{ videoLoadingHint }}</text>
+            </view>
+            <view v-else-if="!videoMetadataReady" class="player-cover-placeholder">
+              <text class="player-cover-icon">🎬</text>
+              <text class="player-cover-hint">视频加载中…</text>
+            </view>
+          </view>
+          <view v-else class="player-cover-audio">
+            <text class="player-cover-icon">{{ playerCoverEmoji }}</text>
+            <text class="player-cover-label">{{ audioTitle || mediaPlayerTitle }}</text>
+          </view>
+          <view class="player-cover-progress">
+            <view class="player-cover-progress-fill" :style="{ width: (mediaPlayer.type === 'video' ? videoProgressPct : audioProgressPct) + '%' }"></view>
+          </view>
+        </view>
         <view class="player-header">
           <text class="player-title">{{ mediaPlayerTitle }}</text>
           <view class="player-close" @click="closeMedia">✕</view>
         </view>
-        <view v-if="mediaPlayer.type === 'video'" class="player-body">
-          <video
-            v-if="videoSrc"
-            ref="trainingVideoEl"
-            class="training-video"
-            :src="videoSrc"
-            controls
-            autoplay
-            @timeupdate="onVideoTimeUpdate"
-            @loadedmetadata="onVideoLoadedMetadata"
-            @pause="flushWatchProgress"
-          />
-          <text v-else>暂无视频资源</text>
+        <view v-if="mediaPlayer.type === 'audio'" class="player-controls">
+          <view class="player-ctrl-left">
+            <text class="player-time-label">{{ audioTimeLabel }}</text>
+          </view>
+          <view class="player-ctrl-center">
+            <view class="player-ctrl-btn sm" @click="rewindAudioTen">
+              <text>⏪</text>
+            </view>
+            <view class="player-ctrl-btn" @click="toggleMediaPlay">
+              <text>{{ mediaPlayIcon }}</text>
+            </view>
+          </view>
+          <view class="player-ctrl-right">
+            <text class="player-time-label">{{ audioDurationLabel }}</text>
+          </view>
         </view>
-        <view v-if="mediaPlayer.type === 'audio'" class="player-body">
-          <text class="pa-icon" style="font-size:48px;display:block;text-align:center;margin-bottom:8px;">🎧</text>
-          <text v-if="audioTitle" class="player-audio-name">{{ audioTitle }}</text>
-          <view v-html="audioHtml"></view>
-        </view>
+        <text v-if="mediaPlayer.type === 'audio'" class="media-listen-hint">{{ mediaPlayerHint }}</text>
       </view>
     </view>
-  </view>
-
-  <!-- 已打卡卡片详情 / 页内编辑 -->
+<!-- 已打卡卡片详情 / 页内编辑 -->
   <view v-if="showCardDetail" class="detail-overlay" @click="closeCardDetail">
     <view class="detail-test-card" @click.stop>
       <text class="detail-slide-name">{{ activeDetailCard?.name }}</text>
@@ -656,125 +880,147 @@
       <view v-else class="detail-edit-body">
         <template v-if="detailEditCard?.name === '极速运算'">
           <view class="detail-form-row">
-            <text class="detail-form-hint">时长</text>
-            <input class="detail-form-input short" v-model="detailEditCard.time" placeholder="0" type="number"  />
-            <text class="detail-form-hint">分</text>
-            <text class="detail-form-hint">题数</text>
-            <input class="detail-form-input short" v-model="detailEditCard.count" placeholder="0" type="number"  />
-            <text class="detail-form-hint">题</text>
-            <text class="detail-form-hint">正确率</text>
-            <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="0" type="number"  />
-            <text class="detail-form-hint">%</text>
+            <text class="detail-form-label">时间</text>
+            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" type="number" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">题型</text>
+            <text class="detail-form-label">内容</text>
             <view class="detail-form-tags">
               <text v-for="t in ['加减法','乘除法','混合运算','口算']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tag === t }" @click="detailEditCard.tag = t">{{ t }}</text>
             </view>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
+            <text class="detail-form-label">结果</text>
+            <view class="detail-form-inline">
+              <input class="detail-form-input short" v-model="detailEditCard.count" placeholder="题数" type="number" />
+              <text class="detail-form-unit">题</text>
+              <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="正确率" type="number" />
+              <text class="detail-form-unit">%</text>
+            </view>
+          </view>
+          <view class="detail-form-row">
+            <text class="detail-form-label">备注</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '扫描速记'">
           <view class="detail-form-row">
-            <text class="detail-form-hint">时长</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number"  />
-            <text class="detail-form-hint">分</text>
-            <text class="detail-form-hint">字数</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number"  />
-            <text class="detail-form-hint">字</text>
-          </view>
-          <view class="detail-form-row">
-            <text class="detail-form-hint">材料</text>
+            <text class="detail-form-label">材料类型</text>
             <view class="detail-form-tags">
               <text v-for="t in ['书','文章','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.materialType === t }" @click="detailEditCard.materialType = t">{{ t }}</text>
             </view>
-            <input class="detail-form-input" v-model="detailEditCard.materialName" placeholder="材料名称" style="flex:1;min-width:80px;" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">倒背</text>
+            <text class="detail-form-label">材料名称</text>
+            <input class="detail-form-input" v-model="detailEditCard.materialName" placeholder="材料名称" />
+          </view>
+          <view class="detail-form-row" style="flex-wrap:nowrap;align-items:center;">
+            <text class="detail-form-label">训练</text>
+            <text class="detail-form-unit">用时</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:50px;flex:none;" />
+            <text class="detail-form-unit">分钟</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:50px;flex:none;" />
+            <text class="detail-form-unit">字</text>
+          </view>
+          <!-- 倒背验证 -->
+          <view class="detail-form-row">
+            <text class="detail-form-label">倒背验证</text>
             <view class="detail-form-tags">
-              <text class="detail-ftag" :class="{ on: detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = true">✓ 可</text>
+              <text class="detail-ftag" :class="{ on: detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = true">✓ 可逐字倒背</text>
               <text class="detail-ftag" :class="{ on: !detailEditCard.reverseRecite }" @click="detailEditCard.reverseRecite = false">✗ 暂不能</text>
             </view>
-            <template v-if="!detailEditCard.reverseRecite">
-              <input class="detail-form-input short" v-model="detailEditCard.forwardTime" placeholder="用时" style="width:50px;" />
-              <text class="detail-form-hint">/</text>
-              <input class="detail-form-input short" v-model="detailEditCard.forwardAcc" placeholder="准确度" style="width:50px;" />
-            </template>
-            <template v-else>
-              <input class="detail-form-input short" v-model="detailEditCard.backwardTime" placeholder="用时" style="width:50px;" />
-              <text class="detail-form-hint">/</text>
-              <input class="detail-form-input short" v-model="detailEditCard.backwardAcc" placeholder="准确度" style="width:50px;" />
-            </template>
+          </view>
+          <view class="detail-form-row" v-if="!detailEditCard.reverseRecite">
+            <text class="detail-form-label">正背</text>
+            <view class="detail-form-inline">
+              <input class="detail-form-input short" v-model="detailEditCard.forwardTime" placeholder="用时" />
+              <text class="detail-form-unit">/</text>
+              <input class="detail-form-input short" v-model="detailEditCard.forwardAcc" placeholder="准确度" />
+            </view>
+          </view>
+          <view class="detail-form-row" v-if="detailEditCard.reverseRecite">
+            <text class="detail-form-label">倒背</text>
+            <view class="detail-form-inline">
+              <input class="detail-form-input short" v-model="detailEditCard.backwardTime" placeholder="用时" />
+              <text class="detail-form-unit">/</text>
+              <input class="detail-form-input short" v-model="detailEditCard.backwardAcc" placeholder="准确度" />
+            </view>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
+            <text class="detail-form-label">备注</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '影像追忆'">
           <view class="detail-form-row">
-            <text class="detail-form-hint">时长</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number"  />
-            <text class="detail-form-hint">分</text>
-            <text class="detail-form-hint">字数</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number"  />
-            <text class="detail-form-hint">字</text>
-            <text class="detail-form-hint">追忆率</text>
-            <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="0" type="number"  />
-            <text class="detail-form-hint">%</text>
-          </view>
-          <view class="detail-form-row">
-            <text class="detail-form-hint">工具</text>
+            <text class="detail-form-label">使用工具</text>
             <view class="detail-form-tags">
               <text v-for="t in ['书本','视频','自定义']" :key="t" class="detail-ftag" :class="{ on: detailEditCard.tool === t }" @click="detailEditCard.tool = t">{{ t }}</text>
             </view>
-            <input class="detail-form-input" v-model="detailEditCard.content" placeholder="材料名称" style="flex:1;" />
+          </view>
+          <view class="detail-form-row" style="align-items:center;">
+            <text class="detail-form-label">训练</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" style="width:56px;" />
+            <text class="detail-form-unit">分钟</text>
+            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" style="width:56px;" />
+            <text class="detail-form-unit">字</text>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
+            <text class="detail-form-label">材料</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练材料" />
+          </view>
+          <view class="detail-form-row">
+            <text class="detail-form-label">追忆率</text>
+            <view class="detail-form-inline">
+              <input class="detail-form-input short" v-model="detailEditCard.accuracy" placeholder="%" type="number" />
+              <text class="detail-form-unit">%</text>
+            </view>
+          </view>
+          <view class="detail-form-row">
+            <text class="detail-form-label">备注</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
           </view>
         </template>
 
         <template v-else-if="detailEditCard?.name === '超脑阅读'">
-          <view class="detail-form-row">
-            <text class="detail-form-hint">时长</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number"  />
-            <text class="detail-form-hint">分</text>
-            <text class="detail-form-hint">字数</text>
-            <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number"  />
-            <text class="detail-form-hint">字</text>
+          <view style="display:flex;align-items:center;gap:4px;margin-bottom:10px;">
+            <text class="detail-form-label" style="width:auto;">训练</text>
+            <view style="display:flex;align-items:center;gap:4px;margin-left:auto;">
+              <text class="detail-form-unit">用时</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.time" placeholder="0" type="number" />
+              <text class="detail-form-unit">分钟，完成</text>
+              <input class="detail-form-input short" v-model.number="detailEditCard.wordCount" placeholder="0" type="number" />
+              <text class="detail-form-unit">字</text>
+            </view>
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">效果</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.result" placeholder="训练效果" style="height:36px;padding:6px 10px;" />
+            <text class="detail-form-label">结果</text>
+            <input class="detail-form-input" v-model="detailEditCard.result" placeholder="训练效果" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
+            <text class="detail-form-label">备注</text>
+            <input class="detail-form-input" v-model="detailEditCard.note" placeholder="补充说明..." />
           </view>
         </template>
 
         <template v-else>
           <view class="detail-form-row">
-            <text class="detail-form-hint">时长</text>
-            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" style="flex:0.4;" />
-            <text class="detail-form-hint">效果</text>
-            <input class="detail-form-input" v-model="detailEditCard.result" placeholder="训练效果" style="flex:0.6;" />
+            <text class="detail-form-label">时间</text>
+            <input class="detail-form-input" v-model="detailEditCard.time" placeholder="分钟" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">内容</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练内容" style="height:36px;padding:6px 10px;" />
+            <text class="detail-form-label">内容</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.content" placeholder="训练内容" />
           </view>
           <view class="detail-form-row">
-            <text class="detail-form-hint">备注</text>
-            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." style="height:36px;padding:6px 10px;" />
+            <text class="detail-form-label">结果</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.result" placeholder="训练效果" />
+          </view>
+          <view class="detail-form-row">
+            <text class="detail-form-label">备注</text>
+            <textarea class="detail-form-textarea" v-model="detailEditCard.note" placeholder="补充说明..." />
           </view>
         </template>
       </view>
@@ -782,7 +1028,7 @@
       <view class="detail-actions">
         <template v-if="!detailEditing">
           <view class="btn-outline-sm" @click="startDetailEdit">✎ 编辑</view>
-          <view class="btn-del-sm" @click="deleteCard(detailCardIndex); closeCardDetail()">删除</view>
+          <view class="btn-del-sm" @click="confirmDeleteCard(detailCardIndex)">删除</view>
         </template>
         <template v-else>
           <view class="btn-outline-sm" @click="cancelDetailEdit">取消</view>
@@ -791,23 +1037,33 @@
       </view>
     </view>
   </view>
+  </view>
+  <!-- 晋级规则说明 Modal -->
+  <tier-rules-modal v-model="showTierRules" :advance-pass="tier?.advance_pass || 3" />
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
-import { ensureChildUser, getChildUserId, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchTalentTrainingVideo, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, fetchElectiveList, submitElectiveCheckin, customizePlan, toggleElectiveItem } from '@/utils/userApi.js'
-import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState } from '@/utils/talentState.js'
+import { onShow, onHide } from '@dcloudio/uni-app'
+import { requirePageAuth, ensureChildUser, getChildUserId, resolveTrainingStreamUrl, fetchTrainingEntry, fetchTrainingToday, fetchTrainingProgress, submitTrainingCheckin, refreshTrainingReport, fetchTodayCheckins, updateTrainingCheckin, deleteTrainingCheckin, scheduleTrainingPlan, setTrainingWindow, clearTrainingWindow, markPlanMediaExhausted, fetchDevTrainingStatus, devResetTodayTraining, devResetTrainingProgress, devResetAllTraining, devSimulateNextDay, devSimulate4amCutoff, devResetTalent, devResetClock, postTrainingWatchProgress, fetchLatestAssessment, fetchAssessmentHistory, customizePlan, toggleElectiveItem, fetchGrowthTier } from '@/utils/userApi.js'
+import { ensureTalentState, hasEffectiveTalent, clearTalentState, refreshTalentState, talentAvatarUrl, talentThemeColor, duanText } from '@/utils/talentState.js'
 import { getDevMode, isDevToolsAvailable, setDevMode } from '@/utils/devMode.js'
-import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES, CARD_FIELDS, ELECTIVE_ABILITIES } from '@/utils/trainingCardDisplay.js'
+import { miniCardSummary, resolvePlanItemSkill, TRAINING_ABILITIES } from '@/utils/trainingCardDisplay.js'
+import { isClassicUi } from '@/utils/uiSkin.js'
+import { switchMainTab } from '@/utils/mainTabs.js'
+import { findAbnormalWordSpeedCards } from '@/composables/useTrainingCheckin.js'
 
 const TIMER_STORAGE_KEY_PREFIX = 'jnao_training_timer'
 const HOUR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+/** 0 小时时可选分钟（最短 20）；有小时时含 0/5/10/15 以便拼整点 */
+const MINUTE_OPTIONS_WITH_HOUR = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+const MINUTE_OPTIONS_ZERO_HOUR = [20, 25, 30, 35, 40, 45, 50, 55]
+const MIN_TRAINING_MINUTES = 20
 
 const devToolsAvailable = isDevToolsAvailable()
 const devMode = ref(getDevMode())
 const scheduleLoading = ref(false)
+const agentScheduleEnabled = ref(false)
 const entryLoading = ref(false)
 const devStatusText = ref('')
 const timerPhase = ref('setup') // setup | running | expired
@@ -829,10 +1085,39 @@ function planAnimShownToday() { try { return localStorage.getItem(todayAnimKey()
 function markPlanAnimShown() { try { localStorage.setItem(todayAnimKey(), '1') } catch (_) {} }
 
 const hourLabels = HOUR_OPTIONS.map(h => `${h} 小时`)
-const minuteLabels = MINUTE_OPTIONS.map(m => `${m} 分钟`)
+const minuteOptions = computed(() =>
+  selectedHours.value === 0 ? MINUTE_OPTIONS_ZERO_HOUR : MINUTE_OPTIONS_WITH_HOUR
+)
+const minuteLabels = computed(() => minuteOptions.value.map(m => `${m} 分钟`))
 const hourIndex = computed(() => Math.max(0, HOUR_OPTIONS.indexOf(selectedHours.value)))
-const minuteIndex = computed(() => Math.max(0, MINUTE_OPTIONS.indexOf(selectedMinutes.value)))
-const canStartTimer = computed(() => !trainingDayLocked.value && !scheduleLoading.value && !entryLoading.value && (selectedHours.value > 0 || selectedMinutes.value > 0))
+const minuteIndex = computed(() => {
+  const opts = minuteOptions.value
+  const idx = opts.indexOf(selectedMinutes.value)
+  return idx >= 0 ? idx : 0
+})
+const canStartTimer = computed(() => {
+  if (durationLocked.value) return false
+  if (trainingDayLocked.value || scheduleLoading.value || entryLoading.value || planJustGenerated.value) return false
+  const total = selectedHours.value * 60 + selectedMinutes.value
+  return total >= MIN_TRAINING_MINUTES
+})
+const durationLocked = computed(() => {
+  if (timerPhase.value === 'running' || timerPhase.value === 'expired') return true
+  if (planJustGenerated.value) return true
+  const pm = Number(todayPlan.value?.planned_minutes || 0)
+  return !!(todayPlan.value?.plan_id && pm >= MIN_TRAINING_MINUTES)
+})
+const timeCardTitle = computed(() => {
+  if (timerPhase.value === 'running') return '⏰ 今日训练计时'
+  if (timerPhase.value === 'expired') return '⏰ 今日训练'
+  if (durationLocked.value) return '⏰ 今日训练时长'
+  return '⏰ 请选择训练时长'
+})
+const lockedDurationLabel = computed(() => {
+  const pm = Number(todayPlan.value?.planned_minutes || 0)
+  if (pm >= MIN_TRAINING_MINUTES) return formatDuration(pm * 60)
+  return formatDuration((selectedHours.value * 60 + selectedMinutes.value) * 60)
+})
 const isPageLoading = computed(() => scheduleLoading.value || entryLoading.value || planJustGenerated.value)
 const hasPlanItems = computed(() => (todayPlan.value?.items?.length || 0) > 0)
 const trainingHasStarted = computed(() => {
@@ -844,11 +1129,18 @@ const trainingHasStarted = computed(() => {
 const planEmptyHint = computed(() => {
   if (needAssessment.value) return '完成天赋测评后可开始训练'
   if (scheduleLoading.value) return '正在生成今日训练内容…'
-  return '选择训练时长，点击「开始训练」生成今日内容'
+  return '选择训练时长，点击「生成今日方案」为你排课'
 })
 const timeSetupHint = computed(() => {
   if (scheduleLoading.value) return '正在按设定时长生成训练内容…'
-  return '选择时长后点击「开始训练」，将按孩子情况分配今日内容'
+  if (planJustGenerated.value) return '可在下方查看、编辑训练内容，确认后开始计时'
+  if (durationLocked.value) return '时长已锁定，确认方案后开始计时'
+  const h = selectedHours.value
+  const m = selectedMinutes.value
+  const total = h * 60 + m
+  if (total < MIN_TRAINING_MINUTES) return '选择时长后点击「生成今日方案」为你排课'
+  const durText = h > 0 && m > 0 ? `${h}小时${m}分` : h > 0 ? `${h}小时` : `${m}分`
+  return `按 ${durText} 为你排课（可随时改时长重新生成）`
 })
 /** 训练日已完成（次日凌晨4点才能新开一天），仅禁止重新「开始训练」 */
 const trainingDayLocked = computed(() => todayPlan.value?.day_locked === true)
@@ -895,7 +1187,7 @@ const mediaLockText = computed(() => {
   if (isGlobalCutoff.value) return '凌晨4点训练日已截止'
   if (isMediaExhausted.value || timerPhase.value === 'expired') return '训练时长已到，音视频已锁定'
   if (trainingDayLocked.value && timerPhase.value === 'setup') return dayLockText.value
-  return '请先设置时长并开始训练'
+  return '请先设置时长并生成今日方案'
 })
 const checkinLockText = computed(() => {
   if (isPageLoading.value) return '方案生成中，请稍候...'
@@ -926,8 +1218,13 @@ function nowSynced() {
 function formatWindowTime(ms) {
   const s = new Date(ms).toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' })
   const timePart = s.split(' ')[1] || '00:00:00'
-  const [hh, mm] = timePart.split(':')
-  return `${hh}:${mm}`
+  const [hh, mm, ss = '00'] = timePart.split(':')
+  return `${hh}:${mm}:${ss}`
+}
+
+function remainingSecondsUntil(endAtMs) {
+  if (!endAtMs) return 0
+  return Math.max(0, Math.ceil((endAtMs - nowSynced()) / 1000))
 }
 
 function applyDevTimeOverride(iso) {
@@ -947,6 +1244,8 @@ function applyServerTimeMeta(data) {
   if (data.training_day) trainingDayKey.value = data.training_day
 }
 
+let _transitionReloading = false
+
 function checkGlobalSchedule() {
   checkDayUnlock()
   if (isGlobalCutoff.value && timerPhase.value === 'running') {
@@ -954,8 +1253,10 @@ function checkGlobalSchedule() {
   }
   const inTransition = dayTransition.value || todayPlan.value?.status === 'transition'
   if (inTransition && newDayAtMs.value && nowSynced() >= newDayAtMs.value) {
+    if (_transitionReloading) return
+    _transitionReloading = true
     resetAllLocalState()
-    loadTodayPlan(true)
+    loadTodayPlan(true).finally(() => { _transitionReloading = false })
   }
 }
 
@@ -992,12 +1293,19 @@ const showGuideArrow = ref(false)
 const redAlertActive = ref(false)
 
 function onHourPick(e) {
+  if (durationLocked.value) return
   selectedHours.value = HOUR_OPTIONS[Number(e.detail.value)] ?? 0
+  // 切回 0 小时时，分钟不得低于 20
+  if (selectedHours.value === 0 && selectedMinutes.value < MIN_TRAINING_MINUTES) {
+    selectedMinutes.value = MIN_TRAINING_MINUTES
+  }
   showGuideArrow.value = false
   redAlertActive.value = false
 }
 function onMinutePick(e) {
-  selectedMinutes.value = MINUTE_OPTIONS[Number(e.detail.value)] ?? 0
+  if (durationLocked.value) return
+  const opts = minuteOptions.value
+  selectedMinutes.value = opts[Number(e.detail.value)] ?? opts[0] ?? MIN_TRAINING_MINUTES
   showGuideArrow.value = false
   redAlertActive.value = false
 }
@@ -1081,6 +1389,13 @@ function applyTimerFromServer(data) {
   if (phase === 'setup') {
     clearAllTimerKeysForUser()
     resetTimerToSetup()
+    const items = todayPlan.value?.items || []
+    const hasProgress = items.some(
+      i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0
+    )
+    if (!hasProgress) {
+      showTraining.value = false
+    }
     return
   }
 
@@ -1098,20 +1413,33 @@ function applyTimerFromServer(data) {
   }
 
   const endAt = data.timer_end_at ? new Date(data.timer_end_at).getTime() : null
-  const plannedSec = data.timer_planned_seconds || 0
-  let remaining = data.timer_remaining_seconds
-  if (remaining == null && endAt) {
-    remaining = Math.max(0, Math.ceil((endAt - nowSynced()) / 1000))
+  const plannedSec = data.timer_planned_seconds || (data.planned_minutes || 0) * 60 || 0
+  if (!endAt) {
+    const fallback = Number(data.timer_remaining_seconds || 0)
+    if (fallback <= 0) {
+      applyTimerFromServer({ ...data, timer_phase: 'expired' })
+      return
+    }
+    plannedDurationSec.value = plannedSec || fallback
+    remainingSeconds.value = fallback
+    timerPhase.value = 'running'
+    const syntheticEnd = nowSynced() + fallback * 1000
+    persistTimer(syntheticEnd, plannedDurationSec.value, data.plan_id)
+    clearTimerTick()
+    timerTickId = setInterval(tickTrainingTimer, 1000)
+    return
   }
-  if (!endAt || remaining <= 0) {
+
+  const remaining = remainingSecondsUntil(endAt)
+  if (remaining <= 0) {
     applyTimerFromServer({ ...data, timer_phase: 'expired' })
     return
   }
 
-  plannedDurationSec.value = plannedSec
+  plannedDurationSec.value = plannedSec || remaining
   remainingSeconds.value = remaining
   timerPhase.value = 'running'
-  persistTimer(endAt, plannedSec, data.plan_id)
+  persistTimer(endAt, plannedDurationSec.value, data.plan_id)
   clearTimerTick()
   timerTickId = setInterval(tickTrainingTimer, 1000)
 }
@@ -1122,12 +1450,13 @@ function resetDurationPickers() {
 }
 
 function syncPickersFromPlannedMinutes(minutes) {
-  if (!minutes || minutes < 5) return
+  if (!minutes || minutes < MIN_TRAINING_MINUTES) return
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   if (HOUR_OPTIONS.includes(h)) selectedHours.value = h
-  let best = MINUTE_OPTIONS[0]
-  for (const x of MINUTE_OPTIONS) {
+  const opts = h === 0 ? MINUTE_OPTIONS_ZERO_HOUR : MINUTE_OPTIONS_WITH_HOUR
+  let best = opts[0]
+  for (const x of opts) {
     if (Math.abs(x - m) < Math.abs(best - m)) best = x
   }
   selectedMinutes.value = best
@@ -1142,9 +1471,32 @@ function syncPickersAfterTimerRestore(planMinutes) {
   syncPickersFromPlannedMinutes(mins)
 }
 
+/**
+ * 训练卡显隐是前端状态（confirmPlan），离页再进会丢。
+ * 已有方案且计时已开始/结束（或已有进度）时自动恢复展示，避免「方案在、卡片没了」。
+ */
+function restoreTrainingVisibility(data) {
+  if (showTraining.value) return
+  const plan = data || todayPlan.value
+  if (!plan?.plan_id) return
+  const items = plan.items || []
+  if (!items.length) return
+  const phase = plan.timer_phase || timerPhase.value
+  if (phase === 'running' || phase === 'expired') {
+    showTraining.value = true
+    planJustGenerated.value = false
+    return
+  }
+  if (items.some(i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0)) {
+    showTraining.value = true
+    planJustGenerated.value = false
+  }
+}
+
 function syncPlanMetaFromApi(data) {
   if (!data) return
-  lessonIndex.value = data.training_day_number ?? data.lesson_day ?? (data.content_index ?? 0) + 1
+  // 课序用训练天数；勿用 content_index（v3 存 overall_tier）
+  lessonIndex.value = data.training_day_number ?? data.lesson_day ?? 1
   if (data.overall_tier != null) overallTier.value = data.overall_tier
 }
 
@@ -1152,10 +1504,17 @@ async function applyScheduledPlan(uid, data) {
   todayPlan.value = data
   applyServerTimeMeta(data)
   syncPlanMetaFromApi(data)
-  loadElectiveOffers()
   aiPlanText.value = data.report_text || ''
   applyPlanMedia(data)
   hydrateWatchProgressFromPlan(data)
+  if (Number(data.planned_minutes || 0) >= MIN_TRAINING_MINUTES) {
+    syncPickersFromPlannedMinutes(data.planned_minutes)
+    plannedDurationSec.value = data.planned_minutes * 60
+  }
+  // 方案变更后清除 position-based 状态，避免 block ID 碰撞
+  phaseRecordIds.value = {}
+  phaseClicked.value = {}
+  planExpanded.value = {}
   // 时长选择器仅在用户本次已选；不在此回填 planned_minutes
   await loadTodayCheckinRecords(uid, data.plan_id)
   nextTick(() => syncPhaseExpand())
@@ -1192,13 +1551,24 @@ function expireTrainingTimer(silent = false) {
 }
 
 function syncTimerFromEndAt(endAt) {
-  const left = Math.ceil((endAt - nowSynced()) / 1000)
+  const left = remainingSecondsUntil(endAt)
   if (left <= 0) {
     expireTrainingTimer(true)
     return
   }
   timerPhase.value = 'running'
   remainingSeconds.value = left
+}
+
+function resumeTimerFromStorage() {
+  const data = readTimerData()
+  if (!data || data.phase !== 'running' || !data.endAt) return false
+  if (Number(data.plannedSec) > 0) plannedDurationSec.value = Number(data.plannedSec)
+  syncTimerFromEndAt(Number(data.endAt))
+  if (timerPhase.value !== 'running') return true
+  clearTimerTick()
+  timerTickId = setInterval(tickTrainingTimer, 1000)
+  return true
 }
 
 function tickTrainingTimer() {
@@ -1211,11 +1581,14 @@ function tickTrainingTimer() {
 }
 
 function maxBlocksForMinutes(minutes) {
-  if (minutes <= 45) return 1
-  if (minutes <= 90) return 2
-  if (minutes <= 120) return 3
-  if (minutes <= 160) return 5
-  return 6
+  // 与 backend slot_table + homework 上界对齐（含非精确点 floor）
+  if (minutes < 40) return 1       // 5–39 → 20min 档
+  if (minutes < 60) return 2       // 40–59 → 40min 档
+  if (minutes <= 120) return 3     // 60–120
+  if (minutes <= 180) return 5     // 4 + homework
+  if (minutes <= 240) return 6     // 4 + 最多 2 homework
+  if (minutes < 480) return 8      // 5 + 最多 3 homework
+  return 10                        // ≥480：6 + homework / 精力恢复
 }
 
 function isPlanStructureStale(plannedMinutes) {
@@ -1228,73 +1601,71 @@ function isPlanStructureStale(plannedMinutes) {
 }
 
 async function startTrainingTimer() {
+  return startTrainingWithPrefer('rule')
+}
+
+async function startTrainingTimerAgent() {
+  return startTrainingWithPrefer('agent')
+}
+
+async function startTrainingWithPrefer(schedulePrefer = 'rule') {
   if (trainingDayLocked.value) {
     uni.showToast({ title: dayLockText.value, icon: 'none', duration: 2500 })
     return
   }
   if (!canStartTimer.value) {
+    if (entryLoading.value) {
+      uni.showToast({ title: '方案加载中，请稍候', icon: 'none' })
+    } else if (scheduleLoading.value) {
+      uni.showToast({ title: '正在生成训练内容，请稍候', icon: 'none' })
+    }
     showGuideArrow.value = true
     redAlertActive.value = false
     nextTick(() => { redAlertActive.value = true })
     return
   }
   const plannedMinutes = selectedHours.value * 60 + selectedMinutes.value
-  if (plannedMinutes < 5) {
-    uni.showToast({ title: '训练时长至少 5 分钟', icon: 'none' })
+  if (plannedMinutes < MIN_TRAINING_MINUTES) {
+    uni.showToast({ title: `训练时长至少 ${MIN_TRAINING_MINUTES} 分钟`, icon: 'none' })
     return
   }
 
   scheduleLoading.value = true
   try {
     const uid = await ensureChildUser()
-    const needSchedule = !trainingHasStarted.value
-      || todayPlan.value?.planned_minutes !== plannedMinutes
+    // 一天一次：仅未开始时允许生成/按新时长重生；已开始绝不因 stale 再调 schedule
+    const hasContent = (todayPlan.value?.items?.length || 0) > 0
+    const minutesChanged = todayPlan.value?.planned_minutes !== plannedMinutes
+    const needSchedule = !trainingHasStarted.value && (
+      !hasContent
+      || minutesChanged
       || isPlanStructureStale(plannedMinutes)
+    )
+    if (trainingHasStarted.value && minutesChanged) {
+      uni.showToast({ title: '今日训练已开始，无法更改时长', icon: 'none' })
+      scheduleLoading.value = false
+      return
+    }
     if (needSchedule) {
-      const result = await scheduleTrainingPlan(uid, plannedMinutes)
+      const result = await scheduleTrainingPlan(uid, plannedMinutes, schedulePrefer)
       if (result.error) throw new Error(result.message || '生成训练内容失败')
       await applyScheduledPlan(uid, result.data)
-      if (!planAnimShownToday()) {
-        markPlanAnimShown()
-        planJustGenerated.value = true
-        setTimeout(() => { planJustGenerated.value = false }, 2000)
-      }
-    }
-
-    const totalSec = plannedMinutes * 60
-    plannedDurationSec.value = totalSec
-    const nowMs = nowSynced()
-    const endAt = nowMs + totalSec * 1000
-
-    try {
-      await setTrainingWindow(uid, formatWindowTime(nowMs), formatWindowTime(endAt))
-      const synced = await fetchTrainingToday(uid, { skipAi: true })
-      if (!synced.error && synced.data) {
-        applyServerTimeMeta(synced.data)
-        applyTimerFromServer(synced.data)
-        syncPickersAfterTimerRestore(synced.data.planned_minutes)
+      if (schedulePrefer === 'agent' && result.data?.schedule_mode === 'agent_fallback') {
+        uni.showToast({ title: '智能排课未生效，已改用标准方案', icon: 'none', duration: 2500 })
       } else {
-        applyTimerFromServer({
-          timer_phase: 'running',
-          timer_end_at: new Date(endAt).toISOString(),
-          timer_planned_seconds: totalSec,
-          timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
-          plan_id: todayPlan.value?.plan_id,
-        })
+        uni.showToast({ title: '方案已生成，请确认后开始', icon: 'none' })
       }
-    } catch (_) {
-      applyTimerFromServer({
-        timer_phase: 'running',
-        timer_end_at: new Date(endAt).toISOString(),
-        timer_planned_seconds: totalSec,
-        timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
-        plan_id: todayPlan.value?.plan_id,
-      })
+    } else if (!hasContent) {
+      throw new Error('暂无训练内容，请稍后重试')
+    } else {
+      uni.showToast({ title: '方案已生成，请确认后开始', icon: 'none' })
     }
 
-    uni.showToast({ title: '训练已开始', icon: 'none' })
+    // 远端修复：此处只生成方案并锁定时长，计时在 confirmPlan 后启动
+    planJustGenerated.value = true
+    showTraining.value = false
   } catch (e) {
-    uni.showToast({ title: e.message || '开始训练失败', icon: 'none', duration: 2500 })
+        uni.showToast({ title: e.message || '生成训练内容失败', icon: 'none', duration: 2500 })
   } finally {
     scheduleLoading.value = false
   }
@@ -1311,7 +1682,7 @@ function guardMedia() {
     return false
   }
   if (timerPhase.value === 'setup') {
-    uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
+    uni.showToast({ title: '请先选择时长并点击「生成今日方案」', icon: 'none' })
     return false
   }
   return true
@@ -1327,7 +1698,7 @@ function guardCheckin(block) {
     return true
   }
   if (timerPhase.value === 'setup') {
-    uni.showToast({ title: '请先设置时长并开始训练', icon: 'none' })
+    uni.showToast({ title: '请先设置时长并生成今日方案', icon: 'none' })
     return false
   }
   return true
@@ -1374,6 +1745,8 @@ function resetAllLocalState() {
   submittedCards.value = []
   phaseRecordIds.value = {}
   primaryCheckinRecordId.value = null
+  showTraining.value = false
+  planJustGenerated.value = false
   summaryAttitude.value = 60
   attitudeTouched.value = false
   closeMedia()
@@ -1403,7 +1776,7 @@ async function devResetMainLine() {
     await loadDevStatus()
     uni.showToast({ title: '训练进度已重置（今日方案未删）', icon: 'none' })
   } catch (e) {
-    uni.showToast({ title: e.message || '重置失败', icon: 'none' })
+        uni.showToast({ title: e.message || '重置训练进度失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1421,11 +1794,13 @@ async function devResetToday() {
     videoSrc.value = ''
     audioSrc.value = ''
     submittedCards.value = []
+    showTraining.value = false
+    planJustGenerated.value = false
     await loadTodayPlan(true)
     await loadDevStatus()
     uni.showToast({ title: '今日方案已清空（历史保留）', icon: 'none' })
   } catch (e) {
-    uni.showToast({ title: e.message || '重置失败', icon: 'none' })
+        uni.showToast({ title: e.message || '重置今日方案失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1451,7 +1826,7 @@ async function devSimulate4amCutoffAction() {
     await loadDevStatus()
     uni.showToast({ title: res.message || '已模拟凌晨4点全局截止', icon: 'none', duration: 2500 })
   } catch (e) {
-    uni.showToast({ title: e.message || '模拟失败', icon: 'none' })
+        uni.showToast({ title: e.message || '模拟截止失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1473,19 +1848,45 @@ async function devGoNextDay() {
     } else {
       videoSrc.value = ''
       audioSrc.value = ''
-      lessonIndex.value = (res.status?.content_index ?? res.today?.content_index ?? 0) + 1
+      lessonIndex.value = res.status?.training_day_number ?? res.today?.training_day_number ?? 1
       syncPlanMetaFromApi(res.today || res.status)
     }
     await loadTodayPlan(true)
     nextTick(() => syncPhaseExpand())
     await loadDevStatus()
-    const idx = res.today?.content_index ?? res.status?.content_index ?? '?'
+    const idx = res.today?.training_day_number ?? res.status?.training_day_number ?? '?'
     uni.showToast({ title: res.message || `已进入下一天 · 课序 ${idx}`, icon: 'none', duration: 2500 })
   } catch (e) {
-    uni.showToast({ title: e.message || '模拟失败', icon: 'none' })
+        uni.showToast({ title: e.message || '模拟下一天失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
+}
+
+async function devResetClockAction() {
+  if (!devMode.value) return
+  try {
+    uni.showLoading({ title: '清除虚拟时钟...' })
+    const uid = await ensureChildUser()
+    const res = await devResetClock(uid)
+    applyDevTimeOverride(null)
+    devResetTimer(true)
+    await loadTodayPlan(true)
+    nextTick(() => syncPhaseExpand())
+    await loadDevStatus()
+    uni.showToast({ title: res.message || '已回归实际日期', icon: 'none', duration: 2000 })
+  } catch (e) {
+        uni.showToast({ title: e.message || '回归实际日期失败', icon: 'none', duration: 2500 })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+function devPreviewCongrats() {
+  uni.showToast({ title: '🎉 超脑阅读 晋级成功！', icon: 'none', duration: 3000 })
+}
+function devPreviewRegret() {
+  uni.showToast({ title: '😔 超脑阅读 差一点就晋级了，明天继续加油！', icon: 'none', duration: 3000 })
 }
 
 async function devClearAllHistory() {
@@ -1503,7 +1904,7 @@ async function devClearAllHistory() {
     await loadDevStatus()
     uni.showToast({ title: '训练历史已清空', icon: 'none' })
   } catch (e) {
-    uni.showToast({ title: e.message || '清空失败', icon: 'none' })
+        uni.showToast({ title: e.message || '清空历史失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1525,7 +1926,7 @@ async function devResetTalentAction() {
     await loadDevStatus()
     uni.showToast({ title: '天赋测评已重置', icon: 'none' })
   } catch (e) {
-    uni.showToast({ title: e.message || '重置失败', icon: 'none' })
+        uni.showToast({ title: e.message || '重置天赋失败', icon: 'none', duration: 2500 })
   } finally {
     uni.hideLoading()
   }
@@ -1576,7 +1977,7 @@ async function devRefreshAiPlan() {
     nextTick(() => syncPhaseExpand())
   } catch (e) {
     scheduleLoading.value = false
-    uni.showToast({ title: e.message || '刷新失败', icon: 'none' })
+        uni.showToast({ title: e.message || '刷新AI方案失败', icon: 'none', duration: 2500 })
     return
   }
   scheduleLoading.value = false
@@ -1590,44 +1991,131 @@ const activePickerBlock = ref(null)
 const submittedCards = ref([])
 const summaryAttitude = ref(60)
 
-// 🆕 v2.0 选修弹窗
-// 选修弹窗已移除，改用开关控制
-
-// ── 选修开关 ──
+// ── 选修开关（替代弹窗）──
 const electiveSkills = computed(() => {
   const items = todayPlan.value?.items || []
-  const plan = todayPlan.value
   const list = []
 
   function skillInPlan(skill) {
     return items.some(item => {
       const inst = parseItemInstructions(item.instructions)
-      return inst.skill === skill || (item.title || '').includes(skill)
+      return inst.skill === skill
     })
   }
 
-  // 多元感知：始终可用
-  list.push({ skill: '多元感知', label: '多元感知', inPlan: skillInPlan('多元感知') })
+  // 从方案里读该项的真实时长（分钟）；未排进方案时给兜底默认值
+  function skillDurationMin(skill, fallback) {
+    const item = items.find(i => parseItemInstructions(i.instructions).skill === skill)
+    return (item && item.duration_min) ? item.duration_min : fallback
+  }
 
-  return list
+  // 该项在方案里排第几位（第几关），未排进返回 0
+  const sortedItems = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  function skillRank(skill) {
+    const idx = sortedItems.findIndex(i => parseItemInstructions(i.instructions).skill === skill)
+    return idx >= 0 ? idx + 1 : 0
+  }
+  const CN_NUM = ['零','一','二','三','四','五','六','七','八','九','十']
+
+  // 多元感知（OSS 内部名：感知力）：音频训练
+  const ganDuration = skillDurationMin('感知力', 12)
+  list.push({ skill: '感知力', label: '多元感知', inPlan: skillInPlan('感知力'), desc: `感知力音频训练，时长为${ganDuration}分钟`, mediaTag: 'audio', rank: skillRank('感知力') })
+  // 开口窍：视频选修，独立开关
+  const kaiqiaoDuration = skillDurationMin('开口窍', 30)
+  list.push({ skill: '开口窍', label: '开口窍 🎬', inPlan: skillInPlan('开口窍'), desc: `表达力开口训练，时长为${kaiqiaoDuration}分钟`, mediaTag: 'video', rank: skillRank('开口窍') })
+
+  return list.map(es => ({ ...es, rankCN: es.rank > 0 ? CN_NUM[Math.min(es.rank, CN_NUM.length - 1)] : '' }))
 })
 
+const electiveToggling = ref(false)
+
 async function toggleElective(skill) {
+  if (electiveToggling.value) return
   const uid = await ensureChildUser()
   const planId = todayPlan.value?.plan_id
   if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
+  const pendingConfirm = planJustGenerated.value && timerPhase.value === 'setup'
   const inPlan = electiveSkills.value.find(e => e.skill === skill)?.inPlan
   const action = inPlan ? 'remove' : 'add'
+  electiveToggling.value = true
   try {
     const data = await toggleElectiveItem(uid, planId, skill, action)
     await applyScheduledPlan(uid, data)
+    if (pendingConfirm) planJustGenerated.value = true
     uni.showToast({ title: inPlan ? `已移除 ${skill}` : `已添加 ${skill}`, icon: 'none' })
   } catch (e) {
     const msg = e.data?.detail || e.message || '操作失败'
     uni.showToast({ title: Array.isArray(msg) ? msg.map(d => d.msg || JSON.stringify(d)).join('; ') : msg, icon: 'none', duration: 3000 })
+  } finally {
+    electiveToggling.value = false
   }
 }
+
+// ── 选修说明 ──
+const ELECTIVE_INFO = {
+  '感知力': {
+    title: '🧩 多元感知是什么？',
+    desc: '多元感知是双人互动训练，需要家长或同学配合完成。通过听觉、视觉等多感官刺激，提升专注力和感知能力。',
+    age: '适合各年龄段孩子训练，低龄儿童可在家长陪伴下进行。',
+    how: '开启后，训练计划中将出现「多元感知」环节，按提示播放音频并完成互动即可。',
+  },
+  '开口窍': {
+    title: '🗣️ 开口窍是什么？',
+    desc: '开口窍通过朗读口腔操训练唇舌灵活度，激活语言中枢，促进左右脑协同工作，有效提升阅读速度与理解能力。',
+    age: '适合各年龄段，低龄孩子可每天跟练5分钟，发音更清晰流畅。',
+    how: '开启后，训练计划中将出现「开口窍」视频环节，跟随老师朗读练习即可。',
+  },
+  'edit_plan': {
+    title: '📝 编辑方案说明',
+    desc: '如果您觉得推荐内容可以，就点击音频｜视频开始训练吧，不认可可以自行编辑方案哦。',
+    age: '',
+    how: '⚠️ 仅可编辑一次，开始打卡后不可再修改。',
+  },
+}
+const showInfoModal = ref(false)
+const infoModalData = ref({ title: '', desc: '', age: '', how: '' })
+
+function showElectiveInfoModal(skill) {
+  const info = ELECTIVE_INFO[skill]
+  if (!info) return
+  infoModalData.value = { ...info }
+  showInfoModal.value = true
+}
+
+function isPerceptionPhase(phase) {
+  if (!phase?.items?.length) return false
+  const item = phase.items[0]
+  return item.item_type === 'perception' || (item.title || '').includes('多元感知')
+}
+
+async function autoCompletePerception(phase) {
+  if (phase.allDone || phaseRecordIds.value[phase.block]) return
+  if (perceptionSubmitting.value) return
+  const item = phase.items[0]
+  if (!item?.id) return
+  perceptionSubmitting.value = true
+  try {
+    const uid = await ensureChildUser()
+    const cardsList = [{ name: '多元感知', time: item.duration_min || '', content: '已听音频', phaseBlock: phase.block }]
+    await persistPhaseCheckin(phase.block, cardsList)
+    await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
+    await loadTodayPlan(true)
+    // 选修感知：完成后不弹提示、卡片保留（见 quest-level 渲染条件）
+  } catch (e) {
+    uni.showToast({ title: e.message || '提交失败', icon: 'none', duration: 2500 })
+  } finally {
+    perceptionSubmitting.value = false
+  }
+}
+
 // ── 方案编辑 ──
+const showCustomizeConfirm = ref(false)
+const pendingCustomize = ref(null)
+const showSubmitConfirm = ref(false)
+const pendingSubmitBlock = ref(null)
+const showDeleteConfirm = ref(false)
+const deleteTargetIdx = ref(-1)
+const deleteTargetName = ref('')
 const showPlanEditor = ref(false)
 const editorSkills = ref([])
 
@@ -1685,28 +2173,32 @@ function openPlanEditor() {
 
 function closePlanEditor() { showPlanEditor.value = false }
 
-async function confirmCustomize() {
-  const uid = await ensureChildUser()
+function confirmCustomize() {
+  const uid = ensureChildUser()
   const planId = todayPlan.value?.plan_id
   if (!planId) { uni.showToast({ title: '方案不存在', icon: 'none' }); return }
   const skills = editorSkills.value.map(s => s.split(':')[1])
-  uni.showModal({
-    title: '确认修改方案',
-    content: '每个训练日仅可修改一次，打卡后不可再改。修改后将按所选技能重新匹配训练内容，请谨慎操作，后果自负。确定继续吗？',
-    success: async (r) => {
-      if (!r.confirm) return
-      try {
-        await customizePlan(uid, planId, skills)
-        uni.showToast({ title: '方案已更新', icon: 'none' })
-        closePlanEditor()
-        await loadTodayPlan(true)
-      } catch (e) {
-        const detail = e.data?.detail || e.message || '修改失败'
-        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
-        uni.showToast({ title: msg, icon: 'none', duration: 3000 })
-      }
-    },
-  })
+  pendingCustomize.value = { uid, planId, skills }
+  showCustomizeConfirm.value = true
+}
+
+async function doCustomize() {
+  const c = pendingCustomize.value
+  if (!c) return
+  showCustomizeConfirm.value = false
+  try {
+    const uid = await c.uid
+    await customizePlan(uid, c.planId, c.skills)
+    uni.showToast({ title: '方案已更新', icon: 'none' })
+    closePlanEditor()
+    await loadTodayPlan(true)
+  } catch (e) {
+    const detail = e.data?.detail || e.message || '修改失败'
+    const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : detail
+    uni.showToast({ title: msg, icon: 'none', duration: 3000 })
+  } finally {
+    pendingCustomize.value = null
+  }
 }
 
 const attitudeTouched = ref(false)
@@ -1722,9 +2214,29 @@ const mediaPlayer = ref({ show: false, type: 'video', title: '' })
 const watchedItemIds = ref(new Set())
 const watchProgressMap = ref({})
 const trainingVideoEl = ref(null)
+let trainingAudio = null
 let watchProgressSaveTimer = null
 const lastOpenedItem = ref(null)
+const mediaMaxHeardSec = ref(0)
+const audioPlaying = ref(false)
+const videoPlaying = ref(false)
+const videoLoading = ref(false)
+const videoMetadataReady = ref(false)
+const videoLoadAttempt = ref(0)
+const VIDEO_LOAD_MAX_RETRIES = 3
+let videoRetryTimer = null
+const planMediaPreloaded = ref(false)
+const audioUiSec = ref(0)
+const audioUiDuration = ref(0)
+const WATCH_DONE_PCT = 90
+const MEDIA_SEEK_EPS = 1.2
+const phaseClicked = ref({})
+const primaryCheckinRecordId = ref(null)
+const planJustGenerated = ref(false)
+const showTraining = ref(false)
+const showDoneConfirm = ref(false)
 const videoSrc = ref('')
+const activeVideoItemId = ref(0)
 const audioSrc = ref('')
 const audioTitle = ref('🎧 训练用音频')
 const talentLabel = ref('')
@@ -1747,7 +2259,7 @@ const skillTierProgress = ref({})
 const planHeaderMeta = computed(() => {
   const parts = [talentLabel.value]
   const tier = overallTier.value || todayPlan.value?.overall_tier || 1
-  if (tier > 1) parts.push(`Lv.${tier}`)
+  if (tier > 1) parts.push(duanText(tier))
   const day = todayPlan.value?.training_day_number ?? todayPlan.value?.lesson_day ?? lessonIndex.value
   if (day) parts.push(`第 ${day} 天`)
   return parts.filter(Boolean).join(' · ')
@@ -1756,9 +2268,146 @@ const needAssessment = ref(false)
 const showAssessmentModal = ref(false)
 const todayPlan = ref(null)
 const phaseRecordIds = ref({})
-const primaryCheckinRecordId = ref(null)
-const planJustGenerated = ref(false)
+const tier = ref(null) // 🆕 六级九段（角标 + 状态卡）
+const tierMedalSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>'
+
+const talentAvatarImg = computed(() => talentAvatarUrl(talentLabel.value))
+const talentColor = computed(() => talentThemeColor(talentLabel.value))
+
+// 🆕 顶部标题改成孩子名字（登录时存在 jnao_user）
+const childNickname = computed(() => {
+  try {
+    const raw = localStorage.getItem('jnao_user')
+    if (raw) {
+      const u = JSON.parse(raw)
+      if (u && u.name) return u.name
+    }
+  } catch (_) { /* ignore */ }
+  return ''
+})
+// 🆕 段位椭圆改成「天赋 · 第N天」
+const heroPill = computed(() => {
+  const day = todayPlan.value?.training_day_number ?? todayPlan.value?.lesson_day ?? lessonIndex.value
+  const base = talentLabel.value || ''
+  return day ? `${base} · 第${day}天` : base
+})
+
+function goGrowth() { uni.navigateTo({ url: '/pages/growth/index' }) }
+
+const showTierRules = ref(false)
+function openTierRules() { showTierRules.value = true }
+function explainConsecutive(s) {
+  const need = (tier.value?.advance_pass || 3)
+  const cur = int(s?.consecutive_pass || 0)
+  if (cur === 0) {
+    uni.showModal({
+      title: `${s.name} · 当前连续 0/${need} 次`,
+      content: `还没有连续达标记录。今天打卡先达「${s.rule_text || '通关标准'}」，开启本轮计数～\n⚠️ 中间有任何一天没达标，会清零重来哦`,
+      showCancel: false,
+      confirmText: '知道了',
+    })
+  } else if (cur >= need) {
+    uni.showModal({
+      title: `${s.name} · 已达成 ${need}/${need} 次`,
+      content: `恭喜，已连续达标 ${need} 次！\n完成本次打卡后即可升段，通关标准将自动升级。`,
+      showCancel: false,
+      confirmText: '太棒了',
+    })
+  } else {
+    const remain = need - cur
+    uni.showModal({
+      title: `${s.name} · 当前连续 ${cur}/${need} 次`,
+      content: `已连续达标 ${cur} 天，再坚持 ${remain} 天即可升段！\n⚠️ 注意：${remain === 1 ? '明天' : '接下来 ' + remain + ' 天'} 打卡必须继续达标「${s.rule_text || '通关标准'}」，否则清零重来`,
+      showCancel: false,
+      confirmText: '加油',
+    })
+  }
+}
+function int(v) { const n = Number(v); return Number.isFinite(n) ? n | 0 : 0 }
+
+/** DEV only：Agent 排课理由（正式 UI 不展示） */
+const scheduleAssistDevText = computed(() => {
+  const a = todayPlan.value?.schedule_assist
+  if (!a || typeof a !== 'object') return ''
+  const lines = []
+  if (a.mode) lines.push(`模式：${a.mode}`)
+  if (a.reason) lines.push(String(a.reason))
+  else if (a.mode === 'agent') lines.push('（模型未返回 reason）')
+  if (Array.isArray(a.draft) && a.draft.length) {
+    lines.push(`草案：${a.draft.join(' → ')}`)
+  }
+  if (Array.isArray(a.rule_slots) && a.rule_slots.length) {
+    lines.push(`规则对照：${a.rule_slots.join(' → ')}`)
+  }
+  if (Array.isArray(a.projected) && a.projected.length) {
+    lines.push(`落库：${a.projected.join(' → ')}`)
+  }
+  if (Array.isArray(a.padded_from_intent) && a.padded_from_intent.length) {
+    lines.push(`画像补齐：${a.padded_from_intent.join('、')}`)
+  }
+  if (Array.isArray(a.padded_from_rule) && a.padded_from_rule.length) {
+    lines.push(`规则垫底：${a.padded_from_rule.join('、')}`)
+  }
+  if (Array.isArray(a.dropped_for_slot_cap) && a.dropped_for_slot_cap.length) {
+    lines.push(`槽位截断：${a.dropped_for_slot_cap.join('、')}`)
+  }
+  return lines.join('\n')
+})
+
+async function confirmPlan() {
+  // 确认方案后才开始计时；训练块在此之后解锁。
+  if (scheduleLoading.value || !planJustGenerated.value) {
+    showTraining.value = true
+    planJustGenerated.value = false
+    return
+  }
+  const plannedMinutes = todayPlan.value?.planned_minutes
+    ?? (selectedHours.value * 60 + selectedMinutes.value)
+  if (plannedMinutes < MIN_TRAINING_MINUTES) {
+    uni.showToast({ title: `训练时长至少 ${MIN_TRAINING_MINUTES} 分钟`, icon: 'none' })
+    return
+  }
+
+  scheduleLoading.value = true
+  try {
+    const uid = await ensureChildUser()
+    const totalSec = plannedMinutes * 60
+    plannedDurationSec.value = totalSec
+    const nowMs = nowSynced()
+    const endAt = nowMs + totalSec * 1000
+    const runningTimerPayload = {
+      timer_phase: 'running',
+      timer_end_at: new Date(endAt).toISOString(),
+      timer_planned_seconds: totalSec,
+      timer_remaining_seconds: Math.ceil((endAt - nowSynced()) / 1000),
+      plan_id: todayPlan.value?.plan_id,
+    }
+
+    await setTrainingWindow(uid, formatWindowTime(nowMs), formatWindowTime(endAt))
+    const synced = await fetchTrainingToday(uid, { skipAi: true })
+    if (!synced.error && synced.data?.timer_phase === 'running') {
+      applyServerTimeMeta(synced.data)
+      applyTimerFromServer(synced.data)
+      syncPickersAfterTimerRestore(synced.data.planned_minutes)
+    } else {
+      applyTimerFromServer(runningTimerPayload)
+      syncPickersAfterTimerRestore(plannedMinutes)
+    }
+
+    showTraining.value = true
+    planJustGenerated.value = false
+    preloadTodayPlanMedia(uid)
+    uni.showToast({ title: '训练已开始', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '开始训练失败', icon: 'none', duration: 2500 })
+  } finally {
+    scheduleLoading.value = false
+  }
+}
+
 const checkinSubmitting = ref(false)
+const perceptionSubmitting = ref(false)
+const accErrorCards = ref({})
 
 const todayCompleted = computed(() => todayPlan.value?.status === 'completed')
 const checkedPhaseCount = computed(() => new Set(submittedCards.value.map(c => c.phaseBlock).filter(Boolean)).size)
@@ -1808,6 +2457,13 @@ function isPhaseUnlocked(block) {
 }
 
 const planExpanded = ref({})
+const visiblePhases = computed(() => {
+  return planPhases.value.filter(p => {
+    // 有打卡记录且不是多元感知 → 隐藏
+    if (phaseRecordIds.value[p.block] && !isPerceptionPhase(p)) return false
+    return true
+  })
+})
 
 function togglePhase(block) {
   planExpanded.value = { ...planExpanded.value, [block]: !planExpanded.value[block] }
@@ -1836,18 +2492,27 @@ const planPhases = computed(() => {
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
   let prevDone = true  // first item always unlocked
 
+  // 闯关编号：所有项（必修/选修/感知）按今日方案 sort_order 顺序连续编号（1,2,3…），
+  // 选修因此也进入 Z 字左右交替（reversed 由 questNo 奇偶决定），并显示「第 N 关 · 选修」。
+
   return sorted.map((item, idx) => {
     const inst = parseItemInstructions(item.instructions)
     const isRequired = inst.item_type !== 'elective' && inst.blocks_next !== false
-    const unlocked = isRequired ? prevDone : true  // elective always unlocked
+    const isPercep = item.item_type === 'perception' || inst.item_type === 'perception' || (item.title || '').includes('多元感知')
     const isDone = item.checkin_status === 'done'
+    const unlocked = isRequired ? (prevDone || isDone) : true  // elective always unlocked
 
-    // Update prevDone for next iteration
+    // Update prevDone for next iteration — completed items keep the chain alive
     if (isRequired && !isDone) prevDone = false
+    if (isDone) prevDone = true
 
     const skillName = inst.skill || resolvePlanItemSkill(item) || ''
     const isElective = !isRequired
-    const label = isElective ? `${skillName || '选修'}（选修）` : `${idx + 1}. ${skillName || '训练'}`
+    // 按今日方案顺序连续编号：置顶选修（开口窍）即为第 1 关，Z 字由奇偶自然交替
+    const questNo = idx + 1
+    const label = isElective
+      ? (isPercep ? `${questNo}. ${skillName || '多元感知'}` : `${questNo}. ${skillName || '选修'}（选修）`)
+      : `${questNo}. ${skillName || '训练'}`
 
     let nodeIcon = '○'
     let nodeClass = 'tl-node-locked'
@@ -1871,9 +2536,89 @@ const planPhases = computed(() => {
       nodeClass,
       isElective,
       skillName,
+      // ── 闯关地图字段 ──
+      isPercep,
+      questNo,          // 关卡编号；null = 非关卡（普通选修）
+      questIcon: questIconFor(item, skillName),
+      audioItem: item.audio_url ? item : null,
+      videoItem: item.video_url ? item : null,
     }
   })
 })
+
+/** 关卡项目图标：超脑阅读=📖 书，影像追忆=🎬，扫描速记=✍️ … */
+function questIconFor(item, skill) {
+  const t = `${item?.title || ''} ${skill || ''}`
+  if (t.includes('感知') || skill === '感知力') return '🔮'
+  if (t.includes('超脑') || t.includes('阅读')) return '📖'
+  if (t.includes('影像') || t.includes('追忆')) return '🎬'
+  if (t.includes('扫描') || t.includes('速记')) return '✍️'
+  if (t.includes('作业')) return '🏆'
+  if (t.includes('精力') || t.includes('恢复')) return '🌙'
+  if (t.includes('开口')) return '🗣️'
+  return '🎯'
+}
+
+/** 闯关地图全部过关（含多元感知第 1 关点听完成） */
+const questAllDone = computed(() => {
+  const quests = planPhases.value.filter(p => p.questNo !== null && !p.isElective)
+  if (!quests.length) return false
+  return quests.every(p => p.allDone)
+})
+
+/** 音频卡片状态行：第 N 关 · 状态（选修按参考原型：收 官 · 选修 / 终 点） */
+function questStatusText(phase) {
+  if (phase.isElective) {
+    const s = phase.skillName || ''
+    if (s.includes('作业')) return '终 点'
+    if (s.includes('精力') || s.includes('恢复')) return '收 官 · 选修'
+    return `第 ${phase.questNo} 关 · 选修`
+  }
+  if (phase.allDone) return `第 ${phase.questNo} 关 · 已过关`
+  if (!phase.unlocked) return `第 ${phase.questNo} 关 · 未解锁`
+  return `第 ${phase.questNo} 关 · 进行中`
+}
+
+/** 音频卡片开始按钮文案（emoji 由按钮圆图标承载） */
+function questStartText(phase) {
+  if (isMediaLocked.value || isMediaExhausted.value) {
+    if (phase.allDone) return '已过关 · 时长已到'
+    if (!phase.unlocked) return '完成上一关后解锁'
+    return '时长已到 · 仍可打卡'
+  }
+  if (phase.allDone) return '已通过 · 点击回听'
+  if (!phase.unlocked) return '完成上一关后解锁'
+  if (phase.isPercep) return '开始闯关 · 听音频'
+  // 纯视频项：闯关即看视频（参考原型 play 文案），不再写成“听音频”
+  if (phase.videoItem && !phase.audioItem) return '开始闯关 · 看视频'
+  return '开始闯关 · 听音频'
+}
+
+/** 关卡卡描述（按技能固定文案，供设计稿引用） */
+function questDescFor(phase) {
+  const s = phase.skillName || ''
+  if (s.includes('超脑') || s.includes('阅读')) return '一目十行 · 观其大略不求甚解'
+  if (s.includes('影像') || s.includes('追忆')) return '闪回定格 · 场景记忆复原'
+  if (s.includes('扫描') || s.includes('速记')) return '快速扫读 · 精准记忆'
+  if (s.includes('感知')) return '唤醒感知力 · 打开五感'
+  if (s.includes('作业')) return '通关后的实战演练'
+  if (s.includes('精力') || s.includes('恢复')) return '冥想放松音频 · 给大脑充电'
+  if (s.includes('开口')) return '视频训练 · 表达力开口练习'
+  return ''
+}
+
+/** 关卡卡按钮下说明小字 */
+function questSubText(phase) {
+  if (phase.allDone) return ''
+  if (!phase.unlocked) return ''
+  if (phase.isPercep) return `约 ${phase.audioItem?.duration_min || '?'} 分钟 · 听完即过关`
+  const s = phase.skillName || ''
+  if (s.includes('超脑') || s.includes('阅读')) return '听指令 → 读一段 → 答3问'
+  if (s.includes('精力') || s.includes('恢复')) return '跟着练 · 完成即过关'
+  // 纯视频项：小字用视频时长（参考原型 play 小字）
+  if (phase.videoItem && !phase.audioItem) return `跟着练 · 完成即过关`
+  return `约 ${phase.audioItem?.duration_min || '?'} 分钟`
+}
 
 function parseItemInstructions(instructions) {
   if (typeof instructions === 'string' && instructions.trim().startsWith('{')) {
@@ -1882,11 +2627,26 @@ function parseItemInstructions(instructions) {
   return {}
 }
 
-const planTotalCount = computed(() => (todayPlan.value?.items || []).length)
-const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => i.checkin_status === 'done').length)
+/** 排除选修/多元感知等不需要打卡的项，避免进度卡住 */
+function itemNeedsCheckin(item) {
+  if (!item) return false
+  const inst = parseItemInstructions(item.instructions)
+  // 选修 / 多元感知 / blocks_next=false 的项不参与完成计数
+  if (inst.item_type === 'elective' || inst.item_type === 'perception') return false
+  if (inst.blocks_next === false) return false
+  if (item.ability_type === 'elective') return false
+  if (item.item_type === 'elective' || item.item_type === 'perception') return false
+  return true
+}
+
+const planTotalCount = computed(() => (todayPlan.value?.items || []).filter(itemNeedsCheckin).length)
+const planCompletedCount = computed(() => (todayPlan.value?.items || []).filter(i => itemNeedsCheckin(i) && i.checkin_status === 'done').length)
 const planProgressPct = computed(() => {
   if (!planTotalCount.value) return 0
   return Math.round((planCompletedCount.value / planTotalCount.value) * 100)
+})
+const allRequiredDone = computed(() => {
+  return planTotalCount.value > 0 && planCompletedCount.value === planTotalCount.value
 })
 
 function itemTypeEmoji(item) {
@@ -1931,58 +2691,525 @@ function isVideoItem(item) {
   return item?.item_type === 'video' || !!item?.video_url
 }
 
+function videoTitle(item) {
+  if (item?.title) return item.title
+  if (!item?.video_url) return '训练视频'
+  const url = item.video_url
+  // 后端代理流地址不含文件名，勿从 /stream 解析
+  if (url.includes('/stream')) return '训练视频'
+  try {
+    const name = decodeURIComponent(url.split('/').pop().split('?')[0])
+    const base = name.replace(/\.[^.]*$/, '')
+    return base.replace(/^shipin[\/_]/, '').replace(/^[_0-9.]+/, '') || '训练视频'
+  } catch {
+    return '训练视频'
+  }
+}
+
+function itemNeedsListen(item) {
+  if (!item) return false
+  if (item.item_type === 'perception' || item.item_type === 'placeholder') return false
+  return !!item.audio_url
+}
+
+function getMediaSlotProgress(item, mediaType = 'audio') {
+  const remote = (!item?.id)
+    ? {}
+    : (watchProgressMap.value[item.id] || item.watch_progress || {})
+  if (mediaType === 'video') {
+    const v = remote.video && typeof remote.video === 'object' ? remote.video : null
+    if (v) {
+      return {
+        watched_sec: Math.max(0, Number(v.watched_sec) || 0),
+        duration_sec: Math.max(0, Number(v.duration_sec) || 0),
+        pct: Math.max(0, Number(v.pct) || 0),
+      }
+    }
+    return { watched_sec: 0, duration_sec: 0, pct: 0 }
+  }
+  const a = remote.audio && typeof remote.audio === 'object' ? remote.audio : null
+  if (a) {
+    return {
+      watched_sec: Math.max(0, Number(a.watched_sec) || 0),
+      duration_sec: Math.max(0, Number(a.duration_sec) || 0),
+      pct: Math.max(0, Number(a.pct) || 0),
+    }
+  }
+  return {
+    watched_sec: Math.max(0, Number(remote.watched_sec) || 0),
+    duration_sec: Math.max(0, Number(remote.duration_sec) || 0),
+    pct: Math.max(0, Number(remote.pct) || 0),
+  }
+}
+
+function getItemWatchPct(item) {
+  return getMediaSlotProgress(item, 'audio').pct
+}
+
+function isItemListenDone(item) {
+  if (!itemNeedsListen(item)) return true
+  if (item.checkin_status === 'done') return true
+  return getItemWatchPct(item) >= WATCH_DONE_PCT
+}
+
+function isPhaseListenDone(phase) {
+  if (devMode.value) return true
+  if (isPerceptionPhase(phase)) return true
+  const items = phase?.items || []
+  if (!items.length) return true
+  return items.every(isItemListenDone)
+}
+
 function isItemWatched(item) {
   if (!item?.id) return false
-  if (isVideoItem(item)) return false
-  return watchedItemIds.value.has(item.id)
+  return isItemListenDone(item) || watchedItemIds.value.has(item.id)
+}
+
+const audioProgressPct = computed(() => {
+  const d = audioUiDuration.value
+  if (!d || d <= 0) return 0
+  return Math.min(100, Math.round((audioUiSec.value / d) * 1000) / 10)
+})
+
+const audioTimeLabel = computed(() => {
+  const fmt = (s) => {
+    const n = Math.max(0, Math.floor(s || 0))
+    const m = Math.floor(n / 60)
+    const r = n % 60
+    return `${m}:${String(r).padStart(2, '0')}`
+  }
+  return `${fmt(audioUiSec.value)} / ${fmt(audioUiDuration.value)} · 已听 ${Math.round(audioProgressPct.value)}%`
+})
+
+const audioDurationLabel = computed(() => {
+  const d = audioUiDuration.value
+  return d ? `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}` : '--:--'
+})
+
+const videoProgressPct = ref(0)
+const videoTimeLabel = ref('0:00')
+const videoDurationLabel = ref('--:--')
+const videoLoadingHint = computed(() => {
+  if (videoLoadAttempt.value > 0) {
+    return `正在重试加载 (${videoLoadAttempt.value}/${VIDEO_LOAD_MAX_RETRIES})…`
+  }
+  return '视频缓冲中…'
+})
+
+const mediaPlayIcon = computed(() => {
+  if (mediaPlayer.value.type === 'video') return videoPlaying.value ? '⏸' : '▶'
+  return audioPlaying.value ? '⏸' : '▶'
+})
+
+const mediaPlayerHint = computed(() => {
+  if (mediaPlayer.value.type === 'video' && videoLoading.value) {
+    return '视频缓冲中，请稍候…'
+  }
+  if (mediaPlayer.value.type === 'video' && !videoPlaying.value && videoMetadataReady.value) {
+    return '点击下方 ▶ 开始播放'
+  }
+  return `听满约 ${WATCH_DONE_PCT}% 后可解锁打卡`
+})
+
+const playerCoverEmoji = computed(() => {
+  const t = (audioTitle.value || mediaPlayerTitle.value || '').toLowerCase()
+  if (t.includes('超脑') || t.includes('阅读')) return '🧠'
+  if (t.includes('影像') || t.includes('追忆')) return '🎬'
+  if (t.includes('扫描') || t.includes('速记')) return '📝'
+  if (t.includes('运算')) return '⚡'
+  if (t.includes('学习')) return '🚀'
+  if (t.includes('作业')) return '✅'
+  if (t.includes('绘画')) return '🎨'
+  if (t.includes('音乐')) return '🎵'
+  if (t.includes('棋')) return '♟️'
+  if (t.includes('感知')) return '🔮'
+  if (t.includes('精力') || t.includes('恢复')) return '💆'
+  if (t.includes('开口')) return '🗣️'
+  return '🎧'
+})
+
+function formatMediaTime(sec) {
+  const n = Math.max(0, Math.floor(sec || 0))
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+}
+
+/** uni-app H5 下 ref 可能不是原生 HTMLVideoElement，需兼容解析 */
+function getTrainingVideoDom() {
+  if (pinnedTrainingVideo) {
+    try {
+      if (typeof document !== 'undefined' && document.body.contains(pinnedTrainingVideo)) {
+        return pinnedTrainingVideo
+      }
+    } catch (_) { /* ignore */ }
+    pinnedTrainingVideo = null
+  }
+  const refVal = trainingVideoEl.value
+  if (refVal) {
+    if (typeof HTMLVideoElement !== 'undefined' && refVal instanceof HTMLVideoElement) return refVal
+    const el = refVal.$el || refVal
+    if (typeof HTMLVideoElement !== 'undefined' && el instanceof HTMLVideoElement) return el
+    if (el?.querySelector) {
+      const nested = el.querySelector('video')
+      if (nested) return nested
+    }
+  }
+  if (typeof document !== 'undefined') {
+    return document.querySelector('.training-video')
+  }
+  return null
+}
+
+const videoPreloadPool = new Map()
+let cachedVideoItemId = null
+let cachedVideoUserId = null
+let sessionChildUserId = null
+let sessionPlanId = null
+/** 当前播放器内唯一 video 元素 */
+let pinnedTrainingVideo = null
+/** 本次打开是否已执行续播 seek */
+let videoResumeApplied = false
+/** 打开播放器后待 seek 的续播秒数 */
+let videoResumePendingSec = 0
+/** 程序内 seek（续播）期间不弹「不可快进」 */
+let programmaticSeekUntil = 0
+
+function markProgrammaticSeek(ms = 1200) {
+  programmaticSeekUntil = Date.now() + ms
+}
+
+function isProgrammaticSeek() {
+  return Date.now() < programmaticSeekUntil
+}
+
+function resetVideoUiClock(initialSec = 0) {
+  /* 保留兼容调用，UI 已直接读 currentTime */
+}
+
+function getItemWatchProgress(item) {
+  if (!item?.id) return {}
+  const remote = watchProgressMap.value[item.id] || item.watch_progress || {}
+  const audio = getMediaSlotProgress(item, 'audio')
+  return { ...remote, ...audio }
+}
+
+function getItemResumeSec(item, mediaType = 'audio') {
+  return Math.max(0, Number(getMediaSlotProgress(item, mediaType).watched_sec) || 0)
+}
+
+function clearVideoResumePending() {
+  videoResumePendingSec = 0
+  videoResumeApplied = false
+}
+
+function syncItemWatchProgress(item, wp) {
+  if (!item?.id || !wp) return
+  watchProgressMap.value = { ...watchProgressMap.value, [item.id]: { ...wp } }
+  item.watch_progress = { ...wp }
+  const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
+  if (planItem) planItem.watch_progress = { ...wp }
+}
+
+function resetMediaSessionForAccountSwitch() {
+  clearVideoRetryTimer()
+  watchProgressMap.value = {}
+  mediaMaxHeardSec.value = 0
+  watchedItemIds.value = new Set()
+  videoSrc.value = ''
+  activeVideoItemId.value = 0
+  cachedVideoItemId = null
+  cachedVideoUserId = null
+  pinnedTrainingVideo = null
+  clearVideoResumePending()
+  videoProgressPct.value = 0
+  videoTimeLabel.value = '0:00'
+  videoDurationLabel.value = '--:--'
+  destroyPreloadVideos()
+  planMediaPreloaded.value = false
+  if (mediaPlayer.value.show) {
+    mediaPlayer.value.show = false
+    videoPlaying.value = false
+    videoLoading.value = false
+    videoMetadataReady.value = false
+  }
+}
+
+function ensureSessionChildUser(uid) {
+  if (!uid) return
+  if (sessionChildUserId != null && sessionChildUserId !== uid) {
+    resetMediaSessionForAccountSwitch()
+  }
+  sessionChildUserId = uid
+}
+
+function ensureSessionPlan(planId) {
+  const pid = Number(planId) || 0
+  if (!pid) return
+  if (sessionPlanId != null && sessionPlanId !== pid) {
+    resetMediaSessionForAccountSwitch()
+  }
+  sessionPlanId = pid
+}
+
+function applyVideoResume(el, force = false) {
+  if (!el || mediaPlayer.value.type !== 'video') return false
+  if (videoResumeApplied && !force) return true
+  const resume = videoResumePendingSec > 0
+    ? videoResumePendingSec
+    : getItemResumeSec(lastOpenedItem.value, 'video')
+  if (resume <= 0.5) {
+    clearVideoResumePending()
+    videoResumeApplied = true
+    return false
+  }
+  const dur = Number(el.duration) || 0
+  if (dur > 0 && resume >= dur - 1) {
+    clearVideoResumePending()
+    videoResumeApplied = true
+    return false
+  }
+  const cur = Number(el.currentTime) || 0
+  if (!force && cur >= resume - 0.75) {
+    clearVideoResumePending()
+    videoResumeApplied = true
+    return true
+  }
+  try {
+    mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
+    markProgrammaticSeek()
+    el.currentTime = resume
+    videoResumeApplied = true
+    clearVideoResumePending()
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
+function pinTrainingVideoEl(el) {
+  if (!el) return
+  const node = el instanceof HTMLVideoElement ? el : (el.querySelector?.('video') || null)
+  if (node instanceof HTMLVideoElement) pinnedTrainingVideo = node
+}
+
+function clearPinnedTrainingVideo() {
+  pinnedTrainingVideo = null
+  clearVideoResumePending()
+}
+
+function syncVideoUiFromElement(el) {
+  if (!el || mediaPlayer.value.type !== 'video') return
+  const durationSec = Number(el.duration) || Number(watchProgressMap.value[lastOpenedItem.value?.id]?.duration_sec) || 0
+  const cur = Math.max(0, Number(el.currentTime) || 0)
+  if (durationSec > 0) {
+    videoMetadataReady.value = true
+    videoLoading.value = false
+    videoDurationLabel.value = formatMediaTime(durationSec)
+    videoProgressPct.value = Math.min(100, Math.round(cur / durationSec * 1000) / 10)
+  }
+  videoTimeLabel.value = formatMediaTime(cur)
+  videoPlaying.value = !el.paused && !el.ended
+}
+
+function destroyPreloadVideos() {
+  for (const el of videoPreloadPool.values()) {
+    try {
+      el.pause()
+      el.removeAttribute('src')
+      el.load()
+      el.remove()
+    } catch (_) { /* ignore */ }
+  }
+  videoPreloadPool.clear()
+  planMediaPreloaded.value = false
+}
+
+function preloadTodayPlanMedia(_uid) {
+  /* 禁用后台预加载，避免与主播放器争抢带宽导致卡顿 */
+  planMediaPreloaded.value = false
+}
+
+function applyPreloadedVideoMeta(item) {
+  const warmed = item?.id ? videoPreloadPool.get(item.id) : null
+  const d = warmed?.duration || Number(watchProgressMap.value[item.id]?.duration_sec || 0)
+  if (d > 0) {
+    videoDurationLabel.value = formatMediaTime(d)
+    videoMetadataReady.value = true
+    videoLoading.value = false
+  }
+}
+
+function activeMediaEl() {
+  if (mediaPlayer.value.type === 'audio') return trainingAudio
+  return getTrainingVideoDom()
+}
+
+function destroyTrainingAudio() {
+  if (!trainingAudio) return
+  try {
+    trainingAudio.pause()
+    trainingAudio.removeAttribute('src')
+    trainingAudio.load()
+  } catch (_) { /* ignore */ }
+  trainingAudio = null
+}
+
+function ensureTrainingAudio(src) {
+  destroyTrainingAudio()
+  if (typeof Audio === 'undefined' || !src) return null
+  const el = new Audio(src)
+  el.preload = 'auto'
+  el.playbackRate = 1
+  const onTime = () => onMediaTimeUpdate({ target: el })
+  const onMeta = () => onMediaLoadedMetadata({ target: el })
+  const onSeek = () => onMediaSeeking({ target: el })
+  const onRate = () => lockMediaPlaybackRate({ target: el })
+  const onPause = () => flushWatchProgress()
+  const onEnd = () => onMediaEnded({ target: el })
+  el.addEventListener('timeupdate', onTime)
+  el.addEventListener('loadedmetadata', onMeta)
+  el.addEventListener('seeking', onSeek)
+  el.addEventListener('ratechange', onRate)
+  el.addEventListener('pause', onPause)
+  el.addEventListener('ended', onEnd)
+  trainingAudio = el
+  return el
 }
 
 function hydrateWatchProgressFromPlan(plan) {
-  const map = { ...watchProgressMap.value }
+  const map = {}
   for (const item of plan?.items || []) {
     if (!item?.id) continue
-    if (item.watch_progress) map[item.id] = { ...item.watch_progress }
+    if (item.watch_progress && typeof item.watch_progress === 'object') {
+      map[item.id] = { ...item.watch_progress }
+    }
   }
   watchProgressMap.value = map
 }
 
+function lockMediaPlaybackRate(e) {
+  const el = e?.target || activeMediaEl()
+  if (el && el.playbackRate !== 1) el.playbackRate = 1
+}
+
+function clampMediaForward(el, { silent = false } = {}) {
+  if (!el) return false
+  const t = Number(el.currentTime) || 0
+  const max = mediaMaxHeardSec.value
+  if (isProgrammaticSeek()) {
+    if (t > max) mediaMaxHeardSec.value = t
+    return false
+  }
+  if (t > max + MEDIA_SEEK_EPS) {
+    el.currentTime = max
+    if (!silent) {
+      uni.showToast({ title: '训练音视频不可快进', icon: 'none' })
+    }
+    return true
+  }
+  if (t > max) mediaMaxHeardSec.value = t
+  return false
+}
+
+function onMediaSeeking(e) {
+  clampMediaForward(e?.target || activeMediaEl(), { silent: isProgrammaticSeek() })
+}
+
 async function flushWatchProgress() {
   const item = lastOpenedItem.value
-  const el = trainingVideoEl.value
-  if (!item?.id || !isVideoItem(item) || !el) return
-  const watchedSec = el.currentTime || 0
-  const durationSec = el.duration || 0
-  if (durationSec <= 0) return
-  const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
-  watchProgressMap.value = {
-    ...watchProgressMap.value,
-    [item.id]: { watched_sec: watchedSec, duration_sec: durationSec, pct },
+  if (!item?.id) return
+  const mediaType = mediaPlayer.value.type === 'video' ? 'video' : 'audio'
+  if (mediaType === 'audio' && !itemNeedsListen(item)) return
+  const el = activeMediaEl() || pinnedTrainingVideo
+  const cached = getItemWatchProgress(item)
+  const cachedSlot = mediaType === 'audio'
+    ? (cached.audio && typeof cached.audio === 'object' ? cached.audio : cached)
+    : (cached.video && typeof cached.video === 'object' ? cached.video : {})
+  const cachedDur = Number(cachedSlot.duration_sec || cached.duration_sec || 0)
+  const durationSec = (el && el.duration) ? el.duration : (audioUiDuration.value || cachedDur || 0)
+  const finalDur = durationSec > 0 ? durationSec : cachedDur
+  if (finalDur <= 0 && mediaMaxHeardSec.value <= 0) return
+  const fromEl = el ? (Number(el.currentTime) || 0) : 0
+  const watchedSec = finalDur > 0
+    ? Math.min(Math.max(mediaMaxHeardSec.value, fromEl), finalDur)
+    : Math.max(mediaMaxHeardSec.value, fromEl)
+  const pct = finalDur > 0
+    ? Math.min(100, Math.round(watchedSec / finalDur * 1000) / 10)
+    : Number(cachedSlot.pct || cached.pct || 0)
+  const wp = { watched_sec: watchedSec, duration_sec: finalDur || cachedDur, pct }
+  if (mediaType === 'audio') {
+    syncItemWatchProgress(item, { ...cached, ...wp, audio: wp })
   }
   try {
     const uid = await ensureChildUser()
     const res = await postTrainingWatchProgress(uid, item.id, {
       watched_sec: watchedSec,
-      duration_sec: durationSec,
+      duration_sec: finalDur > 0 ? finalDur : undefined,
+      media: mediaType,
     })
     if (res?.watch_progress) {
-      watchProgressMap.value = { ...watchProgressMap.value, [item.id]: res.watch_progress }
+      syncItemWatchProgress(item, res.watch_progress)
+    }
+    if (res?.video_complete != null && lastOpenedItem.value?.id === item.id) {
+      lastOpenedItem.value = { ...lastOpenedItem.value, video_complete: res.video_complete }
+      const planItem = (todayPlan.value?.items || []).find(i => i.id === item.id)
+      if (planItem) planItem.video_complete = res.video_complete
     }
   } catch (_) { /* ignore */ }
 }
 
-function onVideoLoadedMetadata(e) {
-  const el = e?.target || trainingVideoEl.value
+function onMediaLoadedMetadata(e) {
+  const el = e?.target || activeMediaEl()
   if (!el || !lastOpenedItem.value?.id) return
+  lockMediaPlaybackRate({ target: el })
+  if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
+  const resume = getItemResumeSec(
+    lastOpenedItem.value,
+    mediaPlayer.value.type === 'video' ? 'video' : 'audio',
+  )
+  mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
+  if (mediaPlayer.value.type === 'video') {
+    applyVideoResume(el)
+  } else if (resume > 0 && resume < (el.duration || Infinity) && (el.currentTime || 0) < resume) {
+    try {
+      mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, resume)
+      markProgrammaticSeek()
+      el.currentTime = resume
+    } catch (_) { /* ignore */ }
+  }
+  if (mediaPlayer.value.type === 'audio') {
+    audioUiDuration.value = el.duration || 0
+    audioUiSec.value = el.currentTime || resume || 0
+  }
+  if (mediaPlayer.value.type === 'video') {
+    syncMediaUiFromElement(el)
+  }
   flushWatchProgress()
 }
 
-function onVideoTimeUpdate(e) {
-  const el = e?.target || trainingVideoEl.value
+function syncMediaUiFromElement(el, opts = {}) {
   const item = lastOpenedItem.value
   if (!el || !item?.id) return
-  const durationSec = el.duration || 0
+  if (!opts.skipClamp && clampMediaForward(el)) return
+  lockMediaPlaybackRate({ target: el })
+  const durationSec = el.duration || Number(watchProgressMap.value[item.id]?.duration_sec || 0) || 0
+  if (durationSec > 0) {
+    videoMetadataReady.value = true
+    videoLoading.value = false
+  }
+  const rawCur = Number(el.currentTime) || 0
+  if (rawCur > mediaMaxHeardSec.value) mediaMaxHeardSec.value = rawCur
+  const watchedSec = mediaMaxHeardSec.value
+
+  if (mediaPlayer.value.type === 'audio') {
+    audioUiDuration.value = durationSec
+    audioUiSec.value = rawCur
+    audioPlaying.value = !el.paused && !el.ended
+  }
+  if (mediaPlayer.value.type === 'video') {
+    syncVideoUiFromElement(el)
+  }
+
   if (durationSec <= 0) return
-  const watchedSec = el.currentTime || 0
   const pct = Math.min(100, Math.round(watchedSec / durationSec * 1000) / 10)
   watchProgressMap.value = {
     ...watchProgressMap.value,
@@ -1995,6 +3222,134 @@ function onVideoTimeUpdate(e) {
   }, 4000)
 }
 
+function onMediaTimeUpdate(e) {
+  const el = e?.target
+  if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
+  syncMediaUiFromElement(el || activeMediaEl())
+}
+
+function onVideoLoadedData(e) {
+  const el = e?.target
+  if (!el || mediaPlayer.value.type !== 'video') return
+  pinTrainingVideoEl(el)
+  applyVideoResume(el)
+  syncMediaUiFromElement(el)
+}
+
+function onVideoDurationChange(e) {
+  const el = e?.target
+  if (!el || mediaPlayer.value.type !== 'video') return
+  if (el instanceof HTMLVideoElement) pinTrainingVideoEl(el)
+  const d = el.duration || 0
+  if (d > 0) {
+    videoDurationLabel.value = formatMediaTime(d)
+    videoMetadataReady.value = true
+    videoLoading.value = false
+  }
+}
+
+function onMediaEnded(e) {
+  const el = e?.target || activeMediaEl()
+  if (el?.duration) mediaMaxHeardSec.value = Math.max(mediaMaxHeardSec.value, el.duration)
+  audioPlaying.value = false
+  videoPlaying.value = false
+  videoLoading.value = false
+  flushWatchProgress()
+}
+
+function onVideoWaiting() {
+  videoLoading.value = true
+}
+
+function onVideoCanPlay() {
+  videoLoading.value = false
+  videoMetadataReady.value = true
+  videoLoadAttempt.value = 0
+  clearVideoRetryTimer()
+  const el = getTrainingVideoDom()
+  if (el) syncMediaUiFromElement(el)
+}
+
+function onVideoPlaying() {
+  videoPlaying.value = true
+  videoLoading.value = false
+  videoMetadataReady.value = true
+  const el = getTrainingVideoDom()
+  if (el) syncMediaUiFromElement(el)
+}
+
+function onVideoPause() {
+  videoPlaying.value = false
+  flushWatchProgress()
+}
+
+async function toggleMediaPlay() {
+  if (mediaPlayer.value.type === 'audio') return toggleAudioPlay()
+  return toggleVideoPlay()
+}
+
+async function toggleVideoPlay() {
+  const el = getTrainingVideoDom()
+  if (!el) {
+    uni.showToast({ title: '视频仍在加载，请稍候', icon: 'none' })
+    return
+  }
+  lockMediaPlaybackRate({ target: el })
+  try {
+    if (el.paused) {
+      videoLoading.value = true
+      await el.play()
+      videoPlaying.value = true
+      videoMetadataReady.value = true
+      syncMediaUiFromElement(el)
+    } else {
+      el.pause()
+      videoPlaying.value = false
+      syncMediaUiFromElement(el)
+      flushWatchProgress()
+    }
+  } catch (_) {
+    videoPlaying.value = false
+    uni.showToast({ title: '播放失败，请稍候再试', icon: 'none', duration: 2500 })
+  } finally {
+    videoLoading.value = false
+  }
+}
+
+function prepareVideoAfterOpen(el) {
+  if (!el) return
+  pinTrainingVideoEl(el)
+  applyVideoResume(el)
+  syncMediaUiFromElement(el)
+}
+
+async function toggleAudioPlay() {
+  const el = trainingAudio
+  if (!el) return
+  lockMediaPlaybackRate({ target: el })
+  try {
+    if (el.paused) {
+      await el.play()
+      audioPlaying.value = true
+    } else {
+      el.pause()
+      audioPlaying.value = false
+      flushWatchProgress()
+    }
+  } catch (_) {
+    uni.showToast({ title: '音频播放失败', icon: 'none' })
+  }
+}
+
+function rewindAudioTen() {
+  const el = trainingAudio
+  if (!el) return
+  const next = Math.max(0, (el.currentTime || 0) - 10)
+  el.currentTime = next
+  audioUiSec.value = next
+  // 不降低 mediaMaxHeardSec，避免用回退刷进度
+}
+
 function canPhaseCheckin(phase) {
   if (!phase.unlocked) return false
   if (devMode.value) return true
@@ -2002,6 +3357,7 @@ function canPhaseCheckin(phase) {
   if (isGlobalCutoff.value) return false
   if (phase.allDone || phaseRecordIds.value[phase.block]) return true
   if (timerPhase.value === 'setup') return false
+  if (!isPhaseListenDone(phase)) return false
   return true
 }
 
@@ -2016,7 +3372,7 @@ function phaseCheckinLockText(phase) {
     return prev ? `请先完成训练 ${prev} 打卡` : '待解锁'
   }
   if (phaseHasCheckin(phase)) return checkinLockText.value
-  if (timerPhase.value === 'setup') return '请先选择时长并开始训练'
+  if (timerPhase.value === 'setup') return '请先选择时长并生成今日方案'
   if (timerPhase.value === 'expired') return '时长已到，仍可填写打卡'
   return checkinLockText.value
 }
@@ -2063,7 +3419,7 @@ function phaseTip(phase) {
     return prev ? `完成训练 ${prev} 打卡后解锁本阶段` : '待解锁'
   }
   if (phase.allDone) return ''
-  return `训练 ${phase.block} 共 ${phase.totalCount} 项`
+  return `训练 ${phase.block}`
 }
 
 function scrollToPhase(block) {
@@ -2075,7 +3431,7 @@ function scrollToPhase(block) {
   body.scrollTo({ top: body.scrollTop + targetTop - bodyTop - 12, behavior: 'smooth' })
 }
 
-function openPhaseMediaItem(item, phase) {
+async function openPhaseMediaItem(item, phase, forceType) {
   if (!item) return
   if (!phase.unlocked && !devMode.value) {
     const idx = planPhases.value.findIndex(p => p.block === phase.block)
@@ -2083,11 +3439,21 @@ function openPhaseMediaItem(item, phase) {
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
-  openMediaItem(item)
-}
 
-const audioHtml = computed(() => audioSrc.value ? `<audio src="${audioSrc.value}" controls autoplay style="width:100%;"></audio>` : '<text>暂无音频资源</text>')
+  // 多元感知：首次点击自动完成，完成后可回听不重复提交
+  if (isPerceptionPhase(phase)) {
+    phaseClicked.value = { ...phaseClicked.value, [phase.block]: true }
+    if (!phase.allDone) {
+      await autoCompletePerception(phase)
+    }
+    openMediaItem(item, forceType)
+    return
+  }
+
+  openMediaItem(item, forceType)
+}
 const pickerCards = ref([])
+const allowedAbility = ref('')
 const sparkAbi = ref(-1)
 const abilities = TRAINING_ABILITIES
 
@@ -2107,7 +3473,29 @@ function newCard(name) {
   return base
 }
 
+// ── 必填字段定义 ──
+const CARD_REQUIRED = {
+  '超脑阅读': { time: '训练时长', wordCount: '完成字数' },
+  '影像追忆': { time: '训练时长', wordCount: '完成字数', content: '训练材料', accuracy: '追忆率' },
+  '扫描速记': { time: '训练用时', wordCount: '记住字数', materialName: '材料名称' },
+  '极速运算': { time: '训练时长', count: '完成题数', accuracy: '正确率' },
+}
+function getRequired(cardName) { return CARD_REQUIRED[cardName] || { time: '训练时长', wordCount: '完成字数' } }
+function isRequired(cardName, field) { return field in (CARD_REQUIRED[cardName] || { time: 1, wordCount: 1 }) }
+function missingFields(card) {
+  const required = getRequired(card.name)
+  const missing = []
+  for (const [field, label] of Object.entries(required)) {
+    const val = card[field]
+    if (val === undefined || val === null || val === '' || (typeof val === 'number' && isNaN(val))) {
+      missing.push(label)
+    }
+  }
+  return missing
+}
+
 function togglePickerCard(name, abi) {
+  if (allowedAbility.value && name !== allowedAbility.value) return
   const idx = pickerCards.value.findIndex(c => c.name === name)
   if (idx >= 0) {
     pickerCards.value.splice(idx, 1)
@@ -2182,7 +3570,7 @@ function cardsForBlock(block) {
   return submittedCards.value.filter(c => c.phaseBlock === block)
 }
 
-async function loadTodayCheckinRecords(uid, planId) {
+async function loadTodayCheckinRecords(uid, _planId) {
   try {
     const records = await fetchTodayCheckins(uid)
     const sorted = [...records].sort((a, b) => (a.id || 0) - (b.id || 0))
@@ -2230,23 +3618,19 @@ function applyCheckinProgress(res) {
   if (sr) {
     skillTierProgress.value = sr
     for (const [skill, result] of Object.entries(sr)) {
+      // 仅在第 3 次尝试（小晋级考核）时触发通知
+      if (!result.was_deciding) continue
       if (result.tier_advanced) {
         uni.showToast({
           title: `🎉 ${skill} 晋级成功！`,
           icon: 'none',
           duration: 3000,
         })
-      } else if (result.passed && result.consecutive_pass >= 2) {
-        uni.showToast({
-          title: `${skill} 连续 ${result.consecutive_pass} 次达标`,
-          icon: 'none',
-          duration: 2000,
-        })
       } else if (!result.passed) {
         uni.showToast({
-          title: `${skill} 未达标，计数重置`,
+          title: `😔 ${skill} 差一点就晋级了，明天继续加油！`,
           icon: 'none',
-          duration: 2000,
+          duration: 3000,
         })
       }
     }
@@ -2341,6 +3725,11 @@ function openPicker(block) {
     uni.showToast({ title: prev ? `请先完成训练 ${prev} 打卡` : '本阶段尚未解锁', icon: 'none' })
     return
   }
+  if (!isPhaseListenDone(phase)) {
+    uni.showToast({ title: `请先听完/看完音视频（约 ${WATCH_DONE_PCT}%）`, icon: 'none' })
+    return
+  }
+  allowedAbility.value = phase.skillName || ''
   activePickerBlock.value = block
   const isEdit = phase.allDone && phaseRecordIds.value[block]
   if (isEdit) {
@@ -2359,6 +3748,8 @@ function closePicker() {
   showPicker.value = false
   activePickerBlock.value = null
   pickerCards.value = []
+  pendingSubmitBlock.value = null
+  allowedAbility.value = ''
 }
 
 function submitFormWithAnim() {
@@ -2379,28 +3770,91 @@ async function submitForm() {
     uni.showToast({ title: '训练方案未加载，请稍后重试', icon: 'none' })
     return
   }
+
+  // 校验必填字段
+  for (const card of pickerCards.value) {
+    const missing = missingFields(card)
+    if (missing.length) {
+      uni.showToast({ title: card.name + '的「' + missing.join('、') + '」为必填', icon: 'none', duration: 2500 })
+      return
+    }
+  }
+
+  // 校验正确率不超过 100
+  for (let ci = 0; ci < pickerCards.value.length; ci++) {
+    const card = pickerCards.value[ci]
+    const accFields = [
+      { key: 'accuracy', val: card.accuracy },
+      { key: 'forwardAcc', val: card.forwardAcc },
+      { key: 'backwardAcc', val: card.backwardAcc },
+    ]
+    for (const f of accFields) {
+      const v = parseFloat(f.val)
+      if (!isNaN(v) && v > 100) {
+        accErrorCards.value[ci] = (accErrorCards.value[ci] || {})
+        accErrorCards.value[ci][f.key] = true
+        uni.showToast({ title: '数据填写有误，请重新填写', icon: 'none', duration: 2500 })
+        setTimeout(() => { accErrorCards.value = {} }, 3000)
+        return
+      }
+    }
+  }
+
   const hasContent = pickerCards.value.some(c => c.time || c.content || c.result || c.count || c.tag || c.wordCount || c.materialName)
   if (!hasContent) {
     uni.showToast({ title: '请先填写训练记录再提交', icon: 'none', duration: 2000 })
     return
   }
+
+  const speedNames = findAbnormalWordSpeedCards(pickerCards.value)
+  if (speedNames.length) {
+    uni.showModal({
+      title: '字速偏高，请确认',
+      content:
+        speedNames.join('、')
+        + ' 每分钟字数高于晋升参考上限，仍可提交，系统会记录偏高项。确认作为今日打卡吗？',
+      confirmText: '确认提交',
+      cancelText: '再改改',
+      success: (res) => {
+        if (res.confirm) {
+          pendingSubmitBlock.value = block
+          showSubmitConfirm.value = true
+        }
+      },
+    })
+    return
+  }
+
+  // 提交前确认
+  pendingSubmitBlock.value = block
+  showSubmitConfirm.value = true
+}
+
+async function confirmSubmit() {
+  if (checkinSubmitting.value) return
+  const block = pendingSubmitBlock.value
+  if (!block) return
+  if (!guardCheckin(block)) return
+  showSubmitConfirm.value = false
   checkinSubmitting.value = true
   try {
-    const cardsList = pickerCards.value.map(c => {
-      const { _editIndex, ...rest } = c
-      return { ...rest, phaseBlock: block }
+    const cardsList = pickerCards.value.map(function(c) {
+      const data = { ...c, phaseBlock: block }
+      delete data._editIndex
+      return data
     })
     await persistPhaseCheckin(block, cardsList)
     const uid = await ensureChildUser()
     await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
     closePicker()
-    nextTick(() => syncPhaseExpand())
+    await nextTick(function() { syncPhaseExpand() })
     loadTodayPlan(true)
-    uni.showToast({ title: `✅ 训练 ${block} 打卡成功！`, icon: 'none' })
+    uni.showToast({ title: '训练 ' + block + ' 打卡成功！', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '打卡提交失败', icon: 'none', duration: 2500 })
   } finally {
     checkinSubmitting.value = false
+    pendingSubmitBlock.value = null
   }
 }
 
@@ -2483,35 +3937,62 @@ async function saveDetailEdit() {
     detailEditCard.value = null
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch (e) {
-    uni.showToast({ title: e.message || '保存失败', icon: 'none' })
+        uni.showToast({ title: e.message || '保存失败', icon: 'none', duration: 2500 })
   } finally {
-    checkinSubmitting.value = false
+        checkinSubmitting.value = false
   }
 }
 
 function cardDetailFields(c) {
   const map = {}
   if (!c) return map
-  if (c.time) map['时长'] = c.time + ' 分钟'
+  if (c.time) map['训练时长'] = c.time + ' 分钟'
   if (c.content) map['内容'] = c.content
   if (c.result) map['结果'] = c.result
   if (c.tag) map['类型'] = c.tag
   if (c.count) map['题数'] = c.count + ' 题'
-  if (c.accuracy) map['正确率'] = c.accuracy + '%'
+  if (c.accuracy) map[c.name === '影像追忆' ? '追忆率' : '正确率'] = c.accuracy + '%'
   if (c.tool) map['工具'] = c.tool
   if (c.materialType) map['材料类型'] = c.materialType
   if (c.materialName) map['材料名称'] = c.materialName
-  if (c.wordCount) map['字数'] = c.wordCount + ' 字'
+  if (c.wordCount) {
+    const wcLabel = c.name === '扫描速记' ? '记住字数' : '完成字数'
+    map[wcLabel] = c.wordCount + ' 字'
+  }
   if (c.forwardTime || c.forwardAcc) map['正背'] = (c.forwardTime || '?') + '/' + (c.forwardAcc || '?')
   if (c.backwardTime || c.backwardAcc) map['倒背'] = (c.backwardTime || '?') + '/' + (c.backwardAcc || '?')
   if (c.note) map['备注'] = c.note
   return map
 }
 
+function confirmDeleteCard(idx) {
+  const c = submittedCards.value[idx]
+  if (!c) return
+  if (!guardCheckin(c.phaseBlock || 'A')) return
+  deleteTargetIdx.value = idx
+  deleteTargetName.value = c.name || ('训练' + (c.phaseBlock || 'A'))
+  showDeleteConfirm.value = true
+}
+
+function cancelDeleteConfirm() {
+  showDeleteConfirm.value = false
+  deleteTargetIdx.value = -1
+  deleteTargetName.value = ''
+}
+
+async function confirmDelete() {
+  showDeleteConfirm.value = false
+  closeCardDetail()
+  const idx = deleteTargetIdx.value
+  deleteTargetIdx.value = -1
+  deleteTargetName.value = ''
+  if (idx < 0) return
+  await deleteCard(idx)
+}
+
 async function deleteCard(idx) {
   const c = submittedCards.value[idx]
   const block = c.phaseBlock || 'A'
-  if (!guardCheckin(block)) return
   const remaining = submittedCards.value.filter((_, i) => i !== idx && (_.phaseBlock || 'A') === block)
   checkinSubmitting.value = true
   try {
@@ -2522,32 +4003,81 @@ async function deleteCard(idx) {
     }
     const uid = await ensureChildUser()
     await loadTodayCheckinRecords(uid, todayPlan.value?.plan_id)
+    // 删除后重新加载方案，确保 item 状态与后端对齐
+    await loadTodayPlan(true)
     if (!submittedCards.value.length) closeCardDetail()
     nextTick(() => syncPhaseExpand())
     uni.showToast({ title: '已删除', icon: 'none' })
   } catch (e) {
-    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+    uni.showToast({ title: e.message || '删除失败', icon: 'none', duration: 2500 })
   } finally {
     checkinSubmitting.value = false
   }
 }
 
-function applyPlanMedia(plan) {
-  const items = plan?.items || []
-  const videoItem = items.find(i => i.item_type === 'video' || i.video_url)
-  if (videoItem?.video_url) {
-    videoSrc.value = videoItem.video_url
+function clearVideoRetryTimer() {
+  if (videoRetryTimer) {
+    clearTimeout(videoRetryTimer)
+    videoRetryTimer = null
   }
-  const firstBlock = items[0]?.block || 'A'
-  const firstAudio = items.find(i => (i.block || 'A') === firstBlock && i.audio_url)
-    || items.find(i => i.audio_url && !i.video_url)
+}
+
+function buildVideoStreamSrc(rawUrl, uid, attempt = 0) {
+  let url = resolveTrainingStreamUrl(rawUrl, uid)
+  if (!url) return url
+  if (attempt > 0) {
+    const sep = url.includes('?') ? '&' : '?'
+    url = `${url}${sep}_retry=${attempt}&_t=${Date.now()}`
+  }
+  return url
+}
+
+function reloadTrainingVideo(item, uid) {
+  videoLoading.value = true
+  videoMetadataReady.value = false
+  videoResumeApplied = false
+  videoSrc.value = buildVideoStreamSrc(item.video_url, uid, videoLoadAttempt.value)
+  nextTick(() => {
+    const el = getTrainingVideoDom()
+    if (el) {
+      pinTrainingVideoEl(el)
+      try { el.load() } catch (_) { /* ignore */ }
+    }
+    prepareVideoAfterOpen(getTrainingVideoDom())
+  })
+}
+
+function onTrainingVideoError() {
+  const item = lastOpenedItem.value
+  const uid = getChildUserId()
+  if (item?.video_url && uid && videoLoadAttempt.value < VIDEO_LOAD_MAX_RETRIES) {
+    videoLoadAttempt.value += 1
+    videoLoading.value = true
+    videoMetadataReady.value = false
+    clearVideoRetryTimer()
+    videoRetryTimer = setTimeout(() => reloadTrainingVideo(item, uid), 700 * videoLoadAttempt.value)
+    return
+  }
+  clearVideoRetryTimer()
+  videoLoading.value = false
+  videoPlaying.value = false
+  videoMetadataReady.value = false
+  console.error('[training] video load failed:', videoSrc.value)
+  uni.showToast({ title: '视频加载失败，请关闭后重试或刷新页面', icon: 'none', duration: 3000 })
+}
+
+function applyPlanMedia(plan) {
+  const uid = getChildUserId()
+  const items = plan?.items || []
+  const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  const firstAudio = sorted.find(i => i.audio_url)
   if (firstAudio) {
-    audioSrc.value = firstAudio.audio_url
+    audioSrc.value = resolveTrainingStreamUrl(firstAudio.audio_url, uid)
     audioTitle.value = `🎧 ${firstAudio.title || '今日训练音频'}`
   }
 }
 
-function openMediaItem(item) {
+async function openMediaItem(item, forceType) {
   if (!item) return
   if (item.media_hidden || item.item_type === 'placeholder') {
     if (item.item_type === 'perception' && item.audio_url) {
@@ -2563,17 +4093,65 @@ function openMediaItem(item) {
   }
   if (!guardMedia()) return
   lastOpenedItem.value = item
-  if (item.video_url) {
-    videoSrc.value = item.video_url
+  let uid = getChildUserId()
+  if (!uid) {
+    try {
+      uid = await ensureChildUser()
+    } catch (_) {
+      return
+    }
+  }
+  const audioSlot = getMediaSlotProgress(item, 'audio')
+  const videoSlot = getMediaSlotProgress(item, 'video')
+  mediaMaxHeardSec.value = Number(audioSlot.watched_sec || 0)
+  audioPlaying.value = false
+  videoPlaying.value = false
+  audioUiSec.value = mediaMaxHeardSec.value
+  audioUiDuration.value = Number(audioSlot.duration_sec || 0)
+
+  const openVideo = () => {
+    const resumeSec = Number(videoSlot.watched_sec || 0)
+    const durSec = Number(videoSlot.duration_sec || 0)
+    mediaMaxHeardSec.value = resumeSec
+    videoResumePendingSec = resumeSec
+    videoResumeApplied = false
+    videoLoading.value = true
+    videoMetadataReady.value = false
+    videoLoadAttempt.value = 0
+    clearVideoRetryTimer()
+    applyPreloadedVideoMeta(item)
     mediaPlayer.value = { show: true, type: 'video', title: item.title || '训练视频' }
-    return
+
+    cachedVideoItemId = item.id
+    cachedVideoUserId = uid
+    activeVideoItemId.value = item.id
+    videoProgressPct.value = 0
+    videoTimeLabel.value = '0:00'
+    videoDurationLabel.value = durSec > 0 ? formatMediaTime(durSec) : '--:--'
+    videoSrc.value = buildVideoStreamSrc(item.video_url, uid, 0)
+    nextTick(() => prepareVideoAfterOpen(getTrainingVideoDom()))
   }
-  if (item.audio_url) {
-    audioSrc.value = item.audio_url
+  const openAudio = () => {
+    const streamUrl = resolveTrainingStreamUrl(item.audio_url, uid)
+    audioSrc.value = streamUrl
     audioTitle.value = item.title || '训练音频'
-    mediaPlayer.value = { show: true, type: 'audio', title: item.title || '训练音频' }
-    return
+    mediaPlayer.value = { show: true, type: 'audio', title: audioTitle.value }
+    const el = ensureTrainingAudio(streamUrl)
+    if (!el) {
+      uni.showToast({ title: '当前环境无法播放音频', icon: 'none' })
+      return
+    }
+    try {
+      if (mediaMaxHeardSec.value > 0) el.currentTime = mediaMaxHeardSec.value
+      el.playbackRate = 1
+      el.play().then(() => { audioPlaying.value = true }).catch(() => {})
+    } catch (_) { /* ignore */ }
   }
+
+  if (forceType === 'video' && item.video_url) return openVideo()
+  if (forceType === 'audio' && item.audio_url) return openAudio()
+  if (item.video_url) return openVideo()
+  if (item.audio_url) return openAudio()
   if (needAssessment.value) {
     showAssessmentModal.value = true
     return
@@ -2594,17 +4172,40 @@ function openMedia(type) {
     openMediaItem(audio || { audio_url: audioSrc.value, title: audioTitle.value })
   }
 }
-function closeMedia() {
+async function closeMedia() {
   if (watchProgressSaveTimer) {
     clearTimeout(watchProgressSaveTimer)
     watchProgressSaveTimer = null
   }
-  if (lastOpenedItem.value?.id && isVideoItem(lastOpenedItem.value)) {
-    flushWatchProgress()
-  } else if (lastOpenedItem.value?.id) {
-    watchedItemIds.value.add(lastOpenedItem.value.id)
-    watchedItemIds.value = new Set(watchedItemIds.value)
+  clearVideoRetryTimer()
+  const item = lastOpenedItem.value
+  if (item?.id && (itemNeedsListen(item) || item.video_url)) {
+    const el = pinnedTrainingVideo || activeMediaEl()
+    if (el) {
+      const t = Number(el.currentTime) || 0
+      if (t > mediaMaxHeardSec.value) mediaMaxHeardSec.value = t
+      syncMediaUiFromElement(el, { skipClamp: true })
+    }
+    await flushWatchProgress()
+    if (isItemListenDone(item)) {
+      watchedItemIds.value.add(item.id)
+      watchedItemIds.value = new Set(watchedItemIds.value)
+    }
   }
+  try { trainingAudio?.pause() } catch (_) { /* ignore */ }
+  try {
+    const el = pinnedTrainingVideo || getTrainingVideoDom()
+    el?.pause()
+  } catch (_) { /* ignore */ }
+  destroyTrainingAudio()
+  pinnedTrainingVideo = null
+  videoResumeApplied = false
+  clearVideoResumePending()
+  videoLoadAttempt.value = 0
+  audioPlaying.value = false
+  videoPlaying.value = false
+  videoLoading.value = false
+  videoMetadataReady.value = false
   mediaPlayer.value.show = false
 }
 
@@ -2640,10 +4241,16 @@ async function checkTrainingEntry(uid) {
       needAssessment.value = false
       showAssessmentModal.value = false
       applyTalentLabelFromTag(talent.talent_tag)
+      try {
+        const entry = await fetchTrainingEntry(uid)
+        applyServerTimeMeta(entry)
+        agentScheduleEnabled.value = !!entry.agent_schedule_enabled
+      } catch (_) { /* 开关失败不影响进页 */ }
       return true
     }
     const entry = await fetchTrainingEntry(uid)
     applyServerTimeMeta(entry)
+    agentScheduleEnabled.value = !!entry.agent_schedule_enabled
     if (!entry.needs_assessment && entry.has_assessment) {
       needAssessment.value = false
       showAssessmentModal.value = false
@@ -2699,13 +4306,19 @@ function dismissAssessmentModal() {
   showAssessmentModal.value = false
 }
 
-async function loadTodayPlan(silent = true) {
-  if (scheduleLoading.value) return
+const todayPlanLoading = ref(false)
 
+async function loadTodayPlan(silent = true) {
+  if (todayPlanLoading.value) return
+  todayPlanLoading.value = true
   entryLoading.value = !silent
   needAssessment.value = false
   try {
     const uid = await ensureChildUser()
+    ensureSessionChildUser(uid)
+
+    // 🆕 段位角标 + 状态卡（六级九段），独立加载不阻塞主流程
+    fetchGrowthTier(uid).then((d) => { tier.value = d }).catch(() => {})
 
     // 提前启动 progress 请求，与主流程并行
     const progressPromise = !talentLabel.value
@@ -2733,7 +4346,9 @@ async function loadTodayPlan(silent = true) {
 
     todayPlan.value = result.data
     applyServerTimeMeta(result.data)
+    ensureSessionPlan(result.data.plan_id)
     applyTimerFromServer(result.data)
+    restoreTrainingVisibility(result.data)
 
     if (result.data.status === 'transition' || !result.data.plan_id) {
       resetAllLocalState()
@@ -2760,6 +4375,16 @@ async function loadTodayPlan(silent = true) {
 
     syncPickersAfterTimerRestore(result.data.planned_minutes)
 
+    if (
+      result.data.timer_phase === 'setup'
+      && result.data.items?.length
+      && !result.data.items.some(
+        i => i.checkin_status === 'done' || Number(i.watch_progress?.pct || 0) > 0
+      )
+    ) {
+      planJustGenerated.value = true
+    }
+
     // checkin records + progress 并行等待
     const [progress] = await Promise.all([
       progressPromise,
@@ -2776,10 +4401,15 @@ async function loadTodayPlan(silent = true) {
     if (result.data.plan_id && result.data.items?.length) {
       refreshAiPlanInBackground(uid)
     }
+
+    if (result.data.timer_phase === 'running' && result.data.items?.length) {
+      preloadTodayPlanMedia(uid)
+    }
   } catch (e) {
-    uni.showToast({ title: e.message || '加载训练方案失败', icon: 'none' })
+    uni.showToast({ title: e.message || '加载今日方案失败', icon: 'none', duration: 2500 })
   } finally {
     entryLoading.value = false
+    todayPlanLoading.value = false
   }
 }
 
@@ -2790,10 +4420,16 @@ function goTalent() {
 let idleGuideTimer = null
 
 onMounted(async () => {
+  if (!isClassicUi()) {
+    switchMainTab('/pages/training/dayu')
+    return
+  }
+  const auth = await requirePageAuth('student')
+  if (!auth?.ok) return
   // App.vue 已做系统偏好+硬件检测；此处补 FPS 实测捕获弱 GPU 边缘机型
   if (!document.documentElement.hasAttribute('data-reduced-motion')) {
     try {
-      const fps = await new Promise<number>(resolve => {
+      const fps = await new Promise(resolve => {
         let frames = 0
         const start = performance.now()
         function tick() {
@@ -2821,25 +4457,25 @@ onMounted(async () => {
   }, 5000)
 })
 onShow(async () => {
-  // 方案已存在且计时运行中 → 无需重载（避免 3-4 次 API 调用造成卡顿）
-  if (todayPlan.value?.plan_id && timerPhase.value === 'running') {
-    return
-  }
-  // 方案存在但不在运行中 → 只刷新打卡记录（轻量）
-  if (todayPlan.value?.plan_id) {
-    try {
-      const uid = await ensureChildUser()
-      await loadTodayCheckinRecords(uid, todayPlan.value.plan_id)
-    } catch (_) { /* 静默失败 */ }
-    return
-  }
-  // 无方案 → 完整加载
+  const uid = getChildUserId()
+  if (uid) ensureSessionChildUser(uid)
+  resumeTimerFromStorage()
   await loadTodayPlan(true)
+})
+onHide(() => {
+  clearTimerTick()
 })
 onUnmounted(() => {
   clearTimerTick()
   clearDayUnlockWatch()
+  clearVideoRetryTimer()
+  destroyPreloadVideos()
+  cachedVideoItemId = null
+  cachedVideoUserId = null
+  sessionChildUserId = null
+  sessionPlanId = null
   if (idleGuideTimer) clearTimeout(idleGuideTimer)
+  destroyTrainingAudio()
 })
 function goBack() {
   uni.navigateBack({ delta: 1 })
@@ -2860,6 +4496,67 @@ function triggerGlitch() {
 .nav { display:flex; align-items:center; padding:28rpx 28rpx 0; position:relative; z-index:1001; }
 .nav-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
 .nav-back { width:36px; height:36px; border-radius:50%; background:rgba(0,210,255,0.08); border:1px solid rgba(0,210,255,0.2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+/* 🆕 段位状态卡（六级九段） */
+.tier-card { background:#243046; border:2px solid rgba(0,210,255,0.2); border-radius:20rpx; padding:28rpx 32rpx; margin:0 0 24rpx; cursor:pointer; clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+.tier-card:active { opacity:0.85; }
+.tier-card-head { display:flex; align-items:center; justify-content:space-between; gap:12rpx; }
+.tier-card-title { display:flex; align-items:center; gap:10rpx; min-width:0; }
+.tier-card-medal { display:flex; color:#ffd666; flex-shrink:0; }
+.tier-card-name { color:#fff; font-size:16px; font-weight:700; white-space:nowrap; }
+.tier-card-tier { color:rgba(0,210,255,0.9); font-size:12px; font-weight:600; background:rgba(0,210,255,0.12); border-radius:999px; padding:2px 10px; flex-shrink:0; }
+.tier-card-next { color:#ffd666; font-size:11px; font-weight:600; white-space:nowrap; flex-shrink:0; }
+.tier-card-next.top { color:#4ade80; }
+.tier-card-bar { height:6px; background:rgba(255,255,255,0.08); border-radius:999px; margin:12rpx 0 8rpx; overflow:hidden; }
+.tier-card-fill { height:100%; background:linear-gradient(90deg,#22d3ee,#38bdf8); border-radius:999px; transition:width .4s ease; }
+.tier-card-foot { display:flex; justify-content:space-between; align-items:center; }
+.tier-card-foot text { color:rgba(255,255,255,0.45); font-size:10px; }
+.tier-card-skills { margin-top:16rpx; padding-top:16rpx; border-top:1px solid rgba(255,255,255,0.08); }
+.tier-card-skills-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6rpx; }
+.tier-card-skills-rhs { display:flex; align-items:center; gap:10rpx; }
+.tier-card-skills-title { color:#7dd3fc; font-size:12px; font-weight:700; }
+.tier-card-skills-tip { color:rgba(255,255,255,0.4); font-size:10px; }
+.tier-info-btn {
+  display:inline-flex; align-items:center; gap:4rpx;
+  padding:4rpx 12rpx; border-radius:999px;
+  background:rgba(125, 211, 252, 0.1);
+  border:1px solid rgba(125, 211, 252, 0.3);
+  cursor:pointer; flex-shrink:0;
+}
+.tier-info-btn:active { opacity:0.8; }
+.tier-info-btn text:first-child { color:#7dd3fc; font-size:12px; line-height:1; font-weight:700; }
+.tier-info-btn-label { color:#7dd3fc; font-size:10px; font-weight:600; }
+.tier-skill-dots { cursor:pointer; }
+.tier-skill-dots:active { opacity:0.8; }
+.tier-skill { display:flex; align-items:center; justify-content:space-between; gap:12rpx; padding:8rpx 0; }
+.tier-skill-left { display:flex; align-items:center; gap:10rpx; min-width:0; flex-shrink:0; }
+.tier-skill-name { color:#fff; font-size:13px; font-weight:600; }
+.tier-skill-tier { color:rgba(0,210,255,0.9); font-size:11px; font-weight:700; background:rgba(0,210,255,0.12); border-radius:999px; padding:2px 8px; flex-shrink:0; }
+.tier-skill-tier.muted { color:#8b949e; background:rgba(255,255,255,0.06); }
+.tier-skill-right { display:flex; align-items:center; gap:10rpx; min-width:0; }
+.tier-skill-dots { display:flex; align-items:center; gap:4rpx; flex-shrink:0; }
+.tier-skill-dot { width:10rpx; height:10rpx; border-radius:999px; background:rgba(255,255,255,0.12); }
+.tier-skill-dot.on { background:#22d3ee; }
+.tier-skill-dot-num { color:rgba(255,255,255,0.5); font-size:10px; margin-left:2rpx; }
+.tier-skill-rule { color:rgba(255,255,255,0.55); font-size:11px; text-align:right; flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.tier-skill-rule.muted { color:rgba(255,255,255,0.28); }
+[data-theme="white"] .tier-card { background:#fff; border:2px solid #e5e7eb; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+[data-theme="white"] .tier-card-name { color:#1a1a2e; }
+[data-theme="white"] .tier-card-foot text { color:#94a3b8; }
+[data-theme="white"] .tier-card-bar { background:#e2e8f0; }
+[data-theme="white"] .tier-card-skills { border-top-color:#e5e7eb; }
+[data-theme="white"] .tier-card-skills-title { color:#2563eb; }
+[data-theme="white"] .tier-card-skills-tip { color:#94a3b8; }
+[data-theme="white"] .tier-info-btn { background:#eff6ff; border-color:#bfdbfe; }
+[data-theme="white"] .tier-info-btn text:first-child { color:#2563eb; }
+[data-theme="white"] .tier-info-btn-label { color:#2563eb; }
+[data-theme="white"] .tier-skill-name { color:#1a1a2e; }
+[data-theme="white"] .tier-skill-tier { color:#0d9488; background:#ccfbf1; }
+[data-theme="white"] .tier-skill-tier.muted { color:#9ca3af; background:#f1f5f9; }
+[data-theme="white"] .tier-skill-dot { background:#e2e8f0; }
+[data-theme="white"] .tier-skill-dot.on { background:#14b8a6; }
+[data-theme="white"] .tier-skill-dot-num { color:#94a3b8; }
+[data-theme="white"] .tier-skill-rule { color:#64748b; }
+[data-theme="white"] .tier-skill-rule.muted { color:#cbd5e1; }
 .nav-title { flex:1; text-align:center; color:#fff; font-size:16px; font-weight:600; }
 .nav-dev { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .nav-history { min-width:36px; height:28px; padding:0 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; z-index:1002; }
@@ -2883,7 +4580,6 @@ function triggerGlitch() {
 .history-card-content { margin-bottom:4px; }
 .history-card-content text { font-size:13px; color:#d1d5db; }
 .history-card-result text { font-size:12px; color:#9ca3af; }
-.history-empty { text-align:center; padding:24px 0; color:#6b7280; font-size:14px; }
 
 [data-theme="white"] .history-panel { background:#fff; }
 [data-theme="white"] .history-title { color:#1a1a2e; }
@@ -2896,17 +4592,46 @@ function triggerGlitch() {
 .hr-date { color:var(--text); font-size:12px; font-weight:600; display:block; }
 .hr-meta { color:var(--text-dim); font-size:11px; display:block; margin-top:2px; }
 .hr-note { color:var(--text-dim); font-size:10px; display:block; margin-top:2px; }
-.history-empty { color:var(--text-dim); font-size:12px; text-align:center; padding:12px 0; }
+.history-empty { color:var(--text-dim); font-size:13px; text-align:center; padding:16px 0; }
 .nav-dev text { color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; letter-spacing:0.04em; }
 .nav-dev.active { background:rgba(251,191,36,0.15); border-color:rgba(251,191,36,0.45); }
 .nav-dev.active text { color:#fbbf24; }
 .body { flex:1; overflow-y:auto; padding:24rpx 28rpx 0; scrollbar-width:none; -ms-overflow-style:none; }
+/* 🆕 顶部信息行：天赋头像（只显示头部）+ 成长历程碑 / MILESTONES + 段位椭圆（与成长页一致） */
+.hero-idbar {
+  display:flex; align-items:center; gap:12px;
+  padding:4px 2px 14px; position:relative; z-index:1;
+}
+.hero-idbar-avatar {
+  width:52px; height:52px; border-radius:50%; overflow:hidden; flex-shrink:0;
+  border:2px solid var(--border);
+  background-color:var(--bg-card);
+  background-size: auto 230%;
+  background-position:50% 26%;
+  background-repeat:no-repeat;
+  box-shadow:var(--card-glow);
+}
+.hero-idbar-main { flex:1; min-width:0; }
+.hero-idbar-title { color:var(--text); font-size:17px; font-weight:800; display:block; letter-spacing:1px; }
+.hero-idbar-en {
+  color:var(--text-dim); font-size:10px; font-weight:600;
+  letter-spacing:3px; display:block; margin-top:3px; text-transform:uppercase;
+}
+.hero-tier-pill {
+  flex-shrink:0; border-radius:999px; text-align:center;
+  padding:8px 12px; max-width:55%; white-space:nowrap;
+  border:1px solid;
+  background:transparent;
+}
+.hero-tier-pill-num { font-size:13px; font-weight:800; white-space:nowrap; }
 .body::-webkit-scrollbar { display:none; }
 
 .card { background:#243046; border-radius:20rpx; padding:28rpx 32rpx; margin-bottom:24rpx; position:relative; border:2px solid rgba(0,210,255,0.2); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
-.plan-label { color:#00d2ff; font-size:13px; font-weight:700; display:block; }
+.plan-label { color:#00d2ff; font-size:16px; font-weight:700; display:block; }
 .plan-header { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-bottom:20rpx; flex-wrap:wrap; }
-.plan-header-meta { color:rgba(255,255,255,0.55); font-size:11px; font-weight:600; white-space:nowrap; }
+.plan-header-left { display:flex; align-items:center; gap:8px; }
+.chip-gold { font-size:11px; font-weight:800; color:#C9A869; border:1px solid rgba(201,168,105,.5); padding:3px 10px; border-radius:999px; white-space:nowrap; }
+.plan-header-meta { color:rgba(255,255,255,0.55); font-size:14px; font-weight:600; white-space:nowrap; }
 .plan-loading { color:rgba(255,255,255,0.45); font-size:12px; display:block; padding:8px 0; }
 
 /* ---- AI 方案加载动画 ---- */
@@ -2916,11 +4641,11 @@ function triggerGlitch() {
 .plr-arc { position:absolute; inset:0; border-radius:50%; border:2px solid transparent; border-top-color:#00d2ff; animation:plrSpin 1.2s linear infinite; box-shadow:0 0 12px rgba(0,210,255,0.25); }
 @keyframes plrSpin { to { transform:rotate(360deg); } }
 @keyframes plrPulse { 0%,100% { transform:scale(0.85); opacity:0.5; } 50% { transform:scale(1.1); opacity:1; } }
-.plan-loading-title { display:block; color:#fff; font-size:13px; font-weight:600; margin-bottom:10px; }
+.plan-loading-title { display:block; color:#fff; font-size:16px; font-weight:600; margin-bottom:10px; }
 .plan-loading-bar { height:3px; width:70%; max-width:200px; margin:0 auto 8px; background:rgba(255,255,255,0.06); border-radius:999px; overflow:hidden; }
 .plan-loading-bar-fill { height:100%; width:30%; background:linear-gradient(90deg,transparent,#00d2ff); border-radius:999px; animation:plrBar 1.6s ease-in-out infinite; }
 @keyframes plrBar { 0% { margin-left:0; width:30%; } 50% { margin-left:50%; width:40%; } 100% { margin-left:70%; width:30%; } }
-.plan-loading-hint { display:block; color:rgba(255,255,255,0.3); font-size:10px; }
+.plan-loading-hint { display:block; color:rgba(255,255,255,0.3); font-size:13px; }
 
 /* ---- 方案生成完毕 ---- */
 .plan-done-wrap { text-align:center; padding:28px 8px 16px; animation:doneFadeIn 0.4s ease-out; }
@@ -2930,12 +4655,31 @@ function triggerGlitch() {
 .plan-done-title { display:block; color:#22c55e; font-size:15px; font-weight:700; margin-bottom:4px; }
 .plan-done-sub { display:block; color:rgba(255,255,255,0.45); font-size:12px; }
 .plan-empty { padding:10px 0 4px; }
-.plan-empty-text { color:rgba(255,255,255,0.4); font-size:12px; line-height:1.5; }
+.card-empty { background:rgba(10,18,30,0.6); border:1px solid rgba(0,210,255,0.12); border-radius:14px; padding:20px 16px; text-align:center; }
+.plan-empty-text { color:rgba(255,255,255,0.4); font-size:15px; line-height:1.5; }
 .plan-transition-wrap { padding:16px 8px; text-align:center; }
 .plan-transition-icon { font-size:28px; display:block; margin-bottom:8px; }
-.plan-transition-title { color:#e6edf3; font-size:15px; font-weight:600; display:block; }
-.plan-transition-sub { color:rgba(255,255,255,0.5); font-size:12px; margin-top:6px; display:block; }
+.plan-transition-title { color:#e6edf3; font-size:18px; font-weight:600; display:block; }
+.plan-transition-sub { color:rgba(255,255,255,0.5); font-size:15px; margin-top:6px; display:block; }
 .training-video { width:100%; border-radius:10px; background:#000; }
+.audio-controls { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
+.audio-btn-row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.audio-play-btn {
+  min-width:112px; text-align:center; padding:10px 18px; border-radius:999px;
+  background:rgba(0,210,255,0.15); border:1px solid rgba(0,210,255,0.45); color:#00d2ff; font-weight:700; cursor:pointer;
+}
+.audio-play-btn.secondary {
+  background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.18); color:rgba(255,255,255,0.85); font-weight:600;
+}
+.audio-progress-wrap { display:flex; flex-direction:column; gap:6px; }
+.audio-progress-track { height:8px; border-radius:999px; background:rgba(255,255,255,0.12); overflow:hidden; }
+.audio-progress-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#22d3ee,#2563eb); }
+.audio-progress-text { color:rgba(255,255,255,0.7); font-size:12px; text-align:center; }
+.media-listen-hint { display:block; margin-top:10px; text-align:center; color:rgba(255,255,255,0.55); font-size:11px; line-height:1.4; }
+[data-theme="white"] .audio-play-btn { background:#eff6ff; border-color:#93c5fd; color:#2563eb; }
+[data-theme="white"] .audio-progress-track { background:#e5e7eb; }
+[data-theme="white"] .audio-progress-text,
+[data-theme="white"] .media-listen-hint { color:#6b7280; }
 .video-progress-hint { display:block; margin-top:8px; font-size:12px; color:rgba(255,255,255,0.65); text-align:center; }
 .plan-timeline { margin-top:2px; }
 .tl-phase { display:flex; gap:10px; align-items:stretch; }
@@ -2949,16 +4693,16 @@ function triggerGlitch() {
 .tl-content { flex:1; min-width:0; padding-bottom:8px; }
 .tl-node-row { cursor:pointer; }
 .tl-phase-head { padding-top:0; min-width:0; display:flex; align-items:center; justify-content:space-between; }
-.tl-phase-title { color:#fff; font-size:12px; font-weight:700; display:block; line-height:1.4; }
+.tl-phase-title { color:#fff; font-size:15px; font-weight:700; display:block; line-height:1.4; }
 .tl-phase-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.tl-phase-meta { color:rgba(255,255,255,0.38); font-size:10px; display:block; margin-top:0; }
-.tl-phase-toggle { color:rgba(255,255,255,0.3); font-size:10px; cursor:pointer; }
+.tl-phase-meta { color:rgba(255,255,255,0.38); font-size:13px; display:block; margin-top:0; }
+.tl-phase-toggle { color:rgba(255,255,255,0.3); font-size:13px; cursor:pointer; }
 .tl-items { margin:6px 0 2px; padding-left:2px; }
 .tl-item { display:flex; align-items:center; gap:6px; padding:5px 0; cursor:pointer; }
 .tl-item-icon { font-size:11px; width:14px; text-align:center; flex-shrink:0; }
-.tl-item-title { flex:1; color:rgba(255,255,255,0.82); font-size:11px; line-height:1.35; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tl-item-title { flex:1; color:rgba(255,255,255,0.82); font-size:14px; line-height:1.35; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tl-item-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.tl-item-dur { color:rgba(255,255,255,0.35); font-size:10px; }
+.tl-item-dur { color:rgba(255,255,255,0.35); font-size:13px; }
 .tl-item-status { font-size:10px; }
 .tl-st-locked { color:rgba(255,255,255,0.3); }
 .tl-st-done { color:#22c55e; }
@@ -2967,20 +4711,40 @@ function triggerGlitch() {
 .plan-progress { margin-top:12px; padding-top:12px; border-top:1px solid rgba(0,210,255,0.12); }
 .plan-progress-track { height:4px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; }
 .plan-progress-fill { height:100%; background:linear-gradient(90deg,#00d2ff,#22c55e); border-radius:999px; transition:width 0.35s ease; box-shadow:0 0 10px rgba(0,210,255,0.35); }
-.plan-progress-text { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:10px; text-align:center; letter-spacing:0.04em; }
+.plan-progress-text { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:13px; text-align:center; letter-spacing:0.04em; }
 .plan-ai-box { background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.18); border-radius:10px; padding:12px; margin-top:12px; }
 .plan-ai-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
 .plan-ai-label { color:#00d2ff; font-size:11px; font-weight:700; }
 .plan-ai-text { color:#fff; font-size:13px; line-height:1.65; display:block; white-space:pre-wrap; }
 .plan-ai-header { cursor:pointer; }
 .plan-ai-hint { color:rgba(255,255,255,0.35); font-size:10px; }
-.plan-warn { color:#fbbf24; font-size:12px; display:block; margin-top:8px; cursor:pointer; }
-.phase-section { scroll-margin-top:12px; }
+.plan-warn { color:#fbbf24; font-size:15px; display:block; margin-top:8px; cursor:pointer; }
+.phase-shine {
+  position:absolute; top:0; left:-100%; width:100%; height:100%;
+  background:linear-gradient(90deg, transparent 0%, rgba(0,210,255,0.06) 30%, rgba(0,210,255,0.15) 50%, rgba(0,210,255,0.06) 70%, transparent 100%);
+  animation:phaseShine 6s ease-in-out infinite;
+  pointer-events:none; z-index:0;
+}
+@keyframes phaseShine {
+  0% { transform:translateX(0); }
+  60% { transform:translateX(200%); }
+  100% { transform:translateX(200%); }
+}
+.phase-section {
+  scroll-margin-top:12px;
+  background:rgba(0,210,255,0.04);
+  border:1.5px solid rgba(0,210,255,0.2);
+  border-radius:14px;
+  padding:16px;
+  margin-bottom:14px;
+  position:relative;
+}
+
 
 .section-title { color:#fff; font-size:14px; font-weight:700; margin-bottom:8px; display:block; }
 .section-title.dim { color:rgba(255,255,255,0.35); }
 
-.step { background:#243046; border-radius:6px; padding:14px; display:flex; gap:10px; align-items:flex-start; border-left:4px solid #00d2ff; margin-bottom:8px; cursor:pointer; transition:all 0.15s; position:relative; clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+.step { background:rgba(15,28,48,0.85); border-radius:10px; padding:14px; display:flex; gap:10px; align-items:flex-start; border:1px solid rgba(0,210,255,0.15); border-left:4px solid #00d2ff; margin-bottom:10px; cursor:pointer; transition:all 0.15s; position:relative; box-shadow:0 0 0 1px rgba(0,210,255,0.08), 0 4px 20px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.3); }
 .step-grid { display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box; }
 .step-grid .step { width:100%; box-sizing:border-box; max-width:100%; }
 .step:active { background:#1a3040; }
@@ -2998,11 +4762,12 @@ function triggerGlitch() {
 .step-label.dim-text { color:rgba(255,255,255,0.35); }
 .step-box { background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:20px 14px; text-align:center; font-size:24px; color:#0b111e; }
 .step-box.dim-box { opacity:0.3; }
+.step-video { border-left-color:#f59e0b; }
 .step-time { color:rgba(255,255,255,0.4); font-size:10px; text-align:center; display:block; margin-top:4px; }
 .step-time.dim-text { color:rgba(255,255,255,0.35); }
 
-.btn-checkin { background:linear-gradient(135deg,rgba(0,210,255,0.25),rgba(0,136,204,0.25)); border-radius:20rpx; padding:28rpx; text-align:center; margin-bottom:24rpx; cursor:pointer; box-shadow:0 0 20px rgba(0,210,255,0.15); }
-.btn-checkin text { color:#00d2ff; font-size:15px; font-weight:600; }
+.btn-checkin { background:linear-gradient(135deg,rgba(0,210,255,0.3),rgba(0,136,204,0.3)); border-radius:12px; padding:10px 8px; text-align:center; cursor:pointer; box-shadow:0 0 20px rgba(0,210,255,0.15); display:flex; align-items:center; justify-content:center; width:100%; box-sizing:border-box; }
+.btn-checkin text, .btn-checkin-text { color:#fff !important; font-size:14px; font-weight:700; }
 .btn-checkin:active { opacity:0.85; }
 
 .summary-card { border:2px solid rgba(0,210,255,0.15); cursor:pointer; clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
@@ -3016,7 +4781,7 @@ function triggerGlitch() {
 .sa-item { flex:1; text-align:center; padding:6px 2px; border-radius:6px; cursor:pointer; border:1px solid transparent; transition:all 0.15s; }
 .sa-item:active { transform:scale(0.95); }
 .sa-item.active { border-color:#00d2ff; background:rgba(0,136,204,0.2); }
-.sa-pct { display:block; color:rgba(255,255,255,0.55); font-size:9px; font-weight:700; }
+.sa-pct { display:block; color:rgba(255,255,255,0.55); font-size:10px; font-weight:700; }
 .sa-item.active .sa-pct { color:#00d2ff; }
 .sa-emoji { display:block; font-size:12px; margin-top:1px; }
 
@@ -3057,7 +4822,6 @@ function triggerGlitch() {
 }
 .elective-info { display: flex; flex-direction: column; gap: 2px; }
 .elective-name { color: #e6edf3; font-size: 15px; font-weight: 600; }
-.elective-hint { color: #8b949e; font-size: 12px; }
 .elective-btn {
   padding: 6px 14px; border-radius: 6px; background: rgba(139, 92, 246, 0.2);
   border: 1px solid rgba(139, 92, 246, 0.4); cursor: pointer;
@@ -3072,29 +4836,93 @@ function triggerGlitch() {
 .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
 .modal-title { color:#fff; font-size:16px; font-weight:700; }
 .modal-close { color:rgba(255,255,255,0.5); font-size:20px; cursor:pointer; padding:4px 8px; }
-.plan-editor-modal { max-width:340px; }
+
+.plan-editor-modal { max-width:340px; position:relative; overflow:hidden; }
+.plan-editor-modal::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,#00d2ff,transparent);
+  opacity:0.6;
+}
+.plan-editor-modal::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,#00d2ff,transparent);
+  opacity:0.4;
+}
+.confirm-modal { max-width:320px; padding:32px 28px; }
+.confirm-modal-text { display:block; color:rgba(255,255,255,0.7); font-size:13px; line-height:1.5; text-align:left; margin:12px 0 20px; }
+.confirm-modal-actions { display:flex; gap:10px; }
+[data-theme="white"] .confirm-modal-text { color:rgba(0,0,0,0.6); }
 .editor-hint { color:var(--text-dim); font-size:12px; text-align:center; margin-bottom:16px; display:block; }
-.editor-list { max-height:300px; overflow-y:auto; }
-.editor-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(0,210,255,0.08); }
+.editor-list { max-height:300px; overflow-y:auto; scrollbar-width:none; -ms-overflow-style:none; }
+.editor-row {
+  display:flex; align-items:center; gap:10px; padding:10px 0;
+  border-bottom:1px solid rgba(0,210,255,0.12);
+  position:relative;
+}
 .editor-row:last-child { border-bottom:none; }
-.editor-label { color:var(--text); font-size:13px; font-weight:600; white-space:nowrap; min-width:56px; }
+.editor-row::after {
+  content:''; position:absolute; bottom:-1px; left:50%; width:0;
+  height:1px; background:#00d2ff; transition:width 0.3s,left 0.3s;
+}
+.editor-row:focus-within::after { width:100%; left:0; }
+.editor-label {
+  color:#00d2ff; font-size:12px; font-weight:700; white-space:nowrap; min-width:56px;
+  text-shadow:0 0 8px rgba(0,210,255,0.3);
+  letter-spacing:0.5px;
+}
 .editor-picker { flex:1; }
-.editor-picker-display { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text); }
+.editor-picker-display {
+  background:rgba(0,210,255,0.06); border:1px solid rgba(0,210,255,0.25);
+  border-radius:8px; padding:10px 12px; font-size:13px; color:#fff;
+  position:relative; overflow:hidden;
+  transition:border-color 0.2s, box-shadow 0.2s;
+}
+.editor-picker-display:active {
+  border-color:#00d2ff; box-shadow:0 0 12px rgba(0,210,255,0.2);
+}
+[data-theme="white"] .editor-label { color:#2563eb; text-shadow:none; }
+[data-theme="white"] .editor-picker-display { background:rgba(37,99,235,0.04); border-color:rgba(37,99,235,0.2); color:#1a1a2e; }
+[data-theme="white"] .editor-picker-display:active { border-color:#2563eb; box-shadow:0 0 12px rgba(37,99,235,0.15); }
 .editor-actions { display:flex; gap:10px; margin-top:18px; }
 .editor-btn { flex:1; padding:12px; border-radius:10px; text-align:center; cursor:pointer; }
 .editor-btn text { font-size:14px; font-weight:600; }
-.editor-btn.primary { background:linear-gradient(135deg,#00d2ff,#3b8bff); }
+.editor-btn.primary { background:linear-gradient(135deg,rgba(0,210,255,0.3),rgba(0,136,204,0.3)); box-shadow:0 0 20px rgba(0,210,255,0.15); }
 .editor-btn.primary text { color:#fff; }
 .editor-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
 .editor-btn.secondary text { color:var(--text-dim); }
-.elective-toggles { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-.elective-toggle-item { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:6px 12px; }
-.et-label { color:var(--text); font-size:12px; font-weight:500; }
+.plan-edit-block { margin-top:8px; }
+.training-done-wrap { margin-top:12px; margin-bottom:20px; }
+.training-done-card { text-align:center; padding:16px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:12px; }
+.training-done-icon { font-size:28px; display:block; margin-bottom:4px; }
+.training-done-title { font-size:15px; font-weight:600; color:#22c55e; }
+.btn-confirm-plan { display:block; margin:16px auto 0; padding:12px 28px; background:linear-gradient(135deg,#00d2ff,#0088cc); color:#fff; font-size:17px; font-weight:600; border-radius:24px; text-align:center; cursor:pointer; box-shadow:0 4px 16px rgba(0,210,255,0.3); }
+.btn-confirm-plan text { color:#fff; }
+.btn-confirm-plan-sub { display:block; font-size:12px; font-weight:600; opacity:.75; margin-top:3px; }
+.plan-edit-guide { display:block; color:rgba(255,255,255,0.5); font-size:16px; margin-bottom:4px; }
+.plan-edit-bar { display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
+.plan-edit-bar-text { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
+.peb-title { color:var(--text); font-size:16px; font-weight:600; }
+.peb-desc { color:rgba(255,255,255,0.55); font-size:11px; line-height:1.4; }
+.plan-edit-tip { display:block; color:rgba(255,255,255,0.4); font-size:14px; margin-top:4px; }
+.elective-toggles { display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+.elective-toggle-item { display:flex; flex-direction:column; gap:4px; }
+.et-main { display:flex; align-items:center; gap:8px; }
+.et-label { color:var(--text); font-size:15px; font-weight:500; flex:1; min-width:0; }
+.et-desc { display:block; color:rgba(255,255,255,0.45); font-size:12px; line-height:1.5; }
+.et-pinned { display:block; color:#4ade80; font-size:12px; line-height:1.4; font-weight:500; }
 .et-switch { width:36px; height:20px; border-radius:10px; background:var(--border); cursor:pointer; position:relative; transition:background 0.2s; }
 .et-switch.on { background:#00d2ff; }
 .et-knob { width:16px; height:16px; border-radius:50%; background:var(--text); position:absolute; top:2px; left:2px; transition:left 0.2s; }
 .et-switch.on .et-knob { background:#fff; left:18px; }
-.picker-close { text-align:center; margin-top:16px; cursor:pointer; }
+.et-info { display:flex; align-items:center; justify-content:center; width:20px; height:20px; cursor:pointer; margin-left:2px; padding:0; transition:all 0.2s; border-radius:50%; background:rgba(0,210,255,0.12); }
+.et-info text { color:#00d2ff; font-size:16px; font-weight:700; line-height:1; }
+.et-info:active { background:rgba(0,210,255,0.2); }
+.et-info:active text { color:#5ce0ff; }
+.et-arrow { color:rgba(255,255,255,0.3); font-size:16px; font-weight:300; margin-left:auto; flex-shrink:0; }
+.elective-section-label { width:100%; color:rgba(255,255,255,0.5); font-size:15px; font-weight:500; margin-bottom:2px; }
+[data-theme="white"] .et-desc { color:rgba(0,0,0,0.5); }
+[data-theme="white"] .et-pinned { color:#16a34a; }
+ker-close { text-align:center; margin-top:16px; cursor:pointer; }
 .picker-close text { color:rgba(255,255,255,0.5); font-size:14px; }
 .submitted-item { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid rgba(0,210,255,0.1); }
 .submitted-item:last-child { border-bottom:none; }
@@ -3118,6 +4946,9 @@ function triggerGlitch() {
 .time-status-tag { font-size:10px; padding:2px 8px; border-radius:999px; }
 .time-status-tag.running { background:rgba(34,197,94,0.15); color:#22c55e; }
 .time-status-tag.expired { background:rgba(239,68,68,0.15); color:#ef4444; }
+.time-status-tag.pending { background:rgba(59,130,246,0.15); color:#3b82f6; }
+.time-locked { text-align:center; padding:8px 0 4px; }
+.time-locked-val { display:block; color:var(--accent); font-size:32px; font-weight:800; letter-spacing:0.06em; font-variant-numeric:tabular-nums; }
 .time-setup { display:flex; flex-direction:column; gap:10px; }
 .guide-arrow { text-align:center; animation: guideBounce 0.8s ease-in-out infinite; }
 .guide-arrow text { font-size:16px; color:#f5a623; font-weight:600; }
@@ -3129,7 +4960,38 @@ function triggerGlitch() {
 .time-start-btn { background:linear-gradient(135deg,rgba(0,210,255,0.35),rgba(0,136,204,0.35)); border-radius:10px; padding:12px; text-align:center; cursor:pointer; }
 .time-start-btn text { color:#00d2ff; font-size:15px; font-weight:600; }
 .time-start-btn.disabled { opacity:0.4; }
+
 .time-setup-hint { color:rgba(255,255,255,0.35); font-size:11px; text-align:center; }
+/* 🆕 时间预算卡下方：天赋头像 + 时间预算引导（头像大小/位置与顶部 hero-idbar 对齐，文字为对话框，配色跟随训练页青色调） */
+.time-budget-tip {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:4px 2px 14px; position:relative; z-index:1;
+}
+.time-budget-avatar {
+  width:52px; height:52px; border-radius:50%; overflow:hidden; flex-shrink:0;
+  border:2px solid var(--border);
+  background-color:var(--bg-card);
+  background-size: auto 230%;       /* 与顶部 hero-idbar-avatar 完全一致：聚焦头部 */
+  background-position:50% 26%;
+  background-repeat:no-repeat;
+  box-shadow:var(--card-glow);
+}
+/* 对话框：青色系底 + 青色描边 + 左下小圆角指向头像，与训练页卡片风格一致 */
+.time-budget-bubble {
+  flex:1; min-width:0;
+  background:rgba(0,210,255,0.06);
+  border:1px solid rgba(0,210,255,0.2);
+  border-radius:16px;
+  border-bottom-left-radius:6px;
+  padding:12px 16px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.12);
+  display:flex; flex-direction:column; gap:4px;
+}
+.time-budget-title { color:#e6f7ff; font-size:14px; font-weight:700; line-height:1.4; }
+.time-budget-sub { color:rgba(255,255,255,0.55); font-size:12px; line-height:1.5; }
+[data-theme="white"] .time-budget-bubble { background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 16px rgba(0,0,0,0.06); }
+[data-theme="white"] .time-budget-title { color:#1a1a2e; }
+[data-theme="white"] .time-budget-sub { color:#6b7280; }
 .time-running { text-align:center; padding:4px 0; }
 .time-countdown { display:block; color:#22c55e; font-size:36px; font-weight:800; letter-spacing:0.06em; font-variant-numeric:tabular-nums; }
 .time-running-hint { display:block; margin-top:6px; color:rgba(255,255,255,0.45); font-size:11px; }
@@ -3142,6 +5004,7 @@ function triggerGlitch() {
 .dev-section-label { display:block; color:rgba(251,191,36,0.55); font-size:10px; font-weight:600; margin:8px 0 4px; }
 .dev-status { margin-bottom:8px; padding:6px 10px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px; }
 .dev-status text { color:rgba(251,191,36,0.9); font-size:10px; line-height:1.4; }
+.dev-assist text { white-space: pre-wrap; word-break: break-word; }
 .dev-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
 .dev-action { flex:1; min-width:88px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 6px; text-align:center; cursor:pointer; }
 .dev-action-primary { background:rgba(34,197,94,0.12); border-color:rgba(34,197,94,0.35); }
@@ -3158,9 +5021,10 @@ function triggerGlitch() {
 .media-block .step-num { width:18px; height:18px; font-size:10px; }
 .media-block.locked, .checkin-block.locked { pointer-events:none; }
 .media-block.locked .step { opacity:0.4; }
-.checkin-block.locked { opacity:0.35; }
+.checkin-block.locked { opacity:0.6; }
 .media-lock-overlay, .checkin-lock-overlay { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; pointer-events:none; }
 .media-lock-text, .checkin-lock-text { background:rgba(11,17,30,0.92); border:1px solid rgba(0,210,255,0.25); color:#00d2ff; font-size:12px; padding:8px 14px; border-radius:999px; }
+.perception-done-text { display:block; text-align:center; color:rgba(0,210,255,0.5); font-size:12px; padding:8px 4px; }
 .step-locked { cursor:not-allowed; }
 [data-theme="white"] .nav-dev { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .nav-dev text { color:#9ca3af; }
@@ -3175,6 +5039,7 @@ function triggerGlitch() {
 [data-theme="white"] .time-select-unit { color:#9ca3af; }
 [data-theme="white"] .time-start-btn { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 [data-theme="white"] .time-start-btn text { color:#fff; }
+
 [data-theme="white"] .time-setup-hint { color:#9ca3af; }
 [data-theme="white"] .time-running-hint { color:#9ca3af; }
 [data-theme="white"] .time-expired-sub { color:#9ca3af; }
@@ -3195,7 +5060,7 @@ function triggerGlitch() {
 [data-augmented-ui].picker-panel { --aug-border-bg:rgba(0,210,255,0.35); --aug-border-all:2px; --aug-clip-tl:12px; --aug-clip-tr:12px; --aug-clip-br:12px; --aug-clip-bl:12px; }
 [data-augmented-ui].btn-checkin { --aug-border-bg:rgba(0,210,255,0.3); --aug-border-all:1px; --aug-clip-tl:10px; --aug-clip-br:10px; }
 .picker-panel-header { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:12px; }
-.pph-dot { color:#00d2ff; font-size:8px; }
+.pph-dot { color:#00d2ff; font-size:10px; }
 .pph-title { color:rgba(255,255,255,0.5); font-size:11px; letter-spacing:0.1em; text-transform:uppercase; }
 
 .picker-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
@@ -3213,6 +5078,7 @@ function triggerGlitch() {
 .pi-text { color:#fff; font-size:11px; font-weight:600; letter-spacing:0.02em; }
 .picker-item.active { border-color:#00d2ff; background:#0088cc; box-shadow:0 0 20px rgba(0,210,255,0.35),inset 0 0 10px rgba(0,0,0,0.15); }
 .picker-item.active .pi-text { color:#fff; text-shadow:0 0 6px rgba(0,210,255,0.5); }
+.picker-item.disabled { opacity:0.25; pointer-events:none; }
 .picker-item.ability-spark::before {
   content:''; position:absolute;
   width:30px; height:2px;
@@ -3249,9 +5115,20 @@ function triggerGlitch() {
 .form-title { color:#fff; font-size:14px; font-weight:700; }
 .form-del { color:rgba(255,255,255,0.4); font-size:18px; cursor:pointer; padding:2px 6px; }
 .form-del:active { color:#ff6b6b; }
-.form-row { display:flex; align-items:center; gap:20rpx; margin-bottom:20rpx; }
-.form-label { color:rgba(255,255,255,0.5); font-size:26rpx; width:auto; min-width:112rpx; flex-shrink:0; }
-.form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:20rpx; padding:20rpx 24rpx; font-size:26rpx; color:#0b111e; }
+.form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.form-label { color:rgba(255,255,255,0.5); font-size:13px; width:auto; min-width:56px; flex-shrink:0; }
+.form-soft-tip {
+  display: block;
+  margin: 0 0 10px;
+  padding: 0 2px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  line-height: 1.4;
+}
+[data-theme="white"] .form-soft-tip { color: #6b7280; }
+.form-input { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; }
+.form-input-err { border-color:#ef4444 !important; animation: flash-red 0.5s ease-in-out 3; }
+@keyframes flash-red { 0%,100% { background:#fff; } 50% { background:rgba(239,68,68,0.2); } }
 .form-textarea { flex:1; background:#fff; border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:10px 12px; font-size:13px; color:#0b111e; height:60px; }
 .form-textarea-sm { height:36px; padding:6px 10px; }
 .form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
@@ -3259,6 +5136,7 @@ function triggerGlitch() {
 .ftag.on { background:#0088cc; border-color:#00d2ff; color:#fff; box-shadow:0 0 10px rgba(0,210,255,0.2); }
 .form-inline { display:flex; align-items:center; gap:6px; flex:1; }
 .form-file-wrap { flex:1; }
+.form-media-hint { display:block; color:#fbbf24; font-size:11px; line-height:1.5; margin-top:6px; font-weight:500; }
 .file-btn { background:rgba(0,210,255,0.1); border:1px dashed rgba(0,210,255,0.25); border-radius:10px; padding:10px; text-align:center; cursor:pointer; }
 .file-btn text { color:#00d2ff; font-size:12px; }
 .file-hint { color:rgba(255,255,255,0.3); font-size:10px; display:block; margin-top:4px; text-align:center; }
@@ -3268,13 +5146,16 @@ function triggerGlitch() {
 .file-del { position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 [data-theme="white"] .file-btn { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .file-btn text { color:#2563eb; }
+[data-theme="white"] .form-media-hint { color:#d97706; }
 [data-theme="white"] .file-hint { color:#9ca3af; }
 
 .form-input.short { width:80px; flex:none; background:#fff; color:#0b111e; }
 .form-input.mini { width:40px; flex:none; background:#fff; color:#0b111e; padding:6px 0; text-align:center; appearance:textfield; -moz-appearance:textfield; -webkit-appearance:none; }
 .form-inline .form-unit { color:rgba(255,255,255,0.7); }
-.form-unit { color:rgba(255,255,255,0.5); font-size:12px; }
+.form-unit { color:rgba(255,255,255,0.7); font-size:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.2); border-radius:6px; padding:4px 8px; }
 
+.req-star { color:#ff4757; font-size:14px; font-weight:700; margin-left:2px; line-height:1; }
+[data-theme="white"] .req-star { color:#ef4444; }
 .score-panel { border:2px solid rgba(0,210,255,0.2); border-radius:10px; padding:14px; margin-bottom:12px; background:rgba(13,23,40,0.5); }
 .score-header { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; }
 .score-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
@@ -3305,18 +5186,35 @@ function triggerGlitch() {
 [data-theme="white"] .plan-done-title { color:#16a34a; }
 [data-theme="white"] .plan-done-sub { color:#6b7280; }
 [data-theme="white"] .plan-ai-box { background:#eff6ff; border-color:#bfdbfe; }
-[data-theme="white"] .elective-entry { background:#eff6ff; border-color:#bfdbfe; }
+[data-theme="white"] .plan-edit-guide { color:rgba(0,0,0,0.5); }
+[data-theme="white"] .peb-desc { color:rgba(0,0,0,0.55); }
+[data-theme="white"] .plan-edit-tip { color:rgba(0,0,0,0.45); }
+[data-theme="white"] .btn-confirm-plan { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .btn-confirm-plan text { color:#fff; }
+[data-theme="white"] .et-info { background:rgba(0,210,255,0.1); }
+[data-theme="white"] .et-info text { color:#00d2ff; }
+[data-theme="white"] .et-info:active { background:rgba(0,210,255,0.18); }
+[data-theme="white"] .et-info:active text { color:#5ce0ff; }
+[data-theme="white"] .elective-section-label { color:rgba(0,0,0,0.5); }
+[data-theme="white"] .elective-entry { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .elective-entry text { color:#2563eb; }
+[data-theme="white"] .elective-item { border-bottom-color:#e5e7eb; }
+[data-theme="white"] .elective-name { color:#1a1a2e; }
+[data-theme="white"] .elective-btn { background:rgba(139,92,246,0.08); border-color:rgba(139,92,246,0.2); }
+[data-theme="white"] .elective-btn text { color:#7c3aed; }
+[data-theme="white"] .elective-btn.disabled { opacity:0.3; }
+[data-theme="white"] .et-arrow { color:rgba(0,0,0,0.3); }
 [data-theme="white"] .plan-ai-label { color:#2563eb; }
 [data-theme="white"] .plan-ai-text { color:#1a1a2e; }
 [data-theme="white"] .plan-ai-hint { color:#9ca3af; }
 [data-theme="white"] .section-title { color:#1a1a2e; }
-[data-theme="white"] .step { background:#fff; border-left-color:#2563eb; box-shadow:0 2px 8px rgba(0,0,0,0.03); }
+[data-theme="white"] .step { background:#fff; border-color:#e5e7eb; border-left-color:#2563eb; box-shadow:0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06); }
 [data-theme="white"] .step-num { background:#2563eb; }
 [data-theme="white"] .step-label { color:#1a1a2e; }
 [data-theme="white"] .step-box { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
 [data-theme="white"] .step-time { color:#9ca3af; }
 [data-theme="white"] .btn-checkin text { color:#fff; }
+
 [data-theme="white"] .summary-card { border-color:#e5e7eb; }
 [data-theme="white"] .summary-label { color:#6b7280; }
 [data-theme="white"] .summary-text { color:#9ca3af; }
@@ -3337,6 +5235,7 @@ function triggerGlitch() {
 [data-theme="white"] .pi-text { color:#374151; }
 [data-theme="white"] .picker-item.active { background:#2563eb; border-color:#2563eb; }
 [data-theme="white"] .picker-item.active .pi-text { color:#fff; text-shadow:none; }
+[data-theme="white"] .picker-item.disabled { opacity:0.2; }
 [data-theme="white"] .score-panel { background:#fff; border-color:#e5e7eb; box-shadow:0 4px 20px rgba(0,0,0,0.04); }
 [data-theme="white"] .score-item { background:#f3f4f6; border-color:#e5e7eb; }
 [data-theme="white"] .score-item.active { background:rgba(37,99,235,0.08); border-color:#2563eb; }
@@ -3373,6 +5272,7 @@ function triggerGlitch() {
 
 /* ---- 时间轴总览 — 白色主题 ---- */
 [data-theme="white"] .plan-header-meta { color:#6b7280; }
+[data-theme="white"] .card-empty { background:#fff; border-color:#e5e7eb; }
 [data-theme="white"] .plan-empty-text { color:#9ca3af; }
 [data-theme="white"] .tl-phase-title { color:#1a1a2e; }
 [data-theme="white"] .tl-phase-meta { color:#9ca3af; }
@@ -3387,6 +5287,7 @@ function triggerGlitch() {
 [data-theme="white"] .tl-node-active .tl-node-icon { color:#2563eb; text-shadow:0 0 8px rgba(37,99,235,0.3); }
 [data-theme="white"] .tl-node-done .tl-node-icon { color:#16a34a; text-shadow:0 0 8px rgba(22,163,74,0.3); }
 [data-theme="white"] .tl-line { background:linear-gradient(180deg,#2563eb,#93c5fd); }
+[data-theme="white"] .phase-section { background:#fff; border-color:#e5e7eb; }
 [data-theme="white"] .plan-progress { border-top-color:#e5e7eb; }
 [data-theme="white"] .plan-progress-track { background:#e5e7eb; }
 [data-theme="white"] .plan-progress-fill { background:linear-gradient(90deg,#2563eb,#16a34a); box-shadow:0 0 10px rgba(37,99,235,0.2); }
@@ -3398,7 +5299,7 @@ function triggerGlitch() {
 }
 .si-pct { color:#00d2ff; font-size:18px; font-weight:800; display:block; }
 .si-emoji { font-size:16px; display:block; margin:2px 0; }
-.si-desc { color:rgba(255,255,255,0.5); font-size:9px; line-height:1.3; display:block; }
+.si-desc { color:rgba(255,255,255,0.5); font-size:10px; line-height:1.3; display:block; }
 .score-item.active .si-desc { color:#fff; }
 
 .card-enter-active { animation:scanDown 0.4s cubic-bezier(0.25,0.8,0.25,1); }
@@ -3410,15 +5311,50 @@ function triggerGlitch() {
 }
 .player-overlay { position:fixed; inset:0; z-index:600; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; padding:16px; }
 .player-card { background:var(--bg-card,#1a2840); border:1px solid rgba(0,210,255,0.2); border-radius:16px; padding:16px; width:100%; max-width:420px; }
-.player-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-.player-title { color:#fff; font-size:15px; font-weight:600; }
+/* 方案C：封面风 */
+.player-card-c { background:var(--bg-card,#1a2840); border:1px solid rgba(0,210,255,0.2); border-radius:16px; width:100%; max-width:380px; overflow:hidden; padding:0; }
+.player-cover { position:relative; height:180px; background:linear-gradient(135deg,rgba(0,210,255,0.08),rgba(139,92,246,0.08)); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.player-cover::before { content:''; position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 30px,rgba(255,255,255,0.015) 30px,rgba(255,255,255,0.015) 31px); pointer-events:none; }
+.player-cover-video { width:100%; height:100%; position:relative; }
+.player-cover-video .training-video { width:100%; height:100%; object-fit:cover; }
+.player-video-loading {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.45); pointer-events:none;
+}
+.player-video-loading-text { color:#fff; font-size:14px; }
+.player-cover-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; pointer-events:none; background:rgba(0,0,0,0.35); }
+.player-cover-icon { font-size:48px; }
+.player-cover-hint { color:rgba(255,255,255,0.4); font-size:12px; }
+.player-cover-audio { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.player-cover-label { color:rgba(255,255,255,0.7); font-size:13px; font-weight:500; text-align:center; padding:0 16px; }
+.player-cover-progress { position:absolute; bottom:0; left:0; right:0; height:3px; background:rgba(255,255,255,0.1); }
+.player-cover-progress-fill { height:100%; background:linear-gradient(90deg,#22d3ee,#34d399); }
+.player-header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 4px; margin-bottom:0; }
+.player-title { color:#fff; font-size:14px; font-weight:600; }
 .player-audio-name { display:block; text-align:center; color:rgba(255,255,255,0.85); font-size:13px; margin-bottom:12px; line-height:1.4; }
-.player-close { color:rgba(255,255,255,0.5); font-size:20px; cursor:pointer; padding:4px 8px; }
+.player-close { color:rgba(255,255,255,0.4); font-size:18px; cursor:pointer; padding:4px 6px; }
 .player-body { }
+.player-controls { display:flex; align-items:center; justify-content:space-between; padding:8px 14px 14px; }
+.player-ctrl-center { display:flex; align-items:center; gap:12px; }
+.player-ctrl-btn { width:44px; height:44px; border-radius:50%; background:rgba(0,210,255,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.15s; }
+.player-ctrl-btn text { font-size:18px; }
+.player-ctrl-btn:active { background:rgba(0,210,255,0.25); transform:scale(0.95); }
+.player-ctrl-btn.sm { width:32px; height:32px; }
+.player-ctrl-btn.sm text { font-size:14px; }
+.player-time-label { color:rgba(255,255,255,0.5); font-size:12px; font-variant-numeric:tabular-nums; }
+.player-ctrl-left .player-time-label { text-align:left; }
+.player-ctrl-right .player-time-label { text-align:right; }
+.media-listen-hint { display:block; padding:0 14px 10px; text-align:center; color:rgba(255,255,255,0.4); font-size:10px; }
 [data-theme="white"] .player-overlay { background:rgba(0,0,0,0.6); }
 [data-theme="white"] .player-card { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .player-card-c { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .player-cover { background:linear-gradient(135deg,rgba(37,99,235,0.03),rgba(139,92,246,0.03)); }
 [data-theme="white"] .player-title { color:#1a1a2e; }
 [data-theme="white"] .player-audio-name { color:#374151; }
+[data-theme="white"] .player-cover-label { color:rgba(0,0,0,0.6); }
+[data-theme="white"] .player-time-label { color:rgba(0,0,0,0.4); }
+[data-theme="white"] .player-ctrl-btn { background:rgba(37,99,235,0.08); }
+[data-theme="white"] .media-listen-hint { color:#9ca3af; }
 [data-theme="white"] .player-close { color:#9ca3af; }
 
 .pulse-out { animation:pulseRing 0.5s ease-out; }
@@ -3643,8 +5579,7 @@ function triggerGlitch() {
 .mini-card-left { flex:1; min-width:0; }
 .mini-card-name { color:#fff; font-size:12px; font-weight:600; display:block; }
 .mini-card-summary { color:rgba(255,255,255,0.45); font-size:10px; display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.mini-card-del { color:rgba(255,255,255,0.25); font-size:14px; padding:4px; flex-shrink:0; }
-.mini-card-del:active { color:#ff6b6b; }
+
 .summary-add-btn {
   text-align:center; padding:10px; border-radius:10px;
   background:linear-gradient(135deg,rgba(0,210,255,0.25),rgba(0,136,204,0.25));
@@ -3664,11 +5599,11 @@ function triggerGlitch() {
   display:flex; justify-content:center; padding:24px 0 40px;
 }
 .detail-test-card {
-  width:85%; max-width:300px; margin:auto;
+  width:90%; max-width:340px; margin:auto;
   background:#1a2840; border-radius:12px;
   border:1.5px solid rgba(0,210,255,0.35);
   box-shadow:0 0 24px rgba(0,210,255,0.12);
-  padding:14px;
+  padding:16px;
 }
 .detail-swiper-wrap { width:90%; max-width:360px; }
 .detail-swiper { height:420px; }
@@ -3682,20 +5617,24 @@ function triggerGlitch() {
 .detail-slide-body { flex:1; overflow-y:auto; min-height:0; padding-right:2px; }
 .detail-row { display:flex; align-items:flex-start; gap:6px; padding:6px 0; border-bottom:1px solid rgba(0,210,255,0.06); position:relative; }
 .detail-row::before { content:'›'; position:absolute; left:-6px; top:6px; color:rgba(0,210,255,0.25); font-size:9px; font-family:monospace; }
-.detail-label { color:#fff; font-size:13px; width:56px; flex-shrink:0; font-weight:600; }
-.detail-value { color:rgba(0,210,255,0.55); font-size:12px; flex:1; line-height:1.4; word-break:break-all; }
+.detail-label { color:#fff; font-size:12px; width:56px; flex-shrink:0; font-weight:500; }
+.detail-value { color:rgba(0,210,255,0.55); font-size:11px; flex:1; line-height:1.4; word-break:break-all; }
 
 [data-theme="white"] .detail-label { color:#1a1a2e; }
 [data-theme="white"] .detail-value { color:#6b7280; }
 .detail-actions { display:flex; gap:6px; padding-top:8px; flex-shrink:0; border-top:1px solid rgba(0,210,255,0.08); }
 .detail-edit-body { max-height:52vh; max-height:52dvh; overflow-y:auto; margin-bottom:4px; }
-.detail-form-row { display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
-.detail-form-hint { color:rgba(255,255,255,0.55); font-size:12px; width:auto; flex-shrink:0; }
-.detail-form-input { flex:none; width:auto; min-width:0; }
-.detail-form-input.short { width:56px; flex:none; }
+.detail-form-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
+.detail-form-label { color:rgba(0,210,255,0.55); font-size:10px; width:52px; flex-shrink:0; padding-top:8px; }
+.detail-form-unit { color:rgba(0,210,255,0.45); font-size:11px; }
+.detail-form-input {
+  flex:1; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
+  border-radius:8px; padding:8px 10px; font-size:12px; color:#fff;
+}
+.detail-form-input.short { width:72px; flex:none; }
 .detail-form-textarea {
-  flex:1; min-height:36px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
-  border-radius:8px; padding:6px 10px; font-size:12px; color:#fff; width:auto; max-width:100%; box-sizing:border-box;
+  flex:1; min-height:36px; height:36px; background:rgba(255,255,255,0.06); border:1px solid rgba(0,210,255,0.25);
+  border-radius:8px; padding:6px 10px; font-size:12px; color:#fff;
 }
 .detail-form-inline { display:flex; align-items:center; gap:6px; flex:1; flex-wrap:wrap; }
 .detail-form-tags { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
@@ -3707,9 +5646,10 @@ function triggerGlitch() {
 .detail-save-btn { border-color:rgba(34,197,94,0.45); color:#4ade80; background:rgba(34,197,94,0.08); }
 [data-theme="white"] .detail-test-card { background:#fff; border-color:rgba(37,99,235,0.25); }
 [data-theme="white"] .detail-slide-name { color:#1a1a2e; }
-[data-theme="white"] .detail-form-hint { color:#6b7280; }
 [data-theme="white"] .detail-form-input,
 [data-theme="white"] .detail-form-textarea { background:#f9fafb; border-color:#e5e7eb; color:#1a1a2e; }
+[data-theme="white"] .detail-form-label { color:#6b7280; }
+[data-theme="white"] .detail-form-unit { color:#9ca3af; }
 [data-theme="white"] .detail-ftag { border-color:#e5e7eb; color:#6b7280; }
 [data-theme="white"] .detail-ftag.on { border-color:#bfdbfe; color:#2563eb; background:#eff6ff; }
 .detail-card-slide::before {
@@ -3751,7 +5691,7 @@ function triggerGlitch() {
 [data-theme="white"] .mini-card-v2 .mini-card-accent::after { background:#2563eb; box-shadow:0 0 6px #2563eb; }
 [data-theme="white"] .mini-card-name { color:#1a1a2e; }
 [data-theme="white"] .mini-card-summary { color:#9ca3af; }
-[data-theme="white"] .mini-card-del { color:#d1d5db; }
+
 
 /* ═══════════════════════════════════════════
    交互感增强
@@ -3901,6 +5841,127 @@ function triggerGlitch() {
 [data-reduced-motion] .plr-core {
   display: none;
 }
+
+/* ===== 闯关地图 ===== */
+.quest-map { position:relative; display:flex; flex-direction:column; margin-top:6px; padding-bottom:40px; }
+.quest-map.ended { margin-top:12px; padding-bottom:24px; }
+/* 中间一条贯穿虚线（时间线）：参考风格 3px + 有节奏的虚线段 */
+.quest-map::before {
+  content:''; position:absolute; left:50%; top:0; bottom:0; width:3px;
+  transform:translateX(-1.5px);
+  background:repeating-linear-gradient(180deg, color-mix(in srgb, var(--qc, #3b82f6) 35%, transparent) 0 10px, transparent 10px 19px);
+  pointer-events:none;
+}
+.quest-banner {
+  position:relative; z-index:1;
+  margin-bottom:40px; border-radius:12px; padding:12px 14px; text-align:center;
+  background:linear-gradient(135deg,rgba(245,200,66,0.16),rgba(34,197,94,0.14));
+  border:1px solid rgba(245,200,66,0.35);
+  box-shadow:0 0 18px rgba(245,200,66,0.08);
+}
+.quest-banner-text { font-size:15px; font-weight:700; color:#f5c842; letter-spacing:0.02em; }
+.quest-level { position:relative; margin-bottom:32px; min-height:200px; }
+/* 关卡大节点：52px 圆形图标，骑在虚线上、中心对齐第一行状态文字；参考风格深底+天赋色边+呼吸光晕 */
+.quest-node {
+  position:absolute; left:50%; top:37px; transform:translate(-50%,-50%);
+  width:52px; height:52px; border-radius:50%; z-index:2;
+  background:#161D2B;
+  border:2.5px solid var(--qc, rgba(59,130,246,0.6));
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none;
+}
+.quest-node.done { border-color:var(--qc, #3b82f6); }
+.quest-node.locked { border-color:#2A3040; }
+.quest-node.locked .quest-node-icon { color:#5A6274; }
+.quest-node.pulse { animation:questPulse 2s ease-out infinite; }
+@keyframes questPulse {
+  0%,100% { box-shadow:0 0 0 4px color-mix(in srgb, var(--qc, #3b82f6) 10%, transparent), 0 0 12px color-mix(in srgb, var(--qc, #3b82f6) 40%, transparent); }
+  50% { box-shadow:0 0 0 8px color-mix(in srgb, var(--qc, #3b82f6) 16%, transparent), 0 0 22px color-mix(in srgb, var(--qc, #3b82f6) 65%, transparent); }
+}
+.quest-node-icon { font-size:24px; line-height:1; color:var(--qc, #3b82f6); }
+.quest-node-star { position:absolute; top:-6px; right:-6px; font-size:15px; }
+/* 每一关：左右两列卡片（关卡卡 / 视频卡），卡片边缘距中间虚线 24px（gap:50px = 24+2虚线+24） */
+.quest-media {
+  position:relative; display:flex; gap:50px; align-items:stretch;
+  margin-top:26px; /* 为半跨卡顶的图标上半留空间 */
+  min-height:168px;
+}
+.quest-media.locked { opacity:0.55; }
+.quest-media.reversed { flex-direction:row-reverse; }
+.qm-col { flex:1; min-width:0; display:flex; flex-direction:column; }
+.qm-video-col { justify-content:flex-start; padding-top:56px; } /* 视频卡与音频卡对角错开（Z字），往下错位 */
+.qm-side {
+  min-width:0; border-radius:12px; cursor:pointer;
+  transition:transform 0.15s;
+}
+.qm-side:active { transform:scale(0.98); }
+/* 关卡卡：深色底卡片，边框随天赋变色（参考风格） */
+.qm-audio {
+  display:flex; flex-direction:column;
+  background:linear-gradient(135deg, rgba(59,130,246,0.07), #131926 55%);
+  border:1.5px solid var(--qc, rgba(59,130,246,0.5));
+  border-radius:16px;
+  padding:30px 20px 34px;
+  min-height:140px;
+  box-sizing:border-box;
+}
+.quest-level.done .qm-audio { background:linear-gradient(135deg, rgba(34,197,94,0.08), #131926 55%); border-color:var(--qc, #3b82f6); }
+.quest-media.locked .qm-audio { background:#131926; border-color:#2A3040; }
+/* 视频卡：与「开始闯关」按钮同款布局（圆形图标在左 + 两行文字在右，垂直居中） */
+.qm-video {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  background:#131926; border:1.5px solid #2E6BE6;
+  border-radius:14px; padding:16px 12px;
+}
+.qm-video-ic {
+  width:46px; height:46px; border-radius:50%; flex:none;
+  background:#0B0E14; color:#2E6BE6;
+  display:flex; align-items:center; justify-content:center; font-size:24px;
+}
+.qm-video-body { display:flex; flex-direction:column; min-width:0; align-items:flex-start; }
+.qm-label { font-size:16px; font-weight:800; color:#7FA7EF; line-height:1.25; }
+.qm-meta { font-size:12px; font-weight:600; color:#5F7BC0; margin-top:2px; }
+/* 关卡卡文字区：左对齐（深色卡，亮色文字，参考排版） */
+.qa-main { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.qa-status { font-size:11px; color:var(--qc, #3b82f6); font-weight:700; letter-spacing:1.5px; }
+.qa-status.done { color:#22c55e; }
+.qa-status.locked { color:#5A6274; }
+.qa-skill { display:flex; align-items:center; gap:5px; font-size:11px; color:#8B93A5; margin-top:2px; }
+.qa-tag {
+  font-size:10px; color:#C9A869; border:1px solid rgba(201,168,105,0.4);
+  background:rgba(201,168,105,0.12);
+  border-radius:999px; padding:1px 6px; line-height:1.3;
+}
+.qa-name { font-size:18px; font-weight:900; color:#EDEBE4; line-height:1.25; margin:2px 0 2px; }
+.qa-desc { font-size:11px; color:#8B93A5; }
+/* 开始闯关：参考风格横条按钮（圆形图标 + 主文字 + 小字） */
+.qa-start {
+  margin-top:8px; padding:9px 10px; border-radius:11px;
+  background:var(--qc, #3b82f6);
+  display:flex; align-items:center; gap:9px;
+  width:100%; min-width:0; box-sizing:border-box;
+}
+.qa-start-ic {
+  width:30px; height:30px; border-radius:50%; flex:none;
+  background:#0B0E14; color:var(--qc, #3b82f6);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px;
+}
+.qa-start-body { display:flex; flex-direction:column; min-width:0; flex:1; }
+.qa-start-text { font-size:13px; font-weight:800; color:#0B0E14; line-height:1.25; overflow-wrap:break-word; }
+.qa-start-sub { font-size:10px; font-weight:600; color:rgba(11,14,20,0.7); margin-top:2px; overflow-wrap:break-word; }
+.qa-start.locked { background:rgba(255,255,255,0.07); }
+.qa-start.locked .qa-start-ic { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.4); }
+.qa-start.locked .qa-start-text { color:rgba(255,255,255,0.45); }
+.qa-start.locked .qa-start-sub { color:rgba(255,255,255,0.3); }
+.qa-start.done { background:rgba(111,207,142,0.16); }
+.qa-start.done .qa-start-ic { background:#6FCF8E; color:#0B0E14; }
+.qa-start.done .qa-start-text { color:#15803d; }
+.quest-checkin { margin-top:12px; }
+.quest-checkin.locked .btn-checkin { opacity:0.55; pointer-events:none; }
+.quest-checkin-tip { display:flex; justify-content:center; margin-bottom:8px; }
+.qct-text { font-size:11px; color:#f59e0b; }
+.quest-perception-tip { margin-top:10px; text-align:center; font-size:12px; color:rgba(255,255,255,0.5); }
 </style>
 
 <style>
@@ -3912,9 +5973,37 @@ function triggerGlitch() {
 [data-theme="white"] .form-input.short { background:#fff; }
 [data-theme="white"] .ftag { background:#f3f4f6; color:#374151; border-color:#e5e7eb; }
 [data-theme="white"] .ftag.on { background:#2563eb; border-color:#2563eb; color:#fff; }
-[data-theme="white"] .form-unit { color:#1f2937; }
+[data-theme="white"] .form-unit { color:#1f2937; background:#f3f4f6; border-color:#d1d5db; }
 [data-theme="white"] .form-inline .form-unit { color:#1f2937; }
 [data-theme="white"] .form-del { color:#9ca3af; }
 [data-theme="white"] .form-del:active { color:#ef4444; }
 [data-theme="white"] .btn-checkin { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+.editor-list::-webkit-scrollbar { display:none; width:0; height:0; }
+/* 闯关地图 · 白色主题（参考质感浅色适配） */
+[data-theme="white"] .quest-banner { background:linear-gradient(135deg,rgba(217,119,6,0.08),rgba(22,163,74,0.08)); border-color:#fbbf24; box-shadow:none; }
+[data-theme="white"] .quest-banner-text { color:#d97706; }
+[data-theme="white"] .quest-map::before { background:repeating-linear-gradient(180deg, color-mix(in srgb, var(--qc, #2563eb) 22%, transparent) 0 10px, transparent 10px 19px); }
+[data-theme="white"] .qm-audio { background:#fff; border-color:var(--qc, #2563eb); }
+[data-theme="white"] .quest-level.done .qm-audio { background:#fff; border-color:var(--qc, #2563eb); }
+[data-theme="white"] .quest-media.locked .qm-audio { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .qm-video { background:#fff; border-color:#93c5fd; }
+[data-theme="white"] .qm-label { color:#2563eb; }
+[data-theme="white"] .qm-meta { color:#6b7280; }
+[data-theme="white"] .quest-node { background:#fff; border-color:var(--qc, #2563eb); }
+[data-theme="white"] .quest-node.locked { border-color:#d1d5db; }
+[data-theme="white"] .quest-node.done { border-color:var(--qc, #2563eb); }
+[data-theme="white"] .qa-status { color:var(--qc, #2563eb); }
+[data-theme="white"] .qa-status.done { color:#16a34a; }
+[data-theme="white"] .qa-status.locked { color:#9ca3af; }
+[data-theme="white"] .qa-skill { color:#6b7280; }
+[data-theme="white"] .qa-tag { color:#b45309; border-color:#fcd34d; background:rgba(217,119,6,0.08); }
+[data-theme="white"] .qa-name { color:#1a1a2e; }
+[data-theme="white"] .qa-desc { color:#6b7280; }
+[data-theme="white"] .qa-start.locked { background:#f3f4f6; }
+[data-theme="white"] .qa-start.locked .qa-start-ic { background:#e5e7eb; color:#9ca3af; }
+[data-theme="white"] .qa-start.locked .qa-start-text { color:#9ca3af; }
+[data-theme="white"] .qa-start.locked .qa-start-sub { color:#9ca3af; }
+[data-theme="white"] .qa-start.done .qa-start-text { color:#16a34a; }
+[data-theme="white"] .qct-text { color:#d97706; }
+[data-theme="white"] .quest-perception-tip { color:#6b7280; }
 </style>

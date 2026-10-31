@@ -29,14 +29,13 @@ def get_elective_offers(
         reason = ""
 
         if trigger == "duration_gte_8h":
-            available = planned_minutes >= 480  # 8 hours = 480 minutes
+            available = planned_minutes >= 480
             if not available:
                 reason = "训练时长未达8小时"
         elif trigger == "formula_slot":
-            # 高效作业：在公式展开时自动处理，这里标记为"公式决定"
-            available = True  # 由公式引擎决定是否包含
+            available = True
         elif trigger == "manual":
-            available = True  # 多元感知：始终可选
+            available = True
 
         offers.append({
             "skill": skill_name,
@@ -58,21 +57,24 @@ def submit_elective_checkin(
     skill: str,
     cards: list[dict] | None = None,
 ) -> dict:
-    """提交选修打卡（仅多元感知支持打卡）。
-
-    Returns:
-        { record_id, status }
-    """
+    """提交选修打卡（仅多元感知支持打卡）。"""
     from app.db.models import TrainingRecord, TrainingPlan
+    from app.services.dev_clock import resolve_training_now
+    from app.services.training_day import is_plan_globally_cutoff
+    from app.services.training_service import TrainingError, invalidate_plan_cache
 
     plan = db.get(TrainingPlan, plan_id)
     if not plan or plan.child_user_id != child_user_id:
-        return {"error": "训练计划不存在", "status": "not_found"}
+        raise TrainingError("训练计划不存在", 404)
+
+    now = resolve_training_now(db, child_user_id)
+    if is_plan_globally_cutoff(plan, now=now):
+        raise TrainingError("训练日已于凌晨4点截止", 403)
 
     record = TrainingRecord(
         child_user_id=child_user_id,
         plan_id=plan_id,
-        item_id=None,  # 选修项可能无对应 TrainingItem
+        item_id=None,
         train_date=plan.plan_date,
         ability_type="elective",
         files_json=cards,
@@ -80,8 +82,6 @@ def submit_elective_checkin(
     db.add(record)
     db.commit()
     db.refresh(record)
-    # 选修打卡后清除方案缓存
-    from app.services.training_service import invalidate_plan_cache
     invalidate_plan_cache(child_user_id, plan.plan_date)
 
     return {"record_id": record.id, "status": "ok"}

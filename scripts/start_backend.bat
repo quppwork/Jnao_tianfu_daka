@@ -19,7 +19,7 @@ call .venv\Scripts\activate
 echo [TIME] venv activate done:  %time%
 
 echo [INFO] Cleaning port 8012...
-powershell -ExecutionPolicy Bypass -File "%~dp0kill_port.ps1" 8012
+call "%~dp0_pwsh.cmd" -File "%~dp0kill_port.ps1" 8012
 
 cd backend
 

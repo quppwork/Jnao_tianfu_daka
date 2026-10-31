@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api import admin, auth, chat, dev, growth, guide, health, parent, qa, resources, talent, training, user, voice
+from app.api import academy, admin, auth, consult, dev, growth, guide, harness, health, meta, parent, partner, qa, resources, solve, talent, training, usage, user, voice
 from app.core.logger import setup_logging
 from app.core.security import get_cors_origins, is_debug_routes_enabled
 from app.db.models import ContentItem
@@ -30,7 +30,8 @@ def _seed_catalog_if_empty() -> None:
     try:
         from app.services.auth_service import ensure_admin_account
 
-        ensure_admin_account(session)
+        if os.getenv("JNAO_SKIP_ADMIN_SEED") != "1":
+            ensure_admin_account(session)
         count = session.scalar(select(func.count()).select_from(ContentItem)) or 0
         if count == 0:
             inserted = sum(import_all_xet_catalogs(session).values())
@@ -49,8 +50,33 @@ def _seed_catalog_if_empty() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.core.runtime import init_runtime, should_force_relogin_on_boot, warn_redis_once
+    from app.core.security import assert_production_auth_config
+
+    assert_production_auth_config()
+    boot_id = init_runtime()
+    warn_redis_once(logger)
+    logger.info(
+        "runtime ready boot_id=%s force_relogin_on_boot=%s",
+        boot_id[:8],
+        should_force_relogin_on_boot(),
+    )
     init_db()
     _seed_catalog_if_empty()
+    try:
+        from app.assemble import wire_legacy_harness
+
+        wire_legacy_harness()
+        logger.info("agent bundle assembled (runtime + guards)")
+    except Exception:
+        logger.exception("agent bundle assemble failed")
+    try:
+        from app.harness.mcp_adapters.echo_stub import maybe_register_echo_stub
+
+        if maybe_register_echo_stub():
+            logger.info("harness mcp echo stub registered")
+    except Exception:
+        logger.exception("harness mcp echo stub register failed")
     yield
 
 
@@ -81,9 +107,83 @@ def root():
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    logger.info(f"--> {request.method} {request.url.path}")
-    response = await call_next(request)
-    logger.info(f"<-- {request.method} {request.url.path} {response.status_code}")
+    import time
+
+    from app.core.biz_log import (
+        bind_user,
+        biz_event,
+        get_request_id,
+        get_user_id,
+        new_request_id,
+        reset_context,
+        set_request_id,
+        should_log_http,
+    )
+
+    reset_context()
+    rid = request.headers.get("X-Request-Id") or new_request_id()
+    set_request_id(rid)
+
+    # 尽早带上客户端声明的 uid（鉴权后再由 deps 覆盖为已验证 uid）
+    hint = request.headers.get("X-Child-User-Id") or request.query_params.get("user_id")
+    try:
+        if hint and str(hint).isdigit() and int(hint) > 0:
+            bind_user(int(hint))
+    except Exception:
+        pass
+
+    path = request.url.path
+    quiet = path == "/api/ping" or path == "/api/health"
+    t0 = time.perf_counter()
+    if not quiet:
+        logger.info(
+            "--> %s %s uid=%s rid=%s",
+            request.method,
+            path,
+            hint or "-",
+            get_request_id(),
+        )
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        ms = (time.perf_counter() - t0) * 1000
+        biz_event(
+            "http.error",
+            result="error",
+            ms=ms,
+            level="error",
+            method=request.method,
+            path=path,
+            err=type(e).__name__,
+        )
+        raise
+    ms = (time.perf_counter() - t0) * 1000
+    response.headers["X-Request-Id"] = get_request_id()
+    status = response.status_code
+    uid_now = get_user_id() or hint or "-"
+    if not quiet:
+        logger.info(
+            "<-- %s %s %s uid=%s rid=%s ms=%.0f",
+            request.method,
+            path,
+            status,
+            uid_now,
+            get_request_id(),
+            ms,
+        )
+    elif status >= 400:
+        logger.warning(f"<-- {request.method} {path} {status}")
+
+    if should_log_http(path, status):
+        biz_event(
+            "http.request",
+            result="ok" if status < 400 else f"http_{status}",
+            ms=ms,
+            level="info" if status < 400 else "warning",
+            method=request.method,
+            path=path,
+            status=status,
+        )
     return response
 
 
@@ -92,20 +192,27 @@ app.add_middleware(
     allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Child-User-Id"],
+    allow_headers=["Content-Type", "X-Child-User-Id", "X-Session-Token", "X-Device-Id", "X-Request-Id", "X-Api-Key"],
+    expose_headers=["X-Request-Id"],
 )
 
 app.include_router(health.router)
+app.include_router(harness.router)
+app.include_router(meta.router)
 app.include_router(talent.router)
-app.include_router(chat.router)
 app.include_router(guide.router)
 app.include_router(voice.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(parent.router)
+app.include_router(consult.router)
+app.include_router(partner.router)
 app.include_router(user.router)
 app.include_router(training.router)
 app.include_router(dev.router)
 app.include_router(resources.router)
 app.include_router(qa.router)
+app.include_router(solve.router)
+app.include_router(academy.router)
 app.include_router(growth.router)
+app.include_router(usage.router)

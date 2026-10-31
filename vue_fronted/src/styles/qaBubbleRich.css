@@ -1,0 +1,458 @@
+/**
+ * 答疑气泡富文本（v-html 注入）
+ * 必须非 scoped：子节点无 data-v，scoped 选不中 .qa-line / .katex / .qa-math-inline
+ */
+
+.bubble-rich {
+  --qa-prose: #aeb8c6;
+  --qa-prose-strong: #e8eef6;
+  --qa-math-ink: #6ec8e0;
+  --qa-math-chip: rgba(110, 200, 224, 0.18);
+  --qa-math-panel: rgba(80, 170, 200, 0.12);
+  --qa-math-panel-border: rgba(110, 200, 224, 0.32);
+  --qa-sec: #d0e4f2;
+  --qa-sec-bar: #5eb8d4;
+  color: var(--qa-prose);
+  font-size: 14px;
+  line-height: 1.78;
+  letter-spacing: 0.01em;
+  word-break: break-word;
+  white-space: normal;
+  /* 覆盖 uni-h5 html/body 的 user-select:none，允许划选复制 */
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
+}
+
+.bubble-rich * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+/* 浅色主题：index 用 data-theme，dayu 用 .app.lt */
+[data-theme='white'] .bubble-rich,
+.app.lt .bubble-rich {
+  --qa-prose: #5a6574;
+  --qa-prose-strong: #243040;
+  --qa-math-ink: #0d6b7c;
+  --qa-math-chip: rgba(13, 107, 124, 0.1);
+  --qa-math-panel: rgba(13, 107, 124, 0.06);
+  --qa-math-panel-border: rgba(13, 107, 124, 0.18);
+  --qa-sec: #1e4a5c;
+  --qa-sec-bar: #1a7a8c;
+}
+
+.bubble-rich .qa-line {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-line:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-rich .qa-gap {
+  height: 12px;
+}
+
+.bubble-rich .qa-hr {
+  border: none;
+  height: 0;
+  margin: 14px 0;
+  border-top: 1px dashed rgba(148, 163, 184, 0.4);
+}
+
+[data-theme='white'] .bubble-rich .qa-hr,
+.app.lt .bubble-rich .qa-hr {
+  border-top-color: rgba(100, 116, 139, 0.3);
+}
+
+.bubble-rich .qa-sec {
+  margin: 14px 0 8px;
+  padding: 4px 0 4px 10px;
+  border-left: 3px solid var(--qa-sec-bar);
+  color: var(--qa-sec);
+  font-weight: 650;
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.55;
+}
+
+.bubble-rich .qa-sec:first-child {
+  margin-top: 2px;
+}
+
+.bubble-rich .qa-h1 {
+  font-size: 15.5px;
+}
+.bubble-rich .qa-h2 {
+  font-size: 14.5px;
+}
+.bubble-rich .qa-h3,
+.bubble-rich .qa-h4 {
+  font-size: 13.5px;
+}
+
+.bubble-rich .qa-ul,
+.bubble-rich .qa-ol {
+  margin: 6px 0 12px;
+  padding-left: 1.35em;
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-ul {
+  list-style: disc;
+}
+
+.bubble-rich .qa-ol {
+  list-style: decimal;
+}
+
+.bubble-rich .qa-ul li,
+.bubble-rich .qa-ol li {
+  margin: 0 0 6px;
+  line-height: 1.65;
+  padding-left: 2px;
+}
+
+.bubble-rich .qa-ul li:last-child,
+.bubble-rich .qa-ol li:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-rich em {
+  font-style: italic;
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  background: var(--qa-math-chip);
+  color: var(--qa-math-ink);
+}
+
+/* 行内公式：青石色 + 浅底，和中文解说明显分开 */
+.bubble-rich .qa-math-inline {
+  display: inline;
+  padding: 0.14em 0.38em;
+  margin: 0 0.12em;
+  border-radius: 6px;
+  background: var(--qa-math-chip);
+  color: var(--qa-math-ink);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.bubble-rich .katex {
+  font-size: 1.06em;
+  color: var(--qa-math-ink) !important;
+}
+
+.bubble-rich .qa-math-inline .katex {
+  font-size: 1em;
+  color: inherit !important;
+}
+
+/* KaTeX 内部节点强制继承，避免被全局 katex.css / 气泡色盖掉 */
+.bubble-rich .katex,
+.bubble-rich .katex * {
+  color: inherit !important;
+  border-color: currentColor;
+}
+
+.bubble-rich .katex .katex-mathml {
+  position: absolute !important;
+  clip: rect(1px, 1px, 1px, 1px);
+  padding: 0 !important;
+  border: 0 !important;
+  height: 1px !important;
+  width: 1px !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  color: transparent !important;
+}
+
+/* 块级公式面板 */
+.bubble-rich .qa-math,
+.bubble-rich .katex-display {
+  display: block;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--qa-math-panel);
+  border: 1px solid var(--qa-math-panel-border);
+  text-align: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  color: var(--qa-math-ink);
+}
+
+.bubble-rich .qa-math .katex,
+.bubble-rich .katex-display .katex {
+  font-size: 1.14em;
+  color: inherit !important;
+}
+
+.bubble-rich .qa-math .katex-display,
+.bubble-rich .katex-display .katex-display {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.bubble-rich .qa-struct {
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--qa-math-panel);
+  border: 1px solid var(--qa-math-panel-border);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-tag {
+  display: inline-block;
+  margin: 0 1px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--qa-math-chip);
+  color: var(--qa-math-ink);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.bubble-rich .qa-kv {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--qa-math-panel);
+}
+
+.bubble-rich .qa-k {
+  color: var(--qa-prose);
+  opacity: 0.75;
+  font-size: 12px;
+  min-width: 3em;
+}
+
+.bubble-rich .qa-arrow {
+  color: var(--qa-math-ink);
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.bubble-rich .qa-v {
+  color: var(--qa-prose-strong);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.bubble-rich .qa-challenge {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px dashed rgba(251, 191, 36, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bubble-rich .qa-challenge-label {
+  color: #f0c674;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+[data-theme='white'] .bubble-rich .qa-challenge-label,
+.app.lt .bubble-rich .qa-challenge-label {
+  color: #b45309;
+}
+
+.bubble-rich .qa-challenge-text {
+  color: var(--qa-prose);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.bubble-rich strong {
+  font-weight: 650;
+  color: var(--qa-prose-strong);
+}
+
+/* math_sketch SVG 草图 */
+.bubble-rich .qa-sketch {
+  margin: 12px 0;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--qa-math-panel);
+  border: 1px solid var(--qa-math-panel-border);
+  overflow-x: auto;
+  text-align: center;
+}
+.bubble-rich .qa-sketch svg {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 外语阅读：对照表 */
+.bubble-rich .qa-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 10px 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--qa-math-panel-border);
+  background: var(--qa-math-panel);
+}
+
+.bubble-rich .qa-table {
+  width: 100%;
+  min-width: 260px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.bubble-rich .qa-table th,
+.bubble-rich .qa-table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  color: var(--qa-prose);
+}
+
+.bubble-rich .qa-table th {
+  background: rgba(110, 200, 224, 0.12);
+  color: var(--qa-math-ink);
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bubble-rich .qa-table tr:last-child td {
+  border-bottom: none;
+}
+
+[data-theme='white'] .bubble-rich .qa-table th,
+.app.lt .bubble-rich .qa-table th {
+  background: rgba(13, 107, 124, 0.08);
+}
+
+[data-theme='white'] .bubble-rich .qa-table th,
+[data-theme='white'] .bubble-rich .qa-table td,
+.app.lt .bubble-rich .qa-table th,
+.app.lt .bubble-rich .qa-table td {
+  border-bottom-color: rgba(100, 116, 139, 0.18);
+}
+
+/* 原文定位块 */
+.bubble-rich .qa-source {
+  margin: 10px 0 14px;
+  padding: 10px 12px 12px;
+  border-radius: 0 12px 12px 0;
+  border-left: 3px solid rgba(94, 184, 212, 0.75);
+  background: rgba(80, 170, 200, 0.1);
+}
+
+.bubble-rich .qa-source-label {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--qa-math-ink);
+}
+
+.bubble-rich .qa-source p {
+  margin: 0 0 6px;
+  color: var(--qa-prose-strong);
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.bubble-rich .qa-source p:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-rich .qa-quote {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border-radius: 0 10px 10px 0;
+  border-left: 3px solid rgba(148, 163, 184, 0.45);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.bubble-rich .qa-quote p {
+  margin: 0 0 4px;
+  color: var(--qa-prose);
+  line-height: 1.65;
+}
+
+.bubble-rich .qa-quote p:last-child {
+  margin-bottom: 0;
+}
+
+[data-theme='white'] .bubble-rich .qa-source,
+.app.lt .bubble-rich .qa-source {
+  background: rgba(13, 107, 124, 0.06);
+  border-left-color: rgba(13, 107, 124, 0.45);
+}
+
+/* 生词条 */
+.bubble-rich .qa-vocab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
+.bubble-rich .qa-vocab-word {
+  font-weight: 700;
+  font-size: 14px;
+  color: #f0c674;
+  letter-spacing: 0.02em;
+}
+
+[data-theme='white'] .bubble-rich .qa-vocab-word,
+.app.lt .bubble-rich .qa-vocab-word {
+  color: #b45309;
+}
+
+.bubble-rich .qa-vocab-ipa {
+  font-size: 12px;
+  color: var(--qa-prose);
+  opacity: 0.75;
+}
+
+.bubble-rich .qa-vocab-eq {
+  font-size: 12px;
+  color: var(--qa-math-ink);
+  opacity: 0.85;
+}
+
+.bubble-rich .qa-vocab-gloss {
+  flex: 1 1 120px;
+  font-size: 13px;
+  color: var(--qa-prose-strong);
+  line-height: 1.5;
+}

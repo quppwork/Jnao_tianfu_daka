@@ -1,0 +1,61 @@
+# 日志栈：Loki + Grafana Alloy + Grafana
+# 与生产 compose 叠加使用：
+#   docker compose -f docker-compose.prod.yml -f docker-compose.logging.yml --env-file .env.production up -d
+#
+# Grafana 仅本机监听，经宝塔反向代理访问（勿对公网裸开 3000）
+
+services:
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: jnao-daka-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./docker/logging/loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - jnao_net
+
+  alloy:
+    image: grafana/alloy:v1.7.5
+    container_name: jnao-daka-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --stability.level=generally-available
+    volumes:
+      - ./docker/logging/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy
+    depends_on:
+      - loki
+    networks:
+      - jnao_net
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: jnao-daka-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme-grafana}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:3000}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_LOG_LEVEL: warn
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/logging/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+    networks:
+      - jnao_net
+
+volumes:
+  loki_data:
+  alloy_data:
+  grafana_data:

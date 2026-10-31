@@ -32,6 +32,11 @@ def apply_schema_patches(engine: Engine) -> None:
             "ALTER TABLE training_plan ADD COLUMN plan_customized INTEGER DEFAULT 0",
         ),
         (
+            "training_plan",
+            "schedule_assist_json",
+            "ALTER TABLE training_plan ADD COLUMN schedule_assist_json JSON",
+        ),
+        (
             "child_user",
             "account_status",
             "ALTER TABLE child_user ADD COLUMN account_status VARCHAR(20) DEFAULT 'active'",
@@ -45,6 +50,61 @@ def apply_schema_patches(engine: Engine) -> None:
             "training_record",
             "train_date",
             "ALTER TABLE training_record ADD COLUMN train_date DATE",
+        ),
+        (
+            "daka_member",
+            "wechat_bound_at",
+            "ALTER TABLE daka_member ADD COLUMN wechat_bound_at DATETIME",
+        ),
+        (
+            "daka_member",
+            "company_verified_at",
+            "ALTER TABLE daka_member ADD COLUMN company_verified_at DATETIME",
+        ),
+        (
+            "guide_message",
+            "meta_json",
+            "ALTER TABLE guide_message ADD COLUMN meta_json JSON",
+        ),
+        (
+            "report_talent_message",
+            "meta_json",
+            "ALTER TABLE report_talent_message ADD COLUMN meta_json JSON",
+        ),
+        (
+            "qa_session",
+            "meta_json",
+            "ALTER TABLE qa_session ADD COLUMN meta_json JSON",
+        ),
+        (
+            "qa_message",
+            "image_url",
+            "ALTER TABLE qa_message ADD COLUMN image_url VARCHAR(500)",
+        ),
+        (
+            "qa_message",
+            "meta_json",
+            "ALTER TABLE qa_message ADD COLUMN meta_json JSON",
+        ),
+        (
+            "academy_room",
+            "affect",
+            "ALTER TABLE academy_room ADD COLUMN affect JSON",
+        ),
+        (
+            "academy_bot_script",
+            "content_version",
+            "ALTER TABLE academy_bot_script ADD COLUMN content_version VARCHAR(32) DEFAULT 'v1'",
+        ),
+        (
+            "academy_bot_script",
+            "publish_status",
+            "ALTER TABLE academy_bot_script ADD COLUMN publish_status VARCHAR(16) DEFAULT 'draft'",
+        ),
+        (
+            "academy_bot_script",
+            "published_at",
+            "ALTER TABLE academy_bot_script ADD COLUMN published_at DATETIME",
         ),
     ]
     dialect = engine.dialect.name
@@ -107,7 +167,253 @@ def apply_schema_patches(engine: Engine) -> None:
 
     _apply_parent_auth_patches(engine)
     _apply_user_session_table(engine)
+    _apply_wechat_auth_tables(engine)
+    _apply_daka_member_table(engine)
+    _apply_chat_archive_tables(engine)
+    _backfill_daka_member_gate(engine)
+    _apply_parent_child_unique_child(engine)
     _migrate_user_session_utc_to_cst(engine)
+    _apply_p1_constraints_and_indexes(engine)
+
+
+def _existing_index_names(engine: Engine, table: str) -> set[str]:
+    insp = inspect(engine)
+    if table not in insp.get_table_names():
+        return set()
+    return {idx["name"] for idx in insp.get_indexes(table) if idx.get("name")}
+
+
+def _ensure_index(engine: Engine, table: str, name: str, ddl_mysql: str, ddl_sqlite: str) -> None:
+    """幂等创建索引/唯一键；已存在则跳过。"""
+    if name in _existing_index_names(engine, table):
+        return
+    # MySQL：UNIQUE 也会出现在 get_indexes；PRIMARY 不在此列表时仍可再查 unique
+    insp = inspect(engine)
+    if table not in insp.get_table_names():
+        return
+    for uk in insp.get_unique_constraints(table):
+        if uk.get("name") == name:
+            return
+    dialect = engine.dialect.name
+    stmt = ddl_mysql if dialect == "mysql" else ddl_sqlite
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(stmt))
+    except Exception:
+        # 并发/已存在/方言差异：再查一次，仍有则吞掉
+        if name in _existing_index_names(engine, table):
+            return
+        for uk in inspect(engine).get_unique_constraints(table):
+            if uk.get("name") == name:
+                return
+        raise
+
+
+def _apply_p1_constraints_and_indexes(engine: Engine) -> None:
+    """补齐与线上一致的唯一键/索引（create_all 对已有表不会补约束）。"""
+    specs: list[tuple[str, str, str, str]] = [
+        (
+            "training_plan",
+            "uk_training_plan_user_date",
+            "ALTER TABLE training_plan ADD UNIQUE KEY uk_training_plan_user_date (child_user_id, plan_date)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_training_plan_user_date ON training_plan(child_user_id, plan_date)",
+        ),
+        (
+            "training_window",
+            "uk_training_window_user_date",
+            "ALTER TABLE training_window ADD UNIQUE KEY uk_training_window_user_date (child_user_id, train_date)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_training_window_user_date ON training_window(child_user_id, train_date)",
+        ),
+        (
+            "training_window",
+            "idx_training_window_user",
+            "ALTER TABLE training_window ADD INDEX idx_training_window_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_training_window_user ON training_window(child_user_id)",
+        ),
+        (
+            "parent_wechat_bind",
+            "uk_wechat_openid_app",
+            "ALTER TABLE parent_wechat_bind ADD UNIQUE KEY uk_wechat_openid_app (openid, app_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_wechat_openid_app ON parent_wechat_bind(openid, app_id)",
+        ),
+        (
+            "parent_wechat_bind",
+            "uk_wechat_parent_app",
+            "ALTER TABLE parent_wechat_bind ADD UNIQUE KEY uk_wechat_parent_app (parent_id, app_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_wechat_parent_app ON parent_wechat_bind(parent_id, app_id)",
+        ),
+        (
+            "parent_child_bind",
+            "uk_parent_child",
+            "ALTER TABLE parent_child_bind ADD UNIQUE KEY uk_parent_child (parent_id, child_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_parent_child ON parent_child_bind(parent_id, child_id)",
+        ),
+        (
+            "content_item",
+            "idx_content_talent_sort",
+            "ALTER TABLE content_item ADD INDEX idx_content_talent_sort (talent_code, lesson_sort)",
+            "CREATE INDEX IF NOT EXISTS idx_content_talent_sort ON content_item(talent_code, lesson_sort)",
+        ),
+        (
+            "training_record",
+            "idx_record_user_date",
+            "ALTER TABLE training_record ADD INDEX idx_record_user_date (child_user_id, train_date)",
+            "CREATE INDEX IF NOT EXISTS idx_record_user_date ON training_record(child_user_id, train_date)",
+        ),
+        (
+            "training_record",
+            "idx_record_plan",
+            "ALTER TABLE training_record ADD INDEX idx_record_plan (plan_id)",
+            "CREATE INDEX IF NOT EXISTS idx_record_plan ON training_record(plan_id)",
+        ),
+        (
+            "training_record",
+            "idx_record_item",
+            "ALTER TABLE training_record ADD INDEX idx_record_item (item_id)",
+            "CREATE INDEX IF NOT EXISTS idx_record_item ON training_record(item_id)",
+        ),
+        (
+            "guide_session",
+            "idx_guide_session_user",
+            "ALTER TABLE guide_session ADD INDEX idx_guide_session_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_guide_session_user ON guide_session(child_user_id)",
+        ),
+        (
+            "qa_session",
+            "idx_qa_session_user",
+            "ALTER TABLE qa_session ADD INDEX idx_qa_session_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_qa_session_user ON qa_session(child_user_id)",
+        ),
+        (
+            "talent_assessment",
+            "idx_talent_assessment_user",
+            "ALTER TABLE talent_assessment ADD INDEX idx_talent_assessment_user (child_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_talent_assessment_user ON talent_assessment(child_user_id)",
+        ),
+        (
+            "wx_member_snapshot",
+            "idx_wx_snapshot_mobile",
+            "ALTER TABLE wx_member_snapshot ADD INDEX idx_wx_snapshot_mobile (mobile)",
+            "CREATE INDEX IF NOT EXISTS idx_wx_snapshot_mobile ON wx_member_snapshot(mobile)",
+        ),
+        (
+            "wx_member_snapshot",
+            "idx_wx_snapshot_unionid",
+            "ALTER TABLE wx_member_snapshot ADD INDEX idx_wx_snapshot_unionid (unionid)",
+            "CREATE INDEX IF NOT EXISTS idx_wx_snapshot_unionid ON wx_member_snapshot(unionid)",
+        ),
+        (
+            "user_session",
+            "idx_user_session_last_active",
+            "ALTER TABLE user_session ADD INDEX idx_user_session_last_active (last_active_at)",
+            "CREATE INDEX IF NOT EXISTS idx_user_session_last_active ON user_session(last_active_at)",
+        ),
+        (
+            "user_session",
+            "idx_user_session_user",
+            "ALTER TABLE user_session ADD INDEX idx_user_session_user (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_session_user ON user_session(user_id)",
+        ),
+        (
+            "qa_session_archive",
+            "idx_qa_archive_user_time",
+            "ALTER TABLE qa_session_archive ADD INDEX idx_qa_archive_user_time (child_user_id, archived_at)",
+            "CREATE INDEX IF NOT EXISTS idx_qa_archive_user_time ON qa_session_archive(child_user_id, archived_at)",
+        ),
+        (
+            "qa_session_archive",
+            "idx_qa_archive_orig",
+            "ALTER TABLE qa_session_archive ADD INDEX idx_qa_archive_orig (original_session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_qa_archive_orig ON qa_session_archive(original_session_id)",
+        ),
+        (
+            "guide_session_archive",
+            "idx_guide_archive_user_time",
+            "ALTER TABLE guide_session_archive ADD INDEX idx_guide_archive_user_time (child_user_id, archived_at)",
+            "CREATE INDEX IF NOT EXISTS idx_guide_archive_user_time ON guide_session_archive(child_user_id, archived_at)",
+        ),
+        (
+            "guide_session_archive",
+            "idx_guide_archive_orig",
+            "ALTER TABLE guide_session_archive ADD INDEX idx_guide_archive_orig (original_session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_guide_archive_orig ON guide_session_archive(original_session_id)",
+        ),
+    ]
+    for table, name, mysql_ddl, sqlite_ddl in specs:
+        _ensure_index(engine, table, name, mysql_ddl, sqlite_ddl)
+
+
+def _apply_parent_child_unique_child(engine: Engine) -> None:
+    """一个孩子只能绑定一个家长 — 去重后加 UNIQUE(child_id)"""
+    insp = inspect(engine)
+    if "parent_child_bind" not in insp.get_table_names():
+        return
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS schema_data_patch (
+                    name VARCHAR(64) PRIMARY KEY
+                )
+                """
+            )
+        )
+        done = conn.execute(
+            text("SELECT 1 FROM schema_data_patch WHERE name = 'parent_child_bind_unique_child'")
+        ).fetchone()
+        if done:
+            return
+        if dialect == "mysql":
+            conn.execute(
+                text(
+                    """
+                    DELETE pcb1 FROM parent_child_bind pcb1
+                    INNER JOIN parent_child_bind pcb2
+                      ON pcb1.child_id = pcb2.child_id AND pcb1.id > pcb2.id
+                    """
+                )
+            )
+            idx = conn.execute(
+                text(
+                    """
+                    SELECT 1 FROM information_schema.statistics
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'parent_child_bind'
+                      AND index_name = 'uk_parent_child_child_id'
+                    LIMIT 1
+                    """
+                )
+            ).fetchone()
+            if not idx:
+                conn.execute(
+                    text(
+                        "ALTER TABLE parent_child_bind "
+                        "ADD UNIQUE KEY uk_parent_child_child_id (child_id)"
+                    )
+                )
+        else:
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM parent_child_bind
+                    WHERE id NOT IN (
+                        SELECT MIN(id) FROM parent_child_bind GROUP BY child_id
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uk_parent_child_child_id "
+                    "ON parent_child_bind(child_id)"
+                )
+            )
+        conn.execute(
+            text(
+                "INSERT INTO schema_data_patch (name) VALUES ('parent_child_bind_unique_child')"
+            )
+        )
 
 
 def _migrate_user_session_utc_to_cst(engine: Engine) -> None:
@@ -153,6 +459,203 @@ def _migrate_user_session_utc_to_cst(engine: Engine) -> None:
             )
         conn.execute(
             text("INSERT INTO schema_data_patch (name) VALUES ('user_session_utc_to_cst')")
+        )
+
+
+def _apply_wechat_auth_tables(engine: Engine) -> None:
+    insp = inspect(engine)
+    dialect = engine.dialect.name
+    if "wx_member_snapshot" not in insp.get_table_names():
+        if dialect == "mysql":
+            ddl = """
+                CREATE TABLE wx_member_snapshot (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    wx_member_id INT NULL,
+                    openid VARCHAR(64) NOT NULL,
+                    unionid VARCHAR(64) NULL,
+                    mobile VARCHAR(20) NULL,
+                    nickname VARCHAR(255) NULL,
+                    truename VARCHAR(64) NULL,
+                    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_wx_snapshot_openid (openid),
+                    KEY idx_wx_snapshot_mobile (mobile),
+                    KEY idx_wx_snapshot_unionid (unionid)
+                )
+            """
+        else:
+            ddl = """
+                CREATE TABLE wx_member_snapshot (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    wx_member_id INTEGER,
+                    openid VARCHAR(64) NOT NULL UNIQUE,
+                    unionid VARCHAR(64),
+                    mobile VARCHAR(20),
+                    nickname VARCHAR(255),
+                    truename VARCHAR(64),
+                    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+
+    if "parent_wechat_bind" not in insp.get_table_names():
+        if dialect == "mysql":
+            ddl = """
+                CREATE TABLE parent_wechat_bind (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    parent_id INT NOT NULL,
+                    openid VARCHAR(64) NOT NULL,
+                    unionid VARCHAR(64) NULL,
+                    wx_member_id INT NULL,
+                    app_id VARCHAR(32) NOT NULL,
+                    bound_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_login_at DATETIME NULL,
+                    UNIQUE KEY uk_wechat_openid_app (openid, app_id),
+                    UNIQUE KEY uk_wechat_parent_app (parent_id, app_id),
+                    KEY idx_wechat_unionid (unionid),
+                    FOREIGN KEY (parent_id) REFERENCES child_user(id)
+                )
+            """
+        else:
+            ddl = """
+                CREATE TABLE parent_wechat_bind (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    parent_id INTEGER NOT NULL,
+                    openid VARCHAR(64) NOT NULL,
+                    unionid VARCHAR(64),
+                    wx_member_id INTEGER,
+                    app_id VARCHAR(32) NOT NULL,
+                    bound_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_login_at DATETIME,
+                    UNIQUE (openid, app_id),
+                    UNIQUE (parent_id, app_id),
+                    FOREIGN KEY (parent_id) REFERENCES child_user(id)
+                )
+            """
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+
+
+def _apply_daka_member_table(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "daka_member" in insp.get_table_names():
+        return
+    dialect = engine.dialect.name
+    if dialect == "mysql":
+        ddl = """
+            CREATE TABLE daka_member (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                parent_id INT NOT NULL,
+                mobile VARCHAR(20) NOT NULL,
+                openid VARCHAR(64) NULL,
+                unionid VARCHAR(64) NULL,
+                register_channel VARCHAR(20) NOT NULL,
+                legacy_matched TINYINT NOT NULL DEFAULT 0,
+                legacy_wx_member_id INT NULL,
+                real_name VARCHAR(64) NULL,
+                nickname VARCHAR(50) NULL,
+                registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_daka_member_parent (parent_id),
+                UNIQUE KEY uk_daka_member_mobile (mobile),
+                UNIQUE KEY uk_daka_member_openid (openid),
+                KEY idx_daka_member_legacy_wx (legacy_wx_member_id),
+                FOREIGN KEY (parent_id) REFERENCES child_user(id)
+            )
+        """
+    else:
+        ddl = """
+            CREATE TABLE daka_member (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_id INTEGER NOT NULL UNIQUE,
+                mobile VARCHAR(20) NOT NULL UNIQUE,
+                openid VARCHAR(64) UNIQUE,
+                unionid VARCHAR(64),
+                register_channel VARCHAR(20) NOT NULL,
+                legacy_matched INTEGER NOT NULL DEFAULT 0,
+                legacy_wx_member_id INTEGER,
+                real_name VARCHAR(64),
+                nickname VARCHAR(50),
+                registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (parent_id) REFERENCES child_user(id)
+            )
+        """
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
+
+
+def _apply_chat_archive_tables(engine: Engine) -> None:
+    """QA / Guide 会话归档表 — 配合 tools/archive_chat_history.py"""
+    insp = inspect(engine)
+    dialect = engine.dialect.name
+    tables = {
+        "qa_session_archive": """
+            CREATE TABLE qa_session_archive (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                original_session_id INT NOT NULL,
+                child_user_id INT NOT NULL,
+                snapshot_json JSON NOT NULL,
+                archived_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_qa_archive_child (child_user_id, archived_at),
+                INDEX idx_qa_archive_orig (original_session_id)
+            )
+        """,
+        "guide_session_archive": """
+            CREATE TABLE guide_session_archive (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                original_session_id INT NOT NULL,
+                child_user_id INT NOT NULL,
+                snapshot_json JSON NOT NULL,
+                archived_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_guide_archive_child (child_user_id, archived_at),
+                INDEX idx_guide_archive_orig (original_session_id)
+            )
+        """,
+    }
+    if dialect != "mysql":
+        tables = {
+            "qa_session_archive": """
+                CREATE TABLE qa_session_archive (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_session_id INTEGER NOT NULL,
+                    child_user_id INTEGER NOT NULL,
+                    snapshot_json JSON NOT NULL,
+                    archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+            "guide_session_archive": """
+                CREATE TABLE guide_session_archive (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_session_id INTEGER NOT NULL,
+                    child_user_id INTEGER NOT NULL,
+                    snapshot_json JSON NOT NULL,
+                    archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """,
+        }
+    existing = set(insp.get_table_names())
+    for name, ddl in tables.items():
+        if name in existing:
+            continue
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+
+
+def _backfill_daka_member_gate(engine: Engine) -> None:
+    if "wechat_bound_at" not in _column_names(engine, "daka_member"):
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE daka_member
+                SET wechat_bound_at = COALESCE(wechat_bound_at, updated_at),
+                    company_verified_at = COALESCE(company_verified_at, updated_at)
+                WHERE openid IS NOT NULL AND openid != ''
+                  AND wechat_bound_at IS NULL
+                """
+            )
         )
 
 
@@ -267,3 +770,74 @@ def _apply_parent_auth_patches(engine: Engine) -> None:
                     "ON child_user(login_name) WHERE login_name IS NOT NULL"
                 )
             )
+
+    seed_consult_channels(engine)
+
+
+def seed_consult_channels(engine: Engine) -> None:
+    """幂等写入默认咨询频道；人设/欢迎语来自 consult.personas（01/02/03）。"""
+    from sqlalchemy.orm import Session
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.agents.consult.personas import all_persona_codes, get_persona, persona_meta_seed
+    from app.db.models import ConsultChannel
+
+    kind_order = {
+        "dayu": ("group", 0, 0, 0),
+        "sizhe": ("dm", 10, 1, 1),
+        "yingzhe": ("dm", 20, 1, 1),
+        "dezhe": ("dm", 30, 1, 1),
+        "xingzhe": ("dm", 40, 1, 1),
+        "xuezhe": ("dm", 50, 1, 1),
+    }
+    seeds = []
+    for code in all_persona_codes():
+        p = get_persona(code)
+        kind, sort_order, ai_on, handoff = kind_order.get(code, ("dm", 99, 1, 1))
+        meta = persona_meta_seed(code)
+        seeds.append(
+            {
+                "code": code,
+                "kind": kind,
+                "title": p.title,
+                "bot_persona": code,
+                "ai_enabled": ai_on,
+                "human_handoff": handoff,
+                "sort_order": sort_order,
+                "meta_json": meta,
+            }
+        )
+
+    insp = inspect(engine)
+    if "consult_channel" not in insp.get_table_names():
+        return
+
+    from sqlalchemy import select as sa_select
+
+    with Session(engine) as db:
+        for row in seeds:
+            existing = db.scalars(
+                sa_select(ConsultChannel).where(ConsultChannel.code == row["code"])
+            ).first()
+            if not existing:
+                db.add(ConsultChannel(**row, status="active"))
+                continue
+            # 回填空 welcome/chips/kb_route，不覆盖运营已定制文案
+            meta = dict(existing.meta_json or {})
+            seed_meta = row["meta_json"]
+            changed = False
+            for key in ("welcome", "chips", "kb_route", "tag", "skill", "tp", "foundation", "talent", "kb_keywords"):
+                cur = meta.get(key)
+                empty = cur in (None, "", [])
+                if empty and seed_meta.get(key) not in (None, "", []):
+                    meta[key] = seed_meta[key]
+                    changed = True
+            if "board_enabled" not in meta and seed_meta.get("board_enabled"):
+                meta["board_enabled"] = True
+                changed = True
+            if changed:
+                existing.meta_json = meta
+                flag_modified(existing, "meta_json")
+            if not (existing.title or "").strip():
+                existing.title = row["title"]
+        db.commit()

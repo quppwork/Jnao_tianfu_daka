@@ -1,0 +1,584 @@
+/* 讨论区 @、引用、表情。表情是系统 Unicode，不加载 QQ / 微信版权包。 */
+(function (root) {
+  var style = document.createElement('style')
+  style.textContent = '.ib{width:36px;height:36px;border-radius:50%;border:none;background:transparent;color:#D8DCE6;font-size:22px;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box}'
+    + '.qbar{position:relative;left:auto;transform:none;bottom:auto;width:100%;max-width:none;display:flex;gap:8px;align-items:center;background:#161D2B;border-left:3px solid #C9A869;border-radius:10px;padding:7px 10px;z-index:30;box-sizing:border-box;margin:0 0 6px}'
+    + '.qbar[hidden],.talkpan[hidden]{display:none!important}'
+    + '.qbar b{font-size:11px;color:#C9A869;flex:none}.qbar span{flex:1;font-size:12px;color:#B9C0CE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    + '.qbar button{border:none;background:transparent;color:#B9C0CE;font-size:18px;cursor:pointer}'
+    + '.talkpan{position:absolute;left:12px;right:12px;bottom:calc(100% + 4px);width:auto;max-width:none;transform:none;background:#121826;border:1px solid #2A3040;border-radius:14px;padding:8px;z-index:40;max-height:min(240px,42vh);overflow:auto;box-sizing:border-box}'
+    + '.talkpan button{border:none;background:#1A2233;color:#E4E8F0;border-radius:10px;padding:8px 10px;margin:4px;font-size:13px;font-weight:800;cursor:pointer}'
+    + '.talkpan button i{font-style:normal;color:#8b93a5;font-size:10px;margin-left:4px;font-weight:700}'
+    + '.ems{display:flex;flex-wrap:wrap}'
+    + '.ems button{font-size:26px;background:transparent;padding:4px 6px}'
+    + '.pluspan{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:none;overflow:visible}'
+    + '.pluspan button{display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;padding:8px 4px;margin:0}'
+    + '.pluspan button b{width:52px;height:52px;border-radius:14px;background:#1A2233;border:1px solid #2A3040;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:400;font-style:normal}'
+    + '.pluspan button span{font-size:11px;color:#8b93a5;font-weight:700}'
+    + 'html.lt .pluspan button b{background:#d4dbe9;border-color:#c2cadc}'
+    + '.mq{border-left:3px solid rgba(201,168,105,.9);padding:0 0 4px 8px;margin-bottom:4px}'
+    + '.mq b{display:block;font-size:10px;opacity:.8}.mq span{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;opacity:.85}'
+    + '.msticker{font-size:42px;line-height:1.15}.mb .at{color:#8EBEFF;font-weight:800}.msg.me .mb .at{color:#FFF3C4}'
+    + 'html.lt .ib{color:#5a6274}'
+    + 'html.lt .qbar,html.lt .talkpan{background:#e7ebf4;border-color:#c2cadc}'
+    + 'html.lt .qbar span,html.lt .talkpan button{color:#1b1912}'
+    + 'html.lt .talkpan button{background:#d4dbe9}'
+  document.head.appendChild(style)
+  var phone = document.createElement('style')
+  phone.textContent = '.inbar{gap:8px;padding:0;align-items:flex-end}'
+    + '.inbar .box-wrap{flex:1;min-width:0}'
+    + '.inbar .box-wrap input,.inbar .box-wrap input:focus{width:100%;min-width:0;border:none;background:#0f1420;border-radius:8px;box-shadow:none;padding:8px 12px;font-size:15px;color:#EEF1F6;outline:none;box-sizing:border-box}'
+    + '.ib.em,.ib.voice,.ib.plus{width:36px;height:36px;border:none;background:transparent;font-size:22px}'
+    + '.inbar .send.talk-send{display:none;width:auto;min-width:56px;height:34px;border-radius:6px;padding:0 12px;font-size:14px;font-weight:700;background:#12b7f5;color:#fff;border:none}'
+    + '.inbar.has-text .send.talk-send{display:flex;align-items:center;justify-content:center}'
+    + '.inbar.has-text .ib.plus{display:none}'
+    + '.mb{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}'
+    + '.mb.faceonly{background:transparent!important;padding:0!important}'
+    + '.msticker{font-size:68px;line-height:1}'
+    + '.rx{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}.rx i{font-style:normal;background:rgba(255,255,255,.08);border-radius:99px;padding:1px 7px;font-size:14px}'
+    + '.holdmask{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.12)}'
+    + '.holdpop{position:fixed;z-index:81;width:min(286px,calc(100vw - 20px))}'
+    + '.reactbar{display:flex;justify-content:space-between;background:#2b2f3a;border-radius:999px;padding:6px 10px;margin-bottom:8px;box-shadow:0 8px 24px rgba(0,0,0,.28)}'
+    + '.reactbar button{border:none;background:transparent;font-size:22px;padding:2px 3px;cursor:pointer;line-height:1}'
+    + '.holdmenu{display:grid;grid-template-columns:repeat(3,1fr);background:#2c303a;color:#fff;border-radius:14px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.32)}'
+    + '.holdmenu button{border:none;background:transparent;color:#fff;padding:14px 4px 12px;font-size:12px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}'
+    + '.holdmenu button b{font-size:18px;font-weight:600;line-height:1}'
+    + '.mb.picked{box-shadow:0 0 0 2px #C9A869}'
+    + 'html.lt .inbar .box-wrap input{background:#fff;color:#1b1912}'
+    + 'html.lt .inbar .send.talk-send{background:#12b7f5;color:#fff}'
+    + '.talkshade{position:fixed;inset:0;z-index:36;background:transparent}'
+    + '.talkshade[hidden]{display:none!important}'
+    + '.chat-dock{position:fixed}'
+    + '.talkpan{z-index:45}'
+    + '.chat-dock .inbar{z-index:46}'
+  document.head.appendChild(phone)
+  var PACK = ['😂','🤣','😭','😅','🥹','🥺','😏','🙄','🤔','😤','🥰','😎','🙈','🫠','👍','👏','❤️','🔥','✨','💪','🤝','👀','🙏','👋','💯','😴','🤡','😮','🐶','📒']
+  var pendingQuote = null
+  var pendingSticker = null
+  var pendingMention = ''
+
+  function esc(value) {
+    return String(value || '').replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+    })
+  }
+
+  function people() {
+    if (typeof CHARS !== 'undefined') return CHARS
+    return root.CHARS || {}
+  }
+
+  function cast() {
+    var chars = people()
+    return Object.keys(chars).map(function (key) {
+      return { key: key, name: chars[key].n, tag: chars[key].tag }
+    })
+  }
+
+  function nameOf(who) {
+    if (!who || who === 'me' || who === 'user') return '我'
+    var chars = people()
+    return (chars[who] && chars[who].n) || who
+  }
+
+  function resolveMention(text) {
+    var found = ''
+    cast().forEach(function (item) {
+      if (text.indexOf('@' + item.name) >= 0 || text.indexOf('@' + item.key) >= 0) found = item.key
+    })
+    return found || pendingMention
+  }
+
+  function paint(text) {
+    return esc(text).replace(/@([^\s@]{1,8})/g, '<span class="at">@$1</span>')
+  }
+
+  function $(id) { return document.getElementById(id) }
+
+  function syncSendUi() {
+    var inp = $('inp')
+    var bar = document.querySelector('.inbar')
+    if (!bar) return
+    // 只看输入框是否有内容（含表情），有内容就换出发送键
+    var has = !!(inp && String(inp.value || '').trim())
+    bar.classList.toggle('has-text', has)
+    // 直接改 style，避免 html.lt / 旧 CSS 特异性把「发送」继续 display:none
+    var send = bar.querySelector('.send')
+    var plusBtn = bar.querySelector('.ib.plus')
+    if (send) {
+      send.style.display = has ? 'flex' : 'none'
+      send.style.alignItems = 'center'
+      send.style.justifyContent = 'center'
+    }
+    if (plusBtn) plusBtn.style.display = has ? 'none' : ''
+    if (has) {
+      var plus = $('plusPanel')
+      if (plus) plus.hidden = true
+    }
+  }
+
+  function toastSoon(title) {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'dayu-toast', title: title || '功能即将开放' }, '*')
+      }
+    } catch (e) {}
+  }
+
+  function hidePickers() {
+    var at = $('atPanel')
+    var em = $('emPanel')
+    var plus = $('plusPanel')
+    var shade = $('talkshade')
+    if (at) at.hidden = true
+    if (em) em.hidden = true
+    if (plus) plus.hidden = true
+    if (shade) shade.hidden = true
+  }
+
+  function showShade() {
+    var shade = $('talkshade')
+    if (!shade) return
+    shade.hidden = false
+  }
+
+  function closePanels() {
+    hidePickers()
+    closeMenu()
+  }
+
+  function closeMenu() {
+    var mask = $('holdmask')
+    var pop = $('holdpop')
+    if (mask) mask.remove()
+    if (pop) pop.remove()
+    var picked = document.querySelector('.mb.picked')
+    if (picked) picked.classList.remove('picked')
+  }
+
+  function copyText(text) {
+    var done = function () {}
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () { fallbackCopy(text) }).then(done)
+      return
+    }
+    fallbackCopy(text)
+  }
+
+  function fallbackCopy(text) {
+    var area = document.createElement('textarea')
+    area.value = text
+    area.setAttribute('readonly', '')
+    area.style.position = 'fixed'
+    area.style.left = '-999px'
+    document.body.appendChild(area)
+    area.select()
+    try { document.execCommand('copy') } catch (err) { /* ignore */ }
+    area.remove()
+  }
+
+  function addReaction(bubble, face) {
+    var card = bubble.parentNode
+    if (!card) return
+    var row = card.querySelector('.rx')
+    if (!row) {
+      row = document.createElement('div')
+      row.className = 'rx'
+      card.appendChild(row)
+    }
+    var chip = document.createElement('i')
+    chip.textContent = face
+    row.appendChild(chip)
+  }
+
+  function openMenu(anchor, meta) {
+    closeMenu()
+    var at = $('atPanel')
+    var em = $('emPanel')
+    if (at) at.hidden = true
+    if (em) em.hidden = true
+    var mask = document.createElement('div')
+    mask.id = 'holdmask'
+    mask.className = 'holdmask'
+    var pop = document.createElement('div')
+    pop.id = 'holdpop'
+    pop.className = 'holdpop'
+    var faces = ['👍', '👌', '❤️', '🤣', '😤', '🤔']
+    var actions = [
+      { id: 'copy', icon: '❐', label: '复制' },
+      { id: 'quote', icon: '↩', label: '引用' }
+    ]
+    if (!meta.mine && meta.who && meta.who !== 'me') {
+      actions.push({ id: 'at', icon: '@', label: nameOf(meta.who) })
+    }
+    pop.innerHTML = '<div class="reactbar">' + faces.map(function (face) {
+      return '<button type="button" data-react="' + face + '">' + face + '</button>'
+    }).join('') + '</div><div class="holdmenu">' + actions.map(function (act) {
+      return '<button type="button" data-act="' + act.id + '"><b>' + act.icon + '</b>' + esc(act.label) + '</button>'
+    }).join('') + '</div>'
+    document.body.appendChild(mask)
+    document.body.appendChild(pop)
+    anchor.classList.add('picked')
+    var rect = anchor.getBoundingClientRect()
+    var width = pop.offsetWidth
+    var height = pop.offsetHeight
+    var left = Math.max(10, Math.min(rect.left, window.innerWidth - width - 10))
+    var top = rect.bottom + 8
+    if (top + height > window.innerHeight - 72) top = Math.max(8, rect.top - height - 8)
+    pop.style.left = left + 'px'
+    pop.style.top = top + 'px'
+    mask.addEventListener('click', closeMenu)
+    pop.addEventListener('click', function (event) {
+      var btn = event.target.closest('button')
+      if (!btn) return
+      var face = btn.getAttribute('data-react')
+      if (face) {
+        addReaction(anchor, face)
+        closeMenu()
+        return
+      }
+      var act = btn.getAttribute('data-act')
+      if (act === 'quote') quote(meta.who, meta.plain)
+      if (act === 'at') mention(meta.who)
+      if (act === 'copy') copyText(meta.plain)
+      closeMenu()
+    })
+  }
+
+  function armHold(bubble, meta) {
+    var timer = 0
+    var startX = 0
+    var startY = 0
+    var moved = false
+    bubble.addEventListener('pointerdown', function (event) {
+      if (event.button && event.button !== 0) return
+      startX = event.clientX
+      startY = event.clientY
+      moved = false
+      timer = setTimeout(function () {
+        if (moved) return
+        if (navigator.vibrate) {
+          try { navigator.vibrate(12) } catch (err) { /* ignore */ }
+        }
+        openMenu(bubble, meta)
+      }, 420)
+    })
+    bubble.addEventListener('pointermove', function (event) {
+      if (Math.abs(event.clientX - startX) > 8 || Math.abs(event.clientY - startY) > 8) {
+        moved = true
+        clearTimeout(timer)
+      }
+    })
+    bubble.addEventListener('pointerup', function () { clearTimeout(timer) })
+    bubble.addEventListener('pointercancel', function () { clearTimeout(timer) })
+    bubble.addEventListener('contextmenu', function (event) { event.preventDefault() })
+  }
+
+  function paintQuoteBar() {
+    var bar = $('qbar')
+    if (!bar) return
+    if (!pendingQuote) {
+      bar.hidden = true
+      bar.innerHTML = ''
+      if (typeof root.syncChatDock === 'function') root.syncChatDock()
+      return
+    }
+    bar.hidden = false
+    bar.innerHTML = '<b>回复 ' + esc(nameOf(pendingQuote.who)) + '</b><span>' + esc(pendingQuote.text) + '</span><button type="button" id="qbarX">×</button>'
+    var close = $('qbarX')
+    if (close) close.onclick = function () {
+      pendingQuote = null
+      paintQuoteBar()
+    }
+    if (typeof root.syncChatDock === 'function') root.syncChatDock()
+  }
+
+  function insertAtCursor(token) {
+    var inp = $('inp')
+    if (!inp || inp.disabled) return
+    token = String(token || '')
+    if (!token) return
+    var start = (typeof inp.selectionStart === 'number') ? inp.selectionStart : inp.value.length
+    var end = (typeof inp.selectionEnd === 'number') ? inp.selectionEnd : start
+    inp.value = inp.value.slice(0, start) + token + inp.value.slice(end)
+    var next = start + token.length
+    try { inp.focus() } catch (e0) {}
+    try { if (inp.setSelectionRange) inp.setSelectionRange(next, next) } catch (e1) {}
+    // 程序改 value 不会触发 input；派发事件后仍强制 sync
+    try {
+      inp.dispatchEvent(new Event('input', { bubbles: true }))
+    } catch (e) {}
+    syncSendUi()
+  }
+
+  function mention(key) {
+    var item = cast().filter(function (row) { return row.key === key })[0]
+    if (!item) return
+    pendingMention = key
+    var inp = $('inp')
+    if (!inp) return
+    var value = inp.value || ''
+    value = value.replace(/@[^\s@]*$/, '')
+    inp.value = value
+    if (value && !/\s$/.test(value)) insertAtCursor(' ')
+    insertAtCursor('@' + item.name + ' ')
+    closePanels()
+  }
+
+  function quote(who, text) {
+    var plain = String(text || '').replace(/<[^>]+>/g, '').trim()
+    if (!plain) return
+    pendingQuote = { who: who || 'me', text: plain.slice(0, 80) }
+    paintQuoteBar()
+    var inp = $('inp')
+    if (inp && !inp.disabled) inp.focus()
+  }
+
+  function mount(who, text, extra, mine) {
+    extra = extra || {}
+    var box = $('msgs')
+    if (!box) return
+    var person = people()[who] || {}
+    var d = document.createElement('div')
+    d.className = 'msg' + (mine ? ' me' : '')
+    var quoted = extra.quote && extra.quote.text
+      ? '<div class="mq"><b>' + esc(nameOf(extra.quote.who)) + '</b><span>' + esc(extra.quote.text) + '</span></div>'
+      : ''
+    var sticker = extra.sticker ? '<div class="msticker">' + esc(extra.sticker) + '</div>' : ''
+    var showText = text || ''
+    if (extra.sticker && showText === extra.sticker) showText = ''
+    var body = showText ? '<div class="mt">' + paint(showText) + '</div>' : ''
+    var avatar = mine ? '' : '<img class="ma" alt="" src="' + esc(person.av || '') + '">'
+    var tag = !mine && person.tag ? '<i>' + esc(person.tag) + '</i>' : ''
+    var onlyFace = !!(extra.sticker && !showText)
+    d.innerHTML = avatar + '<div class="mc"><div class="mn">' + esc(mine ? '我' : (person.n || who)) + tag + '</div><div class="mb' + (onlyFace ? ' faceonly' : '') + '">' + quoted + sticker + body + '</div></div>'
+    var plain = showText || extra.sticker || ''
+    var bubble = d.querySelector('.mb')
+    if (bubble) {
+      bubble.setAttribute('role', 'button')
+      bubble.setAttribute('aria-label', (mine ? '我' : (person.n || who)) + '的消息，长按可引用')
+      armHold(bubble, { who: mine ? 'me' : who, plain: plain, mine: !!mine })
+    }
+    var face = d.querySelector('.ma')
+    if (face) face.addEventListener('click', function (event) {
+      event.stopPropagation()
+      mention(who)
+    })
+    box.appendChild(d)
+    if (typeof root.scrollChat === 'function') root.scrollChat()
+  }
+
+  function renderPanel(id, html) {
+    var node = $(id)
+    if (!node) return null
+    node.innerHTML = html
+    return node
+  }
+
+  function openAt() {
+    var panel = renderPanel('atPanel', cast().map(function (item) {
+      return '<button type="button" data-key="' + esc(item.key) + '">' + esc(item.name) + '<i>' + esc(item.tag) + '</i></button>'
+    }).join(''))
+    var emo = $('emPanel')
+    var plus = $('plusPanel')
+    if (emo) emo.hidden = true
+    if (plus) plus.hidden = true
+    if (!panel) return
+    panel.hidden = false
+    showShade()
+    panel.onclick = function (event) {
+      var btn = event.target.closest('button')
+      if (!btn) return
+      mention(btn.getAttribute('data-key'))
+    }
+  }
+
+  function openPlus() {
+    var panel = renderPanel(
+      'plusPanel',
+      '<button type="button" data-act="album"><b>🖼</b><span>相册</span></button>'
+        + '<button type="button" data-act="camera"><b>📷</b><span>拍摄</span></button>'
+        + '<button type="button" data-act="file"><b>📎</b><span>文件</span></button>'
+    )
+    var at = $('atPanel')
+    var em = $('emPanel')
+    if (at) at.hidden = true
+    if (em) em.hidden = true
+    if (!panel) return
+    panel.hidden = false
+    showShade()
+    panel.onclick = function (event) {
+      var btn = event.target.closest('button')
+      if (!btn) return
+      var act = btn.getAttribute('data-act')
+      closePanels()
+      if (act === 'album') toastSoon('相册即将开放')
+      else if (act === 'camera') toastSoon('拍摄即将开放')
+      else if (act === 'file') toastSoon('文件即将开放')
+    }
+  }
+
+  function openEmoji(list) {
+    var faces = list && list.length ? list : PACK
+    var cells = faces.map(function (face) {
+      return '<button type="button" data-face="' + face + '">' + face + '</button>'
+    }).join('')
+    var panel = renderPanel('emPanel', '<div class="ems">' + cells + '</div>')
+    var at = $('atPanel')
+    var plus = $('plusPanel')
+    if (at) at.hidden = true
+    if (plus) plus.hidden = true
+    if (!panel) return
+    panel.hidden = false
+    showShade()
+    panel.onclick = function (event) {
+      var btn = event.target.closest('button')
+      if (!btn) return
+      var face = btn.getAttribute('data-face') || String(btn.textContent || '').trim()
+      insertAtCursor(face)
+      closePanels()
+      syncSendUi()
+    }
+  }
+
+  function bind() {
+    if ($('emBtn')) return
+    var bar = document.querySelector('.inbar')
+    var inp = $('inp')
+    if (!bar || !inp) return
+    var dock = $('chatDock') || bar.parentNode
+    if (dock && dock.style) dock.style.position = dock.style.position || ''
+
+    var voice = document.createElement('button')
+    voice.type = 'button'
+    voice.id = 'voiceBtn'
+    voice.className = 'ib voice'
+    voice.textContent = '🎤'
+    voice.setAttribute('aria-label', '语音')
+
+    var wrap = document.createElement('div')
+    wrap.className = 'box-wrap'
+    bar.insertBefore(wrap, inp)
+    wrap.appendChild(inp)
+
+    var em = document.createElement('button')
+    em.type = 'button'
+    em.id = 'emBtn'
+    em.className = 'ib em'
+    em.textContent = '😊'
+    em.setAttribute('aria-label', '表情')
+
+    var plus = document.createElement('button')
+    plus.type = 'button'
+    plus.id = 'plusBtn'
+    plus.className = 'ib plus'
+    plus.textContent = '＋'
+    plus.setAttribute('aria-label', '更多')
+
+    bar.insertBefore(voice, wrap)
+    bar.appendChild(em)
+    bar.appendChild(plus)
+
+    var send = bar.querySelector('.send')
+    if (send) {
+      send.classList.add('talk-send')
+      send.textContent = '发送'
+    }
+    syncSendUi()
+
+    var host = dock || bar.parentNode
+    var qbar = document.createElement('div')
+    qbar.id = 'qbar'
+    qbar.className = 'qbar'
+    qbar.hidden = true
+    host.insertBefore(qbar, bar)
+    var atPanel = document.createElement('div')
+    atPanel.id = 'atPanel'
+    atPanel.className = 'talkpan'
+    atPanel.hidden = true
+    var emPanel = document.createElement('div')
+    emPanel.id = 'emPanel'
+    emPanel.className = 'talkpan'
+    emPanel.hidden = true
+    var plusPanel = document.createElement('div')
+    plusPanel.id = 'plusPanel'
+    plusPanel.className = 'talkpan pluspan'
+    plusPanel.hidden = true
+    host.insertBefore(atPanel, bar)
+    host.insertBefore(emPanel, bar)
+    host.insertBefore(plusPanel, bar)
+    if (typeof root.syncChatDock === 'function') root.syncChatDock()
+    var shade = document.createElement('div')
+    shade.id = 'talkshade'
+    shade.className = 'talkshade'
+    shade.hidden = true
+    shade.setAttribute('aria-label', '关闭')
+    document.body.appendChild(shade)
+    shade.addEventListener('click', function (event) {
+      event.preventDefault()
+      event.stopPropagation()
+      hidePickers()
+      var box = $('inp')
+      if (box && !box.disabled) box.focus()
+    })
+    voice.onclick = function () {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'dayu-toast', title: '语音消息即将开放' }, '*')
+        }
+      } catch (e) {}
+    }
+    plus.onclick = function () {
+      if ($('plusPanel') && !$('plusPanel').hidden) closePanels()
+      else openPlus()
+    }
+    em.onclick = function () {
+      if ($('emPanel') && !$('emPanel').hidden) {
+        closePanels()
+        return
+      }
+      var ns = root.JnaoAcademy
+      var loaded = ns && ns.api ? ns.api('/api/academy/stickers') : Promise.reject()
+      loaded.then(function (data) {
+        openEmoji((data && data.small) || PACK)
+      }).catch(function () {
+        openEmoji(PACK)
+      })
+    }
+    inp.addEventListener('input', function () {
+      syncSendUi()
+      // @ 仍靠输入触发人选面板；＋ 只做相册/拍摄/文件
+      if (/@[^\s@]*$/.test(inp.value)) openAt()
+    })
+    inp.addEventListener('focus', function () {
+      if (typeof root.syncChatDock === 'function') root.syncChatDock()
+    })
+  }
+
+  root.AcademyTalk = {
+    mount: mount,
+    mention: mention,
+    quote: quote,
+    bind: bind,
+    collect: function (text) {
+      var raw = String(text || '').trim()
+      return {
+        text: raw,
+        mention: resolveMention(raw || text || '') || undefined,
+        quote: pendingQuote || undefined,
+        sticker: pendingSticker || undefined
+      }
+    },
+    clear: function () {
+      pendingQuote = null
+      pendingSticker = null
+      pendingMention = ''
+      paintQuoteBar()
+      closePanels()
+      syncSendUi()
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind)
+  else bind()
+})(window)

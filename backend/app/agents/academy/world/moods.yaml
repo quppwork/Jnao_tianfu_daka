@@ -1,0 +1,18 @@
+# 跨集情绪占位（第三阶段轻量）：每集结束后角色情绪/关系，注入讨论时可选。
+# 字段暂由 drama_notes 读取；空则忽略。
+
+E14:
+  jiahui: { mood: 震住, note: 第一次不匀速，红与黑三角还在脑子里 }
+  yuchen: { mood: 得意且湿, note: 被自己脑子里的大草原震住 }
+  chenxue: { mood: 好胜, note: 圆看得清楚，想扬下巴 }
+  limo: { mood: 平静, note: 就是知道，并不惊喜 }
+  dani: { mood: 惊奇, note: 搓到棱，又知卡片其实是平的 }
+  shanyu: { mood: 旁观收束, note: 听完孩子们的五个世界 }
+
+EH01:
+  chenxue: { mood: 追问, note: 种姓与报仇后患还挂着 }
+  yuchen: { mood: 宏观, note: 想弄清称帝结局 }
+  dani: { mood: 沉, note: 杀里有孩子，心里发紧 }
+  jiahui: { mood: 记录, note: 诗句已抄进笔记 }
+  limo: { mood: 握拳, note: 听杀遍贵族时手收紧，不解释 }
+  shanyu: { mood: 听, note: 主讲是张宇，自己少开口 }

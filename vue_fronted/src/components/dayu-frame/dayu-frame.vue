@@ -1,0 +1,566 @@
+<template>
+  <view class="dayu-frame-wrap">
+    <!-- #ifdef H5 -->
+    <iframe
+      ref="iframeRef"
+      class="dayu-iframe"
+      :src="src"
+      frameborder="0"
+      scrolling="no"
+      allow="autoplay; fullscreen; camera; microphone; geolocation"
+      @load="onFrameLoad"
+    />
+    <!-- #endif -->
+    <!-- #ifndef H5 -->
+    <web-view :src="src" />
+    <!-- #endif -->
+  </view>
+</template>
+
+<script setup>
+import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
+import { switchMainTab, goAppPage } from '@/utils/mainTabs.js'
+import { goLinkedParentHome, goLinkedStudentHome } from '@/utils/switchLinkedAccount.js'
+import { fetchUsageSummary, formatTokenCount } from '@/utils/api/usage.js'
+import { isClassicUi, studentHomeUrl } from '@/utils/uiSkin.js'
+import { formatGuideRichHtml, prefetchKatex } from '@/utils/chatRichText.js'
+import { chooseQuestionImage, pickImageViaNativeInput } from '@/utils/qaMedia.js'
+import { browserCanUseMic, BrowserVoiceRecorder } from '@/utils/qaVoice.js'
+
+const USAGE_PILL_PAGES = new Set(['parent.html', 'pset.html'])
+const RICH_TEXT_PAGES = new Set(['consult.html'])
+
+function pageFile(p) {
+  return String(p || '').split('?')[0].split('#')[0]
+}
+
+function frameWindow() {
+  // #ifdef H5
+  try {
+    let win = null
+    const el = iframeRef.value
+    if (el) win = el.contentWindow || el.$el?.contentWindow || null
+    if (!win) {
+      const node = document.querySelector('.dayu-iframe')
+      win = node?.contentWindow || null
+    }
+    return win
+  } catch (_) {
+    return null
+  }
+  // #endif
+  // #ifndef H5
+  return null
+  // #endif
+}
+
+/** 把首页同款 Markdown 渲染注入 iframe（咨询页 AI 气泡复用） */
+function injectFrameRichText(win) {
+  // #ifdef H5
+  if (!win || !RICH_TEXT_PAGES.has(pageFile(props.page))) return
+  try {
+    win.__jnaoFormatGuideRichHtml = formatGuideRichHtml
+    prefetchKatex()
+    if (typeof win.dispatchEvent === 'function') {
+      win.dispatchEvent(new Event('jnao-rich-ready'))
+    }
+  } catch (_) { /* ignore */ }
+  // #endif
+}
+
+const props = defineProps({
+  page: { type: String, required: true },
+  /** 注入 iframe：昵称 / 主题 / 今日状态文案 */
+  hydrate: {
+    type: Object,
+    default: () => ({}),
+  },
+  /** 有值时 dayu-back 直达该页（做什么报告回什么页） */
+  backPath: {
+    type: String,
+    default: '',
+  },
+  /** 学院页每次 onShow 递增：收起讨论组，避免软切回仍停在全屏讨论 */
+  academyCollapseSignal: {
+    type: Number,
+    default: 0,
+  },
+})
+
+const emit = defineEmits(['parent', 'student', 'account', 'theme'])
+
+const src = computed(() => {
+  const file = props.page || ''
+  const rev =
+    file === 'drama.html' ? '20261026sync1' :
+    file === 'consult.html' ? '20261008b1' : ''
+  return `/static/dayu/html/${file}${rev ? `?v=${rev}` : ''}`
+})
+const iframeRef = ref(null)
+let frameReady = false
+/** iframe 主动 sync 时勿再 post 回去，避免切集后二次 paint 冲掉播放 */
+let suppressHydratePush = false
+
+function postToFrame(payload) {
+  // #ifdef H5
+  try {
+    if (payload && payload.type === 'dayu-console' && payload.console) {
+      window.__DAYU_CONSOLE__ = payload.console
+    }
+    const win = frameWindow()
+    if (win) win.postMessage(payload, '*')
+  } catch (_) { /* ignore */ }
+  // #endif
+}
+
+function syncFrameLayoutVars() {
+  // #ifdef H5
+  try {
+    const win = frameWindow()
+    if (!win?.document?.documentElement) return
+    injectFrameRichText(win)
+    const maxW =
+      getComputedStyle(document.documentElement).getPropertyValue('--app-max-width').trim() ||
+      '480px'
+    win.document.documentElement.style.setProperty('--app-max-width', maxW)
+
+    // iframe 内 env(safe-area-*) 常为 0，用父页实测值对齐底栏高度
+    let sab = '0px'
+    try {
+      const probe = document.createElement('div')
+      probe.style.cssText =
+        'position:fixed;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px)'
+      document.body.appendChild(probe)
+      sab = getComputedStyle(probe).paddingBottom || '0px'
+      probe.remove()
+    } catch (_) { /* ignore */ }
+
+    const parentPages = new Set([
+      'parent.html',
+      'pset.html',
+      'pdata.html',
+      'consult.html',
+      'community.html',
+      'pcourse.html',
+      'wallet.html',
+      'console.html',
+    ])
+    const isParent = parentPages.has(pageFile(props.page))
+    const mute = isParent ? '#8B93A5' : '#5A6274'
+    const on = isParent ? '#F5D9A8' : '#6FCF8E'
+    const ltMute = '#8b93a5'
+    const ltOn = isParent ? '#967536' : '#30904f'
+
+    const isConsult = pageFile(props.page) === 'consult.html'
+    const style = win.document.getElementById('dayu-foot-sync') || win.document.createElement('style')
+    style.id = 'dayu-foot-sync'
+    style.textContent = [
+      `.foot{left:0!important;right:0!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;margin:0!important;`,
+      `padding:8px 10px calc(8px + ${sab})!important;`,
+      `box-sizing:border-box!important}`,
+      `.foot a{padding:0!important;gap:0!important;font-size:11px!important;font-weight:400!important;`,
+      `color:${mute}!important;display:block!important;min-width:0!important}`,
+      `.foot a.on{color:${on}!important;font-weight:700!important}`,
+      `html.lt .foot a{color:${ltMute}!important}`,
+      `html.lt .foot a.on{color:${ltOn}!important}`,
+      `.foot a img,.foot .fic,.foot a .fic,.fic{width:38px!important;height:38px!important;`,
+      `display:block!important;margin:0 auto 1px!important;object-fit:contain!important}`,
+      `.askbar{left:0!important;right:0!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;margin:0 auto!important;`,
+      `bottom:calc(72px + ${sab})!important;box-sizing:border-box!important}`,
+      `#roomBar .askbar,#roomBar .inbar{bottom:0!important}`,
+      `#roomBar{left:0!important;right:0!important;width:100%!important}`,
+      `.chat-dock{left:0!important;right:0!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;margin:0!important;`,
+      `bottom:calc(56px + ${sab})!important;box-sizing:border-box!important;z-index:46!important;`,
+      `background:rgba(11,14,20,.98)!important}`,
+      `html.lt .chat-dock{background:rgba(235,238,244,.98)!important}`,
+      `.chat-dock .inbar,.chat-dock .inpbar{position:static!important;bottom:auto!important;left:auto!important;right:auto!important;transform:none!important;`,
+      `width:100%!important;max-width:none!important;padding:8px 10px 10px!important;background:transparent!important;margin:0!important}`,
+      `.chat-dock{background:#161b26!important}`,
+      `html,body{height:100%!important;overflow:hidden!important;overflow-x:hidden!important;`,
+      `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
+      `html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
+      `*{scrollbar-width:none!important;-ms-overflow-style:none!important}`,
+      isConsult
+        ? [
+            `.phone{overflow:hidden!important;display:flex!important;flex-direction:column!important;`,
+            `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
+            `padding-bottom:calc(108px + ${sab})!important}`,
+            `#chatScroll,.chat-scroll{flex:1!important;min-height:0!important;`,
+            `overflow-x:hidden!important;overflow-y:auto!important;`,
+            `-webkit-overflow-scrolling:touch!important;overscroll-behavior-y:contain!important;`,
+            `padding-bottom:24px!important}`,
+            `.chat-head{flex:none!important}`,
+            `.qs{display:none!important}`,
+            `.at-panel{bottom:calc(108px + ${sab})!important;left:0!important;right:0!important;`,
+            `transform:none!important;width:auto!important;max-width:none!important;margin:0 12px!important}`,
+          ].join('')
+        : [
+            // body 原 padding-bottom:140px 在 height:100% + overflow:hidden 下会挤出一段黑底空洞（中央电脑尤甚）
+            `html,body{padding-bottom:0!important;margin:0!important}`,
+            `.phone,.wrap{overflow-x:hidden!important;overflow-y:auto!important;`,
+            `height:100%!important;max-height:100%!important;box-sizing:border-box!important;`,
+            `padding-bottom:calc(88px + ${sab})!important;`,
+            `scrollbar-width:none!important;-ms-overflow-style:none!important}`,
+            `.phone::-webkit-scrollbar,.wrap::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}`,
+          ].join(''),
+      `#msgwrap{overscroll-behavior-y:auto!important;-webkit-overflow-scrolling:touch!important}`,
+    ].join('')
+    if (!style.parentNode) win.document.head.appendChild(style)
+  } catch (_) { /* ignore */ }
+  // #endif
+}
+
+function pushHydrate() {
+  if (!frameReady) return
+  syncFrameLayoutVars()
+  const h = props.hydrate || {}
+  postToFrame({
+    type: 'dayu-hydrate',
+    nickname: h.nickname || '',
+    theme: h.theme || '',
+    situationLabel: h.situationLabel || '',
+    welcome: h.welcome || '',
+  })
+  if (h.console) {
+    postToFrame({ type: 'dayu-console', console: h.console })
+  }
+  if (h.academy) {
+    postToFrame({ type: 'dayu-academy', academy: h.academy })
+  }
+  pushUsage()
+}
+
+async function pushUsage() {
+  if (!frameReady) return
+  if (!USAGE_PILL_PAGES.has(pageFile(props.page))) return
+  try {
+    const data = await fetchUsageSummary()
+    const total = Number(data?.display_total_tokens) || 0
+    postToFrame({
+      type: 'dayu-usage',
+      display_total_tokens: total,
+      label: formatTokenCount(total),
+      role: data?.role || '',
+      me: data?.me || null,
+      billing: data?.billing || null,
+    })
+  } catch (_) {
+    /* 未登录或暂无用量时保持占位 */
+  }
+}
+
+async function handleDayuMedia(data) {
+  const reqId = data.reqId || ''
+  const action = String(data.action || '')
+  const reply = (payload) => {
+    postToFrame({ type: 'dayu-media-result', reqId, ...payload })
+  }
+  try {
+    if (action === 'camera' || action === 'album') {
+      let path = ''
+      try {
+        path = await chooseQuestionImage(action === 'camera' ? 'camera' : 'album')
+      } catch (e) {
+        if (e?.code === 'WEBCAM' || e?.message === 'webcam') {
+          const picked = await pickImageViaNativeInput(action === 'camera' ? 'environment' : '')
+          reply({ ok: true, preview: picked.preview, path: picked.path, name: picked.file?.name })
+          return
+        }
+        throw e
+      }
+      // #ifdef H5
+      try {
+        const resp = await fetch(path)
+        const blob = await resp.blob()
+        const preview = URL.createObjectURL(blob)
+        reply({ ok: true, preview, path, name: 'image.jpg' })
+        return
+      } catch (_) { /* fallthrough */ }
+      // #endif
+      reply({ ok: true, preview: path, path, name: 'image.jpg' })
+      return
+    }
+    if (action === 'mic') {
+      if (!browserCanUseMic()) {
+        reply({ ok: false, error: '语音需 HTTPS，才会弹出系统麦克风授权' })
+        return
+      }
+      uni.showToast({ title: '请允许麦克风权限', icon: 'none' })
+      const rec = new BrowserVoiceRecorder()
+      await rec.start()
+      uni.showToast({ title: '录音中，约 4 秒后结束…', icon: 'none' })
+      await new Promise((r) => setTimeout(r, 4000))
+      const { blob } = await rec.stop()
+      // 家长壳暂无学生 ASR：把时长提示回填，后续可接家长语音接口
+      reply({
+        ok: true,
+        text: '',
+        error: blob?.size ? '已采集音频（识别接口待接家长端）；请先打字补充' : '未录到音频',
+      })
+      if (!blob?.size) return
+      uni.showToast({ title: '已拿到麦克风授权，请打字发送问题', icon: 'none' })
+      return
+    }
+    reply({ ok: false, error: 'unsupported' })
+  } catch (e) {
+    const msg = e?.message || '授权失败'
+    if (msg !== 'cancel') uni.showToast({ title: msg, icon: 'none' })
+    reply({ ok: false, error: msg })
+  }
+}
+
+function handleMessage(ev) {
+  const data = ev?.data
+  if (!data || typeof data !== 'object') return
+
+  if (data.type === 'dayu-parent') {
+    emit('parent')
+    goLinkedParentHome()
+    return
+  }
+  if (data.type === 'dayu-student') {
+    emit('student')
+    goLinkedStudentHome()
+    return
+  }
+  if (data.type === 'dayu-toast') {
+    uni.showToast({ title: data.title || '功能即将开放', icon: 'none' })
+    return
+  }
+  // 学院 iframe 内切集：只更新父页 hydrate，不 navigate（保留播放/讨论）
+  if (data.type === 'dayu-academy-sync' && data.academy) {
+    const h = props.hydrate
+    if (h && typeof h === 'object') {
+      suppressHydratePush = true
+      h.academy = data.academy
+      setTimeout(() => { suppressHydratePush = false }, 0)
+    }
+    try {
+      const ep = data.academy?.episode?.id
+      const uid = localStorage.getItem('jnao_child_user_id') || ''
+      if (ep && uid) {
+        localStorage.setItem(`jnao_academy_last_ep_${uid}`, String(ep).toUpperCase())
+      }
+    } catch (_) { /* ignore */ }
+    return
+  }
+  if (data.type === 'dayu-media') {
+    handleDayuMedia(data)
+    return
+  }
+  if (data.type === 'dayu-account') {
+    emit('account')
+    return
+  }
+  if (data.type === 'dayu-theme') {
+    const light = !!data.light
+    try {
+      const theme = light ? 'white' : 'dark'
+      localStorage.setItem('jnao_theme', theme)
+      localStorage.setItem('jn_theme', light ? 'lt' : 'dk')
+      document.documentElement.setAttribute('data-theme', theme)
+    } catch (_) { /* ignore */ }
+    emit('theme', light)
+    return
+  }
+  if (data.type === 'dayu-ready') {
+    frameReady = true
+    pushHydrate()
+    return
+  }
+  if (data.type === 'dayu-usage-request') {
+    pushUsage()
+    return
+  }
+  if (data.type === 'dayu-console-request') {
+    frameReady = true
+    pushHydrate()
+    return
+  }
+  if (data.type === 'dayu-back') {
+    const target = String(props.backPath || '').trim()
+    if (target) {
+      goAppPage(target)
+      return
+    }
+    const pages = getCurrentPages()
+    if (pages.length > 1) uni.navigateBack({ delta: 1 })
+    else switchMainTab('/pages/dayu/home')
+    return
+  }
+
+  const parentShellPages = new Set([
+    'parent.html',
+    'pset.html',
+    'pdata.html',
+    'consult.html',
+    'community.html',
+    'pcourse.html',
+    'wallet.html',
+    'console.html',
+  ])
+  const parentShellRoutes = {
+    '/pages/parent/dayu': true,
+    '/pages/parent/pset': true,
+    '/pages/parent/pdata': true,
+    '/pages/parent/consult': true,
+    '/pages/parent/community': true,
+    '/pages/parent/pcourse': true,
+    '/pages/parent/wallet': true,
+    '/pages/parent/console': true,
+  }
+
+  if (data.type !== 'dayu-nav' || !data.path) return
+  let path = String(data.path)
+  const base = path.split('?')[0]
+  // 旧 /pages/index：大宇模式回大宇首页；旧版皮肤保留原生首页
+  if (base === '/pages/index') {
+    if (isClassicUi()) {
+      goAppPage(studentHomeUrl())
+    } else {
+      switchMainTab('/pages/dayu/home')
+    }
+    return
+  }
+  if (base === '/pages/training/index' && !isClassicUi()) path = '/pages/training/dayu'
+  if (base === '/pages/qa/index' && !path.includes('?') && !isClassicUi()) path = '/pages/qa/dayu'
+  // 家长账户登录入口 / 切到关联家长版
+  if (path.includes('role=parent')) {
+    emit('parent')
+    goLinkedParentHome()
+    return
+  }
+  if (parentShellRoutes[base]) {
+    // 底栏五页 redirect 互切（见 switchParentTab）；子页走栈
+    const stackOnly =
+      base === '/pages/parent/pcourse'
+      || base === '/pages/parent/wallet'
+      || base === '/pages/parent/console'
+    if (stackOnly) {
+      uni.navigateTo({
+        url: path,
+        fail: () => goAppPage(path),
+      })
+    } else {
+      goAppPage(base)
+    }
+    return
+  }
+  if (base === '/pages/parent/index') {
+    // 「我的 → 孩子账户管理」：栈内打开管理页；其它入口勿再当家长首页
+    if (parentShellPages.has(pageFile(props.page))) {
+      uni.navigateTo({
+        url: path,
+        fail: () => goAppPage(path),
+      })
+    } else {
+      goAppPage(isClassicUi() ? '/pages/parent/index' : '/pages/parent/dayu')
+    }
+    return
+  }
+
+  // 家长版壳内：学生业务页尚未对家长开放，留在本页提示，避免鉴权踢登录
+  // 天赋测试 hub/index 允许进入（测评页会按角色处理）
+  if (parentShellPages.has(pageFile(props.page))) {
+    const studentOnly = [
+      '/pages/dayu/home',
+      '/pages/training/dayu',
+      '/pages/qa/dayu',
+      '/pages/hub/academy',
+      '/pages/hub/console',
+      '/pages/hub/courses',
+      '/pages/hub/story',
+    ]
+    if (studentOnly.includes(base)) {
+      uni.showToast({ title: '功能即将开放', icon: 'none' })
+      return
+    }
+  }
+
+  const tabBases = [
+    '/pages/dayu/home',
+    '/pages/training/dayu',
+    '/pages/qa/dayu',
+    '/pages/hub/academy',
+    '/pages/hub/console',
+  ]
+  if (tabBases.includes(path.split('?')[0])) {
+    switchMainTab(path)
+    return
+  }
+  uni.navigateTo({ url: path })
+}
+
+function onFrameLoad() {
+  frameReady = true
+  syncFrameLayoutVars()
+  pushHydrate()
+}
+
+watch(
+  () => props.hydrate,
+  () => {
+    if (suppressHydratePush) return
+    pushHydrate()
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.academyCollapseSignal,
+  (n, o) => {
+    if (!n || n === o) return
+    if (pageFile(props.page) !== 'drama.html') return
+    postToFrame({ type: 'dayu-academy-collapse' })
+  },
+)
+
+onMounted(() => {
+  // #ifdef H5
+  window.addEventListener('message', handleMessage)
+  // #endif
+})
+
+onUnmounted(() => {
+  // #ifdef H5
+  window.removeEventListener('message', handleMessage)
+  // #endif
+})
+</script>
+
+<style scoped>
+/* 与 Vue 页 fixed 底栏同一视口盒，避免切换时底栏上下/宽窄跳动 */
+.dayu-frame-wrap {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--app-max-width, 480px);
+  background: #07090e;
+  overflow: hidden;
+  z-index: 1;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.dayu-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #07090e;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.dayu-iframe::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+</style>

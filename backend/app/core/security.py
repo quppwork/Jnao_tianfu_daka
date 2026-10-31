@@ -24,6 +24,32 @@ def is_debug_routes_enabled() -> bool:
     return os.getenv("JNAO_DEBUG_ROUTES", "1") == "1"
 
 
+def is_legacy_register_enabled() -> bool:
+    """MVP 遗留 /api/auth/register — 生产默认关闭。"""
+    default = "0" if is_production() else "1"
+    return os.getenv("JNAO_LEGACY_REGISTER", default) == "1"
+
+
+def assert_production_auth_config() -> None:
+    """生产环境禁止 mock 认证组件，并要求 Redis。"""
+    if not is_production():
+        return
+    if os.getenv("AUTH_CHALLENGE_MOCK", "0") == "1":
+        raise RuntimeError("生产环境不可启用 AUTH_CHALLENGE_MOCK")
+    if os.getenv("SMS_PROVIDER", "").strip().lower() == "mock":
+        raise RuntimeError("生产环境不可使用 SMS_PROVIDER=mock")
+    if os.getenv("SMS_MOCK_EXPOSE", "0") == "1":
+        raise RuntimeError("生产环境不可启用 SMS_MOCK_EXPOSE")
+    if not (os.getenv("REDIS_URL") or "").strip():
+        raise RuntimeError("生产环境必须配置 REDIS_URL（OAuth/SMS 状态存储）")
+    admin_login = (os.getenv("ADMIN_LOGIN_NAME") or "").strip()
+    admin_pwd = (os.getenv("ADMIN_PASSWORD") or "").strip()
+    if not admin_login or not admin_pwd:
+        raise RuntimeError("生产环境必须配置 ADMIN_LOGIN_NAME 与 ADMIN_PASSWORD")
+    if len(admin_pwd) < 16:
+        raise RuntimeError("生产环境 ADMIN_PASSWORD 长度至少 16 位")
+
+
 def get_cors_origins() -> list[str]:
     raw = os.getenv("CORS_ORIGINS", "").strip()
     if raw:

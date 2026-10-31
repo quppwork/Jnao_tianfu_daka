@@ -10,6 +10,17 @@ def _auth(uid: int) -> dict:
     return {"headers": {"X-Child-User-Id": str(uid)}}
 
 
+def _finish_media_if_needed(client, uid: int, item: dict) -> None:
+    if not (item.get("audio_url") or item.get("video_url")):
+        return
+    res = client.post(
+        f"/api/training/items/{item['id']}/watch-progress",
+        json={"watched_sec": 95, "duration_sec": 100},
+        **_auth(uid),
+    )
+    assert res.status_code == 200, res.text
+
+
 def _item_skill(item: dict) -> str | None:
     raw = item.get("instructions") or ""
     try:
@@ -98,6 +109,7 @@ class TestPlanCustomizeApi:
         )
         plan = sched.json()
         first = plan["items"][0]
+        _finish_media_if_needed(client, uid, first)
         client.post(
             "/api/training/checkin",
             json={

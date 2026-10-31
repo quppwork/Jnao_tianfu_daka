@@ -1,11 +1,12 @@
 import pytest
 """学科答疑 Prompt 构建 — 学段 + 天赋画像"""
 
-from app.services.qa_prompt_builder import (
+from app.agents.qa.prompt_builder import (
+    build_learner_context_block,
     build_qa_system_prompt,
-    infer_school_stage,
-    talent_coaching_hint,
 )
+from app.agents.shared.stage import infer_school_stage
+from app.agents.shared.talent import talent_coaching_hint
 
 
 class TestSchoolStage:
@@ -31,14 +32,29 @@ class TestTalentCoaching:
 
 class TestBuildPrompt:
     def test_primary_low_language(self):
-        prompt = build_qa_system_prompt(
-            school_stage="primary_low",
-            grade="二年级",
-            talent_primary="学者",
-        )
+        prompt = build_qa_system_prompt(school_stage="primary_low")
         assert "小学低" in prompt or "短句" in prompt
-        assert "学者" in prompt
+        learner = build_learner_context_block(grade="二年级", talent_primary="学者")
+        assert "学者" in learner
 
     def test_includes_subject(self):
-        prompt = build_qa_system_prompt(subject="数学", talent_primary="赢者")
-        assert "数学" in prompt
+        prompt = build_qa_system_prompt(subject="理科")
+        assert "理科" in prompt
+
+    def test_method_kb_header_and_context(self):
+        prompt = build_qa_system_prompt(
+            subject="理科",
+            rag_context="系统训练先打基础再专题",
+            rag_kind="method",
+        )
+        assert "平台特殊训练方法" in prompt
+        assert "系统训练" in prompt
+        assert "不要改成普通刷题" in prompt or "题海" in prompt
+
+    def test_legacy_rag_header(self):
+        prompt = build_qa_system_prompt(
+            rag_context="先通分再相加",
+            rag_kind="legacy",
+        )
+        assert "参考资料" in prompt
+        assert "平台特殊训练方法" not in prompt

@@ -15,6 +15,23 @@ class AdminParentOut(BaseModel):
     child_quota: int
     children_count: int = 0
     created_at: str | None = None
+    account_status: str | None = None
+    display_phone: str | None = None
+    # 家计上游用量（家长本人 + 名下孩子）
+    usage_total_tokens: int = 0
+    usage_call_count: int = 0
+
+
+class AdminCreateParentRequest(BaseModel):
+    parent_phone: str = Field(..., min_length=11, max_length=20)
+    nickname: str = Field(..., min_length=1, max_length=50)
+    password: str | None = Field(None, min_length=6, max_length=128)
+    child_quota: int = Field(5, ge=0, le=999)
+
+
+class AdminRestoreByPhoneRequest(BaseModel):
+    phone: str | None = Field(None, min_length=11, max_length=20)
+    nickname: str | None = Field(None, min_length=1, max_length=50)
 
 
 class AdminParentListResponse(BaseModel):
@@ -33,6 +50,9 @@ class AdminChildOut(BaseModel):
     parent_id: int | None = None
     parent_phone: str | None = None
     parent_nickname: str | None = None
+    # 该孩子账户上游用量
+    usage_total_tokens: int = 0
+    usage_call_count: int = 0
 
 
 class AdminChildListResponse(BaseModel):
@@ -94,6 +114,18 @@ class AdminSessionOut(BaseModel):
     last_active_at: str | None = None
 
 
+class AdminUsageBrief(BaseModel):
+    """上游用量摘要（豆包官方 + 百炼估算等合计）。"""
+
+    user_id: int | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    call_count: int = 0
+    event_count: int = 0
+    by_provider: list[dict] = []
+
+
 class AdminParentDetailResponse(BaseModel):
     id: int
     parent_phone: str
@@ -103,6 +135,23 @@ class AdminParentDetailResponse(BaseModel):
     created_at: str | None = None
     children: list[AdminChildOut] = []
     active_sessions: list[AdminSessionOut] = []
+    reconciled_count: int = 0
+    pending_unbound_count: int = 0
+    unbound_children: list[AdminChildOut] = []
+    duplicate_parents: list[dict] = []
+    canonical_parent_id: int | None = None
+    is_duplicate_account: bool = False
+    account_status: str | None = "active"
+    removed_at: str | None = None
+    # 家长本人用量 / 家计汇总（含家长+全部孩子）
+    usage_me: AdminUsageBrief | None = None
+    usage_billing: AdminUsageBrief | None = None
+
+
+class AdminReconcileResponse(BaseModel):
+    reconciled_count: int = 0
+    children_count: int = 0
+    children: list[AdminChildOut] = []
 
 
 class AdminTrainingDayOut(BaseModel):
@@ -129,3 +178,38 @@ class AdminChildDetailResponse(BaseModel):
     training_history_days: list[AdminTrainingDayOut] = []
     recent_plans: list[dict] = []
     active_sessions: list[AdminSessionOut] = []
+    account_status: str | None = "active"
+    removed_at: str | None = None
+    usage_me: AdminUsageBrief | None = None
+    usage_billing: AdminUsageBrief | None = None
+
+
+class BlacklistEntryOut(BaseModel):
+    value: str
+    reason: str | None = None
+    created_at: str | None = None
+    expires_at: str | None = None
+    created_by: str | None = None
+
+
+class AdminBlacklistResponse(BaseModel):
+    ips: list[BlacklistEntryOut] = []
+    phones: list[BlacklistEntryOut] = []
+    devices: list[BlacklistEntryOut] = []
+
+
+class AdminTalentQuotaRequest(BaseModel):
+    add: int = Field(1, ge=-20, le=20, description="调整次数：正数增加，负数减少")
+
+
+class AdminTalentQuotaBatchRequest(BaseModel):
+    child_ids: list[int] = Field(..., min_length=1, max_length=200)
+    add: int = Field(1, ge=-20, le=20)
+
+
+class AdminTalentQuotaResponse(BaseModel):
+    child_id: int
+    nickname: str
+    talent_test_quota: int
+    valid_tests_used: int = 0
+    remaining: int = 0

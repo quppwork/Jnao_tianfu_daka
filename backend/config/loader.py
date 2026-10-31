@@ -31,27 +31,39 @@ def load_settings() -> dict:
     server["port"] = int(os.getenv("JNAO_PORT", server.get("port", 8011)))
     upstream = raw.get("upstream", {}).get("tianfu_rag", {})
     upstream["url"] = os.getenv("TIANFU_RAG_URL", upstream.get("url", "http://127.0.0.1:8010"))
-    deepseek = raw.get("deepseek", {})
-    deepseek["api_key"] = os.getenv("DEEPSEEK_API_KEY", deepseek.get("api_key", ""))
-    raw["deepseek"] = deepseek
-    doubao = raw.get("doubao", {})
-    doubao_key = os.getenv("DOUBAO_API_KEY", doubao.get("api_key", ""))
-    if str(doubao_key).startswith("${"):
-        doubao_key = ""
-    doubao["api_key"] = doubao_key
-    doubao_base = os.getenv(
-        "DOUBAO_API_BASE",
-        doubao.get("api_base", "https://ark.cn-beijing.volces.com/api/v3"),
+    deepseek = raw.get("deepseek", {}) or {}
+    ds_key = os.getenv("DEEPSEEK_API_KEY", deepseek.get("api_key", ""))
+    if str(ds_key).startswith("${"):
+        ds_key = ""
+    deepseek["api_key"] = ds_key
+    ds_base = os.getenv(
+        "DEEPSEEK_API_BASE",
+        deepseek.get("api_base", "https://api.deepseek.com"),
     )
-    if str(doubao_base).startswith("${"):
-        doubao_base = "https://ark.cn-beijing.volces.com/api/v3"
-    doubao["api_base"] = doubao_base
-    raw_model = doubao.get("model", "")
-    if raw_model.startswith("${"):
-        raw_model = ""
-    doubao["model"] = os.getenv("DOUBAO_CHAT_MODEL", raw_model or "doubao-seed-1-6-250615")
-    doubao["vision_model"] = os.getenv("DOUBAO_VISION_MODEL", doubao["model"])
-    raw["doubao"] = doubao
+    if str(ds_base).startswith("${") or not str(ds_base).startswith("http"):
+        ds_base = "https://api.deepseek.com"
+    deepseek["api_base"] = str(ds_base).rstrip("/")
+    ds_model = os.getenv("DEEPSEEK_CHAT_MODEL", deepseek.get("model", "deepseek-v4-pro"))
+    if str(ds_model).startswith("${") or not str(ds_model).strip():
+        ds_model = "deepseek-v4-pro"
+    deepseek["model"] = str(ds_model).strip()
+    ds_fast = os.getenv(
+        "DEEPSEEK_FAST_MODEL",
+        deepseek.get("fast_model") or "deepseek-flash",
+    )
+    if str(ds_fast).startswith("${") or not str(ds_fast).strip():
+        ds_fast = "deepseek-flash"
+    deepseek["fast_model"] = str(ds_fast).strip()
+    ds_vision = os.getenv(
+        "DEEPSEEK_VISION_MODEL",
+        deepseek.get("vision_model") or "deepseek-flash",
+    )
+    if str(ds_vision).startswith("${") or not str(ds_vision).strip():
+        ds_vision = "deepseek-flash"
+    deepseek["vision_model"] = str(ds_vision).strip()
+    raw["deepseek"] = deepseek
+    # 豆包停用：不再从环境注入；旧 DOUBAO_* 忽略
+    raw["doubao"] = {"api_key": "", "api_base": "", "model": "", "vision_model": ""}
     raw["server"] = server
     raw["upstream"]["tianfu_rag"] = upstream
     db = raw.get("database", {})
@@ -61,14 +73,23 @@ def load_settings() -> dict:
         db["url"] = default_db
     raw["database"] = db
     oss = raw.get("oss", {})
-    oss["access_key_id"] = os.getenv("OSS_ACCESS_KEY_ID", oss.get("access_key_id", ""))
-    oss["access_key_secret"] = os.getenv("OSS_ACCESS_KEY_SECRET", oss.get("access_key_secret", ""))
+    oss_id = os.getenv("OSS_ACCESS_KEY_ID", oss.get("access_key_id", ""))
+    oss_secret = os.getenv("OSS_ACCESS_KEY_SECRET", oss.get("access_key_secret", ""))
+    if str(oss_id).startswith("${"):
+        oss_id = ""
+    if str(oss_secret).startswith("${"):
+        oss_secret = ""
+    oss["access_key_id"] = oss_id
+    oss["access_key_secret"] = oss_secret
     oss["bucket"] = os.getenv("OSS_BUCKET", oss.get("bucket", "jnao-talent-ai"))
     oss["endpoint"] = os.getenv("OSS_ENDPOINT", oss.get("endpoint", "oss-cn-beijing.aliyuncs.com"))
-    oss["prefix"] = os.getenv("OSS_PREFIX", oss.get("prefix", "yinpin/"))
+    oss_prefix = os.getenv("OSS_PREFIX", oss.get("prefix", "yinpin/"))
+    oss["prefix"] = oss_prefix.split(",")[0].strip()
+    oss["prefixes"] = [p.strip() for p in oss_prefix.split(",") if p.strip()]
     signed = os.getenv("OSS_SIGNED_URL", str(oss.get("signed_url", True)))
     oss["signed_url"] = signed.lower() in ("1", "true", "yes")
     oss["sign_expires"] = int(os.getenv("OSS_SIGN_EXPIRES", oss.get("sign_expires", 7200)))
+    oss["cdn_domain"] = os.getenv("OSS_CDN_DOMAIN", oss.get("cdn_domain", "")).strip()
     raw["oss"] = oss
     return raw
 
@@ -102,12 +123,32 @@ def load_training_curriculum() -> dict:
 
 
 @lru_cache(maxsize=1)
+def load_training_recipes() -> dict:
+    """返回 training_recipes.yaml — 分群 / 方案模式 / 固定配方"""
+    path = _CONFIG_DIR / "training_recipes.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("training_recipes.yaml")
+    return data if isinstance(data, dict) else {}
+
+
+@lru_cache(maxsize=1)
 def load_training_tier_thresholds() -> dict:
     """🆕 v2.0 返回 training_tier_thresholds.yaml — 技能 Tier×学段→达标阈值"""
     path = _CONFIG_DIR / "training_tier_thresholds.yaml"
     if not path.exists():
         return {}
     data = _read_yaml("training_tier_thresholds.yaml")
+    return data if isinstance(data, dict) else {}
+
+
+@lru_cache(maxsize=1)
+def load_parent_courses() -> dict:
+    """家长课堂目录 — 与训练/学院解耦"""
+    path = _CONFIG_DIR / "parent_courses.yaml"
+    if not path.exists():
+        return {}
+    data = _read_yaml("parent_courses.yaml")
     return data if isinstance(data, dict) else {}
 
 

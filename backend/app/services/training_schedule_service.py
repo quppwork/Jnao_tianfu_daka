@@ -2,39 +2,51 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload, Session
 
 from app.db.models import ChildUser, ContentItem, TrainingItem, TrainingPlan, TrainingRecord
 from app.services.assessment_service import resolve_effective_talent
 from app.services.child_training_state import (
-    filter_active_skills,
+    display_overall_tier,
     get_skill_oss_position,
-    get_skills_with_records,
     get_training_progress,
-    overall_tier,
 )
 from app.services.content_meta import estimate_duration_min, item_instruction, parse_item_meta, content_display_title
 from app.services.talent_content_pool import get_talent_content_pool
 from app.services.training_catalog_sync import ensure_supplementary_catalogs, repair_plan_media_items
+from app.services.training_video_attach import attach_videos_to_plan_items
 from app.services.training_child_guide import build_coach_text_for_plan
-from app.services.training_formula_engine import expand_formula
+from app.services.training_formula_engine import (
+    duration_slot,
+    HistoryEntry,
+)
+from app.services.training.planner import plan_today_slots
 from app.services.training_service import (
     TrainingError,
     _get_plan_by_date,
     _plan_to_response,
+    _watch_pct,
     create_plan_for_schedule,
 )
 from app.services.training_day import get_training_day, is_new_day_ready
+from app.core.logger import get_logger
+
+logger = get_logger("training.schedule")
 
 
 def _resolve_plan_date(db: Session, child_user_id: int, plan_date: date | None = None) -> date:
     from app.services.dev_clock import resolve_training_now
 
     now = resolve_training_now(db, child_user_id)
-    return plan_date or get_training_day(now)
+    expected = get_training_day(now)
+    resolved = plan_date or expected
+    if resolved != expected:
+        raise TrainingError("只能操作当日训练方案", 400)
+    return resolved
 
 DEFAULT_DAILY_PLAN_MINUTES = 45
 
@@ -51,21 +63,6 @@ def _candidate_dict(item: ContentItem) -> dict:
     }
 
 
-def _build_full_candidate_pool(
-    db: Session,
-    talent_code: int,
-    content_index: int,
-) -> list[ContentItem]:
-    """该天赋全部系列混合候选池（不按 OSS 系列拆分）"""
-    pool_limit = 80 if content_index <= 0 else 48
-    return get_talent_content_pool(
-        db,
-        talent_code,
-        start_index=content_index,
-        limit=pool_limit,
-    )
-
-
 def _plan_has_started(db: Session, plan: TrainingPlan) -> bool:
     if plan.status == "completed":
         return True
@@ -75,8 +72,7 @@ def _plan_has_started(db: Session, plan: TrainingPlan) -> bool:
     if rec:
         return True
     for it in plan.items:
-        wp = it.watch_progress if isinstance(it.watch_progress, dict) else {}
-        if float(wp.get("pct") or 0) > 0:
+        if _watch_pct(it) > 0:
             return True
     return False
 
@@ -95,23 +91,74 @@ def _has_plan_content(plan: TrainingPlan) -> bool:
 
 
 def _plan_structure_invalid(plan: TrainingPlan, planned_minutes: int) -> bool:
-    """同一训练块多项、或超出时长表块数 → 旧排课结构，需重生成"""
+    """项数超出公式上界，或旧版 v1 同 block 重复 → 需重生成"""
     from app.services.content_meta import parse_item_instruction
 
-    slot_cfg = duration_slot(planned_minutes)
-    max_blocks = int(slot_cfg.get("items") or 1)
-    if len(plan.items) > max_blocks:
+    max_items = int(duration_slot(planned_minutes).get("items") or 1)
+    if len(plan.items) > max_items:
         return True
     block_counts: dict[str, int] = {}
     for item in plan.items:
         meta = parse_item_instruction(
             item.instructions if item.instructions and item.instructions.strip().startswith("{") else None
         )
+        if meta.get("skill"):
+            continue  # v2 公式排课项均带 skill，不按 block 字母判重复
         block = meta.get("block") or "A"
         block_counts[block] = block_counts.get(block, 0) + 1
         if block_counts[block] > 1:
             return True
     return False
+
+
+def _attach_videos_to_items(db: Session, plan: TrainingPlan) -> None:
+    """为训练项匹配对应技能的视频（如极速运算 → _1.5极速运算的原理及过程.mp4）"""
+    attach_videos_to_plan_items(db, plan, only_missing=False)
+
+
+def _collect_schedule_history(
+    db: Session,
+    child_user_id: int,
+    plan_date: date | None,
+) -> tuple[HistoryEntry, ...]:
+    """近史：仅有效排课日（有时长+有项），排除当日壳。"""
+    recent_plans = db.scalars(
+        select(TrainingPlan)
+        .where(TrainingPlan.child_user_id == child_user_id)
+        .where(TrainingPlan.status.in_(["completed", "pending"]))
+        .order_by(desc(TrainingPlan.plan_date))
+        .limit(40)
+    ).all()
+
+    def _item_skill_name(it: TrainingItem) -> str | None:
+        from app.services.content_meta import parse_item_instruction, skill_from_title
+
+        inst = it.instructions
+        if inst and str(inst).strip().startswith("{"):
+            sk = parse_item_instruction(inst).get("skill")
+            if sk:
+                return str(sk).strip()
+        title_sk = skill_from_title(it.title or "")
+        return title_sk or None
+
+    hist_list: list[HistoryEntry] = []
+    for p in reversed(recent_plans):
+        if plan_date and p.plan_date == plan_date:
+            continue
+        mins = p.planned_minutes
+        if mins is None or int(mins) <= 0:
+            continue
+        if not p.items:
+            continue
+        skills = tuple(sk for it in p.items if (sk := _item_skill_name(it)))
+        hist_list.append(
+            HistoryEntry(
+                plan_date=p.plan_date,
+                planned_minutes=int(mins),
+                skills=skills,
+            )
+        )
+    return tuple(hist_list[-30:])
 
 
 async def populate_plan_items(
@@ -122,7 +169,7 @@ async def populate_plan_items(
     *,
     plan_date: date | None = None,
 ) -> dict:
-    """v2.0: 公式引擎展开 → 取各技能 OSS 音频 → 生成 plan_items"""
+    """v3.0: Decision Tree 选策略 → 权重引擎展开 → OSS 音频 → plan_items。"""
     ensure_supplementary_catalogs(db)
     plan_date = plan_date or plan.plan_date
     talent = resolve_effective_talent(db, child_user_id)
@@ -133,10 +180,8 @@ async def populate_plan_items(
     child = db.get(ChildUser, child_user_id)
     state = get_training_progress(child) if child else {}
 
-    # v2.0: overall_tier 替代 content_index — 只算有打卡记录的技能
-    skills_with_records = get_skills_with_records(db, child_user_id)
-    active_state = filter_active_skills(state, skills_with_records)
-    o_tier = overall_tier(active_state)
+    # 排课写入的 overall_tier 与成长 /tier、打卡结算同一函数
+    o_tier = display_overall_tier(db, child)
     plan.content_index = o_tier
 
     # 获取年级 → 学段
@@ -146,8 +191,25 @@ async def populate_plan_items(
     from app.services.training_mastery import _grade_band
     grade_band = _grade_band(grade) or "primary_low"
 
-    # 公式引擎展开技能组合
-    formula_result = expand_formula(planned_minutes, overall_tier=o_tier, grade_band=grade_band)
+    # 提取每个技能的个体 Tier
+    skill_tiers: dict[str, int] = {}
+    skills_state = state.get("skills", {})
+    for skill_name, skill_info in skills_state.items():
+        if isinstance(skill_info, dict) and "tier" in skill_info:
+            skill_tiers[skill_name] = int(skill_info["tier"])
+
+    history = _collect_schedule_history(db, child_user_id, plan_date)
+
+    # 分群 + 方案模式 → 槽位（体验/营期走固定配方；默认走现网权重引擎）
+    formula_result = plan_today_slots(
+        child,
+        planned_minutes,
+        overall_tier=o_tier,
+        grade_band=grade_band,
+        skill_tiers=skill_tiers,
+        history=history,
+        db=db,
+    )
     slots = formula_result["slots"]
 
     # OSS 音频池
@@ -178,23 +240,38 @@ async def populate_plan_items(
                 return item
         return None
 
+    bundle_set = set(formula_result.get("bundle_skills") or [])
+    extras_queue = list(formula_result.get("extras") or [])
+    grade_mark_map = {
+        str(g.get("skill")): str(g.get("mark") or "")
+        for g in (formula_result.get("grade_notes") or [])
+        if isinstance(g, dict) and g.get("skill")
+    }
+
     def _add_item(
         *,
         content: ContentItem | None = None,
         skill_name: str = "",
         is_elective: bool = False,
         blocks_next: bool = True,
+        is_bundle: bool = False,
+        is_extra: bool = False,
+        grade_mark: str | None = None,
     ) -> None:
         nonlocal sort_order
         if content:
             meta = parse_item_meta(content)
             inst = item_instruction("A", meta.get("content_type") or "audio")
             try:
-                payload = __import__("json").loads(inst)
+                payload = json.loads(inst)
                 payload["skill"] = meta.get("skill") or skill_name
                 payload["item_type"] = "elective" if is_elective else "required"
                 payload["blocks_next"] = blocks_next
-                inst = __import__("json").dumps(payload, ensure_ascii=False)
+                payload["is_bundle"] = bool(is_bundle)
+                payload["is_extra"] = bool(is_extra)
+                if grade_mark:
+                    payload["grade_mark"] = grade_mark
+                inst = json.dumps(payload, ensure_ascii=False)
             except Exception:
                 pass
             title = content_display_title(content)
@@ -214,6 +291,17 @@ async def populate_plan_items(
             )
         else:
             # 占位：OSS 中找不到该技能的音频
+            ph = {
+                "block": "A",
+                "content_type": "placeholder",
+                "skill": skill_name,
+                "item_type": "elective" if is_elective else "required",
+                "blocks_next": blocks_next,
+                "is_bundle": bool(is_bundle),
+                "is_extra": bool(is_extra),
+            }
+            if grade_mark:
+                ph["grade_mark"] = grade_mark
             db.add(
                 TrainingItem(
                     plan_id=plan.id,
@@ -221,30 +309,94 @@ async def populate_plan_items(
                     ability_type="placeholder",
                     title=f"{skill_name}（待同步）",
                     duration_min=0,
-                    instructions=item_instruction("A", "placeholder"),
+                    instructions=json.dumps(ph, ensure_ascii=False),
                     checkin_status="pending",
                 )
             )
         sort_order += 1
 
-    # 训练时长 >= 8 小时 → 末尾追加精力恢复
-    if planned_minutes >= 480:
-        slots = list(slots) + ["精力恢复"]
-
-    # 遍历公式槽位，为每个技能取对应 OSS 音频
+    # v3.0: 精力恢复已由引擎在 _ctx_to_result 中追加，此处不再重复
     elective_rules = __import__("config.loader", fromlist=["load_training_curriculum"]).load_training_curriculum().get("elective_rules") or {}
+    SUBJECT_SKILLS = frozenset({"学科方案", "三错一讲", "学科复盘", "学科练习"})
     for skill_name in slots:
+        is_subject = skill_name in SUBJECT_SKILLS
         is_elective = skill_name in elective_rules
         er = elective_rules.get(skill_name, {})
-        blocks_next = not is_elective  # 选修不阻塞
+        blocks_next = not is_elective and not is_subject
         if is_elective:
             blocks_next = er.get("blocks_next", False)
 
-        content = _find_content_for_skill(skill_name)
-        _add_item(content=content, skill_name=skill_name, is_elective=is_elective, blocks_next=blocks_next)
+        is_extra = False
+        if extras_queue and skill_name == extras_queue[0]:
+            is_extra = True
+            extras_queue.pop(0)
+
+        content = None if is_subject else _find_content_for_skill(skill_name)
+        if is_subject:
+            # 学业占位：无 OSS，写入可打卡学科项
+            ph = {
+                "block": "S",
+                "content_type": "subject",
+                "skill": skill_name,
+                "item_type": "required",
+                "blocks_next": False,
+                "is_bundle": False,
+                "is_extra": False,
+                "assess_mode": "pass_on_submit",
+            }
+            db.add(
+                TrainingItem(
+                    plan_id=plan.id,
+                    sort_order=sort_order,
+                    ability_type="subject",
+                    title=skill_name,
+                    duration_min=30,
+                    instructions=json.dumps(ph, ensure_ascii=False),
+                    checkin_status="pending",
+                )
+            )
+            sort_order += 1
+            continue
+
+        _add_item(
+            content=content,
+            skill_name=skill_name,
+            is_elective=is_elective,
+            blocks_next=blocks_next,
+            is_bundle=skill_name in bundle_set and not is_extra,
+            is_extra=is_extra,
+            grade_mark=grade_mark_map.get(skill_name) or None,
+        )
+
+    # 匹配视频：为有对应视频的技能附加 video_url
+    _attach_videos_to_items(db, plan)
 
     plan.planned_minutes = planned_minutes
     plan.media_exhausted = 0
+    # 排课元数据写入 schedule_assist_json（对齐算法文档 daily_plan / 回放）
+    plan.schedule_assist_json = {
+        "cohort": formula_result.get("cohort"),
+        "plan_mode": formula_result.get("plan_mode"),
+        "mix_preference": formula_result.get("mix_preference"),
+        "brain_ratio": formula_result.get("brain_ratio"),
+        "subject_ratio": formula_result.get("subject_ratio"),
+        "recipe_id": formula_result.get("recipe_id"),
+        "strategy": formula_result.get("strategy"),
+        "schedule_engine": formula_result.get("schedule_engine"),
+        "overall_grade_used": formula_result.get("overall_grade_used", o_tier),
+        "bundle_id": formula_result.get("bundle_id"),
+        "bundle_skills": formula_result.get("bundle_skills") or [],
+        "extras": formula_result.get("extras") or [],
+        "annotations": formula_result.get("annotations") or [],
+        "exam_note": formula_result.get("exam_note"),
+        "c_note": formula_result.get("c_note"),
+        "reason": formula_result.get("reason"),
+        "cohort_source": formula_result.get("cohort_source"),
+        "frozen": True,
+        "elective_offers": formula_result.get("elective_offers") or [],
+        "subject_slots": formula_result.get("subject_slots") or [],
+        "recipe_variant": formula_result.get("recipe_variant"),
+    }
     db.flush()
     plan = db.scalar(
         select(TrainingPlan).options(selectinload(TrainingPlan.items)).where(TrainingPlan.id == plan.id)
@@ -258,7 +410,24 @@ async def populate_plan_items(
         "c_note": formula_result.get("c_note"),
         "exam_note": formula_result.get("exam_note"),
         "elective_notes": formula_result.get("elective_notes", []),
-        "mode": "formula_v2",
+        "mode": f"v3_{formula_result.get('strategy', 'unknown')}",
+        "strategy": formula_result.get("strategy"),
+        "bundle_id": formula_result.get("bundle_id"),
+        "bundle_note": formula_result.get("bundle_note"),
+        "grade_notes": formula_result.get("grade_notes", []),
+        "reason": formula_result.get("reason"),
+        "cohort": formula_result.get("cohort"),
+        "plan_mode": formula_result.get("plan_mode"),
+        "recipe_id": formula_result.get("recipe_id"),
+        "brain_ratio": formula_result.get("brain_ratio"),
+        "subject_ratio": formula_result.get("subject_ratio"),
+        "schedule_engine": formula_result.get("schedule_engine"),
+        "overall_grade_used": formula_result.get("overall_grade_used", o_tier),
+        "extras": formula_result.get("extras") or [],
+        "annotations": formula_result.get("annotations") or [],
+        "bundle_id": formula_result.get("bundle_id"),
+        "elective_offers": formula_result.get("elective_offers") or [],
+        "recipe_variant": formula_result.get("recipe_variant"),
     }
 
 
@@ -288,9 +457,12 @@ async def schedule_training_by_duration(
     *,
     plan_date: date | None = None,
 ) -> dict:
-    """用户选定时长 → 生成今日 plan_item（LLM 框架内路由）"""
-    if planned_minutes < 5:
-        raise TrainingError("训练时长至少 5 分钟")
+    """用户选定时长 → 生成今日 plan_item。
+
+    一天一次训练：未开始可生成/按新时长重生；已开始禁止清表重排，改时长直接 403。
+    """
+    if planned_minutes < 20:
+        raise TrainingError("训练时长至少 20 分钟")
 
     from app.services.dev_clock import resolve_training_now
 
@@ -303,15 +475,30 @@ async def schedule_training_by_duration(
     if plan.status == "completed":
         raise TrainingError("今日训练已完成，次日凌晨4点解锁", 403)
 
-    if not _plan_has_started(db, plan) or _plan_structure_invalid(plan, planned_minutes):
-        route = await populate_plan_items(
-            db, plan, child_user_id, planned_minutes, plan_date=plan_date
-        )
-        schedule_mode = route.get("mode", "rule")
-    elif not _has_plan_content(plan) or plan.planned_minutes != planned_minutes:
-        raise TrainingError("训练已开始，无法更改今日设定时长", 403)
-    else:
+    started = _plan_has_started(db, plan)
+    has_content = _has_plan_content(plan)
+
+    if started:
+        # 已开始：绝不 populate（避免清掉观看/打卡）；仅允许沿用现有方案
+        if plan.planned_minutes is not None and int(plan.planned_minutes) != int(planned_minutes):
+            raise TrainingError("训练已开始，无法更改今日设定时长", 403)
+        if not has_content:
+            raise TrainingError("训练方案异常，请联系管理员", 500)
         schedule_mode = "existing"
+    else:
+        # 未开始：无内容 / 改时长 / 旧结构非法 → 允许生成或重生
+        need_populate = (
+            not has_content
+            or plan.planned_minutes != planned_minutes
+            or _plan_structure_invalid(plan, planned_minutes)
+        )
+        if need_populate:
+            await populate_plan_items(
+                db, plan, child_user_id, planned_minutes, plan_date=plan_date
+            )
+            schedule_mode = "rule"
+        else:
+            schedule_mode = "existing"
 
     db.commit()
     # 方案变更后清除缓存，确保 GET /today 返回最新数据
@@ -323,6 +510,14 @@ async def schedule_training_by_duration(
     plan = _get_plan_by_date(db, child_user_id, plan_date)
     if not plan or not _has_plan_content(plan):
         raise TrainingError("今日方案生成失败", 500)
+    talent = resolve_effective_talent(db, child_user_id)
+    talent_code = talent.get("talent_code") if talent else None
+    started = _plan_has_started(db, plan)
+    if plan.items and talent_code:
+        # 已开练只补缺音频，不改配套视频，避免把正在练的方案改掉
+        if repair_plan_media_items(db, plan, talent_code, attach_videos=not started):
+            db.commit()
+            plan = _get_plan_by_date(db, child_user_id, plan_date)
     if plan.items:
         plan.report_text = build_coach_text_for_plan(plan)
         db.commit()

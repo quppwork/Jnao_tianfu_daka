@@ -1,0 +1,349 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>算力中心 · 大宇智能体</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{max-width:var(--app-max-width, 480px);margin:0 auto;padding-bottom:40px;min-height:100vh;min-height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:9px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.back{font-size:11.5px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+.qcard{margin:12px 18px 0;background:linear-gradient(150deg,#1A2338,#10162A 60%);border:1.5px solid rgba(245,213,168,.35);border-radius:20px;padding:18px 16px}
+.qcard .qt{font-size:11px;color:#8B93A5;letter-spacing:2px;font-weight:800}
+.qcard .qnum{font-size:34px;font-weight:900;color:#F5D9A8;margin-top:4px}
+.qcard .qnum small{font-size:13px;color:#8B93A5;font-weight:700}
+.qbar{margin-top:10px;height:12px;border-radius:99px;background:#0A0F1C;border:1px solid #2A3040;overflow:hidden}
+.qbar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#F5D576,#E0863C);border-radius:99px;transition:width .35s ease}
+.qmeta{display:flex;justify-content:space-between;font-size:10.5px;color:#8B93A5;margin-top:6px;gap:8px}
+.qmeta b{color:#E0863C}
+.qtok{margin-top:10px;font-size:11px;color:#9AD9FF;line-height:1.5}
+.qbal{display:flex;gap:10px;margin-top:14px}
+.qbal div{flex:1;background:#0D1322;border:1px solid #232B3D;border-radius:14px;padding:10px 12px}
+.qbal b{display:block;font-size:16px;font-weight:900;color:#9AD9FF}
+.qbal span{font-size:10px;color:#8B93A5}
+.grp{margin:18px 18px 0}
+.grp .gt{font-size:11px;font-weight:800;color:#5A6274;letter-spacing:2px;margin:0 4px 8px}
+.kids{background:#131926;border:1.5px solid #2A3040;border-radius:16px;overflow:hidden}
+.kids .kr{display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #1A2132;font-size:13px;font-weight:700}
+.kids .kr:last-child{border-bottom:none}
+.kids .kr span{margin-left:auto;color:#F5D9A8;font-weight:900;font-size:12px}
+.vip{display:flex;flex-direction:column;gap:10px}
+.vrow{display:flex;align-items:center;gap:12px;background:#131926;border:1.5px solid #2A3040;border-radius:16px;padding:13px 15px}
+.vrow.hot{border-color:#C9A227;background:linear-gradient(135deg,rgba(201,162,39,.16),rgba(201,162,39,.03))}
+.vrow .vc{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#171E2E;border:1px solid #2A3040;flex:none}
+.vrow .vi b{font-size:14.5px;font-weight:900}
+.vrow .vi span{display:block;font-size:10px;color:#8B93A5;margin-top:2px}
+.vrow .vp{margin-left:auto;text-align:right;flex:none}
+.vrow .vp b{font-size:17px;font-weight:900;color:#F5D9A8}
+.vrow .vp span{display:block;font-size:9.5px;color:#8B93A5}
+.vrow .buy{display:inline-block;margin-top:5px;font-size:10.5px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:4px 13px;border:none;cursor:pointer;font-family:inherit}
+.vtag{position:relative}
+.vtag::before{content:'推荐';position:absolute;top:-8px;right:12px;font-size:9px;font-weight:900;color:#0D111F;background:#F5D576;border-radius:6px;padding:1px 7px}
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.cgrid button{background:#131926;border:1.5px solid #2A3040;border-radius:14px;padding:12px 4px;color:#EDEBE4;cursor:pointer;font-family:inherit}
+.cgrid button b{display:block;font-size:16.5px;font-weight:900;color:#9AD9FF}
+.cgrid button span{display:block;font-size:9.5px;color:#8B93A5;margin-top:3px}
+.cgrid button.on{border-color:#2E6BE6;background:rgba(46,107,230,.14)}
+.tb{background:#131926;border:1.5px solid #2A3040;border-radius:16px;overflow:hidden}
+.tb .th,.tb .tr{display:flex;align-items:center;padding:11px 15px;font-size:12px}
+.tb .th{background:#171E2E;color:#8B93A5;font-size:10.5px;font-weight:800;letter-spacing:1px}
+.tb .tr{border-top:1px solid #1A2132;font-weight:700}
+.tb .tr span:last-child{margin-left:auto;color:#F5D9A8;font-weight:900}
+.tb .th span:last-child{margin-left:auto}
+.note{margin:14px 18px 0;font-size:10px;color:#5A6274;line-height:1.8}
+.paybtn{display:block;margin:16px 18px 0;text-align:center;font-size:15px;font-weight:900;color:#0D111F;background:linear-gradient(90deg,#F5D576,#C9A869);border-radius:99px;padding:14px;border:none;width:calc(100% - 36px);cursor:pointer;font-family:inherit}
+.hint{margin:8px 18px 0;font-size:11px;color:#8B93A5;text-align:center}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">算力中心<small>CREDITS · 额度 / 会员 / 充值</small></div>
+    <a class="back" href="pset.html" id="btnBack">‹ 返回</a>
+  </div>
+
+  <div class="qcard">
+    <div class="qt">本月算力额度（家计）</div>
+    <div class="qnum" id="qNum">—<small> / — 点</small></div>
+    <div class="qbar"><i id="qBar"></i></div>
+    <div class="qmeta"><span id="qUsed">已消耗 — 点</span><b id="qRemain">—</b></div>
+    <div class="qtok" id="qTok">正在同步家长+孩子 token 用量…</div>
+    <div class="qbal">
+      <div><b id="qBal">¥ —</b><span>充值余额（按量扣费）</span></div>
+      <div><b id="qPlan">—</b><span>每月 1 日重置额度</span></div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">本月家计用量明细</div>
+    <div class="kids" id="kidUsage">
+      <div class="kr"><div>加载中…</div><span>—</span></div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">开通会员 · 每月定额算力</div>
+    <div class="vip" id="vipList"></div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">算力充值 · 按量扣费</div>
+    <div class="cgrid" id="packList"></div>
+    <button class="paybtn" type="button" id="payBtn">立即充值</button>
+    <div class="hint" id="payHint">支付通道即将开放</div>
+  </div>
+
+  <div class="grp">
+    <div class="gt">算力收费标准</div>
+    <div class="tb">
+      <div class="th"><span>功能</span><span>单次消耗</span></div>
+      <div class="tr"><span>🤖 大宇智能对话</span><span>2 点/轮</span></div>
+      <div class="tr"><span>🧭 天赋测试（四宫格完整版）</span><span>30 点/次</span></div>
+      <div class="tr"><span>📊 孩子训练数据深度解读</span><span>15 点/次</span></div>
+      <div class="tr"><span>📋 生成天赋测试报告</span><span>20 点/份</span></div>
+      <div class="tr"><span>🎯 个性化训练计划生成</span><span>25 点/次</span></div>
+      <div class="tr"><span>🖥️ 中央电脑回放分析</span><span>10 点/次</span></div>
+      <div class="tr"><span>👨‍👩‍👧 多孩子账户（每个孩子）</span><span>会员共享额度</span></div>
+      <div class="tr"><span>💬 真人导师咨询</span><span>免费 · 会员专享</span></div>
+    </div>
+  </div>
+
+  <div class="note">
+    · 会员额度每月 1 日重置，当月未用完不结转；充值余额永久有效、可叠加，会员额度耗尽后自动按量扣减充值余额。<br/>
+    · 扣费顺序：先扣会员月度额度，再扣充值余额。<br/>
+    · 家计 token 汇总家长本人与名下孩子；展示换算默认 1000 token ≈ 1 点。
+  </div>
+
+</div>
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  function toast(title){
+    if(post('dayu-toast', {title: title})) return;
+    try{ alert(title); }catch(e){}
+  }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        return (o.parent && o.parent.userId) || (o.role === 'parent' && o.userId) || 0;
+      }
+      var u = localStorage.getItem('jnao_user');
+      if(u){
+        var ju = JSON.parse(u);
+        if(ju.role === 'parent') return ju.user_id || ju.id || ju.child_user_id || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function authHeaders(){
+    var h = { Accept: 'application/json' };
+    try{
+      var tok = localStorage.getItem('jnao_access_token') ||
+        localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){
+          var o = JSON.parse(snap);
+          if(o.parent && o.parent.token) tok = o.parent.token;
+          else if(o.token) tok = o.token;
+        }
+      }
+      if(tok) h['Authorization'] = 'Bearer ' + tok;
+      var pid = parentUserId();
+      if(pid) h['X-Child-User-Id'] = String(pid);
+    }catch(e){}
+    return h;
+  }
+  function fmtTok(n){
+    n = Number(n) || 0;
+    if(n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if(n >= 1e4) return Math.round(n/1000) + 'k';
+    if(n >= 1000) return (n/1000).toFixed(1) + 'k';
+    return String(n);
+  }
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  var selectedPack = null;
+  var VIP_ICON = { free:'🌱', lite:'🌱', plus:'🚀', pro:'💎', flagship:'👑' };
+
+  function applyWallet(data){
+    var acc = data.account || {};
+    var usage = data.usage || {};
+    var fam = usage.family_month || {};
+    var quota = Number(acc.monthly_quota_points) || 0;
+    var used = Number(acc.monthly_used_points) || 0;
+    var rem = Number(acc.monthly_remaining_points);
+    if(isNaN(rem)) rem = Math.max(0, quota - used);
+    var pct = quota > 0 ? Math.max(0, Math.min(100, Math.round(rem / quota * 100))) : 0;
+    var usedPct = Math.max(0, Math.min(100, 100 - pct));
+
+    var qNum = document.getElementById('qNum');
+    if(qNum) qNum.innerHTML = rem + '<small> / ' + quota + ' 点</small>';
+    var bar = document.getElementById('qBar');
+    if(bar) bar.style.width = usedPct + '%';
+    var qUsed = document.getElementById('qUsed');
+    if(qUsed) qUsed.textContent = '已消耗 ' + used + ' 点';
+    var qRemain = document.getElementById('qRemain');
+    if(qRemain){
+      qRemain.textContent = pct <= 15 ? ('剩余 ' + pct + '% · 即将耗尽') : ('剩余 ' + pct + '%');
+      qRemain.style.color = pct <= 15 ? '#E0863C' : '#6FCF8E';
+    }
+    var monthTok = Number(usage.display_month_tokens != null ? usage.display_month_tokens : fam.total_tokens) || 0;
+    var allTok = Number(usage.display_total_tokens) || monthTok;
+    var qTok = document.getElementById('qTok');
+    if(qTok){
+      qTok.textContent = '本月家计 ' + fmtTok(monthTok) + ' tok · 累计 ' + fmtTok(allTok) +
+        ' tok（约 ' + (data.tokens_per_point || 1000) + ' tok = 1 点）';
+    }
+    var qBal = document.getElementById('qBal');
+    if(qBal) qBal.textContent = '¥ ' + (Number(acc.balance_yuan) || 0).toFixed(2);
+    var qPlan = document.getElementById('qPlan');
+    if(qPlan) qPlan.textContent = acc.plan_name || '免费体验';
+
+    var host = document.getElementById('kidUsage');
+    var rows = fam.by_user || [];
+    if(host){
+      if(!rows.length){
+        host.innerHTML = '<div class="kr"><div>本月暂无用量</div><span>0</span></div>';
+      } else {
+        host.innerHTML = rows.map(function(r){
+          var label = (r.nickname || '账户') + (r.role === 'parent' ? '（家长）' : '（孩子）');
+          return '<div class="kr"><div>' + esc(label) + '</div><span>' +
+            fmtTok(r.total_tokens) + ' tok · ' + (r.call_count || 0) + ' 次</span></div>';
+        }).join('');
+      }
+    }
+
+    var membership = (data.catalog && data.catalog.membership) || [];
+    var vip = document.getElementById('vipList');
+    if(vip){
+      vip.innerHTML = membership.filter(function(p){ return p.code !== 'free'; }).map(function(p){
+        var hot = p.code === 'plus' ? ' hot vtag' : '';
+        var yuan = ((p.price_cents || 0) / 100).toFixed(0);
+        return '<div class="vrow' + hot + '">' +
+          '<div class="vc">' + (VIP_ICON[p.code] || '⚡') + '</div>' +
+          '<div class="vi"><b>' + esc(p.name) + '</b><span>' + esc(p.blurb || '') + '</span></div>' +
+          '<div class="vp"><b>¥' + yuan + '</b><span>/月</span>' +
+          '<button type="button" class="buy" data-plan="' + esc(p.code) + '">开通</button></div></div>';
+      }).join('');
+    }
+
+    var packs = (data.catalog && data.catalog.topup) || [];
+    var packHost = document.getElementById('packList');
+    if(packHost){
+      packHost.innerHTML = packs.map(function(p, i){
+        var on = i === 2 ? ' on' : '';
+        if(i === 2) selectedPack = p;
+        var yuan = ((p.price_cents || 0) / 100).toFixed(1).replace(/\.0$/, '');
+        return '<button type="button" class="' + on.trim() + '" data-pack="' + esc(p.code) + '">' +
+          '<b>¥' + yuan + '</b><span>' + esc(p.label) + '</span></button>';
+      }).join('');
+    }
+    var payBtn = document.getElementById('payBtn');
+    if(payBtn && selectedPack){
+      var y = ((selectedPack.price_cents || 0) / 100).toFixed(1).replace(/\.0$/, '');
+      payBtn.textContent = '立即充值 ¥' + y;
+    }
+    var hint = document.getElementById('payHint');
+    if(hint) hint.textContent = data.pay_hint || '支付通道即将开放';
+  }
+
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(a){
+      var href = a.getAttribute('href') || '';
+      if(!href || href.indexOf('javascript:')===0) return;
+      var file = href.split('?')[0].split('#')[0].split('/').pop();
+      var map = {
+        'pset.html': '/pages/parent/pset',
+        'parent.html': '/pages/parent/dayu',
+        'wallet.html': '/pages/parent/wallet'
+      };
+      if(map[file]){
+        e.preventDefault();
+        e.stopPropagation();
+        nav(map[file]);
+      }
+      return;
+    }
+    var buy = e.target.closest && e.target.closest('button.buy');
+    if(buy){
+      e.preventDefault();
+      toast('会员支付即将开放');
+      return;
+    }
+    var packBtn = e.target.closest && e.target.closest('#packList button');
+    if(packBtn){
+      e.preventDefault();
+      var code = packBtn.getAttribute('data-pack');
+      var buttons = document.querySelectorAll('#packList button');
+      for(var i=0;i<buttons.length;i++) buttons[i].classList.remove('on');
+      packBtn.classList.add('on');
+      // find pack from label — reload from data-pack via last payload
+      selectedPack = { code: code, price_cents: 0, label: '' };
+      try{
+        var last = window.__WALLET_LAST__;
+        var packs = (last && last.catalog && last.catalog.topup) || [];
+        for(var j=0;j<packs.length;j++){
+          if(packs[j].code === code){ selectedPack = packs[j]; break; }
+        }
+      }catch(err){}
+      var payBtn2 = document.getElementById('payBtn');
+      if(payBtn2 && selectedPack){
+        var y2 = ((selectedPack.price_cents || 0) / 100).toFixed(1).replace(/\.0$/, '');
+        payBtn2.textContent = '立即充值 ¥' + y2;
+      }
+      return;
+    }
+    if(e.target && e.target.id === 'payBtn'){
+      e.preventDefault();
+      toast('充值支付即将开放');
+    }
+  }, true);
+
+  async function loadWallet(){
+    var pid = parentUserId();
+    if(!pid){
+      document.getElementById('qTok').textContent = '请先登录家长账号';
+      return;
+    }
+    try{
+      var res = await fetch('/api/usage/wallet?user_id=' + encodeURIComponent(pid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      window.__WALLET_LAST__ = data;
+      applyWallet(data);
+    }catch(err){
+      document.getElementById('qTok').textContent = '同步失败，请稍后重试';
+      document.getElementById('kidUsage').innerHTML =
+        '<div class="kr"><div>同步失败</div><span>—</span></div>';
+    }
+  }
+  post('dayu-ready');
+  loadWallet();
+})();
+</script>
+</body></html>

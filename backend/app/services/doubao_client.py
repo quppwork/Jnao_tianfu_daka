@@ -1,14 +1,28 @@
-"""豆包 Ark 对话客户端 — 全平台 AI 统一入口"""
+"""统一对话客户端 — DeepSeek（OpenAI 兼容）。模块名 doubao_client 保留以免全仓改 import。"""
 
 from collections.abc import AsyncIterator
 
 import httpx
 from config.loader import load_settings
 from app.core.logger import get_logger
+from app.services.usage_recorder import record_usage
 
-logger = get_logger("doubao")
+logger = get_logger("llm")
 
-DEFAULT_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+DEFAULT_API_BASE = "https://api.deepseek.com"
+DEFAULT_MODEL = "deepseek-v4-pro"
+DEFAULT_FAST_MODEL = "deepseek-flash"
+DEFAULT_VISION_MODEL = "deepseek-flash"
+
+# 逻辑模型名 → 实际模型：业务/profile 只写 "fast" / "default"
+MODEL_ALIASES = {
+    "": "default",
+    "default": "default",
+    "pro": "default",
+    "slow": "default",
+    "fast": "fast",
+    "flash": "fast",
+}
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -16,7 +30,7 @@ _http_client: httpx.AsyncClient | None = None
 def _get_client(timeout: float) -> httpx.AsyncClient:
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        _http_client = httpx.AsyncClient(timeout=timeout)
+        _http_client = httpx.AsyncClient(timeout=timeout, trust_env=False)
     return _http_client
 
 
@@ -28,26 +42,42 @@ def _sanitize_api_base(value: str | None) -> str:
 
 
 def is_configured() -> bool:
-    cfg = load_settings().get("doubao", {})
+    cfg = _cfg()
     key = str(cfg.get("api_key", "") or "").strip()
-    if not key or key.startswith("${") or key.startswith("your-"):
+    if not key or key.startswith("${") or key.startswith("your-") or key.startswith("sk-your"):
         return False
-    base = _sanitize_api_base(cfg.get("api_base"))
-    return bool(key and base.startswith("http"))
+    return bool(str(cfg.get("api_base") or "").startswith("http"))
 
 
 def _cfg() -> dict:
+    """只走 DeepSeek；不再回落豆包。"""
     settings = load_settings()
-    cfg = settings.get("doubao", {})
-    key = str(cfg.get("api_key", "") or "").strip()
+    ds = settings.get("deepseek", {}) or {}
+    key = str(ds.get("api_key", "") or "").strip()
     if key.startswith("${"):
         key = ""
+    model = str(ds.get("model") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    fast = str(ds.get("fast_model") or DEFAULT_FAST_MODEL).strip() or DEFAULT_FAST_MODEL
+    vision = str(ds.get("vision_model") or DEFAULT_VISION_MODEL).strip() or DEFAULT_VISION_MODEL
     return {
         "api_key": key,
-        "api_base": _sanitize_api_base(cfg.get("api_base")),
-        "model": cfg.get("model", "doubao-seed-1-6-250615"),
-        "vision_model": cfg.get("vision_model") or cfg.get("model", "doubao-seed-1-6-250615"),
+        "api_base": _sanitize_api_base(ds.get("api_base")),
+        "model": model,
+        "fast_model": fast,
+        "vision_model": vision,
+        "provider": "deepseek",
     }
+
+
+def resolve_model(name: str | None) -> str:
+    """把 profile 里的逻辑模型名（fast/default/具体名）解析成真实模型。"""
+    cfg = _cfg()
+    alias = MODEL_ALIASES.get(str(name or "").strip().lower(), "")
+    if alias == "fast":
+        return str(cfg.get("fast_model") or cfg["model"])
+    if alias == "default":
+        return cfg["model"]
+    return str(name).strip()
 
 
 def _build_messages(
@@ -72,6 +102,45 @@ def _build_messages(
     return messages
 
 
+def _record_doubao(
+    *,
+    api: str,
+    model: str | None,
+    usage: dict | None,
+    stream: bool = False,
+    ok: bool = True,
+    feature: str | None = None,
+) -> None:
+    try:
+        record_usage(
+            provider="deepseek",
+            api=api,
+            model=model,
+            feature=feature,
+            usage=usage if isinstance(usage, dict) else None,
+            metric_kind="tokens",
+            stream=stream,
+            ok=ok,
+            call_count=1,
+        )
+    except Exception as e:
+        logger.warning("llm usage record skipped: %s", e)
+
+
+def _message_text(message: dict) -> str | None:
+    content = message.get("content")
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                parts.append(str(part.get("text") or ""))
+        content = "".join(parts)
+    text = str(content or "").strip()
+    return text or None
+
+
 async def chat_completion(
     *,
     system_prompt: str,
@@ -79,12 +148,98 @@ async def chat_completion(
     history: list[dict] | None = None,
     max_tokens: int = 500,
     timeout: float = 30,
+    feature: str | None = None,
+    disable_thinking: bool = True,
 ) -> str | None:
+    """默认关 thinking：v4-pro 推理会吃满 max_tokens，短回复容易 content 为空。"""
     cfg = _cfg()
     if not cfg["api_key"]:
         return None
 
     messages = _build_messages(system_prompt, user_message, history)
+
+    try:
+        client = _get_client(timeout)
+        payload = {
+            "model": cfg["model"],
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if disable_thinking:
+            payload["thinking"] = {"type": "disabled"}
+        resp = await client.post(
+            f"{cfg['api_base']}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {cfg['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=timeout,
+        )
+        if resp.status_code == 400 and disable_thinking and "thinking" in resp.text:
+            payload.pop("thinking", None)
+            resp = await client.post(
+                f"{cfg['api_base']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
+        if resp.status_code != 200:
+            logger.error(f"LLM error {resp.status_code}: {resp.text[:200]}")
+            _record_doubao(api="chat.completions", model=cfg["model"], usage=None, ok=False, feature=feature)
+            return None
+        data = resp.json()
+        _record_doubao(
+            api="chat.completions",
+            model=cfg["model"],
+            usage=data.get("usage"),
+            feature=feature,
+        )
+        return _message_text(data["choices"][0]["message"])
+    except httpx.HTTPError as e:
+        logger.warning(f"LLM request failed: {e}")
+        return None
+    except (KeyError, IndexError, ValueError) as e:
+        logger.warning(f"LLM response parse failed: {e}")
+        return None
+
+
+async def chat_completion_message(
+    *,
+    messages: list[dict],
+    tools: list[dict] | None = None,
+    tool_choice: str | dict | None = "auto",
+    max_tokens: int = 400,
+    timeout: float = 30,
+    feature: str | None = None,
+    model: str | None = None,
+) -> dict | None:
+    """DeepSeek /chat/completions：返回 assistant message（可含 tool_calls）。
+
+    OpenAI 兼容：tools + tool_choice；用于 Guide 原生 function-calling 选工具。
+    model 支持逻辑名（"fast" / "default"）或具体模型名。
+    """
+    cfg = _cfg()
+    if not cfg["api_key"]:
+        return None
+    if not messages:
+        return None
+    used_model = resolve_model(model)
+
+    payload: dict = {
+        "model": used_model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        # 工具选库也关 thinking，避免拖慢 Guide Agent
+        "thinking": {"type": "disabled"},
+    }
+    if tools:
+        payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
 
     try:
         client = _get_client(timeout)
@@ -94,22 +249,45 @@ async def chat_completion(
                 "Authorization": f"Bearer {cfg['api_key']}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": cfg["model"],
-                "messages": messages,
-                "max_tokens": max_tokens,
-            },
+            json=payload,
+            timeout=timeout,
         )
+        if resp.status_code == 400 and "thinking" in resp.text:
+            payload.pop("thinking", None)
+            resp = await client.post(
+                f"{cfg['api_base']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
         if resp.status_code != 200:
-            logger.error(f"Doubao error {resp.status_code}: {resp.text[:200]}")
+            logger.error(
+                f"LLM tools error {resp.status_code}: {resp.text[:300]}"
+            )
+            _record_doubao(api="chat.completions.tools", model=used_model, usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        _record_doubao(
+            api="chat.completions.tools",
+            model=used_model,
+            usage=data.get("usage"),
+            feature=feature,
+        )
+        msg = data["choices"][0]["message"]
+        return msg if isinstance(msg, dict) else None
     except httpx.HTTPError as e:
-        logger.warning(f"Doubao request failed: {e}")
+        logger.warning(
+            "LLM tools request failed: type=%s timeout=%s err=%r",
+            type(e).__name__,
+            timeout,
+            e,
+        )
         return None
-    except (KeyError, IndexError, ValueError) as e:
-        logger.warning(f"Doubao response parse failed: {e}")
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        logger.warning(f"LLM tools parse failed: {e}")
         return None
 
 
@@ -121,6 +299,7 @@ async def vision_chat_completion(
     history: list[dict] | None = None,
     max_tokens: int = 800,
     timeout: float = 60,
+    feature: str | None = None,
 ) -> str | None:
     """多模态识题 + 解答（OpenAI 兼容 image_url 格式）"""
     cfg = _cfg()
@@ -145,7 +324,7 @@ async def vision_chat_completion(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             resp = await client.post(
                 f"{cfg['api_base']}/chat/completions",
                 headers={
@@ -159,41 +338,55 @@ async def vision_chat_completion(
                 },
             )
         if resp.status_code != 200:
-            logger.error(f"Doubao vision error {resp.status_code}: {resp.text[:200]}")
+            logger.error(f"LLM vision error {resp.status_code}: {resp.text[:200]}")
+            _record_doubao(api="chat.completions.vision", model=cfg["vision_model"], usage=None, ok=False, feature=feature)
             return None
         data = resp.json()
+        _record_doubao(
+            api="chat.completions.vision",
+            model=cfg["vision_model"],
+            usage=data.get("usage"),
+            feature=feature,
+        )
         return data["choices"][0]["message"]["content"]
     except httpx.HTTPError as e:
-        logger.warning(f"Doubao vision request failed: {e}")
+        logger.warning(f"LLM vision request failed: {e}")
         return None
     except (KeyError, IndexError, ValueError) as e:
-        logger.warning(f"Doubao vision parse failed: {e}")
+        logger.warning(f"LLM vision parse failed: {e}")
         return None
 
 
-async def chat_completion_stream(
+async def chat_completion_messages_stream(
     *,
-    system_prompt: str,
-    user_message: str,
-    history: list[dict] | None = None,
+    messages: list[dict],
     max_tokens: int = 500,
+    feature: str | None = None,
+    model: str | None = None,
 ) -> AsyncIterator[str]:
-    """流式输出：优先真流式，失败则整段回退"""
+    """按已组装 messages 流式输出；Harness loop 走这里。"""
     cfg = _cfg()
     if not cfg["api_key"]:
-        yield "[ERROR] 豆包 API 未配置"
+        yield "[ERROR] DeepSeek API 未配置"
         return
+    if not messages:
+        yield "[ERROR] 空消息"
+        return
+    used_model = resolve_model(model)
 
-    messages = _build_messages(system_prompt, user_message, history)
     payload = {
-        "model": cfg["model"],
+        "model": used_model,
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
+        "stream_options": {"include_usage": True},
+        "thinking": {"type": "disabled"},
     }
+    usage_acc: dict | None = None
+    yielded_any = False
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
             async with client.stream(
                 "POST",
                 f"{cfg['api_base']}/chat/completions",
@@ -205,8 +398,16 @@ async def chat_completion_stream(
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
-                    logger.error(f"Doubao stream error {resp.status_code}: {body[:200]}")
-                    yield "[ERROR] 豆包服务异常"
+                    logger.error(f"LLM stream error {resp.status_code}: {body[:200]}")
+                    _record_doubao(
+                        api="chat.completions.stream",
+                        model=used_model,
+                        usage=None,
+                        stream=True,
+                        ok=False,
+                        feature=feature,
+                    )
+                    yield "[ERROR] DeepSeek 服务异常"
                     return
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data: "):
@@ -218,24 +419,59 @@ async def chat_completion_stream(
                         import json
 
                         data = json.loads(chunk)
-                        delta = data["choices"][0].get("delta", {})
+                        if isinstance(data.get("usage"), dict):
+                            usage_acc = data["usage"]
+                        choices = data.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {}) or {}
                         text = delta.get("content", "")
                         if text:
+                            yielded_any = True
                             yield text
                     except Exception:
                         continue
+        if yielded_any or usage_acc:
+            _record_doubao(
+                api="chat.completions.stream",
+                model=used_model,
+                usage=usage_acc,
+                stream=True,
+                feature=feature,
+            )
     except Exception as e:
-        logger.error(f"Doubao stream failed: {e}")
-        full = await chat_completion(
-            system_prompt=system_prompt,
-            user_message=user_message,
-            history=history,
+        logger.error(f"LLM stream failed: {e}")
+        msg = await chat_completion_message(
+            messages=messages,
+            tools=None,
+            tool_choice=None,
             max_tokens=max_tokens,
+            feature=feature,
+            model=model,
         )
+        full = str((msg or {}).get("content") or "")
         if full:
             yield full
         else:
             yield f"[ERROR] {e}"
+
+
+async def chat_completion_stream(
+    *,
+    system_prompt: str,
+    user_message: str,
+    history: list[dict] | None = None,
+    max_tokens: int = 500,
+    feature: str | None = None,
+) -> AsyncIterator[str]:
+    """流式输出：优先真流式，失败则整段回退"""
+    messages = _build_messages(system_prompt, user_message, history)
+    async for tok in chat_completion_messages_stream(
+        messages=messages,
+        max_tokens=max_tokens,
+        feature=feature,
+    ):
+        yield tok
 
 
 async def vision_chat_completion_stream(
@@ -245,11 +481,12 @@ async def vision_chat_completion_stream(
     image_data_url: str,
     history: list[dict] | None = None,
     max_tokens: int = 800,
+    feature: str | None = None,
 ) -> AsyncIterator[str]:
     """多模态流式输出"""
     cfg = _cfg()
     if not cfg["api_key"]:
-        yield "[ERROR] 豆包 API 未配置"
+        yield "[ERROR] DeepSeek API 未配置"
         return
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -273,10 +510,13 @@ async def vision_chat_completion_stream(
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
+    usage_acc: dict | None = None
+    yielded_any = False
 
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
+        async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
             async with client.stream(
                 "POST",
                 f"{cfg['api_base']}/chat/completions",
@@ -288,8 +528,16 @@ async def vision_chat_completion_stream(
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
-                    logger.error(f"Doubao vision stream error {resp.status_code}: {body[:200]}")
-                    yield "[ERROR] 豆包识图服务异常"
+                    logger.error(f"LLM vision stream error {resp.status_code}: {body[:200]}")
+                    _record_doubao(
+                        api="chat.completions.vision.stream",
+                        model=cfg["vision_model"],
+                        usage=None,
+                        stream=True,
+                        ok=False,
+                        feature=feature,
+                    )
+                    yield "[ERROR] DeepSeek 识图服务异常"
                     return
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data: "):
@@ -301,20 +549,35 @@ async def vision_chat_completion_stream(
                         import json
 
                         data = json.loads(chunk)
-                        delta = data["choices"][0].get("delta", {})
+                        if isinstance(data.get("usage"), dict):
+                            usage_acc = data["usage"]
+                        choices = data.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {}) or {}
                         text = delta.get("content", "")
                         if text:
+                            yielded_any = True
                             yield text
                     except Exception:
                         continue
+        if yielded_any or usage_acc:
+            _record_doubao(
+                api="chat.completions.vision.stream",
+                model=cfg["vision_model"],
+                usage=usage_acc,
+                stream=True,
+                feature=feature,
+            )
     except Exception as e:
-        logger.error(f"Doubao vision stream failed: {e}")
+        logger.error(f"LLM vision stream failed: {e}")
         full = await vision_chat_completion(
             system_prompt=system_prompt,
             user_message=user_message,
             image_data_url=image_data_url,
             history=history,
             max_tokens=max_tokens,
+            feature=feature,
         )
         if full:
             yield full

@@ -119,7 +119,7 @@ class TestBuildStateFromOnboarding:
                 "影像追忆": {"wordCount": "2000", "accuracy_pct": 80, "time": "5", "totalCount": "1"},
             },
         )
-        # 2 skills tier2 + 3 skills tier1 → avg 1.6 → floor 1
+        # 2 skills tier2 + 3 skills tier1 → min = 1
         assert overall_tier(state) == 1
         assert state["skills"]["影像追忆"]["tier"] == 2
 

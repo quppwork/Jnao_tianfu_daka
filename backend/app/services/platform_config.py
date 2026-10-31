@@ -11,21 +11,26 @@ from app.services import auth_service
 
 DEFAULT_LOGIN_POLICY = {
     "admin_max_devices": 3,
-    "parent_max_devices": 1,
-    "student_max_devices": 1,
+    "parent_max_devices": 5,
+    "student_max_devices": 5,
 }
 
 
 def _config_admin(db: Session) -> ChildUser | None:
-    return db.scalar(
+    admins = db.scalars(
         select(ChildUser)
-        .where(
-            ChildUser.role == auth_service.ROLE_ADMIN,
-            ChildUser.account_status == auth_service.ACCOUNT_ACTIVE,
-        )
+        .where(ChildUser.role == auth_service.ROLE_ADMIN)
         .order_by(ChildUser.id)
-        .limit(1)
-    )
+    ).all()
+    if not admins:
+        return None
+    for admin in admins:
+        if isinstance(admin.profile_json, dict) and admin.profile_json.get("platform_config"):
+            return admin
+    for admin in admins:
+        if admin.account_status == auth_service.ACCOUNT_ACTIVE:
+            return admin
+    return admins[0]
 
 
 def get_login_policy(db: Session) -> dict:

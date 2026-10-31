@@ -1,0 +1,172 @@
+# 今日修炼分群配方 — 合并《开发设定》+ 排课进阶/算法文档
+# regular 标准训练仍走 training_curriculum.yaml 权重引擎
+version: 2
+
+authority:
+  regular_schedule: training_curriculum.yaml
+  settle: training_tier_thresholds.yaml
+  cohort_recipes: training_recipes.yaml
+
+cohorts:
+  experience:
+    default_plan_mode: standard
+    default_variant: standard
+    minutes_min: 30
+    minutes_max: 90
+  venue_new:
+    default_plan_mode: rocket
+    minutes_min: 180
+    minutes_max: 480
+  new_student:
+    default_plan_mode: standard
+    # 开发设定第二部分：新学员标准自动版走固定日表（不再静默回权重）
+    default_variant: fixed
+    minutes_min: 30
+    minutes_max: 180
+  regular:
+    default_plan_mode: standard
+    # 老学员标准：权重进阶；强化版才走 fixed advanced
+    default_variant: standard
+    minutes_min: 30
+    minutes_max: 480
+  rocket:
+    default_plan_mode: rocket
+    minutes_min: 180
+    minutes_max: 720
+  blackhorse:
+    default_plan_mode: blackhorse
+    minutes_min: 180
+    minutes_max: 720
+
+# 自动推断信号（无显式 cohort 时）— 会改变默认排课清单
+auto_infer:
+  experience_channels: [experience, trial, 体验, 体验课]
+  rocket_flags: [rocket, 火箭, 火箭营]
+  blackhorse_flags: [blackhorse, 黑马, 黑马营]
+  venue_flags: [venue, 会场, venue_new]
+  # 0 训练日 → 体验固定表(30–90)；1..(N-1) → 新学员固定表；≥N → 老学员权重
+  experience_max_days: 0
+  new_student_max_days: 7
+
+duration_mix:
+  - minutes_min: 30
+    minutes_max: 60
+    modes:
+      fill_default: { brain: 1.0, subject: 0.0 }
+      fill_prefer:  { brain: 0.5, subject: 0.5 }
+      academic:     { brain: 0.5, subject: 0.5 }
+  - minutes_min: 61
+    minutes_max: 180
+    modes:
+      fill_default: { brain: 1.0, subject: 0.0 }
+      fill_prefer:  { brain: 0.5, subject: 0.5 }
+      academic:     { brain: 0.3, subject: 0.7 }
+  - minutes_min: 181
+    minutes_max: 320
+    modes:
+      fill_prefer:  { brain: 0.3, subject: 0.7 }
+      academic:     { brain: 0.15, subject: 0.85 }
+  - minutes_min: 321
+    minutes_max: 480
+    modes:
+      fill_prefer:  { brain: 0.25, subject: 0.75 }
+      academic:     { brain: 0.5, subject: 0.5 }
+
+# 学业规划学科占位（无音频时仍进清单，供打卡/引导）
+academic_subject_slots:
+  light: [学科方案]
+  standard: [学科方案, 三错一讲]
+  heavy: [学科方案, 三错一讲, 学科复盘]
+
+# 体验 · 标准自动版（仅 30–90；更长时在 planner 落新学员固定表）
+experience_standard:
+  - minutes_max: 45
+    recipe_id: experience_30
+    slots: [超脑阅读]
+    elective_offers: [开口窍]
+  - minutes_max: 75
+    recipe_id: experience_60
+    slots: [超脑阅读, 影像追忆]
+    elective_offers: [开口窍, 多元感知]
+  - minutes_max: 90
+    recipe_id: experience_90
+    slots: [超脑阅读, 影像追忆, 扫描速记]
+    elective_offers: [开口窍, 多元感知]
+
+# 体验 · 强化能力高级定制版1
+experience_advanced:
+  - minutes_max: 45
+    recipe_id: experience_adv_30
+    slots: [多元感知, 超脑阅读]
+    elective_offers: [开口窍]
+  - minutes_max: 75
+    recipe_id: experience_adv_60
+    slots: [多元感知, 影像追忆]
+    elective_offers: [开口窍]
+  - minutes_max: 90
+    recipe_id: experience_adv_90
+    slots: [多元感知, 扫描速记]
+    elective_offers: [开口窍]
+
+# 新学员短时固定表（有显式 variant=fixed 或 training.use_fixed_recipe=true 时启用；默认仍走权重）
+new_student_fixed:
+  - minutes_max: 90
+    recipe_id: new_60_90
+    slots: [超脑阅读, 影像追忆, 扫描速记]
+    elective_offers: [多元感知, 高效作业, 开口窍]
+  - minutes_max: 180
+    recipe_id: new_90_180
+    slots: [超脑阅读, 影像追忆, 超脑阅读, 影像追忆, 多元感知, 扫描速记]
+    elective_offers: [高效作业]
+  - minutes_max: 999
+    recipe_id: new_180_plus
+    slots: [超脑阅读, 影像追忆, 扫描速记, 精力恢复, 极速运算, 极速学习]
+    elective_offers: [多元感知, 高效作业]
+
+# 老学员强化表（variant=advanced 时）
+regular_advanced:
+  - minutes_max: 90
+    recipe_id: regular_adv_60_90
+    slots: [影像追忆, 扫描速记, 极速运算]
+    elective_offers: [多元感知, 超脑阅读, 高效作业]
+  - minutes_max: 180
+    recipe_id: regular_adv_90_180
+    slots: [影像追忆, 扫描速记, 极速运算, 极速学习]
+    elective_offers: [多元感知, 超脑阅读, 高效作业]
+  - minutes_max: 320
+    recipe_id: regular_adv_180_320
+    slots: [超脑阅读, 影像追忆, 扫描速记, 精力恢复, 极速运算, 极速学习]
+    elective_offers: [多元感知, 高效作业]
+  - minutes_max: 999
+    recipe_id: regular_adv_320_plus
+    slots: [影像追忆, 扫描速记, 极速运算, 极速学习, 精力恢复]
+    elective_offers: [多元感知]
+
+rocket_standard:
+  - minutes_max: 360
+    recipe_id: rocket_4_6h
+    slots: [超脑阅读, 影像追忆, 极速学习]
+    elective_offers: [精力恢复, 开口窍]
+  - minutes_max: 480
+    recipe_id: rocket_6_8h
+    slots: [超脑阅读, 影像追忆, 极速学习, 极速学习]
+    elective_offers: [精力恢复, 开口窍]
+  - minutes_max: 999
+    recipe_id: rocket_8_12h
+    slots: [超脑阅读, 影像追忆, 极速学习, 极速学习, 极速学习]
+    elective_offers: [精力恢复, 开口窍]
+
+# 黑马营：更偏复刷+极学（推断自设定「个性化内容」）
+blackhorse_standard:
+  - minutes_max: 360
+    recipe_id: blackhorse_4_6h
+    slots: [超脑阅读, 影像追忆, 极速学习, 扫描速记]
+    elective_offers: [精力恢复, 开口窍]
+  - minutes_max: 480
+    recipe_id: blackhorse_6_8h
+    slots: [超脑阅读, 影像追忆, 极速学习, 极速学习, 扫描速记]
+    elective_offers: [精力恢复]
+  - minutes_max: 999
+    recipe_id: blackhorse_8_12h
+    slots: [超脑阅读, 影像追忆, 极速学习, 极速学习, 极速学习, 扫描速记]
+    elective_offers: [精力恢复]
