@@ -1,4 +1,7 @@
-"""计费抽象 — Agent 只依赖本协议，不直接碰 usage_recorder / 账本表。"""
+"""Fee DTO / 协议 — Agent·工具只依赖本文件，不碰 usage_recorder / 账本表。
+
+对齐 architecture.CostMeter；实现为 model_cost.UsageLedger。
+"""
 
 from __future__ import annotations
 

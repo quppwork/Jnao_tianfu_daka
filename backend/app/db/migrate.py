@@ -106,6 +106,16 @@ def apply_schema_patches(engine: Engine) -> None:
             "published_at",
             "ALTER TABLE academy_bot_script ADD COLUMN published_at DATETIME",
         ),
+        (
+            "upstream_usage_event",
+            "cost_milli_cent",
+            "ALTER TABLE upstream_usage_event ADD COLUMN cost_milli_cent INTEGER DEFAULT 0",
+        ),
+        (
+            "upstream_usage_event",
+            "rate_version",
+            "ALTER TABLE upstream_usage_event ADD COLUMN rate_version VARCHAR(32)",
+        ),
     ]
     dialect = engine.dialect.name
     for table, column, ddl in patches:

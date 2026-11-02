@@ -8,6 +8,7 @@ from enum import StrEnum
 class AgentFeature(StrEnum):
     GUIDE = "guide"
     PARENT_GUIDE = "parent_guide"
+    PARENT_DASHBOARD = "parent_dashboard"
     QA = "qa"
     CONSULT = "consult"
     ACADEMY = "academy"
@@ -21,13 +22,14 @@ class AgentFeature(StrEnum):
 _LABELS: dict[str, str] = {
     AgentFeature.GUIDE: "首页引导",
     AgentFeature.PARENT_GUIDE: "家长引导",
+    AgentFeature.PARENT_DASHBOARD: "家长看板文案",
     AgentFeature.QA: "学科答疑",
     AgentFeature.CONSULT: "在线咨询",
     AgentFeature.ACADEMY: "学院对话",
     AgentFeature.SOLVE: "拍题解题",
     AgentFeature.REPORT_TALENT: "报告天赋解答",
     AgentFeature.HARNESS: "Harness",
-    AgentFeature.RAG: "知识库检索",
+    AgentFeature.RAG: "知识库检索（未归属）",
     AgentFeature.UNKNOWN: "未分类",
 }
 

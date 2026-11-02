@@ -100,7 +100,7 @@ def search_sync(
     )
     try:
         from app.services.bailian.token_estimate import estimate_retrieve_tokens
-        from app.services.usage_recorder import record_usage
+        from app.services.usage_recorder import get_usage_feature, record_usage
 
         # Search 路径不暴露 dense_top_k；按官方默认初步 TopK≈50 估 Rerank
         est = estimate_retrieve_tokens(
@@ -110,6 +110,7 @@ def search_sync(
             prelim_top_k=max(50, int(c.dense_top_k or 50)),
             index_count=1,
         )
+        feat = get_usage_feature() or "rag"
         record_usage(
             provider="bailian",
             api="search",
@@ -121,7 +122,7 @@ def search_sync(
             completion_tokens=est.rerank_tokens,
             total_tokens=est.total_tokens,
             estimated=True,
-            feature="rag",
+            feature=feat,
             ok=True,
         )
     except Exception as e:

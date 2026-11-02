@@ -1,4 +1,4 @@
-"""UsageLedger — CostRecorder 的默认实现，委托 usage_recorder 落库。"""
+"""UsageLedger — Fee 实现：CostRecorder / CostMeter，委托能力层 usage_recorder。"""
 
 from __future__ import annotations
 
@@ -64,9 +64,8 @@ class UsageLedger:
                 UpstreamUsageEvent.feature,
                 UpstreamUsageEvent.provider,
                 func.coalesce(func.sum(UpstreamUsageEvent.total_tokens), 0),
-                func.coalesce(func.sum(UpstreamUsageEvent.prompt_tokens), 0),
-                func.coalesce(func.sum(UpstreamUsageEvent.completion_tokens), 0),
                 func.coalesce(func.sum(UpstreamUsageEvent.call_count), 0),
+                func.coalesce(func.sum(UpstreamUsageEvent.cost_milli_cent), 0),
             ).where(UpstreamUsageEvent.ok == 1)
             if user_id is not None:
                 q = q.where(UpstreamUsageEvent.user_id == int(user_id))
@@ -81,7 +80,7 @@ class UsageLedger:
                 session.close()
 
         by_feat: dict[str, dict[str, Any]] = {}
-        for feature, provider, total, prompt, completion, calls in rows:
+        for feature, provider, total, calls, milli in rows:
             feat = normalize_feature(feature)
             bucket = by_feat.setdefault(
                 feat,
@@ -92,20 +91,16 @@ class UsageLedger:
                     "by_provider": [],
                 },
             )
-            rate = self._rates.resolve(str(provider or ""), None)
-            milli = rate.estimate_milli(
-                prompt_tokens=int(prompt or 0),
-                completion_tokens=int(completion or 0),
-            )
+            cost = int(milli or 0)
             bucket["total_tokens"] += int(total or 0)
             bucket["call_count"] += int(calls or 0)
-            bucket["estimated_cost_milli"] += milli
+            bucket["estimated_cost_milli"] += cost
             bucket["by_provider"].append(
                 {
                     "provider": str(provider or ""),
                     "total_tokens": int(total or 0),
                     "call_count": int(calls or 0),
-                    "estimated_cost_milli": milli,
+                    "estimated_cost_milli": cost,
                 }
             )
 

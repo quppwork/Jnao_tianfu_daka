@@ -290,8 +290,10 @@ async def parent_guide_chat(
     db: Session = Depends(get_db),
 ):
     check_guide_chat_limits(user_id)
+    from app.services.credit_service import require_credit
     from app.services.usage_recorder import bind_usage_feature
 
+    require_credit(db, user_id)
     bind_usage_feature("parent_guide")
     biz_event(
         "parent.guide.chat",
@@ -319,8 +321,10 @@ async def parent_guide_chat_stream(
     db: Session = Depends(get_db),
 ):
     check_guide_chat_limits(user_id)
+    from app.services.credit_service import require_credit
     from app.services.usage_recorder import bind_usage_feature
 
+    require_credit(db, user_id)
     bind_usage_feature("parent_guide")
     biz_event(
         "parent.guide.chat_stream",

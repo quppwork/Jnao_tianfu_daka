@@ -32,7 +32,7 @@
         <text class="card-title">⚡ 上游 Token 用量</text>
         <view class="row-line">
           <text class="label">本孩子</text>
-          <text class="val" style="font-weight:700;color:#f5d9a8;">{{ fmtTok(detail.usage_me?.total_tokens ?? detail.usage_total_tokens) }} tok · {{ detail.usage_me?.call_count ?? detail.usage_call_count ?? 0 }} 次</text>
+          <text class="val" style="font-weight:700;color:#f5d9a8;">{{ fmtTok(detail.usage_me?.total_tokens ?? detail.usage_total_tokens) }} tok · {{ detail.usage_me?.call_count ?? detail.usage_call_count ?? 0 }} 次 · {{ fmtYuan(detail.usage_me?.cost_yuan) }}</text>
         </view>
         <view v-if="detail.usage_billing" class="row-line">
           <text class="label">家计合计</text>
@@ -216,7 +216,7 @@ import {
   updateChildTalentQuota,
   fetchAdminChildAssessments,
 } from '@/utils/userApi.js'
-import { formatTokenCount } from '@/utils/api/usage.js'
+import { formatTokenCount, formatYuan as fmtYuanFn } from '@/utils/api/usage.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 import { miniCardSummary, cardsFromRecord, attitudeEmoji } from '@/utils/trainingCardDisplay.js'
 
@@ -239,6 +239,10 @@ const childProviders = computed(() => detail.value?.usage_me?.by_provider || [])
 
 function fmtTok(n) {
   return formatTokenCount(n)
+}
+
+function fmtYuan(n) {
+  return fmtYuanFn(n)
 }
 
 function recordTitle(rec) {

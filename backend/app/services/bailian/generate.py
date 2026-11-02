@@ -95,10 +95,56 @@ def generate_sync(
         if not text:
             logger.warning("bailian generate empty output index=%s", idx)
             return None
+        _record_generate_usage(
+            model=str(payload.get("model") or ""),
+            index_id=idx,
+            query=q,
+            reply=text,
+            usage=data.get("usage") if isinstance(data, dict) else None,
+            ok=True,
+        )
         return text
     except Exception as e:
         logger.warning("bailian generate failed index=%s err=%s", idx, e)
         return None
+
+
+def _record_generate_usage(
+    *,
+    model: str,
+    index_id: str,
+    query: str,
+    reply: str,
+    usage: dict | None,
+    ok: bool,
+) -> None:
+    try:
+        from app.services.bailian.token_estimate import estimate_text_tokens
+        from app.services.usage_recorder import (
+            _parse_usage_dict,
+            get_usage_feature,
+            record_usage,
+        )
+
+        p, c, t, _ = _parse_usage_dict(usage if isinstance(usage, dict) else None)
+        if not (p or c or t):
+            p = estimate_text_tokens(query)
+            c = estimate_text_tokens(reply)
+            t = p + c
+        record_usage(
+            provider="bailian",
+            api="generate",
+            model=model or index_id,
+            prompt_tokens=p,
+            completion_tokens=c,
+            total_tokens=t or (p + c),
+            metric_kind="tokens" if usage else "est_rag",
+            estimated=not bool(usage),
+            feature=get_usage_feature() or "rag",
+            ok=ok,
+        )
+    except Exception as e:
+        logger.warning("bailian generate usage record skipped: %s", e)
 
 
 def generate_stream_sync(

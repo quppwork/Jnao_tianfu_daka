@@ -446,6 +446,9 @@ class UpstreamUsageEvent(Base):
     stream: Mapped[int] = mapped_column(Integer, default=0)
     estimated: Mapped[int] = mapped_column(Integer, default=0)
     ok: Mapped[int] = mapped_column(Integer, default=1)
+    # 按落账时价目估算：0.001 分；官网展示 cost_yuan = cost_milli_cent / 1e5
+    cost_milli_cent: Mapped[int] = mapped_column(Integer, default=0)
+    rate_version: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

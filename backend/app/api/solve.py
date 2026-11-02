@@ -21,11 +21,12 @@ async def solve_photo(
     db: Session = Depends(get_db),
 ):
     """拍题：压缩 → OCR → 领域 Profile → 题库优先 → RAG/LLM（SSE）。"""
-    del db
     check_rate_limit(f"solve:{child_user_id}", max_calls=20, window_sec=60)
     from app.agents.solve.runner import run_solve_photo_stream
+    from app.services.credit_service import require_credit
     from app.services.usage_recorder import bind_usage_feature
 
+    require_credit(db, child_user_id)
     bind_usage_feature("solve")
     raw = await image.read()
     if not raw or len(raw) < 32:
@@ -59,11 +60,12 @@ async def solve_photo_sync(
     db: Session = Depends(get_db),
 ):
     """非流式聚合（便于联调）。"""
-    del db
     check_rate_limit(f"solve_sync:{child_user_id}", max_calls=20, window_sec=60)
     from app.agents.solve.runner import run_solve_photo
+    from app.services.credit_service import require_credit
     from app.services.usage_recorder import bind_usage_feature
 
+    require_credit(db, child_user_id)
     bind_usage_feature("solve")
     raw = await image.read()
     if not raw or len(raw) < 32:

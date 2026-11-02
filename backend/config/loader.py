@@ -43,9 +43,9 @@ def load_settings() -> dict:
     if str(ds_base).startswith("${") or not str(ds_base).startswith("http"):
         ds_base = "https://api.deepseek.com"
     deepseek["api_base"] = str(ds_base).rstrip("/")
-    ds_model = os.getenv("DEEPSEEK_CHAT_MODEL", deepseek.get("model", "deepseek-v4-pro"))
+    ds_model = os.getenv("DEEPSEEK_CHAT_MODEL", deepseek.get("model", "deepseek-flash"))
     if str(ds_model).startswith("${") or not str(ds_model).strip():
-        ds_model = "deepseek-v4-pro"
+        ds_model = "deepseek-flash"
     deepseek["model"] = str(ds_model).strip()
     ds_fast = os.getenv(
         "DEEPSEEK_FAST_MODEL",

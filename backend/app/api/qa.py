@@ -67,8 +67,10 @@ async def qa_chat(
     db: Session = Depends(get_db),
 ):
     check_qa_chat_limits(child_user_id)
+    from app.services.credit_service import require_credit
     from app.services.usage_recorder import bind_usage_feature
 
+    require_credit(db, child_user_id)
     bind_usage_feature("qa")
     with biz_timer(
         "qa.chat",
@@ -101,8 +103,10 @@ async def qa_chat_stream(
 ):
     """SSE 流式学科答疑"""
     check_qa_chat_limits(child_user_id)
+    from app.services.credit_service import require_credit
     from app.services.usage_recorder import bind_usage_feature
 
+    require_credit(db, child_user_id)
     bind_usage_feature("qa")
     biz_event(
         "qa.chat_stream",

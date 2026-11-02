@@ -74,10 +74,11 @@ def select_speakers(
 ) -> list[str]:
     """
     调度规则：
-    - @ / 引用优先
+    - @ 点名：只唤醒被 @ 的角色（对齐 QQ「被点名必回」，避免别人抢麦）
+    - 仅引用未 @：引用对象优先，再补一人
     - 只从 characters_present 里抽，排除 absent
     - opening：天赋同学先开口，导师收尾（若导师在场）
-    - reply：默认 2 人，尽量不连麦 last_who
+    - reply 无点名：默认 2 人，尽量不连麦 last_who
     """
     present = [key for key in present_keys(episode_id) if key not in absent_keys(episode_id)]
     if not present:
@@ -101,9 +102,11 @@ def select_speakers(
             return ([kid] if kid and kid != "shanyu" else []) + ["shanyu"]
         return [kid] if kid else present[:1]
 
+    # @ 点名：只出被叫的人（被叫但不在场则回落普通调度）
+    if mention and mention in present:
+        return [mention]
+
     speakers: list[str] = []
-    if mention in present:
-        speakers.append(mention)
     if quote_who in present and quote_who not in speakers:
         speakers.append(quote_who)
     pool = [key for key in present if key != last_who and key not in speakers] or [

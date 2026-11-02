@@ -254,7 +254,11 @@ def _record_usage(
 ) -> None:
     try:
         from app.services.bailian.token_estimate import estimate_retrieve_tokens
-        from app.services.usage_recorder import _parse_usage_dict, record_usage
+        from app.services.usage_recorder import (
+            _parse_usage_dict,
+            get_usage_feature,
+            record_usage,
+        )
 
         docs = parsed.get("retrieved_docs") or []
         usage = parsed.get("usage")
@@ -265,11 +269,14 @@ def _record_usage(
             prelim_top_k=max(50, int(cfg.dense_top_k or 50)),
             index_count=1,
         )
-        p_llm, c_llm, t_llm = _parse_usage_dict(usage if isinstance(usage, dict) else None)
+        p_llm, c_llm, t_llm, _cache = _parse_usage_dict(
+            usage if isinstance(usage, dict) else None
+        )
         prompt = est.query_embed_tokens + p_llm
         completion = est.rerank_tokens + c_llm
         total = est.total_tokens + (t_llm if t_llm else (p_llm + c_llm))
         reply = parsed.get("reply") or ""
+        feat = get_usage_feature() or "rag"
         record_usage(
             provider="bailian",
             api="knowledge_chat",
@@ -281,7 +288,7 @@ def _record_usage(
             call_count=1,
             doc_count=len(docs),
             estimated=True,
-            feature="rag",
+            feature=feat,
             request_id=parsed.get("request_id"),
             ok=bool(reply),
         )

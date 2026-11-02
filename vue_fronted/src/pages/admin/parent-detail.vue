@@ -23,7 +23,7 @@
         <text class="card-title">⚡ 上游 Token 用量</text>
         <view class="row-line">
           <text class="label">家计合计</text>
-          <text class="val usage-strong">{{ fmtTok(detail.usage_billing?.total_tokens) }} tok · {{ detail.usage_billing?.call_count || 0 }} 次</text>
+          <text class="val usage-strong">{{ fmtTok(detail.usage_billing?.total_tokens) }} tok · {{ detail.usage_billing?.call_count || 0 }} 次 · {{ fmtYuan(detail.usage_billing?.cost_yuan) }}</text>
         </view>
         <view class="row-line">
           <text class="label">家长本人</text>
@@ -118,7 +118,7 @@ import {
   deleteAdminParent,
   restoreAdminParent,
 } from '@/utils/userApi.js'
-import { formatTokenCount } from '@/utils/api/usage.js'
+import { formatTokenCount, formatYuan as fmtYuanFn } from '@/utils/api/usage.js'
 import { formatDateTimeShanghai } from '@/utils/datetime.js'
 
 const adminId = ref(null)
@@ -133,6 +133,10 @@ const billingProviders = computed(() => detail.value?.usage_billing?.by_provider
 
 function fmtTok(n) {
   return formatTokenCount(n)
+}
+
+function fmtYuan(n) {
+  return fmtYuanFn(n)
 }
 
 onLoad((q) => {

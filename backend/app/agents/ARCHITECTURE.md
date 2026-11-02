@@ -43,7 +43,7 @@ backend/app/
 │
 ├── assemble.py            # 【组装层】依赖注入 get_bundle()
 │
-├── model_cost/            # Fee（横切）
+├── model_cost/            # 【Fee 横切】用量/官价成本；详见 model_cost/ARCHITECTURE.md
 └── agents/                # 【业务板块】人设 / 情境 / 产品闸门；出话只调 runtime
     ├── guide/ qa/ parent_guide/ consult/ academy/ solve/
     └── ARCHITECTURE.md
@@ -55,10 +55,10 @@ backend/app/
 
 ```text
 agents/* · services/*_agent
-    →  runtime.run_turn / memory.ThreadStore / model_cost
+    →  runtime.run_turn / memory.ThreadStore / model_cost（仅 CostRecorder 协议）
     →  assemble.AgentBundle（guards · llm · mcp · checkpoint）
-    →  architecture.*（契约）
-禁止：业务直接散落 insert 会话表、旁路注入检测、旁路工具白名单
+    →  architecture.*（含 CostMeter 契约）
+禁止：业务直接散落 insert 会话表、旁路注入检测、旁路工具白名单、旁路写用量表
 ```
 
 ---
@@ -72,8 +72,16 @@ agents/* · services/*_agent
 | Hands | `providers.mcp` + `harness.registry` |
 | Constrainer | `harness.guards.*` |
 | Memory | `memory.checkpoint` + `memory.log_store` |
-| Fee | `model_cost` + `guards.budget` |
+| Fee | `model_cost`（人民币/token 账）+ `guards.budget`（步数预算，解耦） |
 | Soft | profile system + tool description |
+
+### Fee 数据落在哪一层？
+
+| 切片 | 层 | 说明 |
+|------|-----|------|
+| `CostMeter` / `CostEvent` / `AgentFeature` / `rates` | **Fee 横切**（`model_cost`） | Agent 架构内的费用角色；与五路人设平级横切 |
+| `usage_recorder` / `credit_service` / 表 | **能力层 · 数据** | 持久化与额度，不进 Agent 包 |
+| `api/usage` · `require_credit` 调用点 | **接入层** | 查询与门闸；不算价 |
 
 ---
 

@@ -46,15 +46,18 @@ def bind_time(state: SceneState) -> SceneState:
 
 def plan_cast(state: SceneState) -> SceneState:
     from app.agents.academy.scene import select_speakers
+    from app.agents.academy.talk import resolve_mention
     from app.agents.academy.turn import prepare_turn
 
     episode_id = state.get("episode_id") or ""
     if state.get("mode") == "reply":
         quote_who = (state.get("quote") or {}).get("who")
+        # 正文 @名 与显式 mention 双保险（前端漏传时仍能点名唤醒）
+        mention = resolve_mention(state.get("user_text"), state.get("mention"))
         speakers = select_speakers(
             episode_id=episode_id,
             mode="reply",
-            mention=state.get("mention"),
+            mention=mention,
             quote_who=quote_who,
             last_who=state.get("last_who"),
         )
@@ -63,7 +66,7 @@ def plan_cast(state: SceneState) -> SceneState:
             episode_id=episode_id,
             character_keys=speakers,
         )
-        return {
+        out: dict = {
             "speakers": speakers,
             "index": 0,
             "turn_ctx": {
@@ -77,6 +80,9 @@ def plan_cast(state: SceneState) -> SceneState:
                 "facts_by_char": dict(ctx.facts_by_char),
             },
         }
+        if mention:
+            out["mention"] = mention
+        return out
     speakers = select_speakers(
         episode_id=episode_id,
         mode="opening",
@@ -285,8 +291,7 @@ async def speak_one(state: SceneState) -> SceneState:
         if known:
             notes = f"{notes}\n{known}".strip() if notes else known
 
-    line: dict = {}
-    try:
+    async def _invoke_once() -> dict:
         result = await bot_graph(key).ainvoke(
             {
                 "character_key": key,
@@ -306,7 +311,16 @@ async def speak_one(state: SceneState) -> SceneState:
         )
         raw = result.get("line") or {}
         if isinstance(raw, dict) and raw.get("text"):
-            line = raw
+            return raw
+        return {}
+
+    line: dict = {}
+    pinned = key == (state.get("mention") or "")
+    try:
+        line = await _invoke_once()
+        # @ 点名必回：空台词再试一次（对齐 QQ 被 @ 不可潜水）
+        if pinned and not line.get("text"):
+            line = await _invoke_once()
     except Exception:
         import logging
 
@@ -315,6 +329,13 @@ async def speak_one(state: SceneState) -> SceneState:
         logging.getLogger(__name__).exception("角色 %s 这一轮失败，跳过", key)
         reset_checkpointer()
         line = {}
+        if pinned:
+            try:
+                line = await _invoke_once()
+            except Exception:
+                logging.getLogger(__name__).exception("点名角色 %s 重试仍失败", key)
+                reset_checkpointer()
+                line = {}
 
     turns = list(state.get("turns") or [])
     if line.get("text"):

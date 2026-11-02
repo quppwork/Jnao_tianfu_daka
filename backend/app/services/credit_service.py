@@ -1,16 +1,18 @@
-"""算力中心 — 家长账本（会员额度 + 充值余额）与家计 token 汇总。
+"""能力层 · 算力额度账本（Fee 的「可不可用」门闸数据，非 Agent）。
 
-点（points）：产品侧额度单位（对话/测评扣点）。
-token：上游 LLM/百炼实际消耗，记在 upstream_usage_event。
-换算：默认 1000 token ≈ 1 点（展示会员额度占用；正式扣费可后续按功能价目表）。
+点：产品额度；token/¥：上游实耗快照（upstream_usage_event）。
+接入层 API 调用 require_credit；价目与计量仍在 model_cost。
+CREDIT_ENFORCE=1 时额度用尽且余额为 0 → HTTP 402。
 """
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -20,6 +22,15 @@ CST = ZoneInfo("Asia/Shanghai")
 
 # 1000 upstream tokens ≈ 1 算力点（展示用）
 TOKENS_PER_POINT = 1000
+
+
+def credit_enforce_enabled() -> bool:
+    return (os.getenv("CREDIT_ENFORCE") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 MEMBERSHIP_PLANS: dict[str, dict[str, Any]] = {
     "free": {
@@ -83,6 +94,53 @@ def tokens_to_points(total_tokens: int) -> int:
     return t // TOKENS_PER_POINT
 
 
+def credit_snapshot(db: Session, user_id: int) -> dict[str, Any]:
+    """当前操作者所属家长账本快照（用于拦截与钱包）。"""
+    from app.services.usage_recorder import resolve_billing_parent_id
+
+    uid = int(user_id)
+    billing_parent_id = resolve_billing_parent_id(db, uid) or uid
+    account = get_or_create_credit_account(db, billing_parent_id)
+    month = sum_tokens_for_billing_parent_month(
+        db, billing_parent_id, period_yyyy_mm=account.period_yyyy_mm or _period_yyyy_mm()
+    )
+    month_tokens = int(month.get("total_tokens") or 0)
+    points_used = tokens_to_points(month_tokens)
+    quota = int(account.monthly_quota_points or 0)
+    remaining = max(0, quota - points_used)
+    balance_cents = int(account.balance_cents or 0)
+    return {
+        "billing_parent_id": billing_parent_id,
+        "plan_code": account.plan_code,
+        "period_yyyy_mm": account.period_yyyy_mm,
+        "monthly_quota_points": quota,
+        "monthly_used_points": points_used,
+        "monthly_remaining_points": remaining,
+        "balance_cents": balance_cents,
+        "ok": remaining > 0 or balance_cents > 0,
+    }
+
+
+def require_credit(db: Session, user_id: int) -> dict[str, Any]:
+    """对话入口调用：额度不足则 402。CREDIT_ENFORCE=0 时只返回快照不拦截。"""
+    snap = credit_snapshot(db, user_id)
+    if not credit_enforce_enabled():
+        return snap
+    if snap.get("ok"):
+        return snap
+    raise HTTPException(
+        status_code=402,
+        detail={
+            "code": "credit_exhausted",
+            "message": "本月算力已用完，请充值或升级会员后再试",
+            "billing_parent_id": snap.get("billing_parent_id"),
+            "monthly_quota_points": snap.get("monthly_quota_points"),
+            "monthly_used_points": snap.get("monthly_used_points"),
+            "balance_cents": snap.get("balance_cents"),
+        },
+    )
+
+
 def get_or_create_credit_account(db: Session, owner_user_id: int) -> CreditAccount:
     uid = int(owner_user_id)
     row = db.scalar(select(CreditAccount).where(CreditAccount.owner_user_id == uid))
@@ -129,6 +187,8 @@ def sum_tokens_for_billing_parent_month(
     else:
         end = datetime(year, month + 1, 1).replace(tzinfo=None)
 
+    from app.model_cost.rates import milli_cent_to_yuan
+
     row = db.execute(
         select(
             func.coalesce(func.sum(UpstreamUsageEvent.prompt_tokens), 0),
@@ -136,6 +196,7 @@ def sum_tokens_for_billing_parent_month(
             func.coalesce(func.sum(UpstreamUsageEvent.total_tokens), 0),
             func.coalesce(func.sum(UpstreamUsageEvent.call_count), 0),
             func.count(UpstreamUsageEvent.id),
+            func.coalesce(func.sum(UpstreamUsageEvent.cost_milli_cent), 0),
         ).where(
             UpstreamUsageEvent.billing_parent_id == pid,
             UpstreamUsageEvent.ok == 1,
@@ -150,6 +211,7 @@ def sum_tokens_for_billing_parent_month(
             func.coalesce(func.sum(UpstreamUsageEvent.total_tokens), 0),
             func.coalesce(func.sum(UpstreamUsageEvent.call_count), 0),
             func.count(UpstreamUsageEvent.id),
+            func.coalesce(func.sum(UpstreamUsageEvent.cost_milli_cent), 0),
         )
         .where(
             UpstreamUsageEvent.billing_parent_id == pid,
@@ -162,6 +224,7 @@ def sum_tokens_for_billing_parent_month(
 
     # 全量家计（不过滤月份）作对照
     all_time = sum_tokens_for_billing_parent(db, pid)
+    milli = int(row[5] or 0)
 
     return {
         "billing_parent_id": pid,
@@ -171,16 +234,21 @@ def sum_tokens_for_billing_parent_month(
         "total_tokens": int(row[2] or 0),
         "call_count": int(row[3] or 0),
         "event_count": int(row[4] or 0),
+        "cost_milli_cent": milli,
+        "cost_yuan": round(milli_cent_to_yuan(milli), 6),
         "by_user": [
             {
                 "user_id": int(r[0]) if r[0] is not None else None,
                 "total_tokens": int(r[1] or 0),
                 "call_count": int(r[2] or 0),
                 "event_count": int(r[3] or 0),
+                "cost_milli_cent": int(r[4] or 0),
+                "cost_yuan": round(milli_cent_to_yuan(int(r[4] or 0)), 6),
             }
             for r in by_user_rows
         ],
         "all_time_total_tokens": int(all_time.get("total_tokens") or 0),
+        "all_time_cost_yuan": all_time.get("cost_yuan"),
     }
 
 
@@ -256,6 +324,7 @@ def build_wallet_payload(db: Session, user_id: int) -> dict[str, Any]:
             "membership": list(MEMBERSHIP_PLANS.values()),
             "topup": TOPUP_PACKS,
         },
+        "credit_enforce": credit_enforce_enabled(),
         "pay_enabled": False,
-        "pay_hint": "支付通道即将开放，当前可查看家计用量与额度规划",
+        "pay_hint": "支付通道即将开放；可先打开 CREDIT_ENFORCE=1 做额度硬拦截",
     }

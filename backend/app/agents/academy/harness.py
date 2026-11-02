@@ -164,10 +164,13 @@ _GREET = re.compile(
     r"^(你好|你们好|大家好|哈喽|嗨|hi|hello|在吗|早|晚安|吃了吗)[啊呀吧呢哦哈！!。.~～\s]*$",
     re.I,
 )
+# 「@施丹尼 你好」去掉点名后仍算打招呼
+_AT_PREFIX = re.compile(r"^@[^\s@]{1,12}\s*")
 
 
 def is_greeting(text: str) -> bool:
-    return bool(_GREET.match((text or "").strip()))
+    raw = _AT_PREFIX.sub("", (text or "").strip(), count=1).strip()
+    return bool(_GREET.match(raw))
 
 
 def read_mood(text: str) -> str:

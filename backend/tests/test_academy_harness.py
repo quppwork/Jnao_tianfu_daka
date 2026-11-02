@@ -39,9 +39,19 @@ def test_at_wakes_that_character_and_quote_wakes_the_author():
         "user_turns": 3,
         "last_who": "dani",
     })
-    assert directed["speakers"][0] == "limo"
-    assert len(directed["speakers"]) == 2
-    assert directed["speakers"][1] != "limo"
+    # @ 点名只唤醒被叫的人，避免别人抢麦
+    assert directed["speakers"] == ["limo"]
+
+    at_hi = plan_cast({
+        "mode": "reply",
+        "episode_id": "E13",
+        "mention": "dani",
+        "user_text": "@施丹尼 你好",
+        "user_turns": 1,
+    })
+    assert at_hi["speakers"] == ["dani"]
+    assert harness.is_greeting("@施丹尼 你好") is True
+    assert resolve_mention("@施丹尼 你好", None) == "dani"
 
     quoted = plan_cast({
         "mode": "reply",

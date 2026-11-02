@@ -222,7 +222,9 @@ async def generate_consult_reply(
         parse_mentioned_bot_codes,
     )
     from app.services.doubao_client import is_configured
+    from app.services.usage_recorder import bind_usage_feature
 
+    bind_usage_feature("consult")
     del trigger_msg_id  # 预留给 job/审计
     text = (user_text or "").strip()
     if not text:

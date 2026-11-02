@@ -107,7 +107,7 @@ def retrieve_sync(
     )
     try:
         from app.services.bailian.token_estimate import estimate_retrieve_tokens
-        from app.services.usage_recorder import record_usage
+        from app.services.usage_recorder import get_usage_feature, record_usage
 
         # 官方：Query 向量化 +（可选）初步召回×均长；API 无 usage → 估算
         # prelim 用本次请求的 dense_top_k（控制台默认常为 50，可能更大）
@@ -118,6 +118,8 @@ def retrieve_sync(
             prelim_top_k=int(c.dense_top_k),
             index_count=1,
         )
+        # 归属调用方功能（guide/report_talent/…）；无上下文才记 rag
+        feat = get_usage_feature() or "rag"
         record_usage(
             provider="bailian",
             api="retrieve",
@@ -130,7 +132,7 @@ def retrieve_sync(
             completion_tokens=est.rerank_tokens,
             total_tokens=est.total_tokens,
             estimated=True,
-            feature="rag",
+            feature=feat,
             ok=True,
         )
     except Exception as e:

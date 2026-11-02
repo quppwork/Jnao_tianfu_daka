@@ -44,9 +44,14 @@ def _user(db, *, phone="13800000000", nickname="u", role="student"):
 
 
 def test_parse_usage_dict():
-    assert ur._parse_usage_dict({"prompt_tokens": 10, "completion_tokens": 5}) == (10, 5, 15)
-    assert ur._parse_usage_dict({"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 9}) == (3, 2, 9)
-    assert ur._parse_usage_dict(None) == (0, 0, 0)
+    assert ur._parse_usage_dict({"prompt_tokens": 10, "completion_tokens": 5}) == (10, 5, 15, 0)
+    assert ur._parse_usage_dict(
+        {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 9}
+    ) == (3, 2, 9, 0)
+    assert ur._parse_usage_dict(
+        {"prompt_tokens": 100, "completion_tokens": 1, "prompt_cache_hit_tokens": 40}
+    ) == (100, 1, 101, 40)
+    assert ur._parse_usage_dict(None) == (0, 0, 0, 0)
 
 
 def test_record_and_sum_by_parent(db):
@@ -137,7 +142,7 @@ async def test_chat_completion_records_usage(db):
     assert result == "OK"
     ev = db.scalars(select(UpstreamUsageEvent)).first()
     assert ev is not None
-    assert ev.provider == "doubao"
+    assert ev.provider == "deepseek"
     assert ev.user_id == child.id
     assert ev.total_tokens == 18
     assert ev.feature == "qa"

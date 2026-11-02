@@ -10,7 +10,8 @@ from app.services.usage_recorder import record_usage
 logger = get_logger("llm")
 
 DEFAULT_API_BASE = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-v4-pro"
+# DeepSeek V4.1 Flash（官网 API 名 deepseek-flash）；豆包已停用
+DEFAULT_MODEL = "deepseek-flash"
 DEFAULT_FAST_MODEL = "deepseek-flash"
 DEFAULT_VISION_MODEL = "deepseek-flash"
 

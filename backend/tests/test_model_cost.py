@@ -22,8 +22,9 @@ def test_feature_labels():
 
 def test_rate_estimate():
     card = default_rate_card()
-    rate = card.resolve("doubao", "ep-x")
-    assert rate.estimate_milli(prompt_tokens=1000, completion_tokens=1000) == 2 + 6
+    # 未知名回落默认 deepseek-flash：空闲 1+4 元/百万 → 1K 各 = 100+400 milli-cent
+    rate = card.resolve("deepseek", "deepseek-flash")
+    assert rate.estimate_milli(prompt_tokens=1000, completion_tokens=1000) == 500
 
 
 def test_ledger_summarize_by_feature():

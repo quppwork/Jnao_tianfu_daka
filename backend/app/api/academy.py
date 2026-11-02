@@ -250,6 +250,11 @@ async def academy_chat(
     user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
+    from app.services.credit_service import require_credit
+    from app.services.usage_recorder import bind_usage_feature
+
+    require_credit(db, user_id)
+    bind_usage_feature("academy")
     try:
         return await chat(
             db,

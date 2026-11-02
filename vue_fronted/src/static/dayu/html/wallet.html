@@ -211,10 +211,12 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
     }
     var monthTok = Number(usage.display_month_tokens != null ? usage.display_month_tokens : fam.total_tokens) || 0;
     var allTok = Number(usage.display_total_tokens) || monthTok;
+    var monthYuan = Number(fam.cost_yuan);
+    if(isNaN(monthYuan)) monthYuan = 0;
     var qTok = document.getElementById('qTok');
     if(qTok){
-      qTok.textContent = '本月家计 ' + fmtTok(monthTok) + ' tok · 累计 ' + fmtTok(allTok) +
-        ' tok（约 ' + (data.tokens_per_point || 1000) + ' tok = 1 点）';
+      qTok.textContent = '本月家计 ' + fmtTok(monthTok) + ' tok · 约 ¥' + monthYuan.toFixed(4) +
+        ' · 累计 ' + fmtTok(allTok) + ' tok（约 ' + (data.tokens_per_point || 1000) + ' tok = 1 点）';
     }
     var qBal = document.getElementById('qBal');
     if(qBal) qBal.textContent = '¥ ' + (Number(acc.balance_yuan) || 0).toFixed(2);
@@ -229,8 +231,10 @@ body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","M
       } else {
         host.innerHTML = rows.map(function(r){
           var label = (r.nickname || '账户') + (r.role === 'parent' ? '（家长）' : '（孩子）');
+          var y = Number(r.cost_yuan);
+          var yuanBit = isNaN(y) || y <= 0 ? '' : (' · ¥' + y.toFixed(4));
           return '<div class="kr"><div>' + esc(label) + '</div><span>' +
-            fmtTok(r.total_tokens) + ' tok · ' + (r.call_count || 0) + ' 次</span></div>';
+            fmtTok(r.total_tokens) + ' tok · ' + (r.call_count || 0) + ' 次' + yuanBit + '</span></div>';
         }).join('');
       }
     }

@@ -61,14 +61,19 @@ fi
 echo "[1/4] 构建镜像（生产精简依赖，无 pytest/ffmpeg/whisper）..."
 docker compose "${COMPOSE_ARGS[@]}" --env-file "$ENV_FILE" build
 
-echo "[2/4] 启动容器（含 Loki / Alloy / Grafana 日志栈）..."
+echo "[2/5] 启动容器（含 Loki / Alloy / Grafana 日志栈）..."
 docker compose "${COMPOSE_ARGS[@]}" --env-file "$ENV_FILE" up -d
 
-echo "[3/4] 等待后端健康检查..."
+echo "[3/5] 等待后端健康检查..."
 sleep 5
 docker compose "${COMPOSE_ARGS[@]}" --env-file "$ENV_FILE" ps
 
-echo "[4/4] 表结构由后端 init_db 自动创建/补丁（migrate.py）"
+echo "[4/5] 清理悬空镜像/构建缓存（不删正在用的 :latest）..."
+# 镜像层默认在 /var/lib/docker；根分区紧时务必把 Docker data-root 迁到 /data/docker（见脚本末尾提示）
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
+
+echo "[5/5] 表结构由后端 init_db 自动创建/补丁（migrate.py）"
 echo "      若库中已有 v1 训练进度数据，可选手动执行一次："
 echo "      docker compose ${COMPOSE_ARGS[*]} --env-file $ENV_FILE exec backend python migrate_state_v2.py"
 
@@ -96,3 +101,8 @@ echo "  常用命令:"
 echo "    日志 UI: 浏览器打开 Grafana → Explore → 查询 {container=\"jnao-daka-backend\"}"
 echo "    临时跟屏: docker compose ${COMPOSE_ARGS[*]} --env-file $ENV_FILE logs -f backend"
 echo "    重启: docker compose ${COMPOSE_ARGS[*]} --env-file $ENV_FILE restart"
+echo ""
+echo "  磁盘:"
+echo "    代码在 /data；Docker 镜像默认在 /var/lib/docker（根盘）。"
+echo "    检查: docker info 2>/dev/null | grep 'Docker Root Dir'"
+echo "    应为 /data/docker；否则一次性改 /etc/docker/daemon.json 的 data-root"
