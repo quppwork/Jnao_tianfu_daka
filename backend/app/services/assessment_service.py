@@ -11,6 +11,9 @@ from app.core.talent_mapping import (
 )
 from app.db.models import ChildUser, TalentAssessment, TalentAssessmentArchive, TrainingRecord
 
+# 历史测评上限：首条确认天赋常留 + 其余按最新覆盖，合计最多此数
+ASSESSMENT_HISTORY_KEEP = 10
+
 
 def get_self_reported_talent_code(db: Session, child_user_id: int) -> int | None:
     """从注册引导页自选天赋中提取 talent_code（仅当用户明确选了天赋而非"不知道"）"""
@@ -441,6 +444,13 @@ def save_assessment(
         refresh_today_plan_if_talent_changed(db, child_user_id, assessment=record)
     db.refresh(record)
 
+    try:
+        prune_assessments(db, child_user_id, keep=ASSESSMENT_HISTORY_KEEP)
+        db.refresh(record)
+    except Exception:
+        # 裁剪失败不阻断本次落库
+        pass
+
     # 在返回对象上附加冲突信息（非持久化字段）
     record._talent_conflict = talent_conflict
     record._talent_locked = talent_locked
@@ -561,12 +571,15 @@ def sync_child_user_talent(db: Session, child_user_id: int) -> None:
     db.commit()
 
 
-def list_assessments(db: Session, child_user_id: int, limit: int = 30) -> list[dict]:
+def list_assessments(
+    db: Session, child_user_id: int, limit: int = ASSESSMENT_HISTORY_KEEP
+) -> list[dict]:
+    lim = max(1, min(int(limit or ASSESSMENT_HISTORY_KEEP), ASSESSMENT_HISTORY_KEEP))
     rows = db.scalars(
         select(TalentAssessment)
         .where(TalentAssessment.child_user_id == child_user_id)
         .order_by(TalentAssessment.id.desc())
-        .limit(limit)
+        .limit(lim)
     ).all()
     return [_assessment_list_item(r) for r in rows]
 
@@ -639,12 +652,14 @@ def get_assessment_by_id(db: Session, assessment_id: int, child_user_id: int) ->
     return row
 
 
-def delete_assessment(db: Session, assessment_id: int, child_user_id: int) -> dict:
-    """删除测评：先归档快照，再从主表删除"""
-    row = get_assessment_by_id(db, assessment_id, child_user_id)
-    if not row:
-        raise AssessmentError("测评记录不存在", 404)
+def protected_assessment_id(db: Session, child_user_id: int) -> int | None:
+    """最初确认孩子天赋的那条：按 id 升序第一条有效测评，裁剪时永不删除。"""
+    first = get_first_valid_assessment(db, child_user_id)
+    return int(first.id) if first else None
 
+
+def _archive_and_delete_row(db: Session, row: TalentAssessment) -> None:
+    """归档并删除一行（不 commit、不 sync），供单删与批量裁剪复用。"""
     db.add(
         TalentAssessmentArchive(
             original_id=row.id,
@@ -665,12 +680,104 @@ def delete_assessment(db: Session, assessment_id: int, child_user_id: int) -> di
             ),
             commit=False,
         )
-    except PermissionError:
+    except Exception:
         pass
     db.delete(row)
+
+
+def prune_assessments(
+    db: Session,
+    child_user_id: int,
+    *,
+    keep: int = ASSESSMENT_HISTORY_KEEP,
+) -> dict:
+    """保留首条确认天赋 + 其余最新，合计最多 keep 条；超出归档删除并清 Redis 读缓存。"""
+    keep_n = max(1, min(int(keep or ASSESSMENT_HISTORY_KEEP), 50))
+    rows = list(
+        db.scalars(
+            select(TalentAssessment)
+            .where(TalentAssessment.child_user_id == child_user_id)
+            .order_by(TalentAssessment.id.desc())
+        ).all()
+    )
+    protected = protected_assessment_id(db, child_user_id)
+    if len(rows) <= keep_n:
+        return {
+            "deleted": 0,
+            "kept": len(rows),
+            "protected_id": protected,
+            "deleted_ids": [],
+        }
+
+    keep_ids: set[int] = set()
+    if protected is not None:
+        keep_ids.add(int(protected))
+    for r in rows:
+        if r.id in keep_ids:
+            continue
+        if len(keep_ids) >= keep_n:
+            break
+        keep_ids.add(int(r.id))
+
+    deleted_ids: list[int] = []
+    for r in rows:
+        if r.id in keep_ids:
+            continue
+        deleted_ids.append(int(r.id))
+        _archive_and_delete_row(db, r)
+
+    if deleted_ids:
+        db.commit()
+        try:
+            from app.core.cache import invalidate_user_assessment, invalidate_user_profile
+
+            invalidate_user_assessment(child_user_id)
+            invalidate_user_profile(child_user_id)
+        except Exception:
+            pass
+
+    return {
+        "deleted": len(deleted_ids),
+        "kept": len(keep_ids),
+        "protected_id": protected,
+        "deleted_ids": deleted_ids,
+    }
+
+
+def prune_all_assessments_over_limit(
+    db: Session, *, keep: int = ASSESSMENT_HISTORY_KEEP
+) -> dict:
+    """定期任务：对所有超限用户执行 prune_assessments。"""
+    user_ids = db.scalars(select(TalentAssessment.child_user_id).distinct()).all()
+    users_pruned = 0
+    deleted = 0
+    details: list[dict] = []
+    for uid in user_ids:
+        out = prune_assessments(db, int(uid), keep=keep)
+        if out.get("deleted"):
+            users_pruned += 1
+            deleted += int(out["deleted"])
+            details.append({"child_user_id": int(uid), **out})
+    return {"users_pruned": users_pruned, "deleted": deleted, "details": details}
+
+
+def delete_assessment(db: Session, assessment_id: int, child_user_id: int) -> dict:
+    """删除测评：先归档快照，再从主表删除"""
+    row = get_assessment_by_id(db, assessment_id, child_user_id)
+    if not row:
+        raise AssessmentError("测评记录不存在", 404)
+
+    _archive_and_delete_row(db, row)
     db.commit()
     sync_child_user_talent(db, child_user_id)
     from app.services.training_service import refresh_today_plan_if_talent_changed
 
     refresh_today_plan_if_talent_changed(db, child_user_id)
+    try:
+        from app.core.cache import invalidate_user_assessment, invalidate_user_profile
+
+        invalidate_user_assessment(child_user_id)
+        invalidate_user_profile(child_user_id)
+    except Exception:
+        pass
     return {"deleted": True, "assessment_id": assessment_id}

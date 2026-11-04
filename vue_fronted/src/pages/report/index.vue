@@ -52,7 +52,7 @@ function modeFromQuery(opts) {
 }
 
 onLoad(async (opts) => {
-  let isAdult = modeFromQuery(opts)
+  let isAdult = null
   let talent = ''
   let name = ''
   let date = ''
@@ -61,7 +61,6 @@ onLoad(async (opts) => {
     const uid = await ensureReportUser()
     const profile = await fetchProfile(uid).catch(() => null)
     const age = readAge(profile)
-    if (age != null) isAdult = age >= 18
     name = String(profile?.nickname || profile?.real_name || '').trim()
     const aid = parseInt(opts?.assessment_id || '', 10)
     const report = aid
@@ -70,11 +69,17 @@ onLoad(async (opts) => {
     talent = String(report?.talent_primary || report?.data?.talent || '').trim()
     const testedAt = report?.assessed_at || ''
     if (testedAt) date = String(testedAt).slice(0, 10)
-    if (age == null && isAdult == null && report && report.test_type != null) {
+    // 报告类型以本条测评 test_type 为准，禁止用年龄覆盖（孩子账号也可做成人卷）
+    if (report && report.test_type != null && report.test_type !== '') {
       isAdult = Number(report.test_type) === 0
+    } else {
+      isAdult = modeFromQuery(opts)
+      if (isAdult == null && age != null) isAdult = age >= 18
     }
     assessmentId = Number(report?.assessment_id || report?.id || aid || 0)
-  } catch (_) { /* 拉不到档案时按入口参数 */ }
+  } catch (_) {
+    isAdult = modeFromQuery(opts)
+  }
   if (isAdult == null) isAdult = false
   const key = TALENT_KEY[talent] || talent || ''
   const q = new URLSearchParams({ lock: '1', v: 'rpt4' })

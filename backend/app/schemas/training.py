@@ -304,6 +304,7 @@ class AssessmentOut(BaseModel):
     assessed_at: str | None
     jnao_record_id: str | None = None
     talent_source: str | None = None
+    test_type: int | None = None  # 0 adult, 1 child
 
 
 class PlanCustomizeRequest(BaseModel):

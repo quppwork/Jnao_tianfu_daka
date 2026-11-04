@@ -279,7 +279,8 @@ async function loadHistory() {
 function viewHistory(h) {
   showHistory.value = false
   if (h.id) {
-    const modeQ = (h.type === 0 || h.report_type === 0 || h.mode === 'adult' || h.test_type === 0) ? 'adult' : 'kid'
+    const tt = Number(h.test_type ?? h.type ?? h.report_type)
+    const modeQ = (h.mode === 'adult' || tt === 0) ? 'adult' : 'kid'
     const fromQ = modeQ === 'adult' ? 'hub' : (entryFrom.value || 'training')
     uni.navigateTo({ url: `/pages/report/index?assessment_id=${h.id}&mode=${modeQ}&from=${fromQ}` })
   }

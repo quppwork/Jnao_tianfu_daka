@@ -167,9 +167,9 @@ async def save_assessment_endpoint(
 def assessment_history(
     user_id: int = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
-    limit: int = 30,
+    limit: int = assessment_service.ASSESSMENT_HISTORY_KEEP,
 ):
-    """家长/学生均可：按报告所有者拉取历史。"""
+    """家长/学生均可：按报告所有者拉取历史（最多 10 条）。"""
     return {"items": assessment_service.list_assessments(db, user_id, limit)}
 
 
@@ -196,6 +196,7 @@ def latest_assessment(
             assessed_at=row.assessed_at.isoformat() if row.assessed_at else None,
             jnao_record_id=row.jnao_record_id,
             talent_source="assessment",
+            test_type=row.test_type,
         )
         cache_set_json(key, out.model_dump(), _ASSESSMENT_TTL)
         return out
