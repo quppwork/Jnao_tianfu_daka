@@ -11,6 +11,29 @@
 # 或在主配置里替换 location / 段。
 #
 # 前提：docker compose 已启动，前端监听 127.0.0.1:5185
+#
+# SSE 注意：宝塔这一层默认 proxy_buffering=on，会把报告/引导 chat/stream
+# 攒成整包才吐给浏览器（本地直连 8012 就正常）。/api/ 必须关缓冲。
+
+# API / SSE / WebSocket → 前端容器（容器内再反代 backend:8012）
+location /api/ {
+    proxy_pass http://127.0.0.1:5185;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    client_max_body_size 20m;
+    proxy_read_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_buffering off;
+    proxy_cache off;
+    gzip off;
+    chunked_transfer_encoding on;
+    proxy_set_header X-Accel-Buffering no;
+}
 
 location / {
     proxy_pass http://127.0.0.1:5185;

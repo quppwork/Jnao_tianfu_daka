@@ -10,10 +10,12 @@ import json
 import re
 from typing import Any
 
-MAX_CONTEXT_CHARS = 900
+MAX_CONTEXT_CHARS = 1200
 
 # 五者：报告里 AttributeJs 的键
 WUZHE_ORDER = ("学者", "思者", "行者", "德者", "赢者")
+# 报告页五维能量星图标准名（优先按此顺序输出）
+ABILITY_ORDER = ("执行力", "公信力", "协调力", "创新力", "领导力")
 
 _TALENT_CHARS = "学思行德赢"
 
@@ -68,25 +70,45 @@ def _wuzhe_scores(report: dict[str, Any]) -> str:
     return " / ".join(parts)
 
 
-def _ability_line(report: dict[str, Any]) -> str:
+def _ability_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     results = report.get("results") if isinstance(report.get("results"), dict) else {}
-    rows = results.get("Ability") if isinstance(results.get("Ability"), list) else []
-    parts: list[str] = []
-    for row in rows[:5]:
-        if not isinstance(row, dict):
-            continue
-        name = str(row.get("abilityName") or "").strip()
+    for bucket in (
+        results.get("Ability"),
+        report.get("Ability"),
+        results.get("AbilityList"),
+    ):
+        if isinstance(bucket, list) and bucket:
+            return [r for r in bucket if isinstance(r, dict)]
+    return []
+
+
+def _ability_line(report: dict[str, Any]) -> str:
+    """五维分数：事实行，按报告页星图顺序优先。"""
+    scored: dict[str, str] = {}
+    for row in _ability_rows(report):
+        name = str(
+            row.get("abilityName") or row.get("name") or row.get("label") or ""
+        ).strip()
         if not name:
             continue
         value = row.get("value")
+        if value is None:
+            value = row.get("score")
         grade = row.get("grade")
         seg = name
         if isinstance(value, (int, float)):
             seg += f" {int(value)}"
         if isinstance(grade, (int, float)) and int(grade) > 0:
             seg += f"（{int(grade)}级）"
-        parts.append(seg)
-    return "｜".join(parts)
+        scored[name] = seg
+    if not scored:
+        return ""
+    ordered: list[str] = []
+    for name in ABILITY_ORDER:
+        if name in scored:
+            ordered.append(scored.pop(name))
+    ordered.extend(scored.values())
+    return "｜".join(ordered[:8])
 
 
 def build_report_context(
@@ -112,20 +134,22 @@ def build_report_context(
         if alt and alt != main and len(alt) == 2 and all(c in _TALENT_CHARS for c in alt):
             second = f"{alt[1]}者"
 
-    lines: list[str] = []
+    lines: list[str] = [
+        "【事实】下列分数/标签仅来自本份测评，回答时必须原样引用，禁止改用其它示例分。"
+    ]
     if main:
         head = f"报告中标注天赋：{main}"
         if second and second != main:
             head += f"（副 {second}）"
         lines.append(head)
 
+    ability = _ability_line(report)
+    if ability:
+        lines.append(f"五维能量（星图）：{ability}")
+
     wuzhe = _wuzhe_scores(report)
     if wuzhe:
         lines.append(f"五者分值：{wuzhe}")
-
-    ability = _ability_line(report)
-    if ability:
-        lines.append(f"五维能量：{ability}")
 
     state_name = str(state_block.get("name") or "").strip()
     if state_name:

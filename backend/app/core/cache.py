@@ -118,6 +118,11 @@ def key_guide_bootstrap(user_id: int, training_day: date | str) -> str:
     return f"jnao:guide:boot:{user_id}:{training_day}"
 
 
+def key_report_talent_faq(digest: str, talent: str = "") -> str:
+    t = (talent or "").strip()[:16]
+    return f"jnao:report_talent:faq:{t}:{digest}"
+
+
 def invalidate_user_profile(user_id: int) -> None:
     cache_delete(key_profile(user_id))
 

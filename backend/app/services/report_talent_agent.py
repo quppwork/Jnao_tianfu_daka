@@ -1,16 +1,19 @@
-"""成人报告天赋解答 — 优先调用 Agent 工具 knowledge_qa，原样返回。
+"""成人报告天赋解答 — 按需 get_report_content，再流式 knowledge_qa。
 
-会话落库只经 app.memory.ThreadStore（domain=report_talent）。
+通用问答可不塞报告摘要，并可走 Redis FAQ；会话落 ThreadStore（report_talent）。
 拒答 / 防注入由百炼知识问答应用配置；本门面不做二次改写。
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import AsyncIterator
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger("jnao.report_talent")
 
 from app.db.models import TalentAssessment
 from app.harness.context import ToolContext
@@ -160,24 +163,6 @@ def _tool_context(db: Session, row: TalentAssessment) -> ToolContext:
     )
 
 
-def _compose_kb_query(row: TalentAssessment, user_text: str) -> str:
-    """本份报告摘要 + 用户原问 → 交给 knowledge_qa（整份/局部由问句体现）。"""
-    from app.services.report_talent_context import build_report_context
-
-    report = row.report_json if isinstance(row.report_json, dict) else {}
-    summary = build_report_context(report, getattr(row, "talent_primary", None))
-    q = (user_text or "").strip()
-    if not summary:
-        return q
-    return (
-        "【本份测评报告摘要】\n"
-        f"{summary}\n\n"
-        "【用户问题】\n"
-        f"{q}\n\n"
-        "请结合报告摘要与知识库作答；报告里没有的分数/结论不要编造。"
-    )
-
-
 def _begin(db: Session, row: TalentAssessment, text: str):
     store = get_thread_store(db)
     ref = _thread_ref(row)
@@ -195,6 +180,8 @@ def _payload(
     tool_check: dict,
     refused: bool,
     llm_calls: int = 0,
+    cache_hit: bool = False,
+    used_report: bool = False,
 ) -> dict:
     return {
         "user": _message_out(user),
@@ -205,7 +192,16 @@ def _payload(
         "llm_calls": llm_calls,
         "rag_used": bool(tool_check.get("any_ok")),
         "profile": PROFILE,
+        "cache_hit": cache_hit,
+        "used_report": used_report,
     }
+
+
+def _chunk_cached_reply(text: str, *, size: int = 12) -> list[str]:
+    body = text or ""
+    if not body:
+        return []
+    return [body[i : i + size] for i in range(0, len(body), size)]
 
 
 def _audit_ok(data: dict[str, Any]) -> dict[str, Any]:
@@ -233,12 +229,102 @@ async def ask(db: Session, row: TalentAssessment, content: str) -> dict:
     store, ref, _prior, user = _begin(db, row, text)
 
     from app.harness.runtime import call_tool
+    from app.harness.llm import route as llm_route
+    from app.services import report_talent_faq_cache as faq_cache
+    from app.services.report_talent_query import (
+        needs_report_context,
+        prepare_grounded_turn,
+    )
 
-    kb_query = _compose_kb_query(row, text)
+    used_report = False
+    if not needs_report_context(text):
+        cached = faq_cache.get_cached_reply(
+            text, talent=str(row.talent_primary or "")
+        )
+        if cached:
+            reply = _normalize_kb_reply(cached)
+            assistant = store.append(
+                ref,
+                role="assistant",
+                content=reply,
+                meta={"retrieved": 0, "citations": [], "cache_hit": True},
+                commit=True,
+            )
+            logger.info(
+                "report_talent ask path=faq_cache assessment_id=%s",
+                row.id,
+            )
+            return _payload(
+                user,
+                assistant,
+                tools_used=[{"name": "faq_cache", "ok": True}],
+                tool_check={
+                    "called": False,
+                    "any_ok": True,
+                    "all_failed": False,
+                    "failures": [],
+                },
+                refused=False,
+                cache_hit=True,
+                used_report=False,
+            )
+
+    if needs_report_context(text):
+        grounded = await prepare_grounded_turn(db, row, text)
+        used_report = bool(grounded.get("used_report"))
+        if grounded.get("mode") == "grounded" and grounded.get("messages"):
+            try:
+                msg = await llm_route(PROFILE).complete(list(grounded["messages"]))
+            except Exception as e:
+                db.rollback()
+                raise ReportTalentError(
+                    f"助手暂时无法作答：{type(e).__name__}", 503
+                ) from e
+            reply = _normalize_kb_reply(str(msg.get("content") or "").strip())
+            if reply:
+                tools_used: list[dict] = []
+                if isinstance(grounded.get("report_tool"), dict):
+                    tools_used.append(
+                        {"name": "get_report_content", **grounded["report_tool"]}
+                    )
+                if isinstance(grounded.get("rag_tool"), dict):
+                    tools_used.append(dict(grounded["rag_tool"]))
+                tools_used.append({"name": "llm_grounded", "ok": True})
+                assistant = store.append(
+                    ref,
+                    role="assistant",
+                    content=reply,
+                    meta={
+                        "retrieved": 1,
+                        "citations": [],
+                        "used_report": True,
+                        "path": "grounded",
+                    },
+                    commit=True,
+                )
+                logger.info(
+                    "report_talent ask path=grounded assessment_id=%s rag_hits=%s",
+                    row.id,
+                    (grounded.get("rag_tool") or {}).get("hit_count"),
+                )
+                return _payload(
+                    user,
+                    assistant,
+                    tools_used=tools_used,
+                    tool_check={
+                        "called": True,
+                        "any_ok": True,
+                        "all_failed": False,
+                        "failures": [],
+                    },
+                    refused=False,
+                    used_report=True,
+                )
+
     try:
         result = await call_tool(
             TOOL_NAME,
-            {"query": kb_query},
+            {"query": text},
             profile=PROFILE,
             ctx=_tool_context(db, row),
         )
@@ -249,14 +335,23 @@ async def ask(db: Session, row: TalentAssessment, content: str) -> dict:
     data = result.data if result.ok else {}
     reply = _normalize_kb_reply(str(data.get("reply") or "").strip())
     if result.ok and reply:
+        if not used_report:
+            faq_cache.set_cached_reply(
+                text, reply, talent=str(row.talent_primary or "")
+            )
         tools_used = [_audit_ok(data)]
         tool_check = {"called": True, "any_ok": True, "all_failed": False, "failures": []}
         assistant = store.append(
             ref,
             role="assistant",
             content=reply,
-            meta={"retrieved": 1, "citations": []},
+            meta={"retrieved": 1, "citations": [], "used_report": used_report},
             commit=True,
+        )
+        logger.info(
+            "report_talent ask path=knowledge_qa assessment_id=%s used_report=%s",
+            row.id,
+            used_report,
         )
         return _payload(
             user,
@@ -264,6 +359,7 @@ async def ask(db: Session, row: TalentAssessment, content: str) -> dict:
             tools_used=tools_used,
             tool_check=tool_check,
             refused=False,
+            used_report=used_report,
         )
 
     # 链路失败：不替知识问答编业务拒答
@@ -292,30 +388,161 @@ async def ask(db: Session, row: TalentAssessment, content: str) -> dict:
         tools_used=tools_used,
         tool_check=tool_check,
         refused=True,
+        used_report=used_report,
     )
 
 
 async def ask_stream(
     db: Session, row: TalentAssessment, content: str
 ) -> AsyncIterator[tuple[str, Any]]:
-    """SSE：知识问答流式 token 原样推送；done 带落库权威消息。"""
+    """SSE：按需拉报告片段后流式推知识库；通用问答可走 Redis。"""
     _require_adult(row)
     text = _clean_question(content)
     store, ref, _prior, user = _begin(db, row, text)
 
+    from app.harness.llm import route as llm_route
+    from app.services import report_talent_faq_cache as faq_cache
     from app.services.bailian.config import load_bailian_config
     from app.services.bailian.knowledge_chat import knowledge_chat_stream
     from app.services.kb_policy import knowledge_qa_aid
+    from app.services.report_talent_query import (
+        needs_report_context,
+        prepare_grounded_turn,
+    )
+
+    talent = str(row.talent_primary or "")
+    used_report = False
+    if not needs_report_context(text):
+        cached = faq_cache.get_cached_reply(text, talent=talent)
+        if cached:
+            reply = _normalize_kb_reply(cached)
+            for piece in _chunk_cached_reply(reply):
+                yield ("token", piece)
+            assistant = store.append(
+                ref,
+                role="assistant",
+                content=reply,
+                meta={"retrieved": 0, "citations": [], "cache_hit": True},
+                commit=True,
+            )
+            logger.info(
+                "report_talent stream path=faq_cache assessment_id=%s", row.id
+            )
+            yield (
+                "done",
+                _payload(
+                    user,
+                    assistant,
+                    tools_used=[{"name": "faq_cache", "ok": True}],
+                    tool_check={
+                        "called": False,
+                        "any_ok": True,
+                        "all_failed": False,
+                        "failures": [],
+                    },
+                    refused=False,
+                    cache_hit=True,
+                    used_report=False,
+                ),
+            )
+            return
+
+    if needs_report_context(text):
+        grounded = await prepare_grounded_turn(db, row, text)
+        used_report = bool(grounded.get("used_report"))
+        if grounded.get("mode") == "grounded" and grounded.get("messages"):
+            parts: list[str] = []
+            try:
+                async for piece in llm_route(PROFILE).stream(
+                    list(grounded["messages"])
+                ):
+                    tok = str(piece or "")
+                    if not tok:
+                        continue
+                    parts.append(tok)
+                    yield ("token", tok)
+            except Exception as e:
+                db.rollback()
+                yield ("error", f"助手暂时无法作答：{type(e).__name__}")
+                return
+            reply = _normalize_kb_reply("".join(parts).strip())
+            if reply:
+                tools_used = []
+                if isinstance(grounded.get("report_tool"), dict):
+                    tools_used.append(
+                        {"name": "get_report_content", **grounded["report_tool"]}
+                    )
+                if isinstance(grounded.get("rag_tool"), dict):
+                    tools_used.append(dict(grounded["rag_tool"]))
+                tools_used.append({"name": "llm_grounded", "ok": True})
+                assistant = store.append(
+                    ref,
+                    role="assistant",
+                    content=reply,
+                    meta={
+                        "retrieved": 1,
+                        "citations": [],
+                        "used_report": True,
+                        "path": "grounded",
+                    },
+                    commit=True,
+                )
+                logger.info(
+                    "report_talent stream path=grounded assessment_id=%s rag_hits=%s",
+                    row.id,
+                    (grounded.get("rag_tool") or {}).get("hit_count"),
+                )
+                yield (
+                    "done",
+                    _payload(
+                        user,
+                        assistant,
+                        tools_used=tools_used,
+                        tool_check={
+                            "called": True,
+                            "any_ok": True,
+                            "all_failed": False,
+                            "failures": [],
+                        },
+                        refused=False,
+                        used_report=True,
+                    ),
+                )
+                return
+            yield ("token", TOOL_FAIL)
+            assistant = store.append(
+                ref,
+                role="assistant",
+                content=TOOL_FAIL,
+                meta={"retrieved": 0, "citations": [], "path": "grounded_empty"},
+                commit=True,
+            )
+            yield (
+                "done",
+                _payload(
+                    user,
+                    assistant,
+                    tools_used=[_audit_fail(error="grounded empty", error_kind="empty")],
+                    tool_check={
+                        "called": True,
+                        "any_ok": False,
+                        "all_failed": True,
+                        "failures": [{"error": "empty"}],
+                    },
+                    refused=True,
+                    used_report=used_report,
+                ),
+            )
+            return
 
     cfg = load_bailian_config()
     aid = knowledge_qa_aid()
-    kb_query = _compose_kb_query(row, text)
-    parts: list[str] = []
+    parts = []
     final = None
 
     try:
         async for kind, payload in knowledge_chat_stream(
-            kb_query, aid=aid, cfg=cfg, timeout=90
+            text, aid=aid, cfg=cfg, timeout=90
         ):
             if kind == "token":
                 piece = str(payload or "")
@@ -333,6 +560,7 @@ async def ask_stream(
         str(getattr(final, "reply", "") or "").strip() or "".join(parts).strip()
     )
     if reply:
+        faq_cache.set_cached_reply(text, reply, talent=talent)
         tools_used = [
             _audit_ok(
                 {
@@ -346,8 +574,11 @@ async def ask_stream(
             ref,
             role="assistant",
             content=reply,
-            meta={"retrieved": 1, "citations": []},
+            meta={"retrieved": 1, "citations": [], "used_report": False},
             commit=True,
+        )
+        logger.info(
+            "report_talent stream path=knowledge_qa assessment_id=%s", row.id
         )
         yield (
             "done",
@@ -357,6 +588,7 @@ async def ask_stream(
                 tools_used=tools_used,
                 tool_check=tool_check,
                 refused=False,
+                used_report=False,
             ),
         )
         return
@@ -387,5 +619,6 @@ async def ask_stream(
             tools_used=tools_used,
             tool_check=tool_check,
             refused=True,
+            used_report=False,
         ),
     )
