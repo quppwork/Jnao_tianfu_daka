@@ -164,6 +164,28 @@
   /* ===== 未满18岁 · 强提醒弹窗 ===== */
   .age-mask{position:fixed;inset:0;z-index:80;background:rgba(5,7,12,.82);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:26px}
   .age-mask.on{display:flex}
+  .hist-mask{position:fixed;inset:0;z-index:85;background:rgba(5,7,12,.72);backdrop-filter:blur(4px);display:none;align-items:flex-start;justify-content:center;padding:72px 18px 24px;box-sizing:border-box}
+  .hist-mask.on{display:flex}
+  .hist-panel{width:100%;max-width:360px;background:#131926;border:1px solid #2A3040;border-radius:18px;padding:14px 14px 10px;box-shadow:0 18px 40px rgba(0,0,0,.45);animation:stin .25s ease}
+  .hist-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .hist-hd b{font-size:16px;color:#EDEBE4;font-weight:800}
+  .hist-x{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.06);color:#8B93A5;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px}
+  .hist-list{max-height:52vh;overflow:auto;-webkit-overflow-scrolling:touch}
+  .hist-row{display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer}
+  .hist-row:last-child{border-bottom:none}
+  .hist-av{width:36px;height:36px;border-radius:50%;background:#1A2233;overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .hist-av img{width:100%;height:100%;object-fit:cover;display:block}
+  .hist-name{flex:1;min-width:0;font-size:15px;font-weight:700;color:#EDEBE4}
+  .hist-meta{font-size:11px;color:#8B93A5;font-weight:500;display:block;margin-top:2px}
+  .hist-time{font-size:12px;color:#8B93A5;flex:none}
+  .hist-del{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.06);color:#8B93A5;display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;cursor:pointer}
+  .hist-empty{text-align:center;padding:28px 8px;color:#8B93A5;font-size:14px}
+  html.lt .hist-panel{background:#d9dfec;border-color:#c2cadc}
+  html.lt .hist-hd b{color:#1b1912}
+  html.lt .hist-x,html.lt .hist-del{background:rgba(0,0,0,.06);color:#5a6274}
+  html.lt .hist-name{color:#1b1912}
+  html.lt .hist-row{border-bottom-color:rgba(0,0,0,.06)}
+  html.lt .hist-av{background:#ccd4e5}
   .age-box{background:#131926;border:2px solid rgba(224,82,82,.65);border-radius:24px;padding:26px 22px 22px;text-align:center;max-width:340px;animation:stin .3s;box-shadow:0 0 0 6px rgba(224,82,82,.10),0 20px 50px rgba(0,0,0,.6)}
   .age-box .ai{width:64px;height:64px;margin:0 auto 12px;border-radius:50%;background:rgba(224,82,82,.14);border:1.5px solid rgba(224,82,82,.6);display:flex;align-items:center;justify-content:center;font-size:30px}
   .age-box h3{font-size:19px;font-weight:900;color:#F0A3A3;margin-bottom:10px;line-height:1.5}
@@ -246,7 +268,7 @@ function toggleTheme(){
       <div class="logo"></div>
       <div><div class="t1">天赋测试</div><div class="t2">TALENT TEST</div></div>
     </div>
-    <a href="records.html" class="hist-link">历史报告</a>
+    <a href="javascript:;" class="hist-link" onclick="openHistMask();return false;">历史报告</a>
   </div>
 
   <!-- 第0步 · 测评中心 · 四大板块 -->
@@ -264,7 +286,7 @@ function toggleTheme(){
         <div class="hi"><img src="/static/dayu/assets/ic/hearts.png" alt=""/></div><div class="hm"><b>关系测试</b><span>发链接给TA测合拍 · 家长专区</span></div><span class="arr">›</span><i class="lock">🔒</i>
       </a>
     </div>
-    <a class="recbtn" href="records.html">
+    <a class="recbtn" href="javascript:;" onclick="openHistMask();return false;">
       <span class="ri"><img src="/static/dayu/assets/ic/clipboard.png" alt=""/></span><b>测试记录</b><span>孩子 / 成人 / 规划 / 关系</span>
     </a>
     <div id="selfZone" style="display:none">
@@ -381,6 +403,17 @@ function toggleTheme(){
       <p>您的孩子<b>未满18岁</b>，请您（家长）帮助孩子完成本次测试。<br/>题目将由<b>家长根据孩子的日常真实表现</b>作答，孩子本人作答或凭想象作答，结果会与事实产生误差。</p>
       <div class="age-ok" onclick="confirmKid()">我是家长 · 我来帮孩子测</div>
       <div class="age-back" onclick="closeAge()">返回重选</div>
+    </div>
+  </div>
+
+  <!-- 测试记录：停在测评中心上弹层，不跳个人测试双选页 -->
+  <div class="hist-mask" id="histMask" onclick="if(event.target===this)closeHistMask()">
+    <div class="hist-panel" onclick="event.stopPropagation()">
+      <div class="hist-hd">
+        <b id="histTitle">历史报告</b>
+        <div class="hist-x" onclick="closeHistMask()">✕</div>
+      </div>
+      <div class="hist-list" id="histList"><div class="hist-empty">加载中…</div></div>
     </div>
   </div>
 
@@ -707,16 +740,128 @@ function gateNo(){$('gate').classList.remove('on');_gateCb=null;}
   }
   loadBrandTalent();
 
+  function fmtHistDate(raw){
+    var s = String(raw || '');
+    if(!s) return '';
+    var d = new Date(s.replace(/-/g, '/'));
+    if(Number.isNaN(d.getTime())) return s.slice(0, 10);
+    var p = function(n){ return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function closeHistMask(){
+    var m = document.getElementById('histMask');
+    if(m) m.classList.remove('on');
+  }
+  async function loadHistList(){
+    var box = document.getElementById('histList');
+    var title = document.getElementById('histTitle');
+    if(!box) return;
+    box.innerHTML = '<div class="hist-empty">加载中…</div>';
+    var parent = roleOf() === 'parent';
+    if(title) title.textContent = parent ? '测试记录' : '历史报告';
+    try{
+      var items = [];
+      if(parent){
+        var pid = uidOf('parent');
+        if(!pid) throw new Error('未登录');
+        var pr = await fetch('/api/parent/assessments/history?user_id=' + encodeURIComponent(pid), {
+          credentials: 'include', headers: authHeaders()
+        });
+        if(!pr.ok) throw new Error('加载失败');
+        var pb = await pr.json();
+        items = pb.items || [];
+      }else{
+        var sid = uidOf('student');
+        if(!sid) throw new Error('未登录');
+        var sr = await fetch('/api/talent/assessment/history?user_id=' + encodeURIComponent(sid), {
+          credentials: 'include', headers: authHeaders()
+        });
+        if(!sr.ok) throw new Error('加载失败');
+        var sb = await sr.json();
+        items = sb.items || [];
+      }
+      if(!items.length){
+        box.innerHTML = '<div class="hist-empty">' + (parent ? '暂无孩子的测试记录' : '暂无历史报告') + '</div>';
+        return;
+      }
+      box.innerHTML = items.map(function(h){
+        var talent = h.talent_primary || h.talent || '--';
+        var av = TALENT_AVATAR[talent];
+        var avHtml = av
+          ? '<img src="' + av + '" alt=""/>'
+          : '<span>🧬</span>';
+        var meta = '';
+        if(parent && h.child_nickname){
+          meta = '<span class="hist-meta">' + String(h.child_nickname) + ' · ' + (h.mode === 'adult' || Number(h.test_type) === 0 ? '成人' : '孩子') + '</span>';
+        }
+        var when = fmtHistDate(h.create_time || h.assessed_at);
+        return '<div class="hist-row" data-id="' + h.id + '" data-type="' + (h.test_type == null ? '' : h.test_type) + '" data-mode="' + (h.mode || '') + '">'
+          + '<div class="hist-av">' + avHtml + '</div>'
+          + '<div class="hist-name">' + talent + meta + '</div>'
+          + '<div class="hist-time">' + when + '</div>'
+          + '<div class="hist-del" data-del="' + h.id + '">✕</div>'
+          + '</div>';
+      }).join('');
+    }catch(e){
+      box.innerHTML = '<div class="hist-empty">' + ((e && e.message) || '加载失败') + '</div>';
+    }
+  }
+  function openHistMask(){
+    var m = document.getElementById('histMask');
+    if(!m) return;
+    m.classList.add('on');
+    loadHistList();
+  }
+  window.openHistMask = openHistMask;
+  window.closeHistMask = closeHistMask;
+
+  document.getElementById('histList') && document.getElementById('histList').addEventListener('click', function(e){
+    var del = e.target.closest && e.target.closest('[data-del]');
+    if(del){
+      e.preventDefault(); e.stopPropagation();
+      var id = del.getAttribute('data-del');
+      if(!id || !window.confirm('确定删除这条报告？')) return;
+      (async function(){
+        try{
+          var parent = roleOf() === 'parent';
+          var uid = parent ? uidOf('parent') : uidOf('student');
+          var url = parent
+            ? '/api/parent/assessments/' + id + '?user_id=' + encodeURIComponent(uid)
+            : '/api/talent/assessment/' + id + '?user_id=' + encodeURIComponent(uid);
+          var r = await fetch(url, { method: 'DELETE', credentials: 'include', headers: authHeaders() });
+          if(!r.ok) throw new Error('删除失败');
+          loadHistList();
+        }catch(err){
+          alert((err && err.message) || '删除失败');
+        }
+      })();
+      return;
+    }
+    var row = e.target.closest && e.target.closest('.hist-row');
+    if(!row || !row.getAttribute('data-id')) return;
+    var aid = row.getAttribute('data-id');
+    var tt = Number(row.getAttribute('data-type'));
+    var modeAttr = row.getAttribute('data-mode') || '';
+    var modeQ = (modeAttr === 'adult' || tt === 0) ? 'adult' : 'kid';
+    closeHistMask();
+    nav('/pages/report/index?assessment_id=' + encodeURIComponent(aid) + '&mode=' + modeQ + '&from=hub');
+  });
+
   document.addEventListener('click', function(e){
     var a=e.target.closest&&e.target.closest('a'); if(!a) return;
     var href=a.getAttribute('href')||'';
     if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
     var file=href.split('?')[0].split('#')[0].split('/').pop();
+    if(file === 'records.html'){
+      e.preventDefault(); e.stopPropagation();
+      openHistMask();
+      return;
+    }
     var map={
       'index.html':'/pages/dayu/home','train.html':'/pages/training/dayu','answer.html':'/pages/qa/dayu',
       'drama.html':'/pages/hub/academy','milestone.html':'/pages/hub/console','test.html':'/pages/talent/hub',
       'history.html':'/pages/hub/story','courses.html':'/pages/hub/courses','parent.html':'/pages/parent/dayu',
-      'records.html':'/pages/talent/index?history=1','report-v3.html':'/pages/report/index?mode=adult','report-kid.html':'/pages/report/index?mode=kid','plan.html':'/pages/plan/dayu'
+      'report-v3.html':'/pages/report/index?mode=adult','report-kid.html':'/pages/report/index?mode=kid','plan.html':'/pages/plan/dayu'
     };
     if(map[file]){ e.preventDefault(); e.stopPropagation(); nav(map[file]); }
   }, true);
