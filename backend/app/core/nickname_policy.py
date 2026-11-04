@@ -1,4 +1,4 @@
-"""昵称与姓名规范 — 禁止违规名称，倾向真实姓名"""
+"""昵称/姓名：2-20 长度；登录账号另有字符与禁用词规则。"""
 
 from __future__ import annotations
 
@@ -33,8 +33,6 @@ _FORBIDDEN_SUBSTR = (
     re.compile(r"(?i)admin|root|system"),
 )
 
-_ILLEGAL_CHARS = re.compile(r"[<>\/\\|@#$%^&*()+=;:\"'`~]")
-
 
 def _reject_forbidden(text: str, *, field_label: str) -> None:
     lower = text.lower()
@@ -47,13 +45,8 @@ def _reject_forbidden(text: str, *, field_label: str) -> None:
 
 def validate_real_name(name: str, *, field_label: str = "真实姓名") -> str:
     value = (name or "").strip()
-    if not value:
-        raise HTTPException(400, f"请填写{field_label}")
     if len(value) < 2 or len(value) > 20:
         raise HTTPException(400, f"{field_label}需为2-20个字符")
-    if not re.match(r"^[\u4e00-\u9fa5·]{2,20}$", value):
-        raise HTTPException(400, f"{field_label}请使用中文姓名（可含·）")
-    _reject_forbidden(value, field_label=field_label)
     return value
 
 
@@ -61,20 +54,12 @@ def validate_nickname(
     nickname: str,
     *,
     field_label: str = "昵称",
-    prefer_real_name: bool = False,
+    prefer_real_name: bool = False,  # 兼容旧调用；现仅校验长度
 ) -> str:
+    _ = prefer_real_name
     value = (nickname or "").strip()
     if len(value) < 2 or len(value) > 20:
         raise HTTPException(400, f"{field_label}需为2-20个字符")
-    if _ILLEGAL_CHARS.search(value):
-        raise HTTPException(400, f"{field_label}含非法字符")
-    if re.fullmatch(r"\d+", value):
-        raise HTTPException(400, f"{field_label}不能为纯数字")
-    if re.fullmatch(r"(.)\1{3,}", value):
-        raise HTTPException(400, f"{field_label}过于简单，请更换")
-    _reject_forbidden(value, field_label=field_label)
-    if prefer_real_name and not re.search(r"[\u4e00-\u9fa5]", value):
-        raise HTTPException(400, f"{field_label}请使用中文姓名或常见中文昵称")
     return value
 
 
