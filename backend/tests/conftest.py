@@ -2,8 +2,18 @@
 
 import os
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ.setdefault("TIANFU_RAG_MOCK", "1")
+os.environ.setdefault("AUTH_CHALLENGE_MOCK", "1")
+os.environ.setdefault("SMS_PROVIDER", "mock")
+os.environ.setdefault("SMS_MOCK_CODE", "88888")
+os.environ.setdefault("SMS_HOURLY_PER_IP", "1000")
+os.environ.setdefault("SESSION_EXPOSE_TOKEN_IN_JSON", "1")
+os.environ.setdefault("JNAO_LEGACY_REGISTER", "1")
+os.environ["ADMIN_LOGIN_NAME"] = "pyx"
+os.environ["ADMIN_PASSWORD"] = "123456"
+os.environ.setdefault("JNAO_SKIP_ADMIN_SEED", "1")
+os.environ.setdefault("JNAO_TEST_SKIP_GATE", "1")
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -12,7 +22,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_user, get_child_user_id, get_db
+from app.core.deps import get_authenticated_student, get_authenticated_user, get_child_user_id, get_db
+from app.core.rate_limit import reset_rate_limit_buckets
 from app.db.base import Base
 from app.db.session import get_session_factory, init_db
 from app.services.assessment_service import save_assessment
@@ -22,11 +33,31 @@ from app.services.catalog_import import import_all_xet_catalogs
 # 前端模块 ↔ API 映射见 backend/tests/README.md
 
 
+@pytest.fixture(autouse=True)
+def _reset_test_isolation():
+    """每个用例清空内存限流/验证码/Agent bundle，避免跨用例串扰。"""
+    from app.assemble import reset_bundle
+    from app.services.auth_challenge_store import _lock, _mem
+
+    with _lock:
+        _mem.clear()
+    reset_rate_limit_buckets()
+    reset_bundle()
+    yield
+    with _lock:
+        _mem.clear()
+    reset_rate_limit_buckets()
+    reset_bundle()
+
+
 @pytest.fixture
 def db_session() -> Session:
     init_db()
     session = get_session_factory()()
     import_all_xet_catalogs(session, replace=True)
+    from app.services.auth_service import ensure_admin_account
+
+    ensure_admin_account(session)
     yield session
     session.rollback()
     for table in reversed(Base.metadata.sorted_tables):
@@ -72,19 +103,8 @@ def mock_doubao():
             new_callable=AsyncMock,
             return_value=reply,
         ) as mock_chat,
-        patch("app.services.guide_service.chat_completion", new_callable=AsyncMock, return_value=reply),
-        patch("app.api.chat.chat_completion", new_callable=AsyncMock, return_value=reply),
         patch(
-            "app.api.chat.chat_completion_stream",
-            side_effect=lambda **kwargs: _fake_stream(),
-        ),
-        patch(
-            "app.services.qa_service.chat_completion",
-            new_callable=AsyncMock,
-            return_value=reply,
-        ),
-        patch(
-            "app.services.qa_service.vision_chat_completion",
+            "app.agents.qa.runner._ocr_preview",
             new_callable=AsyncMock,
             return_value="【测试】识题预览",
         ),
@@ -102,10 +122,71 @@ def mock_doubao():
             "app.services.doubao_client.chat_completion_stream",
             side_effect=lambda **kwargs: _fake_stream(),
         ),
+        patch(
+            "app.services.doubao_client.chat_completion_messages_stream",
+            side_effect=lambda **kwargs: _fake_stream(),
+        ),
+        patch(
+            "app.services.doubao_client.vision_chat_completion_stream",
+            side_effect=lambda **kwargs: _fake_stream(),
+        ),
+        patch(
+            "app.services.doubao_client.chat_completion_message",
+            new_callable=AsyncMock,
+            return_value={"role": "assistant", "content": reply},
+        ) as mock_fc,
         patch("app.services.doubao_client.is_configured", return_value=True),
-        patch("app.api.chat.is_configured", return_value=True),
+        # 本机若配置了百炼选库，禁止走真外呼；单测一律走 mock 豆包兜底
+        patch("app.agents.guide.kb_agent.guide_kb_agent_ready", return_value=False),
+        patch(
+            "app.agents.guide.kb_agent.run_guide_kb_turn",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        # kb_tools 模块级 import，必须打在使用处
+        patch(
+            "app.agents.guide.tools.kb_tools.answer_chat_sync",
+            return_value=None,
+        ),
+        patch(
+            "app.services.knowledge.answer_chat_sync",
+            return_value=None,
+        ),
+        patch(
+            "app.agents.guide.runner._try_bailian_direct_reply",
+            new_callable=AsyncMock,
+            return_value=(None, False),
+        ),
+        patch(
+            "app.agents.guide.runner._gather_rag",
+            new_callable=AsyncMock,
+            return_value=("", []),
+        ),
+        patch(
+            "app.services.guide_rag_router.should_guide_use_rag",
+            return_value=False,
+        ),
+        patch(
+            "app.services.guide_rag_fallback.build_rag_miss_fallback",
+            return_value=None,
+        ),
     ):
-        yield {"chat": mock_chat, "stream": _fake_stream}
+        yield {"chat": mock_chat, "stream": _fake_stream, "fc": mock_fc}
+
+
+@pytest.fixture
+def client_strict_auth(db_session, mock_jnao, mock_doubao):
+    """真实 session_token 校验（模拟生产刷新场景）"""
+
+    def override_get_db():
+        yield db_session
+
+    from main import app
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -118,6 +199,7 @@ def client(db_session, mock_jnao, mock_doubao):
     app.dependency_overrides[get_db] = override_get_db
     # 测试环境：绕过 session_token 校验，使用旧版 user_id 认证
     app.dependency_overrides[get_authenticated_user] = get_child_user_id
+    app.dependency_overrides[get_authenticated_student] = get_child_user_id
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -155,12 +237,11 @@ def user_ready_for_training(client, mock_jnao) -> int:
     )
     uid = reg.json()["child_user_id"]
     client.post(
-        "/api/talent/report",
+        f"/api/talent/report?user_id={uid}",
         json={
             "answer": "1" * 35,
             "uid": 888001,
             "type": 1,
-            "child_user_id": uid,
         },
     )
     return uid

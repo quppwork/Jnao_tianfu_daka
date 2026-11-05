@@ -1,0 +1,264 @@
+/** appSession.js — 刷新保会话 / 401 分级 单元测试 */
+import { describe, it, expect, beforeEach } from 'vitest'
+import {
+  inferAuthKindFromPath,
+  isPublicPath,
+  readAuthSnapshot,
+  isTransientError,
+  isAuthExpiredError,
+  shouldLogoutOnError,
+  sessionKeysForKind,
+  normalizePath,
+} from '../src/utils/appSession.js'
+
+describe('normalizePath / inferAuthKindFromPath', () => {
+  it('hash 路由去前缀', () => {
+    expect(normalizePath('#/pages/admin/index')).toBe('/pages/admin/index')
+  })
+
+  it('管理员详情页 → admin', () => {
+    expect(inferAuthKindFromPath('/pages/admin/parent-detail')).toBe('admin')
+  })
+
+  it('家长中心 → parent', () => {
+    expect(inferAuthKindFromPath('/pages/parent/index')).toBe('parent')
+  })
+
+  it('学生首页 → student', () => {
+    expect(inferAuthKindFromPath('/pages/index')).toBe('student')
+    expect(inferAuthKindFromPath('/pages/training/index')).toBe('student')
+  })
+
+  it('天赋/报告共用页：家长登录时按 parent 鉴权', () => {
+    const mem = {}
+    const ls = {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null),
+      setItem: (k, v) => { mem[k] = String(v) },
+      removeItem: (k) => { delete mem[k] },
+      clear: () => { Object.keys(mem).forEach((k) => delete mem[k]) },
+    }
+    globalThis.localStorage = ls
+    localStorage.setItem('jnao_logged_in', '1')
+    localStorage.setItem('jnao_user', JSON.stringify({ id: 9, role: 'parent' }))
+    localStorage.setItem('jnao_parent_user_id', '9')
+    expect(inferAuthKindFromPath('/pages/talent/hub')).toBe('parent')
+    expect(inferAuthKindFromPath('/pages/talent/index')).toBe('parent')
+    expect(inferAuthKindFromPath('/pages/report/index')).toBe('parent')
+    localStorage.clear()
+    expect(inferAuthKindFromPath('/pages/talent/hub')).toBe('student')
+  })
+
+  it('登录页 → null', () => {
+    expect(inferAuthKindFromPath('/pages/login/index')).toBeNull()
+    expect(isPublicPath('/pages/login/register-parent')).toBe(true)
+  })
+
+  it('冷启动根路径 → null（勿当学生鉴权）', () => {
+    expect(inferAuthKindFromPath('/')).toBeNull()
+    expect(inferAuthKindFromPath('')).toBeNull()
+    expect(inferAuthKindFromPath('/favicon.ico')).toBeNull()
+  })
+})
+
+describe('readAuthSnapshot — 三端 session 槽位互不干扰', () => {
+  const store = {}
+
+  function getItem(k) {
+    return store[k] ?? null
+  }
+
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+  })
+
+  it('学生：child_user_id + logged_in（Cookie 模式无 token 字段）', () => {
+    store.jnao_child_user_id = '10'
+    store.jnao_student_user_id = '10'
+    store.jnao_user = JSON.stringify({ id: 10, role: 'student' })
+    store.jnao_logged_in = '1'
+    const snap = readAuthSnapshot(getItem)
+    expect(snap.student).toEqual({ userId: 10, active: true })
+    expect(snap.parent).toBeNull()
+    expect(snap.admin).toBeNull()
+  })
+
+  it('家长：jnao_user role=parent + logged_in', () => {
+    store.jnao_child_user_id = '20'
+    store.jnao_parent_user_id = '20'
+    store.jnao_user = JSON.stringify({ id: 20, role: 'parent' })
+    store.jnao_logged_in = '1'
+    const snap = readAuthSnapshot(getItem)
+    expect(snap.parent).toEqual({ userId: 20, active: true })
+    expect(snap.student).toBeNull()
+  })
+
+  it('管理员：独立 admin 槽，不影响学生槽', () => {
+    store.jnao_admin_user = JSON.stringify({ id: 1, name: 'admin' })
+    store.jnao_admin_logged_in = '1'
+    store.jnao_child_user_id = '10'
+    store.jnao_student_user_id = '10'
+    store.jnao_user = JSON.stringify({ id: 10, role: 'student' })
+    store.jnao_logged_in = '1'
+    const snap = readAuthSnapshot(getItem)
+    expect(snap.admin).toEqual({ userId: 1, active: true })
+    expect(snap.student).toEqual({ userId: 10, active: true })
+  })
+
+  it('无 logged_in → parent/student 槽为空', () => {
+    store.jnao_user = JSON.stringify({ id: 5, role: 'parent' })
+    const snap = readAuthSnapshot(getItem)
+    expect(snap.parent).toBeNull()
+    expect(snap.student).toBeNull()
+  })
+})
+
+describe('isTransientError / isAuthExpiredError / shouldLogoutOnError', () => {
+  it('网络/网关错误视为 transient', () => {
+    expect(isTransientError(0)).toBe(true)
+    expect(isTransientError(502)).toBe(true)
+    expect(isTransientError(503)).toBe(true)
+  })
+
+  it('401 为会话失效', () => {
+    expect(isAuthExpiredError(401)).toBe(true)
+    expect(isAuthExpiredError(403)).toBe(false)
+  })
+
+  it('仅 401 应登出；500/0 不应', () => {
+    expect(shouldLogoutOnError({ status: 401 })).toBe(true)
+    expect(shouldLogoutOnError({ status: 0 })).toBe(false)
+    expect(shouldLogoutOnError({ status: 500 })).toBe(false)
+    expect(shouldLogoutOnError({ status: 502 })).toBe(false)
+  })
+})
+
+describe('consumePostLoginRoute — 按角色隔离跳转', () => {
+  const store = {}
+
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+    global.sessionStorage = {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v },
+      removeItem: (k) => { delete store[k] },
+    }
+  })
+
+  it('家长登录不恢复管理员上次页面', async () => {
+    const { saveRouteSnapshot, consumePostLoginRoute } = await import('../src/utils/appSession.js')
+    saveRouteSnapshot('/pages/admin/index')
+    saveRouteSnapshot('/pages/parent/children')
+    expect(consumePostLoginRoute('/pages/parent/index', 'parent')).toBe('/pages/parent/children')
+    expect(consumePostLoginRoute('/pages/parent/index', 'parent')).toBe('/pages/parent/index')
+  })
+
+  it('学生登录不恢复家长/管理员页面，且旧首页映射到大宇壳', async () => {
+    const { saveRouteSnapshot, consumePostLoginRoute } = await import('../src/utils/appSession.js')
+    saveRouteSnapshot('/pages/admin/index')
+    saveRouteSnapshot('/pages/index')
+    expect(consumePostLoginRoute('/pages/dayu/home', 'student')).toBe('/pages/dayu/home')
+  })
+
+  it('学生旧对话页快照也映射到大宇壳', async () => {
+    const { saveRouteSnapshot, consumePostLoginRoute } = await import('../src/utils/appSession.js')
+    saveRouteSnapshot('/pages/index', 'chat=1')
+    expect(consumePostLoginRoute('/pages/dayu/home', 'student')).toBe('/pages/dayu/home')
+  })
+})
+describe('repairAuthStorage / sanitizeAuthForLoginEntry', () => {
+  const store = {}
+
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+    global.localStorage = {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v },
+      removeItem: (k) => { delete store[k] },
+    }
+    global.sessionStorage = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    }
+  })
+
+  it('用户登录页进入时清除管理员残留', async () => {
+    const { sanitizeAuthForLoginEntry, readAuthSnapshot } = await import('../src/utils/appSession.js')
+    store.jnao_admin_user = JSON.stringify({ id: 1 })
+    store.jnao_admin_logged_in = '1'
+    store.jnao_admin_token = 'adm'
+    sanitizeAuthForLoginEntry('/pages/login/index')
+    const snap = readAuthSnapshot((k) => store[k])
+    expect(snap.admin).toBeNull()
+  })
+
+  it('repair 清除 logged_in 但无 token 的脏数据（v3 Cookie 模式保留有效登录）', async () => {
+    const { repairAuthStorage } = await import('../src/utils/appSession.js')
+    store.jnao_storage_schema = '3'
+    store.jnao_logged_in = '1'
+    store.jnao_user = JSON.stringify({ id: 2, role: 'parent' })
+    store.jnao_parent_user_id = '2'
+    store.jnao_child_user_id = '2'
+    const fixed = repairAuthStorage()
+    expect(fixed).not.toContain('logged_in_without_session')
+    expect(store.jnao_logged_in).toBe('1')
+  })
+
+  it('repair 清除 logged_in 但无身份信息的脏数据', async () => {
+    const { repairAuthStorage } = await import('../src/utils/appSession.js')
+    store.jnao_logged_in = '1'
+    store.jnao_user = JSON.stringify({ role: 'parent' })
+    const fixed = repairAuthStorage()
+    expect(fixed).toContain('logged_in_without_identity')
+    expect(store.jnao_logged_in).toBeUndefined()
+  })
+})
+
+describe('sessionKeysForKind — 清 session 不串槽', () => {
+  it('admin 只清 admin 键', () => {
+    const keys = sessionKeysForKind('admin')
+    expect(keys).toContain('jnao_admin_user')
+    expect(keys).toContain('jnao_admin_token')
+    expect(keys).not.toContain('jnao_session_token')
+  })
+
+  it('parent/student 清用户键但不清 admin', () => {
+    const pKeys = sessionKeysForKind('parent')
+    expect(pKeys).toContain('jnao_session_token')
+    expect(pKeys).not.toContain('jnao_admin_token')
+  })
+})
+
+describe('prepareRoleLoginEntry — 切到学生登录前清家长 session', () => {
+  const store = {}
+
+  beforeEach(() => {
+    Object.keys(store).forEach((k) => delete store[k])
+    global.localStorage = {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v },
+      removeItem: (k) => { delete store[k] },
+    }
+    global.sessionStorage = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    }
+  })
+
+  it('清除家长 token 与 jnao_user，避免学生登录后进家长页', async () => {
+    const { prepareRoleLoginEntry, readAuthSnapshot } = await import('../src/utils/appSession.js')
+    store.jnao_parent_user_id = '9'
+    store.jnao_session_token = 'parent-tok'
+    store.jnao_user = JSON.stringify({ id: 9, role: 'parent' })
+    store.jnao_logged_in = '1'
+    store.jnao_child_user_id = '9'
+
+    prepareRoleLoginEntry('student')
+
+    const snap = readAuthSnapshot((k) => store[k] ?? null)
+    expect(snap.parent).toBeNull()
+    expect(store.jnao_session_token).toBeUndefined()
+    expect(store.jnao_user).toBeUndefined()
+  })
+})

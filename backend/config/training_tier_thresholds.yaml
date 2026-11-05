@@ -160,6 +160,29 @@ tier_thresholds:
       junior:       null
       senior:       null
 
+  # ──── 文科奥秘 / 理科奥秘（五阶起可排；标准未定稿 → 交卡即过、不自动升段由 mastery 处理）────
+  文科奥秘:
+    5:
+      all: null
+    6:
+      all: null
+  理科奥秘:
+    5:
+      all: null
+    6:
+      all: null
+
+  # ──── 学业占位（合并落地：交卡即过）────
+  学科方案:
+    1:
+      all: null
+  三错一讲:
+    1:
+      all: null
+  学科复盘:
+    1:
+      all: null
+
 # ── 扫描速记"逐字倒背"宽容策略 ──
 scan_memory_tolerance:
   reverse_recite_check: sample       # 抽查即可

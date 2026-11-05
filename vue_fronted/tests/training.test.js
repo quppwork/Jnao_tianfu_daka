@@ -587,3 +587,82 @@ describe('配合度评分', () => {
     expect(match.emoji).toBe('🔵')
   })
 })
+
+// ── 🆕 v2.0 晋级通知逻辑（仅第3次触发）──
+
+describe('v2.0 skill notifications — was_deciding gate', () => {
+  function buildSkillResult(overrides = {}) {
+    const base = {
+      tier_before: 1, tier_after: 1, passed: false,
+      consecutive_pass: 0, tier_advanced: false, oss_advanced: false,
+      attempt_number: 1,
+      ...overrides,
+    }
+    // was_deciding 由 attempt_number 自动推导（移除手动传入的值）
+    base.was_deciding = base.attempt_number >= 3
+    return base
+  }
+
+  function getSkillNotifications(skillResults) {
+    const notifications = []
+    for (const [skill, result] of Object.entries(skillResults)) {
+      if (!result.was_deciding) continue
+      if (result.tier_advanced) {
+        notifications.push({ type: 'congrats', skill, text: `🎉 ${skill} 晋级成功！` })
+      } else if (!result.passed) {
+        notifications.push({ type: 'regret', skill, text: `😔 ${skill} 差一点就晋级了，明天继续加油！` })
+      }
+    }
+    return notifications
+  }
+
+  it('第1次达标 → 无通知', () => {
+    const r = { 超脑阅读: buildSkillResult({ passed: true, attempt_number: 1, was_deciding: false, consecutive_pass: 1 }) }
+    expect(getSkillNotifications(r)).toHaveLength(0)
+  })
+
+  it('第2次达标 → 无通知', () => {
+    const r = { 超脑阅读: buildSkillResult({ passed: true, attempt_number: 2, was_deciding: false, consecutive_pass: 2 }) }
+    expect(getSkillNotifications(r)).toHaveLength(0)
+  })
+
+  it('第3次达标 → 🎉 晋级成功', () => {
+    const r = { 超脑阅读: buildSkillResult({ passed: true, attempt_number: 3, was_deciding: true, tier_advanced: true, tier_after: 2, consecutive_pass: 0 }) }
+    const ns = getSkillNotifications(r)
+    expect(ns).toHaveLength(1)
+    expect(ns[0].type).toBe('congrats')
+    expect(ns[0].text).toContain('晋级成功')
+  })
+
+  it('第3次失败 → 😔 遗憾', () => {
+    const r = { 超脑阅读: buildSkillResult({ passed: false, attempt_number: 3, was_deciding: true, consecutive_pass: 0 }) }
+    const ns = getSkillNotifications(r)
+    expect(ns).toHaveLength(1)
+    expect(ns[0].type).toBe('regret')
+    expect(ns[0].text).toContain('差一点')
+  })
+
+  it('第4次达标 → 无通知（日常训练）', () => {
+    const r = { 超脑阅读: buildSkillResult({ passed: true, attempt_number: 4, was_deciding: true, tier_advanced: false, consecutive_pass: 1 }) }
+    expect(getSkillNotifications(r)).toHaveLength(0)
+  })
+
+  it('多技能同时触发 → 各自通知', () => {
+    const r = {
+      超脑阅读: buildSkillResult({ passed: true, attempt_number: 3, was_deciding: true, tier_advanced: true, tier_after: 2, consecutive_pass: 0 }),
+      影像追忆: buildSkillResult({ passed: false, attempt_number: 3, was_deciding: true, consecutive_pass: 0 }),
+      扫描速记: buildSkillResult({ passed: true, attempt_number: 1, was_deciding: false, consecutive_pass: 1 }),
+    }
+    const ns = getSkillNotifications(r)
+    expect(ns).toHaveLength(2)
+    expect(ns[0].type).toBe('congrats')
+    expect(ns[1].type).toBe('regret')
+  })
+
+  it('was_deciding 来自 attempt_number >= 3', () => {
+    expect(buildSkillResult({ attempt_number: 1 }).was_deciding).toBe(false)
+    expect(buildSkillResult({ attempt_number: 2 }).was_deciding).toBe(false)
+    expect(buildSkillResult({ attempt_number: 3 }).was_deciding).toBe(true)
+    expect(buildSkillResult({ attempt_number: 5 }).was_deciding).toBe(true)
+  })
+})

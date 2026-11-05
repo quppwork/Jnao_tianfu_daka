@@ -8,37 +8,59 @@
       }
     },
     {
-      "path": "pages/parent/index",
+      "path": "pages/dayu/home",
+      "type": "home",
       "style": {
-        "navigationBarTitleText": "家长中心",
+        "navigationBarTitleText": "大宇AI",
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/admin/login",
+      "path": "pages/training/dayu",
       "style": {
-        "navigationBarTitleText": "管理员登录",
+        "navigationBarTitleText": "今日修炼",
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/admin/index",
+      "path": "pages/qa/dayu",
       "style": {
-        "navigationBarTitleText": "管理后台",
+        "navigationBarTitleText": "学科答疑",
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/admin/parent-detail",
+      "path": "pages/hub/academy",
       "style": {
-        "navigationBarTitleText": "家长详情",
+        "navigationBarTitleText": "天赋学院",
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/admin/child-detail",
+      "path": "pages/hub/console",
       "style": {
-        "navigationBarTitleText": "孩子详情",
+        "navigationBarTitleText": "中央电脑",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/hub/story",
+      "style": {
+        "navigationBarTitleText": "历史剧情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/hub/courses",
+      "style": {
+        "navigationBarTitleText": "天赋课程",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/index",
+      "style": {
+        "navigationBarTitleText": "JNAO",
         "navigationStyle": "custom"
       }
     },
@@ -57,6 +79,20 @@
       }
     },
     {
+      "path": "pages/login/bind-phone",
+      "style": {
+        "navigationBarTitleText": "绑定手机号",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/complete-parent",
+      "style": {
+        "navigationBarTitleText": "完善资料",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/login/onboarding/index",
       "style": {
         "navigationBarTitleText": "完善信息",
@@ -64,31 +100,9 @@
       }
     },
     {
-      "path": "pages/index",
-      "type": "home",
-      "style": {
-        "navigationBarTitleText": "JNAO",
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/talent/index",
-      "style": {
-        "navigationBarTitleText": "天赋测试",
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/report/index",
-      "style": {
-        "navigationBarTitleText": "天赋报告",
-        "navigationStyle": "custom"
-      }
-    },
-    {
       "path": "pages/training/index",
       "style": {
-        "navigationBarTitleText": "今日训练",
+        "navigationBarTitleText": "今日修炼",
         "navigationStyle": "custom"
       }
     },
@@ -102,28 +116,178 @@
     {
       "path": "pages/qa/index",
       "style": {
-        "navigationBarTitleText": "学科答疑",
+        "navigationBarTitleText": "学科答疑对话",
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/growth/index",
+      "path": "pages/talent/hub",
       "style": {
-        "navigationBarTitleText": "成长里程碑",
+        "navigationBarTitleText": "天赋测评中心",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/talent/index",
+      "style": {
+        "navigationBarTitleText": "个人测试",
         "navigationStyle": "custom"
       }
     }
   ],
+  "subPackages": [
+    {
+      "root": "pages/admin",
+      "pages": [
+        {
+          "path": "login",
+          "style": {
+            "navigationBarTitleText": "管理员登录",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "管理后台",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "parent-detail",
+          "style": {
+            "navigationBarTitleText": "家长详情",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "child-detail",
+          "style": {
+            "navigationBarTitleText": "孩子详情",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/parent",
+      "pages": [
+        {
+          "path": "dayu",
+          "style": {
+            "navigationBarTitleText": "大宇智能体 · 家长版",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "pset",
+          "style": {
+            "navigationBarTitleText": "我的 · 家长版",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "pdata",
+          "style": {
+            "navigationBarTitleText": "数据分析 · 家长版",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "consult",
+          "style": {
+            "navigationBarTitleText": "在线咨询 · 家长版",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "community",
+          "style": {
+            "navigationBarTitleText": "天赋社区 · 家长版",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "pcourse",
+          "style": {
+            "navigationBarTitleText": "家长课堂 · 家长版",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "wallet",
+          "style": {
+            "navigationBarTitleText": "算力中心",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "console",
+          "style": {
+            "navigationBarTitleText": "业务操作平台",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "孩子账户管理",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/report",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "天赋报告",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "talent-chat",
+          "style": {
+            "navigationBarTitleText": "天赋解答",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/plan",
+      "pages": [
+        {
+          "path": "dayu",
+          "style": {
+            "navigationBarTitleText": "学业规划",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/growth",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "成长里程碑",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    }
+  ],
   "globalStyle": {
-    "backgroundColor": "#f0f2f5",
+    "backgroundColor": "#07090e",
     "navigationBarBackgroundColor": "#0d1117",
     "navigationBarTextStyle": "white",
     "navigationStyle": "custom"
   },
   "easycom": {
-    "autoscan": true,
-    "custom": {
-      "^u-(.*)": "uview-plus/components/u-$1/u-$1.vue"
-    }
+    "autoscan": true
   }
 }

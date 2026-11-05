@@ -1,4 +1,8 @@
-"""代理 D:\\11 enterprise_rag /chat — 学科知识检索"""
+"""【遗留】代理 D:\\11 enterprise_rag /chat — 学科答疑旧知识路径。
+
+引导页完整 RAG 已迁移至 `app.services.bailian`（阿里云百炼官方 Retrieve/Search）。
+学科答疑后续可切 BAILIAN_QA_INDEX_ID；在此之前本模块仍指向本地 tianfu_rag。
+"""
 
 from __future__ import annotations
 

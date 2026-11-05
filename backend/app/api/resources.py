@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db
+from app.core.deps import get_authenticated_user, get_db
 from app.db.models import ContentItem
 from app.services.oss_client import is_oss_configured, list_audio_objects, resolve_play_url
 
@@ -12,7 +12,10 @@ router = APIRouter(prefix="/api/resources", tags=["resources"])
 
 
 @router.get("/oss/list")
-def oss_audio_list(prefix: str | None = Query(None)):
+def oss_audio_list(
+    prefix: str | None = Query(None),
+    auth_user_id: int = Depends(get_authenticated_user),
+):
     """列举 OSS yinpin/ 目录下已上传的 MP3（需配置 AccessKey）"""
     if not is_oss_configured():
         raise HTTPException(503, "OSS 未配置，请在 backend/.env 填写 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET")
@@ -28,6 +31,7 @@ def list_resources(
     db: Session = Depends(get_db),
     talent_code: int | None = Query(None),
     content_type: str | None = Query(None),
+    auth_user_id: int = Depends(get_authenticated_user),
 ):
     stmt = select(ContentItem).where(ContentItem.status == 1)
     if talent_code is not None:
@@ -54,7 +58,11 @@ def list_resources(
 
 
 @router.get("/{resource_id}")
-def get_resource(resource_id: int, db: Session = Depends(get_db)):
+def get_resource(
+    resource_id: int,
+    db: Session = Depends(get_db),
+    auth_user_id: int = Depends(get_authenticated_user),
+):
     row = db.get(ContentItem, resource_id)
     if not row:
         raise HTTPException(404, "资源不存在")

@@ -8,8 +8,20 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "[CLEAN] 清理旧进程..." -ForegroundColor Gray
 & "$PSScriptRoot\stop_all.ps1"
 
-Write-Host "[START] 打开后端窗口 (8012)..." -ForegroundColor Yellow
-Start-Process powershell.exe -ArgumentList @(
+# 优先 PowerShell 7，没有再回退 Windows PowerShell 5.1
+$shellExe = $null
+foreach ($cand in @(
+    (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
+    "$env:LOCALAPPDATA\Microsoft\WindowsApps\pwsh.exe",
+    "$env:ProgramFiles\PowerShell\7\pwsh.exe",
+    "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+)) {
+    if ($cand -and (Test-Path $cand)) { $shellExe = $cand; break }
+}
+if (-not $shellExe) { $shellExe = "powershell.exe" }
+
+Write-Host "[START] 打开后端窗口 (8012) via $([IO.Path]::GetFileName($shellExe))..." -ForegroundColor Yellow
+Start-Process $shellExe -ArgumentList @(
     "-NoExit",
     "-ExecutionPolicy", "Bypass",
     "-File", (Join-Path $PSScriptRoot "run_backend.ps1")
@@ -17,23 +29,24 @@ Start-Process powershell.exe -ArgumentList @(
 
 Write-Host "[WAIT] 等待后端就绪..." -ForegroundColor Gray
 $ready = $false
-for ($i = 0; $i -lt 15; $i++) {
+# uvicorn --reload 冷启动常见 >7s；过短会导致误报 WARN
+for ($i = 0; $i -lt 40; $i++) {
     Start-Sleep -Milliseconds 500
     try {
         $code = & curl.exe -s -o $null -w "%{http_code}" --max-time 1 "http://127.0.0.1:8012/api/ping" 2>$null
         if ($code -eq "200") {
-            Write-Host "[BACKEND] Ready" -ForegroundColor Green
+            Write-Host "[BACKEND] Ready ($([math]::Round(($i+1)*0.5,1))s)" -ForegroundColor Green
             $ready = $true
             break
         }
     } catch { }
 }
 if (-not $ready) {
-    Write-Host "[WARN] 后端尚未响应，前端窗口仍会启动" -ForegroundColor DarkYellow
+    Write-Host "[WARN] 后端 20s 内未响应，前端窗口仍会启动（请查看 Backend 窗口报错）" -ForegroundColor DarkYellow
 }
 
 Write-Host "[START] 打开前端窗口 (5185)..." -ForegroundColor Yellow
-Start-Process powershell.exe -ArgumentList @(
+Start-Process $shellExe -ArgumentList @(
     "-NoExit",
     "-ExecutionPolicy", "Bypass",
     "-File", (Join-Path $PSScriptRoot "run_frontend.ps1")

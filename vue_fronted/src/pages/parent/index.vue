@@ -1,8 +1,10 @@
 <template>
   <view class="app">
     <view class="nav-bar">
-      <view class="nav-spacer"></view>
-      <text class="nav-center">家长中心</text>
+      <view class="nav-back" @click="goBack">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </view>
+      <text class="nav-center">孩子账户管理</text>
       <view class="nav-actions">
         <view class="nav-icon-btn" @click="toggleTheme">
           <svg v-if="isLight" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -58,7 +60,10 @@
           <input class="form-input" v-model="childForm.nickname" placeholder="孩子姓名/昵称" />
         </view>
         <view class="input-wrap">
-          <input class="form-input" v-model="childForm.password" :placeholder="editingChild ? '新密码（留空不改）' : '登录密码（至少6位）'" type="password" />
+          <input class="form-input" v-model="childForm.password" :placeholder="editingChild ? '新密码（留空不改，8-32位含大小写+数字）' : '登录密码（8-32位，含大小写+数字）'" type="password" />
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="childForm.confirm" :placeholder="editingChild ? '确认新密码' : '确认密码'" type="password" />
         </view>
         <view class="input-wrap">
           <picker class="form-picker" :range="ageOptions" :value="ageIndex" @change="onAgeChange">
@@ -88,10 +93,42 @@
     <view v-if="showSettings" class="overlay" @tap="showSettings = false">
       <view class="settings-panel" @tap.stop>
         <text class="settings-title">设置</text>
+        <view class="settings-item settings-item-normal" @tap="openProfileForm">
+          <text class="settings-label-normal">我的资料</text>
+        </view>
         <view class="settings-item" @tap="doLogout">
           <text class="settings-label">退出登录</text>
         </view>
         <view class="settings-close" @tap="showSettings = false"><text>关闭</text></view>
+      </view>
+    </view>
+
+    <view v-if="showProfileForm" class="overlay" @tap="closeProfileForm">
+      <view class="settings-panel form-panel" @tap.stop>
+        <text class="settings-title">我的资料</text>
+        <view class="input-wrap readonly">
+          <text class="form-label">手机号</text>
+          <text class="form-readonly">{{ profileForm.phone || '—' }}</text>
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.realName" placeholder="真实姓名" />
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.nickname" placeholder="昵称" />
+        </view>
+        <view v-if="profileHasPassword" class="input-wrap">
+          <input class="form-input" v-model="profileForm.oldPassword" placeholder="原密码（改密必填）" type="password" />
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.password" placeholder="新密码（留空不改）" type="password" />
+        </view>
+        <view class="input-wrap">
+          <input class="form-input" v-model="profileForm.confirm" placeholder="确认新密码" type="password" />
+        </view>
+        <view class="btn-save" @click="saveProfile">
+          <text>{{ savingProfile ? '保存中...' : '保存' }}</text>
+        </view>
+        <view class="settings-close" @tap="closeProfileForm"><text>取消</text></view>
       </view>
     </view>
   </view>
@@ -100,14 +137,20 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  getChildUserId,
+  ensureParentUser,
+  logoutAndGoLogin,
   fetchParentChildren,
   fetchParentQuota,
+  fetchParentProfile,
+  updateParentProfile,
   createParentChild,
   updateParentChild,
+  ensureParentAccountReady,
 } from '@/utils/userApi.js'
+import { validatePasswordClient } from '@/utils/passwordPolicy.js'
 
 const showSettings = ref(false)
+const showProfileForm = ref(false)
 const showChildForm = ref(false)
 const parentName = ref('家长')
 const parentId = ref(null)
@@ -115,11 +158,14 @@ const children = ref([])
 const quota = ref({ limit: 5, used: 0, can_add: true })
 const loading = ref(true)
 const saving = ref(false)
+const savingProfile = ref(false)
 const isLight = ref(false)
 const editingChild = ref(null)
-const childForm = ref({ loginName: '', nickname: '', password: '', age: null, grade: '' })
+const childForm = ref({ loginName: '', nickname: '', password: '', confirm: '', age: null, grade: '' })
+const profileForm = ref({ phone: '', realName: '', nickname: '', oldPassword: '', password: '', confirm: '' })
+const profileHasPassword = ref(false)
 
-const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120
+const ageOptions = Array.from({ length: 118 }, (_, i) => i + 3)  // 3 ~ 120，与后端校验一致
 const ageIndex = computed(() => {
   const idx = ageOptions.indexOf(childForm.value.age)
   return idx >= 0 ? idx : 0
@@ -142,18 +188,16 @@ onMounted(() => loadData())
 async function loadData() {
   loading.value = true
   try {
-    const raw = localStorage.getItem('jnao_user')
-    if (raw) {
-      const u = JSON.parse(raw)
-      parentName.value = u.name || '家长'
-      parentId.value = u.id || getChildUserId()
-    } else {
-      parentId.value = getChildUserId()
-    }
-    if (!parentId.value) {
-      uni.redirectTo({ url: '/pages/login/index' })
-      return
-    }
+    parentId.value = await ensureParentUser()
+    try {
+      const raw = localStorage.getItem('jnao_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        parentName.value = u.name || '家长'
+      }
+    } catch (_) { /* ignore */ }
+    const ready = await ensureParentAccountReady(parentId.value)
+    if (!ready) return
     const [list, q] = await Promise.all([
       fetchParentChildren(parentId.value),
       fetchParentQuota(parentId.value),
@@ -170,19 +214,22 @@ async function loadData() {
   } catch (_) {}
 }
 
-function openAddChild() {
+async function openAddChild() {
+  if (!parentId.value) return
+  const ready = await ensureParentAccountReady(parentId.value)
+  if (!ready) return
   if (!quota.value.can_add) {
     uni.showToast({ title: '孩子名额已满', icon: 'none' })
     return
   }
   editingChild.value = null
-  childForm.value = { loginName: '', nickname: '', password: '', age: null, grade: '' }
+  childForm.value = { loginName: '', nickname: '', password: '', confirm: '', age: null, grade: '' }
   showChildForm.value = true
 }
 
 function openEditChild(child) {
   editingChild.value = child
-  childForm.value = { loginName: child.login_name || '', nickname: child.nickname || '', password: '', age: child.age || null, grade: child.grade || '' }
+  childForm.value = { loginName: child.login_name || '', nickname: child.nickname || '', password: '', confirm: '', age: child.age || null, grade: child.grade || '' }
   showChildForm.value = true
 }
 
@@ -191,23 +238,96 @@ function closeChildForm() {
   editingChild.value = null
 }
 
+async function openProfileForm() {
+  showSettings.value = false
+  if (!parentId.value) return
+  try {
+    const p = await fetchParentProfile(parentId.value)
+    profileForm.value = {
+      phone: p.parent_phone || '',
+      realName: p.real_name || '',
+      nickname: p.nickname || '',
+      oldPassword: '',
+      password: '',
+      confirm: '',
+    }
+    profileHasPassword.value = !!p.has_password
+    showProfileForm.value = true
+  } catch (_) {
+    uni.showToast({ title: '加载资料失败', icon: 'none' })
+  }
+}
+
+function closeProfileForm() {
+  showProfileForm.value = false
+}
+
+async function saveProfile() {
+  const realName = profileForm.value.realName.trim()
+  const nickname = profileForm.value.nickname.trim()
+  const pwd = profileForm.value.password.trim()
+  const confirm = profileForm.value.confirm.trim()
+  if (!realName) { uni.showToast({ title: '请填写真实姓名', icon: 'none' }); return }
+  if (!nickname) { uni.showToast({ title: '请填写昵称', icon: 'none' }); return }
+  if (pwd || confirm) {
+    if (profileHasPassword.value && !profileForm.value.oldPassword.trim()) {
+      uni.showToast({ title: '请输入原密码', icon: 'none' }); return
+    }
+    if (!pwd) { uni.showToast({ title: '请填写新密码', icon: 'none' }); return }
+    const pwdErr = validatePasswordClient(pwd)
+    if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); return }
+    if (pwd !== confirm) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
+  }
+  savingProfile.value = true
+  try {
+    const body = { real_name: realName, nickname }
+    if (pwd) {
+      body.password = pwd
+      if (profileHasPassword.value) body.old_password = profileForm.value.oldPassword.trim()
+    }
+    const p = await updateParentProfile(parentId.value, body)
+    parentName.value = p.nickname || parentName.value
+    try {
+      const raw = localStorage.getItem('jnao_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        u.name = p.nickname
+        localStorage.setItem('jnao_user', JSON.stringify(u))
+      }
+    } catch (_) {}
+    closeProfileForm()
+    uni.showToast({ title: '资料已更新', icon: 'none' })
+  } catch (e) {
+    if (e.status === 401) return
+    uni.showToast({ title: e.message || '保存失败', icon: 'none' })
+  } finally {
+    savingProfile.value = false
+  }
+}
+
 async function saveChild() {
   const nick = childForm.value.nickname.trim()
   const pwd = childForm.value.password.trim()
+  const confirm = childForm.value.confirm.trim()
   if (!nick) { uni.showToast({ title: '请输入孩子姓名', icon: 'none' }); return }
+  if (pwd || confirm) {
+    if (!pwd) { uni.showToast({ title: '请填写密码', icon: 'none' }); return }
+    const pwdErr = validatePasswordClient(pwd)
+    if (pwdErr) { uni.showToast({ title: pwdErr, icon: 'none' }); return }
+    if (pwd !== confirm) { uni.showToast({ title: '两次密码不一致', icon: 'none' }); return }
+  }
   saving.value = true
   try {
     if (editingChild.value) {
-      const body = { nickname: nick, grade: childForm.value.grade || null, age: childForm.value.age || null }
-      if (pwd) {
-        if (pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
-        body.password = pwd
-      }
+      const body = { nickname: nick }
+      if (childForm.value.grade) body.grade = childForm.value.grade
+      if (childForm.value.age != null && childForm.value.age !== '') body.age = childForm.value.age
+      if (pwd) body.password = pwd
       await updateParentChild(parentId.value, editingChild.value.id, body)
     } else {
       const loginName = childForm.value.loginName.trim()
       if (!loginName || loginName.length < 2) { uni.showToast({ title: '账号至少2位', icon: 'none' }); saving.value = false; return }
-      if (!pwd || pwd.length < 6) { uni.showToast({ title: '密码至少6位', icon: 'none' }); saving.value = false; return }
+      if (!pwd) { uni.showToast({ title: '请设置登录密码', icon: 'none' }); saving.value = false; return }
       await createParentChild(parentId.value, {
         loginName, nickname: nick, password: pwd,
         grade: childForm.value.grade || null,
@@ -218,8 +338,13 @@ async function saveChild() {
     await loadData()
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch (e) {
+    if (e.status === 401) return
+    if (e.status === 403) {
+      uni.showToast({ title: e.message || '请先完善家长资料', icon: 'none' })
+      return
+    }
     if (e.status === 409) uni.showToast({ title: '账号已被使用', icon: 'none' })
-    else uni.showToast({ title: '保存失败', icon: 'none' })
+    else uni.showToast({ title: e.message || '保存失败', icon: 'none' })
   } finally {
     saving.value = false
   }
@@ -235,19 +360,26 @@ function toggleTheme() {
 
 function doLogout() {
   showSettings.value = false
+  logoutAndGoLogin()
+}
+
+/** 从「我的 → 孩子账户管理」进入：返回家长「我的」；无栈时回 pset */
+function goBack() {
   try {
-    localStorage.removeItem('jnao_child_user_id')
-    localStorage.removeItem('jnao_user')
-    localStorage.removeItem('jnao_logged_in')
-  } catch (_) {}
-  uni.redirectTo({ url: '/pages/login/index' })
+    const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+    if (pages && pages.length > 1) {
+      uni.navigateBack({ delta: 1 })
+      return
+    }
+  } catch (_) { /* ignore */ }
+  uni.reLaunch({ url: '/pages/parent/pset' })
 }
 </script>
 
 <style scoped>
 .app { min-height: 100vh; min-height: 100dvh; height: 100dvh; max-width: var(--app-max-width, 480px); margin: 0 auto; background: var(--bg); font-family: -apple-system, "PingFang SC", sans-serif; display: flex; flex-direction: column; padding: 0 0 40px; }
 .nav-bar { display:flex; align-items:center; padding:14px 14px 10px; }
-.nav-spacer { width:36px; }
+.nav-back { width:34px; height:34px; border-radius:50%; background:var(--bg-card); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .nav-center { flex:1; text-align:center; color:var(--text); font-size:16px; font-weight:600; }
 .nav-actions { display:flex; gap:8px; }
 .nav-icon-btn { width:34px; height:34px; border-radius:50%; background:var(--bg-card); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; }
@@ -285,7 +417,12 @@ function doLogout() {
 .form-hint { margin-top:12px; text-align:center; }
 .form-hint text { color:var(--text-dim); font-size:12px; }
 .settings-item { padding:14px; border-radius:12px; background:rgba(220,38,38,0.08); text-align:center; cursor:pointer; margin-bottom:12px; }
+.settings-item-normal { background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.25); }
 .settings-label { color:#dc2626; font-size:15px; font-weight:500; }
+.settings-label-normal { color:var(--accent); font-size:15px; font-weight:500; }
+.input-wrap.readonly { display:flex; align-items:center; justify-content:space-between; padding:12px; }
+.form-label { color:var(--text-dim); font-size:13px; }
+.form-readonly { color:var(--text); font-size:14px; }
 .settings-close { text-align:center; padding:10px; cursor:pointer; }
 .settings-close text { color:var(--text-dim); font-size:13px; }
 </style>

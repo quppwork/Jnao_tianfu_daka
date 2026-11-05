@@ -3,162 +3,950 @@
     <view class="glow glow-top"></view>
 
     <view class="card">
-      <view class="logo-row">
-        <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
+      <view class="brand-head">
+        <view class="logo-row">
+          <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
+        </view>
+        <text class="subtitle">欢迎来到天赋成长平台</text>
+        <text class="sub-desc">天赋测评 · 每日训练 · 成长记录</text>
+        <view class="skin-switch" role="tablist">
+          <view
+            class="skin-opt"
+            :class="{ active: uiSkin === 'dayu' }"
+            @click="chooseSkin('dayu')"
+          >
+            <text>大宇版</text>
+          </view>
+          <view
+            class="skin-opt"
+            :class="{ active: uiSkin === 'classic' }"
+            @click="chooseSkin('classic')"
+          >
+            <text>旧版本</text>
+          </view>
+        </view>
       </view>
-      <text class="subtitle">天赋成长平台</text>
 
-      <view class="form">
-        <view class="input-wrap" v-if="form.role === 'student'">
-          <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-          <input class="login-input" v-model="form.loginName" placeholder="孩子账号" />
+      <!-- 入口选择：家长 / 孩子（不再提供微信一键登录） -->
+      <view v-if="!browserLogin" class="login-flow">
+        <view v-if="loginBlocked" class="blocked-hint">
+          <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
         </view>
-        <view class="input-wrap" v-if="form.role === 'parent'">
-          <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
-          <input class="login-input" v-model="form.phone" placeholder="手机号" type="number" />
+
+        <view class="btn-entry-primary" :class="{ off: loginBlocked }" @click="openParentLogin">
+          <text>家长账号登录</text>
         </view>
-        <view class="input-wrap">
-          <svg class="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input class="login-input" v-model="form.password" placeholder="密码" type="password" />
+
+        <view class="btn-phone-login" @click="openStudentLogin">
+          <text>孩子账号登录</text>
+        </view>
+      </view>
+
+      <!-- 账号表单 -->
+      <view v-else class="login-main">
+        <view class="form">
+        <view v-if="loginBlocked" class="blocked-hint">
+          <text>登录尝试过于频繁，请 {{ blockRemain }} 秒后再试</text>
         </view>
 
         <view class="role-row">
           <view class="role-item" :class="{ active: form.role === 'student' }" @click="form.role = 'student'">
-            <svg class="ri-icon-svg" :class="{ on: form.role === 'student' }" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v4M2 10v4"/><path d="M12 2L2 10l10 8 10-8-2-1.5"/><circle cx="12" cy="10" r="3"/><path d="M7 21h10"/></svg>
             <text class="ri-label">学生</text>
           </view>
           <view class="role-item" :class="{ active: form.role === 'parent' }" @click="form.role = 'parent'">
-            <svg class="ri-icon-svg" :class="{ on: form.role === 'parent' }" viewBox="0 0 26 24" width="22" height="22" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="7" r="2.3"/><path d="M4 21v-5.5a4 4 0 0 1 8 0V21"/><circle cx="18.5" cy="8" r="1.6"/><path d="M16 21v-4.5a2.8 2.8 0 0 1 5.5 0V21"/></svg>
             <text class="ri-label">家长</text>
           </view>
         </view>
 
-        <view class="btn-login" @click="doLogin">
-          <text>{{ submitting ? '登录中...' : '进入平台' }}</text>
+        <template v-if="form.role === 'student'" key="login-student">
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.loginName" placeholder="孩子账号" :disabled="loginBusy" />
+          </view>
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.studentPassword" placeholder="密码" type="password" :disabled="loginBusy" />
+          </view>
+        </template>
+
+        <template v-else-if="parentMode === 'sms'" key="login-parent-sms">
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
+          </view>
+          <view class="input-wrap sms-row">
+            <input class="login-input" v-model="form.smsCode" placeholder="短信验证码" type="text" maxlength="6" confirm-type="done" :disabled="loginBusy" />
+            <view class="sms-btn" :class="{ off: smsCooldown > 0 || loginBlocked || loginBusy }" @click="requestLoginSms">
+              <text>{{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}</text>
+            </view>
+          </view>
+        </template>
+
+        <template v-else key="login-parent-password">
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.phone" placeholder="注册手机号（11位，非昵称）" type="text" maxlength="11" confirm-type="done" :disabled="loginBusy" />
+          </view>
+          <view class="input-wrap">
+            <input class="login-input" v-model="form.parentPassword" placeholder="密码" type="password" maxlength="64" confirm-type="done" :disabled="loginBusy" />
+          </view>
+        </template>
+
+        <view v-if="form.role === 'parent'" class="form-links-above">
+          <text class="form-link form-link-left" @click="toggleParentMode">
+            {{ parentMode === 'sms' ? '密码登录' : '验证码登录' }}
+          </text>
+          <text class="form-link form-link-right" @click="backToEntryChooser">返回选择</text>
         </view>
 
-        <view v-if="form.role === 'student'" class="hint-register">
-          <text>孩子账号由家长在家长中心分配</text>
-          <view class="hint-admin" @click="goAdminLogin">
-            <text>管理员入口</text>
-          </view>
+        <view v-if="form.role === 'student'" class="form-links-above">
+          <text class="form-link form-link-left" @click="switchToParent">我是家长，去注册 / 登录</text>
+          <text class="form-link form-link-right" @click="backToEntryChooser">返回选择</text>
         </view>
-        <view v-else class="btn-register" style="border-color:rgba(139,92,246,0.3); background:rgba(139,92,246,0.04)" @click="goParentRegister">
-          <text style="color:#a78bfa">注册家长账户</text>
+
+        <view class="btn-login" :class="{ off: loginBlocked || loginBusy }" @click="doLogin">
+          <text>{{ loginBusy ? '登录中...' : '登录' }}</text>
         </view>
+
+        <view v-if="form.role === 'parent'" class="btn-register" @click="goRegister()">
+          <text>新家长注册</text>
+        </view>
+        </view>
+
+        <view class="page-footer">
+          <text class="footer-link" @click="goAdminLogin">管理员后台</text>
+          <text class="footer-dot">·</text>
+          <text class="footer-link" @click="showLoginHelp">登录帮助</text>
+        </view>
+      </view>
+
+      <view v-if="!browserLogin" class="page-footer">
+        <text class="footer-link" @click="goAdminLogin">管理员后台</text>
+        <text class="footer-dot">·</text>
+        <text class="footer-link" @click="showLoginHelp">登录帮助</text>
       </view>
     </view>
 
     <view class="glow glow-bottom"></view>
+
+    <view v-if="loginBusy" class="login-overlay">
+      <view class="login-spinner"></view>
+      <text class="login-overlay-text">{{ overlayText || '请稍候…' }}</text>
+    </view>
+
+    <view v-if="showNotRegistered" class="login-modal-overlay" @click="showNotRegistered = false">
+      <view class="login-modal-card" @click.stop>
+        <text class="login-modal-title">尚未注册</text>
+        <text class="login-modal-text">该手机号未注册，是否前往注册？</text>
+        <view class="login-modal-actions">
+          <view class="login-modal-btn secondary" @click="showNotRegistered = false"><text>取消</text></view>
+          <view class="login-modal-btn primary" @click="showNotRegistered = false; goRegister()"><text>前往注册</text></view>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="showCaptcha" class="overlay" @click="showCaptcha = false">
+      <view class="captcha-panel" @click.stop>
+        <text class="captcha-title">安全验证</text>
+        <image v-if="captchaImage" class="captcha-img" :src="captchaImage" mode="aspectFit" @click="loadCaptcha" />
+        <view class="input-wrap"><input v-model="captchaCode" class="login-input" placeholder="图形验证码" maxlength="6" /></view>
+        <view class="captcha-actions">
+          <view class="sms-btn" @click="loadCaptcha"><text>换一张</text></view>
+          <view class="btn-login captcha-confirm" @click="confirmLoginSms"><text>{{ sendingSms ? '发送中…' : '发送验证码' }}</text></view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { loginParent, loginStudent, studentNeedsOnboarding } from '@/utils/userApi.js'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
+import {
+  loginParent,
+  loginStudent,
+  loginParentSms,
+  sendParentSmsCode,
+  fetchCaptcha,
+  parentNeedsProfileComplete,
+  parentNeedsAccountReady,
+  resolveParentAuthTarget,
+  saveAuthSession,
+  exchangeWechatLogin,
+  completeWechatExternalBind,
+  fetchParentProfile,
+  studentNeedsOnboarding,
+  getLoggedInUserId,
+  hasUserSession,
+  resetLocalAuthCache,
+  invalidatePageAuthCache,
+} from '@/utils/userApi.js'
+import {
+  isLoginBlocked,
+  recordLoginFail,
+  clearLoginGuard,
+} from '@/utils/loginGuard.js'
+import {
+  readWechatCallbackParams,
+  readExternalBindReturn,
+  clearWechatQueryFromUrl,
+  redirectParentNextStep,
+  skipWechatAutoLogin,
+  readWechatError,
+  markWechatOAuthFailed,
+  clearBrowserLoginPreference,
+  setBrowserLoginPreference,
+  hasBrowserLoginPreference,
+  readLandingQueryParams,
+} from '@/utils/wechatAuth.js'
+import {
+  useLoginFlow,
+  hasValidSession,
+  inferHomeFromSession,
+  minDelay,
+} from '@/utils/useLoginFlow.js'
+import { consumePostLoginRoute, sanitizeAuthForLoginEntry, prepareRoleLoginEntry } from '@/utils/appSession.js'
+import {
+  getUiSkin,
+  setUiSkin,
+  parentHomeUrl,
+  studentHomeUrl,
+} from '@/utils/uiSkin.js'
 
-const form = ref({ phone: '', loginName: '', password: '', role: 'student' })
-const submitting = ref(false)
+const { overlayText, loginBusy, setPhase, resetPhase, runAuthenticating, completeAfterAuth } = useLoginFlow()
 
-function saveSession(data) {
-  localStorage.setItem('jnao_user', JSON.stringify({
-    id: data.child_user_id,
-    name: data.nickname,
-    phone: data.parent_phone,
-    loginName: data.login_name || form.value.loginName.trim(),
-    role: data.role || form.value.role,
-    loginTime: new Date().toISOString(),
-  }))
-  localStorage.setItem('jnao_logged_in', '1')
+const uiSkin = ref(getUiSkin())
+
+function chooseSkin(skin) {
+  uiSkin.value = setUiSkin(skin)
+}
+
+const form = ref({
+  phone: '',
+  loginName: '',
+  studentPassword: '',
+  parentPassword: '',
+  smsCode: '',
+  role: 'student',
+})
+const parentMode = ref('sms')
+const wechatLoading = ref(false)
+let wechatLoadingTimer = null
+const browserLogin = ref(false)
+const smsCooldown = ref(0)
+const blockRemain = ref(0)
+const showNotRegistered = ref(false)
+const pendingRegPhone = ref('')
+const pendingBindTicket = ref('')
+const showCaptcha = ref(false)
+const captchaId = ref('')
+const captchaCode = ref('')
+const captchaImage = ref('')
+const sendingSms = ref(false)
+const loginEntryRole = ref('')
+const wxPageOpts = ref({})
+const wechatHandling = ref(false)
+
+onLoad((opts) => {
+  wxPageOpts.value = { ...(opts || {}) }
+  const role = (opts?.role || '').trim().toLowerCase()
+  if (role === 'student' || role === 'parent') loginEntryRole.value = role
+  if (role === 'student' || role === 'parent') {
+    prepareRoleLoginEntry(role)
+    invalidatePageAuthCache()
+  }
+  if (opts?.phone) form.value.phone = String(opts.phone)
+})
+let cooldownTimer = null
+let blockTimer = null
+
+const loginBlocked = computed(() => blockRemain.value > 0)
+
+function refreshBlockState() {
+  const s = isLoginBlocked()
+  blockRemain.value = s.blocked ? s.remainSec : 0
+}
+
+function cleanLandingQuery() {
+  try {
+    const url = new URL(window.location.href)
+    const hasWxCb = url.searchParams.get('wx') === '1'
+    const hasWxErr = url.searchParams.get('wx_error')
+    const hasExtBind = url.searchParams.get('from') === 'mp' && url.searchParams.get('bind_ticket')
+    if (!hasWxCb && !hasWxErr && url.searchParams.get('from') === 'mp' && !hasExtBind) {
+      url.searchParams.delete('from')
+      window.history.replaceState({}, '', url.pathname + (url.search || ''))
+    }
+  } catch (_) { /* ignore */ }
+}
+
+function openParentLogin() {
+  setBrowserLoginPreference()
+  browserLogin.value = true
+  wechatLoading.value = false
+  form.value.role = 'parent'
+  parentMode.value = 'password'
+}
+
+/** @deprecated 兼容旧调用名 */
+function openBrowserLogin() {
+  openParentLogin()
+}
+
+function openStudentLogin() {
+  setBrowserLoginPreference()
+  browserLogin.value = true
+  wechatLoading.value = false
+  form.value.role = 'student'
+}
+
+function switchToParent() {
+  form.value.role = 'parent'
+  parentMode.value = 'sms'
+}
+
+function backToEntryChooser() {
+  clearBrowserLoginPreference()
+  browserLogin.value = false
+  form.value.role = 'parent'
+}
+
+function tryRedirectIfLoggedIn() {
+  try {
+    // 管理员 session 与用户登录页隔离，不在此自动跳转
+    const adminRaw = localStorage.getItem('jnao_admin_user')
+    const adminLoggedIn = localStorage.getItem('jnao_admin_logged_in') === '1'
+    if (adminRaw && adminLoggedIn && localStorage.getItem('jnao_logged_in') !== '1') {
+      return false
+    }
+    if (localStorage.getItem('jnao_logged_in') !== '1') return false
+    const uid = getLoggedInUserId()
+    if (!uid || !hasUserSession()) return false
+    const raw = localStorage.getItem('jnao_user')
+    const role = raw ? JSON.parse(raw).role : null
+    if (loginEntryRole.value === 'student') {
+      if (role === 'student') {
+        uni.reLaunch({ url: studentHomeUrl() })
+        return true
+      }
+      return false
+    }
+    if (role === 'parent') {
+      uni.reLaunch({ url: parentHomeUrl() })
+      return true
+    }
+    if (role === 'student') {
+      uni.reLaunch({ url: studentHomeUrl() })
+      return true
+    }
+  } catch (_) { /* ignore */ }
+  return false
+}
+
+async function handleWechatCallback(wxCb) {
+  wechatHandling.value = true
+  clearBrowserLoginPreference()
+  browserLogin.value = false
+  try {
+    setPhase('authenticating', '正在登录…')
+    let exchanged = false
+    try {
+      const authData = await exchangeWechatLogin(wxCb.loginTicket)
+      exchanged = true
+      clearWechatQueryFromUrl()
+      wxCb._authData = authData
+    } catch (e) {
+      const fallbackUid = wxCb.userId ? parseInt(wxCb.userId, 10) : 0
+      if (fallbackUid > 0 && (e.status === 400 || e.status === 401)) {
+        try {
+          const p = await fetchParentProfile(fallbackUid)
+          if (p?.id) {
+            const authData = {
+              child_user_id: p.id,
+              nickname: p.nickname,
+              parent_phone: p.parent_phone,
+              role: 'parent',
+              login_channel: p.login_channel || 'wechat',
+              profile_complete: p.profile_complete,
+              account_ready: p.account_ready,
+              next_step: p.next_step,
+              gate_passed: p.gate_passed,
+            }
+            saveAuthSession(authData)
+            wxCb._authData = authData
+            exchanged = true
+            clearWechatQueryFromUrl()
+          }
+        } catch (_) { /* cookie 也未就绪 */ }
+      }
+      if (!exchanged) {
+        markWechatOAuthFailed()
+        uni.showModal({
+          title: '微信登录失败',
+          content: e.message || '登录凭证已过期，请重新进入',
+          showCancel: false,
+        })
+        return
+      }
+    } finally {
+      resetPhase()
+      wechatLoading.value = false
+      clearWechatLoadingTimer()
+    }
+    setPhase('settling', '正在进入…')
+    try {
+      const uid = getLoggedInUserId() || (wxCb.userId ? parseInt(wxCb.userId, 10) : 0)
+      const [profile] = await Promise.all([
+        fetchParentProfile(uid),
+      ])
+      const authData = wxCb._authData || null
+      const nextStep =
+        authData?.next_step ||
+        profile?.next_step ||
+        wxCb.nextStep
+      const needsComplete =
+        nextStep === 'complete-profile' ||
+        authData?.account_ready === false ||
+        profile?.account_ready === false
+      await minDelay(400)
+      if (needsComplete && nextStep !== 'bind-phone') {
+        redirectParentNextStep('complete-profile', wxCb.bindTicket)
+      } else if (nextStep === 'bind-phone') {
+        showNotRegisteredModal('', wxCb.bindTicket)
+      } else {
+        redirectParentNextStep(nextStep, wxCb.bindTicket)
+      }
+    } catch (e) {
+      console.warn('[login] wechat post-auth fallback', e?.message || e)
+      await minDelay(400)
+      const authData = wxCb._authData || null
+      const nextStep = authData?.next_step || wxCb.nextStep || 'home'
+      if (
+        nextStep === 'complete-profile' ||
+        authData?.account_ready === false
+      ) {
+        redirectParentNextStep('complete-profile', wxCb.bindTicket)
+      } else if (nextStep === 'bind-phone') {
+        showNotRegisteredModal('', wxCb.bindTicket)
+      } else {
+        redirectParentNextStep(nextStep, wxCb.bindTicket)
+      }
+    } finally {
+      resetPhase()
+      wechatLoading.value = false
+      clearWechatLoadingTimer()
+    }
+  } finally {
+    wechatHandling.value = false
+  }
+}
+
+function clearWechatLoadingTimer() {
+  if (wechatLoadingTimer) {
+    clearTimeout(wechatLoadingTimer)
+    wechatLoadingTimer = null
+  }
+}
+
+onMounted(async () => {
+  sanitizeAuthForLoginEntry('/pages/login/index')
+  refreshBlockState()
+  blockTimer = setInterval(refreshBlockState, 1000)
+  cleanLandingQuery()
+
+  const pageOpts = wxPageOpts.value
+  const wxErr = readWechatError(pageOpts)
+  if (wxErr) {
+    wechatLoading.value = false
+    markWechatOAuthFailed()
+    clearWechatQueryFromUrl()
+    browserLogin.value = readLandingQueryParams(pageOpts).get('manual') === '1' || hasBrowserLoginPreference()
+    uni.showModal({
+      title: '微信登录失败',
+      content: wxErr,
+      showCancel: false,
+    })
+  }
+
+  const wxCb = readWechatCallbackParams(pageOpts)
+  if (wxCb?.loginTicket) {
+    await handleWechatCallback(wxCb)
+    return
+  }
+  if (wxCb?.nextStep === 'bind-phone' || (wxCb?.bindTicket && !wxCb.loginTicket)) {
+    clearBrowserLoginPreference()
+    browserLogin.value = false
+    clearWechatQueryFromUrl()
+    showNotRegisteredModal('', wxCb.bindTicket)
+    return
+  }
+  if (wxCb && !wxCb.loginTicket && !wxCb.bindTicket) {
+    clearBrowserLoginPreference()
+    browserLogin.value = false
+    clearWechatQueryFromUrl()
+    uni.showModal({
+      title: '微信登录未完成',
+      content: '登录凭证未收到，请改用「家长账号登录」或「孩子账号登录」',
+      showCancel: false,
+    })
+    return
+  }
+
+  const extBind = readExternalBindReturn(pageOpts)
+  if (extBind?.bindTicket) {
+    setPhase('authenticating', '正在完成绑手机…')
+    try {
+      const data = await completeWechatExternalBind(extBind.bindTicket)
+      clearWechatQueryFromUrl()
+      await routeParentHome(data)
+    } catch (e) {
+      resetPhase()
+      clearWechatQueryFromUrl()
+      uni.showModal({
+        title: '绑手机未完成',
+        content: e.message || '请先在绑手机页完成操作后再返回',
+        showCancel: false,
+      })
+    }
+    return
+  }
+
+  if (loginEntryRole.value === 'student') {
+    skipWechatAutoLogin()
+    form.value.role = 'student'
+    browserLogin.value = true
+  } else {
+    // 统一先展示入口选择（家长 / 孩子），不再默认进微信一键登录
+    browserLogin.value = hasBrowserLoginPreference()
+    if (browserLogin.value && !form.value.role) {
+      form.value.role = 'parent'
+    }
+  }
+
+  if (tryRedirectIfLoggedIn()) return
+})
+
+onShow(() => {
+  wechatLoading.value = false
+  clearWechatLoadingTimer()
+  if (!wechatHandling.value && !loginBusy.value) resetPhase()
+})
+
+function toggleParentMode() {
+  parentMode.value = parentMode.value === 'sms' ? 'password' : 'sms'
+}
+
+function startCooldown(sec = 60) {
+  smsCooldown.value = sec
+  if (cooldownTimer) clearInterval(cooldownTimer)
+  cooldownTimer = setInterval(() => {
+    smsCooldown.value -= 1
+    if (smsCooldown.value <= 0) {
+      clearInterval(cooldownTimer)
+      cooldownTimer = null
+    }
+  }, 1000)
+}
+
+async function loadCaptcha() {
+  const data = await fetchCaptcha()
+  captchaId.value = data.captcha_id
+  captchaImage.value = `data:image/${data.image_format || 'png'};base64,${data.image_base64}`
+  captchaCode.value = ''
+}
+
+async function requestLoginSms() {
+  if (loginBlocked.value || smsCooldown.value > 0 || loginBusy.value) return
+  if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
+    uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
+  }
+  try {
+    await loadCaptcha()
+    showCaptcha.value = true
+  } catch (e) {
+    uni.showToast({ title: e.message || '验证码加载失败', icon: 'none' })
+  }
+}
+
+function showNotRegisteredModal(phone = '', bindTicket = '') {
+  pendingRegPhone.value = (phone || form.value.phone || '').trim()
+  pendingBindTicket.value = bindTicket || ''
+  showNotRegistered.value = true
+}
+
+async function confirmLoginSms() {
+  if (!captchaCode.value.trim()) {
+    uni.showToast({ title: '请输入图形验证码', icon: 'none' }); return
+  }
+  sendingSms.value = true
+  try {
+    const res = await sendParentSmsCode(form.value.phone.trim(), 'login', {
+      captchaId: captchaId.value,
+      captchaCode: captchaCode.value.trim(),
+    })
+    showCaptcha.value = false
+    if (res.sent !== true) {
+      if (res.hint === 'not_registered') {
+        showNotRegisteredModal(form.value.phone.trim())
+      } else {
+        uni.showToast({ title: res.message || '发送失败', icon: 'none' })
+      }
+      return
+    }
+    startCooldown(60)
+    uni.showToast({ title: '验证码已发送', icon: 'none' })
+  } catch (e) {
+    if (e.status === 404) {
+      showCaptcha.value = false
+      showNotRegisteredModal(form.value.phone.trim())
+    } else {
+      uni.showToast({ title: e.message || '发送失败', icon: 'none' })
+      await loadCaptcha()
+    }
+    if (e.status === 403 || e.status === 429) recordLoginFail()
+    refreshBlockState()
+  } finally {
+    sendingSms.value = false
+  }
+}
+
+function resolveParentTarget(data) {
+  return resolveParentAuthTarget(data)
+}
+
+async function routeParentHome(data) {
+  clearLoginGuard()
+  saveAuthSession(data)
+  try { sessionStorage.removeItem('jnao_browser_login') } catch (_) { /* ignore */ }
+  uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
+  let target = resolveParentTarget(data)
+  if (target === '__bind_phone__') {
+    goRegister(form.value.phone.trim(), data.bind_ticket || pendingBindTicket.value)
+    return
+  }
+  if (target === parentHomeUrl() || target === '/pages/parent/dayu' || target === '/pages/parent/index') {
+    target = consumePostLoginRoute(target, 'parent')
+  }
+  uni.redirectTo({ url: target })
 }
 
 async function routeStudentHome(data) {
-  saveSession(data)
+  clearLoginGuard()
+  saveAuthSession(data)
   uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
-  let target = '/pages/index'
+  let target = studentHomeUrl()
   try {
     if (await studentNeedsOnboarding(data.child_user_id)) {
       target = '/pages/login/onboarding/index'
     }
-  } catch (_) {
-    target = '/pages/login/onboarding/index'
+  } catch (e) {
+    console.error('[login] studentNeedsOnboarding 检查失败，先进首页:', e?.message || e)
+    target = studentHomeUrl()
   }
-  setTimeout(() => { uni.redirectTo({ url: target }) }, 500)
+  if (target === studentHomeUrl() || target === '/pages/dayu/home' || target === '/pages/index') {
+    target = consumePostLoginRoute(target, 'student')
+    // 登录后不要恢复到学院/中央电脑（易落在讨论全屏），统一回大宇首页
+    const base = String(target || '').split('?')[0]
+    if (
+      base === '/pages/hub/academy'
+      || base === '/pages/hub/console'
+      || base === '/pages/hub/story'
+      || base === '/pages/hub/courses'
+    ) {
+      target = studentHomeUrl()
+    }
+  }
+  uni.reLaunch({ url: target })
+}
+
+function postLoginFallbackUrl() {
+  if (form.value.role === 'student' || loginEntryRole.value === 'student') {
+    return studentHomeUrl()
+  }
+  return inferHomeFromSession()
+}
+
+function handleLoginError(e) {
+  resetPhase()
+  if (hasValidSession()) {
+    uni.reLaunch({ url: postLoginFallbackUrl() })
+    return
+  }
+  if (e.status === 403) {
+    uni.showToast({ title: e.message || '访问受限', icon: 'none', duration: 3000 })
+  } else if (e.status === 404) {
+    showNotRegisteredModal(form.value.phone.trim())
+  } else if (e.status === 401) {
+    uni.showToast({ title: e.message || '账号或密码错误', icon: 'none' })
+  } else if (e.status === 429) {
+    uni.showToast({ title: e.message || '操作太频繁', icon: 'none' })
+  } else {
+    uni.showToast({ title: e.message || '登录失败', icon: 'none' })
+  }
+  if ([400, 401, 403, 404, 429].includes(e.status)) {
+    recordLoginFail()
+    refreshBlockState()
+  }
 }
 
 async function doLogin() {
-  submitting.value = true
+  if (loginBlocked.value || loginBusy.value) {
+    if (loginBlocked.value) uni.showToast({ title: `请 ${blockRemain.value} 秒后再试`, icon: 'none' })
+    return
+  }
   try {
-    if (!form.value.password.trim() || form.value.password.trim().length < 6) {
-      uni.showToast({ title: '密码至少6位', icon: 'none' }); submitting.value = false; return
-    }
-    if (form.value.role === 'parent') {
-      if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
-        uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); submitting.value = false; return
+    const result = await runAuthenticating(async () => {
+      if (form.value.role === 'parent') {
+        if (parentMode.value === 'sms') {
+          if (!form.value.smsCode.trim()) {
+            uni.showToast({ title: '请输入短信验证码', icon: 'none' })
+            resetPhase()
+            return null
+          }
+          const data = await loginParentSms({
+            phone: form.value.phone.trim(),
+            smsCode: form.value.smsCode.trim(),
+          })
+          await completeAfterAuth(() => routeParentHome(data))
+          return data
+        }
+        if (!form.value.phone.trim() || form.value.phone.trim().length < 11) {
+          uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
+          resetPhase()
+          return null
+        }
+        if (!form.value.parentPassword.trim() || form.value.parentPassword.trim().length < 6) {
+          uni.showToast({ title: '密码至少6位', icon: 'none' })
+          resetPhase()
+          return null
+        }
+        const data = await loginParent(form.value.phone.trim(), form.value.parentPassword.trim())
+        await completeAfterAuth(() => routeParentHome(data))
+        return data
       }
-      const data = await loginParent(form.value.phone.trim(), form.value.password.trim())
-      saveSession(data)
-      uni.showToast({ title: '欢迎，' + data.nickname + '！', icon: 'none' })
-      setTimeout(() => { uni.redirectTo({ url: '/pages/parent/index' }) }, 500)
-      return
+
+      if (!form.value.studentPassword.trim() || form.value.studentPassword.trim().length < 6) {
+        uni.showToast({ title: '密码至少6位', icon: 'none' })
+        resetPhase()
+        return null
+      }
+      if (!form.value.loginName.trim()) {
+        uni.showToast({ title: '请输入孩子账号', icon: 'none' })
+        resetPhase()
+        return null
+      }
+      const data = await loginStudent(form.value.loginName.trim(), form.value.studentPassword.trim())
+      await completeAfterAuth(() => routeStudentHome(data))
+      return data
+    })
+    if (result?._sessionFallback) {
+      await completeAfterAuth(() => uni.reLaunch({ url: postLoginFallbackUrl() }))
     }
-    if (!form.value.loginName.trim()) {
-      uni.showToast({ title: '请输入孩子账号', icon: 'none' }); submitting.value = false; return
-    }
-    const data = await loginStudent(form.value.loginName.trim(), form.value.password.trim())
-    await routeStudentHome(data)
   } catch (e) {
-    submitting.value = false
-    if (e.status === 404) uni.showToast({ title: '用户不存在，请联系家长创建账号', icon: 'none', duration: 2000 })
-    else if (e.status === 403) uni.showToast({ title: '账号未绑定家长，请联系管理员', icon: 'none', duration: 2500 })
-    else if (e.status === 401) uni.showToast({ title: '账号或密码错误', icon: 'none' })
-    else uni.showToast({ title: '登录失败，请稍后重试', icon: 'none' })
+    handleLoginError(e)
   }
 }
 
-function goParentRegister() {
-  uni.navigateTo({ url: '/pages/login/register-parent' })
+function goRegister(phone = '', bindTicket = '') {
+  const p = (phone || pendingRegPhone.value || '').trim()
+  const t = bindTicket || pendingBindTicket.value || ''
+  const params = new URLSearchParams()
+  if (p) params.set('phone', p)
+  if (t) {
+    params.set('from', 'wechat')
+    params.set('bind_ticket', t)
+  }
+  const q = params.toString() ? `?${params.toString()}` : ''
+  pendingBindTicket.value = ''
+  uni.navigateTo({ url: `/pages/login/register-parent${q}` })
 }
 
 function goAdminLogin() {
   uni.navigateTo({ url: '/pages/admin/login' })
 }
+
+function confirmClearCache() {
+  uni.showModal({
+    title: '清除登录状态',
+    content: '仅清除本网站的登录信息，清除后需重新登录。确定？',
+    success: (r) => {
+      if (!r.confirm) return
+      resetLocalAuthCache()
+      uni.showToast({ title: '已清除，请重新登录', icon: 'none' })
+    },
+  })
+}
+
+function showLoginHelp() {
+  uni.showActionSheet({
+    itemList: ['清除本机登录状态', '家长登录说明', '孩子登录说明'],
+    success: (r) => {
+      if (r.tapIndex === 0) confirmClearCache()
+      if (r.tapIndex === 1) {
+        uni.showModal({
+          title: '家长怎么登录',
+          content: '点「家长账号登录」→ 输入注册时的 11 位手机号（不是昵称）+ 密码或短信验证码。\n\n新用户可点「新家长注册」。\n\n管理员请点底部「管理员后台」，不要用管理员账号在此登录。',
+          showCancel: false,
+        })
+      }
+      if (r.tapIndex === 2) {
+        uni.showModal({
+          title: '孩子怎么登录',
+          content: '点「孩子账号登录」→ 输入家长在家长中心创建的孩子账号和密码。\n\n首次使用需家长先注册并添加孩子，再把账号发给孩子登录训练。',
+          showCancel: false,
+        })
+      }
+    },
+  })
+}
+
+onUnmounted(() => {
+  if (cooldownTimer) clearInterval(cooldownTimer)
+  if (blockTimer) clearInterval(blockTimer)
+  clearWechatLoadingTimer()
+})
 </script>
 
 <style scoped>
-.app { height:100vh;height:100dvh; max-width:var(--app-max-width, 480px); margin:0 auto; background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:30px; padding-top:18vh; padding-top:18dvh; font-family:-apple-system,"PingFang SC",sans-serif; position:relative; overflow:hidden; }
+.app {
+  height:100vh; height:100dvh; max-width:480px; margin:0 auto;
+  background:var(--bg); display:flex; align-items:center; justify-content:center;
+  padding:12px 20px; padding-top:max(12px, env(safe-area-inset-top));
+  padding-bottom:max(12px, env(safe-area-inset-bottom));
+  position:relative; overflow:hidden; box-sizing:border-box;
+}
 .glow { position:absolute; width:260px; height:260px; border-radius:50%; pointer-events:none; z-index:0; }
 .glow-top { top:-80px; right:-60px; background:radial-gradient(circle, rgba(88,166,255,0.18) 0%, transparent 70%); }
 .glow-bottom { bottom:-100px; left:-50px; background:radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%); }
-.card { width:100%; position:relative; z-index:1; background:rgba(255,255,255,0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:36px 22px 28px; }
+.card {
+  width:100%; max-height:100%; position:relative; z-index:1;
+  background:rgba(255,255,255,0.03); border:none;
+  border-radius:20px; padding:24px 20px 18px; box-sizing:border-box;
+}
+.brand-head { margin-top:-40px; margin-bottom:0; }
 .logo-row { display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:4px; }
-.logo-j { color:#dc2626; font-size:48px; font-weight:800; text-shadow:0 0 24px rgba(220,38,38,0.3); }
-.logo-nao { color:var(--text); font-size:36px; font-weight:700; }
-.logo-ai { color:var(--text); font-size:36px; font-weight:300; }
-.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; margin-bottom:28px; letter-spacing:0.12em; opacity:0.7; }
-.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:12px; border:1.5px solid var(--border); transition:border-color 0.2s; }
-.input-wrap:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,0.1); }
-.input-icon { flex-shrink:0; margin-right:10px; opacity:0.5; }
-.login-input { flex:1; padding:14px 0; font-size:15px; color:var(--text); }
-.role-row { display:flex; gap:10px; margin-bottom:22px; }
-.role-item { flex:1; background:rgba(255,255,255,0.03); border-radius:12px; padding:14px; text-align:center; border:1.5px solid rgba(255,255,255,0.06); cursor:pointer; transition:all 0.2s; }
-.role-item.active { border-color:var(--accent); background:var(--accent-bg); box-shadow:0 0 16px rgba(88,166,255,0.1); }
-.ri-icon-svg { display:block; margin:0 auto 4px; stroke:var(--text-dim); transition:stroke 0.2s; overflow:visible; }
-.ri-icon-svg.on { stroke:var(--accent); }
-.ri-label { color:var(--text-dim); font-size:13px; font-weight:500; }
-.role-item.active .ri-label { color:var(--accent); }
-.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:15px; text-align:center; cursor:pointer; box-shadow:0 4px 20px rgba(88,166,255,0.25); transition:all 0.2s; }
-.btn-login text { color:#fff; font-size:16px; font-weight:700; letter-spacing:0.04em; }
-.btn-login:active { opacity:0.85; transform:scale(0.98); }
-.hint-register { text-align:center; margin-top:12px; }
-.hint-register text { color:var(--text-dim); font-size:12px; opacity:0.7; }
-.hint-admin { margin-top:8px; cursor:pointer; }
-.hint-admin text { color:var(--text-dim); font-size:11px; opacity:0.45; text-decoration:underline; }
-.btn-register { border:1.5px solid rgba(255,255,255,0.1); border-radius:14px; padding:13px; text-align:center; cursor:pointer; margin-top:10px; backdrop-filter:blur(4px); transition:all 0.2s; }
-.btn-register text { color:var(--text-dim); font-size:14px; font-weight:500; }
-.btn-register:active { background:rgba(255,255,255,0.05); border-color:var(--accent); }
-[data-theme="white"] .card { background:rgba(255,255,255,0.6); border-color:rgba(0,0,0,0.06); }
-[data-theme="white"] .input-wrap { background:#fff; border-color:#e5e7eb; }
-[data-theme="white"] .role-item { background:#fff; border-color:#e5e7eb; }
-[data-theme="white"] .btn-login { background:linear-gradient(135deg, #2563eb, #7c3aed); }
+.logo-j { color:#dc2626; font-size:48px; font-weight:800; line-height:1; }
+.logo-nao, .logo-ai { color:var(--text); font-size:36px; font-weight:700; line-height:1; }
+.logo-ai { font-weight:300; }
+.subtitle { color:var(--text-dim); font-size:12px; text-align:center; display:block; line-height:1.4; margin-bottom:2px; }
+.sub-desc { color:var(--text-dim); font-size:11px; text-align:center; display:block; line-height:1.4; margin-bottom:0; opacity:0.85; }
+.skin-switch {
+  display: flex;
+  margin: 16px auto 0;
+  max-width: 240px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.skin-opt {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.skin-opt text {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 500;
+}
+.skin-opt.active {
+  background: linear-gradient(135deg, rgba(0,210,255,0.28), rgba(0,136,204,0.22));
+  border: 1px solid rgba(0,210,255,0.25);
+}
+.skin-opt.active text { color: #fff; font-weight: 600; }
+[data-theme="white"] .skin-switch {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+[data-theme="white"] .skin-opt text { color: #6b7280; }
+[data-theme="white"] .skin-opt.active {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+[data-theme="white"] .skin-opt.active text { color: #fff; }
+.login-main { margin-top:60px; }
+.login-flow { margin-top:20px; padding-top:0; }
+.page-footer { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06); }
+.footer-link { color:var(--text-dim); font-size:11px; padding:4px 2px; }
+.footer-link:active { opacity:0.6; }
+.footer-dot { color:var(--text-dim); font-size:11px; opacity:0.5; }
+.blocked-hint { background:rgba(220,38,38,0.12); border-radius:10px; padding:8px; margin-bottom:10px; text-align:center; }
+.blocked-hint text { color:#f87171; font-size:12px; }
+.btn-entry-primary {
+  background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:14px; text-align:center;
+  cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+}
+.btn-entry-primary.off { opacity:0.5; }
+.btn-entry-primary text { color:#fff; font-size:16px; font-weight:700; }
+.btn-phone-login {
+  margin-top:10px; padding:13px; text-align:center; border-radius:14px;
+  border:1.5px solid var(--border); background:var(--bg-card);
+}
+.btn-phone-login text { color:var(--text); font-size:15px; font-weight:600; }
+.input-wrap { display:flex; align-items:center; background:var(--bg-card); border-radius:12px; padding:0 14px; margin-bottom:10px; border:1.5px solid var(--border); position:relative; z-index:2; }
+.sms-row { padding-right:4px; }
+.sms-btn { flex-shrink:0; padding:8px 10px; border-radius:8px; background:rgba(88,166,255,0.15); }
+.sms-btn.off { opacity:0.5; }
+.sms-btn text { color:var(--accent); font-size:12px; }
+.login-input { flex:1; width:100%; min-height:44px; padding:12px 0; font-size:16px; line-height:1.4; color:var(--text); background:transparent; border:none; box-sizing:border-box; -webkit-user-select:text; user-select:text; }
+.role-row { display:flex; gap:0; margin-top:0; margin-bottom:12px; border-radius:14px; overflow:hidden; border:1.5px solid var(--border); background:var(--accent-bg); }
+.role-item { flex:1; padding:12px; text-align:center; cursor:pointer; transition:all 0.25s; position:relative; }
+.role-item:first-child { border-right:1.5px solid var(--border); }
+.role-item.active { background:var(--bg-card); }
+.role-item.active::after {
+  content:''; position:absolute; bottom:0; left:20%; width:60%; height:2px;
+  background:linear-gradient(90deg,#a78bfa,#60a5fa); border-radius:2px;
+}
+.ri-label { font-size:14px; font-weight:500; transition:all 0.25s; }
+.role-item.active .ri-label { color:var(--accent); font-weight:700; }
+.role-item:not(.active) .ri-label { color:var(--text-dim); }
+.btn-login { background:linear-gradient(135deg, #58a6ff, #7c3aed); border-radius:14px; padding:13px; text-align:center; margin-top:4px; }
+.btn-login.off { opacity:0.5; }
+.btn-login text { color:#fff; font-size:16px; font-weight:700; }
+.form-links-above {
+  display:flex; align-items:center; justify-content:space-between;
+  width:100%; margin:4px 0 10px; box-sizing:border-box;
+}
+.form-link { color:#a78bfa; font-size:13px; padding:4px 0; }
+.form-link-left { text-align:left; flex:1; }
+.form-link-right { text-align:right; flex:1; }
+.btn-register {
+  margin-top:10px; padding:13px; text-align:center; border-radius:14px;
+  border:1.5px solid rgba(167,139,250,0.45); background:rgba(167,139,250,0.08);
+}
+.btn-register text { color:#c4b5fd; font-size:15px; font-weight:600; }
+.login-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.45);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px;
+}
+.login-spinner {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.25);
+  border-top-color: #58a6ff;
+  animation: loginSpin 0.8s linear infinite;
+}
+.login-overlay-text { color: #fff; font-size: 14px; }
+@keyframes loginSpin { to { transform: rotate(360deg); } }
+.login-modal-overlay { position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:24px; }
+.login-modal-card { background:linear-gradient(135deg,#0f1a2e,#0a1425); border:1px solid rgba(0,210,255,0.2); border-radius:14px; padding:28px 24px; width:100%; max-width:320px; }
+.login-modal-title { display:block; color:#fff; font-size:16px; font-weight:700; text-align:center; margin-bottom:12px; }
+.login-modal-text { display:block; color:rgba(255,255,255,0.7); font-size:13px; line-height:1.5; text-align:left; margin-bottom:20px; }
+.login-modal-actions { display:flex; gap:10px; }
+.login-modal-btn { flex:1; padding:12px; border-radius:10px; text-align:center; cursor:pointer; }
+.login-modal-btn text { font-size:14px; font-weight:600; }
+.login-modal-btn.secondary { background:var(--bg-card); border:1px solid var(--border); }
+.login-modal-btn.secondary text { color:var(--text-dim); }
+.login-modal-btn.primary { background:linear-gradient(135deg,rgba(0,210,255,0.2),rgba(0,136,204,0.2)); border:1px solid rgba(0,210,255,0.15); }
+.login-modal-btn.primary text { color:#fff; }
+[data-theme="white"] .login-modal-card { background:#fff; border-color:#e5e7eb; }
+[data-theme="white"] .login-modal-title { color:#1a1a2e; }
+[data-theme="white"] .login-modal-text { color:rgba(0,0,0,0.6); }
+[data-theme="white"] .login-modal-btn.primary { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+[data-theme="white"] .login-modal-btn.primary text { color:#fff; }
+.overlay { position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; padding:20px; }
+.captcha-panel { width:100%; max-width:320px; background:var(--bg-card); border-radius:16px; padding:20px; border:1px solid var(--border); }
+.captcha-title { display:block; text-align:center; font-weight:700; color:var(--text); margin-bottom:12px; }
+.captcha-img { width:100%; height:48px; margin-bottom:10px; border-radius:8px; background:#f3f4f6; }
+.captcha-actions { display:flex; gap:10px; margin-top:12px; align-items:center; }
+.captcha-confirm { flex:1; padding:12px; }
 </style>

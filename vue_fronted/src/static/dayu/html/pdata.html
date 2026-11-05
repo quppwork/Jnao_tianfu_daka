@@ -1,0 +1,394 @@
+﻿<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>数据分析 · 大宇智能体家长版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;min-height:100vh;min-height:100dvh;height:100vh;height:100dvh;padding-bottom:110px;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}.phone::-webkit-scrollbar{display:none;width:0;height:0}
+.ptop{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8;min-width:0}
+.ptop .brand small{display:block;font-size:12px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.kid-switch{flex:1;min-width:0;max-width:140px;margin:0 4px;background:#131926;border:1.5px solid #2A3040;border-radius:99px;color:#F5D9A8;font-size:13px;font-weight:800;padding:6px 10px;outline:none;appearance:none;text-align:center}
+.kid-switch:disabled{opacity:.55}
+.acctbtn{display:inline-block;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none;flex:none}
+/* 孩子卡 */
+.kid{margin:10px 18px 0;background:linear-gradient(135deg,rgba(201,162,39,.18),rgba(201,162,39,.04));border:1.5px solid rgba(201,162,39,.5);border-radius:18px;padding:14px;display:flex;align-items:center;gap:13px}
+.kid .av{width:54px;height:54px;border-radius:50%;background:#171E2E;border:2px solid #C9A227;display:flex;align-items:center;justify-content:center;font-size:27px;flex:none;position:relative}
+.kid .av .tb{position:absolute;right:-4px;bottom:-4px;width:21px;height:21px;border-radius:50%;background:#0D111F;border:1.5px solid #C9A227;color:#C9A227;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;line-height:1;z-index:2}
+.kid .inf{flex:1}
+.kid .inf b{font-size:18px;font-weight:900}
+.kid .inf span{display:block;font-size:14px;color:#8B93A5;margin-top:2px}
+.kid .duan{text-align:right;flex:none}
+.kid .duan b{font-size:18px;font-weight:900;color:#F5D576;text-shadow:0 0 12px rgba(245,213,118,.4)}
+.kid .duan span{display:block;font-size:12px;color:#8B93A5;margin-top:2px}
+/* 概览四格 */
+.ov{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 18px 0}
+.ov div{background:#131926;border:1.5px solid #2A3040;border-radius:15px;padding:12px}
+.ov b{font-size:21px;font-weight:900;color:#F5D9A8}
+.ov b em{font-size:14px;font-style:normal;color:#3FB950;font-weight:800;margin-left:4px}
+.ov b em.dn{color:#E5534B}
+.ov span{display:block;font-size:14px;color:#8B93A5;margin-top:3px}
+/* 卡片通用 */
+.card{margin:14px 18px 0;background:#131926;border:1.5px solid #2A3040;border-radius:18px;padding:15px}
+.card .ct{font-size:17px;font-weight:900;margin-bottom:4px}
+.card .cs{font-size:14px;color:#8B93A5;margin-bottom:12px}
+/* 柱状趋势 */
+.bars{display:flex;align-items:flex-end;gap:8px;height:110px;padding:0 2px}
+.bars .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
+.bars .b i{width:70%;border-radius:6px 6px 3px 3px;background:linear-gradient(180deg,#F5D576,#967536);display:block}
+.bars .b.today i{background:linear-gradient(180deg,#9AD9FF,#2E6BE6);box-shadow:0 0 12px rgba(46,107,230,.5)}
+.bars .b.dn i{background:linear-gradient(180deg,rgba(245,213,118,.45),rgba(150,117,83,.28));box-shadow:none}
+.bars .b span{font-size:12px;color:#8B93A5}
+/* 课程进度 */
+.cr{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed #232B3D}
+.cr:last-child{border-bottom:none}
+.cr .nm{flex:none;width:92px;font-size:16px;font-weight:800;color:#C9CFDC}
+.cr .bar{flex:1;height:8px;border-radius:99px;background:#232B3D;overflow:hidden}
+.cr .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#C9A869,#F5D576)}
+.cr .pc{flex:none;width:40px;text-align:right;font-size:14px;color:#F5D9A8;font-weight:800}
+/* 雷达提示+结论 */
+.note{margin-top:12px;font-size:14px;color:#B9C0CF;line-height:1.7;background:rgba(46,107,230,.08);border:1px solid rgba(46,107,230,.3);border-radius:12px;padding:10px 12px}
+.note b{color:#9AD9FF}
+/* 中央电脑入口 */
+.cclink{margin:14px 18px 0;display:flex;align-items:center;gap:12px;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:16px;padding:14px;text-decoration:none;color:#EDEBE4}
+.cclink img{width:46px;height:46px;object-fit:contain}
+.cclink b{font-size:17px;font-weight:900;color:#F5D9A8}
+.cclink span{display:block;font-size:14px;color:#8B93A5;margin-top:2px}
+.cclink .ar{margin-left:auto;color:#C9A869;font-weight:900}
+/* 底栏 */
+.foot{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}.foot a{text-align:center;color:#8B93A5;font-size:11px;flex:1;text-decoration:none;padding:0}.foot a.on{color:#F5D9A8;font-weight:700}.foot a img{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">数据分析<small>KID DATA · 训练看板</small></div>
+    <select class="kid-switch" id="kidSwitch" aria-label="切换孩子" hidden></select>
+    <a class="acctbtn" href="javascript:;" id="btnStudent">训练账户</a>
+  </div>
+
+  <div class="kid" id="kidCard">
+    <div class="av" id="kidAv">🧒<span class="tb" id="kidTalent" title="">·</span></div>
+    <div class="inf"><b id="kidName">同步中…</b><span id="kidSync">训练账户已绑定 · 正在同步</span></div>
+    <div class="duan"><b id="kidDuan">--</b><span id="kidRank">本机段位榜</span></div>
+  </div>
+
+  <div class="ov" id="metricsOv">
+    <div><b id="mWeekMin">--</b><span>本周训练时长</span></div>
+    <div><b id="mWeekEff">--</b><span>本周有效率</span></div>
+    <div><b id="mXp">--</b><span>累计经验</span></div>
+    <div><b id="mAnxiety">--</b><span id="mAnxietyLab">冲段焦虑预警·近3日效率</span></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">📈 本周训练时长趋势</div>
+    <div class="cs">单位：分钟 · 蓝色为今天</div>
+    <div class="bars" id="weekBars"></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">📚 技能段位进度</div>
+    <div class="cs" id="skillsCs">同步自今日修炼打卡 · 按九段折算进度</div>
+    <div id="skillsProgress">
+      <div class="cr" style="opacity:.7"><span class="nm">加载中</span><div class="bar"><i style="width:0%"></i></div><span class="pc">…</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">🧠 大宇解读</div>
+    <div class="note" id="insightNote">📌 正在根据本周训练数据生成解读…</div>
+  </div>
+
+  <a class="cclink" href="milestone.html">
+    <img src="/static/dayu/assets/ic/computer.png" alt=""/>
+    <div><b>中央电脑 · 完整数据舱</b><span>段位四境之锁 · 天梯榜 · 修行回放舱</span></div>
+    <span class="ar">›</span>
+  </a>
+
+  <div class="foot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a class="on" href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+
+</div>
+
+
+
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  var btnStudent = document.getElementById('btnStudent');
+  if(btnStudent){
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.querySelectorAll('a.acctbtn[href="index.html"]').forEach(function(a){
+    a.setAttribute('href','javascript:;');
+    a.id = a.id || 'btnStudent';
+  });
+  // re-bind if we just set id
+  btnStudent = document.getElementById('btnStudent');
+  if(btnStudent && !btnStudent._bound){
+    btnStudent._bound = 1;
+    btnStudent.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) location.href = '/pages/dayu/home';
+    });
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'kids-manage.html': '/pages/parent/index',
+      'index.html': '__student__'
+    };
+    var soon = {
+      'wallet.html': '算力中心即将开放',
+      'records.html': '测试报告即将开放',
+      'share.html': '分享推广即将开放',
+      'career.html': '招贤纳士即将开放',
+      'console.html': '业务平台即将开放',
+      'test.html': '天赋测试即将开放',
+      'milestone.html': '中央电脑即将开放'
+    };
+    if(soon[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(!post('dayu-toast', {title: soon[file]})){ try{ alert(soon[file]); }catch(err){} }
+      return;
+    }
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      nav(map[file]);
+    }
+  }, true);
+
+  var FOCUS_KEY = 'jnao_parent_focus_child_id';
+  function $(id){ return document.getElementById(id); }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        return (o.parent && o.parent.userId) || (o.role === 'parent' && o.userId) || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function authHeaders(){
+    var h = { Accept: 'application/json' };
+    try{
+      var tok = localStorage.getItem('jnao_access_token') ||
+        localStorage.getItem('jnao_session_token') || '';
+      if(!tok){
+        var snap = localStorage.getItem('jnao_auth_snapshot');
+        if(snap){
+          var o = JSON.parse(snap);
+          if(o.parent && o.parent.token) tok = o.parent.token;
+          else if(o.token) tok = o.token;
+        }
+      }
+      if(tok) h.Authorization = 'Bearer ' + tok;
+    }catch(e){}
+    return h;
+  }
+  function queryChildId(){
+    try{
+      var u = new URL(location.href);
+      var q = u.searchParams.get('child_id');
+      if(q) return parseInt(q, 10) || 0;
+    }catch(e){}
+    try{
+      var saved = localStorage.getItem(FOCUS_KEY);
+      if(saved) return parseInt(saved, 10) || 0;
+    }catch(e){}
+    return 0;
+  }
+  function fmtDelta(n){
+    if(n == null || n === '') return '';
+    var cls = n < 0 ? 'dn' : '';
+    return '<em class="' + cls + '">' + (n > 0 ? '+' : '') + n + '</em>';
+  }
+  function setMetric(el, mainHtml, delta){
+    if(!el) return;
+    if(mainHtml == null){ el.innerHTML = '--'; return; }
+    el.innerHTML = mainHtml + fmtDelta(delta);
+  }
+  function applyDashboard(data){
+    if(!data) return;
+    var child = data.child || {};
+    var tier = data.tier || {};
+    var m = data.metrics || {};
+    if($('kidName')) $('kidName').textContent = child.nickname || '学员';
+    if($('kidSync')) $('kidSync').textContent = data.sync_hint || '实时更新';
+    if($('kidDuan')) $('kidDuan').textContent = tier.duan_label || ('Lv.' + (tier.level || 1));
+    if($('kidRank')) $('kidRank').textContent = tier.rank_label || '本机段位榜';
+    var tc = $('kidTalent');
+    if(tc){ tc.textContent = child.talent_char || '·'; tc.title = child.talent || ''; }
+    var wm = m.week_minutes || {};
+    var we = m.week_efficiency || {};
+    var xp = m.xp_total || {};
+    var ax = m.anxiety || {};
+    setMetric($('mWeekMin'), wm.value != null ? (wm.value + '′') : null, wm.delta_pct);
+    setMetric($('mWeekEff'), we.value != null ? (we.value + '%') : null, we.delta_pct);
+    setMetric($('mXp'), xp.value != null ? String(xp.value) : null, xp.delta);
+    setMetric($('mAnxiety'), ax.value != null ? (ax.value + '%') : (ax.active ? '预警' : null), ax.delta_pct);
+    if($('mAnxietyLab')){
+      $('mAnxietyLab').textContent = ax.active
+        ? (ax.label || '冲段焦虑预警·近3日效率')
+        : '近3日效率';
+    }
+    var anxCell = $('mAnxiety') && $('mAnxiety').parentElement;
+    if(anxCell){
+      anxCell.style.borderColor = ax.active ? 'rgba(229,83,75,.55)' : '';
+      anxCell.style.boxShadow = ax.active ? '0 0 0 1px rgba(229,83,75,.25)' : '';
+    }
+    var bars = data.week_bars || [];
+    var host = $('weekBars');
+    if(host){
+      host.innerHTML = bars.length ? bars.map(function(b){
+        var h = Math.max(b.height_pct || 0, b.minutes ? 8 : 4);
+        var cls = 'b' + (b.is_today ? ' today' : '') + (!b.has_checkin ? ' dn' : '');
+        return '<div class="' + cls + '"><i style="height:' + h + '%"></i><span>' + (b.label || '') + '</span></div>';
+      }).join('') : '<div class="b dn"><i style="height:8%"></i><span>暂无</span></div>';
+    }
+    var skills = data.skills_progress || [];
+    var skHost = $('skillsProgress');
+    if(skHost){
+      if(!skills.length){
+        skHost.innerHTML = '<div class="cr" style="opacity:.75"><span class="nm" style="width:auto;flex:1">暂无技能进度</span><span class="pc" style="width:auto">去今日修炼打卡后可见</span></div>';
+      } else {
+        skHost.innerHTML = skills.map(function(s){
+          var pct = Math.max(0, Math.min(100, Number(s.percent) || 0));
+          var lab = s.label || (s.active ? (String(s.tier || 1) + '段') : '未开');
+          return '<div class="cr"><span class="nm">' + (s.name || '技能') + '</span>'
+            + '<div class="bar"><i style="width:' + pct + '%"></i></div>'
+            + '<span class="pc">' + lab + '</span></div>';
+        }).join('');
+      }
+    }
+    var insight = (data.insight && data.insight.text) || '';
+    if($('insightNote')){
+      $('insightNote').innerHTML = insight
+        ? ('📌 ' + String(insight).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br/>'))
+        : '📌 本周暂无足够数据生成解读，完成几次打卡后再来看。';
+    }
+    var list = data.children || [];
+    var sw = $('kidSwitch');
+    if(sw && list.length > 1){
+      sw.hidden = false;
+      sw.innerHTML = list.map(function(c){
+        var sel = String(c.id) === String(child.id) ? ' selected' : '';
+        return '<option value="' + c.id + '"' + sel + '>' + (c.nickname || '学员') + '</option>';
+      }).join('');
+    } else if(sw){ sw.hidden = true; }
+    try{ localStorage.setItem(FOCUS_KEY, String(child.id)); }catch(e){}
+  }
+  async function loadDashboard(childId){
+    var pid = parentUserId();
+    if(!pid){
+      if($('kidName')) $('kidName').textContent = '未登录';
+      if($('insightNote')) $('insightNote').textContent = '请先登录家长账号。';
+      return;
+    }
+    if(!childId){
+      try{
+        var lr = await fetch('/api/parent/children?user_id=' + encodeURIComponent(pid), {
+          credentials: 'include', headers: authHeaders(),
+        });
+        if(lr.ok){
+          var lb = await lr.json();
+          var kids = lb.children || [];
+          if(kids.length) childId = kids[0].id;
+        }
+      }catch(e){}
+    }
+    if(!childId){
+      if($('kidName')) $('kidName').textContent = '暂无孩子';
+      if($('insightNote')) $('insightNote').textContent = '请先绑定孩子训练账户。';
+      return;
+    }
+    try{
+      // 先拉指标（快），解读单独补（豆包可能数秒）——不必为首屏上 Redis
+      var base =
+        '/api/parent/children/' + encodeURIComponent(childId) +
+        '/dashboard?user_id=' + encodeURIComponent(pid);
+      var res = await fetch(base + '&insight=false', {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      applyDashboard(data);
+      if($('insightNote')) $('insightNote').textContent = '📌 大宇正在解读本周数据…';
+      fetch(base + '&insight=true', { credentials: 'include', headers: authHeaders() })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(full){
+          if(!full) return;
+          if(full.insight) data.insight = full.insight;
+          // 指标可能已在首包；只刷新解读与可能更新的字段
+          applyDashboard(Object.assign({}, data, {
+            insight: full.insight || data.insight,
+            metrics: full.metrics || data.metrics,
+            week_bars: full.week_bars || data.week_bars,
+            skills_progress: full.skills_progress || data.skills_progress,
+            tier: full.tier || data.tier,
+            child: full.child || data.child,
+            sync_hint: full.sync_hint || data.sync_hint,
+          }));
+        })
+        .catch(function(){
+          if($('insightNote') && (!$('insightNote').textContent || $('insightNote').textContent.indexOf('正在解读') >= 0)){
+            $('insightNote').textContent = '📌 本周数据已同步，解读稍后可再试。';
+          }
+        });
+    }catch(err){
+      if($('kidName')) $('kidName').textContent = '同步失败';
+      if($('insightNote')) $('insightNote').textContent = '看板暂时不可用，请稍后重试。';
+    }
+  }
+  var swEl = $('kidSwitch');
+  if(swEl){
+    swEl.addEventListener('change', function(){
+      var id = parseInt(swEl.value, 10);
+      if(id) loadDashboard(id);
+    });
+  }
+  loadDashboard(queryChildId());
+})();
+</script>
+</body></html>

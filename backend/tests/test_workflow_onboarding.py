@@ -12,7 +12,7 @@ if os.path.exists(TEST_DB):
 os.environ['DATABASE_URL'] = f'sqlite:///{TEST_DB}'
 
 from dotenv import load_dotenv
-load_dotenv('.env', override=True)
+load_dotenv('.env', override=False)
 os.environ['DATABASE_URL'] = f'sqlite:///{TEST_DB}'
 
 from app.db.session import get_session_factory, init_db

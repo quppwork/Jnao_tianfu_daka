@@ -87,6 +87,55 @@ export async function fileToDataUrl(file) {
   })
 }
 
+/**
+ * 从粘贴事件取出图片 File（桌面 Ctrl+V / 部分手机长按粘贴）。
+ * @param {ClipboardEvent} event
+ * @returns {File|null}
+ */
+export function extractClipboardImageFile(event) {
+  const cd = event?.clipboardData
+  if (!cd) return null
+  const items = cd.items
+  if (items?.length) {
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]
+      const type = String(it.type || '')
+      // 部分浏览器 kind 为空，只靠 type=image/*
+      if ((it.kind === 'file' || !it.kind) && type.startsWith('image/')) {
+        const f = typeof it.getAsFile === 'function' ? it.getAsFile() : null
+        if (f && f.size) return f
+      }
+    }
+  }
+  const files = cd.files
+  if (files?.length) {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      if (f && f.size && (String(f.type || '').startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(f.name || ''))) {
+        return f
+      }
+    }
+  }
+  return null
+}
+
+/** File → pendingImage 结构（与 buildPendingImageFromPath 同形） */
+export function pendingFromImageFile(file) {
+  if (!file || !file.size) throw new Error('图片为空')
+  const type = file.type || 'image/jpeg'
+  const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg'
+  const normalized =
+    file instanceof File
+      ? file
+      : new File([file], `paste.${ext}`, { type })
+  const named =
+    normalized.name && normalized.name !== 'image.png' && normalized.name !== 'blob'
+      ? normalized
+      : new File([normalized], `paste.${ext}`, { type: normalized.type || type })
+  const preview = URL.createObjectURL(named)
+  return { file: named, preview, path: preview }
+}
+
 /** 本地图片缓存：拍照后优先从本机显示，服务器 URL 仅作 AI 与无缓存时的回退 */
 const QA_IMG_CACHE_PREFIX = 'jnao_qa_img_'
 const QA_IMG_CACHE_MAX = 8
@@ -272,9 +321,17 @@ export async function ensureAlbumPermission() {
 
 /**
  * @param {'camera'|'album'} source
- * @returns {Promise<string>} tempFilePath
+ * @returns {Promise<string>} tempFilePath / blob URL
  */
 export async function chooseQuestionImage(source) {
+  // 手机浏览器 / 微信内置浏览器：用原生 <input type=file>，
+  // 避免 uni.chooseImage 再弹一层「拍摄 / 从手机相册选择」。
+  // input.click() 须在用户手势同步路径里触发，故此处不做 await 权限。
+  if (isMobileH5() && typeof document !== 'undefined') {
+    const picked = await pickImageViaNativeInput(source === 'camera' ? 'environment' : '')
+    return picked.path
+  }
+
   if (needsWebcamCapture(source)) {
     const err = new Error('webcam')
     err.code = 'WEBCAM'

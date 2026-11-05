@@ -14,18 +14,26 @@ import sys
 from dotenv import load_dotenv
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_BACKEND = os.path.join(_HERE, "..", "backend")
+# Docker 镜像内代码在 /app；本地开发在 backend/ 目录
+if os.path.isdir(os.path.join(_HERE, "app")):
+    _BACKEND = _HERE
+else:
+    _BACKEND = os.path.abspath(os.path.join(_HERE, "..", "backend"))
 sys.path.insert(0, _BACKEND)
 os.chdir(_BACKEND)
 
 if not os.getenv("DATABASE_URL"):
     load_dotenv(os.path.join(_BACKEND, ".env"), override=False)
-    _prod = os.path.join(_HERE, "..", ".env.production")
-    if os.path.isfile(_prod):
-        load_dotenv(_prod, override=False)
+    for _prod in (
+        os.path.join(_BACKEND, "..", ".env.production"),
+        os.path.join(_HERE, "..", ".env.production"),
+    ):
+        if os.path.isfile(_prod):
+            load_dotenv(_prod, override=False)
+            break
 
 from app.db.session import get_session_factory, init_db
-from app.services.catalog_import import import_all_xet_catalogs
+from app.services.catalog_import import import_all_xet_catalogs, import_catalog, import_video_catalog
 from sqlalchemy import func, select
 from app.db.models import ContentItem
 
@@ -36,10 +44,12 @@ def main() -> None:
     try:
         before = db.scalar(select(func.count()).select_from(ContentItem)) or 0
         results = import_all_xet_catalogs(db)
+        video_n = import_video_catalog(db)
         after = db.scalar(select(func.count()).select_from(ContentItem)) or 0
         print(f"OK: content_item {before} -> {after}")
         for name, n in results.items():
             print(f"  {name}: {n}")
+        print(f"  xet_video_catalog.json: {video_n}")
     finally:
         db.close()
 

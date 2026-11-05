@@ -5,8 +5,11 @@ import io
 import tempfile
 from pathlib import Path
 import httpx
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import Response
+
+from app.core.deps import get_authenticated_student
+from app.core.rate_limit import check_rate_limit
 from app.core.logger import get_logger
 
 logger = get_logger("voice")
@@ -20,27 +23,13 @@ TTS_URL = "https://openspeech.bytedance.com/api/v1/tts"
 # ── TTS ──
 
 @router.post("/tts")
-async def text_to_speech(data: dict):
-    text = data.get("text", "")
-    if not text:
-        return Response(status_code=400)
-    if not SPEECH_TOKEN:
-        return {"error": "语音服务未配置"}
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            TTS_URL,
-            headers={"Authorization": f"Bearer;{SPEECH_TOKEN}", "Content-Type": "application/json"},
-            json={
-                "app": {"appid": SPEECH_TOKEN, "token": SPEECH_TOKEN, "cluster": "volcano_tts"},
-                "user": {"uid": "jnao_user"},
-                "audio": {"voice_type": "zh_male_qingrun", "encoding": "mp3", "speed_ratio": 1.0},
-                "request": {"reqid": "jnao_tts_" + str(hash(text))[:8], "text": text, "text_type": "plain", "operation": "query"},
-            },
-        )
-    if resp.status_code != 200:
-        return {"error": f"TTS 请求失败: {resp.status_code}"}
-    return Response(content=resp.content, media_type="audio/mpeg")
+async def text_to_speech(
+    data: dict,
+    auth_user_id: int = Depends(get_authenticated_student),
+):
+    """TTS 暂不使用 — 前端未接入，保留路由供后续启用。"""
+    from fastapi import HTTPException
+    raise HTTPException(status_code=501, detail="TTS 功能暂未启用")
 
 
 # ── ASR（本地 Whisper）──
@@ -56,7 +45,11 @@ def _get_model():
 
 
 @router.post("/asr")
-async def speech_to_text(audio: UploadFile = File(...)):
+async def speech_to_text(
+    audio: UploadFile = File(...),
+    auth_user_id: int = Depends(get_authenticated_student),
+):
+    check_rate_limit(f"asr:{auth_user_id}", max_calls=30, window_sec=60)
     try:
         model = _get_model()
     except ImportError:
@@ -64,7 +57,6 @@ async def speech_to_text(audio: UploadFile = File(...)):
     except Exception as e:
         return {"error": f"Whisper 模型加载失败: {e}"}
 
-    # 保存上传的音频到临时文件（保留真实后缀，Whisper 可识别 webm/mp3/wav）
     audio_bytes = await audio.read()
     suffix = Path(audio.filename or "audio.webm").suffix or ".webm"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.talent_mapping import (
@@ -10,6 +10,9 @@ from app.core.talent_mapping import (
     parse_check_talent, talent_display, talent_primary_from_code,
 )
 from app.db.models import ChildUser, TalentAssessment, TalentAssessmentArchive, TrainingRecord
+
+# 历史测评上限：首条确认天赋常留 + 其余按最新覆盖，合计最多此数
+ASSESSMENT_HISTORY_KEEP = 10
 
 
 def get_self_reported_talent_code(db: Session, child_user_id: int) -> int | None:
@@ -55,14 +58,7 @@ def enrich_profile_talent_fields(db: Session, child_user_id: int, data: dict) ->
         if profile.get("latest_assessment_id"):
             data["latest_assessment_id"] = profile.get("latest_assessment_id")
         return
-    latest = get_latest_assessment(db, child_user_id)
-    if latest and effective_talent_code(latest):
-        data["talent_code"] = latest.talent_code
-        data["talent_tag"] = latest.talent_tag
-        data["talent_primary"] = latest.talent_primary
-        data["talent_source"] = "assessment"
-        data["latest_assessment_id"] = latest.id
-        return
+    # 无确认天赋时：走 resolve（首条有效测评 / 引导自选），禁止直接用最新测评
     eff = resolve_effective_talent(db, child_user_id)
     if eff and eff.get("talent_code"):
         data["talent_code"] = eff.get("talent_code")
@@ -71,6 +67,7 @@ def enrich_profile_talent_fields(db: Session, child_user_id: int, data: dict) ->
         data["talent_source"] = eff.get("talent_source")
         if eff.get("assessment_id"):
             data["latest_assessment_id"] = eff.get("assessment_id")
+        return
 
 
 def get_self_reported_talent_name(db: Session, child_user_id: int) -> str | None:
@@ -130,20 +127,78 @@ def repair_onboarding_talent(db: Session, child_user_id: int) -> bool:
     return changed
 
 
+def ensure_onboarding_completed_after_assessment(db: Session, child_user_id: int) -> bool:
+    """已有天赋测评但 onboarding 未标记完成时自动补全（避免登录重复走引导）"""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    user = db.get(ChildUser, child_user_id)
+    if not user:
+        return False
+    profile = dict(user.profile_json or {})
+    raw_ob = profile.get("onboarding")
+    ob = dict(raw_ob) if isinstance(raw_ob, dict) else {}
+    if ob.get("completed_at"):
+        return False
+    if ob.get("student_type") == "returning":
+        return False
+    latest = get_latest_assessment(db, child_user_id)
+    if not latest:
+        return False
+    assessed = latest.assessed_at or datetime.now(timezone.utc)
+    ob.setdefault("student_type", "new")
+    ob["talent_test_done"] = True
+    ob["completed_at"] = assessed.isoformat() if hasattr(assessed, "isoformat") else str(assessed)
+    profile["onboarding"] = ob
+    user.profile_json = profile
+    flag_modified(user, "profile_json")
+    db.commit()
+    try:
+        from app.core.cache import invalidate_user_profile
+        invalidate_user_profile(child_user_id)
+    except Exception:
+        pass
+    return True
+
+
 def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
-    """当前可用于训练的天赋：JNAO 测评 > 引导页自选 > 无"""
+    """当前系统唯一生效的天赋：用户已确认写入 profile 的那一个。
+
+    产品规则：
+    - 历史测评表可有多条不同结果，业务上基本无用
+    - 必须确认一个天赋后全系统只用这一份（默认=第一条有效测评同步进 profile）
+    - 有 profile.talent_code / talent_primary 时，禁止再回落到「最新测评」
+    """
     repair_onboarding_talent(db, child_user_id)
-    assessment = get_latest_assessment(db, child_user_id)
-    if has_valid_talent(assessment):
+    user = db.get(ChildUser, child_user_id)
+    profile = dict(user.profile_json or {}) if user else {}
+
+    # 1) 已确认（含锁定）：profile 是唯一真相源
+    if profile.get("talent_code") and profile.get("talent_primary"):
         return {
             "has_assessment": True,
             "needs_assessment": False,
-            "assessment_id": assessment.id,
-            "talent_primary": assessment.talent_primary,
-            "talent_tag": assessment.talent_tag,
-            "talent_code": effective_talent_code(assessment),
+            "assessment_id": profile.get("latest_assessment_id"),
+            "talent_primary": profile.get("talent_primary"),
+            "talent_tag": profile.get("talent_tag"),
+            "talent_code": profile.get("talent_code"),
+            "talent_source": profile.get("talent_source") or "assessment",
+            "talent_locked": bool(profile.get("talent_locked_code")),
+        }
+
+    # 2) 尚无确认：取「第一条有效测评」作为默认确认候选（不是最新一条）
+    first_valid = get_first_valid_assessment(db, child_user_id)
+    if first_valid and has_valid_talent(first_valid):
+        return {
+            "has_assessment": True,
+            "needs_assessment": False,
+            "assessment_id": first_valid.id,
+            "talent_primary": first_valid.talent_primary,
+            "talent_tag": first_valid.talent_tag,
+            "talent_code": effective_talent_code(first_valid),
             "talent_source": "assessment",
         }
+
+    # 3) 引导页自选
     self_code = get_self_reported_talent_code(db, child_user_id)
     if self_code:
         from app.core.talent_mapping import resolve_talent_tag
@@ -158,18 +213,20 @@ def resolve_effective_talent(db: Session, child_user_id: int) -> dict | None:
             "talent_code": self_code,
             "talent_source": "onboarding",
         }
-    user = db.get(ChildUser, child_user_id)
-    profile = dict(user.profile_json or {}) if user else {}
-    if profile.get("talent_code") and profile.get("talent_source") in ("onboarding", "assessment"):
-        return {
-            "has_assessment": True,
-            "needs_assessment": False,
-            "assessment_id": profile.get("latest_assessment_id"),
-            "talent_primary": profile.get("talent_primary"),
-            "talent_tag": profile.get("talent_tag"),
-            "talent_code": profile.get("talent_code"),
-            "talent_source": profile.get("talent_source"),
-        }
+    return None
+
+
+def get_first_valid_assessment(db: Session, child_user_id: int) -> TalentAssessment | None:
+    """按 id 升序取第一条有效测评（非迷者），用作默认确认天赋。"""
+    rows = db.scalars(
+        select(TalentAssessment)
+        .where(TalentAssessment.child_user_id == child_user_id)
+        .order_by(TalentAssessment.id.asc())
+    ).all()
+    for row in rows:
+        filled = _backfill_talent_fields(db, row)
+        if has_valid_talent(filled):
+            return filled
     return None
 
 
@@ -178,6 +235,7 @@ def has_training_records(db: Session, child_user_id: int) -> bool:
     return db.query(
         select(TrainingRecord).where(TrainingRecord.child_user_id == child_user_id).exists()
     ).scalar()
+
 
 class AssessmentError(Exception):
     def __init__(self, message: str, status_code: int = 400):
@@ -286,18 +344,37 @@ def save_assessment(
     current_code = current_profile.get("talent_code")
     current_source = current_profile.get("talent_source", "")
 
+    # 有效测试次数（迷者不计），与个人配额比较（默认 2）
+    valid_assessment_count = db.scalar(
+        select(func.count()).select_from(TalentAssessment).where(
+            TalentAssessment.child_user_id == child_user_id,
+            TalentAssessment.talent_primary != "迷者",
+            TalentAssessment.talent_code.isnot(None),
+        )
+    ) or 0
+    quota = current_profile.get("talent_test_quota", 2)
+
     # 冲突检测：仅当 新测评结果 ≠ 自选天赋 时触发（JNAO 重测直接覆盖）
     talent_conflict = False
     talent_locked = False
+    talent_last_chance = False
     is_onboarding_source = current_source == "onboarding"
     if talent_code and current_code and talent_code != current_code:
-        if has_training_records(db, child_user_id):
-            # 有训练记录 → 锁定，不更新天赋
+        if has_training_records(db, child_user_id) or valid_assessment_count >= quota:
+            # 有训练记录 或 已达配额上限 → 锁定，不更新天赋
             talent_locked = True
+            if valid_assessment_count >= quota:
+                current_profile["talent_locked_code"] = current_code
+        elif valid_assessment_count == quota - 1:
+            # 配额内最后一次有效测试 → 允许更换，但是最后一次机会
+            talent_last_chance = True
         elif is_onboarding_source:
             # 自选天赋 vs JNAO 不同 → 标记冲突，等用户选择
             talent_conflict = True
         # else: JNAO 重测 → 直接覆盖，不触发冲突
+    elif talent_code and not current_code:
+        # 首次有效测试：迷者之后第一次有效测试，正常写入
+        pass
 
     assessed_at = datetime.now(timezone.utc)
     if report.get("create_time"):
@@ -328,9 +405,23 @@ def save_assessment(
     db.commit()
     db.refresh(record)
 
-    if not talent_locked and not talent_conflict:
+    ensure_onboarding_completed_after_assessment(db, child_user_id)
+
+    if not talent_locked and not talent_conflict and not talent_last_chance:
         # 无冲突 → 正常同步天赋
         sync_child_user_talent(db, child_user_id)
+    elif talent_last_chance:
+        # 最后一次机会 → 暂存到 pending，等用户在前端确认后才生效
+        profile = dict(user.profile_json or {})
+        profile["pending_talent"] = {
+            "assessment_id": record.id,
+            "talent_code": talent_code,
+            "talent_tag": talent_tag,
+            "talent_primary": talent_primary,
+            "from_last_chance": True,
+        }
+        user.profile_json = profile
+        db.commit()
     elif talent_conflict:
         # 有冲突 → 暂存冲突信息到 profile，等用户选择
         profile = dict(user.profile_json or {})
@@ -342,16 +433,28 @@ def save_assessment(
         }
         user.profile_json = profile
         db.commit()
-    # talent_locked → 什么都不更新，仅存档测评
+    else:
+        # talent_locked → 锁定当前天赋到 profile，防 resolve_effective_talent 绕过
+        current_profile["talent_locked_code"] = current_code
+        user.profile_json = current_profile
+        db.commit()
 
     from app.services.training_service import refresh_today_plan_if_talent_changed
     if not talent_locked and not talent_conflict:
         refresh_today_plan_if_talent_changed(db, child_user_id, assessment=record)
     db.refresh(record)
 
+    try:
+        prune_assessments(db, child_user_id, keep=ASSESSMENT_HISTORY_KEEP)
+        db.refresh(record)
+    except Exception:
+        # 裁剪失败不阻断本次落库
+        pass
+
     # 在返回对象上附加冲突信息（非持久化字段）
     record._talent_conflict = talent_conflict
     record._talent_locked = talent_locked
+    record._talent_last_chance = talent_last_chance
     return record
 
 
@@ -468,28 +571,78 @@ def sync_child_user_talent(db: Session, child_user_id: int) -> None:
     db.commit()
 
 
-def list_assessments(db: Session, child_user_id: int, limit: int = 30) -> list[dict]:
+def list_assessments(
+    db: Session, child_user_id: int, limit: int = ASSESSMENT_HISTORY_KEEP
+) -> list[dict]:
+    lim = max(1, min(int(limit or ASSESSMENT_HISTORY_KEEP), ASSESSMENT_HISTORY_KEEP))
     rows = db.scalars(
         select(TalentAssessment)
         .where(TalentAssessment.child_user_id == child_user_id)
         .order_by(TalentAssessment.id.desc())
-        .limit(limit)
+        .limit(lim)
     ).all()
-    return [
-        {
-            "id": r.id,
-            "talent": r.talent_primary,
-            "talent_primary": r.talent_primary,
-            "talent_tag": r.talent_tag,
-            "create_time": (
-                r.assessed_at.strftime("%Y-%m-%d %H:%M")
-                if r.assessed_at
-                else (r.report_json or {}).get("create_time")
-            ),
-            "assessed_at": r.assessed_at.isoformat() if r.assessed_at else None,
-        }
-        for r in rows
-    ]
+    return [_assessment_list_item(r) for r in rows]
+
+
+def _assessment_list_item(
+    r: TalentAssessment,
+    *,
+    child_nickname: str | None = None,
+) -> dict:
+    item = {
+        "id": r.id,
+        "talent": r.talent_primary,
+        "talent_primary": r.talent_primary,
+        "talent_tag": r.talent_tag,
+        "test_type": r.test_type,
+        "mode": "adult" if (0 if r.test_type is None else int(r.test_type)) == 0 else "kid",
+        "create_time": (
+            r.assessed_at.strftime("%Y-%m-%d %H:%M")
+            if r.assessed_at
+            else (r.report_json or {}).get("create_time")
+        ),
+        "assessed_at": r.assessed_at.isoformat() if r.assessed_at else None,
+        "child_user_id": r.child_user_id,
+    }
+    if child_nickname is not None:
+        item["child_id"] = r.child_user_id
+        item["child_nickname"] = child_nickname
+    return item
+
+
+def list_assessments_for_parent(
+    db: Session,
+    parent_id: int,
+    *,
+    child_id: int | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """家长查看绑定孩子的测评记录（可按孩子过滤）。"""
+    from app.services import parent_service
+
+    children = parent_service.list_children(db, parent_id)
+    if not children:
+        return []
+    by_id = {int(c["id"]): c for c in children}
+    if child_id is not None:
+        cid = int(child_id)
+        if cid not in by_id:
+            raise AssessmentError("无权查看该孩子", 403)
+        ids = [cid]
+    else:
+        ids = list(by_id.keys())
+
+    rows = db.scalars(
+        select(TalentAssessment)
+        .where(TalentAssessment.child_user_id.in_(ids))
+        .order_by(TalentAssessment.id.desc())
+        .limit(max(1, min(limit, 100)))
+    ).all()
+    out: list[dict] = []
+    for r in rows:
+        nick = (by_id.get(r.child_user_id) or {}).get("nickname") or "学员"
+        out.append(_assessment_list_item(r, child_nickname=nick))
+    return out
 
 
 def get_assessment_by_id(db: Session, assessment_id: int, child_user_id: int) -> TalentAssessment | None:
@@ -499,12 +652,14 @@ def get_assessment_by_id(db: Session, assessment_id: int, child_user_id: int) ->
     return row
 
 
-def delete_assessment(db: Session, assessment_id: int, child_user_id: int) -> dict:
-    """删除测评：先归档快照，再从主表删除"""
-    row = get_assessment_by_id(db, assessment_id, child_user_id)
-    if not row:
-        raise AssessmentError("测评记录不存在", 404)
+def protected_assessment_id(db: Session, child_user_id: int) -> int | None:
+    """最初确认孩子天赋的那条：按 id 升序第一条有效测评，裁剪时永不删除。"""
+    first = get_first_valid_assessment(db, child_user_id)
+    return int(first.id) if first else None
 
+
+def _archive_and_delete_row(db: Session, row: TalentAssessment) -> None:
+    """归档并删除一行（不 commit、不 sync），供单删与批量裁剪复用。"""
     db.add(
         TalentAssessmentArchive(
             original_id=row.id,
@@ -513,10 +668,116 @@ def delete_assessment(db: Session, assessment_id: int, child_user_id: int) -> di
             deleted_at=datetime.now(timezone.utc),
         )
     )
+    from app.memory import ThreadRef, get_thread_store
+    from app.memory.protocols import DOMAIN_REPORT_TALENT
+
+    try:
+        get_thread_store(db).clear(
+            ThreadRef(
+                domain=DOMAIN_REPORT_TALENT,
+                owner_user_id=int(row.child_user_id),
+                thread_key=str(row.id),
+            ),
+            commit=False,
+        )
+    except Exception:
+        pass
     db.delete(row)
+
+
+def prune_assessments(
+    db: Session,
+    child_user_id: int,
+    *,
+    keep: int = ASSESSMENT_HISTORY_KEEP,
+) -> dict:
+    """保留首条确认天赋 + 其余最新，合计最多 keep 条；超出归档删除并清 Redis 读缓存。"""
+    keep_n = max(1, min(int(keep or ASSESSMENT_HISTORY_KEEP), 50))
+    rows = list(
+        db.scalars(
+            select(TalentAssessment)
+            .where(TalentAssessment.child_user_id == child_user_id)
+            .order_by(TalentAssessment.id.desc())
+        ).all()
+    )
+    protected = protected_assessment_id(db, child_user_id)
+    if len(rows) <= keep_n:
+        return {
+            "deleted": 0,
+            "kept": len(rows),
+            "protected_id": protected,
+            "deleted_ids": [],
+        }
+
+    keep_ids: set[int] = set()
+    if protected is not None:
+        keep_ids.add(int(protected))
+    for r in rows:
+        if r.id in keep_ids:
+            continue
+        if len(keep_ids) >= keep_n:
+            break
+        keep_ids.add(int(r.id))
+
+    deleted_ids: list[int] = []
+    for r in rows:
+        if r.id in keep_ids:
+            continue
+        deleted_ids.append(int(r.id))
+        _archive_and_delete_row(db, r)
+
+    if deleted_ids:
+        db.commit()
+        try:
+            from app.core.cache import invalidate_user_assessment, invalidate_user_profile
+
+            invalidate_user_assessment(child_user_id)
+            invalidate_user_profile(child_user_id)
+        except Exception:
+            pass
+
+    return {
+        "deleted": len(deleted_ids),
+        "kept": len(keep_ids),
+        "protected_id": protected,
+        "deleted_ids": deleted_ids,
+    }
+
+
+def prune_all_assessments_over_limit(
+    db: Session, *, keep: int = ASSESSMENT_HISTORY_KEEP
+) -> dict:
+    """定期任务：对所有超限用户执行 prune_assessments。"""
+    user_ids = db.scalars(select(TalentAssessment.child_user_id).distinct()).all()
+    users_pruned = 0
+    deleted = 0
+    details: list[dict] = []
+    for uid in user_ids:
+        out = prune_assessments(db, int(uid), keep=keep)
+        if out.get("deleted"):
+            users_pruned += 1
+            deleted += int(out["deleted"])
+            details.append({"child_user_id": int(uid), **out})
+    return {"users_pruned": users_pruned, "deleted": deleted, "details": details}
+
+
+def delete_assessment(db: Session, assessment_id: int, child_user_id: int) -> dict:
+    """删除测评：先归档快照，再从主表删除"""
+    row = get_assessment_by_id(db, assessment_id, child_user_id)
+    if not row:
+        raise AssessmentError("测评记录不存在", 404)
+
+    _archive_and_delete_row(db, row)
     db.commit()
     sync_child_user_talent(db, child_user_id)
     from app.services.training_service import refresh_today_plan_if_talent_changed
 
     refresh_today_plan_if_talent_changed(db, child_user_id)
+    try:
+        from app.core.cache import invalidate_user_assessment, invalidate_user_profile
+
+        invalidate_user_assessment(child_user_id)
+        invalidate_user_profile(child_user_id)
+    except Exception:
+        pass
     return {"deleted": True, "assessment_id": assessment_id}

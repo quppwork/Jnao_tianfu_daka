@@ -15,13 +15,12 @@ from typing import TYPE_CHECKING, Any
 from app.services.child_training_state import (
     advance_skill_tier,
     bump_consecutive_pass,
-    filter_active_skills,
+    display_overall_tier,
     get_consecutive_pass,
     get_skill_oss_position,
-    get_skills_with_records,
     get_skill_tier,
-    overall_tier,
     reset_consecutive_pass,
+    set_consecutive_pass,
     set_skill_oss_position,
     state_summary,
 )
@@ -32,6 +31,11 @@ from config.loader import load_training_tier_thresholds
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
     from app.db.models import ChildUser, TrainingPlan
+
+# 标准未定稿：可排课、交卡即过，但不自动升段（需求口径）
+NO_AUTO_TIER_ADVANCE_SKILLS = frozenset(
+    {"文科奥秘", "理科奥秘", "天赋绘画", "音乐灵感"}
+)
 
 
 # ── 辅助 ──────────────────────────────────────────
@@ -107,7 +111,7 @@ def evaluate_card(
     """判定单张打卡卡片是否达标。
 
     Returns:
-        { passed: bool, threshold: dict|null, detail: str, skill, tier, rule_type }
+        { passed, threshold, detail, skill, tier, rule_type }
     """
     threshold = get_skill_threshold(skill, tier, grade_band)
     base: dict[str, Any] = {
@@ -152,16 +156,25 @@ def evaluate_card(
 
     if rtype == "recall":
         words = _card_field_num(card, "wordCount", "words")
-        acc = _card_field_num(card, "accuracy", "accuracy_pct") or 0
+        has_acc = any(k in card and card.get(k) not in (None, "") for k in ("accuracy", "accuracy_pct"))
+        acc = _card_field_num(card, "accuracy", "accuracy_pct")
         required_words = int(threshold.get("words") or 0)
         required_acc = int(threshold.get("accuracy_pct") or 0)
 
+        missing: list[str] = []
+        if words is None:
+            missing.append("字数")
+        if not has_acc or acc is None:
+            missing.append("准确度")
         base["words"] = words
         base["required_words"] = required_words
-        base["accuracy_pct"] = acc
+        base["accuracy_pct"] = acc if acc is not None else 0
         base["required_accuracy_pct"] = required_acc
+        if missing:
+            base["detail"] = f"缺字段：{'、'.join(missing)}"
+            return base
         words_ok = words is not None and words >= required_words
-        acc_ok = acc >= required_acc
+        acc_ok = acc is not None and acc >= required_acc
         base["passed"] = words_ok and acc_ok
         base["detail"] = (
             f"达标：{words:g}字/{acc:g}%准确度"
@@ -171,11 +184,20 @@ def evaluate_card(
         return base
 
     if rtype == "memory":
-        words = _card_field_num(card, "wordCount", "words") or 0
-        minutes = _card_field_num(card, "time", "minutes") or 1
+        words = _card_field_num(card, "wordCount", "words")
+        minutes = _card_field_num(card, "time", "minutes")
         reverse = card.get("reverseRecite", False)
         required_wpm = int(threshold.get("words_per_min") or 0)
         require_reverse = bool(threshold.get("reverse_recite", False))
+
+        missing: list[str] = []
+        if words is None:
+            missing.append("字数")
+        if minutes is None or minutes <= 0:
+            missing.append("时间")
+        if missing:
+            base["detail"] = f"缺字段：{'、'.join(missing)}"
+            return base
 
         actual_wpm = words / max(minutes, 0.01)
         base["words_per_min"] = round(actual_wpm, 1)
@@ -292,7 +314,11 @@ def process_checkin_progress(
     talent_code: int,
     grade: str | None,
 ) -> dict:
-    """打卡提交后：遍历所有技能 → 判定达标 → 更新连续计数 → 处理晋级。
+    """打卡提交后：按本次提交的技能判定达标 → 更新连续计数 → 处理晋级。
+
+    规则：
+    - 只结算「本次 cards」里出现的技能，避免同日其它未打卡技能被误判未达标而清零；
+    - 同一训练日同一技能已达标计过一次后，再交卡不再累加连续次数（防多槽重复计）。
 
     Returns:
         {
@@ -305,37 +331,53 @@ def process_checkin_progress(
     state = get_training_progress(child)
     grade_band = _grade_band(grade)
 
-    # 收集本方案所有打卡卡片（含即将写入的 cards）
+    prior_cards = _collect_plan_checkin_cards(db, child.id, plan.id, extra_cards=None)
     all_cards = _collect_plan_checkin_cards(db, child.id, plan.id, extra_cards=cards)
 
-    # 汇总今天涉及的所有技能
-    skills_today = _extract_skills_from_plan(plan, db)
+    skills_in_submit = {
+        str(c.get("name") or "").strip()
+        for c in (cards or [])
+        if str(c.get("name") or "").strip()
+    }
 
     skill_results: dict[str, dict] = {}
 
-    for skill in sorted(skills_today):
+    for skill in sorted(skills_in_submit):
         if not skill or skill == "训练":
             continue
 
         tier_before = get_skill_tier(state, skill)
+        prior_passed = bool(
+            evaluate_skill_any_card(skill, tier_before, grade_band, prior_cards).get("passed")
+        )
         eval_result = evaluate_skill_any_card(skill, tier_before, grade_band, all_cards)
 
+        consecutive_before = get_consecutive_pass(state, skill)
+        attempt_number = consecutive_before + 1
         passed = bool(eval_result.get("passed"))
         tier_advanced = False
         oss_advanced = False
         tier_after = tier_before
+        counted_today = False
 
         if passed:
-            # 达标 → 连续计数 +1
-            bump_consecutive_pass(state, skill)
-            # 尝试推进 OSS
-            oss_advanced = bump_oss_after_pass(db, talent_code, state, skill)
-            # 检查是否达到晋级条件
-            if get_consecutive_pass(state, skill) >= 3:
-                tier_after = advance_skill_tier(state, skill)
-                tier_advanced = True
+            if prior_passed:
+                # 同日已计过达标：保持连续次数，不重复 bump / 晋级
+                counted_today = False
+            else:
+                counted_today = True
+                bump_consecutive_pass(state, skill)
+                oss_advanced = bump_oss_after_pass(db, talent_code, state, skill)
+                if get_consecutive_pass(state, skill) >= 3:
+                    if skill in NO_AUTO_TIER_ADVANCE_SKILLS:
+                        # 标准未定：连续顶到 3 但不升段
+                        set_consecutive_pass(state, skill, 3)
+                        tier_after = tier_before
+                        tier_advanced = False
+                    else:
+                        tier_after = advance_skill_tier(state, skill)
+                        tier_advanced = True
         else:
-            # 不达标 → 计数重置
             reset_consecutive_pass(state, skill)
 
         skill_results[skill] = {
@@ -345,18 +387,18 @@ def process_checkin_progress(
             "consecutive_pass": get_consecutive_pass(state, skill),
             "tier_advanced": tier_advanced,
             "oss_advanced": oss_advanced,
+            "attempt_number": attempt_number,
+            "was_deciding": attempt_number >= 3,
+            "counted_today": counted_today,
+            "already_passed_today": prior_passed,
             "threshold_detail": eval_result,
         }
 
     # 保存
     save_training_progress(db, child, state)
 
-    # 🆕 overall_tier 只算有打卡记录的技能
-    skills_with_records = get_skills_with_records(db, child.id)
-    active_state = filter_active_skills(state, skills_with_records)
-
     return {
-        "overall_tier": overall_tier(active_state),
+        "overall_tier": display_overall_tier(db, child),
         "skill_results": skill_results,
         "summary": state_summary(state),
     }

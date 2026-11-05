@@ -18,26 +18,23 @@ class TestModuleAuth:
     def test_register_idempotent(self, client: TestClient):
         body = {"parent_phone": "13933334444", "nickname": "小红"}
         r1 = client.post("/api/auth/register", json=body)
+        assert r1.status_code == 200
         r2 = client.post("/api/auth/register", json=body)
-        assert r1.json()["child_user_id"] == r2.json()["child_user_id"]
+        assert r2.status_code == 409
 
     def test_login_student_password(self, client: TestClient):
-        parent = client.post(
-            "/api/auth/register",
-            json={
-                "parent_phone": "13955556666",
-                "nickname": "张家长",
-                "password": "123456",
-                "role": "parent",
-            },
-        ).json()
+        from tests.test_parent_auth import STRONG_PWD, _parent_auth, _register_parent
+
+        parent = _register_parent(client, "13955556666", password=STRONG_PWD)
+        auth = _parent_auth(parent)
         client.post(
-            f"/api/parent/children?user_id={parent['child_user_id']}",
-            json={"login_name": "kid_xiaogang", "nickname": "小刚", "password": "111111"},
+            "/api/parent/children",
+            json={"login_name": "kid_xiaogang", "nickname": "小刚", "password": "XiaoMing1"},
+            **auth,
         )
         res = client.post(
             "/api/auth/login",
-            json={"login_name": "kid_xiaogang", "password": "111111"},
+            json={"login_name": "kid_xiaogang", "password": "XiaoMing1"},
         )
         assert res.status_code == 200
 

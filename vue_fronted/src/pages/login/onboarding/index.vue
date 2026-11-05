@@ -158,8 +158,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getChildUserId, saveProfile, fetchProfile } from '@/utils/userApi.js'
+import { requirePageAuth, getChildUserId, saveProfile, fetchProfile } from '@/utils/userApi.js'
 import { clearTalentState, refreshTalentState } from '@/utils/talentState.js'
+import { studentHomeUrl } from '@/utils/uiSkin.js'
 
 const step = ref(1)
 const studentType = ref('')
@@ -263,14 +264,18 @@ async function persistOnboarding({ finalize = false } = {}) {
   try {
     const p = await fetchProfile(userId)
     existing = p.profile_json?.onboarding || {}
-  } catch (_) {}
+  } catch (e) {
+    console.error('[onboarding] 读取已有数据失败:', e?.message || e)
+  }
   const onboarding = { ...existing, ...buildOnboardingPayload({ finalize }) }
   await saveProfile(userId, { profile_json: { onboarding } })
   await refreshTalentState(userId)
 }
 
 async function startTalentTest() {
-  try { await persistOnboarding() } catch (_) {}
+  try { await persistOnboarding() } catch (e) {
+    console.error('[onboarding] persistOnboarding 失败:', e?.message || e)
+  }
   const st = studentType.value || 'new'
   uni.navigateTo({ url: `/pages/talent/index?from=onboarding&student_type=${st}` })
 }
@@ -302,10 +307,13 @@ function nextDataStep() {
 
 async function goHome() {
   try { await persistOnboarding({ finalize: true }) } catch (_) {}
-  uni.redirectTo({ url: '/pages/index' })
+  uni.redirectTo({ url: studentHomeUrl() })
 }
 
 onMounted(async () => {
+  const auth = await requirePageAuth('student')
+  if (!auth.ok) return
+
   const pages = getCurrentPages()
   const opts = pages[pages.length - 1]?.options || {}
   if (opts.resume === '4') {
@@ -322,7 +330,7 @@ onMounted(async () => {
     const p = await fetchProfile(uid)
     const ob = p.profile_json?.onboarding || {}
     if (ob.completed_at) {
-      uni.redirectTo({ url: '/pages/index' })
+      uni.redirectTo({ url: studentHomeUrl() })
       return
     }
     if (ob.student_type) studentType.value = ob.student_type

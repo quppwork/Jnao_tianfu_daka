@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool, StaticPool
 
 from config.loader import load_settings
 from app.db.base import Base
@@ -31,15 +31,23 @@ def get_engine():
         url = get_database_url()
         _sqlite_path(url)
         if url.startswith("sqlite"):
+            # :memory: 必须 StaticPool（共享同一连接），否则每连接一份空库。
+            # 文件库用 NullPool：避免 StaticPool 单连接跨线程并发 → 503。
+            memory = ":memory:" in url or url.rstrip("/") == "sqlite://"
             _engine = create_engine(
                 url,
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool,
+                connect_args={
+                    "check_same_thread": False,
+                    "timeout": 30,
+                },
+                poolclass=StaticPool if memory else NullPool,
             )
 
             @event.listens_for(_engine, "connect")
             def _set_sqlite_pragma(dbapi_conn, _):
                 cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=15000")
                 cursor.execute("PRAGMA foreign_keys=ON")
                 cursor.close()
         else:
@@ -59,6 +67,16 @@ def init_db() -> None:
     from app.db.migrate import apply_schema_patches
 
     apply_schema_patches(engine)
+    # Evidence 默认落 SQL（测试可 set_ledger 覆盖回内存）
+    try:
+        import os
+
+        if os.getenv("HARNESS_EVIDENCE_SQL", "1").strip() not in ("0", "false", "False"):
+            from app.harness.evidence_sql import install_sql_evidence_ledger
+
+            install_sql_evidence_ledger()
+    except Exception:
+        pass
 
 
 def get_db() -> Generator[Session, None, None]:

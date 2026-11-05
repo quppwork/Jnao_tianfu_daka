@@ -17,36 +17,19 @@ services:
     volumes:
       - backend_data:/app/data
       - ./docs/data:/catalog_data:ro
+      # 企微通讯录 CSV 可选：有文件时再挂，避免路径缺失/被建成目录导致 backend 起不来
+      # - ./docs/export/qywx_follow_mobile.csv:/app/data/qywx_export/qywx_follow_mobile.csv:ro
     env_file:
       - .env.production
     environment:
+      # 只放容器运行时必须覆盖的项。密钥/百炼 aid 一律走 env_file。
+      # 切勿在此写 ${DASHSCOPE_API_KEY:-} 这类空默认：compose 插值失败会写成空串，
+      # 从而覆盖 env_file，KB Agent 被关掉，引导页会退化成 DeepSeek+天赋报告。
       JNAO_HOST: 0.0.0.0
       JNAO_PORT: "8012"
-      JNAO_ENV: production
-      JNAO_DEV_MODE: "0"
-      JNAO_DEBUG_ROUTES: "0"
-      TIANFU_RAG_MOCK: ${TIANFU_RAG_MOCK:-1}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL:-}
-      QA_SESSION_CACHE_TTL: ${QA_SESSION_CACHE_TTL:-3600}
-      CACHE_TTL_PROFILE: ${CACHE_TTL_PROFILE:-300}
-      CACHE_TTL_ASSESSMENT: ${CACHE_TTL_ASSESSMENT:-600}
-      CACHE_TTL_TRAINING_TODAY: ${CACHE_TTL_TRAINING_TODAY:-30}
-      CACHE_TTL_TRAINING_PROGRESS: ${CACHE_TTL_TRAINING_PROGRESS:-60}
-      CACHE_TTL_GROWTH_SUMMARY: ${CACHE_TTL_GROWTH_SUMMARY:-120}
-      CORS_ORIGINS: ${SITE_DOMAIN}
-      DOUBAO_API_KEY: ${DOUBAO_API_KEY}
-      DOUBAO_API_BASE: ${DOUBAO_API_BASE:-https://ark.cn-beijing.volces.com/api/v3}
-      DOUBAO_CHAT_MODEL: ${DOUBAO_CHAT_MODEL:-doubao-seed-1-6-250615}
-      DOUBAO_VISION_MODEL: ${DOUBAO_VISION_MODEL:-doubao-seed-1-6-250615}
-      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
-      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
-      OSS_BUCKET: ${OSS_BUCKET:-jnao-talent-ai}
-      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
-      OSS_PREFIX: ${OSS_PREFIX:-yinpin/}
-      SPEECH_APP_ID: ${SPEECH_APP_ID:-}
-      SPEECH_ACCESS_TOKEN: ${SPEECH_ACCESS_TOKEN:-}
+      TZ: Asia/Shanghai
       CATALOG_DATA_DIR: /catalog_data
+      CORS_ORIGINS: ${SITE_DOMAIN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8012/api/ping')"]
       interval: 30s
@@ -65,14 +48,33 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${FRONTEND_HOST_PORT:-5185}:80"
+    environment:
+      OSS_BUCKET: ${OSS_BUCKET:-jnao-talent-ai}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
+      OSS_CDN_DOMAIN: ${OSS_CDN_DOMAIN:-}
+    volumes:
+      - nginx_media_cache:/var/cache/nginx/media
     depends_on:
       backend:
         condition: service_healthy
     networks:
       - jnao_net
 
+  # 可选：docker compose --profile harness -f docker-compose.prod.yml build harness-sandbox
+  # 启用时在 .env.production 设 HARNESS_SANDBOX=docker 与 HARNESS_SANDBOX_IMAGE
+  harness-sandbox:
+    profiles: ["harness"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.harness-sandbox
+    image: jnao-harness-sandbox:${JNAO_BUILD_ID:-latest}
+    command: ["python", "-c", "print('jnao-harness-sandbox image ok')"]
+    networks:
+      - jnao_net
+
 volumes:
   backend_data:
+  nginx_media_cache:
 
 networks:
   jnao_net:

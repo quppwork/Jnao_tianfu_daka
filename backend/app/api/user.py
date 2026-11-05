@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_authenticated_user, get_db
+from app.core.deps import get_authenticated_student, get_db
 from app.core.cache import (
     cache_get_json,
     cache_set_json,
@@ -42,11 +42,12 @@ class LearnerProfileUpdate(BaseModel):
 
 @router.get("/profile")
 def get_profile(
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
+    repaired = assessment_service.ensure_onboarding_completed_after_assessment(db, child_user_id)
     key = key_profile(child_user_id)
-    cached = cache_get_json(key)
+    cached = None if repaired else cache_get_json(key)
     if cached is not None:
         pj = cached.get("profile_json")
         if isinstance(pj, dict):
@@ -63,7 +64,7 @@ def get_profile(
 @router.put("/profile")
 def update_profile(
     req: ProfileUpdateRequest,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     try:
@@ -90,7 +91,7 @@ def update_profile(
 @router.put("/learner-profile")
 def update_learner_profile(
     req: LearnerProfileUpdate,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     patch = req.model_dump(exclude_none=True)
@@ -108,7 +109,7 @@ class TalentConflictResolve(BaseModel):
 @router.post("/talent/resolve-conflict")
 def resolve_talent_conflict(
     req: TalentConflictResolve,
-    child_user_id: int = Depends(get_authenticated_user),
+    child_user_id: int = Depends(get_authenticated_student),
     db: Session = Depends(get_db),
 ):
     """解决天赋冲突：保留旧天赋或采用新测评结果"""

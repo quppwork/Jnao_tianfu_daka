@@ -1,0 +1,73 @@
+# 引导页知识源目录 — Agent 选库用（文档正文在百炼，此处只维护怎么选库）
+# 入库新内容后无需拷全文；可用 scripts/sync_kb_registry_from_bailian.py 刷新 tags
+#
+# 当前阶段（KB_SINGLE_SOURCE=1）：只启用 talent_doc / index_id=ockqxuuru1（控制台「Jnao软件知识库」）。
+# video_practice 保留登记，便于以后恢复双库，运行时不会选中。
+sources:
+  - key: video_practice
+    name: 视频库
+    aid: aid-1e85a55e08334536ae820aea073df9e7
+    index_id: l37mx47k4u
+    tags:
+      - 练法
+      - 怎么练
+      - 如何练
+      - 开口窍
+      - 开口穹
+      - 超脑阅读
+      - 影像追忆
+      - 扫描速记
+      - 感知力
+      - 多元感知
+      - 极速运算
+      - 极速学习
+      - 视频示范
+      - 训练方法
+      - 示范视频
+    summary: 讲师训练与示范视频切片；回答具体怎么练、步骤与要点、跟练示范。
+
+  - key: talent_doc
+    name: Jnao软件知识库
+    # 控制台「Jnao软件知识库_知识问答」已发布应用（qwen3.6-plus）
+    aid: aid-9eca891478184a39a7e0d37419919ae9
+    index_id: ockqxuuru1
+    tags:
+      - 天赋
+      - 学者
+      - 思者
+      - 赢者
+      - 德者
+      - 行者
+      - 五者
+      - 年级要求
+      - 晋级
+      - 平台说明
+      - 学习规律
+      - 系统训练
+      - 单点刷题
+      - 火箭提分营
+      - 提分营
+      - 课程
+      - 家长课程
+      - 家长课堂
+      - 报告解读
+      - 产品
+      - 营期
+      - 收费
+      - 适合谁
+      - 练法
+      - 怎么练
+      - 训练方法
+      - 开口窍
+      - 超脑阅读
+    summary: >
+      当前唯一启用知识库：天赋解读、五者、年级要求、学习规律、平台/课程/家长课堂/营期，
+      以及练法/怎么练类问题（单库阶段一并查本库）。
+
+# 天赋学院短剧库。不在 sources 里，引导页和学科答疑不会选到。
+# 百炼库已清空：讨论只走本地 events/cards/packs；恢复入库后再填 index_id / aid。
+academy:
+  key: short_drama
+  name: AI短剧知识库
+  aid: ""
+  index_id: ""

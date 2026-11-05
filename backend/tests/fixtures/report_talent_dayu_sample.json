@@ -1,0 +1,53 @@
+{
+  "_meta": {
+    "source": "ys_dayu_test_result shaped sample (adult)",
+    "note": "线上可用 scripts/export_dayu_report_fixture.py 从另一库覆盖本文件",
+    "dayu_test_result_id": 90001,
+    "wx_user_id": 10086,
+    "talent": "思者"
+  },
+  "dayu_row": {
+    "id": 90001,
+    "uid": 10086,
+    "test_type": 1,
+    "answer": "11111111111111111111111111111111111",
+    "talent": "思者",
+    "check_talent": "思德",
+    "results": "{\"AttributeJs\": {\"学者\": 62, \"思者\": 88, \"行者\": 55, \"德者\": 71, \"赢者\": 48}, \"results\": {\"Talent\": {\"name\": \"思者\", \"desp\": \"善于抽象与推演，适合深度阅读与结构化表达。\"}, \"Ability\": [{\"abilityName\": \"执行力\", \"value\": 85, \"grade\": 3}, {\"abilityName\": \"公信力\", \"value\": 79, \"grade\": 3}, {\"abilityName\": \"协调力\", \"value\": 76, \"grade\": 3}, {\"abilityName\": \"创新力\", \"value\": 65, \"grade\": 2}, {\"abilityName\": \"领导力\", \"value\": 41, \"grade\": 2}], \"State\": {\"name\": \"蓄势\"}, \"TalentType\": {\"name\": \"思德型\"}}}"
+  },
+  "cases": [
+    {
+      "id": "generic_kb",
+      "question": "五者天赋体系是什么",
+      "needs_report": false,
+      "expect_query_has_report_block": false
+    },
+    {
+      "id": "generic_practice",
+      "question": "思者怎么练",
+      "needs_report": false,
+      "expect_query_has_report_block": false
+    },
+    {
+      "id": "my_report",
+      "question": "这份报告怎么看",
+      "needs_report": true,
+      "expect_query_has_report_block": true,
+      "expect_fragment_contains": "思者"
+    },
+    {
+      "id": "my_scores",
+      "question": "我的五者分值怎样",
+      "needs_report": true,
+      "expect_query_has_report_block": true,
+      "expect_fragment_contains": "五者分值"
+    },
+    {
+      "id": "my_state",
+      "question": "报告里当前状态是什么意思",
+      "needs_report": true,
+      "expect_query_has_report_block": true,
+      "section_hint": "状态"
+    }
+  ]
+}

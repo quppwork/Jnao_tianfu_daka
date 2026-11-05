@@ -1,0 +1,254 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>家长课堂 · 大宇智能体家长版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{scrollbar-width:none;-ms-overflow-style:none;background:#0D111F;color:#EDEBE4;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.phone{width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;min-height:100vh;min-height:100dvh;height:100vh;height:100dvh;padding-bottom:110px;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}.phone::-webkit-scrollbar{display:none;width:0;height:0}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.ptop .brand{font-size:19px;font-weight:900;color:#F5D9A8}
+.ptop .brand small{display:block;font-size:12px;color:#8B93A5;letter-spacing:2px;font-weight:700;margin-top:1px}
+.acctbtn{display:inline-block;font-size:14px;font-weight:800;color:#9AD9FF;background:rgba(46,107,230,.18);border:1.5px solid #2E6BE6;border-radius:99px;padding:5px 12px;text-decoration:none}
+.hd{margin:12px 18px 0;background:linear-gradient(160deg,#1A2233,#0E1420 75%);border:1.5px solid #C9A869;border-radius:20px;padding:16px;position:relative;overflow:hidden}
+.hd::before{content:"";position:absolute;right:-40px;top:-50px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,105,.18),transparent 70%)}
+.hd b{font-size:20px;letter-spacing:3px;color:#F0DFB8}
+.hd small{display:block;font-size:14px;color:#8B93A5;margin-top:4px;letter-spacing:1px}
+.sec{margin:16px 18px 0;font-size:16px;font-weight:900;color:#EDEBE4;display:flex;justify-content:space-between;align-items:baseline}
+.sec span{font-size:14px;color:#5E6B84;font-weight:700}
+/* 课程卡（同孩子版课程设计） */
+.my{margin:10px 18px 0;background:#131926;border:1.5px solid rgba(201,162,39,.5);border-radius:16px;padding:13px;position:relative}
+.my .row{display:flex;align-items:center;gap:10px}
+.my .ic{width:44px;height:44px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(135deg,#2A2410,#141008);border:1px solid rgba(245,213,118,.4)}
+.my h3{margin:0;font-size:17px;color:#EDEBE4}
+.my .sub{font-size:14px;color:#8B96AB;margin-top:2px}
+.my .go{flex:none;margin-left:auto;font-size:14px;font-weight:800;color:#231a04;background:linear-gradient(135deg,#FFE9A8,#C9A227);border-radius:99px;padding:6px 12px;text-decoration:none}
+.pbar{margin-top:10px;height:6px;border-radius:3px;background:#0C0F16;overflow:hidden}
+.pbar i{display:block;height:100%;background:linear-gradient(90deg,#C9A227,#FFE9A8);border-radius:3px}
+.ptxt{margin-top:5px;font-size:12px;color:#C9A869;font-weight:800}
+.chaps{margin-top:10px;border-top:1px dashed #232B3D;padding-top:8px}
+/* 课程系列介绍片 */
+.cintro{margin:0 0 12px;border-radius:14px;overflow:hidden;position:relative;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:42px;cursor:pointer;border:1px solid #232B3D}
+.cintro .ply{position:absolute;width:54px;height:54px;border-radius:50%;background:rgba(13,17,31,.72);border:2px solid #F5D9A8;display:flex;align-items:center;justify-content:center;font-size:19px;color:#F5D9A8}
+.cintro .vtt{position:absolute;left:12px;bottom:9px;font-size:14px;font-weight:900;color:#fff;text-shadow:0 1px 5px rgba(0,0,0,.85)}
+.cintro .dur{position:absolute;right:10px;bottom:9px;font-size:14px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 8px}
+.chap{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:14px;color:#B8C0D0}
+.chap .dot{width:16px;height:16px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
+.chap.done .dot{background:rgba(111,207,142,.2);color:#6FCF8E;border:1px solid rgba(111,207,142,.5)}
+.chap.done{color:#8B96AB}
+.chap.now .dot{background:rgba(245,213,118,.15);color:#F5D576;border:1px solid rgba(245,213,118,.6)}
+.chap.todo .dot{border:1px dashed #3A4458;color:#5E6B84}
+.chap .tm{margin-left:auto;font-size:12px;color:#5E6B84}
+/* 一键咨询条 */
+.consult{margin:16px 18px 0;display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(46,107,230,.18),rgba(46,107,230,.04));border:1.5px solid rgba(46,107,230,.5);border-radius:16px;padding:13px 15px;text-decoration:none;color:#EDEBE4}
+.consult .ci{width:42px;height:42px;border-radius:50%;background:rgba(46,107,230,.15);border:1.5px solid rgba(46,107,230,.5);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+.consult b{font-size:17px;font-weight:900;color:#9AD9FF}
+.consult span{display:block;font-size:14px;color:#8B93A5;margin-top:2px}
+.consult .st{margin-left:auto;flex:none;font-size:14px;font-weight:800;color:#3FB950}
+.preview-banner{margin:10px 18px 0;padding:10px 12px;border-radius:12px;border:1px dashed rgba(201,162,39,.45);background:rgba(201,162,39,.08);font-size:13px;line-height:1.55;color:#C9CFDC}
+.preview-banner b{color:#F5D9A8}
+/* 底栏 */
+.foot{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:var(--app-max-width, 480px);margin:0 auto;background:rgba(13,17,31,.96);backdrop-filter:blur(12px);border-top:1px solid #232B3D;padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px));display:flex;justify-content:space-around;z-index:50;box-sizing:border-box}.foot a{text-align:center;color:#8B93A5;font-size:11px;flex:1;text-decoration:none;padding:0}.foot a.on{color:#F5D9A8;font-weight:700}.foot a img{width:38px;height:38px;object-fit:contain;display:block;margin:0 auto 1px}
+body::-webkit-scrollbar{display:none;width:0;height:0}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="ptop">
+    <div class="brand">家长课堂<small>PARENT CLASS · 先懂孩子再懂教育</small></div>
+    <a class="acctbtn" href="index.html">训练账户</a>
+  </div>
+
+  <div class="hd"><b>家长课堂</b><small>张无忌家长的课程体系 · 6 门必修课 · 学了就会用</small></div>
+
+  <div class="preview-banner">当前为<strong>课程目录预览</strong>：可浏览章节结构；正片点播与进度同步后续接入。听课卡住可先「一键咨询」。</div>
+
+  <a class="consult" href="consult.html">
+    <div class="ci">📞</div>
+    <div><b>听课卡住了？一键咨询</b><span>值班导师真人 1 对 1 · 留言必回</span></div>
+    <span class="st">● 在线</span>
+  </a>
+
+  <div class="sec">🎓 我的课程 <span id="cOpened">加载中…</span></div>
+  <div id="clist"><div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">正在同步课程目录…</div></div>
+
+  <div class="foot">
+    <a href="parent.html"><img src="/static/dayu/assets/ic/robot.png" alt=""/>大宇</a>
+    <a href="community.html"><img src="/static/dayu/assets/ic/family.png" alt=""/>天赋社区</a>
+    <a href="consult.html"><img src="/static/dayu/assets/ic/bubble.png" alt=""/>在线咨询</a>
+    <a href="pdata.html"><img src="/static/dayu/assets/ic/target.png" alt=""/>数据分析</a>
+    <a href="pset.html"><img src="/static/dayu/assets/ic/person.png" alt=""/>我的</a>
+  </div>
+
+</div>
+<script>
+(function(){
+  function toast(title){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage({type:'dayu-toast', title: title}, '*');
+        return;
+      }
+    }catch(e){}
+    try{ alert(title); }catch(e2){}
+  }
+  function parentUserId(){
+    try{
+      var raw = localStorage.getItem('jnao_parent_user_id') || '';
+      if(raw) return parseInt(raw, 10) || 0;
+      var snap = localStorage.getItem('jnao_auth_snapshot');
+      if(snap){
+        var o = JSON.parse(snap);
+        if(o && o.role === 'parent' && o.user_id) return parseInt(o.user_id, 10) || 0;
+      }
+    }catch(e){}
+    return 0;
+  }
+  function authHeaders(){
+    var h = { 'Content-Type': 'application/json' };
+    try{
+      var did = localStorage.getItem('jnao_device_id');
+      if(did) h['X-Device-Id'] = did;
+      var token = localStorage.getItem('jnao_access_token') || localStorage.getItem('jnao_session_token');
+      if(token) h.Authorization = 'Bearer ' + token;
+    }catch(e){}
+    return h;
+  }
+  function esc(s){
+    return String(s || '').replace(/[&<>"']/g, function(ch){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
+    });
+  }
+  function paint(data){
+    var list = (data && data.courses) || [];
+    var opened = document.getElementById('cOpened');
+    if(opened) opened.textContent = '已开通 ' + (data.opened_count != null ? data.opened_count : list.length) + ' 门';
+    var host = document.getElementById('clist');
+    if(!host) return;
+    if(!list.length){
+      host.innerHTML = '<div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">暂无课程目录</div>';
+      return;
+    }
+    host.innerHTML = list.map(function(c){
+      var lessons = c.lessons || [];
+      var total = c.total || lessons.length;
+      var done = Math.max(0, Math.min(total, Number(c.done) || 0));
+      var pct = total ? Math.round(done / total * 100) : 0;
+      var now = Number(c.now);
+      if(!(now >= 0)) now = done < total ? done : -1;
+      var chaps = lessons.map(function(t, i){
+        if(i < done) return '<div class="chap done"><span class="dot">✓</span>第 '+(i+1)+' 讲 · '+esc(t)+'<span class="tm">已学</span></div>';
+        if(i === now) return '<div class="chap now"><span class="dot">▶</span>第 '+(i+1)+' 讲 · '+esc(t)+'<span class="tm">待学</span></div>';
+        return '<div class="chap todo"><span class="dot">·</span>第 '+(i+1)+' 讲 · '+esc(t)+'<span class="tm">未学</span></div>';
+      }).join('');
+      var goTxt = done > 0 ? '继续听课 ›' : '开始学习 ›';
+      var intro = c.intro || {};
+      var introHtml = intro.bg
+        ? ('<div class="cintro" data-act="intro" data-title="'+esc(intro.title||'')+'" style="background:'+intro.bg+'">'
+          + '<span style="opacity:.85">'+esc(c.icon||'📚')+'</span><span class="ply">▶</span>'
+          + '<span class="vtt">'+esc(intro.title||'')+'</span><span class="dur">'+esc(intro.duration||'')+'</span></div>')
+        : '';
+      return '<div class="my" data-cid="'+esc(c.id)+'">'
+        + introHtml
+        + '<div class="row"><div class="ic">'+esc(c.icon||'📚')+'</div>'
+        + '<div><h3>'+esc(c.name)+'</h3><div class="sub">'+esc(c.sub)+'（已开通）</div></div>'
+        + '<a class="go" href="javascript:;" data-act="play">'+goTxt+'</a></div>'
+        + '<div class="pbar"><i style="width:'+pct+'%"></i></div>'
+        + '<div class="ptxt">已学 '+done+' / '+total+' 讲 · '+pct+'%</div>'
+        + '<div class="chaps">'+chaps+'</div></div>';
+    }).join('');
+    host.onclick = function(e){
+      var btn = e.target.closest && e.target.closest('[data-act]');
+      if(!btn) return;
+      e.preventDefault();
+      toast(btn.getAttribute('data-act') === 'intro'
+        ? ((btn.getAttribute('data-title') || '介绍片') + ' · 正片播放后续开放')
+        : '正片点播后续开放 · 可先「一键咨询」');
+    };
+  }
+  async function load(){
+    var pid = parentUserId();
+    var host = document.getElementById('clist');
+    if(!pid){
+      if(host) host.innerHTML = '<div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">请先登录家长账号</div>';
+      return;
+    }
+    try{
+      var res = await fetch('/api/parent/courses?user_id=' + encodeURIComponent(pid), {
+        credentials: 'include', headers: authHeaders(),
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      paint(await res.json());
+    }catch(err){
+      if(host) host.innerHTML = '<div class="tip" style="margin:16px 18px;color:#8B93A5;text-align:center">目录暂时不可用，请稍后重试</div>';
+    }
+  }
+  load();
+})();
+</script>
+<script>(function(){var st=document.createElement('style');st.textContent='.jn-back{position:fixed;left:0;top:42%;z-index:9999;width:22px;height:70px;border-radius:0 13px 13px 0;background:rgba(20,24,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);border-left:none;color:rgba(255,255,255,.85);font-size:17px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;opacity:.75;transition:opacity .2s}.jn-back:active{opacity:1}html.lt .jn-back{background:rgba(255,255,255,.75);color:#445;border-color:rgba(0,0,0,.1)}';document.head.appendChild(st);var b=document.createElement('div');b.className='jn-back';b.textContent='\u2039';b.setAttribute('aria-label','\u8fd4\u56de\u4e0a\u4e00\u7ea7');b.onclick=function(){if(window.history.length>1){window.history.back();}else{try{if(window.parent&&window.parent!==window){window.parent.postMessage({type:'dayu-back'},'*');return;}}catch(e){}location.href='parent.html';}};document.body.appendChild(b);})();</script>
+
+
+
+<script>
+(function(){
+  function post(type, extra){
+    try{
+      if(window.parent && window.parent !== window){
+        window.parent.postMessage(Object.assign({type:type}, extra||{}), '*');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function nav(path){
+    if(post('dayu-nav', {path: path})) return;
+    location.href = path;
+  }
+  // back button → dayu-back or parent home
+  document.querySelectorAll('.jn-back').forEach(function(b){
+    b.onclick = function(){
+      if(post('dayu-back')) return;
+      if(window.history.length>1) window.history.back();
+      else nav('/pages/parent/dayu');
+    };
+  });
+  document.querySelectorAll('a.acctbtn[href="index.html"]').forEach(function(a){
+    a.setAttribute('href','javascript:;');
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      if(!post('dayu-student')) nav('/pages/dayu/home');
+    });
+  });
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(!href || href.indexOf('javascript:')===0 || href.charAt(0)==='#') return;
+    var file = href.split('?')[0].split('#')[0].split('/').pop();
+    var map = {
+      'parent.html': '/pages/parent/dayu',
+      'pset.html': '/pages/parent/pset',
+      'pdata.html': '/pages/parent/pdata',
+      'consult.html': '/pages/parent/consult',
+      'community.html': '/pages/parent/community',
+      'pcourse.html': '/pages/parent/pcourse',
+      'kids-manage.html': '/pages/parent/index',
+      'index.html': '__student__'
+    };
+    if(map[file]){
+      e.preventDefault();
+      e.stopPropagation();
+      if(map[file] === '__student__'){
+        if(!post('dayu-student')) nav('/pages/dayu/home');
+        return;
+      }
+      nav(map[file]);
+    }
+  }, true);
+  // hide foot scrollbar chrome consistency
+  try{ post('dayu-ready'); }catch(e){}
+})();
+</script>
+</body></html>
