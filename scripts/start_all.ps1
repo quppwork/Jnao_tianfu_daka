@@ -47,6 +47,6 @@ if (-not $ready) {
 
 Write-Host ""
 Write-Host "  API  http://127.0.0.1:8012" -ForegroundColor Green
-Write-Host "  在 HBuilderX 打开 vue_fronted 运行客户端" -ForegroundColor Cyan
+Write-Host "  在 HBuilderX 打开 frontend 运行客户端" -ForegroundColor Cyan
 Write-Host "  关闭 Backend 窗口或运行 scripts\stop_all.ps1 停止 API" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan

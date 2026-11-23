@@ -37,7 +37,7 @@ tianfu_daka/
 │   ├── app/db/         # 数据库模型 + 迁移
 │   ├── config/         # YAML 配置（课程 / Tier 阈值 / 选修规则）
 │   └── tests/          # 后端测试（pytest，52+ 文件 290+ 用例）
-├── vue_fronted/        # UniApp Vue 前端
+├── frontend/           # uni-app x 前端（微信 / Android / iOS）
 │   ├── src/pages/      # 页面（training / talent / qa / growth / report / login / parent）
 │   └── tests/          # 前端测试（vitest，3 文件 89 用例）
 ├── docs/               # 项目文档
@@ -64,12 +64,12 @@ cp backend/.env.example backend/.env   # 编辑填入 API Key
 
 | 系统 | 方式 |
 |---|---|
-| Windows | 双击根目录的 `start.bat` |
+| Windows | 双击 `scripts/start.bat` |
 | Mac/Linux | `bash scripts/start_all.sh` |
 
-本地 API 默认使用 `http://127.0.0.1:8012`。客户端在 HBuilderX 打开 `vue_fronted` 工程，通过运行菜单选择微信小程序、Android 或 iOS。微信小程序使用 `wxbca3a9ba6f39a3df`，预览和真机调试需要该小程序的开发权限。
+本地 API 默认使用 `http://127.0.0.1:8012`。客户端在 HBuilderX 打开 `frontend` 工程，通过运行菜单选择微信小程序、Android 或 iOS。微信小程序使用 `wxbca3a9ba6f39a3df`，预览和真机调试需要该小程序的开发权限。
 
-联调服务地址在 `vue_fronted/config/environment.uts` 中设置。真机与小程序使用设备可访问的 HTTPS 地址。Android 和 iOS 正式发行分别使用本项目的 DCloud AppID、平台包名和签名配置。
+联调服务地址在 `frontend/config/environment.uts` 中设置。真机与小程序使用设备可访问的 HTTPS 地址。Android 和 iOS 正式发行分别使用本项目的 DCloud AppID、平台包名和签名配置。
 
 Docker 中的 `frontend` 服务负责 API、媒体和合作方报告嵌入页的网关转发。
 
