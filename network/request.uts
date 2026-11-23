@@ -1,0 +1,61 @@
+import { getApiOrigin } from '../config/environment.uts'
+import { clearSession, getSession, returnToLogin } from '../state/session.uts'
+
+export function requestJson(
+  path: string,
+  method: RequestMethod = 'GET',
+  data: UTSJSONObject | null = null,
+  extraHeaders: UTSJSONObject | null = null,
+  authenticated: boolean = true,
+  timeout: number = 15000
+): Promise<UTSJSONObject> {
+  return new Promise<UTSJSONObject>((resolve, reject) => {
+    const session = authenticated ? getSession() : null
+    if (authenticated && session == null) {
+      returnToLogin()
+      reject(new Error('请先登录'))
+      return
+    }
+    const headers = extraHeaders ?? ({} as UTSJSONObject)
+    headers['Content-Type'] = 'application/json'
+    if (session != null) {
+      headers['X-Child-User-Id'] = session.userId.toString()
+      if (session.accessToken.length > 0) {
+        // 用户端后端认 Bearer JWT；admin 端后端只认 X-Session-Token / Cookie，
+        // 两个 header 同时发，同一份 token，避免按角色分支。
+        headers['Authorization'] = 'Bearer ' + session.accessToken
+        headers['X-Session-Token'] = session.accessToken
+      }
+    }
+    uni.request<UTSJSONObject>({
+      url: getApiOrigin() + path,
+      method,
+      data,
+      header: headers,
+      timeout,
+      // 后端默认 HttpOnly Cookie 会话（SESSION_USE_HTTPONLY_COOKIE=1），
+      // H5 端靠它鉴权；App / 小程序端无 Cookie，必须依赖上面的 token header。
+      withCredentials: true,
+      success: (response) => {
+        const body = response.data
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          if (response.statusCode == 401 && session != null && getSession()?.accessToken == session.accessToken) {
+            clearSession()
+            returnToLogin()
+          }
+          const detail = body?.getString('detail')
+          reject(new Error(detail ?? '请求失败，请重试'))
+          return
+        }
+        if (body == null) {
+          reject(new Error('服务响应格式有误'))
+          return
+        }
+        resolve(body)
+      },
+      fail: () => {
+        reject(new Error('无法连接服务，请检查网络'))
+      }
+    })
+  })
+}

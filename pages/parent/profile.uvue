@@ -1,0 +1,166 @@
+<template>
+  <view class="pf-page">
+    <view class="pf-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="pf-back" @click="goBack"><text class="pf-back-icon">‹</text></view>
+      <text class="pf-title">家长资料</text>
+      <view class="pf-placeholder"></view>
+    </view>
+
+    <scroll-view class="pf-body" scroll-y>
+      <view v-if="loading" class="pf-empty"><text class="pf-empty-text">加载中…</text></view>
+
+      <template v-else>
+        <!-- 基本信息 -->
+        <view class="pf-card">
+          <text class="pf-card-title">基本信息</text>
+
+          <view class="pf-field">
+            <text class="pf-label">昵称</text>
+            <input class="pf-input" v-model="nickname" placeholder="怎么称呼你" maxlength="50" />
+          </view>
+
+          <view class="pf-field">
+            <text class="pf-label">真实姓名</text>
+            <input class="pf-input" v-model="realName" placeholder="选填" maxlength="50" />
+          </view>
+
+          <text class="pf-hint">昵称和姓名只填一项也可以保存</text>
+        </view>
+
+        <!-- 修改密码 -->
+        <view class="pf-card">
+          <text class="pf-card-title">修改密码</text>
+          <text class="pf-card-hint">不改密码就留空</text>
+
+          <view class="pf-field">
+            <text class="pf-label">当前密码</text>
+            <input class="pf-input" v-model="oldPassword" password placeholder="当前密码" maxlength="128" />
+          </view>
+
+          <view class="pf-field">
+            <text class="pf-label">新密码</text>
+            <input class="pf-input" v-model="newPassword" password placeholder="至少 6 位" maxlength="128" />
+          </view>
+
+          <view class="pf-field pf-field-row">
+            <text class="pf-label">改密后需要重新登录</text>
+            <switch :checked="requirePassword" @change="onRequireChange" color="#4f7cff" />
+          </view>
+        </view>
+
+        <view class="pf-actions">
+          <view class="pf-save" @click="save">
+            <text class="pf-save-text">{{ saving ? '保存中…' : '保存' }}</text>
+          </view>
+        </view>
+
+        <text v-if="okTips.length > 0" class="pf-tips">{{ okTips }}</text>
+        <text v-if="errorText.length > 0" class="pf-error">{{ errorText }}</text>
+      </template>
+
+      <view class="pf-space"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getParentProfile, updateParentProfile } from '../../api/parent.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const loading = ref(true)
+const saving = ref(false)
+const errorText = ref('')
+const okTips = ref('')
+const insetTop = ref(0)
+
+const nickname = ref('')
+const realName = ref('')
+const oldPassword = ref('')
+const newPassword = ref('')
+const requirePassword = ref(false)
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function onRequireChange(e) {
+  requirePassword.value = e.detail.value == true
+}
+
+async function load() {
+  loading.value = true
+  errorText.value = ''
+  okTips.value = ''
+  try {
+    const data = await getParentProfile()
+    nickname.value = data.getString('nickname') ?? ''
+    realName.value = data.getString('real_name') ?? ''
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取资料失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function save() {
+  if (saving.value) return
+  errorText.value = ''
+  okTips.value = ''
+
+  const nick = nickname.value.trim()
+  const real = realName.value.trim()
+  const oldPwd = oldPassword.value
+  const newPwd = newPassword.value
+
+  if (nick.length == 0 && real.length == 0 && newPwd.length == 0) {
+    errorText.value = '没有要保存的改动'
+    return
+  }
+  // 改密码必须两个都填
+  if (newPwd.length > 0) {
+    if (oldPwd.length == 0) {
+      errorText.value = '改密码需要先填当前密码'
+      return
+    }
+    if (newPwd.length < 6) {
+      errorText.value = '新密码至少 6 位'
+      return
+    }
+  }
+
+  saving.value = true
+  try {
+    const patch = {
+      nickname: nick,
+      realName: real,
+      password: newPwd,
+      oldPassword: oldPwd,
+      requirePassword: requirePassword.value
+    }
+    await updateParentProfile(patch)
+    okTips.value = newPwd.length > 0 ? '已保存，下次登录请用新密码' : '已保存'
+    uni.showToast({ title: '已保存', icon: 'none' })
+    oldPassword.value = ''
+    newPassword.value = ''
+    if (newPwd.length > 0) {
+      load()
+    }
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '保存失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+onLoad(() => {
+  load()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './profile.scss';
+</style>

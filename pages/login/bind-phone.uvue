@@ -1,0 +1,242 @@
+<template>
+  <view class="wb-page">
+    <view class="wb-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="wb-back" @click="goBack"><text class="wb-back-icon">‹</text></view>
+      <text class="wb-title">绑定手机号</text>
+      <view class="wb-placeholder"></view>
+    </view>
+
+    <scroll-view class="wb-body" scroll-y>
+      <view class="wb-card">
+        <text class="wb-hint">用微信登录后需要绑定一个手机号，之后可以用手机号登录</text>
+
+        <view class="wb-field">
+          <text class="wb-label">手机号</text>
+          <input class="wb-input" v-model="phone" type="number" maxlength="11" placeholder="11 位手机号" />
+        </view>
+
+        <view class="wb-field">
+          <text class="wb-label">短信验证码</text>
+          <view class="wb-row">
+            <input class="wb-input wb-input-grow" v-model="smsCode" type="number" maxlength="8" placeholder="验证码" />
+            <view
+              class="wb-sms"
+              :class="(waitSeconds > 0 || sendingSms || phone.length < 11) ? 'wb-sms-off' : ''"
+              @click="requestSms"
+            >
+              <text class="wb-sms-text">{{ smsLabel }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="wb-submit" :class="canSubmit ? '' : 'wb-submit-off'" @click="submit">
+          <text class="wb-submit-text">{{ submitting ? '绑定中…' : '绑定并登录' }}</text>
+        </view>
+
+        <text v-if="errorText.length > 0" class="wb-error">{{ errorText }}</text>
+      </view>
+
+      <view class="wb-space"></view>
+    </scroll-view>
+
+    <!-- 图形验证码弹窗 -->
+    <view v-if="showCaptcha" class="wb-mask" @click="closeCaptcha">
+      <view class="wb-panel" @click.stop>
+        <text class="wb-panel-title">安全验证</text>
+        <image
+          v-if="captchaImage.length > 0"
+          class="wb-captcha-img"
+          :src="captchaImage"
+          mode="aspectFit"
+          @click="loadCaptcha"
+        />
+        <text v-if="loadingCaptcha" class="wb-panel-hint">正在加载验证码…</text>
+        <input
+          v-model="captchaCode"
+          class="wb-input"
+          :maxlength="8"
+          :disabled="loadingCaptcha || sendingSms"
+          placeholder="图形验证码"
+          @confirm="sendSms"
+        />
+        <text v-if="captchaError.length > 0" class="wb-error">{{ captchaError }}</text>
+        <view class="wb-row wb-row-gap">
+          <view class="wb-cancel" @click="closeCaptcha"><text class="wb-cancel-text">取消</text></view>
+          <view class="wb-confirm" @click="sendSms">
+            <text class="wb-confirm-text">{{ sendingSms ? '发送中…' : '发送短信' }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getLoginCaptcha, wechatSendBindSms, wechatBindPhone } from '../../api/auth.uts'
+import { saveSession } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const insetTop = ref(0)
+const phone = ref('')
+const smsCode = ref('')
+const submitting = ref(false)
+const sendingSms = ref(false)
+const errorText = ref('')
+const waitSeconds = ref(0)
+
+// 图形验证码
+const showCaptcha = ref(false)
+const captchaId = ref('')
+const captchaImage = ref('')
+const captchaRawBase64 = ref('')
+const captchaCode = ref('')
+const captchaError = ref('')
+const loadingCaptcha = ref(false)
+
+// 微信登录后后端回跳时带上来的票据
+const bindTicket = ref('')
+
+let tickTimer = null
+
+const canSubmit = computed(() => phone.value.length >= 11 && smsCode.value.length >= 4 && !submitting.value)
+
+const smsLabel = computed(() => {
+  if (waitSeconds.value > 0) return waitSeconds.value.toString() + 's'
+  return '获取验证码'
+})
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function startCountdown() {
+  waitSeconds.value = 60
+  if (tickTimer != null) clearInterval(tickTimer)
+  tickTimer = setInterval(() => {
+    if (waitSeconds.value > 1) {
+      waitSeconds.value = waitSeconds.value - 1
+    } else {
+      waitSeconds.value = 0
+      if (tickTimer != null) {
+        clearInterval(tickTimer)
+        tickTimer = null
+      }
+    }
+  }, 1000)
+}
+
+function openCaptcha() {
+  if (phone.value.length < 11) {
+    errorText.value = '先填 11 位手机号'
+    return
+  }
+  errorText.value = ''
+  showCaptcha.value = true
+  loadCaptcha()
+}
+
+function closeCaptcha() {
+  showCaptcha.value = false
+}
+
+function requestSms() {
+  if (waitSeconds.value > 0 || sendingSms.value) return
+  openCaptcha()
+}
+
+async function loadCaptcha() {
+  if (loadingCaptcha.value) return
+  loadingCaptcha.value = true
+  captchaError.value = ''
+  captchaCode.value = ''
+  captchaId.value = ''
+  captchaImage.value = ''
+  captchaRawBase64.value = ''
+  try {
+    const data = await getLoginCaptcha()
+    const id = data.getString('captcha_id') ?? ''
+    const image = data.getString('image_base64') ?? ''
+    if (id.length == 0 || image.length == 0) throw new Error('图形验证码响应无效')
+    captchaId.value = id
+    captchaRawBase64.value = image
+    captchaImage.value = 'data:image/' + (data.getString('image_format') ?? 'png') + ';base64,' + image
+  } catch (error) {
+    captchaError.value = error instanceof Error ? error.message : '无法加载图形验证码'
+  } finally {
+    loadingCaptcha.value = false
+  }
+}
+
+async function sendSms() {
+  if (sendingSms.value) return
+  if (captchaCode.value.trim().length == 0) {
+    captchaError.value = '请填图形验证码'
+    return
+  }
+  sendingSms.value = true
+  captchaError.value = ''
+  try {
+    await wechatSendBindSms(bindTicket.value, phone.value.trim(), captchaId.value, captchaRawBase64.value)
+    showCaptcha.value = false
+    startCountdown()
+    uni.showToast({ title: '短信已发送', icon: 'none' })
+  } catch (error) {
+    captchaError.value = error instanceof Error ? error.message : '发送失败'
+    loadCaptcha()
+  } finally {
+    sendingSms.value = false
+  }
+}
+
+async function submit() {
+  if (!canSubmit.value) return
+  submitting.value = true
+  errorText.value = ''
+  try {
+    const data = await wechatBindPhone(bindTicket.value, phone.value.trim(), smsCode.value.trim())
+    const token = data.getString('access_token') ?? data.getString('session_token') ?? ''
+    const userId = data.getNumber('user_id') ?? 0
+    const role = data.getString('role') ?? ''
+    if (token.length == 0 || userId <= 0) throw new Error('绑定成功但没拿到登录凭证')
+    saveSession({
+      userId: userId,
+      role: role,
+      nickname: data.getString('nickname') ?? '',
+      accessToken: token
+    })
+    const nextStep = data.getString('next_step') ?? ''
+    if (nextStep == 'complete-profile') {
+      uni.redirectTo({ url: '/pages/login/onboarding' })
+    } else {
+      uni.redirectTo({ url: '/pages/home/index' })
+    }
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '绑定失败'
+  } finally {
+    submitting.value = false
+  }
+}
+
+onLoad((query) => {
+  const ticket = query == null ? '' : (query['bind_ticket'] ?? '')
+  bindTicket.value = ticket
+  if (ticket.length == 0) {
+    errorText.value = '缺少绑定票据，请重新从微信进入'
+  }
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+
+onUnload(() => {
+  if (tickTimer != null) {
+    clearInterval(tickTimer)
+    tickTimer = null
+  }
+})
+</script>
+
+<style lang="scss" scoped>
+@import './bind-phone.scss';
+</style>

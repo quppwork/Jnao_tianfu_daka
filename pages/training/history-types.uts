@@ -1,0 +1,10 @@
+// 从 history.uvue 抽出：.uvue 的 script 块不支持 type / interface 声明
+export type Field = { label: string; value: string }
+
+export type TrainingCard = { name: string; summary: string; fields: Field[] }
+
+export type RecordItem = { id: number; attitude: string; cards: TrainingCard[] }
+
+export type TrainingDay = { date: string; records: RecordItem[] }
+
+export type CardField = { key: string; label: string; suffix: string }

@@ -1,0 +1,37 @@
+import { requestJson } from '../network/request.uts'
+
+/** 算力用量：总额、钱包、按功能分布、明细 */
+
+export function getUsageSummary(): Promise<UTSJSONObject> {
+  return requestJson('/api/usage/summary')
+}
+
+export function getUsageWallet(): Promise<UTSJSONObject> {
+  return requestJson('/api/usage/wallet')
+}
+
+export function getUsageByFeature(): Promise<UTSJSONObject> {
+  return requestJson('/api/usage/by-feature')
+}
+
+export function getUsageEvents(): Promise<UTSJSONObject> {
+  return requestJson('/api/usage/events')
+}
+
+/** 按用户拆分的用量；month 可为空（未同步时） */
+export function readUsageByUser(month: UTSJSONObject | null): Array<UTSJSONObject> {
+  if (month == null) return []
+  return month.getArray<UTSJSONObject>('by_user') ?? []
+}
+
+/** 会员方案；catalog 可为空 */
+export function readWalletMemberships(catalog: UTSJSONObject | null): Array<UTSJSONObject> {
+  if (catalog == null) return []
+  return catalog.getArray<UTSJSONObject>('membership') ?? []
+}
+
+/** 充值包；catalog 可为空 */
+export function readWalletPacks(catalog: UTSJSONObject | null): Array<UTSJSONObject> {
+  if (catalog == null) return []
+  return catalog.getArray<UTSJSONObject>('topup') ?? []
+}

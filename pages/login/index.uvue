@@ -1,0 +1,337 @@
+<template>
+  <view class="login-page">
+    <scroll-view class="login-scroll" scroll-y :show-scrollbar="false">
+      <view class="login-viewport" :style="{ minHeight: viewportHeight + 'px', paddingTop: topInset + 'px', paddingBottom: bottomInset + 'px' }">
+        <image class="glow glow-top" src="/static/login/glow-top.png" mode="aspectFit" />
+        <image class="glow glow-bottom" src="/static/login/glow-bottom.png" mode="aspectFit" />
+        <view class="login-card">
+          <view class="brand-head">
+            <view class="logo-row">
+              <text class="logo-j">J</text><text class="logo-nao">nao</text><text class="logo-ai">AI</text>
+            </view>
+            <text class="subtitle">{{ registering ? '注册家长账户' : '欢迎来到天赋成长平台' }}</text>
+            <text v-if="!registering" class="sub-desc">天赋测评 · 每日训练 · 成长记录</text>
+          </view>
+
+          <view v-if="role.length == 0" class="login-flow">
+            <button class="btn-primary" @click="openLogin('parent')">家长账号登录</button>
+            <button class="btn-phone-login" @click="openLogin('student')">孩子账号登录</button>
+            <button class="btn-phone-login" @click="goWechat">微信登录</button>
+          </view>
+
+          <form v-else :class="registering ? 'register-main' : 'login-main'" @submit="submit">
+            <view v-if="!registering" class="role-row">
+              <view class="role-item role-student" :class="{ 'role-active': role == 'student' }" @click="openLogin('student')">
+                <text class="role-label" :class="{ 'role-label-active': role == 'student' }">学生</text>
+                <view v-if="role == 'student'" class="role-underline"></view>
+              </view>
+              <view class="role-item" :class="{ 'role-active': role == 'parent' }" @click="openLogin('parent')">
+                <text class="role-label" :class="{ 'role-label-active': role == 'parent' }">家长</text>
+                <view v-if="role == 'parent'" class="role-underline"></view>
+              </view>
+            </view>
+
+            <view v-if="registering" class="input-wrap">
+              <input v-model="realName" class="login-input" :maxlength="20" placeholder="真实姓名（必填）" :disabled="submitting" />
+            </view>
+            <view v-if="registering" class="input-wrap">
+              <input v-model="nickname" class="login-input" :maxlength="20" placeholder="昵称（必填）" :disabled="submitting" />
+            </view>
+            <view v-if="role == 'parent'" class="input-wrap">
+              <input v-model="phone" class="login-input" name="phone" type="number" :maxlength="11" autocomplete="tel" :disabled="submitting || sendingSms" :placeholder="registering ? '手机号' : '注册手机号（11位，非昵称）'" />
+            </view>
+            <view v-else class="input-wrap">
+              <input v-model="loginName" class="login-input" name="username" autocomplete="username" :disabled="submitting" placeholder="孩子账号" />
+            </view>
+            <view v-if="useSms || registering" class="input-wrap sms-row">
+              <input v-model="smsCode" class="login-input" name="code" type="number" :maxlength="8" autocomplete="one-time-code" :disabled="submitting" placeholder="短信验证码" />
+              <button class="sms-btn" :disabled="submitting || sendingSms || waitSeconds > 0" @click="openCaptcha">{{ waitSeconds > 0 ? waitSeconds.toString() + 's' : '获取验证码' }}</button>
+            </view>
+            <view v-if="!useSms || registering" class="input-wrap">
+              <input v-model="password" class="login-input" name="password" password :autocomplete="registering ? 'new-password' : 'current-password'" :disabled="submitting" :maxlength="registering ? 32 : 128" :placeholder="registering ? '登录密码（8-32位，含大小写+数字）' : '密码'" confirm-type="done" @confirm="submit" />
+            </view>
+            <view v-if="registering" class="input-wrap">
+              <input v-model="confirmPassword" class="login-input" password autocomplete="new-password" :maxlength="32" placeholder="确认密码" :disabled="submitting" />
+            </view>
+
+            <view v-if="!registering" class="form-links">
+              <text v-if="role == 'parent'" class="form-link form-link-left" @click="toggleLoginMode">{{ useSms ? '密码登录' : '验证码登录' }}</text>
+              <text v-else class="form-link form-link-left" @click="openLogin('parent')">我是家长，去注册 / 登录</text>
+              <text class="form-link form-link-right" @click="openLogin('')">返回选择</text>
+            </view>
+            <text v-else class="agreement">注册即代表您同意《用户协议》和《隐私政策》</text>
+            <text v-if="errorText.length > 0" class="login-error">{{ errorText }}</text>
+            <button class="btn-primary" form-type="submit" :disabled="submitting || sendingSms">{{ submitting ? '请稍候…' : (registering ? '注册并登录' : '登录') }}</button>
+            <button v-if="role == 'parent' && !registering" class="btn-register" :disabled="submitting || sendingSms" @click="enterRegistration">新家长注册</button>
+            <button v-if="registering" class="btn-phone-login" :disabled="submitting || sendingSms" @click="openLogin('parent')">← 返回登录</button>
+          </form>
+
+          <view v-if="!registering" class="page-footer">
+            <text class="footer-link" @click="showLoginHelp">登录帮助</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view v-if="showCaptcha" class="overlay" @click="closeCaptcha">
+      <view class="captcha-panel" @click.stop>
+        <text class="captcha-title">安全验证</text>
+        <image v-if="captchaImage.length > 0" class="captcha-img" :src="captchaImage" mode="aspectFit" @click="loadCaptcha" />
+        <text v-if="loadingCaptcha" class="subtitle">正在加载验证码…</text>
+        <view class="input-wrap">
+          <input v-model="captchaCode" class="login-input" :focus="captchaImage.length > 0" :maxlength="8" :disabled="loadingCaptcha || sendingSms" placeholder="图形验证码" @confirm="sendSms" />
+        </view>
+        <text v-if="captchaError.length > 0" class="login-error">{{ captchaError }}</text>
+        <view class="captcha-actions">
+          <button class="sms-btn" :disabled="loadingCaptcha || sendingSms" @click="loadCaptcha">换一张</button>
+          <button class="btn-primary captcha-confirm" :disabled="loadingCaptcha || sendingSms || captchaId.length == 0" @click="sendSms">{{ sendingSms ? '发送中…' : '发送验证码' }}</button>
+        </view>
+        <text class="form-link cancel-link" @click="closeCaptcha">取消</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getLoginCaptcha, loginWithPassword, loginWithSms, registerParent, sendAuthSms } from '../../api/auth.uts'
+import { getSession } from '../../state/session.uts'
+import { getUserProfile } from '../../api/user.uts'
+import { needsOnboarding } from './login-utils.uts'
+import { meetsPasswordPolicy, PASSWORD_HINT } from '../../utils/password-policy.uts'
+
+const role = ref('')
+const phone = ref('')
+const loginName = ref('')
+const password = ref('')
+const confirmPassword = ref('')
+const nickname = ref('')
+const realName = ref('')
+const errorText = ref('')
+const submitting = ref(false)
+const useSms = ref(false)
+const registering = ref(false)
+const showCaptcha = ref(false)
+const captchaImage = ref('')
+const captchaId = ref('')
+const captchaCode = ref('')
+const captchaError = ref('')
+const smsCode = ref('')
+const loadingCaptcha = ref(false)
+const sendingSms = ref(false)
+const waitSeconds = ref(0)
+const viewportHeight = ref(0)
+const topInset = ref(12)
+const bottomInset = ref(12)
+let resendUntil = 0
+let timer = 0
+
+
+/** 登录成功后按角色分流；学生可能还要走完善信息流程 */
+async function routeAfterAuth() {
+  const session = getSession()
+  if (session == null || session.role != 'student') {
+    uni.reLaunch({ url: '/pages/home/index' })
+    return
+  }
+  try {
+    const profile = await getUserProfile()
+    const target = needsOnboarding(profile) ? '/pages/login/onboarding' : '/pages/home/index'
+    uni.reLaunch({ url: target })
+  } catch (error) {
+    // 判断失败不阻塞登录，先进首页
+    uni.reLaunch({ url: '/pages/home/index' })
+  }
+}
+
+function goWechat() {
+  uni.navigateTo({ url: '/pages/login/wechat' })
+}
+
+function openLogin(nextRole) {
+  if (submitting.value || sendingSms.value || (role.value == nextRole && !registering.value)) return
+  role.value = nextRole
+  registering.value = false
+  useSms.value = false
+  password.value = ''
+  confirmPassword.value = ''
+  smsCode.value = ''
+  errorText.value = ''
+}
+
+function enterRegistration() {
+  registering.value = true
+  password.value = ''
+  confirmPassword.value = ''
+  smsCode.value = ''
+  errorText.value = ''
+}
+
+function toggleLoginMode() {
+  if (submitting.value || sendingSms.value) return
+  useSms.value = !useSms.value
+  password.value = ''
+  errorText.value = ''
+}
+
+async function loadCaptcha() {
+  if (loadingCaptcha.value || sendingSms.value) return
+  loadingCaptcha.value = true
+  captchaError.value = ''
+  captchaCode.value = ''
+  captchaId.value = ''
+  captchaImage.value = ''
+  try {
+    const data = await getLoginCaptcha()
+    const id = data.getString('captcha_id') ?? ''
+    const image = data.getString('image_base64') ?? ''
+    if (id.length == 0 || image.length == 0) throw new Error('图形验证码响应无效')
+    captchaId.value = id
+    captchaImage.value = 'data:image/' + (data.getString('image_format') ?? 'png') + ';base64,' + image
+  } catch (error) {
+    captchaError.value = error instanceof Error ? error.message : '无法加载图形验证码'
+  } finally {
+    loadingCaptcha.value = false
+  }
+}
+
+function openCaptcha() {
+  if (submitting.value || waitSeconds.value > 0 || sendingSms.value) return
+  if (!/^\d{11}$/.test(phone.value.trim())) {
+    errorText.value = '请输入正确的手机号'
+    return
+  }
+  errorText.value = ''
+  showCaptcha.value = true
+  loadCaptcha()
+}
+
+function closeCaptcha() {
+  if (!sendingSms.value) showCaptcha.value = false
+}
+
+function updateCountdown() {
+  waitSeconds.value = Math.max(0, Math.ceil((resendUntil - Date.now()) / 1000))
+  if (waitSeconds.value == 0 && timer != 0) {
+    clearInterval(timer)
+    timer = 0
+  }
+}
+
+async function sendSms() {
+  if (loadingCaptcha.value || sendingSms.value || captchaId.value.length == 0) return
+  const code = captchaCode.value.trim()
+  if (code.length < 4) {
+    captchaError.value = '请先填写图形验证码'
+    return
+  }
+  sendingSms.value = true
+  captchaError.value = ''
+  try {
+    const data = await sendAuthSms(phone.value.trim(), registering.value ? 'register' : 'login', captchaId.value, code)
+    resendUntil = Date.now() + Math.max(1, data.getNumber('resend_after') ?? 60) * 1000
+    updateCountdown()
+    timer = setInterval(updateCountdown, 1000)
+    showCaptcha.value = false
+    uni.showToast({ title: data.getString('message') ?? '若号码有效，验证码已发送', icon: 'none' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '发送失败，请重试'
+    sendingSms.value = false
+    await loadCaptcha()
+    captchaError.value = message
+  } finally {
+    sendingSms.value = false
+  }
+}
+
+async function submit() {
+  if (submitting.value || sendingSms.value) return
+  errorText.value = ''
+  const account = role.value == 'parent' ? phone.value.trim() : loginName.value.trim()
+  const secret = password.value.trim()
+  const needsCode = useSms.value || registering.value
+  if (role.value == 'parent' && !/^\d{11}$/.test(account)) {
+    errorText.value = '请输入正确的手机号'
+    return
+  }
+  if (role.value == 'student' && account.length < 2) {
+    errorText.value = '孩子账号至少 2 位'
+    return
+  }
+  if (needsCode && !/^\d{4,8}$/.test(smsCode.value)) {
+    errorText.value = '请输入短信验证码'
+    return
+  }
+  if (!needsCode && secret.length < 6) {
+    errorText.value = '密码至少 6 位'
+    return
+  }
+  if (registering.value) {
+    if (!/^[\u4e00-\u9fa5·]{2,20}$/.test(realName.value.trim())) {
+      errorText.value = '请填写 2 至 20 个字符的中文姓名（可含·）'
+      return
+    }
+    if (nickname.value.trim().length < 2) {
+      errorText.value = '昵称至少 2 个字符'
+      return
+    }
+    if (!meetsPasswordPolicy(secret)) {
+      errorText.value = PASSWORD_HINT
+      return
+    }
+    if (secret != confirmPassword.value.trim()) {
+      errorText.value = '两次输入的密码不一致'
+      return
+    }
+  }
+  submitting.value = true
+  try {
+    if (registering.value) {
+      await registerParent(account, smsCode.value, realName.value.trim(), nickname.value.trim(), secret)
+    } else if (useSms.value) {
+      await loginWithSms(account, smsCode.value)
+    } else {
+      await loginWithPassword(role.value, account, secret)
+    }
+    password.value = ''
+    confirmPassword.value = ''
+    routeAfterAuth()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '登录失败，请重试'
+  } finally {
+    submitting.value = false
+  }
+}
+
+function showLoginHelp() {
+  uni.showActionSheet({
+    itemList: ['家长登录说明', '孩子登录说明'],
+    success: (result) => {
+      const parent = result.tapIndex == 0
+      uni.showModal({
+        title: parent ? '家长怎么登录' : '孩子怎么登录',
+        content: parent ? '使用注册时的手机号和密码或短信验证码登录。新用户可以选择「新家长注册」。' : '使用家长分配的孩子账号和密码登录。首次使用需要家长先添加孩子账号。',
+        showCancel: false
+      })
+    }
+  })
+}
+
+onLoad(() => {
+  if (getSession() != null) routeAfterAuth()
+})
+
+onReady(() => {
+  const info = uni.getWindowInfo()
+  viewportHeight.value = info.windowHeight
+  topInset.value = Math.max(12, info.safeAreaInsets.top)
+  bottomInset.value = Math.max(12, info.safeAreaInsets.bottom)
+})
+
+onUnload(() => {
+  if (timer != 0) clearInterval(timer)
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

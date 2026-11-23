@@ -1,0 +1,257 @@
+import { getApiOrigin } from '../config/environment.uts'
+import { requestJson } from '../network/request.uts'
+
+export type TrainingItem = {
+  id: number
+  title: string
+  skill: string
+  minutes: number
+  audio: string
+  video: string
+  poster: string
+  elective: boolean
+  done: boolean
+  audioSeconds: number
+  videoSeconds: number
+  audioPercent: number
+}
+
+export type TrainingPlan = {
+  id: number
+  minutes: number
+  status: string
+  timerPhase: string
+  remaining: number
+  timerTotal: number
+  dayLocked: boolean
+  cutoff: boolean
+  mediaExhausted: boolean
+  canCustomize: boolean
+  annotations: string[]
+  electives: TrainingElective[]
+  items: TrainingItem[]
+}
+
+type TrainingElective = { skill: string; available: boolean; reason: string }
+
+const skillPosters: UTSJSONObject = {
+  '超脑阅读': 'mj-cnyd.jpg', '影像追忆': 'mj-yxzj.jpg', '扫描速记': 'mj-gxzy.jpg',
+  '极速运算': 'mj-jsys.jpg', '极速学习': 'mj-bddt.jpg', '难题专练': 'sys-contest.jpg',
+  '文科扫书': 'mj-cnyd.jpg', '理科扫书': 'sys-contest.jpg',
+}
+
+function mediaUrl(value: string | null): string {
+  if (value == null || value.length == 0) return ''
+  return value.startsWith('/') ? getApiOrigin() + value : value
+}
+
+function readItem(row: UTSJSONObject): TrainingItem {
+  const title = row.getString('title') ?? '训练'
+  const instructions = row.getString('instructions') ?? ''
+  let meta: UTSJSONObject | null = null
+  if (instructions.startsWith('{')) {
+    try {
+      meta = JSON.parseObject(instructions)
+    } catch (_) {
+      // 旧方案的 instructions 可以是纯文本。
+    }
+  }
+  const skill = meta?.getString('skill') ?? title
+  const kind = row.getString('item_type') ?? meta?.getString('item_type') ?? ''
+  const elective = kind == 'elective' || kind == 'perception' || kind == 'placeholder'
+    || meta?.getBoolean('blocks_next') == false
+  const progress = row.getJSON('watch_progress')
+  const audio = progress?.getJSON('audio')
+  const video = progress?.getJSON('video')
+  return {
+    id: row.getNumber('id') ?? 0,
+    title,
+    skill,
+    minutes: row.getNumber('duration_min') ?? 0,
+    audio: mediaUrl(row.getString('audio_url')),
+    video: mediaUrl(row.getString('video_url')),
+    poster: getApiOrigin() + '/static/dayu/assets/miji/' + (skillPosters.getString(skill) ?? 'mj-tfsd.jpg'),
+    elective,
+    done: row.getString('checkin_status') == 'done',
+    audioSeconds: audio?.getNumber('watched_sec') ?? progress?.getNumber('watched_sec') ?? 0,
+    videoSeconds: video?.getNumber('watched_sec') ?? 0,
+    audioPercent: audio?.getNumber('pct') ?? progress?.getNumber('pct') ?? 0
+  }
+}
+
+export function readTrainingPlan(data: UTSJSONObject): TrainingPlan {
+  return {
+    id: data.getNumber('plan_id') ?? 0,
+    minutes: data.getNumber('planned_minutes') ?? 0,
+    status: data.getString('status') ?? '',
+    timerPhase: data.getString('timer_phase') ?? 'setup',
+    remaining: data.getNumber('timer_remaining_seconds') ?? 0,
+    timerTotal: data.getNumber('timer_planned_seconds') ?? 0,
+    dayLocked: data.getBoolean('day_locked') == true,
+    cutoff: data.getBoolean('globally_cutoff') == true,
+    mediaExhausted: data.getBoolean('media_exhausted') == true,
+    canCustomize: data.getBoolean('can_customize_plan') == true,
+    annotations: data.getArray<string>('annotations') ?? [],
+    electives: (data.getArray<UTSJSONObject>('optional_offers') ?? []).map((offer): TrainingElective => ({
+      skill: offer.getString('skill') ?? '',
+      available: offer.getBoolean('available') == true,
+      reason: offer.getString('reason') ?? ''
+    })),
+    items: (data.getArray<UTSJSONObject>('items') ?? []).map((row): TrainingItem => readItem(row))
+  }
+}
+
+/** 从"现在"起开一个 N 分钟的训练窗口；时段换算交给 setTrainingWindow 统一发送 */
+export async function openTrainingWindow(minutes: number): Promise<UTSJSONObject> {
+  const start = Date.now()
+  const end = start + minutes * 60000
+  return setTrainingWindow(chinaClock(start), chinaClock(end))
+}
+
+function chinaClock(ms: number): string {
+  const date = new Date(ms + 8 * 3600000)
+  return clockText(date.getUTCHours() * 3600 + date.getUTCMinutes() * 60 + date.getUTCSeconds())
+}
+
+export function clockText(seconds: number): string {
+  const hh = Math.floor(seconds / 3600).toString().padStart(2, '0')
+  const mm = Math.floor(seconds / 60 % 60).toString().padStart(2, '0')
+  const ss = Math.floor(seconds % 60).toString().padStart(2, '0')
+  return hh + ':' + mm + ':' + ss
+}
+/**
+ * 训练记录列表。
+ * 放在 .uts 是因为 .uvue 不支持泛型，getArray('items') 会返回 Array<any>。
+ */
+export function readTrainingRecords(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('items') ?? []
+}
+
+/** 打卡记录里的第一张卡片；没有则返回 null */
+export function readFirstCard(record: UTSJSONObject): UTSJSONObject | null {
+  const cards = record.getArray<UTSJSONObject>('cards') ?? []
+  if (cards.length == 0) return null
+  return cards[0]
+}
+
+/** 打卡记录的阶段标记（后端是字符串数组，不是对象数组） */
+export function readPhaseBlocks(record: UTSJSONObject): Array<string> {
+  return record.getArray<string>('phase_blocks') ?? []
+}
+
+/** 打卡记录的卡片（调用方可能 push 补位，故保持返回原数组引用） */
+export function readRecordCards(record: UTSJSONObject): Array<UTSJSONObject> {
+  return record.getArray<UTSJSONObject>('cards') ?? []
+}
+
+/** 历史页按天分组 */
+export function readHistoryDays(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('days') ?? []
+}
+
+/** 某一天下的记录 */
+export function readGroupRecords(group: UTSJSONObject): Array<UTSJSONObject> {
+  return group.getArray<UTSJSONObject>('records') ?? []
+}
+/* ---------- 请求 ----------
+ * 这个模块此前只有读取映射，没有请求封装，导致页面直接调 requestJson。
+ * 后端 training.py 共 26 个端点，下面覆盖今日训练主流程（P0）需要的部分。
+ */
+
+/** 训练入口检查：今天能不能练、为什么不能 */
+export function getTrainingEntry(): Promise<UTSJSONObject> {
+  return requestJson('/api/training/entry')
+}
+
+/** 今日训练方案。skipAi=true 时跳过 AI 生成，首屏更快 */
+export function getTodayPlan(planDate: string, skipAi: boolean): Promise<UTSJSONObject> {
+  let path = '/api/training/today?skip_ai=' + (skipAi ? 'true' : 'false')
+  if (planDate.length > 0) path = path + '&plan_date=' + planDate
+  return requestJson(path)
+}
+
+
+/** 训练时段设置。WindowSetRequest 只有 start_time / end_time（HH:MM） */
+export function setTrainingWindow(startTime: string, endTime: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { start_time: startTime, end_time: endTime }
+  return requestJson('/api/training/window', 'POST', body)
+}
+
+export function getTrainingWindow(): Promise<UTSJSONObject> {
+  return requestJson('/api/training/window')
+}
+
+export function deleteTrainingWindow(): Promise<UTSJSONObject> {
+  return requestJson('/api/training/window', 'DELETE')
+}
+
+export function getWindowStatus(): Promise<UTSJSONObject> {
+  return requestJson('/api/training/window/status')
+}
+
+export function getTrainingProgress(): Promise<UTSJSONObject> {
+  return requestJson('/api/training/progress')
+}
+
+export function getTrainingHistory(limit: number, groupByDay: boolean): Promise<UTSJSONObject> {
+  const path = '/api/training/history?limit=' + limit.toString() + '&group_by_day=' + (groupByDay ? 'true' : 'false')
+  return requestJson(path)
+}
+
+/**
+ * 打卡提交的参数，对应后端 CheckinRequest。
+ * attitudePct 用 -1 表示「未填」，0–100 表示实际配合度——
+ * 后端 attitude_pct 是 ge=0, le=100 的可空字段，0 分是合法值，
+ * 不能拿 0 当哨兵，否则「配合度 0%」会被吞掉。
+ */
+export type CheckinParams = {
+  planId: number
+  itemId: number
+  abilityType: string
+  timeSpent: string
+  content: string
+  result: string
+  note: string
+  attitudePct: number
+}
+
+export function submitCheckin(p: CheckinParams): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { plan_id: p.planId }
+  if (p.itemId > 0) body['item_id'] = p.itemId
+  if (p.abilityType.length > 0) body['ability_type'] = p.abilityType
+  if (p.timeSpent.length > 0) body['time_spent'] = p.timeSpent
+  if (p.content.length > 0) body['content'] = p.content
+  if (p.result.length > 0) body['result'] = p.result
+  if (p.note.length > 0) body['note'] = p.note
+  if (p.attitudePct >= 0) body['attitude_pct'] = p.attitudePct
+
+  return requestJson('/api/training/checkin', 'POST', body)
+}
+
+export function updateCheckin(recordId: number, body: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/training/checkin/' + recordId.toString(), 'PUT', body)
+}
+
+export function deleteCheckin(recordId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/training/checkin/' + recordId.toString(), 'DELETE')
+}
+/**
+ * 整体替换方案项目。
+ * `skills` 长度需与方案 items 一致（后端限制 1–10 个），返回完整的今日方案，
+ * 可直接交给 readTrainingPlan 刷新页面。
+ */
+export function customizePlan(planId: number, skills: string[]): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { plan_id: planId, skills: skills }
+  return requestJson('/api/training/plan/customize', 'POST', body)
+}
+
+/** 增删选修环节。action: "add" 追加 / "remove" 移除 */
+export function toggleElective(planId: number, skill: string, action: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { plan_id: planId, skill: skill, action: action }
+  return requestJson('/api/training/plan/elective-toggle', 'POST', body)
+}
+
+/** 选修可选清单 */
+export function getElectiveOffers(): Promise<UTSJSONObject> {
+  return requestJson('/api/training/elective/list')
+}

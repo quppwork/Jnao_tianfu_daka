@@ -1,0 +1,53 @@
+$bg: #0a0e17;
+$card: #131a2a;
+$card-soft: #1a2236;
+$border: rgba(99, 132, 255, 0.18);
+$text: #e6ecf7;
+$dim: #8b97ad;
+$accent: #4f7cff;
+
+.wq-page { display: flex; flex: 1; flex-direction: column; background-color: $bg; }
+
+.wq-header {
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+  padding-left: 12px; padding-right: 16px; padding-bottom: 10px;
+}
+.wq-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.wq-back-icon { color: $text; font-size: 26px; line-height: 26px; }
+.wq-title { color: $text; font-size: 17px; font-weight: 600; }
+.wq-placeholder { width: 32px; }
+.wq-body { flex: 1; }
+
+.wq-hero { display: flex; flex-direction: column; align-items: center; padding: 32px 24px 24px 24px; }
+.wq-brand {
+  width: 60px; height: 60px; border-radius: 30px; background-color: #07c160;
+  display: flex; align-items: center; justify-content: center;
+}
+.wq-brand-text { color: #fff; font-size: 26px; font-weight: 700; }
+.wq-hero-title { color: $text; font-size: 18px; font-weight: 700; margin-top: 16px; }
+.wq-hero-hint { color: $dim; font-size: 12px; margin-top: 8px; }
+
+.wq-card {
+  margin: 0 16px 14px 16px; padding: 14px 16px; border-radius: 12px;
+  background-color: $card; border-width: 1px; border-style: solid; border-color: $border;
+}
+.wq-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.wq-row-label { color: $dim; font-size: 13px; }
+.wq-row-value { font-size: 13px; font-weight: 600; }
+.wq-ok { color: #34d399; }
+.wq-bad { color: #f87171; }
+.wq-note { color: $dim; font-size: 11px; line-height: 18px; margin-top: 10px; }
+.wq-note-dim { color: #5a6478; }
+
+.wq-actions { padding: 4px 16px 0 16px; }
+.wq-btn { padding: 14px; border-radius: 12px; background-color: #07c160; align-items: center; }
+.wq-btn-off { background-color: $card-soft; }
+.wq-btn-text { color: #fff; font-size: 15px; font-weight: 600; }
+.wq-btn-ghost {
+  margin-top: 12px; padding: 13px; border-radius: 12px; align-items: center;
+  background-color: transparent; border-width: 1px; border-style: solid; border-color: $border;
+}
+.wq-btn-ghost-text { color: $dim; font-size: 14px; }
+
+.wq-error { color: #f87171; font-size: 12px; line-height: 19px; margin: 14px 16px 0 16px; }
+.wq-space { height: 32px; }

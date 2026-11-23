@@ -1,0 +1,92 @@
+import { requestJson } from '../network/request.uts'
+import { streamPost, SseEventSink } from '../network/stream.uts'
+import { LLM_TIMEOUT_MS } from '../network/timeouts.uts'
+
+/** 学科答疑：会话与消息 */
+
+export type QaChatOptions = {
+  message: string
+  sessionId: number
+  subject: string
+  imageId: string
+  useRag: boolean
+}
+
+function buildChatBody(options: QaChatOptions): UTSJSONObject {
+  const body: UTSJSONObject = { message: options.message }
+  if (options.sessionId > 0) body['session_id'] = options.sessionId
+  if (options.subject.length > 0) body['subject'] = options.subject
+  if (options.imageId.length > 0) body['image_id'] = options.imageId
+  if (options.useRag) body['use_rag'] = true
+  return body
+}
+
+/** 流式答疑，返回 RequestTask 供调用方 abort()；未登录返回 null */
+export function qaChatStream(options: QaChatOptions, sink: SseEventSink): RequestTask | null {
+  return streamPost('/api/qa/chat/stream', buildChatBody(options), sink)
+}
+
+/** 非流式答疑：一次性拿到完整结果时用 */
+export function qaChat(options: QaChatOptions): Promise<UTSJSONObject> {
+  return requestJson('/api/qa/chat', 'POST', buildChatBody(options), null, true, LLM_TIMEOUT_MS)
+}
+
+export function listQaSessions(): Promise<UTSJSONObject> {
+  return requestJson('/api/qa/sessions')
+}
+
+/** subject 传空字符串表示不限定学科 */
+export function createQaSession(subject: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {}
+  if (subject.length > 0) body['subject'] = subject
+  return requestJson('/api/qa/sessions', 'POST', body)
+}
+
+export function getQaSession(sessionId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/qa/sessions/' + sessionId.toString())
+}
+
+export function deleteQaSession(sessionId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/qa/sessions/' + sessionId.toString(), 'DELETE')
+}
+
+/* ---------- 响应映射 ---------- */
+
+export type QaSessionRow = {
+  id: number
+  label: string
+  meta: string
+}
+
+/**
+ * 后端返回 {items:[...]}，每个会话只有 id / title / subject / created_at。
+ * meta 用 title，缺失时退回创建日期；label 优先学科。
+ */
+export function readQaSessions(data: UTSJSONObject): QaSessionRow[] {
+  const rows = data.getArray<UTSJSONObject>('items') ?? []
+  const list: QaSessionRow[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const id = row.getNumber('id') ?? 0
+    if (id <= 0) continue
+    const subject = row.getString('subject') ?? ''
+    const title = row.getString('title') ?? ''
+    const createdAt = row.getString('created_at') ?? ''
+    let meta = title
+    if (meta.length == 0) meta = createdAt.length >= 10 ? createdAt.slice(0, 10) : createdAt
+    list.push({
+      id: id,
+      label: subject.length > 0 ? subject : '通用',
+      meta: meta
+    })
+  }
+  return list
+}
+/**
+ * 会话的历史消息。
+ * 放在 .uts 里是因为 .uvue 的 script 不支持泛型调用，
+ * getArray('messages') 会返回 Array<any>。
+ */
+export function readQaMessages(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('messages') ?? []
+}

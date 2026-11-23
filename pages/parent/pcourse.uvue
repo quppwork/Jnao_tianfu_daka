@@ -1,0 +1,86 @@
+<template>
+  <view class="page">
+    <view class="nav" :style="{ marginTop: inset + 'px' }">
+      <text class="nav-back" @click="goBack">‹</text><view class="nav-brand"><text class="title">家长课堂</text><text class="dim">PARENT CLASS · 先懂孩子再懂教育</text></view>
+    </view>
+    <scroll-view direction="vertical" class="content">
+      <view class="body">
+        <view class="hero"><text class="hero-title">家长课堂</text><text class="dim">6 门必修课 · 学了就会用</text></view>
+        <view class="notice"><text class="dim">当前为课程目录预览，可浏览章节结构。正片点播与进度同步后续接入。</text></view>
+        <view class="section"><text class="title">🎓 我的课程</text><text class="dim">{{ loading ? '加载中…' : '已开通 ' + opened + ' 门' }}</text></view>
+        <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
+        <button v-if="errorText.length > 0" class="action" @click="load">重试</button>
+        <text v-if="!loading && errorText.length == 0 && courses.length == 0" class="dim">暂无课程目录</text>
+        <view v-for="course in courses" :key="course.id" class="card">
+          <view v-if="course.intro.length > 0" class="intro" @click="playPreview">
+            <text class="intro-icon">{{ course.icon }} ▶</text><text class="title">{{ course.intro }}</text><text class="dim">{{ course.duration }}</text>
+          </view>
+          <view class="section">
+            <view class="course-heading"><text class="title">{{ course.icon }} {{ course.name }}</text><text class="dim">{{ course.subtitle }}（已开通）</text></view>
+            <text class="action-link" @click="playPreview">{{ course.done > 0 ? '继续听课 ›' : '开始学习 ›' }}</text>
+          </view>
+          <view class="track"><view class="fill" :style="{ width: course.percent + '%' }"></view></view>
+          <text class="dim">已学 {{ course.done }} / {{ course.total }} 讲 · {{ course.percent }}%</text>
+          <view v-for="(lesson, index) in course.lessons" :key="index" class="lesson" :class="{ 'lesson-current': index == course.next }">
+            <text class="lesson-name">{{ index < course.done ? '✓' : (index == course.next ? '▶' : '·') }} 第 {{ index + 1 }} 讲 · {{ lesson }}</text>
+            <text class="dim">{{ index < course.done ? '已学' : (index == course.next ? '待学' : '未学') }}</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { requestJson } from '../../network/request.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { readParentCourses, readCourseLessons } from '../../api/parent.uts'
+
+const inset = ref(0)
+const loading = ref(false)
+const opened = ref(0)
+const courses = ref([])
+const errorText = ref('')
+
+async function load() {
+  if (loading.value) return
+  loading.value = true
+  errorText.value = ''
+  try {
+    const data = await requestJson('/api/parent/courses')
+    const rows = readParentCourses(data)
+    opened.value = data.getNumber('opened_count') ?? rows.length
+    courses.value = rows.map((row) => {
+      const lessons = readCourseLessons(row)
+      const total = row.getNumber('total') ?? lessons.length
+      const done = Math.max(0, Math.min(total, row.getNumber('done') ?? 0))
+      const intro = row.getJSON('intro')
+      return {
+        id: row.getString('id') ?? '', name: row.getString('name') ?? '', subtitle: row.getString('sub') ?? '',
+        icon: row.getString('icon') ?? '📚', intro: intro?.getString('title') ?? '', duration: intro?.getString('duration') ?? '',
+        done, total, next: row.getNumber('now') ?? (done < total ? done : -1),
+        percent: total == 0 ? 0 : Math.round(done * 100 / total), lessons
+      }
+    })
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '课程目录同步失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function playPreview() {
+  uni.showToast({ title: '正片点播后续开放', icon: 'none' })
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+onShow(() => { load() })
+onReady(() => { inset.value = getPageTopInset() })
+</script>
+
+<style lang="scss" scoped>
+@import './pcourse.scss';
+</style>

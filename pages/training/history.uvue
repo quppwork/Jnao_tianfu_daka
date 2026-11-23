@@ -1,0 +1,205 @@
+<template>
+  <view class="history-page">
+    <view class="history-nav" :style="{ marginTop: insetTop + 'px' }">
+      <view class="nav-back" @click="goBack"><text class="back-glyph">‹</text></view>
+      <text class="nav-title">历史记录</text>
+      <view class="nav-refresh" @click="loadHistory"><text class="nav-refresh-label">{{ loading ? '…' : '刷新' }}</text></view>
+    </view>
+    <scroll-view class="history-scroll" scroll-y :show-scrollbar="false" :scroll-into-view="focusSection">
+      <view class="history-body">
+        <view v-if="errorText.length > 0" class="state">
+          <text class="state-error">{{ errorText }}</text>
+          <button class="retry" @click="loadHistory">重试</button>
+        </view>
+        <view v-else-if="loading && days.length == 0" class="state"><text class="state-title">加载中...</text></view>
+        <view v-else-if="days.length == 0" class="state">
+          <text class="state-title">暂无历史记录</text>
+          <text class="state-hint">今日打卡请在训练页查看。完成训练并进入新训练日后，记录会出现在这里。</text>
+        </view>
+        <view v-for="day in days" :id="'hist-day-' + day.date" :key="day.date" class="day-card">
+          <text class="day-title">{{ day.date == 'unknown' ? '未知日期' : day.date }}</text>
+          <view v-for="record in day.records" :key="record.id">
+            <view v-for="(card, index) in record.cards" :key="index" class="record" @click="openDetail(record)">
+              <view class="record-head">
+                <text class="record-name">{{ card.name }}</text>
+                <text v-if="record.attitude.length > 0" class="record-attitude">{{ record.attitude }}</text>
+              </view>
+              <text class="record-summary">{{ card.summary }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view v-if="showDetail" class="detail-overlay" @click="closeDetail">
+      <view class="detail" @click.stop>
+        <view class="detail-head">
+          <text class="detail-title">打卡详情</text>
+          <text class="detail-close" @click="closeDetail">✕</text>
+        </view>
+        <scroll-view direction="vertical" :style="{ height: detailHeight + 'px' }">
+          <view v-for="(card, index) in detailCards" :key="index" class="detail-card">
+            <text class="detail-name">{{ card.name }}</text>
+            <view v-for="field in card.fields" :key="field.label" class="detail-field">
+              <text class="detail-label">{{ field.label }}</text>
+              <text class="detail-value">{{ field.value }}</text>
+            </view>
+          </view>
+        </scroll-view>
+        <button class="detail-button" @click="closeDetail">关闭</button>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { requestJson } from '../../network/request.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { readPhaseBlocks, readRecordCards, readHistoryDays, readGroupRecords } from '../../api/training.uts'
+
+const fieldDefinitions= [
+  { key: 'time', label: '用时', suffix: '分钟' },
+  { key: 'wordCount', label: '完成', suffix: '字' },
+  { key: 'count', label: '题数', suffix: '题' },
+  { key: 'accuracy', label: '正确率', suffix: '%' },
+  { key: 'tool', label: '工具', suffix: '' },
+  { key: 'completed', label: '状态', suffix: '' },
+  { key: 'materialType', label: '材料', suffix: '' },
+  { key: 'materialName', label: '名称', suffix: '' },
+  { key: 'result', label: '效果', suffix: '' },
+  { key: 'note', label: '备注', suffix: '' }
+]
+const summaryDefinitions= [
+  { key: 'time', label: '', suffix: 'min' },
+  { key: 'wordCount', label: '', suffix: '字' },
+  { key: 'tag', label: '', suffix: '' },
+  { key: 'count', label: '', suffix: '题' },
+  { key: 'accuracy', label: '', suffix: '%' },
+  { key: 'tool', label: '', suffix: '' },
+  { key: 'materialType', label: '', suffix: '' },
+  { key: 'materialName', label: '', suffix: '' }
+]
+
+const days = ref([])
+const loading = ref(false)
+const errorText = ref('')
+const insetTop = ref(0)
+const detailHeight = ref(300)
+const focusSection = ref('')
+const showDetail = ref(false)
+const detailCards = ref([])
+let focusDate = ''
+
+function fieldText(data, key) {
+  const raw = data[key]
+  if (typeof raw == 'string') return raw
+  if (typeof raw == 'number') return raw.toString()
+  if (raw == true) return '已完成'
+  return ''
+}
+
+function attitudeLabel(pct) {
+  if (pct == null) return ''
+  let icon = '☠️'
+  if (pct >= 100) icon = '🔴'
+  else if (pct >= 80) icon = '🟡'
+  else if (pct >= 60) icon = '🔵'
+  else if (pct >= 40) icon = '🟤'
+  else if (pct >= 20) icon = '⚫️'
+  return icon + ' ' + pct.toString() + '%'
+}
+
+function readCard(data, phase) {
+  const name = data.getString('name') ?? '训练记录'
+  const block = data.getString('phaseBlock') ?? phase
+  const summaryParts= []
+  const fields= []
+  for (const spec of summaryDefinitions) {
+    const value = fieldText(data, spec.key)
+    if (value.length > 0) summaryParts.push(spec.key == 'materialName' ? '《' + value + '》' : value + spec.suffix)
+  }
+  const content = data.getString('content') ?? ''
+  if (content.length > 0 && fieldText(data, 'wordCount').length == 0) summaryParts.push(content)
+  for (const spec of fieldDefinitions) {
+    const value = fieldText(data, spec.key)
+    if (value.length > 0) fields.push({ label: spec.label, value: value + spec.suffix })
+  }
+  return {
+    name: block.length > 0 ? name + ' · 训练' + block : name,
+    summary: summaryParts.length > 0 ? summaryParts.join(' · ') : '已记录',
+    fields
+  }
+}
+
+function readRecord(record) {
+  const blocks = readPhaseBlocks(record)
+  const phase = blocks.length > 0 ? blocks[0] : null
+  const rows = readRecordCards(record)
+  if (rows.length == 0) {
+    rows.push({
+      name: (record.getString('ability_type') ?? '训练记录').split('、')[0].trim(),
+      content: record.getString('content') ?? '',
+      result: record.getString('result') ?? '',
+      note: record.getString('note') ?? ''
+    })
+  }
+  return {
+    id: record.getNumber('id') ?? 0,
+    attitude: attitudeLabel(record.getNumber('attitude_pct')),
+    cards: rows.map((row) => readCard(row, phase))
+  }
+}
+
+async function loadHistory() {
+  if (loading.value) return
+  loading.value = true
+  errorText.value = ''
+  focusSection.value = ''
+  try {
+    const response = await requestJson('/api/training/history?group_by_day=true&limit=100&exclude_today=true')
+    const groups = readHistoryDays(response)
+    days.value = groups.map((group) => {
+      return {
+        date: group.getString('date') ?? 'unknown',
+        records: readGroupRecords(group).map(readRecord)
+      }
+    })
+    if (focusDate.length > 0) {
+      await nextTick()
+      focusSection.value = 'hist-day-' + focusDate
+    }
+  } catch (error) {
+    days.value = []
+    errorText.value = error instanceof Error ? error.message : '加载失败，请检查网络或稍后重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+function openDetail(record) {
+  detailCards.value = record.cards
+  showDetail.value = true
+}
+
+function closeDetail() {
+  showDetail.value = false
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+onLoad((query) => {
+  focusDate = (query['date'] ?? '').slice(0, 10)
+  loadHistory()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  detailHeight.value = Math.min(350, Math.round(uni.getWindowInfo().windowHeight * 0.48))
+})
+</script>
+
+<style lang="scss" scoped>
+@import './history.scss';
+</style>

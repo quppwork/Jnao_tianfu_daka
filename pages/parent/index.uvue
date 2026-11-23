@@ -1,0 +1,225 @@
+<template>
+  <view class="parent-page">
+    <view class="parent-nav" :style="{ marginTop: insetTop + 'px' }">
+      <view class="nav-back" @click="goBack"><text class="back-glyph">‹</text></view>
+      <text class="nav-title">孩子账户管理</text>
+      <view class="nav-action" @click="goProfile"><text class="nav-action-text">资料</text></view>
+    </view>
+    <scroll-view class="parent-scroll" scroll-y :show-scrollbar="false">
+      <view class="hero">
+        <view class="hero-avatar"><text class="hero-letter">{{ parentName.charAt(0) }}</text></view>
+        <text class="hero-name">{{ parentName }}</text>
+        <text v-if="loaded" class="hero-sub">已绑定 {{ children.length }} 个孩子 · 名额 {{ quotaUsed }}/{{ quotaLimit }}</text>
+      </view>
+
+      <view class="children-section">
+        <view class="section-header">
+          <text class="section-title">我的孩子</text>
+          <button class="btn-add" :disabled="!canAdd || saving" @click="startNew">+ 添加孩子</button>
+        </view>
+        <view v-if="loading" class="empty-state"><text class="empty-title">加载中...</text></view>
+        <view v-else-if="errorText.length > 0" class="empty-state">
+          <text class="form-error">{{ errorText }}</text>
+          <button class="btn-add" @click="loadChildren">重试</button>
+        </view>
+        <view v-else-if="children.length == 0" class="empty-state">
+          <text class="empty-icon">📋</text>
+          <text class="empty-title">暂无孩子账号</text>
+          <text class="empty-hint">点击「添加孩子」分配账号和密码</text>
+        </view>
+        <view v-for="child in children" :key="child.id" class="child-card" @click="editChild(child)">
+          <view class="child-avatar"><text class="child-letter">{{ child.nickname.charAt(0) }}</text></view>
+          <view class="child-info">
+            <text class="child-name">{{ child.nickname }}</text>
+            <text class="child-detail">账号：{{ child.account }}</text>
+            <text class="child-detail">天赋：{{ child.talent }} · 训练 {{ child.trainingDays }} 天</text>
+          </view>
+          <text class="child-detail">编辑</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view v-if="editing" class="overlay" @click="dismissEditor">
+      <scroll-view class="form-panel" direction="vertical" :style="{ height: formHeight + 'px' }" @click.stop>
+       <view class="form-content">
+        <text class="form-title">{{ childId == 0 ? '添加孩子账号' : '编辑孩子' }}</text>
+        <view v-if="childId == 0" class="input-wrap"><input v-model="account" class="field" :maxlength="30" placeholder="登录账号（英文/数字，唯一）" /></view>
+        <view class="input-wrap"><input v-model="nickname" class="field" :maxlength="20" placeholder="孩子姓名/昵称" /></view>
+        <view class="input-wrap"><input v-model="password" class="field" password :maxlength="32" :placeholder="childId == 0 ? '登录密码（8-32位，含大小写+数字）' : '新密码（留空不改）'" /></view>
+        <view class="input-wrap"><input v-model="confirmPassword" class="field" password :maxlength="32" :placeholder="childId == 0 ? '确认密码' : '确认新密码'" /></view>
+        <view class="input-wrap">
+          <picker class="form-picker" :range="ageOptions" :value="ageIndex" @change="onAgeChange">
+            <text class="picker-text">{{ age.length > 0 ? age + ' 岁' : '请选择年龄' }}</text>
+          </picker>
+        </view>
+        <view class="input-wrap">
+          <picker class="form-picker" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
+            <text class="picker-text">{{ grade.length > 0 ? grade : '请选择年级' }}</text>
+          </picker>
+        </view>
+        <text v-if="formError.length > 0" class="form-error">{{ formError }}</text>
+        <button class="btn-save" :loading="saving" :disabled="saving" @click="saveChild">保存</button>
+        <text v-if="childId > 0" class="form-hint">如需注销或转移账号，请联系管理员</text>
+        <button class="btn-cancel" :disabled="saving" @click="dismissEditor">取消</button>
+       </view>
+      </scroll-view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { requestJson } from '../../network/request.uts'
+import { readParentChildren, buildCreateChildBody } from '../../api/parent.uts'
+import { getSession } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { meetsPasswordPolicy, PASSWORD_HINT } from '../../utils/password-policy.uts'
+
+const children = ref([])
+const loaded = ref(false)
+const loading = ref(false)
+const insetTop = ref(0)
+const formHeight = ref(470)
+const parentName = ref('家长')
+const quotaLimit = ref(0)
+const quotaUsed = ref(0)
+const canAdd = ref(false)
+const saving = ref(false)
+const editing = ref(false)
+const childId = ref(0)
+const account = ref('')
+const nickname = ref('')
+const password = ref('')
+const confirmPassword = ref('')
+const grade = ref('')
+const age = ref('')
+const errorText = ref('')
+const formError = ref('')
+const path = '/api/parent/children'
+const ageOptions= []
+for (let value = 3; value <= 120; value++) ageOptions.push(value.toString())
+const gradeOptions = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三']
+const ageIndex = computed(() => Math.max(0, ageOptions.indexOf(age.value)))
+const gradeIndex = computed(() => Math.max(0, gradeOptions.indexOf(grade.value)))
+
+function onAgeChange(event) {
+  age.value = ageOptions[parseInt(event.detail.value.toString())]
+}
+
+function onGradeChange(event) {
+  grade.value = gradeOptions[parseInt(event.detail.value.toString())]
+}
+
+async function loadChildren() {
+  if (loading.value) return
+  loading.value = true
+  errorText.value = ''
+  try {
+    const responses = await Promise.all([requestJson(path), requestJson('/api/parent/quota')])
+    const entries = readParentChildren(responses[0])
+    const quota = responses[1]
+    quotaLimit.value = quota.getNumber('limit') ?? 0
+    quotaUsed.value = quota.getNumber('used') ?? 0
+    canAdd.value = quota.getBoolean('can_add') == true
+    children.value = entries.map((entry) => {
+      return {
+        id: entry.getNumber('id') ?? 0,
+        account: entry.getString('login_name') ?? '',
+        nickname: entry.getString('nickname') ?? '',
+        trainingDays: entry.getNumber('training_days') ?? 0,
+        talent: entry.getString('talent') ?? '未测评',
+        grade: entry.getString('grade') ?? '',
+        age: entry.getNumber('age')?.toString() ?? ''
+      }
+    })
+    loaded.value = true
+  } catch (error) {
+    loaded.value = false
+    canAdd.value = false
+    errorText.value = error instanceof Error ? error.message : '读取孩子账号失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function editChild(child) {
+  if (saving.value) return
+  childId.value = child.id
+  account.value = child.account
+  nickname.value = child.nickname
+  password.value = ''
+  confirmPassword.value = ''
+  grade.value = child.grade
+  age.value = child.age
+  formError.value = ''
+  editing.value = true
+}
+
+function startNew() {
+  if (canAdd.value) editChild({ id: 0, account: '', nickname: '', trainingDays: 0, talent: '', grade: '', age: '' })
+}
+
+function closeEditor() {
+  editing.value = false
+  password.value = ''
+  confirmPassword.value = ''
+}
+
+async function saveChild() {
+  if (saving.value) return
+  const creating = childId.value == 0
+  const loginName = account.value.trim()
+  const name = nickname.value.trim()
+  const secret = password.value.trim()
+  const year = age.value.length > 0 ? parseInt(age.value) : null
+  if (name.length < 2 || (creating && loginName.length < 2)) {
+    formError.value = '账号和昵称至少 2 位'
+    return
+  }
+  if ((creating || secret.length > 0) && !meetsPasswordPolicy(secret)) {
+    formError.value = PASSWORD_HINT
+    return
+  }
+  if (secret != confirmPassword.value.trim()) {
+    formError.value = '两次输入的密码不一致'
+    return
+  }
+  const data = buildCreateChildBody(name, creating ? loginName : '', secret, grade.value.trim(), year == null ? 0 : year)
+  saving.value = true
+  formError.value = ''
+  try {
+    await requestJson(creating ? path : path + '/' + childId.value.toString(), creating ? 'POST' : 'PUT', data)
+    closeEditor()
+    await loadChildren()
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : '保存失败，请重试'
+  } finally {
+    saving.value = false
+  }
+}
+
+function dismissEditor() {
+  if (!saving.value) closeEditor()
+}
+
+function goProfile() {
+  uni.navigateTo({ url: '/pages/parent/profile' })
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+onLoad(() => {
+  parentName.value = getSession()?.nickname ?? '家长'
+  loadChildren()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  formHeight.value = Math.min(520, Math.round(uni.getWindowInfo().windowHeight * 0.82))
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

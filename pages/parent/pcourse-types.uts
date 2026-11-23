@@ -1,0 +1,2 @@
+// 从 pcourse.uvue 抽出：.uvue 的 script 块不支持 type / interface 声明
+export type Course = { id: string; icon: string; name: string; subtitle: string; intro: string; duration: string; done: number; total: number; next: number; percent: number; lessons: string[] }

@@ -1,0 +1,23 @@
+/**
+ * 登录后的引导判定。
+ *
+ * 放在 .uts 里而不是页面 script：`.uvue` 的 script 块不支持 function 参数类型标注
+ * （`profile: UTSJSONObject` 会在冒号处报 `Unexpected token, expected ","`），
+ * 也不支持 type / interface 声明。
+ */
+export function needsOnboarding(profile: UTSJSONObject): boolean {
+  const profileJson = profile.getJSON('profile_json')
+  const onboarding = profileJson == null ? null : profileJson.getJSON('onboarding')
+
+  const completedAt = onboarding == null ? '' : (onboarding.getString('completed_at') ?? '')
+  if (completedAt.length > 0) return false
+  if (profile.getBoolean('onboarding_completed') == true) return false
+
+  const studentType = onboarding == null ? 'new' : (onboarding.getString('student_type') ?? 'new')
+  if (studentType != 'returning') {
+    if ((profile.getNumber('latest_assessment_id') ?? 0) > 0) return false
+    if (profile.getString('talent_source') == 'assessment') return false
+    if (onboarding != null && onboarding.getBoolean('talent_test_done') == true) return false
+  }
+  return true
+}

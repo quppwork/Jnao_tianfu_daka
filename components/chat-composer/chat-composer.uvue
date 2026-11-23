@@ -1,0 +1,115 @@
+<template>
+  <view class="cc-bar" :style="{ paddingBottom: inset + 'px' }">
+    <input
+      v-model="draft"
+      class="cc-input"
+      :disabled="sending"
+      :maxlength="maxlength"
+      :placeholder="placeholder"
+      confirm-type="send"
+      @confirm="submit"
+    />
+    <button v-if="sending" class="cc-btn cc-btn-stop" @click="doStop">
+      <text class="cc-btn-text">停止</text>
+    </button>
+    <button v-else class="cc-btn" :disabled="!canSend" @click="submit">
+      <text class="cc-btn-text">发送</text>
+    </button>
+  </view>
+</template>
+
+<script setup lang="uts">
+defineOptions({
+  styleIsolation: 'app'
+})
+
+const emit = defineEmits(['submit', 'stop'])
+
+const props = defineProps({
+  sending: {
+    type: Boolean,
+    default: false
+  },
+  placeholder: {
+    type: String,
+    default: '输入你的问题'
+  },
+
+  maxlength: {
+    type: Number,
+    default: 4000
+  },
+  inset: {
+    type: Number,
+    default: 0
+  }
+})
+
+const draft = ref('')
+
+const canSend = computed(() => {
+  return !props.sending && draft.value.trim().length > 0
+})
+
+function submit() {
+  if (!canSend.value) return
+  const text = draft.value.trim()
+  if (text.length == 0) return
+  draft.value = ''
+  emit('submit', text)
+}
+
+function doStop() {
+  emit('stop')
+}
+</script>
+
+<style lang="scss" scoped>
+$card: #0f1a2e;
+$card-soft: #131f38;
+$border: rgba(59, 130, 246, 0.2);
+$text: #e2e8f0;
+$accent: #3b82f6;
+
+.cc-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 16px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $border;
+  background-color: $card;
+}
+
+.cc-input {
+  flex: 1;
+  height: 40px;
+  padding: 0 12px;
+  margin-right: 10px;
+  border-radius: 20px;
+  background-color: $card-soft;
+  color: $text;
+  font-size: 14px;
+}
+
+.cc-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 40px;
+  border-radius: 20px;
+  background-color: $accent;
+}
+
+.cc-btn-stop {
+  background-color: #ef4444;
+}
+
+.cc-btn-text {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+}
+</style>

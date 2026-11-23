@@ -1,0 +1,272 @@
+<template>
+  <view class="qa-page">
+    <view class="qa-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="qa-back" @click="goBack"><text class="qa-back-icon">‹</text></view>
+      <view class="qa-title-wrap">
+        <text class="qa-title">学科答疑</text>
+        <text class="qa-subtitle">{{ channel.emoji }} {{ channel.name }} · {{ channel.tag }}</text>
+      </view>
+      <view class="qa-history-entry" @click="openHistory"><text class="qa-history-text">历史</text></view>
+    </view>
+
+    <scroll-view class="qa-subjects" scroll-x :show-scrollbar="false">
+      <view class="qa-subject-row">
+        <view
+          v-for="c in channels"
+          :key="c.subject"
+          class="qa-chip"
+          :class="c.subject == subject ? 'qa-chip-active' : ''"
+          :style="{ backgroundColor: c.subject == subject ? c.color : '#0f1a2e', borderColor: c.subject == subject ? c.color : 'rgba(59, 130, 246, 0.2)' }"
+          @click="pickSubject(c.subject)"
+        >
+          <text class="qa-chip-text" :class="c.subject == subject ? 'qa-chip-text-on' : ''">{{ c.emoji }} {{ c.subject }}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <scroll-view class="qa-chat" scroll-y :scroll-into-view="scrollAnchor" :scroll-with-animation="true">
+      <view class="qa-chat-inner">
+        <view v-if="messages.length == 0" class="qa-empty">
+          <text class="qa-empty-title">有什么问题都可以问我</text>
+          <text class="qa-empty-hint">我会一步步带你想明白，不直接甩答案</text>
+        </view>
+
+        <chat-bubble
+          v-for="(m, index) in messages"
+          :key="index.toString()"
+          :role="m.role"
+          :content="m.content"
+          :pending="m.pending"
+        />
+
+        <view id="qa-bottom" class="qa-bottom-anchor"></view>
+      </view>
+    </scroll-view>
+
+    <view v-if="statusText.length > 0" class="qa-status">
+      <text class="qa-status-text">{{ statusText }}</text>
+    </view>
+    <view v-if="errorText.length > 0" class="qa-error">
+      <text class="qa-error-text">{{ errorText }}</text>
+    </view>
+
+    <chat-composer
+      :sending="sending"
+      :inset="bottomInset"
+      placeholder="输入你的问题"
+      @submit="onSubmit"
+      @stop="stop"
+    />
+
+    <view v-if="historyOpen" class="qa-mask" @click="closeHistory">
+      <view class="qa-sheet" @click.stop>
+        <text class="qa-sheet-title">历史会话</text>
+        <view v-if="historyLoading" class="qa-sheet-hint"><text class="qa-muted">加载中…</text></view>
+        <view v-else-if="sessions.length == 0" class="qa-sheet-hint">
+          <text class="qa-muted">还没有历史会话</text>
+        </view>
+        <scroll-view v-else class="qa-sheet-list" scroll-y>
+          <view
+            v-for="item in sessions"
+            :key="item.id.toString()"
+            class="qa-sheet-item"
+            @click="openSession(item.id)"
+          >
+            <text class="qa-sheet-subject">{{ item.label }}</text>
+            <text class="qa-sheet-meta">{{ item.meta }}</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getQaSession, listQaSessions, qaChatStream, readQaSessions, readQaMessages } from '../../api/qa.uts'
+import { getSession, returnToLogin } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { findChannel, QA_CHANNELS, QA_DEFAULT_SUBJECT } from '../../utils/qaChannels.uts'
+import {
+  finishTurn,
+  reduceSse,
+  startUserTurn,
+  toMessages
+} from '../../utils/chatMessages.uts'
+
+
+
+const channels = QA_CHANNELS
+
+const subject = ref(QA_DEFAULT_SUBJECT)
+const channel = computed(() => findChannel(subject.value))
+const messages = ref([])
+const sending = ref(false)
+const statusText = ref('')
+const errorText = ref('')
+const sessionId = ref(0)
+const scrollAnchor = ref('')
+const historyOpen = ref(false)
+const historyLoading = ref(false)
+const sessions = ref([])
+const insetTop = ref(0)
+const bottomInset = ref(0)
+
+let requestTask: RequestTask | null = null
+let requestSeq = 0
+let scrollTimer = 0
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function clearScrollTimer() {
+  if (scrollTimer != 0) {
+    clearTimeout(scrollTimer)
+    scrollTimer = 0
+  }
+}
+
+function abortActiveStream() {
+  requestSeq = requestSeq + 1
+  const task = requestTask
+  requestTask = null
+  if (task != null) task.abort()
+}
+
+function pickSubject(next) {
+  if (sending.value || next == subject.value) return
+  subject.value = next
+  sessionId.value = 0
+  messages.value = []
+  statusText.value = ''
+  errorText.value = ''
+}
+
+function snapshot() {
+  return {
+    messages: messages.value,
+    sending: sending.value,
+    statusText: statusText.value,
+    errorText: errorText.value,
+    sessionId: sessionId.value
+  }
+}
+
+function applyState(state) {
+  messages.value = state.messages
+  sending.value = state.sending
+  statusText.value = state.statusText
+  errorText.value = state.errorText
+  sessionId.value = state.sessionId
+}
+
+function scrollToBottom() {
+  clearScrollTimer()
+  scrollAnchor.value = ''
+  scrollTimer = setTimeout(() => {
+    scrollTimer = 0
+    scrollAnchor.value = 'qa-bottom'
+  }, 16)
+}
+
+function onSseEvent(seq, event) {
+  if (seq != requestSeq) return
+  applyState(reduceSse(snapshot(), event))
+  if (event.type == 'done' || event.type == 'error' || event.type == 'abort') {
+    requestTask = null
+  }
+  if (event.type == 'token' || event.type == 'replace' || event.type == 'done') {
+    scrollToBottom()
+  }
+}
+
+function onSubmit(text) {
+  if (sending.value) return
+  errorText.value = ''
+  applyState(startUserTurn(snapshot(), text))
+  scrollToBottom()
+
+  requestSeq = requestSeq + 1
+  const seq = requestSeq
+  const options= {
+    message: text,
+    sessionId: sessionId.value,
+    subject: subject.value,
+    imageId: '',
+    useRag: true
+  }
+  const task = qaChatStream(options, (event) => {
+    onSseEvent(seq, event)
+  })
+  if (task == null) {
+    applyState(finishTurn(snapshot()))
+    return
+  }
+  requestTask = task
+}
+
+function stop() {
+  abortActiveStream()
+  applyState(finishTurn(snapshot()))
+}
+
+function openHistory() {
+  historyOpen.value = true
+  loadSessions()
+}
+
+function closeHistory() {
+  historyOpen.value = false
+}
+
+async function loadSessions() {
+  if (historyLoading.value) return
+  historyLoading.value = true
+  try {
+    sessions.value = readQaSessions(await listQaSessions())
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取历史会话失败'
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function openSession(id) {
+  historyOpen.value = false
+  // 切会话前先掐断在途流并递增代际号，忽略旧请求的异步 abort 回调
+  abortActiveStream()
+  sending.value = false
+  statusText.value = ''
+  errorText.value = ''
+  try {
+    const data = await getQaSession(id)
+    messages.value = toMessages(readQaMessages(data))
+    sessionId.value = id
+    scrollToBottom()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取会话失败'
+  }
+}
+
+onLoad(() => {
+  const session = getSession()
+  if (session == null) {
+    returnToLogin()
+    return
+  }
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  bottomInset.value = uni.getWindowInfo().safeAreaInsets.bottom
+})
+
+onUnload(() => {
+  abortActiveStream()
+  clearScrollTimer()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

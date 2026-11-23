@@ -1,0 +1,269 @@
+<template>
+  <view class="pd-page">
+    <view class="pd-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="pd-back" @click="goBack"><text class="pd-back-icon">‹</text></view>
+      <text class="pd-title">大宇智能体 · 家长版</text>
+      <view class="pd-header-right"></view>
+    </view>
+
+    <scroll-view class="pd-body" scroll-y :scroll-into-view="scrollAnchor" :scroll-with-animation="true">
+      <view class="pd-hero">
+        <image class="pd-hero-img" src="/static/parent/parent-team.jpg" mode="aspectFit" />
+        <text class="pd-hero-title">张宇老师 · 天赋导师团</text>
+        <text class="pd-hero-sub">不是一个人，是一支教育团队——陪孩子，也陪家长</text>
+      </view>
+
+      <view class="pd-shortcuts">
+        <view class="pd-shortcut" @click="openTalentTest">
+          <text class="pd-sc-emoji">🧬</text>
+          <text class="pd-sc-name">天赋测试</text>
+        </view>
+        <view class="pd-shortcut" @click="openParentCourse">
+          <text class="pd-sc-emoji">🎓</text>
+          <text class="pd-sc-name">家长课堂</text>
+        </view>
+        <view class="pd-shortcut" @click="openConsult">
+          <text class="pd-sc-emoji">💬</text>
+          <text class="pd-sc-name">一键咨询</text>
+        </view>
+      </view>
+
+      <view v-if="messages.length == 0 && suggests.length > 0" class="pd-suggests">
+        <view
+          v-for="(s, i) in suggests"
+          :key="i.toString()"
+          class="pd-suggest"
+          @click="sendSuggest(s)"
+        >
+          <text class="pd-suggest-text">{{ s }}</text>
+        </view>
+      </view>
+
+      <view class="pd-messages">
+        <chat-bubble
+          v-for="(m, index) in messages"
+          :key="index.toString()"
+          :role="m.role"
+          :content="m.content"
+          :pending="m.pending"
+        />
+        <view id="pd-bottom" class="pd-anchor"></view>
+      </view>
+    </scroll-view>
+
+    <view v-if="statusText.length > 0" class="pd-status">
+      <text class="pd-status-text">{{ statusText }}</text>
+    </view>
+    <view v-if="errorText.length > 0" class="pd-error">
+      <text class="pd-error-text">{{ errorText }}</text>
+    </view>
+
+    <chat-composer
+      :sending="sending"
+      :inset="bottomInset"
+      placeholder="问大宇：孩子训练 / 家长课程 / 报告解读…"
+      @submit="onSubmit"
+      @stop="stop"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+import {
+  getParentGuideSession,
+  getParentSuggestPrompts,
+  listChildren,
+  readFirstChildId,
+  readParentMessages,
+  readParentSuggests,
+  parentGuideChatStream,
+} from '../../api/parent.uts'
+import { getSession, returnToLogin } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import {
+  finishTurn,
+  reduceSse,
+  startUserTurn,
+  toMessages
+} from '../../utils/chatMessages.uts'
+
+const suggests = ref([
+  '学者天赋是什么',
+  '什么是火箭提分营',
+  '火箭提分营适合什么样的孩子'
+])
+
+const messages = ref([])
+const sending = ref(false)
+const statusText = ref('')
+const errorText = ref('')
+const sessionId = ref(0)
+const focusChildId = ref(0)
+const scrollAnchor = ref('')
+const insetTop = ref(0)
+const bottomInset = ref(0)
+
+let requestTask: RequestTask | null = null
+let requestSeq = 0
+let scrollTimer = 0
+
+function clearScrollTimer() {
+  if (scrollTimer != 0) {
+    clearTimeout(scrollTimer)
+    scrollTimer = 0
+  }
+}
+
+function abortActiveStream() {
+  requestSeq = requestSeq + 1
+  const task = requestTask
+  requestTask = null
+  if (task != null) task.abort()
+}
+
+function snapshot() {
+  return {
+    messages: messages.value,
+    sending: sending.value,
+    statusText: statusText.value,
+    errorText: errorText.value,
+    sessionId: sessionId.value
+  }
+}
+
+function applyState(state) {
+  messages.value = state.messages
+  sending.value = state.sending
+  statusText.value = state.statusText
+  errorText.value = state.errorText
+  sessionId.value = state.sessionId
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function openTalentTest() {
+  uni.navigateTo({ url: '/pages/talent/index' })
+}
+
+function openParentCourse() {
+  uni.navigateTo({ url: '/pages/parent/pcourse' })
+}
+
+/** 咨询页目前是静态 HTML，走 web-view 承接 */
+function openConsult() {
+  uni.navigateTo({ url: '/pages/webview/index?page=consult.html' })
+}
+
+function scrollToBottom() {
+  clearScrollTimer()
+  scrollAnchor.value = ''
+  scrollTimer = setTimeout(() => {
+    scrollTimer = 0
+    scrollAnchor.value = 'pd-bottom'
+  }, 16)
+}
+
+function onSseEvent(seq, event) {
+  if (seq != requestSeq) return
+  applyState(reduceSse(snapshot(), event))
+  if (event.type == 'done' || event.type == 'error' || event.type == 'abort') {
+    requestTask = null
+  }
+  if (event.type == 'token' || event.type == 'replace' || event.type == 'done') {
+    scrollToBottom()
+  }
+}
+
+function onSubmit(text) {
+  if (sending.value) return
+  applyState(startUserTurn(snapshot(), text))
+  scrollToBottom()
+
+  requestSeq = requestSeq + 1
+  const seq = requestSeq
+  const options= {
+    message: text,
+    sessionId: sessionId.value,
+    childId: focusChildId.value
+  }
+  const task = parentGuideChatStream(options, (event) => {
+    onSseEvent(seq, event)
+  })
+  if (task == null) {
+    applyState(finishTurn(snapshot()))
+    return
+  }
+  requestTask = task
+}
+
+function sendSuggest(text) {
+  onSubmit(text)
+}
+
+function stop() {
+  abortActiveStream()
+  applyState(finishTurn(snapshot()))
+}
+
+/** 默认关注第一个孩子；家长登录后至少要有一个绑定孩子才能对话 */
+async function loadFocusChild() {
+  try {
+    const id = readFirstChildId(await listChildren())
+    if (id > 0) focusChildId.value = id
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取孩子列表失败'
+  }
+}
+
+async function loadHistory() {
+  try {
+    const data = await getParentGuideSession()
+    const sid = data.getNumber('session_id')
+    if (sid != null && sid > 0) sessionId.value = sid
+    const list = toMessages(readParentMessages(data))
+    if (list.length > 0) {
+      messages.value = list
+      scrollToBottom()
+    }
+  } catch (error) {
+    // 首次进入没有历史会话属于正常情况，不打扰用户
+  }
+}
+
+async function loadSuggests() {
+  try {
+    const data = await getParentSuggestPrompts(3)
+    const list = readParentSuggests(data)
+    if (list.length > 0) suggests.value = list
+  } catch (error) {
+    // 取不到就用默认建议
+  }
+}
+
+onLoad(() => {
+  const session = getSession()
+  if (session == null) {
+    returnToLogin()
+    return
+  }
+  loadFocusChild()
+  loadHistory()
+  loadSuggests()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  bottomInset.value = uni.getWindowInfo().safeAreaInsets.bottom
+})
+
+onUnload(() => {
+  abortActiveStream()
+  clearScrollTimer()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './dayu.scss';
+</style>

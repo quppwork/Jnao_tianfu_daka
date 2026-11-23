@@ -1,0 +1,150 @@
+import { SseEvent } from '../network/stream.uts'
+
+/**
+ * 对话页共用的消息与状态归约。
+ *
+ * qa（学科答疑）、parent/dayu（家长版大宇）以及后续的 plan/dayu、report/talent-chat
+ * 都跑同一套 SSE 状态机，差异只在接口与文案，因此把状态变换抽成纯函数。
+ *
+ * 注意：这里只做不可变换算，不持有 ref。uni-app x 对 ref 数组的就地修改不保证触发渲染，
+ * 所以每次返回新的数组实例，由页面整体赋值。
+ */
+
+export type ChatMessage = {
+  role: string
+  content: string
+  pending: boolean
+}
+
+export type ChatUiState = {
+  messages: ChatMessage[]
+  sending: boolean
+  statusText: string
+  errorText: string
+  sessionId: number
+}
+
+export function emptyChatState(): ChatUiState {
+  return { messages: [], sending: false, statusText: '', errorText: '', sessionId: 0 }
+}
+
+function replaceTail(list: ChatMessage[], build: (prev: ChatMessage) => ChatMessage): ChatMessage[] {
+  if (list.length == 0) return list
+  const next = list.slice(0)
+  const lastIndex = next.length - 1
+  next[lastIndex] = build(list[lastIndex])
+  return next
+}
+
+/** 追加一条消息，返回新数组 */
+export function appendMessage(list: ChatMessage[], message: ChatMessage): ChatMessage[] {
+  const next = list.slice(0)
+  next.push(message)
+  return next
+}
+
+/** 新建一轮：压入用户消息与待回复的 AI 占位，进入 sending 态 */
+export function startUserTurn(state: ChatUiState, text: string): ChatUiState {
+  let list = appendMessage(state.messages, { role: 'user', content: text, pending: false })
+  list = appendMessage(list, { role: 'ai', content: '', pending: true })
+  return {
+    messages: list,
+    sending: true,
+    statusText: '',
+    errorText: '',
+    sessionId: state.sessionId
+  }
+}
+
+/** 收尾当前轮：AI 气泡去 pending、退出 sending，并写入指定的提示/错误与 session */
+function closeTurn(
+  state: ChatUiState,
+  statusText: string,
+  errorText: string,
+  sessionId: number
+): ChatUiState {
+  return {
+    messages: replaceTail(state.messages, (prev: ChatMessage): ChatMessage => {
+      return { role: prev.role, content: prev.content, pending: false }
+    }),
+    sending: false,
+    statusText: statusText,
+    errorText: errorText,
+    sessionId: sessionId
+  }
+}
+
+/** 结束当前轮：AI 气泡去掉 pending，退出 sending 态 */
+export function finishTurn(state: ChatUiState): ChatUiState {
+  return closeTurn(state, state.statusText, state.errorText, state.sessionId)
+}
+
+/** 把一条 SSE 事件归约到新状态 */
+export function reduceSse(state: ChatUiState, event: SseEvent): ChatUiState {
+  if (event.type == 'token') {
+    return {
+      messages: replaceTail(state.messages, (prev: ChatMessage): ChatMessage => {
+        return { role: prev.role, content: prev.content + event.content, pending: true }
+      }),
+      sending: true,
+      statusText: state.statusText,
+      errorText: state.errorText,
+      sessionId: state.sessionId
+    }
+  }
+
+  if (event.type == 'replace') {
+    return {
+      messages: replaceTail(state.messages, (prev: ChatMessage): ChatMessage => {
+        return { role: prev.role, content: event.content, pending: true }
+      }),
+      sending: true,
+      statusText: state.statusText,
+      errorText: state.errorText,
+      sessionId: state.sessionId
+    }
+  }
+
+  if (event.type == 'status') {
+    return {
+      messages: state.messages,
+      sending: state.sending,
+      statusText: event.message,
+      errorText: state.errorText,
+      sessionId: state.sessionId
+    }
+  }
+
+  if (event.type == 'done') {
+    let sessionId = state.sessionId
+    const payload = event.payload
+    if (payload != null) {
+      const sid = payload.getNumber('session_id')
+      if (sid != null && sid > 0) sessionId = sid
+    }
+    return closeTurn(state, '', state.errorText, sessionId)
+  }
+
+  if (event.type == 'abort') {
+    return closeTurn(state, event.message, state.errorText, state.sessionId)
+  }
+
+  if (event.type == 'error') {
+    return closeTurn(state, '', event.message, state.sessionId)
+  }
+
+  return state
+}
+
+/** 历史消息转成气泡列表 */
+export function toMessages(rows: Array<UTSJSONObject>): ChatMessage[] {
+  const list: ChatMessage[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const role = row.getString('role') ?? 'ai'
+    const content = row.getString('content') ?? ''
+    if (content.length == 0) continue
+    list.push({ role: role == 'user' ? 'user' : 'ai', content: content, pending: false })
+  }
+  return list
+}

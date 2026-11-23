@@ -1,0 +1,275 @@
+{
+  "easycom": {
+    "autoscan": true
+  },
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#070b14",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/login/onboarding",
+      "style": {
+        "navigationBarTitleText": "完善信息",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#070b14",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "大宇AI",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/bind-phone",
+      "style": {
+        "navigationBarTitleText": "绑定手机号",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/wechat",
+      "style": {
+        "navigationBarTitleText": "微信登录",
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "subPackages": [
+    {
+      "root": "pages/training",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "今日训练",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "dayu",
+          "style": {
+            "navigationBarTitleText": "今日修炼",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "history",
+          "style": {
+            "navigationBarTitleText": "历史记录",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/growth",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "成长里程碑",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/parent",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "孩子账户管理",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "dayu",
+          "style": {
+            "navigationBarTitleText": "大宇智能体 · 家长版",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "pcourse",
+          "style": {
+            "navigationBarTitleText": "家长课堂",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "wallet",
+          "style": {
+            "navigationBarTitleText": "算力中心",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "profile",
+          "style": {
+            "navigationBarTitleText": "家长资料",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/talent",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "天赋测试",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "chat",
+          "style": {
+            "navigationBarTitleText": "报告答疑",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/report",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "天赋报告",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/qa",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "学科答疑",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/webview",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": ""
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/admin",
+      "pages": [
+        {
+          "path": "login",
+          "style": {
+            "navigationBarTitleText": "管理后台登录",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "管理后台",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "blacklist",
+          "style": {
+            "navigationBarTitleText": "黑名单",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "settings",
+          "style": {
+            "navigationBarTitleText": "平台设置",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/academy",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "天赋学院",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "play",
+          "style": {
+            "navigationBarTitleText": "观看",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "chat",
+          "style": {
+            "navigationBarTitleText": "剧集讨论",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "detail",
+          "style": {
+            "navigationBarTitleText": "剧集详情",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/guide",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "学科引导",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/solve",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "拍照解题",
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    }
+  ],
+  "globalStyle": {
+    "backgroundColor": "#070b14",
+    "navigationBarBackgroundColor": "#070b14",
+    "navigationBarTextStyle": "white"
+  }
+}

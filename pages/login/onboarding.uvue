@@ -1,0 +1,308 @@
+<template>
+  <view class="ob-page">
+    <view class="ob-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view v-if="canGoBack" class="ob-back" @click="goBack"><text class="ob-back-icon">‹</text></view>
+      <view v-else class="ob-back-placeholder"></view>
+      <text class="ob-title">{{ title }}</text>
+      <view class="ob-back-placeholder"></view>
+    </view>
+
+    <scroll-view class="ob-body" scroll-y>
+      <!-- 第 1 步：新学员 / 老学员 -->
+      <view v-if="step == 1" class="ob-card">
+        <text class="ob-h">你是新学员还是老学员？</text>
+        <text class="ob-sub">老学员指已经在别处训练过这些能力的同学</text>
+        <view class="ob-choice" @click="pickType('new')">
+          <text class="ob-choice-title">我是新学员</text>
+          <text class="ob-choice-desc">从零开始，直接做天赋测评</text>
+        </view>
+        <view class="ob-choice" @click="pickType('returning')">
+          <text class="ob-choice-title">我是老学员</text>
+          <text class="ob-choice-desc">已有训练记录，先补录历史数据</text>
+        </view>
+      </view>
+
+      <!-- 第 2 步：选能力 + 总体数据 -->
+      <view v-else-if="step == 2" class="ob-card">
+        <text class="ob-h">你练过哪些能力？</text>
+        <text class="ob-sub">可多选，下一步逐个填写训练数据</text>
+        <view class="ob-grid">
+          <view
+            v-for="(name, idx) in abilities"
+            :key="idx.toString()"
+            class="ob-chip"
+            :class="isSelected(idx) ? 'ob-chip-on' : ''"
+            @click="toggleAbility(idx)"
+          >
+            <text class="ob-chip-text" :class="isSelected(idx) ? 'ob-chip-text-on' : ''">{{ name }}</text>
+          </view>
+        </view>
+
+        <text class="ob-label">开始训练的日期</text>
+        <input v-model="globalFirstDate" class="ob-input" placeholder="如 2024-03-01" :maxlength="10" />
+        <text class="ob-label">累计训练次数（大概即可）</text>
+        <input v-model="globalTotalCount" class="ob-input" type="number" placeholder="如 120" />
+
+        <button class="ob-primary" :disabled="selectedCount == 0" @click="confirmAbilities">继续</button>
+      </view>
+
+      <!-- 第 3 步起：逐项填写 -->
+      <view v-else-if="step >= 3 && step < 100" class="ob-card">
+        <text class="ob-h">{{ currentAbility }}</text>
+        <text class="ob-sub">第 {{ currentIndex + 1 }} / {{ selectedNames.length }} 项，不确定的可以留空</text>
+
+        <text class="ob-label">训练次数</text>
+        <input v-model="fTotalCount" class="ob-input" type="number" placeholder="如 30" />
+        <text class="ob-label">单次时长</text>
+        <input v-model="fTime" class="ob-input" placeholder="如 15分钟" />
+        <text class="ob-label">累计字数（阅读/速记类适用）</text>
+        <input v-model="fWordCount" class="ob-input" type="number" placeholder="如 3000" />
+        <text class="ob-label">正确率（%）</text>
+        <input v-model="fAccuracyPct" class="ob-input" type="number" placeholder="如 85" />
+        <text class="ob-label">备注</text>
+        <input v-model="fNote" class="ob-input" placeholder="如：中途停过两个月" />
+
+        <button class="ob-primary" :loading="saving" :disabled="saving" @click="nextAbility">
+          {{ isLastAbility ? '完成' : '继续' }}
+        </button>
+        <view class="ob-skip" @click="skipAbility"><text class="ob-skip-text">这项跳过</text></view>
+      </view>
+
+      <!-- 完成 -->
+      <view v-else class="ob-card">
+        <text class="ob-h">资料已保存</text>
+        <text class="ob-sub">接下来做一次天赋测评，系统会结合你的历史数据给出报告</text>
+        <button class="ob-primary" @click="goHome">进入首页</button>
+      </view>
+
+      <text v-if="errorText.length > 0" class="ob-error">{{ errorText }}</text>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { updateUserProfile, buildOnboardingPayload } from '../../api/user.uts'
+import { getSession, returnToLogin } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+
+const abilities= [
+  '超脑阅读', '影像追忆', '扫描速记', '极速运算',
+  '极速学习', '难题专练', '文科扫书', '理科扫书',
+  '高效作业', '天赋绘画', '音乐灵感', '棋类专注'
+]
+
+const step = ref(1)
+const studentType = ref('new')
+const selected = ref([])
+const selectedNames = ref([])
+const priorData = ref([])
+
+const globalFirstDate = ref('')
+const globalTotalCount = ref('')
+
+const fTotalCount = ref('')
+const fTime = ref('')
+const fWordCount = ref('')
+const fAccuracyPct = ref('')
+const fNote = ref('')
+
+const saving = ref(false)
+const errorText = ref('')
+const insetTop = ref(0)
+
+const selectedCount = computed(() => selected.value.length)
+
+const currentIndex = computed(() => step.value - 3)
+
+const currentAbility = computed(() => {
+  const names = selectedNames.value
+  const i = currentIndex.value
+  if (i < 0 || i >= names.length) return ''
+  return names[i]
+})
+
+const isLastAbility = computed(() => {
+  return currentIndex.value >= selectedNames.value.length - 1
+})
+
+const canGoBack = computed(() => step.value > 1 && step.value < 100)
+
+const title = computed(() => {
+  if (step.value == 1) return '完善信息'
+  if (step.value == 2) return '补录训练数据'
+  if (step.value >= 100) return '完成'
+  return '训练数据'
+})
+
+function goBack() {
+  if (step.value == 3) {
+    step.value = 2
+    return
+  }
+  if (step.value > 3) {
+    saveCurrentForm()
+    step.value = step.value - 1
+    loadCurrentForm()
+    return
+  }
+  step.value = 1
+}
+
+function isSelected(idx) {
+  return selected.value.includes(idx)
+}
+
+function toggleAbility(idx) {
+  const list = selected.value.slice(0)
+  const at = list.indexOf(idx)
+  if (at >= 0) {
+    list.splice(at, 1)
+  } else {
+    list.push(idx)
+  }
+  list.sort((a, b) => a - b)
+  selected.value = list
+}
+
+function pickType(next) {
+  studentType.value = next
+  errorText.value = ''
+  if (next == 'new') {
+    // 新学员没有历史数据，直接落库并结束
+    persist(true)
+    return
+  }
+  step.value = 2
+}
+
+/** 把已选能力按索引顺序映射成名称，并初始化录入项 */
+function confirmAbilities() {
+  if (selected.value.length == 0) return
+  const names= []
+  const entries= []
+  for (let i = 0; i < selected.value.length; i++) {
+    const name = abilities[selected.value[i]]
+    names.push(name)
+    entries.push({
+      ability: name,
+      totalCount: 0,
+      time: '',
+      wordCount: 0,
+      accuracyPct: 0,
+      note: ''
+    })
+  }
+  selectedNames.value = names
+  priorData.value = entries
+  step.value = 3
+  loadCurrentForm()
+}
+
+function loadCurrentForm() {
+  const i = currentIndex.value
+  const list = priorData.value
+  if (i < 0 || i >= list.length) return
+  const e = list[i]
+  fTotalCount.value = e.totalCount > 0 ? e.totalCount.toString() : ''
+  fTime.value = e.time
+  fWordCount.value = e.wordCount > 0 ? e.wordCount.toString() : ''
+  fAccuracyPct.value = e.accuracyPct > 0 ? e.accuracyPct.toString() : ''
+  fNote.value = e.note
+}
+
+function parseIntOr(value, fallback) {
+  const text = value.trim()
+  if (text.length == 0) return fallback
+  const n = parseInt(text)
+  return isNaN(n) ? fallback : n
+}
+
+function saveCurrentForm() {
+  const i = currentIndex.value
+  const list = priorData.value
+  if (i < 0 || i >= list.length) return
+  const next = list.slice(0)
+  const e = list[i]
+  next[i] = {
+    ability: e.ability,
+    totalCount: parseIntOr(fTotalCount.value, 0),
+    time: fTime.value.trim(),
+    wordCount: parseIntOr(fWordCount.value, 0),
+    accuracyPct: parseIntOr(fAccuracyPct.value, 0),
+    note: fNote.value.trim()
+  }
+  priorData.value = next
+}
+
+function clearForm() {
+  fTotalCount.value = ''
+  fTime.value = ''
+  fWordCount.value = ''
+  fAccuracyPct.value = ''
+  fNote.value = ''
+}
+
+function nextAbility() {
+  saveCurrentForm()
+  if (isLastAbility.value) {
+    persist(true)
+    return
+  }
+  step.value = step.value + 1
+  clearForm()
+  loadCurrentForm()
+}
+
+function skipAbility() {
+  clearForm()
+  saveCurrentForm()
+  if (isLastAbility.value) {
+    persist(true)
+    return
+  }
+  step.value = step.value + 1
+  loadCurrentForm()
+}
+
+/** 汇总成后端约定的 profile_json.onboarding 结构 */
+function buildOnboarding(finalize) {
+  return buildOnboardingPayload(studentType.value, finalize, globalFirstDate.value.trim(), parseIntOr(globalTotalCount.value, 0), priorData.value)
+}
+async function persist(finalize) {
+  if (saving.value) return
+  saving.value = true
+  errorText.value = ''
+  const body= {
+    profile_json: { onboarding: buildOnboarding(finalize) }
+  }
+  try {
+    await updateUserProfile(body)
+    step.value = 100
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '保存失败，请重试'
+  } finally {
+    saving.value = false
+  }
+}
+
+function goHome() {
+  uni.reLaunch({ url: '/pages/home/index' })
+}
+
+onLoad(() => {
+  const session = getSession()
+  if (session == null) {
+    returnToLogin()
+    return
+  }
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

@@ -1,0 +1,181 @@
+<template>
+  <view class="growth-page">
+    <view class="nav" :style="{ marginTop: insetTop + 'px' }">
+      <view class="nav-back" @click="goBack"><text class="back-glyph">‹</text></view>
+      <view class="nav-heading">
+        <text class="nav-title">成长里程碑</text>
+        <text class="nav-sub">段位与打卡</text>
+      </view>
+      <view class="nav-spacer"></view>
+    </view>
+    <scroll-view class="growth-scroll" scroll-y :show-scrollbar="false">
+      <view class="growth-body">
+        <text v-if="loading" class="muted">正在读取成长数据…</text>
+        <view v-if="errorText.length > 0" class="error-card">
+          <text class="error">{{ errorText }}</text>
+          <button class="retry" @click="loadGrowth">重试</button>
+        </view>
+        <view v-if="loaded">
+          <view class="id-bar">
+            <view class="avatar"><image class="avatar-image" :src="avatarUrl" mode="aspectFill" /></view>
+            <view class="id-labels">
+              <text class="nav-title">成长历程碑</text>
+              <text class="nav-sub">段位与打卡</text>
+            </view>
+            <text class="hero-pill">{{ steps[summary.tier - 1] }}阶 / 九阶</text>
+          </view>
+
+          <view class="hero-card">
+            <view class="hero-top">
+              <view class="hero-labels">
+                <text class="hero-honor">{{ summary.honor }}</text>
+                <text class="hero-nick">{{ summary.nickname }}{{ summary.talent.length > 0 ? ' · ' + summary.talent : '' }}</text>
+              </view>
+              <text class="hero-tier">第{{ summary.tier }}段 / 九段</text>
+            </view>
+            <view class="tier-bar"><view class="tier-fill" :style="{ width: summary.percent + '%' }"></view></view>
+            <text v-if="summary.streak >= 3" class="streak-pill">🔥 已连续 {{ summary.streak }} 天</text>
+            <view class="hero-stats">
+              <view class="stat"><text class="stat-value">{{ summary.checkins }}</text><text class="muted">累计打卡</text></view>
+              <view class="stat"><text class="stat-value">{{ summary.streak }}</text><text class="muted">连续天数</text></view>
+              <view class="stat"><text class="stat-value">{{ summary.questions }}</text><text class="muted">学科提问</text></view>
+              <view class="stat"><text class="stat-value">{{ summary.badges }}/{{ summary.badgesTotal }}</text><text class="muted">徽章</text></view>
+            </view>
+            <text class="points">🏆 已获积分 {{ summary.points }}</text>
+          </view>
+
+          <view class="section-heading">
+            <text class="section-title">📈 进阶之路</text>
+            <text v-if="nextTitle.length > 0" class="muted">再进 {{ nextTier }} 阶解锁「{{ nextTitle }}」</text>
+          </view>
+          <view class="path-card">
+            <view class="path-steps">
+              <view v-for="node in pathRows" :key="node.name" class="path-step">
+                <view class="path-icon" :class="{ 'path-current': node.current }"><text class="path-emoji">{{ node.badge }}</text></view>
+                <text class="path-title">{{ node.name }}</text>
+                <text class="path-sub">{{ node.subtitle }}</text>
+              </view>
+            </view>
+            <view class="tier-divider"></view>
+            <view class="tier-steps">
+              <view v-for="(step, index) in steps" :key="step" class="tier-cell" :class="{ 'tier-current': index + 1 == summary.tier }"><text class="tier-text">{{ step }}</text></view>
+            </view>
+            <text class="muted">连续达标 {{ advancePass }} 次，单项升 1 段</text>
+          </view>
+
+          <text class="section-title">🏅 荣誉徽章</text>
+          <view class="badge-grid">
+            <view v-for="badge in badges" :key="badge.name" class="badge" :class="{ 'badge-locked': !badge.earned }">
+              <view class="badge-icon" :class="{ 'badge-earned': badge.earned }"><text class="badge-emoji">{{ badge.icon }}</text></view>
+              <text class="badge-name">{{ badge.name }}</text>
+              <text class="badge-caption">{{ badge.caption }}</text>
+            </view>
+          </view>
+
+          <text v-if="events.length > 0" class="section-title">🕐 成长足迹</text>
+          <view v-for="(event, index) in events" :key="index" class="timeline">
+            <view class="timeline-dot"></view>
+            <view class="timeline-content">
+              <text class="timeline-title">{{ event.title }}</text>
+              <text v-if="event.desc.length > 0" class="muted">{{ event.desc }}</text>
+            </view>
+            <text class="muted">{{ event.date }}</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getApiOrigin } from '../../config/environment.uts'
+import { requestJson } from '../../network/request.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { readTierPath, readBadgeItems, readGrowthEvents, growthAvatarFile, growthPathIcon } from '../../api/growth.uts'
+
+const summary = ref({ nickname: '', honor: '', talent: '', tier: 1, percent: 0, checkins: 0, streak: 0, questions: 0, badges: 0, badgesTotal: 0, points: 0 })
+const steps = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
+const pathRows = ref([])
+const badges = ref([])
+const events = ref([])
+const nextTitle = ref('')
+const nextTier = ref(0)
+const advancePass = ref(3)
+const avatarUrl = ref('')
+const insetTop = ref(0)
+const loaded = ref(false)
+const loading = ref(false)
+const errorText = ref('')
+
+async function loadGrowth() {
+  if (loading.value) return
+  loading.value = true
+  errorText.value = ''
+  try {
+    const responses = await Promise.all([
+      requestJson('/api/growth/summary'),
+      requestJson('/api/growth/tier'),
+      requestJson('/api/growth/badges'),
+      requestJson('/api/growth/timeline')
+    ])
+    const data = responses[0]
+    const tierInfo = responses[1]
+    const talent = data.getString('talent_primary') ?? ''
+    const tier = Math.min(9, Math.max(1, tierInfo.getNumber('overall_tier') ?? data.getNumber('overall_tier') ?? 1))
+    const honor = tierInfo.getString('honor_level') ?? data.getString('honor_level') ?? ''
+    summary.value = {
+      nickname: data.getString('nickname') ?? '',
+      honor, talent, tier, percent: Math.round(tier / 9 * 100),
+      checkins: data.getNumber('total_checkins') ?? 0,
+      streak: data.getNumber('checkin_streak') ?? 0,
+      questions: data.getNumber('qa_questions') ?? 0,
+      badges: data.getNumber('badges_earned') ?? 0,
+      badgesTotal: data.getNumber('badges_total') ?? 0,
+      points: data.getNumber('points') ?? 0
+    }
+    avatarUrl.value = getApiOrigin() + '/static/dayu/assets/ip/ring-' + growthAvatarFile(talent) + '.png'
+    nextTitle.value = tierInfo.getString('next_title') ?? ''
+    nextTier.value = tierInfo.getNumber('need') ?? 0
+    advancePass.value = tierInfo.getNumber('advance_pass') ?? 3
+    const path = readTierPath(tierInfo)
+    pathRows.value = path.map((node) => {
+      const name = node.getString('name') ?? ''
+      const identity = node.getBoolean('identity') == true
+      const fromTier = node.getNumber('from_duan') ?? 1
+      return { name, badge: growthPathIcon(name), subtitle: identity ? '身份' : '第' + fromTier.toString() + '段起', current: name == honor }
+    })
+    badges.value = readBadgeItems(responses[2]).map((row) => {
+      const earned = row.getBoolean('earned') == true
+      const earnedAt = row.getString('earned_at') ?? ''
+      return {
+        name: row.getString('name') ?? '', icon: row.getString('icon') ?? '', earned,
+        caption: earned && earnedAt.length > 0 ? earnedAt.slice(5) + ' 获得' : (row.getString('progress') ?? row.getString('cond') ?? '')
+      }
+    })
+    events.value = readGrowthEvents(responses[3]).map((row) => ({
+      title: row.getString('title') ?? '', date: row.getString('date') ?? '', desc: row.getString('desc') ?? ''
+    }))
+    loaded.value = true
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取成长数据失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+onLoad(() => {
+  loadGrowth()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

@@ -1,0 +1,196 @@
+<template>
+  <view class="gd-page">
+    <view class="gd-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="gd-back" @click="goBack"><text class="gd-back-icon">‹</text></view>
+      <text class="gd-title">学科引导</text>
+      <view class="gd-placeholder"></view>
+    </view>
+
+    <scroll-view class="gd-body" scroll-y :scroll-into-view="scrollAnchor">
+      <view class="gd-inner">
+        <view v-if="messages.length == 0" class="gd-empty">
+          <text class="gd-empty-title">说说你现在卡在哪</text>
+          <text class="gd-empty-hint">我会陪你一步步想，不直接给答案</text>
+        </view>
+
+        <chat-bubble
+          v-for="(m, index) in messages"
+          :key="index.toString()"
+          :role="m.role"
+          :content="m.content"
+          :pending="m.pending"
+        />
+
+        <!-- 推荐提问 -->
+        <view v-if="messages.length == 0 && suggests.length > 0" class="gd-suggests">
+          <view v-for="(s, i) in suggests" :key="i" class="gd-suggest" @click="pickSuggest(s)">
+            <text class="gd-suggest-text">{{ s }}</text>
+          </view>
+        </view>
+
+        <view id="gd-bottom" class="gd-anchor"></view>
+      </view>
+    </scroll-view>
+
+    <view v-if="statusText.length > 0" class="gd-status">
+      <text class="gd-status-text">{{ statusText }}</text>
+    </view>
+    <view v-if="errorText.length > 0" class="gd-error">
+      <text class="gd-error-text">{{ errorText }}</text>
+    </view>
+
+    <chat-composer
+      :sending="sending"
+      :inset="bottomInset"
+      placeholder="说说你卡在哪"
+      @submit="onSubmit"
+      @stop="stop"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+import { guideChatStream, getGuideSuggestPrompts, readGuideSuggests } from '../../api/guide.uts'
+import { getSession, returnToLogin } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { finishTurn, reduceSse, startUserTurn } from '../../utils/chatMessages.uts'
+
+const messages = ref([])
+const sending = ref(false)
+const statusText = ref('')
+const errorText = ref('')
+const sessionId = ref(0)
+const suggests = ref([])
+const scrollAnchor = ref('')
+const insetTop = ref(0)
+const bottomInset = ref(0)
+let requestTask: RequestTask | null = null
+let requestSeq = 0
+let scrollTimer = 0
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function clearScrollTimer() {
+  if (scrollTimer != 0) {
+    clearTimeout(scrollTimer)
+    scrollTimer = 0
+  }
+}
+
+function abortActiveStream() {
+  requestSeq = requestSeq + 1
+  const task = requestTask
+  requestTask = null
+  if (task != null) task.abort()
+}
+
+function snapshot() {
+  return {
+    messages: messages.value,
+    sending: sending.value,
+    statusText: statusText.value,
+    errorText: errorText.value,
+    sessionId: sessionId.value
+  }
+}
+
+function applyState(state) {
+  messages.value = state.messages
+  sending.value = state.sending
+  statusText.value = state.statusText
+  errorText.value = state.errorText
+  sessionId.value = state.sessionId
+}
+
+function scrollToBottom() {
+  clearScrollTimer()
+  scrollAnchor.value = ''
+  scrollTimer = setTimeout(() => {
+    scrollTimer = 0
+    scrollAnchor.value = 'gd-bottom'
+  }, 16)
+}
+
+function onSseEvent(seq, event) {
+  if (seq != requestSeq) return
+  applyState(reduceSse(snapshot(), event))
+  if (event.type == 'done' || event.type == 'error' || event.type == 'abort') {
+    requestTask = null
+  }
+  if (event.type == 'token' || event.type == 'replace' || event.type == 'done') {
+    scrollToBottom()
+  }
+}
+
+function send(text) {
+  if (sending.value) return
+  const t = text.trim()
+  if (t.length == 0) return
+  errorText.value = ''
+  applyState(startUserTurn(snapshot(), t))
+  scrollToBottom()
+
+  requestSeq = requestSeq + 1
+  const seq = requestSeq
+  const options = {
+    message: t,
+    sessionId: sessionId.value,
+    force: false,
+    useLlm: true
+  }
+  const task = guideChatStream(options, (event) => {
+    onSseEvent(seq, event)
+  })
+  if (task == null) {
+    applyState(finishTurn(snapshot()))
+    return
+  }
+  requestTask = task
+}
+
+function onSubmit(text) {
+  send(text)
+}
+
+function pickSuggest(text) {
+  send(text)
+}
+
+function stop() {
+  abortActiveStream()
+  applyState(finishTurn(snapshot()))
+}
+
+async function loadSuggests() {
+  try {
+    const data = await getGuideSuggestPrompts('student', 4)
+    suggests.value = readGuideSuggests(data)
+  } catch (_) {
+    // 推荐提问拿不到不影响对话
+  }
+}
+
+onLoad(() => {
+  if (getSession() == null) {
+    returnToLogin()
+    return
+  }
+  loadSuggests()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  bottomInset.value = uni.getWindowInfo().safeAreaInsets.bottom
+})
+
+onUnload(() => {
+  abortActiveStream()
+  clearScrollTimer()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

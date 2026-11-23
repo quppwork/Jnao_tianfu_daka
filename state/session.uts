@@ -1,0 +1,40 @@
+const SESSION_KEY = 'jnao_native_session'
+
+export type Session = {
+  userId: number
+  role: string
+  nickname: string
+  accessToken: string
+}
+
+let currentSession: Session | null = null
+let loaded = false
+
+export function getSession(): Session | null {
+  if (loaded) return currentSession
+  loaded = true
+  const stored = uni.getStorageSync(SESSION_KEY)
+  if (typeof stored != 'string' || stored.length == 0) return null
+  try {
+    currentSession = JSON.parse<Session>(stored)
+  } catch (_) {
+    uni.removeStorageSync(SESSION_KEY)
+  }
+  return currentSession
+}
+
+export function saveSession(session: Session) {
+  uni.setStorageSync(SESSION_KEY, JSON.stringify(session))
+  currentSession = session
+  loaded = true
+}
+
+export function clearSession() {
+  currentSession = null
+  loaded = true
+  uni.removeStorageSync(SESSION_KEY)
+}
+
+export function returnToLogin() {
+  uni.reLaunch({ url: '/pages/login/index' })
+}

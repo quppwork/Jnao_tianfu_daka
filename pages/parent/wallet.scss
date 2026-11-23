@@ -1,0 +1,25 @@
+.page, .scroll { display:flex; flex:1; flex-direction:column; background-color:#0d111f; }
+.nav, .row, .line, .packs { display:flex; flex-direction:row; align-items:center; }
+.nav { padding:8px 14px; }
+.back { color:#8b93a5; font-size:28px; width:36px; }
+.body { padding:8px 18px 24px; }
+.card { padding:15px; margin-bottom:12px; border-radius:16px; border:1px solid #26334a; background-color:#131926; }
+.hero { border-color:#745e34; background-color:#231c11; background-image:linear-gradient(160deg,#31261a,#151618); }
+.title, .label { color:#efede7; font-weight:800; font-size:16px; }
+.label { font-size:13px; }
+.gold, .large { color:#f5d576; font-weight:900; font-size:14px; }
+.large { font-size:32px; margin:8px 0; }
+.dim { color:#9a9fb0; font-size:12px; margin-top:4px; }
+.error { color:#fca5a5; font-size:13px; }
+.row, .line { justify-content:space-between; }
+.line { padding:9px 0; border-bottom:1px solid #26334a; }
+.item { flex:1; margin-right:8px; }
+.track, .fill { height:6px; border-radius:4px; }
+.track { background-color:#453526; margin-bottom:8px; }
+.fill { background-color:#f5d576; }
+.balance { margin-top:12px; }
+.small, .payment { margin:8px 0 0; padding:0 12px; min-height:28px; line-height:28px; border-radius:9px; background-color:#273652; color:#caddfe; font-size:12px; }
+.payment { min-height:42px; line-height:42px; color:#131926; font-weight:900; background-color:#f5d576; }
+.packs { flex-wrap:wrap; justify-content:space-between; margin-top:8px; }
+.pack { width:31%; box-sizing:border-box; align-items:center; padding:8px; margin-bottom:5px; border-radius:10px; border:1px solid #26334a; }
+.pack-selected { border-color:#f5d576; background-color:#342b1f; }

@@ -1,0 +1,46 @@
+import { requestJson } from '../../network/request.uts'
+import { getSession } from '../../state/session.uts'
+
+export type AssessmentEntry = { id: number; talent: string; date: string; mode: string }
+
+export function orderQuestions(count: number): number[] {
+  const order: number[] = []
+  for (let index = 0; index < count; index++) order.push(index)
+  for (let index = count - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1))
+    const item = order[index]
+    order[index] = order[other]
+    order[other] = item
+  }
+  return order
+}
+
+export async function submitChildAssessment(answers: string[]): Promise<UTSJSONObject> {
+  const bits = answers.join('')
+  if (!/^[01]{35}$/.test(bits)) throw new Error('请完成全部 35 道题后再提交')
+  const session = getSession()
+  if (session == null || session.role != 'student') throw new Error('请进入对应的孩子账号')
+  const profile = await requestJson('/api/user/profile')
+  const stored = profile.getString('jnao_uid') ?? ''
+  let externalId = parseInt(stored)
+  if (isNaN(externalId) || externalId <= 0) {
+    externalId = session.userId * 1000 + Date.now() % 1000
+    await requestJson('/api/user/profile', 'PUT', { jnao_uid: externalId.toString() })
+  }
+  const result = await requestJson('/api/talent/report', 'POST', { answer: bits, uid: externalId, type: 1 }, null, true, 65000)
+  if (result.getNumber('code') != 1 || (result.getNumber('assessment_id') ?? 0) <= 0) {
+    throw new Error('服务未返回有效的测评报告')
+  }
+  return result
+}
+
+export async function readAssessmentHistory(): Promise<AssessmentEntry[]> {
+  const response = await requestJson('/api/talent/assessment/history')
+  const entries = response.getArray<UTSJSONObject>('items') ?? []
+  return entries.map((entry): AssessmentEntry => ({
+    id: entry.getNumber('id') ?? 0,
+    talent: entry.getString('talent_primary') ?? '天赋测评',
+    date: (entry.getString('create_time') ?? '').slice(0, 10),
+    mode: entry.getString('mode') == 'adult' ? '成人' : '儿童'
+  }))
+}

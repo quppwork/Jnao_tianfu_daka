@@ -1,0 +1,9 @@
+export function getPageTopInset(): number {
+  const inset = uni.getWindowInfo().safeAreaInsets.top
+  // #ifdef MP-WEIXIN
+  return Math.max(inset, wx.getMenuButtonBoundingClientRect().bottom)
+  // #endif
+  // #ifndef MP-WEIXIN
+  return inset
+  // #endif
+}

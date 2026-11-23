@@ -1,0 +1,74 @@
+import { requestJson } from '../network/request.uts'
+
+/** 成长里程碑：徽章、等级、时间线、学年规划 */
+
+export function listGrowthBadges(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/badges')
+}
+
+export function listGrowthMilestones(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/milestones')
+}
+
+export function getGrowthTimeline(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/timeline')
+}
+
+export function getGrowthCalendar(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/calendar')
+}
+
+export function getGrowthTier(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/tier')
+}
+
+export function getGrowthConsole(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/console')
+}
+
+export function getGrowthSummary(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/summary')
+}
+
+export function getGrowthShare(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/share')
+}
+
+export function getAcademicPlan(): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/academic-plan')
+}
+
+/** 请求体由后端定义，按需透传 */
+export function confirmAcademicPlan(body: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/growth/academic-plan/confirm', 'POST', body)
+}
+
+/** 等级路径节点 */
+export function readTierPath(tierInfo: UTSJSONObject): Array<UTSJSONObject> {
+  return tierInfo.getArray<UTSJSONObject>('path') ?? []
+}
+
+/** 徽章列表 */
+export function readBadgeItems(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('items') ?? []
+}
+
+/** 成长事件列表 */
+export function readGrowthEvents(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('items') ?? []
+}
+/**
+ * 天赋标签 → 头像文件名。
+ * 必须放在 .uts：.uvue 里不能写 const x: UTSJSONObject = {...}，
+ * 而对象字面量推断不出 UTSJSONObject，就调不了 getString()。
+ */
+export function growthAvatarFile(talent: string): string {
+  const map: UTSJSONObject = { '学者': 'study', '思者': 'think', '行者': 'act', '德者': 'virtue', '赢者': 'win' }
+  return map.getString(talent) ?? 'study'
+}
+
+/** 等级名称 → 徽章图标 */
+export function growthPathIcon(name: string): string {
+  const map: UTSJSONObject = { '会员': '🪪', 'VIP会员': '💎', '导师子女': '👑', '传承特使': '🏅', '劲脑学神': '🧠', '专利精英': '💡' }
+  return map.getString(name) ?? '🏅'
+}

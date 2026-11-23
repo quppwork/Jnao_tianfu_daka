@@ -1,0 +1,2 @@
+// 从 onboarding.uvue 抽出：.uvue 的 script 块不支持 type / interface 声明
+export type PrioriEntry = { ability: string; totalCount: number; time: string; wordCount: number; accuracyPct: number; note: string }

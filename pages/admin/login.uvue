@@ -1,0 +1,89 @@
+<template>
+  <view class="ad-page">
+    <view class="ad-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="ad-back" @click="goBack"><text class="ad-back-icon">‹</text></view>
+      <text class="ad-title">管理后台</text>
+      <view class="ad-header-right"></view>
+    </view>
+
+    <view class="ad-card">
+      <text class="ad-h">管理员登录</text>
+      <text class="ad-sub">仅限内部运维使用</text>
+
+      <text class="ad-label">管理员账号</text>
+      <input v-model="loginName" class="ad-input" placeholder="请输入账号" :maxlength="50" />
+
+      <text class="ad-label">密码</text>
+      <input v-model="password" class="ad-input" password placeholder="请输入密码" :maxlength="128" />
+
+      <button class="ad-primary" :loading="submitting" :disabled="submitting" @click="submit">登录</button>
+      <text v-if="errorText.length > 0" class="ad-error">{{ errorText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { adminLogin } from '../../api/admin.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { saveSession } from '../../state/session.uts'
+
+const loginName = ref('')
+const password = ref('')
+const submitting = ref(false)
+const errorText = ref('')
+const insetTop = ref(0)
+
+function goBack() {
+  uni.navigateBack()
+}
+
+async function submit() {
+  if (submitting.value) return
+  const account = loginName.value.trim()
+  const secret = password.value.trim()
+  if (account.length < 2) {
+    errorText.value = '请输入管理员账号'
+    return
+  }
+  if (secret.length < 6) {
+    errorText.value = '密码至少 6 位'
+    return
+  }
+  submitting.value = true
+  errorText.value = ''
+  try {
+    const data = await adminLogin(account, secret)
+    const userId = data.getNumber('child_user_id') ?? data.getNumber('user_id') ?? data.getNumber('id') ?? 0
+    const token = data.getString('access_token') ?? data.getString('session_token') ?? ''
+    if (userId <= 0) {
+      errorText.value = '登录响应缺少账号信息'
+      return
+    }
+    // #ifndef WEB
+    if (token.length == 0) {
+      errorText.value = '服务端未返回管理员登录凭证，请确认后端已开启移动端 token 返回'
+      return
+    }
+    // #endif
+    saveSession({
+      userId: userId,
+      role: 'admin',
+      nickname: data.getString('nickname') ?? '管理员',
+      accessToken: token
+    })
+    uni.reLaunch({ url: '/pages/admin/index' })
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '登录失败，请重试'
+  } finally {
+    submitting.value = false
+  }
+}
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './admin.scss';
+</style>

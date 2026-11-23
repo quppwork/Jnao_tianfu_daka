@@ -1,0 +1,208 @@
+<template>
+  <view class="tc-page">
+    <view class="tc-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="tc-back" @click="goBack"><text class="tc-back-icon">‹</text></view>
+      <text class="tc-title">{{ talentPrimary.length > 0 ? talentPrimary + ' · 报告答疑' : '报告答疑' }}</text>
+      <view class="tc-placeholder"></view>
+    </view>
+
+    <scroll-view class="tc-body" scroll-y :scroll-into-view="scrollAnchor">
+      <view class="tc-inner">
+        <view v-if="loading" class="tc-empty"><text class="tc-empty-text">加载中…</text></view>
+
+        <template v-else>
+          <chat-bubble
+            v-for="(m, index) in messages"
+            :key="index.toString()"
+            :role="m.role"
+            :content="m.content"
+            :pending="m.pending"
+          />
+
+          <view v-if="messages.length == 0 && chips.length > 0" class="tc-chips">
+            <view v-for="(c, i) in chips" :key="i" class="tc-chip" @click="pickChip(c)">
+              <text class="tc-chip-text">{{ c }}</text>
+            </view>
+          </view>
+        </template>
+
+        <view id="tc-bottom" class="tc-anchor"></view>
+      </view>
+    </scroll-view>
+
+    <view v-if="statusText.length > 0" class="tc-status"><text class="tc-status-text">{{ statusText }}</text></view>
+    <view v-if="errorText.length > 0" class="tc-error"><text class="tc-error-text">{{ errorText }}</text></view>
+
+    <chat-composer
+      :sending="sending"
+      :inset="bottomInset"
+      placeholder="就问报告里的内容"
+      @submit="onSubmit"
+      @stop="stop"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getTalentChatHistory, talentChatStream, readTalentChat } from '../../api/talent.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { finishTurn, reduceSse, startUserTurn } from '../../utils/chatMessages.uts'
+
+const loading = ref(true)
+const messages = ref([])
+const sending = ref(false)
+const statusText = ref('')
+const errorText = ref('')
+const chips = ref([])
+const talentPrimary = ref('')
+const scrollAnchor = ref('')
+const insetTop = ref(0)
+const bottomInset = ref(0)
+const assessmentId = ref(0)
+let requestTask: RequestTask | null = null
+let requestSeq = 0
+let scrollTimer = 0
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function clearScrollTimer() {
+  if (scrollTimer != 0) {
+    clearTimeout(scrollTimer)
+    scrollTimer = 0
+  }
+}
+
+function abortActiveStream() {
+  requestSeq = requestSeq + 1
+  const task = requestTask
+  requestTask = null
+  if (task != null) task.abort()
+}
+
+function snapshot() {
+  return {
+    messages: messages.value,
+    sending: sending.value,
+    statusText: statusText.value,
+    errorText: errorText.value,
+    sessionId: assessmentId.value
+  }
+}
+
+function applyState(state) {
+  messages.value = state.messages
+  sending.value = state.sending
+  statusText.value = state.statusText
+  errorText.value = state.errorText
+}
+
+function scrollToBottom() {
+  clearScrollTimer()
+  scrollAnchor.value = ''
+  scrollTimer = setTimeout(() => {
+    scrollTimer = 0
+    scrollAnchor.value = 'tc-bottom'
+  }, 16)
+}
+
+function onSseEvent(seq, event) {
+  if (seq != requestSeq) return
+  applyState(reduceSse(snapshot(), event))
+  if (event.type == 'done' || event.type == 'error' || event.type == 'abort') {
+    requestTask = null
+  }
+  if (event.type == 'token' || event.type == 'replace' || event.type == 'done') {
+    scrollToBottom()
+  }
+}
+
+function send(text) {
+  if (sending.value) return
+  const t = text.trim()
+  if (t.length == 0) return
+  if (assessmentId.value <= 0) {
+    errorText.value = '还没选报告'
+    return
+  }
+  errorText.value = ''
+  applyState(startUserTurn(snapshot(), t))
+  scrollToBottom()
+
+  requestSeq = requestSeq + 1
+  const seq = requestSeq
+  const task = talentChatStream(assessmentId.value, t, (event) => {
+    onSseEvent(seq, event)
+  })
+  if (task == null) {
+    applyState(finishTurn(snapshot()))
+    return
+  }
+  requestTask = task
+}
+
+function onSubmit(text) {
+  send(text)
+}
+
+function pickChip(text) {
+  send(text)
+}
+
+function stop() {
+  abortActiveStream()
+  applyState(finishTurn(snapshot()))
+}
+
+async function load(id) {
+  loading.value = true
+  errorText.value = ''
+  try {
+    const data = await getTalentChatHistory(id)
+    const chat = readTalentChat(data)
+    assessmentId.value = chat.assessmentId > 0 ? chat.assessmentId : id
+    talentPrimary.value = chat.talentPrimary
+    chips.value = chat.chips
+    // 后端的历史消息 + 开场白都要渲染
+    const list = []
+    if (chat.opening.length > 0) {
+      list.push({ role: 'ai', content: chat.opening, pending: false })
+    }
+    for (let i = 0; i < chat.messages.length; i++) {
+      const m = chat.messages[i]
+      list.push({
+        role: m.role == 'assistant' ? 'ai' : 'user',
+        content: m.content,
+        pending: false
+      })
+    }
+    messages.value = list
+    scrollToBottom()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '加载对话失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onLoad((query) => {
+  const raw = query == null ? '' : (query['id'] ?? '')
+  const id = parseInt(raw)
+  load(isNaN(id) ? 0 : id)
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  bottomInset.value = uni.getWindowInfo().safeAreaInsets.bottom
+})
+
+onUnload(() => {
+  abortActiveStream()
+  clearScrollTimer()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './chat.scss';
+</style>

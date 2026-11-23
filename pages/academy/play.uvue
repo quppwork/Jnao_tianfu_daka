@@ -1,0 +1,173 @@
+<template>
+  <view class="pl-page">
+    <view class="pl-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="pl-back" @click="goBack"><text class="pl-back-icon">‹</text></view>
+      <text class="pl-title">{{ episodeTitle.length > 0 ? episodeTitle : '剧集' }}</text>
+      <view class="pl-placeholder"></view>
+    </view>
+
+    <view v-if="loading" class="pl-empty"><text class="pl-empty-text">加载中…</text></view>
+
+    <template v-else>
+      <!-- 有可播地址 -->
+      <view v-if="playUrl.length > 0" class="pl-video-wrap">
+        <video
+          id="academyVideo"
+          class="pl-video"
+          :src="playUrl"
+          :poster="poster"
+          :autoplay="false"
+          :show-center-play-btn="true"
+          :enable-progress-gesture="true"
+          @timeupdate="onTimeUpdate"
+          @ended="onEnded"
+          @error="onVideoError"
+        ></video>
+      </view>
+
+      <!-- 没有可播地址 -->
+      <view v-else class="pl-empty">
+        <text class="pl-empty-title">暂无可播放的视频</text>
+        <text class="pl-empty-hint">{{ emptyHint }}</text>
+      </view>
+
+      <view class="pl-info">
+        <text class="pl-ep-title">{{ episodeTitle }}</text>
+        <text v-if="episodeTopic.length > 0" class="pl-ep-topic">{{ episodeTopic }}</text>
+        <view class="pl-bar">
+          <view class="pl-bar-fill" :style="{ width: percent + '%' }"></view>
+        </view>
+        <text class="pl-progress">已看 {{ percent }}%</text>
+        <view class="pl-chat-btn" @click="goChat"><text class="pl-chat-btn-text">剧集讨论</text></view>
+      </view>
+
+      <text v-if="errorText.length > 0" class="pl-error">{{ errorText }}</text>
+    </template>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getAcademySector, readAcademySector, openAcademyEpisode, saveAcademyProgress } from '../../api/academy.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const loading = ref(true)
+const errorText = ref('')
+const insetTop = ref(0)
+
+const episodeId = ref('')
+const episodeTitle = ref('')
+const episodeTopic = ref('')
+const playUrl = ref('')
+const poster = ref('')
+const percent = ref(0)
+const emptyHint = ref('这一集还没有配置媒体文件')
+
+// 进度上报节流：最多每 10 秒一次
+// lastReportAt 在 load() 里初始化成当前时间——若留 0，首个 timeupdate 会立刻上报，
+// 此时 position 还是 0，会把后端已有的进度覆盖成 0。
+let lastReportAt = 0
+let lastPosition = 0
+let durationSec = 0
+
+function goChat() {
+  uni.navigateTo({ url: '/pages/academy/chat?id=' + episodeId.value })
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function onTimeUpdate(e) {
+  const cur = e.detail.currentTime
+  const dur = e.detail.duration
+  if (dur > 0) durationSec = dur
+  lastPosition = cur
+
+  const now = Date.now()
+  if (now - lastReportAt < 10000) return
+  lastReportAt = now
+
+  let pct = 0
+  if (durationSec > 0) {
+    pct = Math.floor(cur * 100 / durationSec)
+    if (pct > 99) pct = 99
+  }
+  if (pct > percent.value) percent.value = pct
+  reportProgress(pct, cur)
+}
+
+function onEnded() {
+  percent.value = 100
+  // durationSec<=0 说明首个 timeupdate 都没来；此时上报 100 会让后端
+  // 直接落 100 并触发 should_unlock，等于没看完就解锁
+  if (durationSec <= 0) return
+  reportProgress(100, durationSec)
+}
+
+function onVideoError() {
+  errorText.value = '视频播放失败，可能是地址已过期'
+}
+
+async function reportProgress(pct, position) {
+  if (episodeId.value.length == 0) return
+  try {
+    await saveAcademyProgress(episodeId.value, pct, Math.floor(position), Math.floor(durationSec))
+  } catch (_) {
+    // 进度上报失败不打断观看
+  }
+}
+
+async function load(id) {
+  loading.value = true
+  errorText.value = ''
+  episodeId.value = id
+  // 重置节流与位置：lastReportAt 必须设成当前时间，
+  // 否则首个 timeupdate 会立刻上报 position=0，把已有进度覆盖掉
+  lastReportAt = Date.now()
+  lastPosition = 0
+  durationSec = 0
+  try {
+    // 先取 sector 渲染首屏：open_room 首访要串行跑多角色开场白（可数十秒），
+    // 且 openAcademyEpisode 没传 LLM 超时，await 会把首屏卡到 15s 默认超时。
+    const data = await getAcademySector(id)
+    const sector = readAcademySector(data)
+    episodeTitle.value = sector.episodeTitle
+    episodeTopic.value = sector.episodeTopic
+    percent.value = sector.episodePercent
+    playUrl.value = sector.episodePlayUrl
+    poster.value = sector.episodePoster
+    // query 没带 id 时用后端返回的当前剧集 id，否则进度一次都报不上去
+    if (episodeId.value.length == 0) episodeId.value = sector.episodeId
+    // 标记进房放在首屏之后且不 await：open_room 首访要跑多角色开场白（可数十秒），
+    // 而这个接口没传 LLM 超时，await 会把首屏卡到 15s 默认超时。失败不影响观看。
+    if (episodeId.value.length > 0) {
+      openAcademyEpisode(episodeId.value)
+    }
+    if (playUrl.value.length == 0) {
+      emptyHint.value = sector.episodePlayable ? '媒体地址为空，请稍后重试' : '这一集还没解锁或未配置媒体'
+    }
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '加载剧集失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onLoad((query) => {
+  const id = query == null ? '' : (query['id'] ?? '')
+  load(id)
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+
+onUnload(() => {
+  // 离开时把最后位置存一次
+  reportProgress(percent.value, lastPosition)
+})
+</script>
+
+<style lang="scss" scoped>
+@import './play.scss';
+</style>

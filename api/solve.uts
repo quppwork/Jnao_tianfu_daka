@@ -1,0 +1,93 @@
+/**
+ * 拍题解答。后端 POST /api/solve/photo/sync 是 multipart（image + subject_hint），
+ * 非流式聚合，便于联调；流式版 /photo 在 uni-app x 里做不了——
+ * uni.uploadFile 不支持分块读响应体。
+ *
+ * 依赖：后端 DOUBAO_API_KEY（vision 做 OCR）。未配置时后端会走降级分支。
+ */
+
+import { getApiOrigin } from '../config/environment.uts'
+import { getSession, returnToLogin } from '../state/session.uts'
+
+export type SolveResult = {
+  ok: boolean
+  answer: string
+  source: string
+  errorText: string
+}
+
+/** 后端 done 结构：{ok, answer, source, error}；need_academic_plan 时也 200 */
+export function readSolveResult(data: UTSJSONObject): SolveResult {
+  return {
+    ok: data.getBoolean('ok') != false,
+    answer: data.getString('answer') ?? '',
+    source: data.getString('source') ?? '',
+    errorText: data.getString('error') ?? ''
+  }
+}
+
+function authHeaders(): UTSJSONObject {
+  const headers: UTSJSONObject = {}
+  const session = getSession()
+  if (session != null) {
+    headers['X-Child-User-Id'] = session.userId.toString()
+    if (session.accessToken.length > 0) {
+      headers['Authorization'] = 'Bearer ' + session.accessToken
+      headers['X-Session-Token'] = session.accessToken
+    }
+  }
+  return headers
+}
+
+/** 上传一张图并等完整结果。filePath 来自 uni.chooseImage 的 tempFilePaths[0]。 */
+export function solvePhotoSync(filePath: string, subjectHint: string): Promise<UTSJSONObject> {
+  return new Promise<UTSJSONObject>((resolve, reject) => {
+    const session = getSession()
+    if (session == null || session.accessToken.length == 0) {
+      returnToLogin()
+      reject(new Error('登录已失效'))
+      return
+    }
+
+    const formData: UTSJSONObject = {}
+    if (subjectHint.length > 0) formData['subject_hint'] = subjectHint
+
+    uni.uploadFile({
+      url: getApiOrigin() + '/api/solve/photo/sync',
+      filePath: filePath,
+      name: 'image',
+      formData: formData,
+      header: authHeaders(),
+      success: (res) => {
+        const raw = res.data
+        if (res.statusCode == 401) {
+          returnToLogin()
+          reject(new Error('登录已失效'))
+          return
+        }
+        if (raw == null || raw.length == 0) {
+          reject(new Error('服务未返回内容'))
+          return
+        }
+        try {
+          const parsed = JSON.parse(raw) as UTSJSONObject
+          if (parsed == null) {
+            reject(new Error('返回格式异常'))
+            return
+          }
+          if (res.statusCode >= 400) {
+            const detail = parsed.getString('detail') ?? parsed.getString('error') ?? ''
+            reject(new Error(detail.length > 0 ? detail : '解答失败（' + res.statusCode.toString() + '）'))
+            return
+          }
+          resolve(parsed)
+        } catch (_) {
+          reject(new Error('返回的不是 JSON'))
+        }
+      },
+      fail: (err) => {
+        reject(new Error(err.errMsg.length > 0 ? err.errMsg : '上传失败'))
+      }
+    })
+  })
+}

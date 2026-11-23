@@ -1,0 +1,697 @@
+<template>
+  <view class="training">
+    <view class="topbar" :style="{ marginTop: insetTop + 'px' }">
+      <view class="back" @click="goBack"><text class="back-glyph">‹</text></view>
+      <view class="brand">
+        <text class="brand-title">大宇智能体</text>
+        <text class="brand-sub">DAYU · 今日通关挑战</text>
+      </view>
+      <text class="chip" @click="openHistory">历史记录</text>
+    </view>
+
+    <scroll-view class="training-scroll" direction="vertical" :show-scrollbar="false">
+      <view v-if="errorText.length > 0" class="notice">
+        <text class="error">{{ errorText }}</text>
+        <button v-if="phase == 'loading'" class="small-button" @click="loadTraining">重试</button>
+      </view>
+      <view v-if="phase == 'loading' && errorText.length == 0" class="notice">
+        <text class="text">正在读取今日挑战…</text>
+      </view>
+      <view v-if="phase == 'assessment'" class="notice">
+        <text class="text">需要先完成天赋测评</text>
+        <text class="muted">{{ assessmentMessage }}</text>
+        <button class="small-button" @click="openAssessment">请家长代测</button>
+      </view>
+
+      <view v-if="phase == 'setup'" class="block">
+        <view class="time-card">
+          <view class="row">
+            <text class="title">⏰ 今天练多久？</text>
+            <text class="chip chip-info">第 1 步 · 选时长</text>
+          </view>
+          <text class="clock">{{ selectedDuration }}</text>
+          <text class="caption">选多久，就排多少</text>
+          <view class="quick">
+            <view v-for="preset in presets" :key="preset.minutes" class="preset" :class="{ 'preset-selected': minutes == preset.minutes }" @click="selectMinutes(preset.minutes)">
+              <text class="preset-label">{{ preset.label }}</text>
+            </view>
+          </view>
+          <view class="adjust-row">
+            <text class="adjust" @click="adjustMinutes(-60)">− 1小时</text>
+            <text class="adjust" @click="adjustMinutes(-10)">− 10分钟</text>
+            <text class="adjust" @click="adjustMinutes(10)">＋ 10分钟</text>
+            <text class="adjust" @click="adjustMinutes(60)">＋ 1小时</text>
+          </view>
+        </view>
+        <button class="gold-button" :disabled="busy" :loading="busy" @click="schedule">生成今日挑战</button>
+        <view class="notice notice-flush"><text class="muted">练多久，排多少关。按所选时长生成今日训练。</text></view>
+      </view>
+
+      <view v-if="phase == 'confirm'" class="block">
+        <view class="plan-card">
+          <view class="row"><text class="title">🏮 今日通关挑战</text><text class="chip">第 2 步 · 确认方案</text></view>
+          <text class="challenge-number">{{ plan.items.length }} 个技能任务</text>
+          <text v-for="(line, index) in plan.annotations" :key="index" class="muted note">{{ line }}</text>
+          <view v-for="(item, index) in plan.items" :key="item.id" class="plan-item">
+            <text class="ordinal">{{ item.elective ? '选' : (index + 1).toString() }}</text>
+            <text class="item-name">{{ item.title }}</text>
+            <text class="muted">{{ item.minutes }} 分钟</text>
+          </view>
+          <view v-if="plan.electives.length > 0" class="electives">
+            <text class="text">🛠️ 选修 · 可开关置顶</text>
+            <view v-for="offer in plan.electives" :key="offer.skill" class="plan-item">
+              <view class="elective-label">
+                <text class="text">{{ offer.skill }}</text>
+                <text v-if="!offer.available" class="muted">{{ offer.reason }}</text>
+              </view>
+              <switch :checked="hasElective(offer.skill)" :disabled="busy || (!offer.available && !hasElective(offer.skill))" color="#6fcf8e" @change="toggleElective(offer.skill)" />
+            </view>
+          </view>
+        </view>
+        <button class="gold-button" :disabled="busy" :loading="busy" @click="confirmPlan">确认 · 开启今日挑战</button>
+        <view class="row edit-row">
+          <text class="link" @click="selectDurationAgain">↩ 重选时长</text>
+          <text v-if="plan.canCustomize" class="link" @click="openEditor">编辑方案</text>
+        </view>
+      </view>
+
+      <view v-if="phase == 'running' || phase == 'expired'" class="block">
+        <view class="plan-card">
+          <view class="row"><text class="title">今日修炼挑战</text><text class="chip">{{ plan.dayLocked ? '已通关' : (phase == 'expired' ? '已结束' : '进行中') }}</text></view>
+          <view class="timer-card">
+            <view class="row">
+              <text class="muted">{{ phase == 'running' ? '剩余时间' : '今日训练' }}</text>
+              <text class="timer-value">{{ phase == 'running' ? timerLabel : '计时结束' }}</text>
+            </view>
+            <view class="track"><view class="fill" :style="{ width: timerPercent + '%' }"></view></view>
+          </view>
+          <text class="challenge-number">{{ plan.items.length }} 个技能任务 · 已完成 {{ completed }}</text>
+          <view class="track"><view class="fill" :style="{ width: completionPercent + '%' }"></view></view>
+          <view class="tower">
+            <view class="row"><text class="text">能量塔</text><text class="muted">{{ completed }}/{{ plan.items.length }} 关</text></view>
+            <view class="tower-steps">
+              <view v-for="step in towerSteps" :key="step" class="tower-step" :class="{ 'tower-lit': step <= towerLevel }"></view>
+            </view>
+          </view>
+        </view>
+
+        <view v-for="(item, index) in plan.items" :key="item.id" class="stage" :class="{ 'stage-locked': !isOpen(item) }">
+          <view class="stage-cover">
+            <image class="stage-image" :src="item.poster" mode="aspectFill" lazy-load />
+            <view class="stage-caption">
+              <text class="stage-index">任务 {{ index + 1 }} / {{ plan.items.length }} · {{ item.done ? '已完成' : (isOpen(item) ? '当前挑战' : '待解锁') }}</text>
+              <text class="stage-name">{{ item.skill }}</text>
+            </view>
+          </view>
+          <view class="stage-content">
+            <text class="muted">约 {{ item.minutes }} 分钟{{ item.elective ? ' · 选修' : '' }}</text>
+            <view class="row progress-row"><text class="text">⚡ 进度 · {{ item.skill }}</text><text class="chip">{{ Math.round(item.audioPercent) }}%</text></view>
+            <view class="track"><view class="fill" :style="{ width: item.audioPercent + '%' }"></view></view>
+            <button v-if="item.audio.length > 0 && canPlay(item)" class="media-button" @click="openPlayer(item, 'audio')">▶ 播放训练音频</button>
+            <view class="stage-actions">
+              <button v-if="item.video.length > 0 && canPlay(item)" class="small-button stage-button action-first" @click="openPlayer(item, 'video')">📜 秘籍剧情</button>
+              <button v-if="isOpen(item) && !plan.cutoff && (!item.done || hasRecord(item.id))" class="small-button stage-button" @click="openCheckin(item)">{{ item.done ? '查看或修改打卡' : '✅ 训练打卡' }}</button>
+            </view>
+            <text v-if="isOpen(item) && phase == 'expired' && !plan.cutoff" class="muted note">时长已到 · 音视频已锁定</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view v-if="editing" class="overlay" @click="closeEditor">
+      <view class="sheet" @click.stop>
+        <view class="row"><text class="title">编辑今日方案</text><text class="link" @click="closeEditor">取消</text></view>
+        <text class="muted note">仅可改一次 · 打卡后不可再改 · 选修请用开关调整</text>
+        <scroll-view direction="vertical" :style="{ height: sheetHeight + 'px' }">
+          <view v-for="(selected, index) in selectedSkills" :key="index" class="editor-card">
+            <view class="row"><text class="muted">必修 {{ index + 1 }}</text><text class="text">{{ selected }}</text></view>
+            <view class="quick">
+              <view v-for="skill in coreSkills" :key="skill" class="preset skill-chip" :class="{ 'preset-selected': selected == skill }" @click="chooseSkill(index, skill)">
+                <text class="preset-label">{{ skill }}</text>
+              </view>
+            </view>
+          </view>
+          <text v-if="editorError.length > 0" class="error">{{ editorError }}</text>
+        </scroll-view>
+        <button class="gold-button" :disabled="busy" :loading="busy" @click="saveEditor">确认修改</button>
+      </view>
+    </view>
+
+    <view v-if="mediaId > 0" class="overlay" @click="closePlayer">
+      <view class="sheet" @click.stop>
+        <view class="row"><text class="title">{{ mediaTitle }}</text><text class="link" @click="closePlayer">关闭</text></view>
+        <video v-if="mediaKind == 'video'" id="training-video" class="video" :src="mediaSource" :initial-time="mediaStart" controls autoplay @timeupdate="onVideoTime" @ended="onMediaEnded" @error="onMediaError" />
+        <view v-else class="audio">
+          <text class="text">{{ audioLabel }}</text>
+          <button class="gold-button" @click="toggleAudio">{{ audioPlaying ? '暂停' : '继续播放' }}</button>
+        </view>
+        <text v-if="mediaError.length > 0" class="error">{{ mediaError }}</text>
+      </view>
+    </view>
+
+    <view v-if="checkinId > 0" class="overlay" @click="closeCheckin">
+      <view class="sheet" @click.stop>
+        <view class="row"><text class="title">{{ checkinSkill }} · 训练打卡</text><text class="link" @click="closeCheckin">取消</text></view>
+        <scroll-view direction="vertical" :style="{ height: sheetHeight + 'px' }">
+          <text class="field-label">用时(分钟)</text>
+          <input v-model="trainingTime" class="field" type="digit" placeholder="请输入训练分钟数" />
+          <view v-if="showWord">
+            <text class="field-label">完成字数</text>
+            <input v-model="wordCount" class="field" type="number" placeholder="请输入完成字数" />
+          </view>
+          <view v-if="checkinSkill == '影像追忆'">
+            <text class="field-label">准确率(%)</text>
+            <input v-model="accuracy" class="field" type="digit" placeholder="0–100" />
+          </view>
+          <text class="field-label">备注</text>
+          <input v-model="note" class="field" :maxlength="500" placeholder="可选填写" />
+          <text class="field-label">配合度 {{ attitude }}%</text>
+          <view class="attitudes">
+            <view v-for="score in scores" :key="score.value" class="score" :class="{ 'score-on': attitude == score.value }" @click="selectAttitude(score.value)">
+              <text class="score-label" :class="{ 'score-label-on': attitude == score.value }">{{ score.value }}%</text>
+              <text class="score-label">{{ score.icon }}</text>
+            </view>
+          </view>
+          <text class="muted note">{{ attitudeDescription }}</text>
+          <text v-if="checkinError.length > 0" class="error note">{{ checkinError }}</text>
+        </scroll-view>
+        <button class="gold-button" :loading="busy" :disabled="busy" @click="submitCheckin">提交打卡</button>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { clockText, openTrainingWindow, readTrainingPlan, readTrainingRecords, readFirstCard } from '../../api/training.uts'
+import { requestJson } from '../../network/request.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const presets= [
+  { minutes: 30, label: '30分钟' }, { minutes: 60, label: '1小时' },
+  { minutes: 90, label: '90分钟' }, { minutes: 120, label: '2小时' },
+  { minutes: 180, label: '3小时' }, { minutes: 240, label: '4小时' },
+  { minutes: 360, label: '6小时' }, { minutes: 480, label: '8小时' }
+]
+const towerSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+const scores= [
+  { value: 100, icon: '🔴', description: '身体已透支，精神还要求进步' },
+  { value: 80, icon: '🟡', description: '能完成任务，但还有余力学习' },
+  { value: 60, icon: '🔵', description: '做基本任务，被动的低效训练' },
+  { value: 40, icon: '🟤', description: '不完成任务，不认真逃避训练' },
+  { value: 20, icon: '⚫️', description: '不完成任务，基本不配合训练' },
+  { value: 0, icon: '☠️', description: '不完成任务，严重不配合训练' }
+]
+const speedLimits= { '超脑阅读': 1000, '影像追忆': 1200, '扫描速记': 300 }
+const phase = ref('loading')
+const minutes = ref(60)
+const insetTop = ref(0)
+const sheetHeight = ref(320)
+const plan = ref({ id: 0, minutes: 0, status: '', timerPhase: '', remaining: 0, timerTotal: 0, dayLocked: false, cutoff: false, mediaExhausted: false, canCustomize: false, annotations: [], electives: [], items: [] })
+const busy = ref(false)
+const loading = ref(false)
+const errorText = ref('')
+const assessmentMessage = ref('')
+const remaining = ref(0)
+let deadline = 0
+let timer = 0
+let visible = false
+const completed = computed(() => plan.value.items.filter((item) => item.done).length)
+const completionPercent = computed(() => plan.value.items.length > 0 ? Math.round(completed.value * 100 / plan.value.items.length) : 0)
+const timerPercent = computed(() => plan.value.timerTotal > 0 ? Math.min(100, Math.round(remaining.value * 100 / plan.value.timerTotal)) : 0)
+const selectedDuration = computed(() => clockText(minutes.value * 60))
+const timerLabel = computed(() => clockText(remaining.value))
+const towerLevel = computed(() => Math.round(completionPercent.value * 0.09))
+const activeItem = computed(() => plan.value.items.find((item) => !item.done && !item.elective)?.id ?? 0)
+const coreSkills = ['超脑阅读', '影像追忆', '扫描速记', '极速运算', '极速学习']
+const selectedSkills = ref([])
+const editing = ref(false)
+const editorError = ref('')
+
+const mediaId = ref(0)
+const mediaTitle = ref('')
+const mediaKind = ref('')
+const mediaSource = ref('')
+const mediaStart = ref(0)
+const mediaSeconds = ref(0)
+const mediaDuration = ref(0)
+const mediaError = ref('')
+const audioPlaying = ref(false)
+const audioLabel = computed(() => clockText(mediaSeconds.value) + ' / ' + clockText(mediaDuration.value))
+let audioContext= null
+let progressSave= null
+let savedPosition = 0
+let lastProgressAttempt = 0
+let closingPlayer = false
+
+const checkinId = ref(0)
+const checkinSkill = ref('')
+const trainingTime = ref('')
+const wordCount = ref('')
+const accuracy = ref('')
+const note = ref('')
+const attitude = ref(60)
+const attitudeDescription = computed(() => scores.find((score) => score.value == attitude.value)?.description ?? '')
+const checkinError = ref('')
+const records = ref([])
+const showWord = computed(() => ['超脑阅读', '影像追忆', '扫描速记'].includes(checkinSkill.value))
+
+function isOpen(item) {
+  return item.done || item.elective || activeItem.value == item.id
+}
+
+function canPlay(item) {
+  return phase.value == 'running' && !plan.value.mediaExhausted && isOpen(item)
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function openHistory() {
+  uni.navigateTo({ url: '/pages/training/history' })
+}
+
+function openAssessment() {
+  uni.navigateTo({ url: '/pages/talent/index' })
+}
+
+function selectMinutes(value) {
+  if (!busy.value) minutes.value = value
+}
+
+function adjustMinutes(delta) {
+  selectMinutes(Math.max(20, Math.min(480, minutes.value + delta)))
+}
+
+function selectDurationAgain() {
+  if (!busy.value) phase.value = 'setup'
+}
+
+function clearTimer() {
+  if (timer != 0) clearInterval(timer)
+  timer = 0
+}
+
+async function sendProgress(itemId, kind, position, duration) {
+  try {
+    const result = await requestJson('/api/training/items/' + itemId.toString() + '/watch-progress', 'POST', {
+      watched_sec: Math.min(position, duration), duration_sec: duration, media: kind
+    })
+    if (mediaId.value == itemId && mediaKind.value == kind) savedPosition = Math.max(savedPosition, position)
+    const item = plan.value.items.find((entry) => entry.id == itemId)
+    const slot = result.getJSON('watch_progress')?.getJSON(kind)
+    if (item != null && slot != null) {
+      if (kind == 'audio') {
+        item.audioSeconds = slot.getNumber('watched_sec') ?? item.audioSeconds
+        item.audioPercent = slot.getNumber('pct') ?? item.audioPercent
+      } else {
+        item.videoSeconds = slot.getNumber('watched_sec') ?? item.videoSeconds
+      }
+    }
+  } catch (error) {
+    if (mediaId.value == itemId) mediaError.value = error instanceof Error ? error.message : '播放进度保存失败'
+  } finally {
+    progressSave = null
+  }
+}
+
+async function flushProgress(wait) {
+  const pending = progressSave
+  if (pending != null) {
+    if (!wait) return
+    await pending
+    if (progressSave != null) return
+  }
+  if (mediaId.value <= 0 || mediaDuration.value <= 0 || mediaSeconds.value <= savedPosition) return
+  lastProgressAttempt = Date.now()
+  const request = sendProgress(mediaId.value, mediaKind.value, mediaSeconds.value, mediaDuration.value)
+  progressSave = request
+  if (wait) await request
+}
+
+async function closePlayer() {
+  if (mediaId.value == 0 || closingPlayer) return
+  closingPlayer = true
+  const current = audioContext
+  audioContext = null
+  if (current != null) current.destroy()
+  if (mediaKind.value == 'video') uni.createVideoContext('training-video')?.pause()
+  audioPlaying.value = false
+  const saving = flushProgress(true)
+  await saving
+  mediaId.value = 0
+  mediaSource.value = ''
+  closingPlayer = false
+}
+
+async function expireTrainingWindow() {
+  await closePlayer()
+  try {
+    await requestJson('/api/training/plan/media-exhausted', 'POST')
+    plan.value.mediaExhausted = true
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '训练时段同步失败'
+  }
+}
+
+function tick() {
+  remaining.value = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+  if (remaining.value == 0) {
+    clearTimer()
+    phase.value = 'expired'
+    expireTrainingWindow()
+  }
+}
+
+function applyPlan(next) {
+  plan.value = next
+  clearTimer()
+  if (next.minutes > 0) minutes.value = next.minutes
+  if (next.dayLocked || next.cutoff || next.status == 'completed' || next.mediaExhausted || next.timerPhase == 'expired') {
+    phase.value = 'expired'
+    remaining.value = 0
+  } else if (next.items.length == 0) {
+    phase.value = 'setup'
+  } else if (next.timerPhase == 'running') {
+    phase.value = 'running'
+    deadline = Date.now() + next.remaining * 1000
+    tick()
+    if (visible && remaining.value > 0) timer = setInterval(tick, 1000)
+  } else {
+    phase.value = 'confirm'
+  }
+}
+
+async function loadRecords() {
+  const response = await requestJson('/api/training/history?limit=100&group_by_day=false')
+  records.value = readTrainingRecords(response).filter((row) => row.getNumber('plan_id') == plan.value.id)
+}
+
+async function refreshPlan() {
+  const data = await requestJson('/api/training/today?skip_ai=true')
+  applyPlan(readTrainingPlan(data))
+  if (phase.value == 'running' || phase.value == 'expired') await loadRecords()
+}
+
+async function loadTraining() {
+  if (loading.value || busy.value) return
+  loading.value = true
+  errorText.value = ''
+  try {
+    const home = await requestJson('/api/training/home')
+    if (home.getBoolean('needs_assessment') == true) {
+      assessmentMessage.value = home.getString('message') ?? '完成测评后可安排今日训练'
+      phase.value = 'assessment'
+      return
+    }
+    const data = home.getJSON('plan')
+    if (data == null) {
+      phase.value = 'setup'
+      return
+    }
+    applyPlan(readTrainingPlan(data))
+    if (phase.value == 'running' || phase.value == 'expired') await loadRecords()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取训练方案失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function schedule() {
+  if (busy.value) return
+  busy.value = true
+  errorText.value = ''
+  try {
+    const response = await requestJson('/api/training/schedule', 'POST', { planned_minutes: minutes.value })
+    applyPlan(readTrainingPlan(response))
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '排课失败，请重试'
+  } finally {
+    busy.value = false
+  }
+}
+
+function hasElective(skill) {
+  return plan.value.items.some((item) => item.elective && item.skill == skill)
+}
+
+async function toggleElective(skill) {
+  if (busy.value || phase.value != 'confirm') return
+  busy.value = true
+  errorText.value = ''
+  try {
+    const data = await requestJson('/api/training/plan/elective-toggle', 'POST', {
+      plan_id: plan.value.id, skill, action: hasElective(skill) ? 'remove' : 'add'
+    })
+    applyPlan(readTrainingPlan(data))
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '更新选修失败'
+    await refreshPlan().catch(() => {})
+  } finally {
+    busy.value = false
+  }
+}
+
+function openEditor() {
+  if (busy.value || !plan.value.canCustomize) return
+  selectedSkills.value = plan.value.items.filter((item) => !item.done && !item.elective).map((item) => item.skill)
+  editorError.value = ''
+  editing.value = true
+}
+
+function chooseSkill(index, skill) {
+  if (!busy.value) selectedSkills.value[index] = skill
+}
+
+function closeEditor() {
+  if (!busy.value) editing.value = false
+}
+
+async function saveEditor() {
+  if (busy.value || !plan.value.canCustomize || selectedSkills.value.length == 0) return
+  busy.value = true
+  editorError.value = ''
+  try {
+    const confirmed = await new Promise<boolean>((resolve) => {
+      uni.showModal({
+        title: '确认修改方案',
+        content: '每个训练日仅可修改一次，打卡后不可再改。修改后将按所选技能重新匹配训练内容。',
+        success: (result) => resolve(result.confirm),
+        fail: () => resolve(false)
+      })
+    })
+    if (!confirmed) return
+    const data = await requestJson('/api/training/plan/customize', 'POST', { plan_id: plan.value.id, skills: selectedSkills.value })
+    applyPlan(readTrainingPlan(data))
+    editing.value = false
+  } catch (error) {
+    editorError.value = error instanceof Error ? error.message : '方案修改失败'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function confirmPlan() {
+  if (busy.value || plan.value.id == 0) return
+  busy.value = true
+  errorText.value = ''
+  try {
+    // 确认响应丢失时，先核对服务端有没有开计时，避免重开窗口。
+    const current = readTrainingPlan(await requestJson('/api/training/today?skip_ai=true'))
+    if (current.timerPhase == 'setup' && current.items.length > 0 && !current.dayLocked && !current.cutoff) {
+      await openTrainingWindow(current.minutes > 0 ? current.minutes : minutes.value)
+    }
+    await refreshPlan()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '开启挑战失败，请重试'
+  } finally {
+    busy.value = false
+  }
+}
+
+function recordPlayback(position, duration) {
+  if (mediaId.value == 0 || duration <= 0) return
+  mediaDuration.value = duration
+  mediaSeconds.value = Math.max(mediaSeconds.value, position)
+  if (!closingPlayer && mediaSeconds.value - savedPosition >= 5 && Date.now() - lastProgressAttempt >= 5000) flushProgress()
+}
+
+function onVideoTime(event) {
+  recordPlayback(event.detail.currentTime, event.detail.duration)
+}
+
+function onMediaEnded() {
+  if (mediaDuration.value > 0) mediaSeconds.value = mediaDuration.value
+  audioPlaying.value = false
+  flushProgress(true)
+}
+
+function onMediaError() {
+  audioPlaying.value = false
+  mediaError.value = '播放失败，请关闭后重新打开。'
+}
+
+function openPlayer(item, kind) {
+  if (mediaId.value > 0 || !canPlay(item)) return
+  mediaError.value = ''
+  mediaId.value = item.id
+  mediaTitle.value = item.title
+  mediaKind.value = kind
+  mediaSource.value = kind == 'audio' ? item.audio : item.video
+  mediaStart.value = kind == 'audio' ? (item.audioPercent < 99 ? item.audioSeconds : 0) : item.videoSeconds
+  mediaSeconds.value = mediaStart.value
+  mediaDuration.value = 0
+  savedPosition = mediaStart.value
+  lastProgressAttempt = 0
+  if (kind == 'audio') {
+    const context = uni.createInnerAudioContext()
+    audioContext = context
+    context.startTime = mediaStart.value
+    context.src = mediaSource.value
+    context.onTimeUpdate(() => recordPlayback(context.currentTime, context.duration))
+    context.onPlay(() => { audioPlaying.value = true })
+    context.onPause(() => { audioPlaying.value = false; flushProgress(true) })
+    context.onEnded(() => { onMediaEnded() })
+    context.onError(() => { onMediaError() })
+    context.play()
+  }
+}
+
+function toggleAudio() {
+  const context = audioContext
+  if (context == null) return
+  if (audioPlaying.value) context.pause()
+  else context.play()
+}
+
+function findRecord(id) {
+  return records.value.find((row) => row.getNumber('item_id') == id) ?? null
+}
+
+function hasRecord(id) {
+  return findRecord(id) != null
+}
+
+function openCheckin(item) {
+  if (!isOpen(item) || plan.value.cutoff) return
+  if (!item.done && item.audio.length > 0 && !item.elective && phase.value == 'running' && item.audioPercent < 90) {
+    uni.showToast({ title: '请先听完本项音频（至少 90%）', icon: 'none' })
+    return
+  }
+  const record = findRecord(item.id)
+  const card = record == null ? null : readFirstCard(record)
+  checkinId.value = item.id
+  checkinSkill.value = item.skill
+  trainingTime.value = card?.getNumber('time')?.toString() ?? ''
+  wordCount.value = card?.getNumber('wordCount')?.toString() ?? ''
+  accuracy.value = card?.getNumber('accuracy')?.toString() ?? ''
+  note.value = card?.getString('note') ?? record?.getString('note') ?? ''
+  attitude.value = record?.getNumber('attitude_pct') ?? 60
+  checkinError.value = ''
+}
+
+function closeCheckin() {
+  if (!busy.value) checkinId.value = 0
+}
+
+function selectAttitude(score) {
+  attitude.value = score
+}
+
+function confirmSpeed(speed, limit) {
+  return new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '字速偏高，请确认',
+      content: '当前约 ' + speed.toString() + ' 字/分，高于晋升参考上限 ' + limit.toString() + ' 字/分。仍可作为今日打卡提交。',
+      confirmText: '继续提交',
+      success: (result) => resolve(result.confirm),
+      fail: () => resolve(false)
+    })
+  })
+}
+
+async function submitCheckin() {
+  if (busy.value || checkinId.value == 0) return
+  const time = parseFloat(trainingTime.value)
+  const words = parseInt(wordCount.value)
+  const acc = parseFloat(accuracy.value)
+  const providesTime = trainingTime.value.trim().length > 0
+  if ((showWord.value || providesTime) && (isNaN(time) || time < 0.5 || time > 480)) {
+    checkinError.value = '请填写 0.5 至 480 分钟的用时'
+    return
+  }
+  if (showWord.value && (isNaN(words) || words < 1 || words > 1000000)) {
+    checkinError.value = '请填写有效的完成字数'
+    return
+  }
+  if (checkinSkill.value == '影像追忆' && (isNaN(acc) || acc < 0 || acc > 100)) {
+    checkinError.value = '准确率应为 0 至 100'
+    return
+  }
+  const cleanNote = note.value.trim()
+  const card= { name: checkinSkill.value, note: cleanNote, completed: true }
+  if (providesTime) card['time'] = time
+  if (showWord.value) card['wordCount'] = words
+  if (checkinSkill.value == '影像追忆') card['accuracy'] = acc
+  const payload= {
+    ability_type: checkinSkill.value, content: cleanNote.length > 0 ? cleanNote : checkinSkill.value + '打卡',
+    attitude_pct: attitude.value, cards: [card]
+  }
+  const recordId = findRecord(checkinId.value)?.getNumber('id') ?? 0
+  busy.value = true
+  checkinError.value = ''
+  try {
+    const limit = speedLimits.getNumber(checkinSkill.value) ?? 0
+    if (limit > 0 && providesTime && words / time > limit) {
+      const speed = Math.round(words / time * 10) / 10
+      if (!(await confirmSpeed(speed, limit))) return
+      card['speed_abnormal'] = true
+      card['words_per_min'] = speed
+      card['word_speed_limit'] = limit
+    }
+    if (recordId > 0) {
+      await requestJson('/api/training/checkin/' + recordId.toString(), 'PUT', payload)
+    } else {
+      payload['plan_id'] = plan.value.id
+      payload['item_id'] = checkinId.value
+      await requestJson('/api/training/checkin', 'POST', payload)
+    }
+    checkinId.value = 0
+    uni.showToast({ title: recordId > 0 ? '已保存修改' : '打卡成功', icon: 'none' })
+    await refreshPlan()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '保存打卡失败'
+    if (checkinId.value > 0) checkinError.value = message
+    else errorText.value = message
+  } finally {
+    busy.value = false
+  }
+}
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  sheetHeight.value = Math.min(380, Math.round(uni.getWindowInfo().windowHeight * 0.52))
+})
+
+onShow(() => {
+  visible = true
+  loadTraining()
+})
+
+onHide(() => {
+  visible = false
+  clearTimer()
+  closePlayer()
+})
+
+onUnload(() => {
+  visible = false
+  clearTimer()
+  closePlayer()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './dayu.scss';
+</style>

@@ -1,0 +1,289 @@
+import { requestJson } from '../network/request.uts'
+import { getApiOrigin } from '../config/environment.uts'
+import { LLM_TIMEOUT_MS } from '../network/timeouts.uts'
+
+/** 天赋学院：剧集、机器人、剧本、剧内对话 */
+
+export function listAcademyStickers(): Promise<UTSJSONObject> {
+  return requestJson('/api/academy/stickers')
+}
+
+/**
+ * 分区总览。返回里的 episodes[].play_url 已带 mt 短期签名，
+ * 播放时直接把它交给 <video>，不要自己拼 /stream?user_id= ——
+ * video 标签无法携带 Authorization，自拼地址会落到会话校验分支并 401。
+ */
+export function getAcademySector(episodeId: string): Promise<UTSJSONObject> {
+  const query = episodeId.length > 0 ? '?episode_id=' + episodeId : ''
+  return requestJson('/api/academy/sector' + query)
+}
+
+export function openAcademyEpisode(episodeId: string): Promise<UTSJSONObject> {
+  return requestJson('/api/academy/episodes/' + episodeId + '/open', 'POST')
+}
+
+/** 观看进度：只传实际有值的字段，避免把 null 覆盖成 0 */
+export function saveAcademyProgress(
+  episodeId: string,
+  percent: number,
+  positionSec: number,
+  durationSec: number
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {}
+  if (percent >= 0) body['percent'] = percent
+  if (positionSec > 0) body['position_sec'] = positionSec
+  if (durationSec > 0) body['duration_sec'] = durationSec
+  return requestJson('/api/academy/episodes/' + episodeId + '/progress', 'POST', body)
+}
+
+export function listAcademyBots(): Promise<UTSJSONObject> {
+  return requestJson('/api/academy/bots')
+}
+
+export function getAcademyBot(botId: string): Promise<UTSJSONObject> {
+  return requestJson('/api/academy/bots/' + botId)
+}
+
+export function updateAcademyBot(
+  botId: string,
+  personaPrompt: string,
+  constraints: string
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {}
+  if (personaPrompt.length > 0) body['persona_prompt'] = personaPrompt
+  if (constraints.length > 0) body['constraints'] = constraints
+  return requestJson('/api/academy/bots/' + botId, 'PUT', body)
+}
+
+export function generateAcademyScript(botId: string, episodeId: string): Promise<UTSJSONObject> {
+  const path = '/api/academy/bots/' + botId + '/episodes/' + episodeId + '/script'
+  return requestJson(path, 'POST', null, null, true, LLM_TIMEOUT_MS)
+}
+
+export function publishAcademyScript(botId: string, episodeId: string): Promise<UTSJSONObject> {
+  const path = '/api/academy/bots/' + botId + '/episodes/' + episodeId + '/script/publish'
+  return requestJson(path, 'POST')
+}
+
+export function listAcademyScriptVersions(episodeId: string): Promise<UTSJSONObject> {
+  const query = episodeId.length > 0 ? '?episode_id=' + episodeId : ''
+  return requestJson('/api/academy/script-versions' + query)
+}
+
+/** 剧内对话（非流式，一次性返回） */
+export function chatInAcademyEpisode(
+  episodeId: string,
+  text: string,
+  mention: string,
+  sticker: string
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { text }
+  if (mention.length > 0) body['mention'] = mention
+  if (sticker.length > 0) body['sticker'] = sticker
+  return requestJson(
+    '/api/academy/episodes/' + episodeId + '/chat',
+    'POST',
+    body,
+    null,
+    true,
+    LLM_TIMEOUT_MS
+  )
+}
+/* ---------- 读取映射 ----------
+ * 结构由实测 /api/academy/sector 得出：
+ *   {badge, talent_primary, overall_tier, episode{...}, switchable[], acts[], courses{}}
+ * `.uvue` 不能写泛型，getArray 会退化成 Array<any>，所以在这里做结构化。
+ */
+
+/** 后端 play_url / poster 在无 CDN 时是相对路径，小程序端必须补 origin 才能播 */
+function mediaUrl(value: string): string {
+  if (value.length == 0) return ''
+  return value.startsWith('/') ? getApiOrigin() + value : value
+}
+
+export type AcademyEpisode = {
+  id: string
+  title: string
+  topic: string
+  status: string
+  media: string
+  playable: boolean
+  unlocked: boolean
+}
+
+export type AcademyAct = {
+  no: string
+  name: string
+  range: string
+  poster: string
+  core: string
+  tag: string
+  locked: boolean
+  status: string
+  watched: number
+  total: number
+  episodes: AcademyEpisode[]
+}
+
+export type AcademyCast = {
+  key: string
+  name: string
+  tag: string
+}
+
+export type AcademyChannel = {
+  id: string
+  title: string
+  channelName: string
+  unlocked: boolean
+  current: boolean
+}
+
+export type AcademySector = {
+  badge: string
+  talentPrimary: string
+  overallTier: number
+  episodeId: string
+  episodeTitle: string
+  episodeTopic: string
+  episodeTask: string
+  episodeChannel: string
+  episodeDuration: string
+  episodePercent: number
+  episodePlayable: boolean
+  episodeUnlocked: boolean
+  episodePlayUrl: string
+  episodeMedia: string
+  episodePoster: string
+  episodeNotice: string
+  episodeNudge: string
+  episodeChips: string[]
+  episodeCast: AcademyCast[]
+  episodeOnline: number
+  switchable: AcademyChannel[]
+  acts: AcademyAct[]
+}
+
+function readEpisodeOf(row: UTSJSONObject): AcademyEpisode {
+  return {
+    id: row.getString('id') ?? '',
+    title: row.getString('title') ?? '',
+    topic: row.getString('topic') ?? '',
+    status: row.getString('status') ?? '',
+    media: row.getString('media') ?? '',
+    playable: row.getBoolean('playable') == true,
+    unlocked: row.getBoolean('unlocked') == true
+  }
+}
+
+function readCast(rows: UTSJSONObject[]): AcademyCast[] {
+  const list: AcademyCast[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    list.push({
+      key: r.getString('key') ?? '',
+      name: r.getString('name') ?? '',
+      tag: r.getString('tag') ?? ''
+    })
+  }
+  return list
+}
+
+export function readAcademySector(data: UTSJSONObject): AcademySector {
+  const ep = data.getJSON('episode')
+  const chanRaw = data.getArray<UTSJSONObject>('switchable') ?? []
+  const actRaw = data.getArray<UTSJSONObject>('acts') ?? []
+
+  const channels: AcademyChannel[] = []
+  for (let i = 0; i < chanRaw.length; i++) {
+    const c = chanRaw[i]
+    channels.push({
+      id: c.getString('id') ?? '',
+      title: c.getString('title') ?? '',
+      channelName: c.getString('channel_name') ?? '',
+      unlocked: c.getBoolean('unlocked') == true,
+      current: c.getBoolean('current') == true
+    })
+  }
+
+  const acts: AcademyAct[] = []
+  for (let i = 0; i < actRaw.length; i++) {
+    const a = actRaw[i]
+    const epRaw = a.getArray<UTSJSONObject>('episodes') ?? []
+    const eps: AcademyEpisode[] = []
+    for (let j = 0; j < epRaw.length; j++) {
+      eps.push(readEpisodeOf(epRaw[j]))
+    }
+    acts.push({
+      no: a.getString('no') ?? '',
+      name: a.getString('name') ?? '',
+      range: a.getString('range') ?? '',
+      poster: mediaUrl(a.getString('poster') ?? ''),
+      core: a.getString('core') ?? '',
+      tag: a.getString('tag') ?? '',
+      locked: a.getBoolean('locked') == true,
+      status: a.getString('status') ?? '',
+      watched: a.getNumber('watched') ?? 0,
+      total: a.getNumber('total') ?? 0,
+      episodes: eps
+    })
+  }
+
+  return {
+    badge: data.getString('badge') ?? '',
+    talentPrimary: data.getString('talent_primary') ?? '',
+    overallTier: data.getNumber('overall_tier') ?? 0,
+    episodeTitle: ep?.getString('title') ?? '',
+    episodeTopic: ep?.getString('topic') ?? '',
+    episodeTask: ep?.getString('task') ?? '',
+    episodeChannel: ep?.getString('channel_name') ?? '',
+    episodeDuration: ep?.getString('duration_label') ?? '',
+    episodePercent: ep?.getNumber('percent') ?? 0,
+    episodePlayable: ep?.getBoolean('playable') == true,
+    episodeUnlocked: ep?.getBoolean('unlocked') == true,
+    episodeId: ep?.getString('id') ?? '',
+    episodePlayUrl: mediaUrl(ep?.getString('play_url') ?? ''),
+    episodeMedia: ep?.getString('media') ?? '',
+    episodePoster: mediaUrl(ep?.getString('poster') ?? ''),
+    episodeNotice: ep?.getString('notice') ?? '',
+    episodeNudge: ep?.getJSON('nudge')?.getString('text') ?? '',
+    episodeChips: ep?.getArray<string>('chips') ?? [],
+    episodeCast: readCast(ep?.getArray<UTSJSONObject>('cast') ?? []),
+    episodeOnline: ep?.getNumber('online_count') ?? 0,
+    switchable: channels,
+    acts: acts
+  }
+}
+/* ---------- 剧内对话 ----------
+ * 实测 POST /api/academy/episodes/{id}/chat 返回：
+ *   {"turns": [{"who": "善雨", "text": "..."}], "nudge": null, "training_done": false}
+ * 前置：需先看完正片，否则 403「看完正片才能加入讨论」。
+ */
+
+export type AcademyTurn = {
+  who: string
+  text: string
+}
+
+export type AcademyChat = {
+  turns: AcademyTurn[]
+  nudge: string
+  trainingDone: boolean
+}
+
+export function readAcademyChat(data: UTSJSONObject): AcademyChat {
+  const raw = data.getArray<UTSJSONObject>('turns') ?? []
+  const turns: AcademyTurn[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const t = raw[i]
+    turns.push({
+      who: t.getString('who') ?? '',
+      text: t.getString('text') ?? ''
+    })
+  }
+  return {
+    turns: turns,
+    nudge: data.getString('nudge') ?? '',
+    trainingDone: data.getBoolean('training_done') == true
+  }
+}

@@ -1,0 +1,139 @@
+.page {
+  flex: 1;
+  background-color: #0b0e14;
+  background-image: linear-gradient(180deg, #101623, #0b0e14);
+}
+
+.home-top, .home-shortcuts {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.home-top { padding: 8px 14px 4px; }
+.parent-brand { display: flex; flex-direction: column; }
+.parent-title {
+  color: #f5d9a8;
+  font-size: 17px;
+  font-weight: 900;
+}
+.parent-subtitle {
+  margin-top: 1px;
+  color: #8b93a5;
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.student-label, .logout-button {
+  padding: 0 10px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.student-label {
+  padding: 5px 12px;
+  border: 1.5px solid #c9a227;
+  color: #f5d9a8;
+  background-color: rgba(201, 162, 39, 0.18);
+}
+.home-user {
+  flex: 1;
+  margin: 0 8px;
+  text-align: center;
+  color: #edebe4;
+  font-weight: 900;
+  font-size: 17px;
+}
+.logout-button {
+  margin: 0;
+  min-height: 30px;
+  line-height: 30px;
+  color: #c8cdd8;
+  border: 1.5px solid rgba(200, 205, 216, 0.35);
+  background-color: #101623;
+}
+
+.home-hero {
+  position: relative;
+  margin: 4px 14px 0;
+  border-radius: 14px;
+  border: 1.5px solid #232b3d;
+  background-color: #0d111f;
+  overflow: hidden;
+}
+.hero-background {
+  width: 100%;
+  height: 100%;
+}
+.hero-teacher, .hero-cartoon {
+  position: absolute;
+  bottom: 0;
+}
+.hero-teacher { left: 4.3%; width: 26%; height: 93%; }
+.hero-cartoon { left: 22.2%; width: 27%; height: 82%; }
+.team-tag {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  color: #0d111f;
+  padding: 3px 10px;
+  border-radius: 14px;
+  background-color: #f5d576;
+  background-image: linear-gradient(90deg, #f5d576, #c9a869);
+  font-size: 12px;
+  font-weight: 900;
+}
+.team-caption {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 22px 12px 10px;
+  background-image: linear-gradient(180deg, rgba(8, 11, 22, 0), rgba(8, 11, 22, 0.88));
+}
+.team-title { color: #ffffff; font-size: 15px; font-weight: 900; }
+.team-subtitle { color: #c9cfdc; font-size: 12px; margin-top: 2px; }
+
+.home-shortcuts {
+  margin: 8px 14px 6px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.home-shortcut {
+  flex: 0 0 23%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  padding: 6px 2px 7px;
+  border: 1.5px solid #232b3d;
+  border-radius: 12px;
+  background-color: #131926;
+}
+.shortcut-icon { width: 36px; height: 36px; }
+.shortcut-label { color: #edebe4; font-size: 11px; font-weight: 800; margin-top: 2px; }
+
+.content { padding: 24px 16px; }
+.title { font-size: 17px; font-weight: 600; color: #f3f6fc; }
+.muted, .error, .label { margin-top: 8px; color: #a8b6ce; font-size: 14px; }
+.error { color: #ff9a9a; }
+.card { margin-top: 16px; padding: 16px; background-color: #131c2e; border-radius: 12px; }
+.field {
+  padding: 0 12px;
+  height: 42px;
+  margin-top: 6px;
+  color: #f3f6fc;
+  background-color: #070b14;
+  border-radius: 8px;
+}
+.primary, .secondary {
+  margin: 12px 0 0;
+  color: #f3f6fc;
+  background-color: #3062bc;
+  border-radius: 10px;
+}
+.secondary { background-color: #22334e; }
