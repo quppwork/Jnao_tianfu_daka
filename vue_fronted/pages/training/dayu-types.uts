@@ -1,0 +1,4 @@
+// 从 dayu.uvue 抽出：.uvue 的 script 块不支持 type / interface 声明
+export type DurationPreset = { minutes: number; label: string }
+
+export type AttitudeScore = { value: number; icon: string; description: string }

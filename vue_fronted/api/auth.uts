@@ -1,0 +1,132 @@
+import { requestJson } from '../network/request.uts'
+import { clearSession, saveSession } from '../state/session.uts'
+
+function getDeviceId(): string {
+  const key = 'jnao_device_id'
+  const stored = uni.getStorageSync(key)
+  if (typeof stored == 'string' && stored.length > 0) return stored
+  const id = 'd_' + Date.now().toString() + '_' + Math.floor(Math.random() * 1000000000).toString()
+  uni.setStorageSync(key, id)
+  return id
+}
+
+export function getLoginCaptcha(): Promise<UTSJSONObject> {
+  return requestJson('/api/auth/captcha', 'GET', null, null, false)
+}
+
+export function sendAuthSms(phone: string, scene: string, captchaId: string, captchaCode: string): Promise<UTSJSONObject> {
+  return requestJson('/api/auth/sms/send', 'POST', {
+    phone,
+    scene,
+    captcha_id: captchaId,
+    captcha_code: captchaCode,
+    device_id: getDeviceId()
+  }, null, false)
+}
+
+export async function registerParent(phone: string, code: string, realName: string, nickname: string, password: string) {
+  const data = await requestJson('/api/auth/sms/register', 'POST', {
+    phone,
+    sms_code: code,
+    real_name: realName,
+    nickname,
+    password,
+    device_id: getDeviceId()
+  }, null, false)
+  useLoginResponse(data, 'parent')
+}
+
+export async function loginWithSms(phone: string, code: string) {
+  const data = await requestJson('/api/auth/sms/login', 'POST', {
+    phone,
+    sms_code: code,
+    device_id: getDeviceId()
+  }, null, false)
+  useLoginResponse(data, 'parent')
+}
+
+export async function loginWithPassword(role: string, account: string, password: string) {
+  const body: UTSJSONObject = { password }
+  if (role == 'parent') {
+    body['role'] = 'parent'
+    body['parent_phone'] = account
+  } else {
+    body['login_name'] = account
+  }
+  const headers: UTSJSONObject = {
+    'X-Device-Id': getDeviceId()
+  }
+  const data = await requestJson('/api/auth/login', 'POST', body, headers, false)
+  useLoginResponse(data, role)
+}
+
+function useLoginResponse(data: UTSJSONObject, role: string) {
+  const userId = data.getNumber('child_user_id') ?? 0
+  const accessToken = data.getString('access_token') ?? data.getString('session_token') ?? ''
+  if (data.getString('role') != role || userId <= 0) {
+    throw new Error('登录响应中的账号身份无效')
+  }
+  // #ifndef WEB
+  // App / 小程序端不共享浏览器 HttpOnly Cookie，空 token 会导致后续请求立刻 401 踢回登录页。
+  if (accessToken.length == 0) {
+    throw new Error('服务端未返回登录凭证，请确认后端已开启移动端 token 返回')
+  }
+  // #endif
+  saveSession({
+    userId,
+    role,
+    nickname: data.getString('nickname') ?? '',
+    accessToken
+  })
+}
+
+export async function logout() {
+  try {
+    await requestJson('/api/auth/logout', 'POST')
+  } finally {
+    clearSession()
+  }
+}
+/* ---------- 微信登录子流程 ----------
+ * 后端契约（api/auth.py）：
+ *   GET  /wechat/config                              → {app_id, bind_mobile_return_url, ...}
+ *   GET  /wechat/exchange?login_ticket=xxx           → AuthResponse（H5 OAuth 回调后换取）
+ *   POST /wechat/send-bind-sms  {bind_ticket, phone, captcha_id, image_base64, device_id?}
+ *   POST /wechat/bind-phone     {bind_ticket, phone, sms_code, device_id?}
+ *
+ * 注意：完整链路依赖 WECHAT_MP_APP_ID / WECHAT_MP_APP_SECRET。
+ * 这两个为空时后端拿不到 openid，login_ticket 永远不会产生。
+ */
+
+export function getWechatConfig(): Promise<UTSJSONObject> {
+  return requestJson('/api/auth/wechat/config', 'GET', null, null, false)
+}
+
+export function wechatExchange(loginTicket: string): Promise<UTSJSONObject> {
+  return requestJson('/api/auth/wechat/exchange?login_ticket=' + encodeURIComponent(loginTicket), 'GET', null, null, false)
+}
+
+/** 发绑定短信：需要图形验证码，imageBase64 是 /auth/captcha 返回的裸 base64（不带 data: 前缀） */
+export function wechatSendBindSms(
+  bindTicket: string,
+  phone: string,
+  captchaId: string,
+  imageBase64: string
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {
+    bind_ticket: bindTicket,
+    phone: phone,
+    captcha_id: captchaId,
+    image_base64: imageBase64
+  }
+  return requestJson('/api/auth/wechat/send-bind-sms', 'POST', body, null, false)
+}
+
+export function wechatBindPhone(bindTicket: string, phone: string, smsCode: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {
+    bind_ticket: bindTicket,
+    phone: phone,
+    sms_code: smsCode
+  }
+  return requestJson('/api/auth/wechat/bind-phone', 'POST', body, null, false)
+}

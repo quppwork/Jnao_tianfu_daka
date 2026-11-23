@@ -1,0 +1,219 @@
+<template>
+  <view class="ac-page">
+    <view class="ac-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="ac-back" @click="goBack"><text class="ac-back-icon">‹</text></view>
+      <text class="ac-title">天赋学院</text>
+      <view class="ac-placeholder"></view>
+    </view>
+
+    <scroll-view class="ac-body" scroll-y>
+      <view v-if="loading" class="ac-empty"><text class="ac-empty-text">加载中…</text></view>
+
+      <template v-else>
+        <!-- 身份条 -->
+        <view class="ac-identity">
+          <text class="ac-badge">{{ badge }}</text>
+          <text class="ac-talent">{{ talentPrimary }}</text>
+          <text class="ac-tier">第 {{ overallTier }} 段</text>
+        </view>
+
+        <!-- 当前剧集 -->
+        <view v-if="episodeTitle.length > 0" class="ac-episode">
+          <view class="ac-ep-head">
+            <text class="ac-ep-channel">{{ episodeChannel }}</text>
+            <text class="ac-ep-duration">{{ episodeDuration }}</text>
+          </view>
+          <text class="ac-ep-title" @click="goDetail">{{ episodeTitle }}</text>
+          <text v-if="episodeTopic.length > 0" class="ac-ep-topic">{{ episodeTopic }}</text>
+          <text v-if="episodeTask.length > 0" class="ac-ep-task">任务：{{ episodeTask }}</text>
+          <view class="ac-ep-bar">
+            <view class="ac-ep-bar-fill" :style="{ width: episodePercent + '%' }"></view>
+          </view>
+          <view class="ac-ep-foot">
+            <text class="ac-ep-progress">已看 {{ episodePercent }}%</text>
+            <view class="ac-ep-actions">
+              <view class="ac-ep-btn ac-ep-btn-ghost" @click="goChat">
+                <text class="ac-ep-btn-text ac-ep-btn-text-ghost">讨论</text>
+              </view>
+              <view
+                class="ac-ep-btn"
+                :class="episodePlayable ? '' : 'ac-ep-btn-off'"
+                @click="openEpisode"
+              >
+                <text class="ac-ep-btn-text">{{ episodePlayable ? '继续观看' : '未解锁' }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 可切换 -->
+        <view v-if="switchable.length > 0" class="ac-channels">
+          <text class="ac-section">其他频道</text>
+          <view class="ac-channel-row">
+            <view
+              v-for="(c, i) in switchable"
+              :key="i"
+              class="ac-channel"
+              :class="c.current ? 'ac-channel-on' : (c.unlocked ? '' : 'ac-channel-off')"
+              @click="switchChannel(c)"
+            >
+              <text class="ac-channel-name">{{ c.title }}</text>
+              <text class="ac-channel-sub">{{ c.current ? '当前' : (c.unlocked ? '可切换' : '未解锁') }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 幕 / 章节 -->
+        <text class="ac-section">剧集目录 {{ watchedTotal }} / {{ episodeTotal }}</text>
+
+        <view v-for="(act, i) in acts" :key="i" class="ac-act">
+          <view class="ac-act-head" @click="toggleAct(i)">
+            <view class="ac-act-main">
+              <view class="ac-act-title-row">
+                <text class="ac-act-no">{{ act.no }}</text>
+                <text class="ac-act-name">{{ act.name }}</text>
+                <text v-if="act.tag.length > 0" class="ac-act-tag">{{ act.tag }}</text>
+              </view>
+              <text class="ac-act-range">{{ act.range }} · 已看 {{ act.watched }}/{{ act.total }}</text>
+            </view>
+            <text class="ac-act-arrow">{{ expandedIndex == i ? '▾' : '▸' }}</text>
+          </view>
+
+          <view v-if="expandedIndex == i" class="ac-episodes">
+            <view
+              v-for="(ep, j) in act.episodes"
+              :key="j"
+              class="ac-ep-item"
+              :class="ep.unlocked ? '' : 'ac-ep-item-off'"
+            >
+              <text class="ac-ep-item-title">{{ ep.title }}</text>
+              <text class="ac-ep-item-status">{{ ep.unlocked ? (ep.playable ? '可观看' : '待开放') : '未解锁' }}</text>
+            </view>
+          </view>
+        </view>
+      </template>
+
+      <text v-if="errorText.length > 0" class="ac-error">{{ errorText }}</text>
+      <view class="ac-bottom-space"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getAcademySector, readAcademySector } from '../../api/academy.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const loading = ref(true)
+const errorText = ref('')
+const insetTop = ref(0)
+
+const badge = ref('')
+const episodeId = ref('')
+const talentPrimary = ref('')
+const overallTier = ref(0)
+
+const episodeTitle = ref('')
+const episodeTopic = ref('')
+const episodeTask = ref('')
+const episodeChannel = ref('')
+const episodeDuration = ref('')
+const episodePercent = ref(0)
+const episodePlayable = ref(false)
+const episodeUnlocked = ref(false)
+
+const switchable = ref([])
+const acts = ref([])
+const expandedIndex = ref(-1)
+
+const watchedTotal = computed(() => {
+  let n = 0
+  for (let i = 0; i < acts.value.length; i++) {
+    n = n + acts.value[i].watched
+  }
+  return n
+})
+
+const episodeTotal = computed(() => {
+  let n = 0
+  for (let i = 0; i < acts.value.length; i++) {
+    n = n + acts.value[i].total
+  }
+  return n
+})
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function toggleAct(index) {
+  expandedIndex.value = expandedIndex.value == index ? -1 : index
+}
+
+function goDetail() {
+  uni.navigateTo({ url: '/pages/academy/detail?id=' + episodeId.value })
+}
+
+function goChat() {
+  const id = episodeId.value.length > 0 ? episodeId.value : ''
+  uni.navigateTo({ url: '/pages/academy/chat?id=' + id })
+}
+
+function openEpisode() {
+  if (!episodePlayable.value) {
+    uni.showToast({ title: '这一集还没开放', icon: 'none' })
+    return
+  }
+  uni.navigateTo({ url: '/pages/academy/play?id=' + episodeId.value })
+}
+
+async function loadSector(targetId) {
+  loading.value = true
+  errorText.value = ''
+  try {
+    const data = await getAcademySector(targetId)
+    const sector = readAcademySector(data)
+    badge.value = sector.badge
+    talentPrimary.value = sector.talentPrimary
+    overallTier.value = sector.overallTier
+
+    episodeTitle.value = sector.episodeTitle
+    episodeTopic.value = sector.episodeTopic
+    episodeTask.value = sector.episodeTask
+    episodeChannel.value = sector.episodeChannel
+    episodeDuration.value = sector.episodeDuration
+    episodePercent.value = sector.episodePercent
+    episodePlayable.value = sector.episodePlayable
+    episodeUnlocked.value = sector.episodeUnlocked
+
+    episodeId.value = sector.episodeId
+    switchable.value = sector.switchable
+    acts.value = sector.acts
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '学院数据加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function switchChannel(channel) {
+  if (channel.current) return
+  if (!channel.unlocked) {
+    uni.showToast({ title: '这个频道还没解锁', icon: 'none' })
+    return
+  }
+  expandedIndex.value = -1
+  loadSector(channel.id)
+}
+
+onLoad(() => {
+  loadSector('')
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

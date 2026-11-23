@@ -1,0 +1,239 @@
+<template>
+  <view class="assessment">
+    <view class="top" :style="{ marginTop: topInset + 'px' }">
+      <view class="back" @click="goBack"><text class="back-icon">‹</text></view>
+      <view class="brand"><text class="brand-title">天赋测试</text><text class="brand-sub">TALENT TEST</text></view>
+      <text class="history-link" @click="openHistory">历史报告</text>
+    </view>
+    <scroll-view class="content" direction="vertical">
+      <view class="body">
+        <view v-if="phase == 'intro'" class="intro-card">
+          <text class="hero-icon">👨‍👧</text>
+          <text class="title">家长代测 · 儿童版</text>
+          <text class="muted copy">35 道快答题。请家长根据孩子平时的真实表现作答，凭第一反应选择。</text>
+          <view class="notice">
+            <text class="notice-text">未满 18 岁的孩子请由家长代测。孩子本人作答或凭想象选择会影响结果。</text>
+          </view>
+          <button class="primary intro-action" @click="start">我是家长 · 开始答题</button>
+          <button class="secondary intro-action" @click="goBack">稍后再说</button>
+        </view>
+
+        <view v-if="phase == 'quiz'">
+          <view class="progress-row">
+            <text class="progress-mode">家长代测 · 儿童版</text>
+            <view class="track total-track"><view class="progress-fill" :style="{ width: progressPercent + '%' }"></view></view>
+            <text class="muted">{{ questionNumber }}/{{ total }}</text>
+          </view>
+          <view v-if="cursor > 0 && !undoing" class="undo" @click="undo">
+            <text class="undo-text">上一题「{{ previousQuestion }}」</text><text class="history-link">↩ 点击撤回</text>
+          </view>
+          <view class="question-card">
+            <text class="question-number">第 {{ questionNumber }} 题</text>
+            <view class="timer-row">
+              <view class="circle" :class="{ 'circle-urgent': left <= 5 }"><text class="seconds">{{ left }}</text></view>
+              <view class="hint">
+                <text class="muted">{{ hint }}</text>
+                <view class="track"><view class="progress-fill" :style="{ width: timePercent + '%' }"></view></view>
+              </view>
+            </view>
+            <text class="question">🧒 {{ question }}</text>
+            <text v-if="undoing" class="muted">上次选择：{{ previousChoice }}</text>
+            <view class="answers">
+              <button class="primary answer-button answer-first" @click="answer('1')">完全符合</button>
+              <button class="secondary answer-button" @click="answer('0')">有差异</button>
+            </view>
+          </view>
+          <text class="footnote">按孩子真实表现作答，不美化、不苛求。</text>
+        </view>
+
+        <view v-if="phase == 'complete'" class="complete">
+          <text class="done-check">✓</text>
+          <text class="title">35 题已完成</text>
+          <text class="muted copy">测评服务将生成专属天赋解读。</text>
+          <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
+          <button v-if="assessmentId == 0" class="primary complete-action" :loading="submitting" :disabled="submitting" @click="submit">生成报告</button>
+          <button v-else class="primary complete-action" @click="openSubmittedReport">查看报告</button>
+        </view>
+      </view>
+    </scroll-view>
+    <view v-if="showHistory" class="overlay" @click="closeHistory">
+      <view class="sheet" @click.stop>
+        <view class="row"><text class="title">历史报告</text><text class="history-link" @click="closeHistory">关闭</text></view>
+        <scroll-view direction="vertical" :style="{ height: historyHeight + 'px' }">
+          <text v-if="historyLoading" class="muted history-empty">加载中…</text>
+          <view v-else-if="historyError.length > 0">
+            <text class="error history-empty">{{ historyError }}</text>
+            <button class="secondary" @click="loadHistory">重试</button>
+          </view>
+          <text v-else-if="history.length == 0" class="muted history-empty">暂无历史报告</text>
+          <view v-for="item in history" :key="item.id" class="history-item" @click="openReport(item.id)">
+            <view><text class="name">{{ item.talent }}</text><text class="muted">{{ item.mode }}测评</text></view>
+            <text class="muted">{{ item.date }} ›</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { childQuestions } from './questions.uts'
+import { orderQuestions, readAssessmentHistory, submitChildAssessment } from './assessment.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const total = childQuestions.length
+const phase = ref('intro')
+const cursor = ref(0)
+const order = ref([])
+const answers = ref([])
+const undoing = ref(false)
+const left = ref(60)
+const topInset = ref(0)
+const historyHeight = ref(320)
+const submitting = ref(false)
+const assessmentId = ref(0)
+const reportMessage = ref('')
+const errorText = ref('')
+let deadline = 0
+let timer = 0
+
+const index = computed(() => undoing.value ? cursor.value - 1 : cursor.value)
+const question = computed(() => childQuestions[order.value[index.value] ?? 0])
+const questionNumber = computed(() => index.value + 1)
+const progressPercent = computed(() => questionNumber.value / total * 100)
+const previousQuestion = computed(() => (childQuestions[order.value[cursor.value - 1] ?? 0] ?? '').slice(0, 14) + '…')
+const previousChoice = computed(() => answers.value[order.value[cursor.value - 1] ?? 0] == '1' ? '完全符合' : '有差异')
+const timePercent = computed(() => left.value / (undoing.value ? 5 : 60) * 100)
+const hint = computed(() => undoing.value ? '5 秒内可修改上一题' : (left.value == 0 ? '慢慢想，按真实表现作答' : '家长朋友，想一想孩子平时的表现'))
+
+const showHistory = ref(false)
+const history = ref([])
+const historyLoading = ref(false)
+const historyError = ref('')
+
+function stopTimer() {
+  if (timer != 0) clearInterval(timer)
+  timer = 0
+}
+
+function tick() {
+  left.value = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+  if (left.value > 0) return
+  if (undoing.value) {
+    undoing.value = false
+    left.value = 60
+    deadline = Date.now() + 60000
+  } else {
+    stopTimer()
+  }
+}
+
+function startTimer(seconds) {
+  stopTimer()
+  left.value = seconds
+  deadline = Date.now() + seconds * 1000
+  timer = setInterval(tick, 250)
+}
+
+function start() {
+  order.value = orderQuestions(total)
+  const empty= []
+  for (let i = 0; i < total; i++) empty.push('')
+  answers.value = empty
+  cursor.value = 0
+  undoing.value = false
+  phase.value = 'quiz'
+  startTimer(60)
+}
+
+function undo() {
+  if (cursor.value == 0 || undoing.value) return
+  undoing.value = true
+  startTimer(5)
+}
+
+function answer(value) {
+  if (phase.value != 'quiz') return
+  answers.value[order.value[index.value]] = value
+  if (undoing.value) undoing.value = false
+  else cursor.value += 1
+  if (cursor.value < total) {
+    startTimer(60)
+  } else {
+    stopTimer()
+    phase.value = 'complete'
+  }
+}
+
+function closeHistory() {
+  showHistory.value = false
+}
+
+function openReport(id, message) {
+  closeHistory()
+  uni.navigateTo({ url: '/pages/report/index?assessment_id=' + id.toString() + '&notice=' + encodeURIComponent(message) })
+}
+
+function openSubmittedReport() {
+  openReport(assessmentId.value, reportMessage.value)
+}
+
+async function submit() {
+  if (submitting.value || assessmentId.value > 0) return
+  submitting.value = true
+  errorText.value = ''
+  try {
+    const data = await submitChildAssessment(answers.value)
+    assessmentId.value = data.getNumber('assessment_id') ?? 0
+    reportMessage.value = data.getString('lock_message') ?? ''
+    openSubmittedReport()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '生成报告失败，请重试'
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function loadHistory() {
+  if (historyLoading.value) return
+  historyLoading.value = true
+  historyError.value = ''
+  try {
+    history.value = await readAssessmentHistory()
+  } catch (error) {
+    historyError.value = error instanceof Error ? error.message : '历史报告读取失败'
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function openHistory() {
+  showHistory.value = true
+  loadHistory()
+}
+
+function goBack() {
+  if (submitting.value) return
+  if (phase.value == 'intro' || assessmentId.value > 0) {
+    uni.navigateBack()
+    return
+  }
+  uni.showModal({
+    title: '退出测评',
+    content: '退出后本次答题进度将丢失，确定退出吗？',
+    success: (result) => { if (result.confirm) uni.navigateBack() }
+  })
+}
+
+onReady(() => {
+  topInset.value = getPageTopInset()
+  historyHeight.value = Math.min(360, Math.round(uni.getWindowInfo().windowHeight * 0.58))
+})
+onShow(() => { if (phase.value == 'quiz' && timer == 0 && left.value > 0) startTimer(left.value) })
+onHide(stopTimer)
+onUnload(stopTimer)
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

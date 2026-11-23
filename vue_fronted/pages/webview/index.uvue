@@ -1,0 +1,33 @@
+<template>
+  <web-view :src="url"></web-view>
+</template>
+
+<script setup lang="uts">
+/**
+ * 通用 WebView 承接页。
+ *
+ * 旧壳有 21 个页面只是 `<dayu-frame page="xxx.html" />` 的壳，真正的 UI 在
+ * static/dayu/html/*.html 里（合计约 1 MB）。这些 HTML 已部署在
+ * https://jnaosoft.cn/static/dayu/html/ 且逐个验证过内容真实（非 SPA fallback），
+ * 所以先用 web-view 承接，让这些页面立刻可用，后续再按优先级逐个重写为原生 uvue。
+ *
+ * 用法：uni.navigateTo({ url: '/pages/webview/index?page=consult.html' })
+ *
+ * 注意：
+ * - 微信小程序端需在微信后台把 jnaosoft.cn 配为业务域名，否则 web-view 无法加载
+ * - web-view 会占满整页，不能与原生组件混排
+ * - plan.html 线上是 SPA fallback（不是真页面），暂不可用
+ */
+import { getApiOrigin } from '../../config/environment.uts'
+
+const SAFE_PAGE_RE = /^[a-zA-Z0-9._-]+\.html$/
+const url = ref('')
+
+onLoad((options) => {
+  const rawPage = options == null ? '' : (options['page'] ?? '')
+  const page = SAFE_PAGE_RE.test(rawPage) && rawPage.indexOf('..') < 0 ? rawPage : 'index.html'
+  const query = options == null ? '' : (options['q'] ?? '')
+  const suffix = query.length > 0 ? '?' + query : ''
+  url.value = getApiOrigin() + '/static/dayu/html/' + page + suffix
+})
+</script>

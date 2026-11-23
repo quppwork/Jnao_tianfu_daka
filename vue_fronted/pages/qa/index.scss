@@ -1,0 +1,230 @@
+$bg: #070b14;
+$card: #0f1a2e;
+$card-soft: #131f38;
+$border: rgba(59, 130, 246, 0.2);
+$dim: #94a3b8;
+$text: #e2e8f0;
+$accent: #3b82f6;
+
+.qa-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  position: relative;
+  background-color: $bg;
+}
+
+.qa-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 12px;
+  padding-right: 16px;
+  padding-bottom: 8px;
+}
+
+.qa-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.qa-back-icon {
+  color: $text;
+  font-size: 26px;
+  line-height: 26px;
+}
+
+.qa-title {
+  color: $text;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.qa-title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.qa-subtitle {
+  color: $dim;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.qa-history-entry {
+  padding: 4px 10px;
+  border-radius: 12px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $border;
+}
+
+.qa-history-text {
+  color: $dim;
+  font-size: 12px;
+}
+
+.qa-subjects {
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.qa-subject-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.qa-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  margin-right: 8px;
+  border-radius: 16px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $border;
+  background-color: $card;
+}
+
+.qa-chip-active {
+  background-color: $accent;
+  border-color: $accent;
+}
+
+.qa-chip-text {
+  color: $dim;
+  font-size: 13px;
+}
+
+.qa-chip-text-on {
+  color: #0b1220;
+  font-weight: 600;
+}
+
+.qa-chip-active .qa-chip-text {
+  color: #0b1220;
+  font-weight: 600;
+}
+
+.qa-chat {
+  flex: 1;
+  background-color: $bg;
+}
+
+.qa-chat-inner {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px 8px 16px;
+}
+
+.qa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 60px;
+  padding-bottom: 60px;
+}
+
+.qa-empty-title {
+  color: $text;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.qa-empty-hint {
+  color: $dim;
+  font-size: 12px;
+}
+
+.qa-bottom-anchor {
+  height: 1px;
+}
+
+.qa-status {
+  padding: 4px 16px;
+}
+
+.qa-status-text {
+  color: $dim;
+  font-size: 12px;
+}
+
+.qa-error {
+  padding: 6px 16px;
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.qa-error-text {
+  color: #f87171;
+  font-size: 12px;
+}
+
+.qa-muted {
+  color: $dim;
+}
+
+.qa-mask {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.55);
+  justify-content: flex-end;
+}
+
+.qa-sheet {
+  display: flex;
+  flex-direction: column;
+  background-color: $card;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  padding: 16px;
+  max-height: 440px;
+}
+
+.qa-sheet-title {
+  color: $text;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.qa-sheet-hint {
+  padding-top: 12px;
+  padding-bottom: 24px;
+}
+
+.qa-sheet-list {
+  flex: 1;
+}
+
+.qa-sheet-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background-color: $card-soft;
+}
+
+.qa-sheet-subject {
+  color: $text;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.qa-sheet-meta {
+  color: $dim;
+  font-size: 12px;
+}

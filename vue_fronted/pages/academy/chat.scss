@@ -1,0 +1,42 @@
+$bg: #0a0e17;
+$card: #131a2a;
+$card-soft: #1a2236;
+$border: rgba(99, 132, 255, 0.18);
+$text: #e6ecf7;
+$dim: #8b97ad;
+$accent: #4f7cff;
+
+.ac-chat-page { display: flex; flex: 1; flex-direction: column; background-color: $bg; }
+
+.ac-chat-header {
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+  padding-left: 12px; padding-right: 16px; padding-bottom: 10px;
+  background-color: $bg;
+}
+.ac-chat-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.ac-chat-back-icon { color: $text; font-size: 26px; line-height: 26px; }
+.ac-chat-title { color: $text; font-size: 16px; font-weight: 600; }
+.ac-chat-placeholder { width: 32px; }
+
+.ac-chat-body { flex: 1; }
+.ac-chat-inner { padding: 12px 0 8px 0; }
+.ac-chat-anchor { height: 8px; }
+
+.ac-chat-empty { display: flex; flex-direction: column; padding: 48px 24px; align-items: center; }
+.ac-chat-empty-title { color: $text; font-size: 15px; font-weight: 600; }
+.ac-chat-empty-hint { color: $dim; font-size: 12px; margin-top: 8px; text-align: center; line-height: 18px; }
+
+.ac-chat-blocked {
+  margin: 0 16px 10px 16px; padding: 14px; border-radius: 12px;
+  background-color: rgba(248, 113, 113, 0.1);
+  border-width: 1px; border-style: solid; border-color: rgba(248, 113, 113, 0.3);
+}
+.ac-chat-blocked-text { color: #f87171; font-size: 13px; line-height: 19px; }
+.ac-chat-blocked-btn {
+  margin-top: 10px; align-self: flex-start; padding: 7px 16px;
+  border-radius: 11px; background-color: $accent;
+}
+.ac-chat-blocked-btntext { color: #fff; font-size: 13px; font-weight: 600; }
+
+.ac-chat-error { padding: 0 16px 8px 16px; }
+.ac-chat-error-text { color: #f87171; font-size: 12px; }

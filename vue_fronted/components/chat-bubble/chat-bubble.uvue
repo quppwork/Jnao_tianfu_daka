@@ -1,0 +1,93 @@
+<template>
+  <view class="cb-row" :class="role == 'user' ? 'cb-row-user' : 'cb-row-ai'">
+    <view class="cb-bubble" :class="role == 'user' ? 'cb-bubble-user' : 'cb-bubble-ai'">
+      <text v-if="content.length > 0" class="cb-text">{{ content }}</text>
+      <text v-if="pending && content.length == 0" class="cb-text cb-muted">正在思考…</text>
+      <text v-if="pending && content.length > 0" class="cb-caret">▍</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+defineOptions({
+  styleIsolation: 'app'
+})
+
+defineProps({
+  role: {
+    type: String,
+    default: 'ai'
+  },
+  content: {
+    type: String,
+    default: ''
+  },
+  pending: {
+    type: Boolean,
+    default: false
+  }
+})
+</script>
+
+<style lang="scss" scoped>
+$card: #0f1a2e;
+$border: rgba(59, 130, 246, 0.2);
+$text: #e2e8f0;
+$dim: #94a3b8;
+$accent: #3b82f6;
+
+.cb-row {
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 12px;
+}
+
+.cb-row-user {
+  justify-content: flex-end;
+  padding-left: 48px;
+}
+
+.cb-row-ai {
+  justify-content: flex-start;
+  padding-right: 48px;
+}
+
+.cb-bubble {
+  flex-shrink: 1;
+  padding: 10px 12px;
+  border-radius: 12px;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.cb-bubble-user {
+  background-color: $accent;
+}
+
+.cb-bubble-ai {
+  background-color: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $border;
+}
+
+.cb-text {
+  color: $text;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.cb-bubble-user .cb-text {
+  color: #ffffff;
+}
+
+.cb-muted {
+  color: $dim;
+}
+
+.cb-caret {
+  color: $accent;
+  font-size: 14px;
+  line-height: 22px;
+}
+</style>

@@ -1,0 +1,7 @@
+/**
+ * LLM 类请求的统一超时预算。
+ *
+ * 这些端点（答疑、天赋解答、大宇对话、剧本生成）都是 Agent 全量执行后一次性返回，
+ * 耗时远超普通 CRUD，沿用 requestJson 默认的 15s 必然超时。
+ */
+export const LLM_TIMEOUT_MS: number = 120000

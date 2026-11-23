@@ -1,0 +1,271 @@
+import { requestJson } from '../network/request.uts'
+
+/** 管理后台：账号、家长、孩子、绑定、配额、登录策略、黑名单 */
+
+export function adminLogin(loginName: string, password: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { login_name: loginName, password: password }
+  return requestJson('/api/admin/login', 'POST', body)
+}
+
+export function adminLogout(): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/logout', 'POST')
+}
+
+/* ---------- 家长 ---------- */
+
+export function listAdminParents(): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/parents')
+}
+
+export function listAdminRemovedParents(): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/parents/removed')
+}
+
+export function createAdminParent(
+  parentPhone: string,
+  nickname: string,
+  password: string,
+  childQuota: number
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { parent_phone: parentPhone, nickname: nickname, child_quota: childQuota }
+  if (password.length > 0) body['password'] = password
+  return requestJson('/api/admin/parents', 'POST', body)
+}
+
+export function updateAdminParent(parentId: number, body: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/parents/' + parentId.toString(), 'PUT', body)
+}
+
+export function deleteAdminParent(parentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/parents/' + parentId.toString(), 'DELETE')
+}
+
+export function restoreAdminParent(parentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/parents/' + parentId.toString() + '/restore', 'POST')
+}
+
+export function restoreAdminParentByPhone(phone: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { phone: phone }
+  return requestJson('/api/admin/parents/restore-by-phone', 'POST', body)
+}
+
+export function getAdminParentDetail(parentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/parents/' + parentId.toString() + '/detail')
+}
+
+export function reconcileAdminParent(parentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/parents/' + parentId.toString() + '/reconcile', 'POST')
+}
+
+/* ---------- 孩子 ---------- */
+
+export function listAdminChildren(): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children')
+}
+
+export function createAdminChild(
+  parentId: number,
+  loginName: string,
+  nickname: string,
+  password: string,
+  grade: string,
+  age: number
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {
+    parent_id: parentId,
+    login_name: loginName,
+    nickname: nickname,
+    password: password
+  }
+  if (grade.length > 0) body['grade'] = grade
+  if (age > 0) body['age'] = age
+  return requestJson('/api/admin/children', 'POST', body)
+}
+
+export function updateAdminChild(childId: number, body: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children/' + childId.toString(), 'PUT', body)
+}
+
+export function deleteAdminChild(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children/' + childId.toString(), 'DELETE')
+}
+
+export function restoreAdminChild(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children/' + childId.toString() + '/restore', 'POST')
+}
+
+export function bindAdminChild(childId: number, parentId: number): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { parent_id: parentId }
+  return requestJson('/api/admin/children/' + childId.toString() + '/bind', 'POST', body)
+}
+
+export function unbindAdminChild(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children/' + childId.toString() + '/bind', 'DELETE')
+}
+
+export function getAdminChildDetail(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children/' + childId.toString() + '/detail')
+}
+
+/* ---------- 天赋测评配额 ---------- */
+
+export function getAdminTalentQuota(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children/' + childId.toString() + '/talent-quota')
+}
+
+/** add 为正数增加、负数减少 */
+export function adjustAdminTalentQuota(childId: number, add: number): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { add: add }
+  return requestJson('/api/admin/children/' + childId.toString() + '/talent-quota', 'PUT', body)
+}
+
+export function batchAdjustAdminTalentQuota(childIds: number[], add: number): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { child_ids: childIds, add: add }
+  return requestJson('/api/admin/children/talent-quota/batch', 'PUT', body)
+}
+
+export function listAdminTalentAssessments(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/children/' + childId.toString() + '/talent-assessments')
+}
+
+/* ---------- 平台设置 ---------- */
+
+export function getAdminSettings(): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/settings')
+}
+
+export function updateAdminSettings(body: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/settings', 'PUT', body)
+}
+
+/* ---------- 黑名单 ---------- */
+
+export function listAdminBlacklist(): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/blacklist')
+}
+
+/** kind: phone / nickname / device 等，由后端定义 */
+export function removeAdminBlacklist(kind: string, value: string): Promise<UTSJSONObject> {
+  return requestJson('/api/admin/blacklist/' + kind + '/' + value, 'DELETE')
+}
+
+/* ---------- 响应映射 ----------
+ * 页面只拿结构化数据，不自己解析响应键名。
+ * 模式与 api/training.uts 的 readTrainingPlan 一致。
+ */
+
+export type AdminParentRow = {
+  id: number
+  nickname: string
+  phone: string
+  childrenCount: number
+  quota: number
+}
+
+export type AdminChildRow = {
+  id: number
+  nickname: string
+  loginName: string
+  grade: string
+  parentName: string
+}
+
+export type AdminBlacklistRow = {
+  kind: string
+  value: string
+}
+
+export type AdminDetailRow = {
+  label: string
+  value: string
+}
+
+export function readAdminParents(data: UTSJSONObject): AdminParentRow[] {
+  const rows = data.getArray<UTSJSONObject>('parents') ?? []
+  return rows.map((row): AdminParentRow => ({
+    id: row.getNumber('id') ?? 0,
+    nickname: row.getString('nickname') ?? '（未命名）',
+    phone: row.getString('parent_phone') ?? '',
+    childrenCount: row.getNumber('children_count') ?? 0,
+    quota: row.getNumber('child_quota') ?? 0
+  })).filter((row): boolean => row.id > 0)
+}
+
+export function readAdminChildren(data: UTSJSONObject): AdminChildRow[] {
+  const rows = data.getArray<UTSJSONObject>('children') ?? []
+  return rows.map((row): AdminChildRow => ({
+    id: row.getNumber('id') ?? 0,
+    nickname: row.getString('nickname') ?? '（未命名）',
+    loginName: row.getString('login_name') ?? '',
+    grade: row.getString('grade') ?? '未填',
+    parentName: row.getString('parent_nickname') ?? '未绑定'
+  })).filter((row): boolean => row.id > 0)
+}
+
+/** 后端按来源分成 ips / phones / devices 三组，条目本身只有 value */
+export function readAdminBlacklist(data: UTSJSONObject): AdminBlacklistRow[] {
+  const groups: string[] = ['ips', 'phones', 'devices']
+  const kinds: string[] = ['ip', 'phone', 'device']
+  const list: AdminBlacklistRow[] = []
+  for (let g = 0; g < groups.length; g++) {
+    const rows = data.getArray<UTSJSONObject>(groups[g]) ?? []
+    for (let i = 0; i < rows.length; i++) {
+      const value = rows[i].getString('value') ?? ''
+      if (value.length > 0) list.push({ kind: kinds[g], value: value })
+    }
+  }
+  return list
+}
+
+function detailRow(label: string, value: string): AdminDetailRow {
+  return { label: label, value: value.length > 0 ? value : '—' }
+}
+
+/**
+ * AdminParentDetailResponse 的实际字段：id / parent_phone / nickname / child_quota /
+ * children_count / created_at / children / active_sessions / reconciled_count / pending_unbound_count。
+ * 没有 login_channel 和 account_status，不要凭空读。
+ */
+export function readAdminParentDetail(data: UTSJSONObject): AdminDetailRow[] {
+  return [
+    detailRow('昵称', data.getString('nickname') ?? ''),
+    detailRow('手机号', data.getString('parent_phone') ?? ''),
+    detailRow('孩子配额', (data.getNumber('child_quota') ?? 0).toString()),
+    detailRow('已绑定孩子', (data.getNumber('children_count') ?? 0).toString()),
+    detailRow('会话数', (data.getArray<UTSJSONObject>('active_sessions') ?? []).length.toString()),
+    detailRow('待绑定', (data.getNumber('pending_unbound_count') ?? 0).toString()),
+    detailRow('创建时间', data.getString('created_at') ?? '')
+  ]
+}
+
+/**
+ * AdminChildDetailResponse 的实际字段：id / login_name / nickname / grade / age /
+ * talent / talent_display / training_days / checkins / overall_tier / parent_id / parent_phone。
+ * 测评配额在 /talent-quota 接口，不在这里。
+ */
+export function readAdminChildDetail(data: UTSJSONObject): AdminDetailRow[] {
+  return [
+    detailRow('昵称', data.getString('nickname') ?? ''),
+    detailRow('登录名', data.getString('login_name') ?? ''),
+    detailRow('年级', data.getString('grade') ?? ''),
+    detailRow('年龄', (data.getNumber('age') ?? 0).toString()),
+    detailRow('天赋', data.getString('talent_display') ?? data.getString('talent') ?? ''),
+    detailRow('家长手机', data.getString('parent_phone') ?? ''),
+    detailRow('训练天数', (data.getNumber('training_days') ?? 0).toString()),
+    detailRow('打卡次数', (data.getNumber('checkins') ?? 0).toString()),
+    detailRow('总段位', (data.getNumber('overall_tier') ?? 0).toString())
+  ]
+}
+/**
+ * 组装平台设置请求体。
+ * 必须放在 .uts：.uvue 里不能写 const x: UTSJSONObject = {}，
+ * 而空对象字面量推断不出 UTSJSONObject，就做不了下标赋值。
+ */
+export function buildSettingsBody(adminDevices: number, parentDevices: number, studentDevices: number): UTSJSONObject {
+  const policy: UTSJSONObject = {}
+  if (adminDevices > 0) policy['admin_max_devices'] = adminDevices
+  if (parentDevices > 0) policy['parent_max_devices'] = parentDevices
+  if (studentDevices > 0) policy['student_max_devices'] = studentDevices
+  const body: UTSJSONObject = { login_policy: policy }
+  return body
+}

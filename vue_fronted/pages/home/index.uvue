@@ -1,0 +1,293 @@
+<template>
+  <scroll-view class="page" scroll-y :show-scrollbar="false">
+    <view class="home-top" :style="{ marginTop: insetTop + 'px' }">
+      <view v-if="isParent" class="parent-brand">
+        <text class="parent-title">大宇智能体</text>
+        <text class="parent-subtitle">PARENT · 家长版</text>
+      </view>
+      <text v-else class="student-label">学生账户</text>
+      <text class="home-user">{{ nickname.length > 0 ? nickname : '大宇 AI' }}</text>
+      <button class="logout-button" :disabled="saving || signingOut" @click="signOut">退出</button>
+    </view>
+    <view v-if="profileLoaded && (!isParent || parentReady)" class="home-hero" :style="{ height: heroHeight + 'px' }">
+      <template v-if="isParent">
+        <image class="hero-background" :src="assetBase + 'parent-team.jpg'" mode="aspectFit" />
+        <text class="team-tag">天赋导师团</text>
+        <view class="team-caption">
+          <text class="team-title">张宇老师 · 天赋导师团</text>
+          <text class="team-subtitle">不是一个人，是一支教育团队——陪孩子，也陪家长</text>
+        </view>
+      </template>
+      <template v-else>
+        <image class="hero-background" :src="assetBase + 'hero_bg.jpg'" mode="aspectFill" />
+        <image class="hero-teacher" :src="assetBase + '_zy-cut.png'" mode="heightFix" />
+        <image class="hero-cartoon" :src="assetBase + '_cartoon-cut.png'" mode="heightFix" />
+      </template>
+    </view>
+    <view v-if="profileLoaded && (!isParent || parentReady)" class="home-shortcuts">
+      <view class="home-shortcut" @click="openPage('/pages/guide/index')">
+        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+        <text class="shortcut-label">学科引导</text>
+      </view>
+      <view class="home-shortcut" @click="openPage('/pages/solve/index')">
+        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+        <text class="shortcut-label">拍照解题</text>
+      </view>
+
+      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/dayu')">
+        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+        <text class="shortcut-label">大宇智能体</text>
+      </view>
+      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/index')">
+        <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
+        <text class="shortcut-label">孩子账户管理</text>
+      </view>
+      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/pcourse')">
+        <image class="shortcut-icon" :src="assetBase + 'ic/cap.png'" mode="aspectFit" />
+        <text class="shortcut-label">家长课堂</text>
+      </view>
+      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/wallet')">
+        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+        <text class="shortcut-label">算力中心</text>
+      </view>
+      <view v-if="isParent" class="home-shortcut" @click="openWeb('community.html')">
+        <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
+        <text class="shortcut-label">天赋社区</text>
+      </view>
+      <view v-if="isParent" class="home-shortcut" @click="openWeb('consult.html')">
+        <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
+        <text class="shortcut-label">在线咨询</text>
+      </view>
+      <view v-if="isParent" class="home-shortcut" @click="openWeb('pdata.html')">
+        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+        <text class="shortcut-label">数据分析</text>
+      </view>
+      <view v-if="isParent" class="home-shortcut" @click="openWeb('pset.html', 'console1')">
+        <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
+        <text class="shortcut-label">我的</text>
+      </view>
+      <template v-else>
+        <view class="home-shortcut" @click="openPage('/pages/training/index')">
+          <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+          <text class="shortcut-label">今日修炼</text>
+        </view>
+        <view class="home-shortcut" @click="openPage('/pages/qa/index')">
+          <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
+          <text class="shortcut-label">学科答疑</text>
+        </view>
+        <view class="home-shortcut" @click="openPage('/pages/training/history')">
+          <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
+          <text class="shortcut-label">历史记录</text>
+        </view>
+        <view class="home-shortcut" @click="openPage('/pages/growth/index')">
+          <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+          <text class="shortcut-label">成长里程碑</text>
+        </view>
+        <view class="home-shortcut" @click="goAcademy">
+          <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
+          <text class="shortcut-label">天赋学院</text>
+        </view>
+        <view class="home-shortcut" @click="openWeb('test.html', 'hub7')">
+          <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
+          <text class="shortcut-label">天赋测试</text>
+        </view>
+        <view class="home-shortcut" @click="openWeb('milestone.html', 'console7')">
+          <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
+          <text class="shortcut-label">中央电脑</text>
+        </view>
+      </template>
+    </view>
+    <view v-if="loading || errorText.length > 0 || (profileLoaded && isParent && !parentReady)" class="content">
+      <text v-if="loading" class="muted">正在读取账号信息…</text>
+      <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
+      <button v-if="!loading && !profileLoaded" class="secondary" @click="loadProfile">重试</button>
+      <view v-if="profileLoaded && isParent && !parentReady" class="card">
+        <text class="title">{{ gateTitle }}</text>
+        <view v-if="nextStep == 'complete-profile' && gatePassed">
+          <text class="label">昵称</text>
+          <input v-model="nicknameInput" class="field" :maxlength="50" placeholder="请输入昵称" />
+          <text class="label">姓名</text>
+          <input v-model="realNameInput" class="field" :maxlength="50" placeholder="请输入姓名" />
+          <template v-if="needPassword">
+            <text class="label">登录密码</text>
+            <input v-model="passwordInput" class="field" password :maxlength="32" :placeholder="PASSWORD_HINT" />
+            <text class="label">确认密码</text>
+            <input v-model="confirmInput" class="field" password :maxlength="32" placeholder="再次输入密码" />
+          </template>
+          <button class="primary" :disabled="saving" :loading="saving" @click="saveProfile">保存资料</button>
+        </view>
+        <template v-else>
+          <text class="muted">{{ gateHint }}</text>
+          <button class="secondary" @click="exitToPasswordLogin">改用手机号密码登录</button>
+        </template>
+      </view>
+    </view>
+  </scroll-view>
+</template>
+
+<script setup lang="uts">
+import { logout } from '../../api/auth.uts'
+import { getApiOrigin } from '../../config/environment.uts'
+import { requestJson } from '../../network/request.uts'
+import { clearSession, getSession, returnToLogin, saveSession } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { buildParentProfileBody } from '../../api/user.uts'
+import { meetsPasswordPolicy, PASSWORD_HINT } from '../../utils/password-policy.uts'
+
+const nickname = ref('')
+const isParent = ref(false)
+const profileLoaded = ref(false)
+const parentReady = ref(false)
+const gatePassed = ref(false)
+const nextStep = ref('')
+const nicknameInput = ref('')
+const realNameInput = ref('')
+const passwordInput = ref('')
+const confirmInput = ref('')
+const hasPassword = ref(false)
+const loginChannel = ref('')
+const errorText = ref('')
+const loading = ref(false)
+const saving = ref(false)
+const signingOut = ref(false)
+const insetTop = ref(0)
+const heroHeight = ref(115)
+const assetBase = getApiOrigin() + '/static/dayu/assets/'
+
+function applyProfile(profile) {
+  nickname.value = profile.getString('nickname') ?? ''
+  const session = getSession()
+  if (session != null && session.nickname != nickname.value) {
+    saveSession({ userId: session.userId, role: session.role, nickname: nickname.value, accessToken: session.accessToken })
+  }
+  if (isParent.value) {
+    nicknameInput.value = nickname.value
+    realNameInput.value = profile.getString('real_name') ?? ''
+    gatePassed.value = profile.getBoolean('gate_passed') == true
+    parentReady.value = gatePassed.value && profile.getBoolean('account_ready') == true
+    nextStep.value = profile.getString('next_step') ?? ''
+    hasPassword.value = profile.getBoolean('has_password') == true
+    loginChannel.value = profile.getString('login_channel') ?? ''
+  }
+  profileLoaded.value = true
+}
+
+/** 微信登录或还没设过密码的家长，需要在这里补密码 */
+const needPassword = computed(() => {
+  return !hasPassword.value || loginChannel.value == 'wechat'
+})
+
+const gateTitle = computed(() => {
+  if (nextStep.value == 'bind-phone') return '绑定手机号'
+  return '完善家长资料'
+})
+
+/** 后端 next_step 只有 home / bind-phone / complete-profile 三种，分别给出可操作指引 */
+const gateHint = computed(() => {
+  if (nextStep.value == 'bind-phone') {
+    return '该微信账号还没绑定手机号。绑定需要在微信内完成，当前版本暂未支持；可先退出，用手机号+密码登录。'
+  }
+  if (nextStep.value == 'complete-profile') {
+    return '该账号还需要完成身份验证，请联系管理员处理。'
+  }
+  return '该账号状态异常，请联系管理员。'
+})
+
+function exitToPasswordLogin() {
+  clearSession()
+  returnToLogin()
+}
+
+async function loadProfile() {
+  const session = getSession()
+  if (session == null) {
+    returnToLogin()
+    return
+  }
+  isParent.value = session.role == 'parent'
+  nickname.value = session.nickname
+  loading.value = true
+  errorText.value = ''
+  try {
+    const path = isParent.value ? '/api/parent/profile' : '/api/user/profile'
+    applyProfile(await requestJson(path))
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取账号信息失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveProfile() {
+  const newNickname = nicknameInput.value.trim()
+  const realName = realNameInput.value.trim()
+  if (newNickname.length == 0 || realName.length == 0) {
+    errorText.value = '请填写昵称和姓名'
+    return
+  }
+
+  let pwd = ''
+  if (needPassword.value) {
+    pwd = passwordInput.value.trim()
+    if (!meetsPasswordPolicy(pwd)) {
+      errorText.value = PASSWORD_HINT
+      return
+    }
+    if (pwd != confirmInput.value.trim()) {
+      errorText.value = '两次密码不一致'
+      return
+    }
+  }
+  const body = buildParentProfileBody(newNickname, realName, pwd, loginChannel.value == 'wechat')
+
+  saving.value = true
+  errorText.value = ''
+  try {
+    applyProfile(await requestJson('/api/parent/profile', 'PUT', body))
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '保存失败，请重试'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function signOut() {
+  signingOut.value = true
+  errorText.value = ''
+  try {
+    await logout()
+    returnToLogin()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '退出失败，请重试'
+  } finally {
+    signingOut.value = false
+  }
+}
+
+function openPage(url) {
+  uni.navigateTo({ url })
+}
+
+/** 尚未原生重写的页面统一走 WebView 承接（HTML 已部署在 jnaosoft.cn） */
+function goAcademy() {
+  uni.navigateTo({ url: '/pages/academy/index' })
+}
+
+function openWeb(page, q) {
+  const query = q.length > 0 ? '&q=' + q : ''
+  uni.navigateTo({ url: '/pages/webview/index?page=' + page + query })
+}
+
+onLoad(() => {
+  loadProfile()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  heroHeight.value = Math.round((uni.getWindowInfo().windowWidth - 28) * 0.32)
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

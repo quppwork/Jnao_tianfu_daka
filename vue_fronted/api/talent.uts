@@ -1,0 +1,125 @@
+import { requestJson } from '../network/request.uts'
+import { streamPost, SseEventSink } from '../network/stream.uts'
+import { LLM_TIMEOUT_MS } from '../network/timeouts.uts'
+
+/** 天赋测评与报告内解答 */
+
+/** type: 0 成人 / 1 儿童（后端 talent.py 注释为 `0 adult, 1 child`）；childUserId 大于 0 时结果落库 */
+export function submitTalentReport(
+  answer: string,
+  uid: number,
+  type: number,
+  childUserId: number
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { answer: answer, uid: uid, type: type }
+  if (childUserId > 0) body['child_user_id'] = childUserId
+  return requestJson('/api/talent/report', 'POST', body, null, true, LLM_TIMEOUT_MS)
+}
+
+/** JNAO 外部提交：answer 走 query，35 位 01 串 */
+export function submitJnaoAnswer(answer: string): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/jnao/submit?answer=' + answer, 'POST')
+}
+
+export function getJnaoReport(recordId: string): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/jnao/report/' + recordId)
+}
+
+export function getTalentAssessment(assessmentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/assessment/' + assessmentId.toString())
+}
+
+export function listTalentHistory(): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/assessment/history')
+}
+
+export function getLatestTalentAssessment(): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/assessment/latest')
+}
+
+export function deleteTalentAssessment(assessmentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/assessment/' + assessmentId.toString(), 'DELETE')
+}
+
+export function prepareDayuTest(resultId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/dayu-test/' + resultId.toString() + '/prepare')
+}
+
+/** 报告内历史问答 */
+export function getTalentChatHistory(assessmentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/assessment/' + assessmentId.toString() + '/chat')
+}
+
+export function talentChat(assessmentId: number, content: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { content: content }
+  return requestJson(
+    '/api/talent/assessment/' + assessmentId.toString() + '/chat',
+    'POST',
+    body,
+    null,
+    true,
+    LLM_TIMEOUT_MS
+  )
+}
+
+/** 流式天赋解答，done 事件带权威消息与 citations */
+export function talentChatStream(
+  assessmentId: number,
+  content: string,
+  sink: SseEventSink
+): RequestTask | null {
+  const body: UTSJSONObject = { content: content }
+  return streamPost('/api/talent/assessment/' + assessmentId.toString() + '/chat/stream', body, sink)
+}
+
+/** 天赋报告里的属性列表；后端嵌在 results.Attribute.attributeList */
+export function readReportAttributes(data: UTSJSONObject): Array<UTSJSONObject> {
+  const results = data.getJSON<UTSJSONObject>('results')
+  if (results == null) return []
+  const attribute = results.getJSON<UTSJSONObject>('Attribute')
+  if (attribute == null) return []
+  return attribute.getArray<UTSJSONObject>('attributeList') ?? []
+}
+/** 天赋标签 → 报告页头像文件名 */
+export function talentAvatarFile(talent: string): string {
+  const map: UTSJSONObject = { '学者': 'study', '思者': 'think', '行者': 'act', '德者': 'virtue', '赢者': 'win' }
+  return map.getString(talent) ?? 'study'
+}
+/* ---------- 报告对话 ----------
+ * GET /api/talent/assessment/{id}/chat 返回（report_talent_agent.list_messages）：
+ *   {opening, assessment_id, talent_primary, test_type, source_key,
+ *    chips: [str], messages: [{role, content, citations}]}
+ * 开场白不入库，由后端每次给出。
+ */
+
+export type TalentChatMessage = {
+  role: string
+  content: string
+}
+
+export type TalentChat = {
+  opening: string
+  assessmentId: number
+  talentPrimary: string
+  chips: string[]
+  messages: TalentChatMessage[]
+}
+
+export function readTalentChat(data: UTSJSONObject): TalentChat {
+  const raw = data.getArray<UTSJSONObject>('messages') ?? []
+  const list: TalentChatMessage[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const m = raw[i]
+    list.push({
+      role: m.getString('role') ?? '',
+      content: m.getString('content') ?? ''
+    })
+  }
+  return {
+    opening: data.getString('opening') ?? '',
+    assessmentId: data.getNumber('assessment_id') ?? 0,
+    talentPrimary: data.getString('talent_primary') ?? '',
+    chips: data.getArray<string>('chips') ?? [],
+    messages: list
+  }
+}

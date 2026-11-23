@@ -1,0 +1,10 @@
+const PRODUCTION_ORIGIN = 'https://jnaosoft.cn'
+// 真机联调时填入设备可访问的 HTTPS 测试服务地址。
+const DEVELOPMENT_ORIGIN = ''
+
+export function getApiOrigin(): string {
+  if (process.env.NODE_ENV == 'development' && DEVELOPMENT_ORIGIN.length > 0) {
+    return DEVELOPMENT_ORIGIN
+  }
+  return PRODUCTION_ORIGIN
+}

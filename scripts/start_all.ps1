@@ -2,7 +2,7 @@
 $root = Split-Path -Parent $PSScriptRoot
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  JNAO - 一键启动前后端" -ForegroundColor Cyan
+Write-Host "  JNAO - 启动本地 API" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 Write-Host "[CLEAN] 清理旧进程..." -ForegroundColor Gray
@@ -42,21 +42,11 @@ for ($i = 0; $i -lt 40; $i++) {
     } catch { }
 }
 if (-not $ready) {
-    Write-Host "[WARN] 后端 20s 内未响应，前端窗口仍会启动（请查看 Backend 窗口报错）" -ForegroundColor DarkYellow
+    Write-Host "[WARN] 后端 20s 内未响应，请查看 Backend 窗口" -ForegroundColor DarkYellow
 }
 
-Write-Host "[START] 打开前端窗口 (5185)..." -ForegroundColor Yellow
-Start-Process $shellExe -ArgumentList @(
-    "-NoExit",
-    "-ExecutionPolicy", "Bypass",
-    "-File", (Join-Path $PSScriptRoot "run_frontend.ps1")
-) -WorkingDirectory $root
-
 Write-Host ""
-Write-Host "  Backend:  http://127.0.0.1:8012" -ForegroundColor Green
-Write-Host "  Frontend: http://127.0.0.1:5185" -ForegroundColor Green
-Write-Host ""
-Write-Host "  已弹出两个 PowerShell 窗口" -ForegroundColor Cyan
-Write-Host "  关闭对应窗口即可停止该服务" -ForegroundColor Cyan
-Write-Host "  或运行 scripts\stop_all.ps1 全部停止" -ForegroundColor Gray
+Write-Host "  API  http://127.0.0.1:8012" -ForegroundColor Green
+Write-Host "  在 HBuilderX 打开 vue_fronted 运行客户端" -ForegroundColor Cyan
+Write-Host "  关闭 Backend 窗口或运行 scripts\stop_all.ps1 停止 API" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan

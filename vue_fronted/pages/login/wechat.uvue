@@ -1,0 +1,122 @@
+<template>
+  <view class="wq-page">
+    <view class="wq-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="wq-back" @click="goBack"><text class="wq-back-icon">‹</text></view>
+      <text class="wq-title">微信登录</text>
+      <view class="wq-placeholder"></view>
+    </view>
+
+    <scroll-view class="wq-body" scroll-y>
+      <view class="wq-hero">
+        <view class="wq-brand"><text class="wq-brand-text">微</text></view>
+        <text class="wq-hero-title">用微信登录 JNAO</text>
+        <text class="wq-hero-hint">首次登录后会让你绑定一个手机号</text>
+      </view>
+
+      <!-- 服务端配置状态 -->
+      <view class="wq-card">
+        <view class="wq-row">
+          <text class="wq-row-label">服务端微信配置</text>
+          <text class="wq-row-value" :class="configured ? 'wq-ok' : 'wq-bad'">
+            {{ checking ? '检查中…' : (configured ? '已就绪' : '未配置') }}
+          </text>
+        </view>
+        <text v-if="!checking && !configured" class="wq-note">
+          服务端缺少 WECHAT_MP_APP_ID / WECHAT_MP_APP_SECRET，现在点登录会在第一步失败。
+        </text>
+        <text v-if="appId.length > 0" class="wq-note wq-note-dim">AppID：{{ appId }}</text>
+      </view>
+
+      <view class="wq-actions">
+        <view class="wq-btn" :class="(checking || !configured) ? 'wq-btn-off' : ''" @click="startWechatLogin">
+          <text class="wq-btn-text">{{ busy ? '正在唤起微信…' : '微信登录' }}</text>
+        </view>
+        <view class="wq-btn-ghost" @click="goPhoneLogin">
+          <text class="wq-btn-ghost-text">用手机号登录</text>
+        </view>
+      </view>
+
+      <text v-if="errorText.length > 0" class="wq-error">{{ errorText }}</text>
+      <view class="wq-space"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getWechatConfig } from '../../api/auth.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const insetTop = ref(0)
+const checking = ref(true)
+const configured = ref(false)
+const appId = ref('')
+const busy = ref(false)
+const errorText = ref('')
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function goPhoneLogin() {
+  uni.redirectTo({ url: '/pages/login/index' })
+}
+
+async function checkConfig() {
+  checking.value = true
+  errorText.value = ''
+  try {
+    const data = await getWechatConfig()
+    const id = data.getString('app_id') ?? ''
+    appId.value = id
+    configured.value = id.length > 0
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取微信配置失败'
+  } finally {
+    checking.value = false
+  }
+}
+
+/**
+ * 小程序端只能拿到 code，换 session 要服务端调 jscode2session。
+ * 后端目前只有 H5 的 /wechat/callback，没有小程序 code 换票端点，
+ * 所以这里如实把 code 展示出来并提示缺什么，不假装登录成功。
+ */
+function startWechatLogin() {
+  if (checking.value) return
+  if (!configured.value) {
+    errorText.value = '服务端还没配置微信 AppID/Secret'
+    return
+  }
+  busy.value = true
+  errorText.value = ''
+  uni.login({
+    provider: 'weixin',
+    success: (res) => {
+      busy.value = false
+      const code = res.code ?? ''
+      if (code.length == 0) {
+        errorText.value = '微信没返回 code'
+        return
+      }
+      // 后端缺小程序 code 换票端点，这里不能静默失败
+      errorText.value = '已拿到微信 code，但服务端还没有「小程序 code 换登录态」的接口，需要后端补一个端点'
+    },
+    fail: (err) => {
+      busy.value = false
+      errorText.value = err.errMsg.length > 0 ? err.errMsg : '唤起微信失败'
+    }
+  })
+}
+
+onLoad(() => {
+  checkConfig()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './wechat.scss';
+</style>

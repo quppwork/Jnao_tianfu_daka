@@ -1,0 +1,387 @@
+<template>
+  <view class="ad-page">
+    <view class="ad-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="ad-back" @click="goBack"><text class="ad-back-icon">‹</text></view>
+      <text class="ad-title">管理后台</text>
+      <view class="ad-header-actions">
+        <view class="ad-mini-btn" @click="goSettings"><text class="ad-mini-text">设置</text></view>
+        <view class="ad-mini-btn" @click="goBlacklist"><text class="ad-mini-text">黑名单</text></view>
+        <view class="ad-mini-btn" @click="signOut"><text class="ad-mini-text">退出</text></view>
+      </view>
+    </view>
+
+    <view class="ad-tabs">
+      <view
+        v-for="tab in tabs"
+        :key="tab.key"
+        class="ad-tab"
+        :class="activeTab == tab.key ? 'ad-tab-on' : ''"
+        @click="switchTab(tab.key)"
+      >
+        <text class="ad-tab-text" :class="activeTab == tab.key ? 'ad-tab-text-on' : ''">{{ tab.label }}</text>
+      </view>
+    </view>
+
+    <view class="ad-toolbar">
+      <text class="ad-toolbar-text">{{ summaryText }}</text>
+      <view class="ad-action" @click="reload"><text class="ad-action-text">刷新</text></view>
+    </view>
+
+    <scroll-view class="ad-list" scroll-y>
+      <view v-if="loading" class="ad-empty"><text class="ad-empty-text">加载中…</text></view>
+
+      <!-- 家长 -->
+      <template v-else-if="activeTab == 'parents'">
+        <view v-if="parents.length == 0" class="ad-empty"><text class="ad-empty-text">暂无家长账号</text></view>
+        <view v-for="p in parents" :key="p.id.toString()" class="ad-row">
+          <view class="ad-row-main">
+            <text class="ad-row-name">{{ p.nickname }}</text>
+            <text class="ad-row-meta">{{ p.phone }}</text>
+          </view>
+          <text class="ad-row-meta">孩子 {{ p.childrenCount }} / 配额 {{ p.quota }}</text>
+          <view class="ad-row-actions">
+            <view class="ad-mini" @click="openParentDetail(p.id)">
+              <text class="ad-mini-text">详情</text>
+            </view>
+            <view class="ad-mini ad-mini-danger" @click="removeParent(p.id, p.nickname)">
+              <text class="ad-mini-danger-text">删除</text>
+            </view>
+          </view>
+        </view>
+      </template>
+
+      <!-- 孩子 -->
+      <template v-else-if="activeTab == 'children'">
+        <view v-if="children.length == 0" class="ad-empty"><text class="ad-empty-text">暂无孩子账号</text></view>
+        <view v-for="c in children" :key="c.id.toString()" class="ad-row">
+          <view class="ad-row-main">
+            <text class="ad-row-name">{{ c.nickname }}</text>
+            <text class="ad-row-meta">{{ c.loginName }}</text>
+          </view>
+          <text class="ad-row-meta">年级 {{ c.grade }} · 家长 {{ c.parentName }}</text>
+          <view class="ad-row-actions">
+            <view class="ad-mini" @click="openChildDetail(c.id)">
+              <text class="ad-mini-text">详情</text>
+            </view>
+            <view class="ad-mini" @click="addQuota(c.id)">
+              <text class="ad-mini-text">测评 +1</text>
+            </view>
+            <view class="ad-mini ad-mini-danger" @click="removeChild(c.id, c.nickname)">
+              <text class="ad-mini-danger-text">删除</text>
+            </view>
+          </view>
+        </view>
+      </template>
+
+      <!-- 设置 -->
+      <template v-else-if="activeTab == 'settings'">
+        <view class="ad-card">
+          <text class="ad-h">登录策略 · 设备数上限</text>
+          <text class="ad-sub">超出上限时旧设备会被挤下线</text>
+          <text class="ad-label">管理员</text>
+          <input v-model="adminDevices" class="ad-input" type="number" placeholder="3" />
+          <text class="ad-label">家长</text>
+          <input v-model="parentDevices" class="ad-input" type="number" placeholder="1" />
+          <text class="ad-label">学生</text>
+          <input v-model="studentDevices" class="ad-input" type="number" placeholder="1" />
+          <button class="ad-primary" :loading="saving" :disabled="saving" @click="saveSettings">保存设置</button>
+        </view>
+      </template>
+
+      <!-- 黑名单 -->
+      <template v-else>
+        <view v-if="blacklist.length == 0" class="ad-empty"><text class="ad-empty-text">黑名单为空</text></view>
+        <view v-for="(b, i) in blacklist" :key="i.toString()" class="ad-row">
+          <view class="ad-row-main">
+            <text class="ad-row-name">{{ b.value }}</text>
+            <text class="ad-row-meta">{{ b.kind }}</text>
+          </view>
+          <view class="ad-row-actions">
+            <view class="ad-mini ad-mini-danger" @click="removeBlack(b.kind, b.value)">
+              <text class="ad-mini-danger-text">移出</text>
+            </view>
+          </view>
+        </view>
+      </template>
+
+      <text v-if="errorText.length > 0" class="ad-error">{{ errorText }}</text>
+      <view class="ad-empty"></view>
+    </scroll-view>
+
+    <!-- 详情抽屉 -->
+    <view v-if="detailOpen" class="ad-mask" @click="closeDetail">
+      <view class="ad-sheet" @click.stop>
+        <text class="ad-sheet-title">{{ detailTitle }}</text>
+        <scroll-view class="ad-sheet-body" scroll-y>
+          <view v-for="(row, i) in detailRows" :key="i.toString()" class="ad-kv">
+            <text class="ad-k">{{ row.label }}</text>
+            <text class="ad-v">{{ row.value }}</text>
+          </view>
+        </scroll-view>
+        <view class="ad-sheet-close" @click="closeDetail"><text class="ad-sheet-close-text">关闭</text></view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import {
+  adjustAdminTalentQuota,
+  adminLogout,
+  deleteAdminChild,
+  deleteAdminParent,
+  getAdminChildDetail,
+  getAdminParentDetail,
+  getAdminSettings,
+  listAdminBlacklist,
+  listAdminChildren,
+  listAdminParents,
+  readAdminBlacklist,
+  readAdminChildDetail,
+  readAdminChildren,
+  readAdminParentDetail,
+  readAdminParents,
+  removeAdminBlacklist,
+  buildSettingsBody,
+  updateAdminSettings
+} from '../../api/admin.uts'
+import { clearSession, getSession, returnToLogin } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+
+const tabs= [
+  { key: 'parents', label: '家长' },
+  { key: 'children', label: '孩子' },
+  { key: 'settings', label: '设置' },
+  { key: 'blacklist', label: '黑名单' }
+]
+
+const activeTab = ref('parents')
+const loading = ref(false)
+const saving = ref(false)
+const errorText = ref('')
+const insetTop = ref(0)
+
+const parents = ref([])
+const children = ref([])
+const blacklist = ref([])
+
+const adminDevices = ref('')
+const parentDevices = ref('')
+const studentDevices = ref('')
+
+const detailOpen = ref(false)
+const detailTitle = ref('')
+const detailRows = ref([])
+
+const summaryText = computed(() => {
+  if (activeTab.value == 'parents') return '家长账号 ' + parents.value.length.toString() + ' 个'
+  if (activeTab.value == 'children') return '孩子账号 ' + children.value.length.toString() + ' 个'
+  if (activeTab.value == 'blacklist') return '黑名单 ' + blacklist.value.length.toString() + ' 条'
+  return '平台登录策略'
+})
+
+function goSettings() {
+  uni.navigateTo({ url: '/pages/admin/settings' })
+}
+
+function goBlacklist() {
+  uni.navigateTo({ url: '/pages/admin/blacklist' })
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+async function signOut() {
+  try {
+    await adminLogout()
+  } catch (error) {
+    // 服务端登出失败也要清本地会话，否则无法退出
+  }
+  clearSession()
+  returnToLogin()
+}
+
+function switchTab(key) {
+  if (activeTab.value == key) return
+  activeTab.value = key
+  errorText.value = ''
+  if (key == 'settings' && adminDevices.value.length == 0) loadSettings()
+  if (key == 'blacklist' && blacklist.value.length == 0) loadBlacklist()
+}
+
+function reload() {
+  errorText.value = ''
+  if (activeTab.value == 'parents') loadParents()
+  else if (activeTab.value == 'children') loadChildren()
+  else if (activeTab.value == 'settings') loadSettings()
+  else loadBlacklist()
+}
+
+async function loadParents() {
+  loading.value = true
+  try {
+    parents.value = readAdminParents(await listAdminParents())
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取家长列表失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadChildren() {
+  loading.value = true
+  try {
+    children.value = readAdminChildren(await listAdminChildren())
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取孩子列表失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadBlacklist() {
+  loading.value = true
+  try {
+    blacklist.value = readAdminBlacklist(await listAdminBlacklist())
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取黑名单失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadSettings() {
+  loading.value = true
+  try {
+    const data = await getAdminSettings()
+    const policy = data.getJSON('login_policy') ?? data
+    adminDevices.value = (policy.getNumber('admin_max_devices') ?? 3).toString()
+    parentDevices.value = (policy.getNumber('parent_max_devices') ?? 1).toString()
+    studentDevices.value = (policy.getNumber('student_max_devices') ?? 1).toString()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取平台设置失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveSettings() {
+  if (saving.value) return
+  const a = parseInt(adminDevices.value.trim())
+  const p = parseInt(parentDevices.value.trim())
+  const s = parseInt(studentDevices.value.trim())
+  const body = buildSettingsBody(isNaN(a) ? 0 : a, isNaN(p) ? 0 : p, isNaN(s) ? 0 : s)
+  saving.value = true
+  errorText.value = ''
+  try {
+    await updateAdminSettings(body)
+    uni.showToast({ title: '已保存', icon: 'none' })
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '保存设置失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function openParentDetail(parentId) {
+  errorText.value = ''
+  try {
+    detailRows.value = readAdminParentDetail(await getAdminParentDetail(parentId))
+    detailTitle.value = '家长详情'
+    detailOpen.value = true
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取家长详情失败'
+  }
+}
+
+async function openChildDetail(childId) {
+  errorText.value = ''
+  try {
+    detailRows.value = readAdminChildDetail(await getAdminChildDetail(childId))
+    detailTitle.value = '孩子详情'
+    detailOpen.value = true
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取孩子详情失败'
+  }
+}
+
+function closeDetail() {
+  detailOpen.value = false
+}
+
+async function addQuota(childId) {
+  try {
+    await adjustAdminTalentQuota(childId, 1)
+    uni.showToast({ title: '测评次数 +1', icon: 'none' })
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '调整配额失败'
+  }
+}
+
+async function doRemoveParent(parentId) {
+  try {
+    await deleteAdminParent(parentId)
+    await loadParents()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '删除家长失败'
+  }
+}
+
+async function doRemoveChild(childId) {
+  try {
+    await deleteAdminChild(childId)
+    await loadChildren()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '删除孩子失败'
+  }
+}
+
+async function removeBlack(kind, value) {
+  try {
+    await removeAdminBlacklist(kind, value)
+    await loadBlacklist()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '移出黑名单失败'
+  }
+}
+
+function removeParent(parentId, nickname) {
+  uni.showModal({
+    title: '删除家长',
+    content: '确认删除「' + nickname + '」？账号会被标记删除，可恢复。',
+    success: (res) => {
+      if (res.confirm) doRemoveParent(parentId)
+    }
+  })
+}
+
+function removeChild(childId, nickname) {
+  uni.showModal({
+    title: '删除孩子',
+    content: '确认删除「' + nickname + '」？账号会被标记删除，可恢复。',
+    success: (res) => {
+      if (res.confirm) doRemoveChild(childId)
+    }
+  })
+}
+
+onLoad(() => {
+  const session = getSession()
+  if (session == null || session.role != 'admin') {
+    returnToLogin()
+    return
+  }
+  loadParents()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+
+</script>
+
+<style lang="scss" scoped>
+@import './admin.scss';
+</style>

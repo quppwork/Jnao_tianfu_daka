@@ -1,0 +1,618 @@
+<template>
+  <view class="tr-page">
+    <view class="tr-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="tr-back" @click="goBack"><text class="tr-back-icon">‹</text></view>
+      <text class="tr-title">今日训练</text>
+      <view class="tr-history" @click="openHistory"><text class="tr-history-text">历史</text></view>
+    </view>
+
+    <scroll-view class="tr-body" scroll-y>
+      <view v-if="loading" class="tr-empty"><text class="tr-empty-text">加载中…</text></view>
+
+      <template v-else>
+        <view v-if="blockText.length > 0" class="tr-card tr-warn">
+          <text class="tr-warn-title">暂时不能开始训练</text>
+          <text class="tr-warn-text">{{ blockText }}</text>
+        </view>
+
+        <template v-else>
+          <view class="tr-card">
+            <view class="tr-row">
+              <text class="tr-plan-minutes">{{ planMinutes }} 分钟</text>
+              <text class="tr-plan-status">{{ planStatusText }}</text>
+            </view>
+            <view class="tr-timer-row">
+              <text class="tr-timer-label">{{ timerLabel }}</text>
+              <text class="tr-timer-value">{{ timerText }}</text>
+            </view>
+            <view v-if="planCanCustomize" class="tr-edit-entry" @click="openEditor">
+              <text class="tr-edit-entry-text">编辑方案</text>
+            </view>            <view v-if="annotations.length > 0" class="tr-notes">
+              <text v-for="(note, i) in annotations" :key="i" class="tr-note">· {{ note }}</text>
+            </view>
+          </view>
+
+          <!-- 训练时段 -->
+          <view class="tr-card tr-window">
+            <view class="tr-row">
+              <text class="tr-window-title">训练时段</text>
+              <text v-if="windowSet" class="tr-window-value">{{ windowStartH }}:{{ windowStartM }} — {{ windowEndH }}:{{ windowEndM }}</text>
+              <text v-else class="tr-window-value tr-window-unset">未设置</text>
+            </view>
+            <view class="tr-window-pickers">
+              <picker :range="HOURS" :value="startHourIndex" @change="onStartHour">
+                <view class="tr-pick-box"><text class="tr-pick-box-text">{{ windowStartH }}</text></view>
+              </picker>
+              <text class="tr-window-sep">:</text>
+              <picker :range="MINUTES" :value="startMinIndex" @change="onStartMin">
+                <view class="tr-pick-box"><text class="tr-pick-box-text">{{ windowStartM }}</text></view>
+              </picker>
+              <text class="tr-window-dash">—</text>
+              <picker :range="HOURS" :value="endHourIndex" @change="onEndHour">
+                <view class="tr-pick-box"><text class="tr-pick-box-text">{{ windowEndH }}</text></view>
+              </picker>
+              <text class="tr-window-sep">:</text>
+              <picker :range="MINUTES" :value="endMinIndex" @change="onEndMin">
+                <view class="tr-pick-box"><text class="tr-pick-box-text">{{ windowEndM }}</text></view>
+              </picker>
+            </view>
+            <view class="tr-window-actions">
+              <view class="tr-window-save" @click="saveWindow"><text class="tr-window-save-text">保存时段</text></view>
+              <view v-if="windowSet" class="tr-window-clear" @click="clearWindow"><text class="tr-window-clear-text">清除</text></view>
+            </view>
+          </view>
+
+          <text class="tr-section-title">今日项目 {{ doneCount }} / {{ items.length }}</text>
+
+          <view v-if="items.length == 0" class="tr-empty">
+            <text class="tr-empty-text">今天还没有训练方案</text>
+          </view>
+
+          <view
+            v-for="item in items"
+            :key="item.id"
+            class="tr-item"
+            :class="item.done ? 'tr-item-done' : ''"
+          >
+            <view class="tr-item-main">
+              <view class="tr-item-head">
+                <text class="tr-item-title">{{ item.title }}</text>
+                <text v-if="item.done" class="tr-item-badge">已完成</text>
+                <text v-else-if="item.elective" class="tr-item-badge tr-badge-elective">选修</text>
+              </view>
+              <text class="tr-item-meta">{{ item.skill }} · {{ item.minutes }} 分钟</text>
+              <view v-if="!item.done && item.audioPercent > 0" class="tr-progress">
+                <view class="tr-progress-bar" :style="{ width: item.audioPercent + '%' }"></view>
+              </view>
+            </view>
+            <view class="tr-item-action" @click="onItemTap(item)">
+              <text class="tr-item-action-text">{{ item.done ? '已打卡' : '打卡' }}</text>
+            </view>
+          </view>
+
+          <view v-if="electives.length > 0" class="tr-electives">
+            <text class="tr-section-title">选修环节</text>
+            <view
+              v-for="(e, i) in electives"
+              :key="i"
+              class="tr-elective"
+              :class="e.available ? '' : 'tr-elective-off'"
+            >
+              <view class="tr-elective-main">
+                <text class="tr-elective-skill">{{ e.skill }}</text>
+                <text v-if="!e.available && e.reason.length > 0" class="tr-elective-reason">{{ e.reason }}</text>
+              </view>
+              <view
+                v-if="e.available"
+                class="tr-elective-btn"
+                :class="isElectiveAdded(e.skill) ? 'tr-elective-btn-on' : ''"
+                @click="togglingElective ? null : toggleElectiveSkill(e.skill)"
+              >
+                <text class="tr-elective-btn-text">{{ isElectiveAdded(e.skill) ? '移除' : '添加' }}</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="tr-footer">
+            <button class="tr-primary" @click="goTraining">进入训练</button>
+          </view>
+        </template>
+      </template>
+
+      <text v-if="errorText.length > 0" class="tr-error">{{ errorText }}</text>
+      <view class="tr-bottom-space"></view>
+    </scroll-view>
+
+    <!-- 打卡弹窗 -->
+    <view v-if="checkinOpen" class="tr-mask" @click="closeCheckin">
+      <view class="tr-sheet" @click.stop>
+        <text class="tr-sheet-title">{{ checkinTitle }}</text>
+        <text class="tr-sheet-sub">{{ checkinSkill }} · 打卡后计入今日进度</text>
+
+        <text class="tr-label">用时</text>
+        <input v-model="fTime" class="tr-input" :maxlength="20" placeholder="如 25 分钟" />
+
+        <text class="tr-label">完成内容</text>
+        <input v-model="fContent" class="tr-input" :maxlength="200" placeholder="今天练了什么" />
+
+        <text class="tr-label">结果 / 正确率</text>
+        <input v-model="fResult" class="tr-input" :maxlength="50" placeholder="如 95%" />
+
+        <text class="tr-label">备注</text>
+        <input v-model="fNote" class="tr-input" :maxlength="200" placeholder="可留空" />
+
+        <text class="tr-label">配合度（0-100）</text>
+        <input v-model="fAttitude" class="tr-input" type="number" :maxlength="3" placeholder="80" />
+
+        <button class="tr-primary tr-submit" :loading="submitting" :disabled="submitting" @click="doCheckin">提交打卡</button>
+        <view class="tr-sheet-close" @click="closeCheckin"><text class="tr-sheet-close-text">取消</text></view>
+      </view>
+    </view>
+  </view>
+
+    <!-- 方案编辑（skills 长度需与 items 一致，按下标替换） -->
+    <view v-if="editorOpen" class="tr-mask" @click="closeEditor">
+      <view class="tr-sheet" @click.stop>
+        <text class="tr-sheet-title">编辑今日方案</text>
+        <text class="tr-sheet-sub">可替换的必修项（{{ editorSkills.length }} 项，需与未打卡的必修数一致）</text>
+        <view v-for="(sk, i) in editorSkills" :key="i" class="tr-edit-row">
+          <text class="tr-edit-idx">{{ i + 1 }}</text>
+          <text class="tr-edit-skill">{{ sk }}</text>
+          <view class="tr-edit-change" @click="openSkillPicker(i)"><text class="tr-edit-change-text">更换</text></view>
+        </view>
+        <button class="tr-primary tr-submit" :loading="savingPlan" :disabled="savingPlan" @click="savePlan">保存方案</button>
+        <view class="tr-sheet-close" @click="closeEditor"><text class="tr-sheet-close-text">取消</text></view>
+      </view>
+    </view>
+
+    <!-- 技能选择 -->
+    <view v-if="pickerOpen" class="tr-mask" @click="closeSkillPicker">
+      <view class="tr-sheet" @click.stop>
+        <text class="tr-sheet-title">选择技能</text>
+        <view v-for="(opt, i) in SKILL_OPTIONS" :key="i" class="tr-pick-item" @click="pickSkill(opt)">
+          <text class="tr-pick-text">{{ opt }}</text>
+        </view>
+        <view class="tr-sheet-close" @click="closeSkillPicker"><text class="tr-sheet-close-text">取消</text></view>
+      </view>
+    </view>
+</template>
+
+<script setup lang="uts">
+import { getTrainingEntry, getTodayPlan, readTrainingPlan, clockText, submitCheckin, customizePlan, toggleElective, setTrainingWindow, deleteTrainingWindow, getWindowStatus } from '../../api/training.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const loading = ref(true)
+const errorText = ref('')
+const blockText = ref('')
+const insetTop = ref(0)
+
+const planId = ref(0)
+const planMinutes = ref(0)
+const planStatus = ref('')
+const timerPhase = ref('')
+const remaining = ref(0)
+const timerTotal = ref(0)
+const annotations = ref([])
+const items = ref([])
+
+let tickTimer = 0
+
+const checkinOpen = ref(false)
+
+// 方案编辑：后端要求 skills 长度与 items 一致，所以按下标替换
+// 只有后端 REQUIRED_SKILLS 里的 5 个是合法替换项
+// （child_training_state.py: REQUIRED_SKILLS，customize 会用 allowed_skills 校验，越界报「未知技能」400）
+const SKILL_OPTIONS = ['超脑阅读', '影像追忆', '扫描速记', '极速运算', '极速学习']
+const editorOpen = ref(false)
+const pickerOpen = ref(false)
+const editorSkills = ref([])
+const editingIndex = ref(-1)
+const savingPlan = ref(false)
+const planCanCustomize = ref(false)
+const electives = ref([])
+const togglingElective = ref(false)
+
+// 训练时段：后端只要 HH:MM，用两个 selector picker 拼（旧壳也是这么做的）
+/** 生成两位数字的选项数组；step 用于分钟（5 分钟一档），需在使用前定义 */
+function buildClockOptions(count, step) {
+  const s = step == null ? 1 : step
+  const list = []
+  for (let i = 0; i < count; i++) {
+    const v = i * s
+    list.push(v < 10 ? '0' + v.toString() : v.toString())
+  }
+  return list
+}
+const HOURS = buildClockOptions(24)
+const MINUTES = buildClockOptions(12, 5)
+const windowSet = ref(false)
+const windowStartH = ref('08')
+const windowStartM = ref('00')
+const windowEndH = ref('22')
+const windowEndM = ref('00')
+const savingWindow = ref(false)
+const startHourIndex = ref(8)
+const startMinIndex = ref(0)
+const endHourIndex = ref(22)
+const endMinIndex = ref(0)
+const checkinTitle = ref('')
+const checkinSkill = ref('')
+const checkinItemId = ref(0)
+const submitting = ref(false)
+const fTime = ref('')
+const fContent = ref('')
+const fResult = ref('')
+const fNote = ref('')
+const fAttitude = ref('80')
+
+const doneCount = computed(() => {
+  let n = 0
+  for (let i = 0; i < items.value.length; i++) {
+    if (items.value[i].done == true) n++
+  }
+  return n
+})
+
+/** 后端 status 目前只见过 pending / completed，其他值原样显示不猜 */
+const planStatusText = computed(() => {
+  const v = planStatus.value
+  if (v == 'pending') return '待确认'
+  if (v == 'completed') return '已完成'
+  return v
+})
+
+const timerLabel = computed(() => {
+  if (timerPhase.value == 'running') return '剩余时间'
+  if (timerPhase.value == 'done') return '已完成'
+  return '计时未开始'
+})
+
+const timerText = computed(() => {
+  if (timerPhase.value == 'setup') return '--:--'
+  return clockText(remaining.value)
+})
+
+/** 服务端下发剩余秒数，本地每秒递减；页面切回时会重新拉取校准 */
+function startTick() {
+  stopTick()
+  if (timerPhase.value != 'running') return
+  tickTimer = setInterval(() => {
+    if (remaining.value > 1) {
+      remaining.value = remaining.value - 1
+    } else {
+      remaining.value = 0
+      timerPhase.value = 'done'
+      stopTick()
+    }
+  }, 1000)
+}
+
+function stopTick() {
+  if (tickTimer != 0) {
+    clearInterval(tickTimer)
+    tickTimer = 0
+  }
+}
+
+
+function onStartHour(e) {
+  startHourIndex.value = e.detail.value
+  windowStartH.value = HOURS[e.detail.value]
+}
+
+function onStartMin(e) {
+  startMinIndex.value = e.detail.value
+  windowStartM.value = MINUTES[e.detail.value]
+}
+
+function onEndHour(e) {
+  endHourIndex.value = e.detail.value
+  windowEndH.value = HOURS[e.detail.value]
+}
+
+function onEndMin(e) {
+  endMinIndex.value = e.detail.value
+  windowEndM.value = MINUTES[e.detail.value]
+}
+
+/** 后端返回 HH:MM:SS 或 HH:MM，取前两位 */
+function hourOf(value) {
+  if (value.length >= 2) return value.slice(0, 2)
+  return '08'
+}
+
+function minuteOf(value) {
+  if (value.length >= 5) return value.slice(3, 5)
+  return '00'
+}
+
+function indexOfOption(list, value) {
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] == value) return i
+  }
+  return 0
+}
+
+async function saveWindow() {
+  if (savingWindow.value) return
+  const start = windowStartH.value + ':' + windowStartM.value
+  const end = windowEndH.value + ':' + windowEndM.value
+  if (start == end) {
+    errorText.value = '开始和结束时间不能相同'
+    return
+  }
+  // 后端支持跨日窗口（如 22:00→06:00，见 common.py _time_in_training_window），
+  // 所以 end < start 是合法的，不能拦。
+  savingWindow.value = true
+  errorText.value = ''
+  try {
+    await setTrainingWindow(start, end)
+    uni.showToast({ title: '时段已保存', icon: 'none' })
+    await load()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '保存时段失败'
+  } finally {
+    savingWindow.value = false
+  }
+}
+
+async function clearWindow() {
+  if (savingWindow.value) return
+  savingWindow.value = true
+  try {
+    await deleteTrainingWindow()
+    uni.showToast({ title: '已清除时段', icon: 'none' })
+    await load()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '清除失败'
+  } finally {
+    savingWindow.value = false
+  }
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function openHistory() {
+  uni.navigateTo({ url: '/pages/training/history' })
+}
+
+function goTraining() {
+  uni.navigateTo({ url: '/pages/training/dayu' })
+}
+
+function onItemTap(item) {
+  if (item.done == true) {
+    uni.showToast({ title: '这一项今天已打卡', icon: 'none' })
+    return
+  }
+  checkinItemId.value = item.id
+  checkinTitle.value = item.title
+  checkinSkill.value = item.skill
+  fTime.value = item.minutes.toString()
+  fContent.value = ''
+  fResult.value = ''
+  fNote.value = ''
+  fAttitude.value = '80'
+  checkinOpen.value = true
+}
+
+function closeCheckin() {
+  checkinOpen.value = false
+}
+
+function openEditor() {
+  const list = []
+  for (let i = 0; i < items.value.length; i++) {
+    const it = items.value[i]
+    // 后端 customize 只接受「未打卡且非选修」项，数量需与之相等
+    if (it.done != true && it.elective != true) {
+      list.push(it.skill)
+    }
+  }
+  editorSkills.value = list
+  editorOpen.value = true
+}
+
+function closeEditor() {
+  editorOpen.value = false
+}
+
+function openSkillPicker(index) {
+  editingIndex.value = index
+  pickerOpen.value = true
+}
+
+function closeSkillPicker() {
+  pickerOpen.value = false
+}
+
+function pickSkill(skill) {
+  const next = editorSkills.value.slice()
+  next[editingIndex.value] = skill
+  editorSkills.value = next
+  pickerOpen.value = false
+}
+
+async function savePlan() {
+  if (savingPlan.value) return
+  savingPlan.value = true
+  errorText.value = ''
+  try {
+    await customizePlan(planId.value, editorSkills.value)
+    editorOpen.value = false
+    uni.showToast({ title: '方案已更新', icon: 'none' })
+    await load()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '保存方案失败'
+  } finally {
+    savingPlan.value = false
+  }
+}
+
+/**
+ * 把入口检查的拒因翻译成可读文案。
+ * 字段对应后端 TrainingEntryResponse：没有 allowed / reason / globally_cutoff，
+ * 只有 needs_assessment / message / day_locked / seconds_until_unlock。
+ */
+function entryBlockReason(data) {
+  if (data.getBoolean('needs_assessment') == true) {
+    const msg = data.getString('message') ?? ''
+    return msg.length > 0 ? msg : '请先完成天赋测评，再开始今日训练。'
+  }
+  if (data.getBoolean('day_locked') == true) {
+    const secs = data.getNumber('seconds_until_unlock') ?? 0
+    if (secs > 0) return '距离解锁还有 ' + clockText(secs) + '，请耐心等待。'
+    return '今天的训练还没解锁，请在设定时段内开始。'
+  }
+  return ''
+}
+
+async function doCheckin() {
+  if (submitting.value) return
+  // -1 表示未填（不提交该字段）；0 是合法的配合度
+  let attitude = -1
+  const raw = fAttitude.value.trim()
+  if (raw.length > 0) {
+    const pct = parseInt(raw)
+    if (!isNaN(pct)) attitude = pct < 0 ? 0 : (pct > 100 ? 100 : pct)
+  }
+  submitting.value = true
+  errorText.value = ''
+  try {
+    await submitCheckin({
+      planId: planId.value,
+      itemId: checkinItemId.value,
+      abilityType: checkinSkill.value,
+      timeSpent: fTime.value.trim(),
+      content: fContent.value.trim(),
+      result: fResult.value.trim(),
+      note: fNote.value.trim(),
+      attitudePct: attitude
+    })
+    checkinOpen.value = false
+    uni.showToast({ title: '打卡成功', icon: 'none' })
+    await load()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '打卡失败，请重试'
+  } finally {
+    submitting.value = false
+  }
+}
+
+function isElectiveAdded(skill) {
+  for (let i = 0; i < items.value.length; i++) {
+    const it = items.value[i]
+    if (it.elective == true && it.skill == skill) return true
+  }
+  return false
+}
+
+async function toggleElectiveSkill(skill) {
+  if (togglingElective.value) return
+  togglingElective.value = true
+  errorText.value = ''
+  const action = isElectiveAdded(skill) ? 'remove' : 'add'
+  try {
+    await toggleElective(planId.value, skill, action)
+    uni.showToast({ title: action == 'add' ? '已添加选修' : '已移除选修', icon: 'none' })
+    await load()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '操作失败，请重试'
+  } finally {
+    togglingElective.value = false
+  }
+}
+
+async function load() {
+  loading.value = true
+  errorText.value = ''
+  blockText.value = ''
+  try {
+    const entry = await getTrainingEntry()
+    const blocked = entryBlockReason(entry)
+    if (blocked.length > 0) {
+      blockText.value = blocked
+      loading.value = false
+      // 早退时上一轮 load 起的 tick 如果还在跑，会继续减 remaining
+      stopTick()
+      return
+    }
+
+    const data = await getTodayPlan('', true)
+    const plan = readTrainingPlan(data)
+    planId.value = plan.id
+    planMinutes.value = plan.minutes
+    planStatus.value = plan.status
+    timerPhase.value = plan.timerPhase
+    remaining.value = plan.remaining
+    timerTotal.value = plan.timerTotal
+    annotations.value = plan.annotations
+    planCanCustomize.value = plan.canCustomize
+    electives.value = plan.electives
+    await loadWindow()
+    // 用 readTrainingPlan 映射好的结构化数组，模板里 item.title 才能直接取到
+    items.value = plan.items
+
+    if (plan.dayLocked) blockText.value = '今天的训练还没解锁。'
+    else if (plan.cutoff) blockText.value = '已过今日训练截止时间。'
+    else startTick()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取今日方案失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadWindow() {
+  try {
+    const data = await getWindowStatus()
+    const st = data.getString('start_time')
+    const et = data.getString('end_time')
+    if (st != null && st.length > 0 && et != null && et.length > 0) {
+      windowSet.value = true
+      windowStartH.value = hourOf(st)
+      windowStartM.value = minuteOf(st)
+      windowEndH.value = hourOf(et)
+      windowEndM.value = minuteOf(et)
+      startHourIndex.value = indexOfOption(HOURS, windowStartH.value)
+      startMinIndex.value = indexOfOption(MINUTES, windowStartM.value)
+      endHourIndex.value = indexOfOption(HOURS, windowEndH.value)
+      endMinIndex.value = indexOfOption(MINUTES, windowEndM.value)
+    } else {
+      windowSet.value = false
+    }
+  } catch (error) {
+    // 读失败时不能静默——UI 会显示「未设置」，用户重设会覆盖已有时段
+    errorText.value = error instanceof Error ? error.message : '读取训练时段失败'
+    windowSet.value = false
+  }
+}
+
+onLoad(() => {
+  load()
+})
+
+// 从 training/dayu 打卡返回时需要刷新；首个 onShow 紧跟 onLoad，跳过以免重复请求
+let firstShow = true
+onShow(() => {
+  if (firstShow) {
+    firstShow = false
+    return
+  }
+  load()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+
+onUnload(() => {
+  stopTick()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

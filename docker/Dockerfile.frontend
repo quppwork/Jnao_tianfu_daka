@@ -1,26 +1,17 @@
-FROM node:20-alpine AS builder
-
-WORKDIR /app/vue_fronted
-
-COPY vue_fronted/package.json vue_fronted/package-lock.json ./
-# 使用 npm install，避免 lock 与 package.json 不一致时 ci 失败
-RUN npm config set registry https://registry.npmmirror.com \
-    && npm install --no-audit --no-fund
-
-COPY vue_fronted/ ./
-RUN npm run build
-
 FROM nginx:1.27-alpine
 
 RUN apk add --no-cache gettext \
-    && mkdir -p /var/cache/nginx/media
+    && mkdir -p /var/cache/nginx/media \
+    && rm -f /usr/share/nginx/html/index.html
 
 COPY docker/nginx-main.conf /etc/nginx/nginx.conf
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/docker-entrypoint-nginx.sh /docker-entrypoint-nginx.sh
-RUN chmod +x /docker-entrypoint-nginx.sh
+RUN sed -i 's/\r$//' /docker-entrypoint-nginx.sh \
+    && chmod +x /docker-entrypoint-nginx.sh
 
-COPY --from=builder /app/vue_fronted/dist/build/h5 /usr/share/nginx/html
+COPY vue_fronted/src/static/ /usr/share/nginx/html/static/
+COPY vue_fronted/src/static/MP_verify_aRhvQC5V4c6H9PYQ.txt /usr/share/nginx/html/
 
 EXPOSE 80
 

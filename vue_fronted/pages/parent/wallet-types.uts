@@ -1,0 +1,4 @@
+// 从 wallet.uvue 抽出：.uvue 的 script 块不支持 type / interface 声明
+export type Option = { code: string; name: string; detail: string; price: string }
+
+export type UsageRow = { name: string; usage: string }

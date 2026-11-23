@@ -1,0 +1,8 @@
+// 从 index.uvue 抽出：.uvue 的 script 块不支持 type / interface 声明
+export type GrowthSummary = { nickname: string; honor: string; talent: string; tier: number; percent: number; checkins: number; streak: number; questions: number; badges: number; badgesTotal: number; points: number }
+
+export type PathNode = { name: string; badge: string; subtitle: string; current: boolean }
+
+export type Badge = { name: string; icon: string; caption: string; earned: boolean }
+
+export type GrowthEvent = { title: string; date: string; desc: string }

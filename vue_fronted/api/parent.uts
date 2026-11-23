@@ -1,0 +1,170 @@
+import { requestJson } from '../network/request.uts'
+import { streamPost, SseEventSink } from '../network/stream.uts'
+import { LLM_TIMEOUT_MS } from '../network/timeouts.uts'
+
+/** 家长中心：资料、孩子账户、配额、家长课堂、家长版大宇 */
+
+export function getParentProfile(): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/profile')
+}
+
+export type ParentProfilePatch = {
+  nickname: string
+  realName: string
+  password: string
+  oldPassword: string
+  requirePassword: boolean
+}
+
+/** 后端 ParentProfileUpdateRequest 只有这 5 个字段，没有 phone / captcha_id */
+export function updateParentProfile(patch: ParentProfilePatch): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {}
+  if (patch.nickname.length > 0) body['nickname'] = patch.nickname
+  if (patch.realName.length > 0) body['real_name'] = patch.realName
+  if (patch.password.length > 0) body['password'] = patch.password
+  if (patch.oldPassword.length > 0) body['old_password'] = patch.oldPassword
+  if (patch.requirePassword) body['require_password'] = true
+  return requestJson('/api/parent/profile', 'PUT', body)
+}
+
+export function getParentQuota(): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/quota')
+}
+
+export function listChildren(): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children')
+}
+
+/** 家长默认关注的孩子；没有绑定孩子时返回 0 */
+export function readFirstChildId(data: UTSJSONObject): number {
+  const rows = data.getArray<UTSJSONObject>('children') ?? []
+  if (rows.length == 0) return 0
+  return rows[0].getNumber('id') ?? 0
+}
+
+/**
+ * 家长端大宇会话的历史消息。
+ * 放在 .uts 里是因为 `.uvue` 的 script 不支持泛型调用，
+ * `getArray('messages')` 会返回 `Array<any>`，传给 toMessages 时类型不保证。
+ */
+export function readParentMessages(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('messages') ?? []
+}
+
+/** 建议提示词：后端返回 {items:[{text,label}]} */
+export function readParentSuggests(data: UTSJSONObject): string[] {
+  const rows = data.getArray<UTSJSONObject>('items') ?? []
+  const list: string[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const text = rows[i].getString('text') ?? rows[i].getString('label') ?? ''
+    if (text.length > 0) list.push(text)
+  }
+  return list
+}
+
+export type NewChild = {
+  loginName: string
+  nickname: string
+  password: string
+  grade: string
+  age: number
+}
+
+export function createChild(child: NewChild): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {
+    login_name: child.loginName,
+    nickname: child.nickname,
+    password: child.password
+  }
+  if (child.grade.length > 0) body['grade'] = child.grade
+  if (child.age > 0) body['age'] = child.age
+  return requestJson('/api/parent/children', 'POST', body)
+}
+
+export function deleteChild(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children/' + childId.toString(), 'DELETE')
+}
+
+export function getChildSummary(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children/' + childId.toString() + '/summary')
+}
+
+export function getChildDashboard(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children/' + childId.toString() + '/dashboard')
+}
+
+export function listParentCourses(): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/courses')
+}
+
+/** childId 传 0 表示全部孩子 */
+export function listParentAssessments(childId: number): Promise<UTSJSONObject> {
+  const query = childId > 0 ? '?child_id=' + childId.toString() : ''
+  return requestJson('/api/parent/assessments/history' + query)
+}
+
+export function deleteParentAssessment(assessmentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/assessments/' + assessmentId.toString(), 'DELETE')
+}
+
+export function getParentGuideSession(): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/guide/session')
+}
+
+export function getParentSuggestPrompts(limit: number): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/suggest-prompts?limit=' + limit.toString())
+}
+
+export type ParentGuideChatOptions = {
+  message: string
+  sessionId: number
+  childId: number
+}
+
+function buildGuideBody(options: ParentGuideChatOptions): UTSJSONObject {
+  const body: UTSJSONObject = { message: options.message }
+  if (options.sessionId > 0) body['session_id'] = options.sessionId
+  if (options.childId > 0) body['child_id'] = options.childId
+  return body
+}
+
+export function parentGuideChat(options: ParentGuideChatOptions): Promise<UTSJSONObject> {
+  return requestJson(
+    '/api/parent/guide/chat',
+    'POST',
+    buildGuideBody(options),
+    null,
+    true,
+    LLM_TIMEOUT_MS
+  )
+}
+
+export function parentGuideChatStream(
+  options: ParentGuideChatOptions,
+  sink: SseEventSink
+): RequestTask | null {
+  return streamPost('/api/parent/guide/chat/stream', buildGuideBody(options), sink)
+}
+/** 家长绑定的孩子原始列表；页面自己 map 成展示结构 */
+export function readParentChildren(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('children') ?? []
+}
+
+/** 家长课程列表 */
+export function readParentCourses(data: UTSJSONObject): Array<UTSJSONObject> {
+  return data.getArray<UTSJSONObject>('courses') ?? []
+}
+
+/** 单个课程下的课时（后端是字符串数组，不是对象数组） */
+export function readCourseLessons(row: UTSJSONObject): Array<string> {
+  return row.getArray<string>('lessons') ?? []
+}
+/** 组装创建孩子账号的请求体（可选字段只在有值时带上） */
+export function buildCreateChildBody(nickname: string, loginName: string, password: string, grade: string, age: number): UTSJSONObject {
+  const data: UTSJSONObject = { nickname: nickname }
+  if (loginName.length > 0) data['login_name'] = loginName
+  if (password.length > 0) data['password'] = password
+  if (grade.length > 0) data['grade'] = grade
+  if (age > 0) data['age'] = age
+  return data
+}

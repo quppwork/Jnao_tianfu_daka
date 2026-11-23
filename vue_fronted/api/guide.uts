@@ -1,0 +1,62 @@
+import { requestJson } from '../network/request.uts'
+import { streamPost, SseEventSink } from '../network/stream.uts'
+import { LLM_TIMEOUT_MS } from '../network/timeouts.uts'
+
+/** 大宇 AI 引导（首页对话） */
+
+export type GuideChatOptions = {
+  message: string
+  sessionId: number
+  force: boolean
+  useLlm: boolean
+}
+
+function buildChatBody(options: GuideChatOptions): UTSJSONObject {
+  const body: UTSJSONObject = { message: options.message }
+  if (options.sessionId > 0) body['session_id'] = options.sessionId
+  if (options.force) body['force'] = true
+  if (!options.useLlm) body['use_llm'] = false
+  return body
+}
+
+/** 流式对话，返回 RequestTask 供调用方 abort()；未登录返回 null */
+export function guideChatStream(options: GuideChatOptions, sink: SseEventSink): RequestTask | null {
+  return streamPost('/api/guide/chat/stream', buildChatBody(options), sink)
+}
+
+export function guideChat(options: GuideChatOptions): Promise<UTSJSONObject> {
+  return requestJson('/api/guide/chat', 'POST', buildChatBody(options), null, true, LLM_TIMEOUT_MS)
+}
+
+/** 当前会话（含历史消息） */
+export function getGuideSession(): Promise<UTSJSONObject> {
+  return requestJson('/api/guide/session')
+}
+
+export function listGuideSessions(): Promise<UTSJSONObject> {
+  return requestJson('/api/guide/sessions')
+}
+
+export function getGuideSessionById(sessionId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/guide/sessions/' + sessionId.toString())
+}
+
+export function deleteGuideSession(sessionId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/guide/sessions/' + sessionId.toString(), 'DELETE')
+}
+
+/** audience: student | parent */
+export function getGuideSuggestPrompts(audience: string, limit: number): Promise<UTSJSONObject> {
+  const query = '?audience=' + audience + '&limit=' + limit.toString()
+  return requestJson('/api/guide/suggest-prompts' + query)
+}
+
+export function clearGuideSession(): Promise<UTSJSONObject> {
+  return requestJson('/api/guide/clear', 'POST')
+}
+/* ---------- 读取映射 ---------- */
+
+/** /api/guide/suggest-prompts 返回 {suggest_prompts: string[], ...} */
+export function readGuideSuggests(data: UTSJSONObject): string[] {
+  return data.getArray<string>('suggest_prompts') ?? []
+}

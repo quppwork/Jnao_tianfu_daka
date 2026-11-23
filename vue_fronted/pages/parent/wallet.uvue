@@ -1,0 +1,131 @@
+<template>
+  <view class="page">
+    <view class="nav" :style="{ marginTop: inset + 'px' }"><text class="back" @click="goBack">‹</text><text class="title">算力中心</text></view>
+    <scroll-view class="scroll" direction="vertical">
+      <view class="body">
+        <text v-if="loading" class="dim">正在同步算力…</text>
+        <view v-if="errorText.length > 0" class="card"><text class="error">{{ errorText }}</text><button class="small" @click="load">重试</button></view>
+        <view v-if="loaded" class="card hero">
+          <view class="row"><text class="gold">⚡ 本月剩余算力</text><text class="gold">{{ plan }}</text></view>
+          <text class="large">{{ remaining }} / {{ quota }} 点</text>
+          <view class="track"><view class="fill" :style="{ width: (100 - percent) + '%' }"></view></view>
+          <view class="row"><text class="dim">已消耗 {{ used }} 点</text><text class="gold">剩余 {{ percent }}%</text></view>
+          <text class="dim">{{ usageText }}</text>
+          <view class="row balance"><text class="dim">充值余额</text><text class="gold">{{ balance }}</text></view>
+        </view>
+        <view v-if="loaded" class="card">
+          <text class="title">本月家庭用量</text>
+          <text v-if="users.length == 0" class="dim">本月暂无用量</text>
+          <view v-for="(user, index) in users" :key="index" class="line">
+            <text class="label">{{ user.name }}</text><text class="dim">{{ user.usage }}</text>
+          </view>
+        </view>
+        <view v-if="memberships.length > 0" class="card">
+          <text class="title">会员方案</text>
+          <view v-for="item in memberships" :key="item.code" class="line">
+            <view class="item"><text class="label">{{ item.name }}</text><text class="dim">{{ item.detail }}</text></view>
+            <view><text class="gold">{{ item.price }}/月</text><button class="small" @click="showPaymentStatus">开通</button></view>
+          </view>
+        </view>
+        <view v-if="packs.length > 0" class="card">
+          <text class="title">算力充值</text>
+          <view class="packs">
+            <view v-for="pack in packs" :key="pack.code" class="pack" :class="{ 'pack-selected': pack.code == selected }" @click="selectPack(pack.code)">
+              <text class="gold">{{ pack.price }}</text><text class="dim">{{ pack.name }}</text>
+            </view>
+          </view>
+          <button class="payment" @click="showPaymentStatus">立即充值 {{ selectedPrice }}</button>
+          <text v-if="paymentHint.length > 0" class="dim">{{ paymentHint }}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+<script setup lang="uts">
+import { requestJson } from '../../network/request.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+import { readUsageByUser, readWalletMemberships, readWalletPacks } from '../../api/usage.uts'
+
+const inset = ref(0)
+const loaded = ref(false)
+const loading = ref(false)
+const errorText = ref('')
+const plan = ref('')
+const quota = ref(0)
+const remaining = ref(0)
+const used = ref(0)
+const percent = ref(0)
+const balance = ref('')
+const usageText = ref('')
+const paymentHint = ref('')
+const users = ref([])
+const memberships = ref([])
+const packs = ref([])
+const selected = ref('')
+const selectedPrice = computed(() => packs.value.find((item) => item.code == selected.value)?.price ?? '')
+
+function readOption(row, isPack) {
+  const cents = row.getNumber('price_cents') ?? 0
+  return {
+    code: row.getString('code') ?? '',
+    name: row.getString(isPack ? 'label' : 'name') ?? '',
+    detail: row.getString('blurb') ?? '',
+    price: '¥' + (cents / 100).toFixed(isPack && cents % 100 != 0 ? 1 : 0)
+  }
+}
+
+async function load() {
+  if (loading.value) return
+  loading.value = true
+  errorText.value = ''
+  try {
+    const payload = await requestJson('/api/usage/wallet')
+    const account = payload.getJSON('account')
+    const usage = payload.getJSON('usage')
+    const month = usage?.getJSON('family_month')
+    const catalog = payload.getJSON('catalog')
+    quota.value = account?.getNumber('monthly_quota_points') ?? 0
+    used.value = account?.getNumber('monthly_used_points') ?? 0
+    remaining.value = account?.getNumber('monthly_remaining_points') ?? Math.max(0, quota.value - used.value)
+    percent.value = Math.max(0, Math.min(100, account?.getNumber('remain_pct') ?? 0))
+    balance.value = '¥ ' + (account?.getNumber('balance_yuan') ?? 0).toFixed(2)
+    plan.value = account?.getString('plan_name') ?? '免费体验'
+    const monthTokens = usage?.getNumber('display_month_tokens') ?? month?.getNumber('total_tokens') ?? 0
+    const allTokens = usage?.getNumber('display_total_tokens') ?? monthTokens
+    const monthCost = (month?.getNumber('cost_yuan') ?? 0).toFixed(4)
+    usageText.value = '本月家计 ' + monthTokens.toString() + ' tok · 约 ¥' + monthCost + ' · 累计 ' + allTokens.toString() + ' tok'
+    users.value = readUsageByUser(month).map((row) => ({
+      name: (row.getString('nickname') ?? '账户') + (row.getString('role') == 'parent' ? '（家长）' : '（孩子）'),
+      usage: (row.getNumber('total_tokens') ?? 0).toString() + ' tok · ' + (row.getNumber('call_count') ?? 0).toString() + ' 次'
+    }))
+    memberships.value = readWalletMemberships(catalog).filter((item) => item.getString('code') != 'free').map((item) => readOption(item, false))
+    packs.value = readWalletPacks(catalog).map((item) => readOption(item, true))
+    if (packs.value.length > 0 && !packs.value.some((item) => item.code == selected.value)) selected.value = packs.value[Math.min(2, packs.value.length - 1)].code
+    paymentHint.value = '支付通道即将开放'
+    loaded.value = true
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '算力同步失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function selectPack(code) {
+  selected.value = code
+}
+
+function showPaymentStatus() {
+  uni.showToast({ title: '支付通道即将开放', icon: 'none' })
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+onShow(() => { load() })
+onReady(() => { inset.value = getPageTopInset() })
+</script>
+
+<style lang="scss" scoped>
+@import './wallet.scss';
+</style>

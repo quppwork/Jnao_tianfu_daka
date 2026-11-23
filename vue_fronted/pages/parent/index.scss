@@ -1,0 +1,245 @@
+$bg: #070b14;
+$card: #0f1a2e;
+$dim: #94a3b8;
+$border: rgba(59, 130, 246, 0.2);
+
+.parent-page, .parent-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  background-color: $bg;
+}
+
+.parent-nav, .section-header, .child-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.parent-nav {
+  padding: 14px 14px 10px;
+  flex-shrink: 0;
+}
+
+.nav-back, .hero-avatar, .child-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-back, .nav-spacer {
+  width: 34px;
+  height: 34px;
+}
+
+.nav-back {
+  background-color: $card;
+  border: 1px solid $border;
+  border-radius: 17px;
+}
+
+.back-glyph {
+  color: $dim;
+  font-size: 28px;
+  line-height: 28px;
+}
+
+.nav-title {
+  flex: 1;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 20px 20px;
+}
+
+.hero-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 32px;
+  margin-bottom: 10px;
+  background-color: #6358ed;
+  background-image: linear-gradient(135deg, #3b82f6, #7c3aed);
+}
+
+.hero-letter, .hero-name, .child-letter, .section-title {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.hero-letter { font-size: 28px; }
+.hero-name { font-size: 20px; }
+.hero-sub {
+  margin-top: 4px;
+  color: $dim;
+  font-size: 13px;
+}
+
+.children-section { padding: 0 16px 30px; }
+.section-header {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-title { font-size: 15px; }
+.btn-add {
+  margin: 0;
+  min-height: 32px;
+  line-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 10px;
+  background-color: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.child-card {
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid $border;
+  border-radius: 14px;
+  background-color: $card;
+}
+
+.child-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  margin-right: 12px;
+  background-color: rgba(59, 130, 246, 0.15);
+}
+
+.child-letter {
+  color: #3b82f6;
+  font-size: 18px;
+}
+
+.child-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.child-name {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.child-detail {
+  color: $dim;
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+}
+
+.empty-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.empty-title {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.empty-hint, .form-hint {
+  color: $dim;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.form-panel {
+  width: 100%;
+  max-width: 340px;
+  border-radius: 16px;
+  background-color: $card;
+}
+
+.form-content {
+  padding: 24px 20px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-title {
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.input-wrap {
+  padding: 0 12px;
+  margin-bottom: 10px;
+  border: 1px solid $border;
+  border-radius: 12px;
+  background-color: $bg;
+}
+
+.field, .picker-text {
+  height: 44px;
+  line-height: 44px;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.form-picker { width: 100%; }
+.form-error {
+  color: #fca5a5;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.btn-save, .btn-cancel {
+  margin: 8px 0 0;
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 15px;
+}
+
+.btn-save {
+  color: #ffffff;
+  background-color: #7c3aed;
+  background-image: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.btn-cancel {
+  color: $dim;
+  background-color: $card;
+}
+
+.nav-action { padding: 6px 12px; border-radius: 10px; background-color: rgba(79, 124, 255, 0.14); }
+.nav-action-text { color: #4f7cff; font-size: 12px; font-weight: 600; }

@@ -6,6 +6,7 @@
 **/.pytest_cache
 **/node_modules
 **/dist
+**/unpackage
 **/logs
 **/.env
 **/.cursor

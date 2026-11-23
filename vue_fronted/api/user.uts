@@ -1,0 +1,72 @@
+import { requestJson } from '../network/request.uts'
+
+/** 学生资料与学习画像 */
+
+export function getUserProfile(): Promise<UTSJSONObject> {
+  return requestJson('/api/user/profile')
+}
+
+/** 字段随场景变化较多，交由调用方构造，避免在这里写死错误契约 */
+export function updateUserProfile(body: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/user/profile', 'PUT', body)
+}
+
+export function updateLearnerProfile(body: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/user/learner-profile', 'PUT', body)
+}
+
+/** action: 冲突处理动作（采用新测评 / 保留旧天赋） */
+export function resolveTalentConflict(action: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = { action: action }
+  return requestJson('/api/user/talent/resolve-conflict', 'POST', body)
+}
+/**
+ * 家长资料更新请求体。
+ * 必须放在 .uts：.uvue 里不能写 const x: UTSJSONObject = {...}，
+ * 而对象字面量推断不出 UTSJSONObject，就做不了下标赋值。
+ */
+export function buildParentProfileBody(nickname: string, realName: string, password: string, requirePassword: boolean): UTSJSONObject {
+  const body: UTSJSONObject = { nickname: nickname, real_name: realName }
+  if (password.length > 0) {
+    body['password'] = password
+    // 微信登录的家长补齐密码后，才允许用手机号+密码在任意设备登录
+    if (requirePassword) body['require_password'] = true
+  }
+  return body
+}
+
+/** 老学员补录的单项历史数据 */
+export type OnboardingEntry = {
+  ability: string
+  totalCount: number
+  time: string
+  wordCount: number
+  accuracyPct: number
+  note: string
+}
+
+/** 汇总成后端约定的 profile_json.onboarding 结构 */
+export function buildOnboardingPayload(studentType: string, finalize: boolean, firstDate: string, totalSessions: number, entries: OnboardingEntry[]): UTSJSONObject {
+  const onboarding: UTSJSONObject = { student_type: studentType, talent_unknown: true }
+  if (finalize) onboarding['completed_at'] = new Date().toISOString()
+  if (studentType == 'returning') {
+    if (firstDate.length > 0) onboarding['first_training_date'] = firstDate
+    if (totalSessions > 0) onboarding['total_training_sessions'] = totalSessions
+    const names: string[] = []
+    const prior: UTSJSONObject = {}
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]
+      names.push(e.ability)
+      const row: UTSJSONObject = {}
+      if (e.totalCount > 0) row['total_count'] = e.totalCount
+      if (e.time.length > 0) row['time'] = e.time
+      if (e.wordCount > 0) row['word_count'] = e.wordCount
+      if (e.accuracyPct > 0) row['accuracy_pct'] = e.accuracyPct
+      if (e.note.length > 0) row['note'] = e.note
+      prior.set(e.ability, row)
+    }
+    onboarding['prior_abilities'] = names
+    onboarding['prior_training_data'] = prior
+  }
+  return onboarding
+}

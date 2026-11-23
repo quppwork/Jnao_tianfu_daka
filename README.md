@@ -64,27 +64,20 @@ cp backend/.env.example backend/.env   # 编辑填入 API Key
 
 | 系统 | 方式 |
 |---|---|
-| Windows | 双击 `scripts/start_all.bat` |
+| Windows | 双击根目录的 `start.bat` |
 | Mac/Linux | `bash scripts/start_all.sh` |
 
-**分别启动：**
+本地 API 默认使用 `http://127.0.0.1:8012`。客户端在 HBuilderX 打开 `vue_fronted` 工程，通过运行菜单选择微信小程序、Android 或 iOS。微信小程序使用 `wxbca3a9ba6f39a3df`，预览和真机调试需要该小程序的开发权限。
 
-```bash
-# 后端 → http://127.0.0.1:8012
-cd backend && python main.py
+联调服务地址在 `vue_fronted/config/environment.uts` 中设置。真机与小程序使用设备可访问的 HTTPS 地址。Android 和 iOS 正式发行分别使用本项目的 DCloud AppID、平台包名和签名配置。
 
-# 前端 → http://127.0.0.1:5185
-cd vue_fronted && npm run dev
-```
+Docker 中的 `frontend` 服务负责 API、媒体和合作方报告嵌入页的网关转发。
 
 ### 运行测试
 
 ```bash
 # 后端全量
 python -m pytest backend/tests/ -v
-
-# 前端全量
-cd vue_fronted && npm test
 
 # 快速发烟（小改动验证，<2秒）
 python -m pytest tests/smoke_test.py -v --tb=short

@@ -1,0 +1,73 @@
+/**
+ * 学科答疑的 5 个频道与导师人格。
+ *
+ * 口径来自后端 app/agents/qa/subjects/registry.py 的 CANONICAL_SUBJECTS：
+ *   理科 / 文科 / 外语 / 科技 / 书法
+ * 旧称（数学/语文/英语/科学/学习心法）后端会用 alias 归一，但前端必须直接用规范名，
+ * 否则导师人格与展示会错位。
+ *
+ * 头像取自旧壳 static/dayu/assets 的 JPG（每张 18–79 KB，共 174 KB）。
+ * 旧壳每个导师还有 1.4–1.8 MB 的 GIF，6 个合计约 9.8 MB，小程序包体积承受不了，
+ * 因此这里只用静态头像 + 主题色，不放动图。
+ */
+
+export type QaChannel = {
+  subject: string
+  name: string
+  tag: string
+  emoji: string
+  color: string
+  avatar: string
+}
+
+export const QA_CHANNELS: QaChannel[] = [
+  {
+    subject: '理科',
+    name: '余峰',
+    tag: '严格冷面',
+    emoji: '📐',
+    color: '#7FA7EF',
+    avatar: '/static/qa/mentor-math.jpg'
+  },
+  {
+    subject: '文科',
+    name: '秦念国',
+    tag: '国学厚重',
+    emoji: '📜',
+    color: '#C9A227',
+    avatar: '/static/qa/mentor-chinese.jpg'
+  },
+  {
+    subject: '外语',
+    name: '田小静',
+    tag: '温柔共情',
+    emoji: '🌸',
+    color: '#FF9EBB',
+    avatar: '/static/qa/mentor-english.jpg'
+  },
+  {
+    subject: '科技',
+    name: '张宇',
+    tag: '睿智布局',
+    emoji: '🔭',
+    color: '#9AD9FF',
+    avatar: '/static/qa/mentor-tech.jpg'
+  },
+  {
+    subject: '书法',
+    name: '善雨',
+    tag: '温润定心',
+    emoji: '🍵',
+    color: '#E4D8FF',
+    avatar: '/static/qa/mentor-mind.jpg'
+  }
+]
+
+export const QA_DEFAULT_SUBJECT = '理科'
+
+export function findChannel(subject: string): QaChannel {
+  for (let i = 0; i < QA_CHANNELS.length; i++) {
+    if (QA_CHANNELS[i].subject == subject) return QA_CHANNELS[i]
+  }
+  return QA_CHANNELS[0]
+}

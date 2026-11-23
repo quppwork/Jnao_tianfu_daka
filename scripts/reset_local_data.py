@@ -176,8 +176,7 @@ def main() -> None:
             print(f"  content_item 重新导入: {before['content_item_imported']} 条")
 
     print()
-    print("请重启后端服务，并在浏览器清 localStorage:")
-    print("  localStorage.clear(); location.reload()")
+    print("请重启后端服务，再在测试客户端退出并重新登录。")
 
 
 if __name__ == "__main__":

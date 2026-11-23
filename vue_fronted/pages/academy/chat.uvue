@@ -1,0 +1,205 @@
+<template>
+  <view class="ac-chat-page">
+    <view class="ac-chat-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="ac-chat-back" @click="goBack"><text class="ac-chat-back-icon">‹</text></view>
+      <text class="ac-chat-title">{{ episodeTitle.length > 0 ? episodeTitle : '剧集讨论' }}</text>
+      <view class="ac-chat-placeholder"></view>
+    </view>
+
+    <scroll-view class="ac-chat-body" scroll-y :scroll-into-view="scrollTarget">
+      <view class="ac-chat-inner">
+        <view v-if="messages.length == 0" class="ac-chat-empty">
+          <text class="ac-chat-empty-title">这里是剧集讨论区</text>
+          <text class="ac-chat-empty-hint">{{ emptyHint }}</text>
+        </view>
+
+        <chat-bubble
+          v-for="(m, index) in messages"
+          :key="index.toString()"
+          :role="m.role"
+          :content="m.content"
+          :pending="m.pending"
+        />
+
+        <view id="ac-chat-bottom" class="ac-chat-anchor"></view>
+      </view>
+    </scroll-view>
+
+    <!-- 看完正片才能讨论：后端 403，不能当网络错误 -->
+    <view v-if="blockedText.length > 0" class="ac-chat-blocked">
+      <text class="ac-chat-blocked-text">{{ blockedText }}</text>
+      <view class="ac-chat-blocked-btn" @click="goPlay">
+        <text class="ac-chat-blocked-btntext">去看正片</text>
+      </view>
+    </view>
+
+    <view v-if="errorText.length > 0" class="ac-chat-error">
+      <text class="ac-chat-error-text">{{ errorText }}</text>
+    </view>
+
+    <chat-composer
+      v-if="blockedText.length == 0"
+      :sending="sending"
+      :inset="bottomInset"
+      placeholder="和剧集角色说点什么"
+      @submit="onSubmit"
+      @stop="stop"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+import { chatInAcademyEpisode, readAcademyChat, getAcademySector, readAcademySector, openAcademyEpisode } from '../../api/academy.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const episodeId = ref('')
+const episodeTitle = ref('')
+const messages = ref([])
+const sending = ref(false)
+const blockedText = ref('')
+const errorText = ref('')
+const emptyHint = ref('聊两句试试，它会接着剧情跟你说话')
+const insetTop = ref(0)
+const bottomInset = ref(0)
+const scrollTarget = ref('')
+let requestSeq = 0
+let scrollTimer = 0
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function clearScrollTimer() {
+  if (scrollTimer != 0) {
+    clearTimeout(scrollTimer)
+    scrollTimer = 0
+  }
+}
+
+function goPlay() {
+  const url = episodeId.value.length > 0
+    ? '/pages/academy/play?id=' + episodeId.value
+    : '/pages/academy/play'
+  uni.redirectTo({ url })
+}
+
+function scrollToBottom() {
+  clearScrollTimer()
+  scrollTarget.value = ''
+  // 下一帧再设，强制 scroll-view 重新定位
+  scrollTimer = setTimeout(() => {
+    scrollTimer = 0
+    scrollTarget.value = 'ac-chat-bottom'
+  }, 60)
+}
+
+/** 后端 turns 里都是角色的话，用户自己发的那条本地回显 */
+function pushMessage(list, role, content, pending) {
+  const next = list.slice()
+  next.push({ role: role, content: content, pending: pending })
+  return next
+}
+
+async function onSubmit(text) {
+  if (sending.value) return
+  const t = text.trim()
+  if (t.length == 0) return
+  if (episodeId.value.length == 0) {
+    errorText.value = '还没选剧集'
+    return
+  }
+
+  messages.value = pushMessage(messages.value, 'user', t, false)
+  // 每次发送占一个序号：stop() 或新请求后，旧请求的收尾不能清掉新的 sending
+  requestSeq = requestSeq + 1
+  const seq = requestSeq
+  sending.value = true
+  errorText.value = ''
+  scrollToBottom()
+
+  try {
+    const data = await chatInAcademyEpisode(episodeId.value, t, '', '')
+    if (requestSeq != seq) return
+    const chat = readAcademyChat(data)
+    let list = messages.value
+    for (let i = 0; i < chat.turns.length; i++) {
+      list = pushMessage(list, 'ai', chat.turns[i].text, false)
+    }
+    messages.value = list
+    scrollToBottom()
+  } catch (error) {
+    if (requestSeq != seq) return
+    const msg = error instanceof Error ? error.message : '发送失败'
+    // 403 是业务前置条件，引导去看正片而不是报错
+    if (msg.indexOf('看完正片') >= 0 || msg.indexOf('解锁') >= 0) {
+      blockedText.value = msg
+    } else {
+      errorText.value = msg
+    }
+  } finally {
+    if (requestSeq == seq) sending.value = false
+  }
+}
+
+/**
+ * 拉开场白。open_room 返回 {replay, turns, ...}，首访会跑多角色开场白（可数十秒），
+ * 所以不 await、不阻塞首屏；失败就当没有开场白。
+ */
+async function loadOpening(id) {
+  if (id.length == 0) return
+  try {
+    const data = await openAcademyEpisode(id)
+    const chat = readAcademyChat(data)
+    if (chat.turns.length == 0) return
+    // 用户可能已经开始聊了，别覆盖
+    if (messages.value.length > 0) return
+    let list = []
+    for (let i = 0; i < chat.turns.length; i++) {
+      list = pushMessage(list, 'ai', chat.turns[i].text, false)
+    }
+    messages.value = list
+    scrollToBottom()
+  } catch (_) {
+    // 开场白失败不影响发消息
+  }
+}
+
+function stop() {
+  // 接口是非流式，没法真正中断；把序号推进一位让在飞的请求作废，
+  // 否则它的 finally 会把下一次的 sending 提前清掉
+  requestSeq = requestSeq + 1
+  sending.value = false
+}
+
+async function load(id) {
+  episodeId.value = id
+  try {
+    const data = await getAcademySector(id)
+    const sector = readAcademySector(data)
+    episodeTitle.value = sector.episodeTitle
+    if (episodeId.value.length == 0) episodeId.value = sector.episodeId
+    loadOpening(episodeId.value)
+  } catch (_) {
+    // 标题拿不到不影响对话，用占位标题
+  }
+}
+
+onLoad((query) => {
+  const id = query == null ? '' : (query['id'] ?? '')
+  load(id)
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+  bottomInset.value = uni.getWindowInfo().safeAreaInsets.bottom
+})
+
+onUnload(() => {
+  requestSeq = requestSeq + 1
+  clearScrollTimer()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './chat.scss';
+</style>

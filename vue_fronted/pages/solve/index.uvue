@@ -1,0 +1,171 @@
+<template>
+  <view class="sv-page">
+    <view class="sv-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="sv-back" @click="goBack"><text class="sv-back-icon">‹</text></view>
+      <text class="sv-title">拍照解题</text>
+      <view class="sv-placeholder"></view>
+    </view>
+
+    <scroll-view class="sv-body" scroll-y>
+      <!-- 选图区 -->
+      <view class="sv-pick" @click="pickImage">
+        <image v-if="imagePath.length > 0" class="sv-preview" :src="imagePath" mode="aspectFit" />
+        <template v-else>
+          <text class="sv-pick-icon">＋</text>
+          <text class="sv-pick-text">拍一张题目，或者从相册选</text>
+        </template>
+      </view>
+
+      <!-- 学科提示 -->
+      <view class="sv-subjects">
+        <view
+          v-for="(s, i) in SUBJECTS"
+          :key="i"
+          class="sv-subject"
+          :class="subjectHint == s.value ? 'sv-subject-on' : ''"
+          @click="pickSubject(s.value)"
+        >
+          <text class="sv-subject-text">{{ s.label }}</text>
+        </view>
+      </view>
+
+      <view class="sv-actions">
+        <view class="sv-submit" :class="canSubmit ? '' : 'sv-submit-off'" @click="submit">
+          <text class="sv-submit-text">{{ sending ? '识别中…' : '开始解题' }}</text>
+        </view>
+      </view>
+
+      <!-- 结果 -->
+      <view v-if="answer.length > 0" class="sv-result">
+        <view class="sv-result-head">
+          <text class="sv-result-title">解答</text>
+          <text v-if="source.length > 0" class="sv-result-source">{{ sourceLabel }}</text>
+        </view>
+        <text class="sv-result-text">{{ answer }}</text>
+      </view>
+
+      <!-- 学业规划未就绪 -->
+      <view v-if="needPlan" class="sv-plan">
+        <text class="sv-plan-text">还没做学业规划，先补一下才能给针对性解答</text>
+        <view class="sv-plan-btn" @click="goPlan">
+          <text class="sv-plan-btn-text">去补齐</text>
+        </view>
+      </view>
+
+      <text v-if="errorText.length > 0" class="sv-error">{{ errorText }}</text>
+      <view class="sv-space"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { solvePhotoSync, readSolveResult } from '../../api/solve.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const SUBJECTS = [
+  { label: '不限', value: '' },
+  { label: '语文', value: '语文' },
+  { label: '数学', value: '数学' },
+  { label: '英语', value: '外语' },
+  { label: '理科', value: '理科' },
+  { label: '文科', value: '文科' }
+]
+
+const insetTop = ref(0)
+const imagePath = ref('')
+const subjectHint = ref('')
+const sending = ref(false)
+const errorText = ref('')
+const answer = ref('')
+const source = ref('')
+const needPlan = ref(false)
+
+const canSubmit = computed(() => imagePath.value.length > 0 && !sending.value)
+
+const sourceLabel = computed(() => {
+  if (source.value == 'bank') return '题库'
+  if (source.value == 'rag') return '知识库'
+  if (source.value == 'llm') return 'AI 推理'
+  if (source.value == 'need_academic_plan') return '需要规划'
+  return source.value
+})
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function goPlan() {
+  uni.navigateTo({ url: '/pages/talent/index' })
+}
+
+function pickSubject(value) {
+  subjectHint.value = value
+}
+
+function pickImage() {
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['camera', 'album'],
+    success: (res) => {
+      const paths = res.tempFilePaths
+      if (paths.length > 0) {
+        imagePath.value = paths[0]
+        // 换了图就清掉上一次的结果
+        answer.value = ''
+        source.value = ''
+        errorText.value = ''
+        needPlan.value = false
+      }
+    },
+    fail: (_) => {
+      // 用户取消不算错误
+    }
+  })
+}
+
+async function submit() {
+  if (!canSubmit.value) {
+    if (imagePath.value.length == 0) {
+      errorText.value = '先选一张图'
+    }
+    return
+  }
+  sending.value = true
+  errorText.value = ''
+  answer.value = ''
+  source.value = ''
+  needPlan.value = false
+
+  try {
+    const data = await solvePhotoSync(imagePath.value, subjectHint.value)
+    const result = readSolveResult(data)
+    if (result.source == 'need_academic_plan') {
+      needPlan.value = true
+      answer.value = result.answer
+      return
+    }
+    if (!result.ok) {
+      errorText.value = result.errorText.length > 0 ? result.errorText : '没解出来'
+      return
+    }
+    answer.value = result.answer
+    source.value = result.source
+    if (answer.value.length == 0) {
+      errorText.value = '返回了空答案'
+    }
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '上传失败'
+  } finally {
+    sending.value = false
+  }
+}
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

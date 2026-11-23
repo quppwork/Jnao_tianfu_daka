@@ -1,0 +1,23 @@
+.page, .content { display:flex; flex:1; flex-direction:column; background-color:#0d111f; }
+.nav, .section, .lesson { display:flex; flex-direction:row; align-items:center; }
+.nav { padding:8px 14px; }
+.nav-back { color:#c9cfdc; font-size:28px; width:36px; }
+.nav-brand, .course-heading { flex:1; }
+.title { color:#f5d9a8; font-size:17px; font-weight:900; }
+.dim { color:#8b93a5; font-size:12px; margin-top:4px; }
+.body { padding:8px 18px 24px; }
+.hero { align-items:center; padding:24px 8px; border-radius:16px; background-color:#151c2d; }
+.hero-title { color:#f5d576; font-size:26px; font-weight:900; }
+.notice, .card { margin-top:12px; padding:12px; border-radius:12px; border:1px solid #28344b; background-color:#131926; }
+.notice { border-color:#745e34; }
+.section, .lesson { justify-content:space-between; margin-top:12px; }
+.intro { min-height:100px; padding:12px; justify-content:center; align-items:center; border-radius:12px; background-image:linear-gradient(135deg,#203859,#182641); background-color:#203859; }
+.intro-icon { font-size:22px; color:#f5d576; margin-bottom:4px; }
+.action-link, .action { color:#9ad9ff; font-size:12px; padding:7px; background-color:#1d2e48; border-radius:10px; }
+.action-link { margin-left:6px; }
+.track { height:6px; border-radius:4px; background-color:#25354b; margin:10px 0 4px; }
+.fill { height:6px; border-radius:4px; background-color:#72bb82; }
+.lesson { padding:8px 5px 8px 8px; border-bottom:1px solid #263149; margin-top:2px; }
+.lesson-current { background-color:#1c2c46; border-radius:8px; }
+.lesson-name { flex:1; color:#e2e9f7; font-size:13px; }
+.error { color:#fca5a5; font-size:13px; }

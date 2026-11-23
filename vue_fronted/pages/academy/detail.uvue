@@ -1,0 +1,150 @@
+<template>
+  <view class="ad-page">
+    <view class="ad-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="ad-back" @click="goBack"><text class="ad-back-icon">‹</text></view>
+      <text class="ad-title">剧集详情</text>
+      <view class="ad-placeholder"></view>
+    </view>
+
+    <scroll-view class="ad-body" scroll-y>
+      <view v-if="loading" class="ad-empty"><text class="ad-empty-text">加载中…</text></view>
+
+      <template v-else>
+        <!-- 主信息 -->
+        <view class="ad-hero">
+          <view class="ad-hero-top">
+            <text class="ad-channel">{{ channel }}</text>
+            <text v-if="online > 0" class="ad-online">{{ online }} 人在线</text>
+            <text class="ad-duration">{{ duration }}</text>
+          </view>
+          <text class="ad-ep-title">{{ title }}</text>
+          <text v-if="topic.length > 0" class="ad-topic">{{ topic }}</text>
+
+          <view v-if="chips.length > 0" class="ad-chips">
+            <view v-for="(c, i) in chips" :key="i" class="ad-chip">
+              <text class="ad-chip-text">{{ c }}</text>
+            </view>
+          </view>
+
+          <view v-if="notice.length > 0" class="ad-notice">
+            <text class="ad-notice-label">公告</text>
+            <text class="ad-notice-text">{{ notice }}</text>
+          </view>
+
+          <view v-if="task.length > 0" class="ad-task">
+            <text class="ad-task-label">本集任务</text>
+            <text class="ad-task-text">{{ task }}</text>
+          </view>
+
+          <view class="ad-bar">
+            <view class="ad-bar-fill" :style="{ width: percent + '%' }"></view>
+          </view>
+          <text class="ad-progress">已看 {{ percent }}%</text>
+
+          <view class="ad-actions">
+            <view class="ad-btn-ghost" @click="goPlay"><text class="ad-btn-ghost-text">播放</text></view>
+            <view class="ad-btn" @click="goChat"><text class="ad-btn-text">讨论</text></view>
+          </view>
+        </view>
+
+        <!-- 角色卡 -->
+        <view v-if="cast.length > 0" class="ad-section">
+          <text class="ad-section-title">出场角色</text>
+          <view class="ad-cast-grid">
+            <view v-for="(p, i) in cast" :key="i" class="ad-cast">
+              <view class="ad-cast-avatar"><text class="ad-cast-initial">{{ p.name.slice(0, 1) }}</text></view>
+              <text class="ad-cast-name">{{ p.name }}</text>
+              <text v-if="p.tag.length > 0" class="ad-cast-tag">{{ p.tag }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 引导语 -->
+        <view v-if="nudge.length > 0" class="ad-nudge">
+          <text class="ad-nudge-text">{{ nudge }}</text>
+        </view>
+      </template>
+
+      <text v-if="errorText.length > 0" class="ad-error">{{ errorText }}</text>
+      <view class="ad-space"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getAcademySector, readAcademySector } from '../../api/academy.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const loading = ref(true)
+const errorText = ref('')
+const insetTop = ref(0)
+
+const episodeId = ref('')
+const title = ref('')
+const topic = ref('')
+const task = ref('')
+const channel = ref('')
+const duration = ref('')
+const percent = ref(0)
+const online = ref(0)
+const notice = ref('')
+const nudge = ref('')
+const chips = ref([])
+const cast = ref([])
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function goPlay() {
+  const url = episodeId.value.length > 0
+    ? '/pages/academy/play?id=' + episodeId.value
+    : '/pages/academy/play'
+  uni.navigateTo({ url })
+}
+
+function goChat() {
+  const url = episodeId.value.length > 0
+    ? '/pages/academy/chat?id=' + episodeId.value
+    : '/pages/academy/chat'
+  uni.navigateTo({ url })
+}
+
+async function load(id) {
+  loading.value = true
+  errorText.value = ''
+  try {
+    const data = await getAcademySector(id)
+    const sector = readAcademySector(data)
+    episodeId.value = sector.episodeId
+    title.value = sector.episodeTitle
+    topic.value = sector.episodeTopic
+    task.value = sector.episodeTask
+    channel.value = sector.episodeChannel
+    duration.value = sector.episodeDuration
+    percent.value = sector.episodePercent
+    online.value = sector.episodeOnline
+    notice.value = sector.episodeNotice
+    nudge.value = sector.episodeNudge
+    chips.value = sector.episodeChips
+    cast.value = sector.episodeCast
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '加载剧集详情失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onLoad((query) => {
+  const id = query == null ? '' : (query['id'] ?? '')
+  load(id)
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './detail.scss';
+</style>

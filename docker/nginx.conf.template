@@ -2,7 +2,6 @@ server {
     listen 80;
     server_name localhost;
     root /usr/share/nginx/html;
-    index index.html;
 
     client_max_body_size 20m;
 
@@ -118,9 +117,17 @@ server {
         try_files $uri =404;
     }
 
-    location / {
-        try_files $uri $uri/ /index.html;
+    # 合作方报告通过此地址嵌入解答，接口由 partner_report_chat_service 生成。
+    location = /static/dayu/html/report-talent-chat-embed.html {
+        try_files $uri =404;
         add_header Cache-Control "no-cache";
-        # CSP 由宝塔站点 Nginx 统一配置（避免与容器内重复 add_header 叠加导致 media-src 失效）
+    }
+
+    location ~* \.html$ {
+        return 404;
+    }
+
+    location / {
+        try_files $uri =404;
     }
 }

@@ -1,0 +1,139 @@
+<template>
+  <view class="st-page">
+    <view class="st-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="st-back" @click="goBack"><text class="st-back-icon">‹</text></view>
+      <text class="st-title">平台设置</text>
+      <view class="st-placeholder"></view>
+    </view>
+
+    <scroll-view class="st-body" scroll-y>
+      <view v-if="loading" class="st-empty"><text class="st-empty-text">加载中…</text></view>
+
+      <template v-else>
+        <view class="st-card">
+          <text class="st-card-title">同时登录设备数上限</text>
+          <text class="st-card-hint">超出后新设备登录会把最早的挤下线</text>
+
+          <view v-for="(f, i) in FIELDS" :key="i" class="st-field">
+            <view class="st-field-label">
+              <text class="st-field-name">{{ f.label }}</text>
+              <text class="st-field-range">{{ f.min }}–{{ f.max }}</text>
+            </view>
+            <view class="st-field-input">
+              <view class="st-step" @click="step(f.key, -1)"><text class="st-step-text">−</text></view>
+              <text class="st-value">{{ valueOf(f.key) }}</text>
+              <view class="st-step" @click="step(f.key, 1)"><text class="st-step-text">＋</text></view>
+            </view>
+          </view>
+        </view>
+
+        <view class="st-actions">
+          <view class="st-save" @click="save">
+            <text class="st-save-text">{{ saving ? '保存中…' : '保存设置' }}</text>
+          </view>
+          <view class="st-reset" @click="load"><text class="st-reset-text">重新读取</text></view>
+        </view>
+
+        <text v-if="savedTips.length > 0" class="st-tips">{{ savedTips }}</text>
+      </template>
+
+      <text v-if="errorText.length > 0" class="st-error">{{ errorText }}</text>
+      <view class="st-space"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getAdminSettings, updateAdminSettings, buildSettingsBody } from '../../api/admin.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const FIELDS = [
+  { key: 'admin', label: '管理员', min: 1, max: 20 },
+  { key: 'parent', label: '家长', min: 1, max: 10 },
+  { key: 'student', label: '孩子', min: 1, max: 10 }
+]
+
+const loading = ref(true)
+const saving = ref(false)
+const errorText = ref('')
+const savedTips = ref('')
+const insetTop = ref(0)
+
+const adminDevices = ref(3)
+const parentDevices = ref(3)
+const studentDevices = ref(3)
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function valueOf(key) {
+  if (key == 'admin') return adminDevices.value
+  if (key == 'parent') return parentDevices.value
+  return studentDevices.value
+}
+
+function setValue(key, v) {
+  if (key == 'admin') adminDevices.value = v
+  else if (key == 'parent') parentDevices.value = v
+  else studentDevices.value = v
+}
+
+function step(key, delta) {
+  let f = FIELDS[0]
+  for (let i = 0; i < FIELDS.length; i++) {
+    if (FIELDS[i].key == key) f = FIELDS[i]
+  }
+  let v = valueOf(key) + delta
+  if (v < f.min) v = f.min
+  if (v > f.max) v = f.max
+  setValue(key, v)
+}
+
+async function load() {
+  loading.value = true
+  errorText.value = ''
+  savedTips.value = ''
+  try {
+    const data = await getAdminSettings()
+    const policy = data.getJSON('login_policy')
+    adminDevices.value = policy?.getNumber('admin_max_devices') ?? 3
+    parentDevices.value = policy?.getNumber('parent_max_devices') ?? 3
+    studentDevices.value = policy?.getNumber('student_max_devices') ?? 3
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取设置失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function save() {
+  if (saving.value) return
+  saving.value = true
+  errorText.value = ''
+  savedTips.value = ''
+  try {
+    const body = buildSettingsBody(adminDevices.value, parentDevices.value, studentDevices.value)
+    await updateAdminSettings(body)
+    savedTips.value = '已保存：管理员 ' + adminDevices.value.toString() + ' / 家长 ' +
+      parentDevices.value.toString() + ' / 孩子 ' + studentDevices.value.toString()
+    uni.showToast({ title: '设置已保存', icon: 'none' })
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '保存失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+onLoad(() => {
+  load()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './settings.scss';
+</style>

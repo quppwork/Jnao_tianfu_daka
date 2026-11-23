@@ -1,0 +1,183 @@
+$bg: #070b14;
+$card: #0f1a2e;
+$card-soft: #131f38;
+$border: rgba(59, 130, 246, 0.2);
+$dim: #94a3b8;
+$text: #e2e8f0;
+$accent: #3b82f6;
+
+.ob-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  background-color: $bg;
+}
+
+.ob-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 12px;
+  padding-right: 16px;
+  padding-bottom: 8px;
+}
+
+.ob-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.ob-back-icon {
+  color: $text;
+  font-size: 26px;
+  line-height: 26px;
+}
+
+.ob-back-placeholder {
+  width: 32px;
+  height: 32px;
+}
+
+.ob-title {
+  color: $text;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ob-body {
+  flex: 1;
+}
+
+.ob-card {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 16px 24px 16px;
+  padding: 18px 16px;
+  border-radius: 14px;
+  background-color: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $border;
+}
+
+.ob-h {
+  color: $text;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.ob-sub {
+  color: $dim;
+  font-size: 12px;
+  margin-bottom: 14px;
+  line-height: 18px;
+}
+
+.ob-choice {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background-color: $card-soft;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $border;
+}
+
+.ob-choice-title {
+  color: $text;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ob-choice-desc {
+  color: $dim;
+  font-size: 12px;
+}
+
+.ob-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.ob-chip {
+  padding: 7px 12px;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $border;
+  background-color: $card-soft;
+}
+
+.ob-chip-on {
+  background-color: $accent;
+  border-color: $accent;
+}
+
+.ob-chip-text {
+  color: $dim;
+  font-size: 13px;
+}
+
+.ob-chip-text-on {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ob-label {
+  color: $dim;
+  font-size: 12px;
+  margin-top: 10px;
+  margin-bottom: 5px;
+}
+
+.ob-input {
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background-color: $card-soft;
+  color: $text;
+  font-size: 14px;
+}
+
+.ob-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  margin-top: 18px;
+  border-radius: 12px;
+  background-color: $accent;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ob-skip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0 2px 0;
+}
+
+.ob-skip-text {
+  color: $dim;
+  font-size: 13px;
+}
+
+.ob-error {
+  color: #f87171;
+  font-size: 12px;
+  padding: 0 16px 20px 16px;
+}

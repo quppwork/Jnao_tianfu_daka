@@ -1,0 +1,20 @@
+.report, .scroll { display:flex; flex:1; flex-direction:column; background-color:#0b111e; }
+.top, .metric { display:flex; flex-direction:row; align-items:center; }
+.top { padding:8px 14px 10px; }
+.back, .spacer { width:34px; height:34px; }
+.back { border-radius:17px; background-color:#192436; align-items:center; justify-content:center; }
+.back-icon { color:#a8b6ce; font-size:28px; line-height:28px; }
+.title { color:#f3f6fc; font-size:17px; font-weight:800; }
+.top-title { flex:1; text-align:center; }
+.body { padding:8px 16px 24px; }
+.hero, .card { display:flex; flex-direction:column; padding:20px 16px; margin-bottom:12px; border-radius:18px; border:1px solid #283b58; background-color:#101b2c; }
+.hero { align-items:center; background-color:#0e2343; background-image:linear-gradient(135deg,#142d53,#101726); }
+.avatar { width:86px; height:86px; border-radius:43px; margin-bottom:10px; }
+.eyebrow { color:#c8b17a; font-size:13px; font-weight:700; }
+.talent { color:#f8d881; font-size:32px; font-weight:900; margin:6px 0; }
+.dim { color:#a8b6ce; font-size:13px; margin-top:5px; }
+.value { color:#f8d881; font-size:14px; font-weight:700; }
+.metric { justify-content:space-between; margin-top:10px; }
+.error { color:#fca5a5; font-size:13px; }
+.secondary, .primary { margin:10px 0 0; min-height:44px; border-radius:12px; font-size:14px; color:#f3f6fc; background-color:#22334e; }
+.primary { background-color:#295ed0; }
