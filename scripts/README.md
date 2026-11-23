@@ -4,7 +4,7 @@
 
 | 系统 | 方式 |
 |------|------|
-| **Windows** | 双击 `scripts\start.bat`（内部调 `scripts\start_all.ps1`）；或 `scripts\start_all.bat` |
+| **Windows** | 双击 `scripts\start_all.bat`（内部调 `scripts\start_all.ps1`） |
 | **Linux/Mac** | `bash scripts/start_all.sh` |
 
 后端默认地址为 `http://127.0.0.1:8012`。在 HBuilderX 打开 `frontend`，按平台运行客户端。生产环境的 5185 端口用于 Nginx API 网关。

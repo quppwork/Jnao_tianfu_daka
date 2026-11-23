@@ -64,7 +64,7 @@ cp backend/.env.example backend/.env   # 编辑填入 API Key
 
 | 系统 | 方式 |
 |---|---|
-| Windows | 双击 `scripts/start.bat` |
+| Windows | 双击 `scripts/start_all.bat` |
 | Mac/Linux | `bash scripts/start_all.sh` |
 
 本地 API 默认使用 `http://127.0.0.1:8012`。客户端在 HBuilderX 打开 `frontend` 工程，通过运行菜单选择微信小程序、Android 或 iOS。微信小程序使用 `wxbca3a9ba6f39a3df`，预览和真机调试需要该小程序的开发权限。
