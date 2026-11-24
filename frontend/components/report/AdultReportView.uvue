@@ -1,0 +1,162 @@
+<template>
+  <view>
+    <!-- 1. 顶部天赋英雄卡 -->
+    <view class="hero-card">
+      <image class="hero-badge" :src="heroImg" mode="aspectFill" />
+      <text class="eyebrow">成人天赋报告{{ configElement.length > 0 ? ' · ' + configElement : '' }}</text>
+      <text class="hero-talent">{{ report.talent }}</text>
+      <text v-if="comboLabel.length > 0" class="hero-combo">{{ comboLabel }}</text>
+      <text v-if="sloganText.length > 0" class="hero-slogan">{{ sloganText }}</text>
+      <text class="hero-meta">{{ nickname }}{{ report.assessedAt.length > 0 ? ' · ' + report.assessedAt : '' }}</text>
+    </view>
+
+    <!-- 2. 五维属性与主属性解读 -->
+    <view v-if="report.attrList.length > 0 || report.mainDesp.length > 0" class="sec-card">
+      <text class="sec-title">五维天赋分布</text>
+      <view v-for="(attr, idx) in report.attrList" :key="idx" class="bar-row">
+        <view class="bar-head">
+          <text class="bar-label">{{ attr.name }}{{ attr.isMain == 1 ? '（主天赋）' : '' }}</text>
+          <text class="bar-val">{{ attr.value }}</text>
+        </view>
+        <view class="bar-track">
+          <view class="bar-fill" :class="{ 'bar-fill-gold': attr.isMain == 1 }" :style="{ width: attrPercent(attr.value) + '%' }"></view>
+        </view>
+      </view>
+      <text v-if="report.mainDesp.length > 0" class="body-text">{{ report.mainDesp }}</text>
+    </view>
+
+    <!-- 3. 主副组合特征 -->
+    <view v-if="report.traitSummary.length > 0 || report.traits.length > 0 || report.mainSupplementDesp.length > 0" class="sec-card">
+      <text class="sec-title">主副组合特质</text>
+      <text v-if="report.traitSummary.length > 0" class="sub-title">{{ report.traitSummary }}</text>
+      <view v-if="report.traits.length > 0" class="tag-wrap">
+        <view v-for="(t, idx) in report.traits" :key="idx" class="tag-pill">
+          <text class="tag-text">{{ t }}</text>
+        </view>
+      </view>
+      <text v-if="report.mainSupplementDesp.length > 0" class="body-text">{{ report.mainSupplementDesp }}</text>
+    </view>
+
+    <!-- 4. 能量状态与事业/情感建议 -->
+    <view v-if="report.stateName.length > 0 || report.stateDesp.length > 0" class="sec-card">
+      <text class="sec-title">能量状态 · {{ report.stateName }}</text>
+      <text v-if="report.stateDesp.length > 0" class="body-text">{{ report.stateDesp }}</text>
+      <view v-if="report.careerAdvice.length > 0" class="quote-box">
+        <text class="sub-title">事业建议</text>
+        <text class="body-text">{{ report.careerAdvice }}</text>
+      </view>
+      <view v-if="report.emotionAdvice.length > 0" class="quote-box">
+        <text class="sub-title">情感建议</text>
+        <text class="body-text">{{ report.emotionAdvice }}</text>
+      </view>
+    </view>
+
+    <!-- 5. 核心天赋能力 -->
+    <view v-if="report.talentAbilityName.length > 0 || report.talentAbilityDesp.length > 0" class="sec-card">
+      <text class="sec-title">核心天赋能力 · {{ report.talentAbilityName }}</text>
+      <view v-if="report.talentAbilityValue > 0" class="bar-row">
+        <view class="bar-head">
+          <text class="bar-label">潜能指数（Lv.{{ report.talentAbilityGrade }}）</text>
+          <text class="bar-val">{{ report.talentAbilityValue }}</text>
+        </view>
+        <view class="bar-track">
+          <view class="bar-fill bar-fill-gold" :style="{ width: Math.min(100, report.talentAbilityValue) + '%' }"></view>
+        </view>
+      </view>
+      <text v-if="report.talentAbilityDesp.length > 0" class="body-text">{{ report.talentAbilityDesp }}</text>
+      <view v-if="report.talentSay.length > 0" class="quote-box">
+        <text class="sub-title">想对你说</text>
+        <text class="body-text">{{ report.talentSay }}</text>
+      </view>
+      <view v-if="report.adviceList.length > 0">
+        <text class="sub-title">三条行动建议</text>
+        <text v-for="(adv, idx) in report.adviceList" :key="idx" class="para-item">{{ idx + 1 }}. {{ adv }}</text>
+      </view>
+    </view>
+
+    <!-- 6. 四维能力模型 -->
+    <view v-if="report.abilityList.length > 0" class="sec-card">
+      <text class="sec-title">四维能力解读</text>
+      <view v-for="(ab, idx) in report.abilityList" :key="idx" class="item-box">
+        <view class="bar-head">
+          <text class="item-title">{{ ab.abilityName }}</text>
+          <text class="bar-val">{{ ab.value }}</text>
+        </view>
+        <text v-if="ab.gradeSummary.length > 0" class="item-sub">{{ ab.gradeSummary }}</text>
+        <text v-if="ab.desp.length > 0" class="body-text">{{ ab.desp }}</text>
+      </view>
+    </view>
+
+    <!-- 7. 同天赋名人堂 & 天赋剧场 -->
+    <view v-if="peopleList.length > 0" class="sec-card">
+      <text class="sec-title">同天赋名人堂</text>
+      <view v-for="(p, idx) in peopleList" :key="idx" class="item-box">
+        <view class="item-row">
+          <image v-if="p.img.length > 0" class="item-cover" :src="p.img" mode="aspectFill" />
+          <view class="item-main">
+            <text class="item-title">{{ p.name }}</text>
+            <text v-if="p.title.length > 0" class="item-sub">{{ p.title }}</text>
+            <text v-if="p.quote.length > 0" class="dim-text">{{ p.quote }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="episodeList.length > 0" class="sec-card">
+      <text class="sec-title">天赋剧场</text>
+      <view v-for="(ep, idx) in episodeList" :key="idx" class="item-box">
+        <view class="item-row">
+          <image v-if="ep.img.length > 0" class="item-cover" :src="ep.img" mode="aspectFill" />
+          <view class="item-main">
+            <text class="item-title">{{ ep.title }}</text>
+            <text v-if="ep.subtitle.length > 0" class="dim-text">{{ ep.subtitle }}</text>
+            <text v-if="ep.duration.length > 0" class="item-sub">{{ ep.duration }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getApiOrigin } from '../../config/environment.uts'
+import { talentAvatarFile } from '../../api/talent.uts'
+import { FullTalentReport, TalentEpisodeItem, TalentPersonItem } from '../../api/talent-types.uts'
+
+const props = defineProps<{
+  report: FullTalentReport
+  nickname: string
+}>()
+
+const heroImg = computed((): string => {
+  const cfg = props.report.config
+  if (cfg != null && cfg.badgeImg.length > 0) return cfg.badgeImg
+  return getApiOrigin() + '/static/dayu/assets/ip/ring-' + talentAvatarFile(props.report.talent) + '.png'
+})
+const configElement = computed((): string => {
+  const cfg = props.report.config
+  if (cfg == null) return ''
+  if (cfg.element.length > 0 && cfg.beast.length > 0) return cfg.element + ' · ' + cfg.beast
+  return cfg.element
+})
+const comboLabel = computed((): string => {
+  const parts: string[] = []
+  if (props.report.checkTalent.length > 0) parts.push(props.report.checkTalent)
+  if (props.report.comboTypeName.length > 0) parts.push(props.report.comboTypeName)
+  if (props.report.talentTypeName.length > 0) parts.push(props.report.talentTypeName)
+  return parts.join(' · ')
+})
+const sloganText = computed((): string => props.report.config?.slogan ?? '')
+const peopleList = computed((): TalentPersonItem[] => props.report.config?.people ?? [])
+const episodeList = computed((): TalentEpisodeItem[] => props.report.config?.eps ?? [])
+
+function attrPercent(val: number): number {
+  if (val <= 0) return 0
+  if (val <= 7) return Math.round(val / 7 * 100)
+  return Math.min(100, val)
+}
+</script>
+
+<style lang="scss" scoped>
+@import './report-sections.scss';
+</style>

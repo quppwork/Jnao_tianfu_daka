@@ -1,0 +1,237 @@
+<template>
+  <view class="rela-page">
+    <view class="top" :style="{ marginTop: topInset + 'px' }">
+      <view class="back" @click="goBack"><text class="back-icon">‹</text></view>
+      <text class="top-title">关系天赋合测</text>
+      <view class="spacer"></view>
+    </view>
+    <scroll-view class="scroll" direction="vertical">
+      <view class="body">
+        <view class="card">
+          <text class="hero-title">双人关系匹配分析</text>
+          <text class="hero-sub">基于双方已完成的天赋测评，从支持度、互补度、沟通度、和谐度四个维度生成深度解读。</text>
+        </view>
+
+        <view class="card">
+          <text class="sec-label">1. 选择关系类型</text>
+          <view class="chip-row">
+            <view class="chip" :class="{ 'chip-active': rela == 3 }" @click="selectRela(3)">
+              <text class="chip-text" :class="{ 'chip-text-active': rela == 3 }">亲子关系</text>
+            </view>
+            <view class="chip" :class="{ 'chip-active': rela == 1 }" @click="selectRela(1)">
+              <text class="chip-text" :class="{ 'chip-text-active': rela == 1 }">事业关系</text>
+            </view>
+            <view class="chip" :class="{ 'chip-active': rela == 2 }" @click="selectRela(2)">
+              <text class="chip-text" :class="{ 'chip-text-active': rela == 2 }">情感关系</text>
+            </view>
+          </view>
+        </view>
+
+        <view v-if="rela == 3" class="card">
+          <text class="sec-label">2. 选择合测的孩子</text>
+          <text v-if="loadingChildren" class="dim">正在加载孩子档案…</text>
+          <text v-else-if="children.length == 0" class="dim">暂未绑定孩子档案，可输入好友用户 ID 进行合测。</text>
+          <view
+            v-for="ch in children"
+            :key="ch.childId"
+            class="child-card"
+            :class="{ 'child-card-active': selectedChildId == ch.childId }"
+            @click="selectedChildId = ch.childId"
+          >
+            <view>
+              <text class="child-name">{{ ch.nickname.length > 0 ? ch.nickname : ('孩子 #' + ch.childId.toString()) }}</text>
+              <text class="child-meta">{{ ch.talent.length > 0 ? ('天赋：' + ch.talent) : '尚未完成儿童天赋测评' }}</text>
+            </view>
+            <text :class="ch.hasTest == 1 ? 'badge-ok' : 'badge-warn'">{{ ch.hasTest == 1 ? '可合测' : '去测评' }}</text>
+          </view>
+        </view>
+
+        <view v-if="rela != 3 || children.length == 0" class="card">
+          <text class="sec-label">{{ rela == 3 ? '或输入对方用户 ID' : '2. 输入好友用户 ID' }}</text>
+          <input
+            v-model="friendIdText"
+            class="input-box"
+            type="number"
+            placeholder="请输入已完成成人天赋测评的好友 ID"
+          />
+        </view>
+
+        <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
+        <button class="primary" :loading="submitting" :disabled="submitting" @click="submit">生成关系合测报告</button>
+
+        <view class="card" style="margin-top: 16px;">
+          <text class="sec-label">历史关系报告</text>
+          <text v-if="loadingHistory" class="dim">加载中…</text>
+          <text v-else-if="history.length == 0" class="dim">暂无关系测评记录</text>
+          <view v-for="item in history" :key="item.id" class="hist-item" @click="openReport(item.id)">
+            <view>
+              <text class="child-name">{{ item.friendNickname.length > 0 ? item.friendNickname : '合测对象' }} · {{ item.relaText }}</text>
+              <text class="child-meta">{{ item.friendTalent }} · {{ item.createdAt }}</text>
+            </view>
+            <text class="hist-score">{{ item.scorePreview }}% ›</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import {
+  getRelationChildInfo,
+  listRelationAssessments,
+  submitRelationAssessment
+} from '../../api/talent.uts'
+import {
+  parseParentChildrenRows,
+  parseRelationChildOption,
+  parseRelationList,
+  parseRelationSubmitResult
+} from '../../api/talent-parsers.uts'
+import {
+  RelationChildOption,
+  RelationListItem
+} from '../../api/talent-types.uts'
+import { listChildren } from '../../api/parent.uts'
+import { getSession } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const topInset = ref(0)
+const rela = ref(3)
+const selectedChildId = ref(0)
+const friendIdText = ref('')
+const children = ref<RelationChildOption[]>([])
+const loadingChildren = ref(false)
+const history = ref<RelationListItem[]>([])
+const loadingHistory = ref(false)
+const submitting = ref(false)
+const errorText = ref('')
+
+function selectRela(r: number) {
+  rela.value = r
+  if (r != 3) selectedChildId.value = 0
+  errorText.value = ''
+}
+
+async function loadChildrenList() {
+  const session = getSession()
+  if (session == null || session.role != 'parent') return
+  loadingChildren.value = true
+  try {
+    const resp = await listChildren()
+    const rows = parseParentChildrenRows(resp)
+    const list: RelationChildOption[] = []
+    for (let i = 0; i < rows.length; i++) {
+      const cid = rows[i].getNumber('id') ?? 0
+      if (cid <= 0) continue
+      try {
+        const infoResp = await getRelationChildInfo(cid)
+        list.push(parseRelationChildOption(infoResp))
+      } catch (_e) {
+        list.push({
+          childId: cid,
+          nickname: rows[i].getString('nickname') ?? '',
+          gender: 0,
+          talent: '',
+          hasTest: 0,
+          testId: 0
+        })
+      }
+    }
+    children.value = list
+    if (list.length > 0 && selectedChildId.value == 0) {
+      selectedChildId.value = list[0].childId
+    }
+  } catch (_e) {
+    children.value = []
+  } finally {
+    loadingChildren.value = false
+  }
+}
+
+async function loadHistory() {
+  loadingHistory.value = true
+  try {
+    const resp = await listRelationAssessments()
+    history.value = parseRelationList(resp)
+  } catch (_e) {
+    history.value = []
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+function openReport(id: number) {
+  uni.navigateTo({ url: '/pages/talent/relation-report?id=' + id.toString() })
+}
+
+async function submit() {
+  if (submitting.value) return
+  errorText.value = ''
+  const targetChildId = rela.value == 3 ? selectedChildId.value : 0
+  const parsedFriend = parseInt(friendIdText.value.trim())
+  const friendUid = targetChildId > 0 || isNaN(parsedFriend) ? 0 : parsedFriend
+  if (targetChildId <= 0 && friendUid <= 0) {
+    errorText.value = rela.value == 3 ? '请选择孩子或输入好友用户 ID' : '请输入好友用户 ID'
+    return
+  }
+  submitting.value = true
+  try {
+    const resp = await submitRelationAssessment(rela.value, friendUid, targetChildId)
+    const parsed = parseRelationSubmitResult(resp)
+    if (parsed.needSex) {
+      uni.showModal({
+        title: '请先完善性别',
+        content: '关系合测需要双方性别信息，请先在家长资料中设置性别。',
+        confirmText: '去设置',
+        success: (r) => { if (r.confirm) uni.navigateTo({ url: '/pages/parent/profile' }) }
+      })
+      return
+    }
+    if (parsed.needChildTest) {
+      uni.showModal({
+        title: '孩子尚未完成测评',
+        content: '请先为该孩子完成一次儿童天赋测评，再发起亲子合测。',
+        confirmText: '去测评',
+        success: (r) => {
+          if (r.confirm) {
+            uni.navigateTo({ url: '/pages/talent/child-form?child_id=' + parsed.childId.toString() })
+          }
+        }
+      })
+      return
+    }
+    if (parsed.id <= 0) {
+      errorText.value = parsed.message.length > 0 ? parsed.message : '生成关系报告失败'
+      return
+    }
+    loadHistory()
+    openReport(parsed.id)
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '提交关系合测失败'
+  } finally {
+    submitting.value = false
+  }
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+onLoad((options) => {
+  const r = parseInt(options['rela'] ?? '')
+  if (!isNaN(r) && (r == 1 || r == 2 || r == 3)) rela.value = r
+  const fid = options['friend_user_id'] ?? ''
+  if (fid.length > 0) friendIdText.value = fid
+  loadChildrenList()
+  loadHistory()
+})
+
+onReady(() => {
+  topInset.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './relation.scss';
+</style>

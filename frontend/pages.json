@@ -41,6 +41,13 @@
         "navigationBarTitleText": "微信登录",
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/guardian/index",
+      "style": {
+        "navigationBarTitleText": "家长关联",
+        "navigationStyle": "custom"
+      }
     }
   ],
   "subPackages": [
@@ -119,6 +126,27 @@
             "navigationBarTitleText": "家长资料",
             "navigationStyle": "custom"
           }
+        },
+        {
+          "path": "community",
+          "style": {
+            "navigationBarTitleText": "天赋社区",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "consult",
+          "style": {
+            "navigationBarTitleText": "在线咨询",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "pdata",
+          "style": {
+            "navigationBarTitleText": "数据分析",
+            "navigationStyle": "custom"
+          }
         }
       ]
     },
@@ -129,6 +157,34 @@
           "path": "index",
           "style": {
             "navigationBarTitleText": "天赋测试",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "child-form",
+          "style": {
+            "navigationBarTitleText": "孩子测评信息",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "supplement",
+          "style": {
+            "navigationBarTitleText": "迷者补充测试",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "relation",
+          "style": {
+            "navigationBarTitleText": "关系天赋合测",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "relation-report",
+          "style": {
+            "navigationBarTitleText": "关系合测报告",
             "navigationStyle": "custom"
           }
         },

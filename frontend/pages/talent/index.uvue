@@ -8,21 +8,37 @@
     <scroll-view class="content" direction="vertical">
       <view class="body">
         <view v-if="phase == 'intro'" class="intro-card">
-          <text class="hero-icon">👨‍👧</text>
-          <text class="title">家长代测 · 儿童版</text>
-          <text class="muted copy">35 道快答题。请家长根据孩子平时的真实表现作答，凭第一反应选择。</text>
-          <view class="notice">
-            <text class="notice-text">未满 18 岁的孩子请由家长代测。孩子本人作答或凭想象选择会影响结果。</text>
+          <view v-if="draftId == 0" class="mode-tabs">
+            <view class="mode-tab mode-tab-first" :class="{ 'mode-tab-active': testType == 2 }" @click="switchMode(2)">
+              <text class="mode-tab-text" :class="{ 'mode-tab-text-active': testType == 2 }">家长代测 · 儿童</text>
+            </view>
+            <view class="mode-tab" :class="{ 'mode-tab-active': testType == 1 }" @click="switchMode(1)">
+              <text class="mode-tab-text" :class="{ 'mode-tab-text-active': testType == 1 }">成人自评</text>
+            </view>
           </view>
-          <button class="primary intro-action" @click="start">我是家长 · 开始答题</button>
+
+          <text class="hero-icon">{{ testType == 1 ? '🧭' : '👨‍👧' }}</text>
+          <text class="title">{{ modeTitle }}</text>
+          <text class="muted copy">{{ modeDesc }}</text>
+          <view class="notice">
+            <text class="notice-text">{{ modeNotice }}</text>
+          </view>
+          <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
+          <button class="primary intro-action" :loading="loadingQuestions" :disabled="loadingQuestions" @click="handleStart">
+            {{ startButtonText }}
+          </button>
+          <button v-if="draftId == 0" class="relation-entry" @click="openRelation">关系合测 · 事业 / 情感 / 亲子</button>
           <button class="secondary intro-action" @click="goBack">稍后再说</button>
         </view>
 
         <view v-if="phase == 'quiz'">
           <view class="progress-row">
-            <text class="progress-mode">家长代测 · 儿童版</text>
+            <text class="progress-mode">{{ modeShort }}</text>
             <view class="track total-track"><view class="progress-fill" :style="{ width: progressPercent + '%' }"></view></view>
             <text class="muted">{{ questionNumber }}/{{ total }}</text>
+          </view>
+          <view v-if="tipBanner.length > 0" class="tip-toast">
+            <text class="tip-toast-text">💬 {{ tipBanner }}</text>
           </view>
           <view v-if="cursor > 0 && !undoing" class="undo" @click="undo">
             <text class="undo-text">上一题「{{ previousQuestion }}」</text><text class="history-link">↩ 点击撤回</text>
@@ -36,26 +52,27 @@
                 <view class="track"><view class="progress-fill" :style="{ width: timePercent + '%' }"></view></view>
               </view>
             </view>
-            <text class="question">🧒 {{ question }}</text>
+            <text class="question">{{ testType == 1 ? '✨ ' : '🧒 ' }}{{ questionText }}</text>
             <text v-if="undoing" class="muted">上次选择：{{ previousChoice }}</text>
             <view class="answers">
               <button class="primary answer-button answer-first" @click="answer('1')">完全符合</button>
               <button class="secondary answer-button" @click="answer('0')">有差异</button>
             </view>
           </view>
-          <text class="footnote">按孩子真实表现作答，不美化、不苛求。</text>
+          <text class="footnote">{{ testType == 1 ? '凭第一直觉作答，不反复权衡。' : '按孩子真实表现作答，不美化、不苛求。' }}</text>
         </view>
 
         <view v-if="phase == 'complete'" class="complete">
           <text class="done-check">✓</text>
           <text class="title">35 题已完成</text>
-          <text class="muted copy">测评服务将生成专属天赋解读。</text>
+          <text class="muted copy">正在为您连接天赋测评引擎生成完整解读。</text>
           <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
-          <button v-if="assessmentId == 0" class="primary complete-action" :loading="submitting" :disabled="submitting" @click="submit">生成报告</button>
-          <button v-else class="primary complete-action" @click="openSubmittedReport">查看报告</button>
+          <button v-if="assessmentId == 0" class="primary complete-action" :loading="submitting" :disabled="submitting" @click="submit">生成完整报告</button>
+          <button v-else class="primary complete-action" @click="openSubmittedTarget">查看结果</button>
         </view>
       </view>
     </scroll-view>
+
     <view v-if="showHistory" class="overlay" @click="closeHistory">
       <view class="sheet" @click.stop>
         <view class="row"><text class="title">历史报告</text><text class="history-link" @click="closeHistory">关闭</text></view>
@@ -66,8 +83,12 @@
             <button class="secondary" @click="loadHistory">重试</button>
           </view>
           <text v-else-if="history.length == 0" class="muted history-empty">暂无历史报告</text>
-          <view v-for="item in history" :key="item.id" class="history-item" @click="openReport(item.id)">
-            <view><text class="name">{{ item.talent }}</text><text class="muted">{{ item.mode }}测评</text></view>
+          <view v-for="item in history" :key="item.id" class="history-item" @click="openHistoryItem(item)">
+            <view>
+              <text class="name">{{ item.talent }}{{ item.checkTalent.length > 0 ? ' · ' + item.checkTalent : '' }}</text>
+              <text class="muted">{{ item.mode }}测评</text>
+              <text v-if="item.isMihai == 1" class="mihai-tag">待完成补充测试 ›</text>
+            </view>
             <text class="muted">{{ item.date }} ›</text>
           </view>
         </scroll-view>
@@ -77,39 +98,102 @@
 </template>
 
 <script setup lang="uts">
-import { childQuestions } from './questions.uts'
-import { orderQuestions, readAssessmentHistory, submitChildAssessment } from './assessment.uts'
+import {
+  AssessmentEntry,
+  loadQuestionsFromServer,
+  orderQuestions,
+  readAssessmentHistory,
+  submitAlignedAssessment
+} from './assessment.uts'
+import { TalentQuestionItem } from '../../api/talent-types.uts'
 import { getPageTopInset } from '../../utils/layout.uts'
 
-const total = childQuestions.length
+const testType = ref(2) // 1=成人, 2=儿童
+const questionType = ref(2) // 1=成人, 2=儿童(6-9岁), 3=少年(10-16岁)
+const draftId = ref(0)
+const sex = ref(0)
+const age = ref(0)
+
+const questions = ref<TalentQuestionItem[]>([])
+const loadingQuestions = ref(false)
 const phase = ref('intro')
 const cursor = ref(0)
-const order = ref([])
-const answers = ref([])
+const order = ref<number[]>([])
+const answers = ref<string[]>([])
 const undoing = ref(false)
 const left = ref(60)
+const tipBanner = ref('')
 const topInset = ref(0)
 const historyHeight = ref(320)
 const submitting = ref(false)
 const assessmentId = ref(0)
+const submittedIsMihai = ref(0)
 const reportMessage = ref('')
 const errorText = ref('')
 let deadline = 0
 let timer = 0
 
-const index = computed(() => undoing.value ? cursor.value - 1 : cursor.value)
-const question = computed(() => childQuestions[order.value[index.value] ?? 0])
-const questionNumber = computed(() => index.value + 1)
-const progressPercent = computed(() => questionNumber.value / total * 100)
-const previousQuestion = computed(() => (childQuestions[order.value[cursor.value - 1] ?? 0] ?? '').slice(0, 14) + '…')
-const previousChoice = computed(() => answers.value[order.value[cursor.value - 1] ?? 0] == '1' ? '完全符合' : '有差异')
-const timePercent = computed(() => left.value / (undoing.value ? 5 : 60) * 100)
-const hint = computed(() => undoing.value ? '5 秒内可修改上一题' : (left.value == 0 ? '慢慢想，按真实表现作答' : '家长朋友，想一想孩子平时的表现'))
+const total = computed((): number => questions.value.length > 0 ? questions.value.length : 35)
+const index = computed((): number => undoing.value ? cursor.value - 1 : cursor.value)
+const currentItem = computed((): TalentQuestionItem | null => {
+  if (questions.value.length == 0) return null
+  const idx = order.value[index.value] ?? 0
+  return idx >= 0 && idx < questions.value.length ? questions.value[idx] : null
+})
+const questionText = computed((): string => currentItem.value?.content ?? '')
+const questionNumber = computed((): number => index.value + 1)
+const progressPercent = computed((): number => questionNumber.value / total.value * 100)
+const previousQuestion = computed((): string => {
+  if (questions.value.length == 0 || cursor.value <= 0) return ''
+  const prevIdx = order.value[cursor.value - 1] ?? 0
+  const text = prevIdx >= 0 && prevIdx < questions.value.length ? questions.value[prevIdx].content : ''
+  return text.slice(0, 14) + '…'
+})
+const previousChoice = computed((): string => {
+  const prevIdx = order.value[cursor.value - 1] ?? 0
+  return answers.value[prevIdx] == '1' ? '完全符合' : '有差异'
+})
+const timePercent = computed((): number => left.value / (undoing.value ? 5 : 60) * 100)
+const hint = computed((): string => {
+  if (undoing.value) return '5 秒内可修改上一题'
+  if (left.value == 0) return '慢慢想，按真实表现作答'
+  return testType.value == 1 ? '请凭第一直觉选择最符合自己的选项' : '家长朋友，想一想孩子平时的真实表现'
+})
+
+const modeTitle = computed((): string => {
+  if (testType.value == 1) return '成人天赋自评'
+  if (draftId.value > 0) return questionType.value == 3 ? '家长代测 · 少年卷（10–16岁）' : '家长代测 · 儿童卷（6–9岁）'
+  return '家长代测 · 儿童 / 少年版'
+})
+const modeShort = computed((): string => {
+  if (testType.value == 1) return '成人自评'
+  return questionType.value == 3 ? '少年卷 · 家长代测' : '儿童卷 · 家长代测'
+})
+const modeDesc = computed((): string => {
+  if (testType.value == 1) return '35 道快答题，探索你的主副天赋、能量状态、核心能力与人生建议。'
+  return '35 道快答题。请家长先填写孩子年龄与学习情况，再按真实表现作答。'
+})
+const modeNotice = computed((): string => {
+  if (testType.value == 1) return '请由本人独立作答，无需追求“标准答案”，真实反应才能测出准确天赋。'
+  return '未满 18 岁的孩子请由家长代测，系统会根据年龄自动分配 6–9 岁儿童卷或 10–16 岁少年卷。'
+})
+const startButtonText = computed((): string => {
+  if (testType.value == 1) return '开始成人 35 题测评'
+  if (draftId.value > 0) return '开始 35 题作答'
+  return '填写孩子信息 · 开始测评'
+})
 
 const showHistory = ref(false)
-const history = ref([])
+const history = ref<AssessmentEntry[]>([])
 const historyLoading = ref(false)
 const historyError = ref('')
+
+function switchMode(t: number) {
+  if (draftId.value > 0) return
+  testType.value = t
+  questionType.value = t == 1 ? 1 : 2
+  errorText.value = ''
+}
 
 function stopTimer() {
   if (timer != 0) clearInterval(timer)
@@ -128,36 +212,67 @@ function tick() {
   }
 }
 
-function startTimer(seconds) {
+function startTimer(seconds: number) {
   stopTimer()
   left.value = seconds
   deadline = Date.now() + seconds * 1000
   timer = setInterval(tick, 250)
 }
 
-function start() {
-  order.value = orderQuestions(total)
-  const empty= []
-  for (let i = 0; i < total; i++) empty.push('')
-  answers.value = empty
-  cursor.value = 0
-  undoing.value = false
-  phase.value = 'quiz'
-  startTimer(60)
+async function beginQuiz() {
+  if (loadingQuestions.value) return
+  loadingQuestions.value = true
+  errorText.value = ''
+  try {
+    const qType = testType.value == 1 ? 1 : questionType.value
+    const loaded = await loadQuestionsFromServer(qType)
+    questions.value = loaded
+    order.value = orderQuestions(loaded.length)
+    const empty: string[] = []
+    for (let i = 0; i < loaded.length; i++) empty.push('')
+    answers.value = empty
+    cursor.value = 0
+    undoing.value = false
+    tipBanner.value = ''
+    phase.value = 'quiz'
+    startTimer(60)
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '题库加载失败，请重试'
+  } finally {
+    loadingQuestions.value = false
+  }
+}
+
+function handleStart() {
+  if (testType.value == 2 && draftId.value <= 0) {
+    uni.navigateTo({ url: '/pages/talent/child-form' })
+    return
+  }
+  beginQuiz()
+}
+
+function openRelation() {
+  uni.navigateTo({ url: '/pages/talent/relation' })
 }
 
 function undo() {
   if (cursor.value == 0 || undoing.value) return
   undoing.value = true
+  tipBanner.value = ''
   startTimer(5)
 }
 
-function answer(value) {
+function answer(value: string) {
   if (phase.value != 'quiz') return
-  answers.value[order.value[index.value]] = value
+  const item = currentItem.value
+  const targetIdx = order.value[index.value] ?? 0
+  answers.value[targetIdx] = value
+  if (item != null) {
+    tipBanner.value = value == '1' ? item.tipYes : item.tipNo
+  }
   if (undoing.value) undoing.value = false
   else cursor.value += 1
-  if (cursor.value < total) {
+  if (cursor.value < total.value) {
     startTimer(60)
   } else {
     stopTimer()
@@ -169,13 +284,24 @@ function closeHistory() {
   showHistory.value = false
 }
 
-function openReport(id, message) {
+function openTarget(id: number, isMihai: number, itemTestType: number, message: string) {
   closeHistory()
-  uni.navigateTo({ url: '/pages/report/index?assessment_id=' + id.toString() + '&notice=' + encodeURIComponent(message) })
+  if (isMihai == 1) {
+    uni.navigateTo({
+      url: '/pages/talent/supplement?assessment_id=' + id.toString() + '&test_type=' + itemTestType.toString()
+    })
+    return
+  }
+  const suffix = message.length > 0 ? '&notice=' + encodeURIComponent(message) : ''
+  uni.navigateTo({ url: '/pages/report/index?assessment_id=' + id.toString() + suffix })
 }
 
-function openSubmittedReport() {
-  openReport(assessmentId.value, reportMessage.value)
+function openHistoryItem(item: AssessmentEntry) {
+  openTarget(item.id, item.isMihai, item.testType, '')
+}
+
+function openSubmittedTarget() {
+  openTarget(assessmentId.value, submittedIsMihai.value, testType.value, reportMessage.value)
 }
 
 async function submit() {
@@ -183,10 +309,11 @@ async function submit() {
   submitting.value = true
   errorText.value = ''
   try {
-    const data = await submitChildAssessment(answers.value)
-    assessmentId.value = data.getNumber('assessment_id') ?? 0
-    reportMessage.value = data.getString('lock_message') ?? ''
-    openSubmittedReport()
+    const res = await submitAlignedAssessment(answers.value, testType.value, sex.value, age.value, draftId.value)
+    assessmentId.value = res.assessmentId
+    submittedIsMihai.value = res.isMihai
+    reportMessage.value = res.lockMessage
+    openSubmittedTarget()
   } catch (error) {
     errorText.value = error instanceof Error ? error.message : '生成报告失败，请重试'
   } finally {
@@ -224,6 +351,28 @@ function goBack() {
     success: (result) => { if (result.confirm) uni.navigateBack() }
   })
 }
+
+onLoad((options) => {
+  const modeParam = options['mode'] ?? ''
+  if (modeParam == 'adult') {
+    testType.value = 1
+    questionType.value = 1
+  } else if (modeParam == 'child') {
+    testType.value = 2
+  }
+  const dId = parseInt(options['draft_id'] ?? '')
+  if (!isNaN(dId) && dId > 0) draftId.value = dId
+  const qType = parseInt(options['question_type'] ?? '')
+  if (!isNaN(qType) && (qType == 1 || qType == 2 || qType == 3)) questionType.value = qType
+  const s = parseInt(options['sex'] ?? '')
+  if (!isNaN(s) && (s == 1 || s == 2)) sex.value = s
+  const a = parseInt(options['age'] ?? '')
+  if (!isNaN(a) && a > 0) age.value = a
+
+  if (draftId.value > 0) {
+    beginQuiz()
+  }
+})
 
 onReady(() => {
   topInset.value = getPageTopInset()

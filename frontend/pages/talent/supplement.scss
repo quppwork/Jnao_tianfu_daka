@@ -1,0 +1,22 @@
+@import '../../styles/dayu-theme.scss';
+
+.supp-page, .scroll { display: flex; flex: 1; flex-direction: column; }
+.supp-page { background-color: $dy-bg; background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg); }
+.top { display: flex; flex-direction: row; align-items: center; padding: 8px 14px 10px; }
+.back, .spacer { width: 34px; height: 34px; }
+.back { border-radius: 17px; background-color: $dy-card; border: 1px solid $dy-border; align-items: center; justify-content: center; }
+.back-icon { color: $dy-muted; font-size: 28px; line-height: 28px; }
+.top-title { flex: 1; text-align: center; color: $dy-text; font-size: 17px; font-weight: 800; }
+.body { padding: 8px 16px 32px; }
+.banner, .card { display: flex; flex-direction: column; background-color: $dy-card; border: 1.5px solid $dy-border; border-radius: 20px; padding: 18px 16px; margin-bottom: 14px; }
+.banner { border-color: $dy-gold-border; background-color: $dy-gold-bg; }
+.banner-title { color: $dy-gold-bright; font-size: 18px; font-weight: 900; }
+.banner-sub { color: $dy-text-body; font-size: 13px; margin-top: 6px; line-height: 20px; }
+.round-pill { align-self: flex-start; padding: 4px 10px; border-radius: 8px; background-color: rgba(46, 107, 230, 0.16); color: #8fb4ff; font-size: 12px; font-weight: 800; margin-bottom: 12px; }
+.q-title { color: $dy-text; font-size: 18px; font-weight: 800; line-height: 28px; margin-bottom: 16px; }
+.opt-btn { display: flex; flex-direction: row; align-items: center; padding: 14px 14px; border-radius: 14px; background-color: $dy-bubble; border: 1.5px solid $dy-border; margin-bottom: 10px; }
+.opt-code { width: 28px; height: 28px; border-radius: 14px; background-color: $dy-gold-bg; color: $dy-gold-bright; font-size: 13px; font-weight: 900; text-align: center; line-height: 28px; margin-right: 10px; }
+.opt-label { flex: 1; color: $dy-text-body; font-size: 14px; line-height: 21px; }
+.dim { color: $dy-muted; font-size: 13px; }
+.error { color: $dy-danger; font-size: 13px; margin-bottom: 10px; }
+.secondary { margin-top: 8px; min-height: 44px; border-radius: 14px; background-color: $dy-bubble; border: 1px solid $dy-border; color: $dy-muted; font-size: 14px; font-weight: 700; }
