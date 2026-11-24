@@ -96,6 +96,7 @@
       <text v-if="errorText.length > 0" class="ac-error">{{ errorText }}</text>
       <view class="ac-bottom-space"></view>
     </scroll-view>
+    <dayu-tab-bar role="student" active="academy" />
   </view>
 </template>
 

@@ -123,6 +123,8 @@
       <view class="tr-bottom-space"></view>
     </scroll-view>
 
+    <dayu-tab-bar role="student" active="train" />
+
     <!-- 打卡弹窗 -->
     <view v-if="checkinOpen" class="tr-mask" @click="closeCheckin">
       <view class="tr-sheet" @click.stop>

@@ -1,8 +1,11 @@
+@import '../../styles/dayu-theme.scss';
+
 .history-page, .history-scroll {
   display: flex;
   flex: 1;
   flex-direction: column;
-  background-color: #0b111e;
+  background-color: $dy-bg;
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
 }
 .history-nav, .record-head, .detail-head, .detail-field {
   display: flex;
@@ -23,19 +26,19 @@
   width: 36px;
   height: 36px;
   border-radius: 18px;
-  background-color: rgba(0, 210, 255, 0.08);
-  border: 1px solid rgba(0, 210, 255, 0.2);
+  background-color: $dy-green-bg;
+  border: 1px solid $dy-green-border;
 }
 .back-glyph {
-  color: #8b949e;
+  color: $dy-green;
   font-size: 30px;
   line-height: 30px;
 }
 .nav-title {
   flex: 1;
-  color: #ffffff;
+  color: $dy-text;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 800;
   text-align: center;
 }
 .nav-refresh {

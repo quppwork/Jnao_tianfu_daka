@@ -84,6 +84,7 @@
         </view>
       </view>
     </scroll-view>
+    <dayu-tab-bar role="student" active="console" />
   </view>
 </template>
 

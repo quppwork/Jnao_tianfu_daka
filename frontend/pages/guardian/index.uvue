@@ -1,0 +1,257 @@
+<template>
+  <view class="guardian-page">
+    <view class="guardian-nav" :style="{ marginTop: insetTop + 'px' }">
+      <view v-if="canGoBack" class="nav-back" @click="goBack"><text class="back-glyph">‹</text></view>
+      <view v-else class="nav-spacer"></view>
+      <text class="nav-title">家长关联</text>
+      <view class="nav-action" @click="handleLogout"><text class="nav-action-text">退出</text></view>
+    </view>
+
+    <scroll-view class="guardian-scroll" scroll-y :show-scrollbar="false">
+      <view class="guardian-body">
+        <view class="status-card">
+          <view class="status-head">
+            <text class="status-title">关联状态</text>
+            <text class="status-badge" :class="isLinked ? 'badge-linked' : 'badge-unlinked'">
+              {{ isLinked ? '已关联家长' : '尚未关联家长' }}
+            </text>
+          </view>
+          <text class="status-desc" v-if="isLinked">
+            已与家长账号建立关联，可正常使用今日修炼、学科答疑与天赋测评。
+          </text>
+          <text class="status-desc" v-else>
+            请生成 8 位关联码，交由家长在「我的 → 孩子账户管理 → 关联已有孩子」中输入绑定。完成绑定后即可使用完整学习功能。
+          </text>
+        </view>
+
+        <!-- 未关联：生成关联码 -->
+        <view v-if="!isLinked" class="action-card">
+          <template v-if="generatedCode.length > 0">
+            <text class="code-label">请家长在有效期内输入</text>
+            <text class="code-display">{{ formattedCode }}</text>
+            <text class="code-timer">剩余有效期 {{ remainingText }}</text>
+            <view class="code-actions">
+              <button class="btn-secondary" :disabled="busy" @click="copyCode">复制关联码</button>
+              <button class="btn-secondary btn-gap" :disabled="busy" @click="generate">重新生成</button>
+            </view>
+            <text class="code-hint">生成新码会立即作废旧码，输入时无需空格和分隔符，请仅交给信任的家长。</text>
+          </template>
+          <template v-else>
+            <button class="btn-primary" :loading="busy" :disabled="busy" @click="generate">
+              {{ busy ? '生成中…' : '生成 8 位关联码' }}
+            </button>
+            <text class="code-hint">关联码 10 分钟内有效，仅用于绑定家长账号。</text>
+          </template>
+
+          <button class="btn-ghost" :disabled="busy" @click="refreshStatus">
+            家长绑定后，点此刷新状态
+          </button>
+        </view>
+
+        <!-- 已关联：进入首页 / 解除关联 -->
+        <view v-else class="action-card">
+          <button class="btn-primary" :disabled="busy" @click="enterHome">进入大宇 AI</button>
+          <button class="btn-danger" :loading="busy" :disabled="busy" @click="confirmUnlink">
+            {{ busy ? '解除中…' : '解除家长关联' }}
+          </button>
+          <text class="code-hint">
+            解除后家长将失去查看权限，你的账号、测评与训练记录会完整保留；再次使用训练/答疑/测评前需重新关联家长。
+          </text>
+          <button class="btn-ghost" :disabled="busy" @click="refreshStatus">刷新关联状态</button>
+        </view>
+
+        <view v-if="errorText.length > 0" class="error-box">
+          <text class="error-text">{{ errorText }}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { createGuardianCode, logout, unbindMyGuardian } from '../../api/auth.uts'
+import { getApiErrorCode, isUncertainError } from '../../network/request.uts'
+import { restoreSession } from '../../state/auth-actions.uts'
+import {
+  applyConfirmedGuardianUnlink,
+  familyState,
+  getSession,
+  returnToLogin
+} from '../../state/session.uts'
+import { formatGuardianCode, isGuardianCodeValid } from '../../utils/guardian-code.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const insetTop = ref(0)
+const canGoBack = ref(false)
+const busy = ref(false)
+const errorText = ref('')
+const generatedCode = ref('')
+const remaining = ref(0)
+let expiresAtMs = 0
+let timer = 0
+
+const isLinked = computed(() => familyState.value.guardianLinked)
+const formattedCode = computed(() => formatGuardianCode(generatedCode.value))
+const remainingText = computed(() => {
+  const min = Math.floor(remaining.value / 60).toString().padStart(2, '0')
+  const sec = (remaining.value % 60).toString().padStart(2, '0')
+  return min + ':' + sec
+})
+
+function stopTimer() {
+  if (timer != 0) {
+    clearInterval(timer)
+    timer = 0
+  }
+}
+
+function clearCode() {
+  stopTimer()
+  generatedCode.value = ''
+  expiresAtMs = 0
+  remaining.value = 0
+}
+
+function tick() {
+  remaining.value = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000))
+  if (remaining.value == 0) {
+    clearCode()
+    errorText.value = '关联码已过期，请重新生成'
+  }
+}
+
+async function generate() {
+  if (busy.value || isLinked.value) return
+  busy.value = true
+  errorText.value = ''
+  clearCode()
+  try {
+    const data = await createGuardianCode()
+    const code = data.getString('code') ?? ''
+    const expiry = Date.parse(data.getString('expires_at') ?? '')
+    if (!isGuardianCodeValid(code) || !Number.isFinite(expiry) || expiry <= Date.now()) {
+      errorText.value = '关联码响应无效，请重新生成'
+      return
+    }
+    generatedCode.value = code
+    expiresAtMs = expiry
+    tick()
+    timer = setInterval(tick, 1000)
+  } catch (error) {
+    if (getApiErrorCode(error) == 'already_linked') {
+      await restoreSession(true)
+      uni.showToast({ title: '已关联家长', icon: 'none' })
+      return
+    }
+    errorText.value = isUncertainError(error)
+      ? '操作结果尚未确认，请刷新关联状态后重试'
+      : (error instanceof Error ? error.message : '生成关联码失败')
+  } finally {
+    busy.value = false
+  }
+}
+
+function copyCode() {
+  if (busy.value || generatedCode.value.length == 0 || remaining.value <= 0) return
+  uni.setClipboardData({
+    data: generatedCode.value,
+    showToast: false,
+    success: () => uni.showToast({ title: '关联码已复制', icon: 'none' }),
+    fail: () => uni.showToast({ title: '复制失败，请手动记录', icon: 'none' })
+  })
+}
+
+async function refreshStatus() {
+  if (busy.value) return
+  busy.value = true
+  errorText.value = ''
+  try {
+    await restoreSession(true)
+    if (familyState.value.guardianLinked) {
+      clearCode()
+      uni.showToast({ title: '已关联家长', icon: 'none' })
+    } else {
+      uni.showToast({ title: '尚未检测到家长关联', icon: 'none' })
+    }
+  } finally {
+    busy.value = false
+  }
+}
+
+function confirmUnlink() {
+  if (busy.value || !isLinked.value) return
+  uni.showModal({
+    title: '解除家长关联？',
+    content: '解除后你的账号和历史数据会保留，但需重新绑定家长才能使用训练、答疑与测评功能。',
+    confirmText: '确认解除',
+    confirmColor: '#f87171',
+    success: (res) => {
+      if (res.confirm) doUnlink()
+    }
+  })
+}
+
+async function doUnlink() {
+  if (busy.value) return
+  busy.value = true
+  errorText.value = ''
+  try {
+    await unbindMyGuardian()
+    applyConfirmedGuardianUnlink(0)
+    clearCode()
+    uni.showToast({ title: '已解除家长关联', icon: 'none' })
+    restoreSession(true)
+  } catch (error) {
+    errorText.value = isUncertainError(error)
+      ? '操作结果尚未确认，请刷新关联状态后重试'
+      : (error instanceof Error ? error.message : '解除关联失败')
+  } finally {
+    busy.value = false
+  }
+}
+
+function enterHome() {
+  uni.reLaunch({ url: '/pages/home/index' })
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+async function handleLogout() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await logout()
+    returnToLogin()
+  } finally {
+    busy.value = false
+  }
+}
+
+onLoad(() => {
+  const session = getSession()
+  if (session == null) {
+    returnToLogin()
+    return
+  }
+  if (session.role != 'student') {
+    uni.reLaunch({ url: '/pages/parent/index' })
+    return
+  }
+  canGoBack.value = getCurrentPages().length > 1
+  restoreSession(true)
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+
+onUnload(() => {
+  clearCode()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './index.scss';
+</style>

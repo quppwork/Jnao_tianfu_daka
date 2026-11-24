@@ -1,138 +1,166 @@
 <template>
-  <scroll-view class="page" scroll-y :show-scrollbar="false">
-    <view class="home-top" :style="{ marginTop: insetTop + 'px' }">
-      <view v-if="isParent" class="parent-brand">
+  <view class="dy-home">
+    <!-- 顶部栏 -->
+    <view class="home-top" :style="{ paddingTop: insetTop + 'px' }">
+      <view v-if="isParent && !viewingChild" class="parent-brand">
         <text class="parent-title">大宇智能体</text>
         <text class="parent-subtitle">PARENT · 家长版</text>
       </view>
-      <text v-else class="student-label">学生账户</text>
-      <text class="home-user">{{ nickname.length > 0 ? nickname : '大宇 AI' }}</text>
-      <button class="logout-button" :disabled="saving || signingOut" @click="signOut">退出</button>
-    </view>
-    <view v-if="profileLoaded && (!isParent || parentReady)" class="home-hero" :style="{ height: heroHeight + 'px' }">
-      <template v-if="isParent">
-        <image class="hero-background" :src="assetBase + 'parent-team.jpg'" mode="aspectFit" />
-        <text class="team-tag">天赋导师团</text>
-        <view class="team-caption">
-          <text class="team-title">张宇老师 · 天赋导师团</text>
-          <text class="team-subtitle">不是一个人，是一支教育团队——陪孩子，也陪家长</text>
-        </view>
-      </template>
-      <template v-else>
-        <image class="hero-background" :src="assetBase + 'hero_bg.jpg'" mode="aspectFill" />
-        <image class="hero-teacher" :src="assetBase + '_zy-cut.png'" mode="heightFix" />
-        <image class="hero-cartoon" :src="assetBase + '_cartoon-cut.png'" mode="heightFix" />
-      </template>
-    </view>
-    <view v-if="profileLoaded && (!isParent || parentReady)" class="home-shortcuts">
-      <view class="home-shortcut" @click="openPage('/pages/guide/index')">
-        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-        <text class="shortcut-label">学科引导</text>
+      <view v-else-if="viewingChild" class="acct-chip" @click="backToParent">
+        <text class="acct-chip-text">{{ exitingChildView ? '切回中…' : '返回家长版' }}</text>
       </view>
-      <view class="home-shortcut" @click="openPage('/pages/solve/index')">
-        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-        <text class="shortcut-label">拍照解题</text>
+      <view v-else class="acct-chip" @click="openGuardian">
+        <text class="acct-chip-text">家长关联</text>
+      </view>
+      <text class="home-user">{{ nickname.length > 0 ? nickname : '大宇 AI' }}</text>
+      <view class="logout-chip" @click="signOut">
+        <text class="logout-chip-text">{{ signingOut ? '退出中' : '退出' }}</text>
+      </view>
+    </view>
+
+    <!-- 家长资料补全门控 / 加载失败状态 -->
+    <scroll-view v-if="!studentReady" class="gate-scroll" scroll-y>
+      <view class="gate-body">
+        <text v-if="loading" class="muted">正在读取账号信息…</text>
+        <text v-if="errorText.length > 0" class="error-text">{{ errorText }}</text>
+        <button v-if="!loading && !profileLoaded" class="ghost-btn" @click="loadProfile">重试</button>
+
+        <view v-if="profileLoaded && isParent && !parentReady" class="gate-card">
+          <text class="gate-title">{{ gateTitle }}</text>
+          <view v-if="nextStep == 'complete-profile' && gatePassed">
+            <text class="field-label">昵称</text>
+            <input v-model="nicknameInput" class="field-input" :maxlength="50" placeholder="请输入昵称" />
+            <text class="field-label">姓名</text>
+            <input v-model="realNameInput" class="field-input" :maxlength="50" placeholder="请输入姓名" />
+            <template v-if="needPassword">
+              <text class="field-label">登录密码</text>
+              <input v-model="passwordInput" class="field-input" password :maxlength="32" :placeholder="PASSWORD_HINT" />
+              <text class="field-label">确认密码</text>
+              <input v-model="confirmInput" class="field-input" password :maxlength="32" placeholder="再次输入密码" />
+            </template>
+            <button class="gold-btn" :disabled="saving" :loading="saving" @click="saveProfile">保存资料</button>
+          </view>
+          <template v-else>
+            <text class="muted">{{ gateHint }}</text>
+            <button class="ghost-btn" @click="exitToPasswordLogin">改用手机号密码登录</button>
+          </template>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 学生版原版大宇首页 -->
+    <template v-else>
+      <view class="home-hero" :style="{ height: heroHeight + 'px' }">
+        <image class="hero-bg" :src="REMOTE_ASSET_BASE + 'hero_bg.jpg'" mode="aspectFill" />
+        <image class="hero-teacher" :src="REMOTE_ASSET_BASE + '_zy-cut.png'" mode="heightFix" />
+        <image class="hero-cartoon" :src="REMOTE_ASSET_BASE + '_cartoon-cut.png'" mode="heightFix" />
       </view>
 
-      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/dayu')">
-        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-        <text class="shortcut-label">大宇智能体</text>
-      </view>
-      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/index')">
-        <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
-        <text class="shortcut-label">孩子账户管理</text>
-      </view>
-      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/pcourse')">
-        <image class="shortcut-icon" :src="assetBase + 'ic/cap.png'" mode="aspectFit" />
-        <text class="shortcut-label">家长课堂</text>
-      </view>
-      <view v-if="isParent" class="home-shortcut" @click="openPage('/pages/parent/wallet')">
-        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-        <text class="shortcut-label">算力中心</text>
-      </view>
-      <view v-if="isParent" class="home-shortcut" @click="openWeb('community.html')">
-        <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
-        <text class="shortcut-label">天赋社区</text>
-      </view>
-      <view v-if="isParent" class="home-shortcut" @click="openWeb('consult.html')">
-        <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
-        <text class="shortcut-label">在线咨询</text>
-      </view>
-      <view v-if="isParent" class="home-shortcut" @click="openWeb('pdata.html')">
-        <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-        <text class="shortcut-label">数据分析</text>
-      </view>
-      <view v-if="isParent" class="home-shortcut" @click="openWeb('pset.html', 'console1')">
-        <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
-        <text class="shortcut-label">我的</text>
-      </view>
-      <template v-else>
-        <view class="home-shortcut" @click="openPage('/pages/training/index')">
-          <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-          <text class="shortcut-label">今日修炼</text>
+      <!-- 原版三入口卡片 -->
+      <view class="home-tri">
+        <view class="tri-card" @click="openPage('/pages/talent/index')">
+          <image class="tri-ic" src="/static/dayu/ic/dna.png" mode="aspectFit" />
+          <text class="tri-name">天赋测试</text>
+          <text class="tri-sub">发现优势天赋</text>
         </view>
-        <view class="home-shortcut" @click="openPage('/pages/qa/index')">
-          <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
-          <text class="shortcut-label">学科答疑</text>
+        <view class="tri-card" @click="openPage('/pages/solve/index')">
+          <image class="tri-ic" src="/static/dayu/ic/clapper.png" mode="aspectFit" />
+          <text class="tri-name">拍照解题</text>
+          <text class="tri-sub">拍题一步步讲</text>
         </view>
-        <view class="home-shortcut" @click="openPage('/pages/training/history')">
-          <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
-          <text class="shortcut-label">历史记录</text>
+        <view class="tri-card tri-card-last" @click="openPage('/pages/training/history')">
+          <image class="tri-ic" src="/static/dayu/ic/books.png" mode="aspectFit" />
+          <text class="tri-name">修炼记录</text>
+          <text class="tri-sub">历史打卡回顾</text>
         </view>
-        <view class="home-shortcut" @click="openPage('/pages/growth/index')">
-          <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-          <text class="shortcut-label">成长里程碑</text>
-        </view>
-        <view class="home-shortcut" @click="goAcademy">
-          <image class="shortcut-icon" src="/static/home/family.png" mode="aspectFit" />
-          <text class="shortcut-label">天赋学院</text>
-        </view>
-        <view class="home-shortcut" @click="openWeb('test.html', 'hub7')">
-          <image class="shortcut-icon" src="/static/home/target.png" mode="aspectFit" />
-          <text class="shortcut-label">天赋测试</text>
-        </view>
-        <view class="home-shortcut" @click="openWeb('milestone.html', 'console7')">
-          <image class="shortcut-icon" src="/static/home/clipboard.png" mode="aspectFit" />
-          <text class="shortcut-label">中央电脑</text>
-        </view>
-      </template>
-    </view>
-    <view v-if="loading || errorText.length > 0 || (profileLoaded && isParent && !parentReady)" class="content">
-      <text v-if="loading" class="muted">正在读取账号信息…</text>
-      <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
-      <button v-if="!loading && !profileLoaded" class="secondary" @click="loadProfile">重试</button>
-      <view v-if="profileLoaded && isParent && !parentReady" class="card">
-        <text class="title">{{ gateTitle }}</text>
-        <view v-if="nextStep == 'complete-profile' && gatePassed">
-          <text class="label">昵称</text>
-          <input v-model="nicknameInput" class="field" :maxlength="50" placeholder="请输入昵称" />
-          <text class="label">姓名</text>
-          <input v-model="realNameInput" class="field" :maxlength="50" placeholder="请输入姓名" />
-          <template v-if="needPassword">
-            <text class="label">登录密码</text>
-            <input v-model="passwordInput" class="field" password :maxlength="32" :placeholder="PASSWORD_HINT" />
-            <text class="label">确认密码</text>
-            <input v-model="confirmInput" class="field" password :maxlength="32" placeholder="再次输入密码" />
-          </template>
-          <button class="primary" :disabled="saving" :loading="saving" @click="saveProfile">保存资料</button>
-        </view>
-        <template v-else>
-          <text class="muted">{{ gateHint }}</text>
-          <button class="secondary" @click="exitToPasswordLogin">改用手机号密码登录</button>
-        </template>
       </view>
-    </view>
-  </scroll-view>
+
+      <!-- 首页内嵌大宇对话流 -->
+      <scroll-view class="home-chat" scroll-y :scroll-into-view="scrollAnchor" :show-scrollbar="false">
+        <view class="chat-inner">
+          <view class="welcome-card">
+            <view class="welcome-head">
+              <image class="welcome-av" src="/static/dayu/avatar_sizhe.jpg" mode="aspectFill" />
+              <view class="welcome-tag"><text class="welcome-tag-text">大宇 AI · 今日陪伴</text></view>
+            </view>
+            <text class="welcome-text">
+              你好，{{ nickname.length > 0 ? nickname : '同学' }}！今天想先做「今日修炼」，还是直接问我作业和学习上的卡点？
+            </text>
+            <view class="welcome-actions">
+              <view class="go-pill" @click="openPage('/pages/training/dayu')">
+                <text class="go-pill-text">去今日修炼 →</text>
+              </view>
+              <view class="go-pill go-pill-soft" @click="openPage('/pages/qa/index')">
+                <text class="go-pill-soft-text">找学科导师</text>
+              </view>
+            </view>
+          </view>
+
+          <view v-if="messages.length == 0 && suggests.length > 0" class="suggest-list">
+            <view
+              v-for="(s, i) in suggests"
+              :key="i.toString()"
+              class="suggest-chip"
+              @click="sendMessage(s)"
+            >
+              <text class="suggest-chip-text">{{ s }}</text>
+            </view>
+          </view>
+
+          <chat-bubble
+            v-for="(m, idx) in messages"
+            :key="idx.toString()"
+            :role="m.role"
+            :content="m.content"
+            :pending="m.pending"
+            accent="green"
+          />
+
+          <view id="home-chat-bottom" class="chat-anchor"></view>
+        </view>
+      </scroll-view>
+
+      <view v-if="statusText.length > 0" class="chat-status">
+        <text class="chat-status-text">{{ statusText }}</text>
+      </view>
+      <view v-if="chatError.length > 0" class="chat-error">
+        <text class="chat-error-text">{{ chatError }}</text>
+      </view>
+
+      <chat-composer
+        :sending="sending"
+        :inset="0"
+        accent="green"
+        placeholder="问大宇：学习计划 / 卡壳的题…"
+        @submit="sendMessage"
+        @stop="stopStream"
+      />
+
+      <dayu-tab-bar role="student" active="guide" />
+    </template>
+  </view>
 </template>
 
 <script setup lang="uts">
 import { logout } from '../../api/auth.uts'
-import { getApiOrigin } from '../../config/environment.uts'
-import { requestJson } from '../../network/request.uts'
-import { clearSession, getSession, returnToLogin, saveSession } from '../../state/session.uts'
-import { getPageTopInset } from '../../utils/layout.uts'
+import { guideChatStream, getGuideSuggestPrompts, readGuideSuggests } from '../../api/guide.uts'
 import { buildParentProfileBody } from '../../api/user.uts'
+import { requestJson } from '../../network/request.uts'
+import { restoreSession, switchSessionChild } from '../../state/auth-actions.uts'
+import {
+  clearSession,
+  familyState,
+  getSession,
+  isParentViewingChild,
+  returnToLogin,
+  saveSession
+} from '../../state/session.uts'
+import { finishTurn, reduceSse, startUserTurn } from '../../utils/chatMessages.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
 import { meetsPasswordPolicy, PASSWORD_HINT } from '../../utils/password-policy.uts'
+
+// 大尺寸头图走线上静态地址，避免本地 127.0.0.1 联调时图裂
+const REMOTE_ASSET_BASE = 'https://jnaosoft.cn/static/dayu/assets/'
 
 const nickname = ref('')
 const isParent = ref(false)
@@ -150,29 +178,30 @@ const errorText = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const signingOut = ref(false)
+const exitingChildView = ref(false)
 const insetTop = ref(0)
-const heroHeight = ref(115)
-const assetBase = getApiOrigin() + '/static/dayu/assets/'
+const heroHeight = ref(110)
 
-function applyProfile(profile) {
-  nickname.value = profile.getString('nickname') ?? ''
-  const session = getSession()
-  if (session != null && session.nickname != nickname.value) {
-    saveSession({ userId: session.userId, role: session.role, nickname: nickname.value, accessToken: session.accessToken })
-  }
-  if (isParent.value) {
-    nicknameInput.value = nickname.value
-    realNameInput.value = profile.getString('real_name') ?? ''
-    gatePassed.value = profile.getBoolean('gate_passed') == true
-    parentReady.value = gatePassed.value && profile.getBoolean('account_ready') == true
-    nextStep.value = profile.getString('next_step') ?? ''
-    hasPassword.value = profile.getBoolean('has_password') == true
-    loginChannel.value = profile.getString('login_channel') ?? ''
-  }
-  profileLoaded.value = true
-}
+// 学生首页内嵌大宇对话状态
+const messages = ref([])
+const sending = ref(false)
+const statusText = ref('')
+const chatError = ref('')
+const sessionId = ref(0)
+const suggests = ref(['今天怎么安排修炼最省力？', '写作业总是分心怎么办？', '如何用我的天赋优势提分？'])
+const scrollAnchor = ref('')
+let requestTask: RequestTask | null = null
+let requestSeq = 0
+let scrollTimer = 0
 
-/** 微信登录或还没设过密码的家长，需要在这里补密码 */
+const viewingChild = computed(() => {
+  return isParent.value && familyState.value.activeChildId > 0
+})
+
+const studentReady = computed(() => {
+  return profileLoaded.value && (!isParent.value || viewingChild.value)
+})
+
 const needPassword = computed(() => {
   return !hasPassword.value || loginChannel.value == 'wechat'
 })
@@ -182,7 +211,6 @@ const gateTitle = computed(() => {
   return '完善家长资料'
 })
 
-/** 后端 next_step 只有 home / bind-phone / complete-profile 三种，分别给出可操作指引 */
 const gateHint = computed(() => {
   if (nextStep.value == 'bind-phone') {
     return '该微信账号还没绑定手机号。绑定需要在微信内完成，当前版本暂未支持；可先退出，用手机号+密码登录。'
@@ -193,9 +221,142 @@ const gateHint = computed(() => {
   return '该账号状态异常，请联系管理员。'
 })
 
+function clearScrollTimer() {
+  if (scrollTimer != 0) {
+    clearTimeout(scrollTimer)
+    scrollTimer = 0
+  }
+}
+
+function abortActiveStream() {
+  requestSeq = requestSeq + 1
+  const task = requestTask
+  requestTask = null
+  if (task != null) task.abort()
+}
+
+function scrollToBottom() {
+  clearScrollTimer()
+  scrollAnchor.value = ''
+  scrollTimer = setTimeout(() => {
+    scrollTimer = 0
+    scrollAnchor.value = 'home-chat-bottom'
+  }, 16)
+}
+
+function snapshot() {
+  return {
+    messages: messages.value,
+    sending: sending.value,
+    statusText: statusText.value,
+    errorText: chatError.value,
+    sessionId: sessionId.value
+  }
+}
+
+function applyState(state) {
+  messages.value = state.messages
+  sending.value = state.sending
+  statusText.value = state.statusText
+  chatError.value = state.errorText
+  sessionId.value = state.sessionId
+}
+
+function onSseEvent(seq, event) {
+  if (seq != requestSeq) return
+  applyState(reduceSse(snapshot(), event))
+  if (event.type == 'done' || event.type == 'error' || event.type == 'abort') {
+    requestTask = null
+  }
+  if (event.type == 'token' || event.type == 'replace' || event.type == 'done') {
+    scrollToBottom()
+  }
+}
+
+function sendMessage(text) {
+  if (sending.value) return
+  const t = text.trim()
+  if (t.length == 0) return
+  chatError.value = ''
+  applyState(startUserTurn(snapshot(), t))
+  scrollToBottom()
+
+  requestSeq = requestSeq + 1
+  const seq = requestSeq
+  const task = guideChatStream({
+    message: t,
+    sessionId: sessionId.value,
+    force: false,
+    useLlm: true
+  }, (event) => {
+    onSseEvent(seq, event)
+  })
+  if (task == null) {
+    applyState(finishTurn(snapshot()))
+    return
+  }
+  requestTask = task
+}
+
+function stopStream() {
+  abortActiveStream()
+  applyState(finishTurn(snapshot()))
+}
+
+async function loadSuggests() {
+  try {
+    const data = await getGuideSuggestPrompts('student', 3)
+    const list = readGuideSuggests(data)
+    if (list.length > 0) suggests.value = list
+  } catch (_) {
+    // 取不到时沿用默认建议
+  }
+}
+
+function applyProfile(profile) {
+  nickname.value = profile.getString('nickname') ?? ''
+  const session = getSession()
+  if (session != null && !viewingChild.value && session.nickname != nickname.value) {
+    saveSession({ userId: session.userId, role: session.role, nickname: nickname.value, accessToken: session.accessToken })
+  }
+  if (isParent.value && !viewingChild.value) {
+    nicknameInput.value = nickname.value
+    realNameInput.value = profile.getString('real_name') ?? ''
+    gatePassed.value = profile.getBoolean('gate_passed') == true
+    parentReady.value = gatePassed.value && profile.getBoolean('account_ready') == true
+    nextStep.value = profile.getString('next_step') ?? ''
+    hasPassword.value = profile.getBoolean('has_password') == true
+    loginChannel.value = profile.getString('login_channel') ?? ''
+    profileLoaded.value = true
+    if (parentReady.value) {
+      uni.redirectTo({ url: '/pages/parent/dayu' })
+    }
+    return
+  }
+  profileLoaded.value = true
+  loadSuggests()
+}
+
 function exitToPasswordLogin() {
   clearSession()
   returnToLogin()
+}
+
+function openGuardian() {
+  uni.navigateTo({ url: '/pages/guardian/index' })
+}
+
+async function backToParent() {
+  if (exitingChildView.value) return
+  exitingChildView.value = true
+  try {
+    await switchSessionChild(null)
+    uni.reLaunch({ url: '/pages/parent/dayu' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '切回家长版失败', icon: 'none' })
+  } finally {
+    exitingChildView.value = false
+  }
 }
 
 async function loadProfile() {
@@ -204,12 +365,19 @@ async function loadProfile() {
     returnToLogin()
     return
   }
+  if (!familyState.value.loaded) {
+    await restoreSession()
+  }
   isParent.value = session.role == 'parent'
+  if (session.role == 'student' && familyState.value.loaded && !familyState.value.guardianLinked) {
+    uni.reLaunch({ url: '/pages/guardian/index' })
+    return
+  }
   nickname.value = session.nickname
   loading.value = true
   errorText.value = ''
   try {
-    const path = isParent.value ? '/api/parent/profile' : '/api/user/profile'
+    const path = isParent.value && !isParentViewingChild() ? '/api/parent/profile' : '/api/user/profile'
     applyProfile(await requestJson(path))
   } catch (error) {
     errorText.value = error instanceof Error ? error.message : '读取账号信息失败'
@@ -252,6 +420,7 @@ async function saveProfile() {
 }
 
 async function signOut() {
+  if (signingOut.value) return
   signingOut.value = true
   errorText.value = ''
   try {
@@ -268,23 +437,18 @@ function openPage(url) {
   uni.navigateTo({ url })
 }
 
-/** 尚未原生重写的页面统一走 WebView 承接（HTML 已部署在 jnaosoft.cn） */
-function goAcademy() {
-  uni.navigateTo({ url: '/pages/academy/index' })
-}
-
-function openWeb(page, q) {
-  const query = q.length > 0 ? '&q=' + q : ''
-  uni.navigateTo({ url: '/pages/webview/index?page=' + page + query })
-}
-
 onLoad(() => {
   loadProfile()
 })
 
 onReady(() => {
   insetTop.value = getPageTopInset()
-  heroHeight.value = Math.round((uni.getWindowInfo().windowWidth - 28) * 0.32)
+  heroHeight.value = Math.round((uni.getWindowInfo().windowWidth - 28) * 0.30)
+})
+
+onUnload(() => {
+  abortActiveStream()
+  clearScrollTimer()
 })
 </script>
 

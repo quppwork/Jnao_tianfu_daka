@@ -1,17 +1,12 @@
-$bg: #070b14;
-$card: #0f1a2e;
-$card-soft: #131f38;
-$border: rgba(59, 130, 246, 0.2);
-$dim: #94a3b8;
-$text: #e2e8f0;
-$accent: #3b82f6;
+@import '../../styles/dayu-theme.scss';
 
 .qa-page {
   display: flex;
   flex: 1;
   flex-direction: column;
   position: relative;
-  background-color: $bg;
+  background-color: $dy-bg;
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
 }
 
 .qa-header {
@@ -19,131 +14,198 @@ $accent: #3b82f6;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding-left: 12px;
-  padding-right: 16px;
+  padding-left: 14px;
+  padding-right: 14px;
   padding-bottom: 8px;
 }
 
-.qa-back {
+.qa-brand {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
 }
 
-.qa-back-icon {
-  color: $text;
-  font-size: 26px;
-  line-height: 26px;
-}
-
-.qa-title {
-  color: $text;
-  font-size: 17px;
-  font-weight: 600;
+.qa-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 19px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-green;
+  margin-right: 10px;
 }
 
 .qa-title-wrap {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  flex: 1;
+}
+
+.qa-title {
+  color: $dy-text;
+  font-size: 17px;
+  font-weight: 800;
 }
 
 .qa-subtitle {
-  color: $dim;
-  font-size: 11px;
+  color: $dy-dim;
+  font-size: 10px;
+  letter-spacing: 1px;
   margin-top: 2px;
 }
 
-.qa-history-entry {
-  padding: 4px 10px;
-  border-radius: 12px;
-  border-width: 1px;
-  border-style: solid;
-  border-color: $border;
+.qa-top-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
 }
 
-.qa-history-text {
-  color: $dim;
+.qa-chip-btn {
+  padding: 5px 11px;
+  margin-right: 8px;
+  border-radius: 16px;
+  background-color: $dy-green-bg;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-green-border;
+}
+
+.qa-chip-btn-last {
+  margin-right: 0;
+}
+
+.qa-chip-btn-text {
+  color: $dy-green;
   font-size: 12px;
+  font-weight: 700;
+}
+
+/* 导师舞台卡 */
+.qa-stage {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-left: 14px;
+  margin-right: 14px;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background-color: $dy-card;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.qa-stage-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
+  border-width: 2px;
+  border-style: solid;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.qa-stage-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.qa-stage-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.qa-stage-name {
+  color: $dy-text;
+  font-size: 16px;
+  font-weight: 800;
+  margin-right: 8px;
+}
+
+.qa-stage-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  border-width: 1px;
+  border-style: solid;
+  background-color: $dy-bg-top;
+}
+
+.qa-stage-badge-text {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.qa-stage-desc {
+  color: $dy-muted;
+  font-size: 12px;
+  margin-top: 5px;
+  line-height: 18px;
 }
 
 .qa-subjects {
-  height: 40px;
-  flex-shrink: 0;
+  height: 44px;
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
 .qa-subject-row {
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .qa-chip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 14px;
+  padding: 6px 13px;
   margin-right: 8px;
   border-radius: 16px;
-  border-width: 1px;
+  background-color: $dy-card;
+  border-width: 1.5px;
   border-style: solid;
-  border-color: $border;
-  background-color: $card;
+  border-color: $dy-border;
 }
 
 .qa-chip-active {
-  background-color: $accent;
-  border-color: $accent;
+  background-color: $dy-bubble;
 }
 
 .qa-chip-text {
-  color: $dim;
   font-size: 13px;
-}
-
-.qa-chip-text-on {
-  color: #0b1220;
-  font-weight: 600;
-}
-
-.qa-chip-active .qa-chip-text {
-  color: #0b1220;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .qa-chat {
   flex: 1;
-  background-color: $bg;
 }
 
 .qa-chat-inner {
   display: flex;
   flex-direction: column;
-  padding: 12px 16px 8px 16px;
+  padding: 12px 14px 8px 14px;
 }
 
 .qa-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 60px;
-  padding-bottom: 60px;
+  padding-top: 40px;
+  padding-bottom: 40px;
 }
 
 .qa-empty-title {
-  color: $text;
-  font-size: 15px;
-  margin-bottom: 8px;
+  color: $dy-text;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .qa-empty-hint {
-  color: $dim;
-  font-size: 12px;
+  color: $dy-muted;
+  font-size: 13px;
+  margin-top: 8px;
+  text-align: center;
 }
 
 .qa-bottom-anchor {
@@ -151,26 +213,26 @@ $accent: #3b82f6;
 }
 
 .qa-status {
-  padding: 4px 16px;
+  padding: 4px 14px;
 }
 
 .qa-status-text {
-  color: $dim;
+  color: $dy-muted;
   font-size: 12px;
 }
 
 .qa-error {
-  padding: 6px 16px;
-  background-color: rgba(239, 68, 68, 0.12);
+  padding: 6px 14px;
+  background-color: $dy-danger-bg;
 }
 
 .qa-error-text {
-  color: #f87171;
+  color: $dy-danger;
   font-size: 12px;
 }
 
 .qa-muted {
-  color: $dim;
+  color: $dy-muted;
 }
 
 .qa-mask {
@@ -179,30 +241,33 @@ $accent: #3b82f6;
   top: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.55);
+  background-color: rgba(0, 0, 0, 0.6);
   justify-content: flex-end;
 }
 
 .qa-sheet {
   display: flex;
   flex-direction: column;
-  background-color: $card;
+  background-color: $dy-card;
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $dy-border;
   padding: 16px;
   max-height: 440px;
 }
 
 .qa-sheet-title {
-  color: $text;
+  color: $dy-text;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 12px;
 }
 
 .qa-sheet-hint {
-  padding-top: 12px;
-  padding-bottom: 24px;
+  padding: 24px 0;
+  align-items: center;
 }
 
 .qa-sheet-list {
@@ -210,21 +275,20 @@ $accent: #3b82f6;
 }
 
 .qa-sheet-item {
-  display: flex;
-  flex-direction: column;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border-radius: 10px;
-  background-color: $card-soft;
+  padding: 12px 0;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $dy-border;
 }
 
 .qa-sheet-subject {
-  color: $text;
+  color: $dy-text;
   font-size: 14px;
-  margin-bottom: 4px;
+  font-weight: 600;
 }
 
 .qa-sheet-meta {
-  color: $dim;
+  color: $dy-muted;
   font-size: 12px;
+  margin-top: 4px;
 }

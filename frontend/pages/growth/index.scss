@@ -1,14 +1,19 @@
-$bg: #070b14;
-$card: #0f1a2e;
-$border: rgba(59, 130, 246, 0.2);
-$dim: #94a3b8;
-$gold: #f5c842;
+@import '../../styles/dayu-theme.scss';
+
+$bg: $dy-bg;
+$card: $dy-card;
+$border: $dy-border;
+$dim: $dy-muted;
+$gold: $dy-gold-bright;
 
 .growth-page, .growth-scroll {
   display: flex;
   flex: 1;
   flex-direction: column;
   background-color: $bg;
+}
+.growth-page {
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
 }
 .nav, .id-bar, .hero-top, .hero-stats, .section-heading, .path-steps, .tier-steps, .badge-grid, .timeline {
   display: flex;
