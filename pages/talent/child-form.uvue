@@ -1,0 +1,142 @@
+<template>
+  <view class="form-page">
+    <view class="top" :style="{ marginTop: topInset + 'px' }">
+      <view class="back" @click="goBack"><text class="back-icon">‹</text></view>
+      <text class="top-title">孩子测评信息</text>
+      <view class="spacer"></view>
+    </view>
+    <scroll-view class="scroll" direction="vertical">
+      <view class="body">
+        <view class="card">
+          <text class="hero-title">家长代测 · 孩子专属档案</text>
+          <text class="hero-sub">系统将按孩子年龄自动匹配 6–9 岁儿童卷或 10–16 岁少年卷，并结合学习情况生成完整报告。</text>
+        </view>
+
+        <view class="card">
+          <text class="section-label">1. 孩子性别</text>
+          <view class="option-row">
+            <view class="chip" :class="{ 'chip-active': sex == 1 }" @click="sex = 1">
+              <text class="chip-text" :class="{ 'chip-text-active': sex == 1 }">男孩</text>
+            </view>
+            <view class="chip" :class="{ 'chip-active': sex == 2 }" @click="sex = 2">
+              <text class="chip-text" :class="{ 'chip-text-active': sex == 2 }">女孩</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="card">
+          <text class="section-label">2. 孩子年龄（6–16 岁）</text>
+          <view class="age-grid">
+            <view
+              v-for="a in ages"
+              :key="a"
+              class="age-pill"
+              :class="{ 'age-pill-active': age == a }"
+              @click="age = a"
+            >
+              <text class="age-text" :class="{ 'age-text-active': age == a }">{{ a }}岁</text>
+            </view>
+          </view>
+          <text class="hint-tag">当前匹配：{{ age >= 10 ? '10–16 岁少年卷（35 题）' : '6–9 岁儿童卷（35 题）' }}</text>
+        </view>
+
+        <view class="card">
+          <text class="section-label">3. 您是孩子的</text>
+          <view class="option-row">
+            <view class="chip" :class="{ 'chip-active': rela == 1 }" @click="rela = 1">
+              <text class="chip-text" :class="{ 'chip-text-active': rela == 1 }">父母</text>
+            </view>
+            <view class="chip" :class="{ 'chip-active': rela == 2 }" @click="rela = 2">
+              <text class="chip-text" :class="{ 'chip-text-active': rela == 2 }">亲属</text>
+            </view>
+            <view class="chip" :class="{ 'chip-active': rela == 3 }" @click="rela = 3">
+              <text class="chip-text" :class="{ 'chip-text-active': rela == 3 }">其他</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="card">
+          <text class="section-label">4. 孩子当前学习情况</text>
+          <view class="option-row">
+            <view class="chip" :class="{ 'chip-active': resultas == 1 }" @click="resultas = 1">
+              <text class="chip-text" :class="{ 'chip-text-active': resultas == 1 }">优秀</text>
+            </view>
+            <view class="chip" :class="{ 'chip-active': resultas == 2 }" @click="resultas = 2">
+              <text class="chip-text" :class="{ 'chip-text-active': resultas == 2 }">一般</text>
+            </view>
+            <view class="chip" :class="{ 'chip-active': resultas == 3 }" @click="resultas = 3">
+              <text class="chip-text" :class="{ 'chip-text-active': resultas == 3 }">较差</text>
+            </view>
+          </view>
+        </view>
+
+        <text v-if="errorText.length > 0" class="error">{{ errorText }}</text>
+        <button class="submit-btn" :loading="submitting" :disabled="submitting" @click="submitForm">下一步 · 开始 35 题测评</button>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { createKidDraft } from '../../api/talent.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const topInset = ref(0)
+const sex = ref(1)
+const age = ref(10)
+const rela = ref(1)
+const resultas = ref(1)
+const targetChildId = ref(0)
+const submitting = ref(false)
+const errorText = ref('')
+const ages: number[] = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+async function submitForm() {
+  if (submitting.value) return
+  if (sex.value != 1 && sex.value != 2) {
+    errorText.value = '请选择孩子性别'
+    return
+  }
+  if (age.value < 6 || age.value > 16) {
+    errorText.value = '孩子年龄需在 6–16 岁之间'
+    return
+  }
+  submitting.value = true
+  errorText.value = ''
+  try {
+    const draft = await createKidDraft({
+      sex: sex.value,
+      age: age.value,
+      rela: rela.value,
+      resultas: resultas.value,
+      targetChildId: targetChildId.value
+    })
+    const url = '/pages/talent/index?mode=child&draft_id=' + draft.draftId.toString()
+      + '&question_type=' + draft.questionType.toString()
+      + '&sex=' + sex.value.toString()
+      + '&age=' + age.value.toString()
+    uni.redirectTo({ url: url })
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '创建测评预记录失败，请重试'
+  } finally {
+    submitting.value = false
+  }
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+onLoad((options) => {
+  const cid = parseInt(options['child_id'] ?? '')
+  if (!isNaN(cid) && cid > 0) targetChildId.value = cid
+})
+
+onReady(() => {
+  topInset.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './child-form.scss';
+</style>

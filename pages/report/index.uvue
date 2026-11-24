@@ -2,23 +2,19 @@
   <view class="report">
     <view class="top" :style="{ marginTop: inset + 'px' }">
       <view class="back" @click="goBack"><text class="back-icon">‹</text></view>
-      <text class="title top-title">天赋报告</text>
+      <text class="title top-title">{{ topTitle }}</text>
       <view class="spacer"></view>
     </view>
     <scroll-view class="scroll" direction="vertical">
       <view class="body">
-        <text v-if="loading" class="dim">正在读取天赋报告…</text>
+        <text v-if="loading" class="dim">正在读取完整天赋报告…</text>
         <view v-if="errorText.length > 0" class="card">
           <text class="error">{{ errorText }}</text>
           <button class="secondary" @click="loadReport">重试</button>
         </view>
-        <view v-if="loaded" class="hero">
-          <image class="avatar" :src="avatarUrl" mode="aspectFill" />
-          <text class="eyebrow">{{ mode }}</text>
-          <text class="talent">{{ talent }}</text>
-          <text class="dim">{{ nickname }} · {{ date }}</text>
-        </view>
+
         <view v-if="notice.length > 0" class="card"><text class="dim">{{ notice }}</text></view>
+
         <view v-if="pending.length > 0" class="card">
           <text class="title">确认训练使用的天赋</text>
           <text class="dim">当前天赋 {{ current }} · 新测评 {{ pending }}</text>
@@ -26,59 +22,69 @@
           <button class="primary" :disabled="saving" @click="chooseTalent('use_new')">采用新测评结果</button>
           <button class="secondary" :disabled="saving" @click="chooseTalent('keep_old')">保留当前天赋</button>
         </view>
-        <view v-if="metrics.length > 0" class="card">
-          <text class="title">天赋能力</text>
-          <view v-for="(metric, index) in metrics" :key="index" class="metric">
-            <text class="dim">{{ metric.name }}</text><text class="value">{{ metric.value }}</text>
-          </view>
-        </view>
-        <button v-if="loaded && pending.length == 0" class="primary" @click="goChat">就报告内容提问</button>
-        <button v-if="loaded && pending.length == 0" class="secondary" @click="goBack">返回</button>
+
+        <AdultReportView
+          v-if="fullReport != null && fullReport.testType == 1"
+          :report="fullReport"
+          :nickname="nickname"
+        />
+        <KidReportView
+          v-if="fullReport != null && fullReport.testType == 2"
+          :report="fullReport"
+          :nickname="nickname"
+        />
+
+        <button v-if="fullReport != null && pending.length == 0" class="primary" @click="goChat">问大宇 · 就报告内容提问</button>
+        <button v-if="fullReport != null && pending.length == 0" class="secondary" @click="goRelation">发起关系合测</button>
+        <button v-if="fullReport != null && pending.length == 0" class="secondary" @click="goBack">返回</button>
       </view>
     </scroll-view>
   </view>
 </template>
 
 <script setup lang="uts">
+import AdultReportView from '../../components/report/AdultReportView.uvue'
+import KidReportView from '../../components/report/KidReportView.uvue'
 import { requestJson } from '../../network/request.uts'
+import { getFullTalentReport } from '../../api/talent.uts'
+import { parseFullTalentReport } from '../../api/talent-parsers.uts'
+import { FullTalentReport } from '../../api/talent-types.uts'
 import { getSession } from '../../state/session.uts'
-import { getApiOrigin } from '../../config/environment.uts'
 import { getPageTopInset } from '../../utils/layout.uts'
-import { readReportAttributes, talentAvatarFile } from '../../api/talent.uts'
 
 const id = ref(0)
 const inset = ref(0)
 const loading = ref(false)
 const saving = ref(false)
-const loaded = ref(false)
-const talent = ref('')
-const mode = ref('')
-const date = ref('')
+const fullReport = ref<FullTalentReport | null>(null)
 const nickname = ref('')
-const avatarUrl = ref('')
 const notice = ref('')
 const pending = ref('')
 const current = ref('')
 const lastChance = ref(false)
 const errorText = ref('')
-const metrics = ref([])
+
+const topTitle = computed((): string => {
+  const r = fullReport.value
+  if (r == null) return '天赋报告'
+  return r.testType == 1 ? '成人天赋报告' : '孩子天赋报告'
+})
 
 async function loadReport() {
   if (loading.value || id.value <= 0) return
   loading.value = true
   errorText.value = ''
   try {
-    const report = await requestJson('/api/talent/assessment/' + id.value.toString())
-    const data = report.getJSON('data')
-    talent.value = report.getString('talent_primary') ?? data?.getString('talent') ?? '天赋测评'
-    mode.value = report.getNumber('test_type') == 0 ? '成人天赋报告' : '您孩子的测评报告'
-    date.value = (report.getString('assessed_at') ?? '').slice(0, 10)
-    avatarUrl.value = getApiOrigin() + '/static/dayu/assets/ip/ring-' + talentAvatarFile(talent.value) + '.png'
-    const attributes = data == null ? [] : readReportAttributes(data)
-    metrics.value = attributes.map((item) => ({
-      name: item.getString('name') ?? item.getString('label') ?? '',
-      value: item.getNumber('value')?.toString() ?? item.getString('value') ?? ''
-    })).filter((item) => item.name.length > 0 && item.value.length > 0)
+    const resp = await getFullTalentReport(id.value)
+    const parsed = parseFullTalentReport(resp)
+    if (parsed.isMihai == 1) {
+      uni.redirectTo({
+        url: '/pages/talent/supplement?assessment_id=' + id.value.toString() + '&test_type=' + parsed.testType.toString()
+      })
+      return
+    }
+    fullReport.value = parsed
+
     const session = getSession()
     nickname.value = session?.nickname ?? ''
     if (session?.role == 'student') {
@@ -91,7 +97,6 @@ async function loadReport() {
         lastChance.value = change?.getBoolean('from_last_chance') == true
       }
     }
-    loaded.value = true
   } catch (error) {
     errorText.value = error instanceof Error ? error.message : '读取天赋报告失败'
   } finally {
@@ -99,12 +104,12 @@ async function loadReport() {
   }
 }
 
-async function resolveTalent(action) {
+async function resolveTalent(action: string) {
   if (saving.value) return
   saving.value = true
   errorText.value = ''
   try {
-    await requestJson('/api/user/talent/resolve-conflict', 'POST', { action })
+    await requestJson('/api/user/talent/resolve-conflict', 'POST', { action: action })
     pending.value = ''
     notice.value = action == 'use_new' ? '已采用新测评结果，训练将按新天赋安排。' : '已保留当前训练天赋。'
   } catch (error) {
@@ -114,7 +119,7 @@ async function resolveTalent(action) {
   }
 }
 
-function chooseTalent(action) {
+function chooseTalent(action: string) {
   if (saving.value) return
   uni.showModal({
     title: action == 'use_new' ? '采用新天赋' : '保留当前天赋',
@@ -132,21 +137,26 @@ function goChat() {
   uni.navigateTo({ url: '/pages/talent/chat?id=' + aid.toString() })
 }
 
+function goRelation() {
+  uni.navigateTo({ url: '/pages/talent/relation' })
+}
+
 function goBack() {
   uni.navigateBack()
 }
 
 onLoad((options) => {
-  const reportId = parseInt(options['assessment_id'] ?? '')
-  if (!isNaN(reportId) && reportId > 0) {
-    id.value = reportId
-    notice.value = options['notice'] ?? ''
-    loadReport()
-  } else {
-    errorText.value = '未找到测评报告编号'
-  }
+  const reportId = parseInt(options['assessment_id'] ?? options['id'] ?? '')
+  if (!isNaN(reportId) && reportId > 0) id.value = reportId
+  const note = options['notice'] ?? ''
+  if (note.length > 0) notice.value = decodeURIComponent(note)
+  if (id.value > 0) loadReport()
+  else errorText.value = '缺少测评报告编号'
 })
-onReady(() => { inset.value = getPageTopInset() })
+
+onReady(() => {
+  inset.value = getPageTopInset()
+})
 </script>
 
 <style lang="scss" scoped>

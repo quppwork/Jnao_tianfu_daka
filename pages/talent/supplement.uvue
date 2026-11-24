@@ -1,0 +1,206 @@
+<template>
+  <view class="supp-page">
+    <view class="top" :style="{ marginTop: topInset + 'px' }">
+      <view class="back" @click="goBack"><text class="back-icon">‹</text></view>
+      <text class="top-title">迷者补充测试</text>
+      <view class="spacer"></view>
+    </view>
+    <scroll-view class="scroll" direction="vertical">
+      <view class="body">
+        <view class="banner">
+          <text class="banner-title">发现高潜能「迷者」状态</text>
+          <text class="banner-sub">你的多项天赋势均力敌，请完成 3 轮快速场景选择，即可锁定真实主副天赋并解锁完整报告。</text>
+        </view>
+
+        <view v-if="loading" class="card">
+          <text class="dim">正在加载补充测试题库…</text>
+        </view>
+
+        <view v-else-if="errorText.length > 0" class="card">
+          <text class="error">{{ errorText }}</text>
+          <button class="secondary" @click="loadQuestions">重新加载</button>
+        </view>
+
+        <view v-else-if="currentQuestion != null" class="card">
+          <text class="round-pill">第 {{ round }} / 3 轮</text>
+          <text class="q-title">{{ currentQuestion.title }}</text>
+          <view
+            v-for="opt in currentQuestion.options"
+            :key="opt.code"
+            class="opt-btn"
+            @click="chooseOption(opt)"
+          >
+            <text class="opt-code">{{ opt.code.slice(0, 2) }}</text>
+            <text class="opt-label">{{ opt.label }}</text>
+          </view>
+          <button v-if="round > 1 && !submitting" class="secondary" @click="restart">重新从第 1 轮开始</button>
+        </view>
+
+        <view v-if="submitting" class="card">
+          <text class="dim">正在写入你的专属天赋结果…</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import {
+  fetchSupplementQuestions,
+  submitSupplementTalent
+} from '../../api/talent.uts'
+import { parseSupplementBundle } from '../../api/talent-parsers.uts'
+import {
+  SupplementBundle,
+  SupplementOption,
+  SupplementQuestion
+} from '../../api/talent-types.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const topInset = ref(0)
+const assessmentId = ref(0)
+const testType = ref(1)
+const loading = ref(false)
+const submitting = ref(false)
+const errorText = ref('')
+const round = ref(1)
+const bundle = ref<SupplementBundle | null>(null)
+const currentQuestion = ref<SupplementQuestion | null>(null)
+const activeGroup = ref('')
+const groupCursor = ref(0)
+
+function isFinalTalentCode(code: string): boolean {
+  const c = code.trim()
+  if (c.length != 2) return false
+  const chars = ['思', '赢', '德', '行', '学']
+  return chars.includes(c.slice(0, 1)) && chars.includes(c.slice(1, 2))
+}
+
+async function loadQuestions() {
+  if (loading.value) return
+  loading.value = true
+  errorText.value = ''
+  try {
+    const qType = testType.value == 2 ? 0 : 1
+    const resp = await fetchSupplementQuestions(qType)
+    const parsed = parseSupplementBundle(resp)
+    bundle.value = parsed
+    const firstQ = parsed.first ?? (parsed.round1.length > 0 ? parsed.round1[0] : null)
+    if (firstQ == null) {
+      errorText.value = '补充测试题库为空，请联系管理员'
+      return
+    }
+    round.value = 1
+    activeGroup.value = ''
+    groupCursor.value = 0
+    currentQuestion.value = firstQ
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '加载补充测试失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function restart() {
+  const b = bundle.value
+  if (b == null) return
+  const firstQ = b.first ?? (b.round1.length > 0 ? b.round1[0] : null)
+  round.value = 1
+  activeGroup.value = ''
+  groupCursor.value = 0
+  currentQuestion.value = firstQ
+  errorText.value = ''
+}
+
+async function finishWithTalent(talentCombo: string) {
+  if (submitting.value || assessmentId.value <= 0) return
+  submitting.value = true
+  errorText.value = ''
+  try {
+    await submitSupplementTalent(assessmentId.value, talentCombo)
+    uni.redirectTo({ url: '/pages/report/index?assessment_id=' + assessmentId.value.toString() })
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '提交补充结果失败，请重试'
+  } finally {
+    submitting.value = false
+  }
+}
+
+function chooseOption(opt: SupplementOption) {
+  if (submitting.value) return
+  const b = bundle.value
+  if (b == null) return
+  const code = opt.code.trim()
+
+  if (isFinalTalentCode(code)) {
+    finishWithTalent(code)
+    return
+  }
+
+  if (round.value == 1) {
+    const r2List = b.round2.get(code)
+    if (r2List != null && r2List.length > 0) {
+      round.value = 2
+      activeGroup.value = code
+      groupCursor.value = 0
+      currentQuestion.value = r2List[0]
+      return
+    }
+  } else if (round.value == 2) {
+    const r2List = b.round2.get(activeGroup.value)
+    if (r2List != null && groupCursor.value + 1 < r2List.length) {
+      const nextR3 = b.round3.get(code)
+      if (nextR3 != null && nextR3.length > 0) {
+        round.value = 3
+        activeGroup.value = code
+        groupCursor.value = 0
+        currentQuestion.value = nextR3[0]
+        return
+      }
+      groupCursor.value += 1
+      currentQuestion.value = r2List[groupCursor.value]
+      return
+    }
+    const r3List = b.round3.get(code)
+    if (r3List != null && r3List.length > 0) {
+      round.value = 3
+      activeGroup.value = code
+      groupCursor.value = 0
+      currentQuestion.value = r3List[0]
+      return
+    }
+  } else if (round.value == 3) {
+    const r3List = b.round3.get(activeGroup.value)
+    if (r3List != null && groupCursor.value + 1 < r3List.length) {
+      groupCursor.value += 1
+      currentQuestion.value = r3List[groupCursor.value]
+      return
+    }
+    finishWithTalent(code)
+    return
+  }
+
+  errorText.value = '未找到下一轮匹配题目（分组：' + code + '），请重新开始'
+}
+
+function goBack() {
+  if (submitting.value) return
+  uni.navigateBack()
+}
+
+onLoad((options) => {
+  const aid = parseInt(options['assessment_id'] ?? '')
+  if (!isNaN(aid) && aid > 0) assessmentId.value = aid
+  const tt = parseInt(options['test_type'] ?? '')
+  if (!isNaN(tt) && (tt == 1 || tt == 2)) testType.value = tt
+  loadQuestions()
+})
+
+onReady(() => {
+  topInset.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import './supplement.scss';
+</style>

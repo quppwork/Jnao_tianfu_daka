@@ -1,0 +1,245 @@
+<template>
+  <view>
+    <!-- 1. 顶部儿童天赋英雄卡 -->
+    <view class="hero-card">
+      <image class="hero-badge" :src="heroImg" mode="aspectFill" />
+      <text class="eyebrow">孩子专属天赋报告{{ kidMetaTag }}</text>
+      <text class="hero-talent">{{ report.talent }}</text>
+      <text v-if="report.checkTalent.length > 0" class="hero-combo">组合天赋：{{ report.checkTalent }}{{ potLabel }}</text>
+      <text v-if="quoteText.length > 0" class="hero-slogan">{{ quoteText }}</text>
+      <text class="hero-meta">{{ nickname }}{{ report.assessedAt.length > 0 ? ' · ' + report.assessedAt : '' }}</text>
+    </view>
+
+    <!-- 2. 左右脑优势分布 -->
+    <view v-if="hasBrain" class="sec-card">
+      <text class="sec-title">左右脑优势分析</text>
+      <view class="brain-row">
+        <view class="brain-col brain-col-left">
+          <text class="bar-label">左脑 · 理性逻辑</text>
+          <text class="brain-pct">{{ leftBrainText }}</text>
+          <text v-if="blDesc.length > 0" class="dim-text">{{ blDesc }}</text>
+        </view>
+        <view class="brain-col">
+          <text class="bar-label">右脑 · 感性创意</text>
+          <text class="brain-pct">{{ rightBrainText }}</text>
+          <text v-if="brDesc.length > 0" class="dim-text">{{ brDesc }}</text>
+        </view>
+      </view>
+      <view v-if="brainLabels.length > 0" class="tag-wrap">
+        <view v-for="(lb, idx) in brainLabels" :key="idx" class="green-pill">
+          <text class="green-pill-text">{{ lb }}</text>
+        </view>
+      </view>
+      <text v-if="brainDesc.length > 0" class="body-text">{{ brainDesc }}</text>
+    </view>
+
+    <!-- 3. 学习力五维分析 -->
+    <view v-if="kidInfo != null" class="sec-card">
+      <text class="sec-title">学习力五维分析</text>
+      <view class="bar-row">
+        <view class="bar-head"><text class="bar-label">创造力</text><text class="bar-val">{{ kidInfo.learnCreate }}%</text></view>
+        <view class="bar-track"><view class="bar-fill bar-fill-gold" :style="{ width: Math.min(100, kidInfo.learnCreate) + '%' }"></view></view>
+      </view>
+      <view class="bar-row">
+        <view class="bar-head"><text class="bar-label">专注力</text><text class="bar-val">{{ kidInfo.learnAbsorbed }}%</text></view>
+        <view class="bar-track"><view class="bar-fill" :style="{ width: Math.min(100, kidInfo.learnAbsorbed) + '%' }"></view></view>
+      </view>
+      <view class="bar-row">
+        <view class="bar-head"><text class="bar-label">想象力</text><text class="bar-val">{{ kidInfo.learnImagine }}%</text></view>
+        <view class="bar-track"><view class="bar-fill bar-fill-gold" :style="{ width: Math.min(100, kidInfo.learnImagine) + '%' }"></view></view>
+      </view>
+      <view class="bar-row">
+        <view class="bar-head"><text class="bar-label">记忆力</text><text class="bar-val">{{ kidInfo.learnMemory }}%</text></view>
+        <view class="bar-track"><view class="bar-fill" :style="{ width: Math.min(100, kidInfo.learnMemory) + '%' }"></view></view>
+      </view>
+      <view class="bar-row">
+        <view class="bar-head"><text class="bar-label">观察力</text><text class="bar-val">{{ kidInfo.learnObservation }}%</text></view>
+        <view class="bar-track"><view class="bar-fill bar-fill-gold" :style="{ width: Math.min(100, kidInfo.learnObservation) + '%' }"></view></view>
+      </view>
+    </view>
+
+    <!-- 4. 学习问题与偏科分析 -->
+    <view v-if="kidInfo != null && (kidInfo.problemParagraphs.length > 0 || kidInfo.piankeParagraphs.length > 0)" class="sec-card">
+      <text class="sec-title">{{ kidInfo.problemTitle.length > 0 ? kidInfo.problemTitle : '学习问题与偏科分析' }}</text>
+      <text v-if="kidInfo.problemSubtitle.length > 0" class="item-sub">{{ kidInfo.problemSubtitle }}</text>
+      <text v-for="(p, idx) in kidInfo.problemParagraphs" :key="'lp' + idx" class="para-item">{{ p }}</text>
+      <view v-if="kidInfo.piankeParagraphs.length > 0" class="quote-box">
+        <text class="sub-title">常见偏科分析</text>
+        <text v-for="(pk, idx) in kidInfo.piankeParagraphs" :key="'pk' + idx" class="para-item">{{ pk }}</text>
+      </view>
+    </view>
+
+    <!-- 5. 因材施教与常见困扰 -->
+    <view v-if="config != null && (config.teachT.length > 0 || config.teachP.length > 0 || config.probs.length > 0)" class="sec-card">
+      <text class="sec-title">因材施教指南</text>
+      <text v-if="config.teachT.length > 0" class="sub-title">{{ config.teachT }}</text>
+      <text v-if="config.teachP.length > 0" class="para-item">{{ config.teachP }}</text>
+      <text v-if="config.teachP2.length > 0" class="para-item">{{ config.teachP2 }}</text>
+      <view v-if="config.keys.length > 0" class="tag-wrap">
+        <view v-for="(k, idx) in config.keys" :key="'k' + idx" class="tag-pill"><text class="tag-text">{{ k }}</text></view>
+      </view>
+      <view v-if="config.says.length > 0" class="quote-box">
+        <text class="sub-title">孩子心声</text>
+        <text v-for="(s, idx) in config.says" :key="'s' + idx" class="para-item">“{{ s }}”</text>
+      </view>
+      <view v-if="config.probs.length > 0">
+        <text class="sub-title">常见困扰</text>
+        <text v-for="(pr, idx) in config.probs" :key="'pr' + idx" class="para-item">• {{ pr }}</text>
+        <text v-if="config.probS.length > 0" class="dim-text">{{ config.probS }}</text>
+      </view>
+    </view>
+
+    <!-- 6. 成长阶段建议 -->
+    <view v-if="growList.length > 0" class="sec-card">
+      <text class="sec-title">分阶段成长路线</text>
+      <view v-for="(g, idx) in growList" :key="idx" class="item-box">
+        <text v-if="g.stage.length > 0" class="stage-badge">{{ g.stage }}</text>
+        <text v-if="g.title.length > 0" class="item-title">{{ g.title }}</text>
+        <text v-if="g.content.length > 0" class="body-text">{{ g.content }}</text>
+      </view>
+    </view>
+
+    <!-- 7. 素质教育推荐 -->
+    <view v-if="kidInfo != null && kidInfo.learnings.length > 0" class="sec-card">
+      <text class="sec-title">素质教育与兴趣培养</text>
+      <view v-for="(lt, idx) in kidInfo.learnings" :key="idx" class="item-box">
+        <view class="item-row">
+          <image v-if="lt.coverUrl.length > 0" class="item-cover" :src="lt.coverUrl" mode="aspectFill" />
+          <view class="item-main">
+            <text class="item-title">{{ lt.title }}</text>
+            <text v-if="lt.desc.length > 0" class="dim-text">{{ lt.desc }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 8. 未来职业规划与大脑特征影响 -->
+    <view v-if="kidInfo != null && kidInfo.jobs.length > 0" class="sec-card">
+      <text class="sec-title">未来职业规划方向</text>
+      <view v-for="(job, idx) in kidInfo.jobs" :key="idx" class="item-box">
+        <view class="bar-head">
+          <text class="item-title">{{ job.title }}</text>
+          <text v-if="job.fraction > 0" class="bar-val">匹配度 {{ job.fraction }}%</text>
+        </view>
+        <text v-if="job.desc.length > 0" class="body-text">{{ job.desc }}</text>
+        <text v-if="job.desc1.length > 0" class="dim-text">{{ job.desc1 }}</text>
+        <text v-if="job.tzTitle2.length > 0" class="sub-title">{{ job.tzTitle2 }}</text>
+        <text v-if="job.tzDesc2.length > 0" class="dim-text">{{ job.tzDesc2 }}</text>
+        <text v-if="job.tzTitle3.length > 0" class="sub-title">{{ job.tzTitle3 }}</text>
+        <text v-if="job.tzDesc3.length > 0" class="dim-text">{{ job.tzDesc3 }}</text>
+        <text v-if="job.tzTitle4.length > 0" class="sub-title">{{ job.tzTitle4 }}</text>
+        <text v-if="job.tzDesc4.length > 0" class="dim-text">{{ job.tzDesc4 }}</text>
+      </view>
+      <view v-if="kidInfo.jfxTitle.length > 0 || kidInfo.jfxDesc.length > 0" class="quote-box">
+        <text class="sub-title">{{ kidInfo.jfxTitle.length > 0 ? kidInfo.jfxTitle : '大脑特征对职业的影响' }}</text>
+        <text v-if="kidInfo.jfxDesc.length > 0" class="body-text">{{ kidInfo.jfxDesc }}</text>
+        <text v-if="kidInfo.jfxWorth.length > 0" class="dim-text">核心价值感：{{ kidInfo.jfxWorth }}</text>
+      </view>
+    </view>
+
+    <!-- 9. 同天赋名人堂 & 天赋剧场 -->
+    <view v-if="peopleList.length > 0" class="sec-card">
+      <text class="sec-title">同天赋榜样人物</text>
+      <view v-for="(p, idx) in peopleList" :key="idx" class="item-box">
+        <view class="item-row">
+          <image v-if="p.img.length > 0" class="item-cover" :src="p.img" mode="aspectFill" />
+          <view class="item-main">
+            <text class="item-title">{{ p.name }}</text>
+            <text v-if="p.title.length > 0" class="item-sub">{{ p.title }}</text>
+            <text v-if="p.quote.length > 0" class="dim-text">{{ p.quote }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="episodeList.length > 0" class="sec-card">
+      <text class="sec-title">天赋剧场推荐</text>
+      <view v-for="(ep, idx) in episodeList" :key="idx" class="item-box">
+        <view class="item-row">
+          <image v-if="ep.img.length > 0" class="item-cover" :src="ep.img" mode="aspectFill" />
+          <view class="item-main">
+            <text class="item-title">{{ ep.title }}</text>
+            <text v-if="ep.subtitle.length > 0" class="dim-text">{{ ep.subtitle }}</text>
+            <text v-if="ep.duration.length > 0" class="item-sub">{{ ep.duration }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getApiOrigin } from '../../config/environment.uts'
+import { talentAvatarFile } from '../../api/talent.uts'
+import {
+  FullTalentReport,
+  KidReportInfo,
+  TalentConfigView,
+  TalentEpisodeItem,
+  TalentGrowItem,
+  TalentPersonItem
+} from '../../api/talent-types.uts'
+
+const props = defineProps<{
+  report: FullTalentReport
+  nickname: string
+}>()
+
+const config = computed((): TalentConfigView | null => props.report.config)
+const kidInfo = computed((): KidReportInfo | null => props.report.kidInfo)
+
+const heroImg = computed((): string => {
+  const cfg = config.value
+  if (cfg != null && cfg.ringImg.length > 0) return cfg.ringImg
+  if (cfg != null && cfg.badgeImg.length > 0) return cfg.badgeImg
+  return getApiOrigin() + '/static/dayu/assets/ip/ring-' + talentAvatarFile(props.report.talent) + '.png'
+})
+
+const kidMetaTag = computed((): string => {
+  const tags: string[] = []
+  if (props.report.age > 0) tags.push(props.report.age.toString() + '岁')
+  if (props.report.resultas == 1) tags.push('成绩优秀')
+  else if (props.report.resultas == 2) tags.push('成绩一般')
+  else if (props.report.resultas == 3) tags.push('成绩待提升')
+  return tags.length > 0 ? ' · ' + tags.join(' · ') : ''
+})
+
+const potLabel = computed((): string => {
+  const pn = config.value?.potName ?? ''
+  return pn.length > 0 ? ' · ' + pn : ''
+})
+
+const quoteText = computed((): string => {
+  const cfg = config.value
+  if (cfg == null) return ''
+  if (cfg.quote.length > 0) return cfg.quote
+  return cfg.mantra
+})
+
+const leftBrainText = computed((): string => {
+  const lb = kidInfo.value?.lBrain ?? ''
+  if (lb.length > 0) return lb
+  const bl = config.value?.bl ?? 0
+  return bl > 0 ? bl.toString() + '%' : ''
+})
+
+const rightBrainText = computed((): string => {
+  const rb = kidInfo.value?.rBrain ?? ''
+  if (rb.length > 0) return rb
+  const br = config.value?.br ?? 0
+  return br > 0 ? br.toString() + '%' : ''
+})
+
+const blDesc = computed((): string => config.value?.blT ?? '')
+const brDesc = computed((): string => config.value?.brT ?? '')
+const brainDesc = computed((): string => kidInfo.value?.brainDesc ?? '')
+const brainLabels = computed((): string[] => kidInfo.value?.brainLabels ?? [])
+const hasBrain = computed((): boolean => leftBrainText.value.length > 0 || rightBrainText.value.length > 0 || brainDesc.value.length > 0)
+const growList = computed((): TalentGrowItem[] => config.value?.grow ?? [])
+const peopleList = computed((): TalentPersonItem[] => config.value?.people ?? [])
+const episodeList = computed((): TalentEpisodeItem[] => config.value?.eps ?? [])
+</script>
+
+<style lang="scss" scoped>
+@import './report-sections.scss';
+</style>

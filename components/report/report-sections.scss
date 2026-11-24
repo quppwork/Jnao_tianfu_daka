@@ -1,0 +1,39 @@
+@import '../../styles/dayu-theme.scss';
+
+.sec-card { display: flex; flex-direction: column; padding: 18px 16px; margin-bottom: 12px; border-radius: 18px; border: 1.5px solid $dy-border; background-color: $dy-card; }
+.hero-card { display: flex; flex-direction: column; align-items: center; padding: 22px 16px; margin-bottom: 12px; border-radius: 20px; border: 1.5px solid $dy-gold-border; background-color: $dy-bubble; background-image: linear-gradient(135deg, #1b2234, $dy-card); }
+.hero-badge { width: 88px; height: 88px; border-radius: 44px; margin-bottom: 10px; border: 2px solid $dy-gold; }
+.eyebrow { color: $dy-gold; font-size: 12px; font-weight: 800; letter-spacing: 1px; }
+.hero-talent { color: $dy-gold-bright; font-size: 30px; font-weight: 900; margin-top: 6px; }
+.hero-combo { color: $dy-green-soft; font-size: 14px; font-weight: 700; margin-top: 4px; }
+.hero-slogan { color: $dy-text-body; font-size: 13px; text-align: center; margin-top: 8px; line-height: 20px; }
+.hero-meta { color: $dy-muted; font-size: 12px; margin-top: 6px; }
+.sec-title { color: $dy-gold-bright; font-size: 16px; font-weight: 900; margin-bottom: 10px; }
+.sub-title { color: $dy-text; font-size: 14px; font-weight: 800; margin-top: 10px; margin-bottom: 6px; }
+.body-text { color: $dy-text-body; font-size: 13px; line-height: 22px; }
+.dim-text { color: $dy-muted; font-size: 12px; line-height: 19px; }
+.para-item { color: $dy-text-body; font-size: 13px; line-height: 22px; margin-bottom: 8px; }
+.bar-row { display: flex; flex-direction: column; margin-bottom: 10px; }
+.bar-head { display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.bar-label { color: $dy-text; font-size: 13px; font-weight: 700; }
+.bar-val { color: $dy-gold-bright; font-size: 13px; font-weight: 800; }
+.bar-track { height: 7px; border-radius: 4px; background-color: #1c2436; overflow: hidden; }
+.bar-fill { height: 7px; border-radius: 4px; background-color: $dy-green; }
+.bar-fill-gold { background-color: $dy-gold; }
+.tag-wrap { display: flex; flex-direction: row; flex-wrap: wrap; margin-top: 6px; margin-bottom: 6px; }
+.tag-pill { padding: 4px 10px; border-radius: 10px; background-color: $dy-gold-bg; border: 1px solid $dy-gold-border; margin-right: 8px; margin-bottom: 8px; }
+.tag-text { color: $dy-gold-bright; font-size: 12px; font-weight: 700; }
+.green-pill { padding: 4px 10px; border-radius: 10px; background-color: $dy-green-bg; border: 1px solid $dy-green-border; margin-right: 8px; margin-bottom: 8px; }
+.green-pill-text { color: $dy-green-soft; font-size: 12px; font-weight: 700; }
+.quote-box { padding: 12px 14px; border-radius: 12px; background-color: $dy-bubble; border-left: 3px solid $dy-gold; margin-top: 8px; margin-bottom: 8px; }
+.item-box { display: flex; flex-direction: column; padding: 12px; border-radius: 12px; background-color: $dy-bubble; border: 1px solid $dy-border; margin-bottom: 10px; }
+.item-row { display: flex; flex-direction: row; align-items: center; }
+.item-cover { width: 52px; height: 52px; border-radius: 10px; margin-right: 12px; background-color: #1c2436; }
+.item-main { flex: 1; display: flex; flex-direction: column; }
+.item-title { color: $dy-text; font-size: 14px; font-weight: 800; }
+.item-sub { color: $dy-gold; font-size: 12px; margin-top: 2px; }
+.brain-row { display: flex; flex-direction: row; margin-bottom: 10px; }
+.brain-col { flex: 1; padding: 12px; border-radius: 12px; background-color: $dy-bubble; border: 1px solid $dy-border; }
+.brain-col-left { margin-right: 10px; }
+.brain-pct { color: $dy-gold-bright; font-size: 20px; font-weight: 900; margin-top: 4px; }
+.stage-badge { align-self: flex-start; padding: 3px 8px; border-radius: 6px; background-color: $dy-green-bg; color: $dy-green-soft; font-size: 11px; font-weight: 800; margin-bottom: 4px; }

@@ -1,10 +1,111 @@
 import { requestJson } from '../network/request.uts'
 import { streamPost, SseEventSink } from '../network/stream.uts'
 import { LLM_TIMEOUT_MS } from '../network/timeouts.uts'
+import {
+  KidDraftInput,
+  KidDraftResult,
+  TalentSubmitInput
+} from './talent-types.uts'
 
-/** 天赋测评与报告内解答 */
+/** 天赋测评、迷者补充、完整报告、关系测评与报告内解答 */
 
-/** type: 0 成人 / 1 儿童（后端 talent.py 注释为 `0 adult, 1 child`）；childUserId 大于 0 时结果落库 */
+/** 1. 拉取 35 题题库：questionType 1=成人 / 2=儿童(6-9岁) / 3=少年(10-16岁) */
+export function fetchTalentQuestions(questionType: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/questions?question_type=' + questionType.toString())
+}
+
+/** 2. 创建儿童测评预记录，返回 draft_id + question_type(2或3) */
+export async function createKidDraft(input: KidDraftInput): Promise<KidDraftResult> {
+  const body: UTSJSONObject = {
+    sex: input.sex,
+    age: input.age,
+    rela: input.rela,
+    resultas: input.resultas
+  }
+  if (input.targetChildId > 0) body['target_child_id'] = input.targetChildId
+  const resp = await requestJson('/api/talent/kid/draft', 'POST', body)
+  const data = resp.getJSON('data') ?? resp
+  const draftId = data.getNumber('draft_id') ?? data.getNumber('id') ?? 0
+  const questionType = data.getNumber('question_type') ?? (input.age >= 10 ? 3 : 2)
+  if (draftId <= 0) {
+    throw new Error(resp.getString('msg') ?? '创建儿童测评预记录失败')
+  }
+  return { draftId: draftId, questionType: questionType }
+}
+
+/** 3. 提交 35 题答案并直连 WuDao 算分（testType: 1=成人 / 2=儿童） */
+export function submitTalentAssessment(input: TalentSubmitInput): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {
+    test_type: input.testType,
+    answer: input.answer
+  }
+  if (input.sex > 0) body['sex'] = input.sex
+  if (input.age > 0) body['age'] = input.age
+  if (input.draftId > 0) body['draft_id'] = input.draftId
+  return requestJson('/api/talent/submit', 'POST', body, null, true, LLM_TIMEOUT_MS)
+}
+
+/** 4. 拉取迷者（发哥）3 轮补充测试题库：type 0=儿童/家长视角, 1=成人/学生视角 */
+export function fetchSupplementQuestions(type: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/supplement/questions?type=' + type.toString())
+}
+
+/** 5. 提交迷者补充测试结果（两字组合如 赢思） */
+export function submitSupplementTalent(assessmentId: number, talent: string): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {
+    assessment_id: assessmentId,
+    talent: talent
+  }
+  return requestJson('/api/talent/supplement/submit', 'POST', body)
+}
+
+/** 6. 获取完整报告页数据（成人富化 / 儿童完整 + talent_config） */
+export function getFullTalentReport(assessmentId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/report/' + assessmentId.toString())
+}
+
+/** 7. 获取静态天赋配置（0=全部, 1=成人, 2=儿童） */
+export function getTalentConfig(testType: number = 0): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/config?test_type=' + testType.toString())
+}
+
+/** 8. 关系测评：提交合测（好友或自己的孩子） */
+export function submitRelationAssessment(
+  rela: number,
+  friendUserId: number,
+  targetChildId: number
+): Promise<UTSJSONObject> {
+  const body: UTSJSONObject = {
+    rela: rela,
+    friend_user_id: friendUserId,
+    target_child_id: targetChildId
+  }
+  return requestJson('/api/talent/relation/submit', 'POST', body, null, true, LLM_TIMEOUT_MS)
+}
+
+/** 9. 关系测评：检查孩子合测前置条件 */
+export function getRelationChildInfo(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/relation/child-info?child_id=' + childId.toString())
+}
+
+/** 10. 关系测评：受邀方落地页信息 */
+export function getRelationGuestInfo(friendUserId: number, rela: number): Promise<UTSJSONObject> {
+  return requestJson(
+    '/api/talent/relation/guest-info?friend_user_id=' + friendUserId.toString() + '&rela=' + rela.toString()
+  )
+}
+
+/** 11. 关系测评：历史列表 */
+export function listRelationAssessments(): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/relation/list')
+}
+
+/** 12. 关系测评：报告详情 */
+export function getRelationReport(relationId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/talent/relation/' + relationId.toString())
+}
+
+/** type: 0 成人 / 1 儿童（兼容旧调用方） */
 export function submitTalentReport(
   answer: string,
   uid: number,

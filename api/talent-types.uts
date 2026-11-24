@@ -1,0 +1,279 @@
+/** 天赋测评与关系测评完整强类型定义（供 .uvue 与 api/talent.uts 共享） */
+
+export type TalentQuestionItem = {
+  id: number
+  questionNo: number
+  content: string
+  tipYes: string
+  tipNo: string
+}
+
+export type KidDraftInput = {
+  sex: number
+  age: number
+  rela: number
+  resultas: number
+  targetChildId: number
+}
+
+export type KidDraftResult = {
+  draftId: number
+  questionType: number
+}
+
+export type TalentSubmitInput = {
+  testType: number
+  answer: string
+  sex: number
+  age: number
+  draftId: number
+}
+
+export type TalentSubmitResult = {
+  assessmentId: number
+  testType: number
+  property: string
+  talent: string
+  checkTalent: string
+  isMihai: number
+  needPay: number
+  talentConflict: boolean
+  talentLocked: boolean
+  talentLastChance: boolean
+  lockMessage: string
+  currentTalent: string
+}
+
+export type SupplementOption = {
+  code: string
+  label: string
+}
+
+export type SupplementQuestion = {
+  id: number
+  round: number
+  group: string
+  title: string
+  options: SupplementOption[]
+}
+
+export type SupplementBundle = {
+  first: SupplementQuestion | null
+  round1: SupplementQuestion[]
+  round2: Map<string, SupplementQuestion[]>
+  round3: Map<string, SupplementQuestion[]>
+}
+
+export type ReportAttrItem = {
+  id: string
+  name: string
+  value: number
+  grade: number
+  isMain: number
+}
+
+export type ReportAbilityItem = {
+  abilityName: string
+  value: number
+  grade: number
+  gradeSummary: string
+  desp: string
+}
+
+export type TalentPersonItem = {
+  name: string
+  title: string
+  quote: string
+  img: string
+}
+
+export type TalentEpisodeItem = {
+  title: string
+  subtitle: string
+  duration: string
+  img: string
+}
+
+export type TalentGrowItem = {
+  stage: string
+  title: string
+  content: string
+}
+
+export type TalentConfigView = {
+  key: string
+  name: string
+  color: string
+  badgeImg: string
+  element: string
+  beast: string
+  slogan: string
+  hero: string
+  en: string
+  theater: string
+  intro: string
+  ringImg: string
+  quote: string
+  mantra: string
+  quoteTxt: string
+  potName: string
+  potIcon: string
+  bl: number
+  br: number
+  blT: string
+  brT: string
+  teachT: string
+  teachP: string
+  teachP2: string
+  probS: string
+  keys: string[]
+  traits: string[]
+  says: string[]
+  probs: string[]
+  grow: TalentGrowItem[]
+  people: TalentPersonItem[]
+  eps: TalentEpisodeItem[]
+}
+
+export type KidLearningItem = {
+  title: string
+  desc: string
+  coverUrl: string
+}
+
+export type KidJobItem = {
+  title: string
+  fraction: number
+  desc: string
+  desc1: string
+  tzTitle2: string
+  tzDesc2: string
+  tzTitle3: string
+  tzDesc3: string
+  tzTitle4: string
+  tzDesc4: string
+}
+
+export type KidReportInfo = {
+  lBrain: string
+  rBrain: string
+  brainDesc: string
+  brainLabels: string[]
+  learnCreate: number
+  learnAbsorbed: number
+  learnImagine: number
+  learnMemory: number
+  learnObservation: number
+  problemTitle: string
+  problemSubtitle: string
+  problemParagraphs: string[]
+  piankeParagraphs: string[]
+  learnings: KidLearningItem[]
+  jobs: KidJobItem[]
+  jfxTitle: string
+  jfxDesc: string
+  jfxWorth: string
+}
+
+export type FullTalentReport = {
+  id: number
+  testType: number
+  sex: number
+  age: number
+  rela: number
+  resultas: number
+  talent: string
+  checkTalent: string
+  property: string
+  isMihai: number
+  stateId: number
+  stateName: string
+  stateDesp: string
+  careerAdvice: string
+  emotionAdvice: string
+  mainDesp: string
+  mainSupplementDesp: string
+  comboTypeName: string
+  traitSummary: string
+  traits: string[]
+  attrList: ReportAttrItem[]
+  talentAbilityName: string
+  talentAbilityValue: number
+  talentAbilityGrade: number
+  talentAbilityDesp: string
+  talentSay: string
+  adviceList: string[]
+  talentTypeName: string
+  talentTypeDesp: string
+  abilityList: ReportAbilityItem[]
+  kidInfo: KidReportInfo | null
+  config: TalentConfigView | null
+  assessedAt: string
+}
+
+export type RelationChildOption = {
+  childId: number
+  nickname: string
+  gender: number
+  talent: string
+  hasTest: number
+  testId: number
+}
+
+export type RelationListItem = {
+  id: number
+  rela: number
+  relaText: string
+  friendNickname: string
+  friendAvatar: string
+  friendTalent: string
+  scorePreview: number
+  createdAt: string
+}
+
+export type RelationSection = {
+  title: string
+  lines: string[]
+}
+
+export type RelationDimItem = {
+  name: string
+  value: number
+  grade: number
+  sign: string
+  despLines: string[]
+  sections: RelationSection[]
+}
+
+export type RelationUserBrief = {
+  nickname: string
+  avatar: string
+  sex: number
+  talent: string
+}
+
+export type RelationReportDetail = {
+  id: number
+  rela: number
+  relaText: string
+  myTalent: string
+  friendTalent: string
+  myUser: RelationUserBrief
+  friendUser: RelationUserBrief
+  score: number
+  tag: string
+  txt: string
+  dims: RelationDimItem[]
+  createdAt: string
+}
+
+export type RelationSubmitResult = {
+  id: number
+  score: number
+  tag: string
+  txt: string
+  needSex: boolean
+  needChildTest: boolean
+  childId: number
+  message: string
+}

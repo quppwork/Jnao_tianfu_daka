@@ -1,0 +1,569 @@
+import { getApiOrigin } from '../config/environment.uts'
+import {
+  FullTalentReport,
+  KidJobItem,
+  KidLearningItem,
+  KidReportInfo,
+  RelationChildOption,
+  RelationDimItem,
+  RelationListItem,
+  RelationReportDetail,
+  RelationSection,
+  RelationSubmitResult,
+  RelationUserBrief,
+  ReportAbilityItem,
+  ReportAttrItem,
+  SupplementBundle,
+  SupplementOption,
+  SupplementQuestion,
+  TalentConfigView,
+  TalentEpisodeItem,
+  TalentGrowItem,
+  TalentPersonItem,
+  TalentQuestionItem,
+  TalentSubmitResult
+} from './talent-types.uts'
+
+/** 过滤源库里的 '—' 占位符 */
+export function cleanText(value: string | null): string {
+  if (value == null) return ''
+  const trimmed = value.trim()
+  return trimmed == '—' || trimmed == '-' ? '' : trimmed
+}
+
+/** 补全相对资源路径为完整 URL */
+export function resolveTalentAsset(raw: string | null): string {
+  const path = cleanText(raw)
+  if (path.length == 0) return ''
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  const origin = getApiOrigin()
+  if (path.startsWith('/')) return origin + path
+  return origin + '/' + path
+}
+
+/** 将可能含 HTML 标签的富文本清洗为纯文本段落数组（兜底用） */
+export function htmlToParagraphs(raw: string): string[] {
+  const cleaned = raw
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+  const lines = cleaned.split('\n')
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (line.length > 0) out.push(line)
+  }
+  return out
+}
+
+function readStringArray(obj: UTSJSONObject, key: string): string[] {
+  const arr = obj.getArray<string>(key)
+  if (arr == null) return []
+  const out: string[] = []
+  for (let i = 0; i < arr.length; i++) {
+    const v = cleanText(arr[i])
+    if (v.length > 0) out.push(v)
+  }
+  return out
+}
+
+function readMixedStringArray(obj: UTSJSONObject, key: string): string[] {
+  const raw = obj.getArray<any>(key)
+  if (raw == null) return []
+  const out: string[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i]
+    if (typeof item == 'string') {
+      const s = cleanText(item as string)
+      if (s.length > 0) out.push(s)
+    } else if (item instanceof UTSJSONObject) {
+      const j = item as UTSJSONObject
+      const t = cleanText(j.getString('title') ?? j.getString('name') ?? j.getString('text') ?? j.getString('content') ?? '')
+      const d = cleanText(j.getString('desc') ?? j.getString('detail') ?? '')
+      if (t.length > 0 && d.length > 0) out.push(t + '：' + d)
+      else if (t.length > 0) out.push(t)
+      else if (d.length > 0) out.push(d)
+    }
+  }
+  return out
+}
+
+export function parseTalentQuestions(resp: UTSJSONObject): TalentQuestionItem[] {
+  const data = resp.getJSON('data') ?? resp
+  const rows = data.getArray<UTSJSONObject>('items') ?? []
+  const list: TalentQuestionItem[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    list.push({
+      id: r.getNumber('id') ?? 0,
+      questionNo: r.getNumber('question_no') ?? (i + 1),
+      content: cleanText(r.getString('content')),
+      tipYes: cleanText(r.getString('tip_yes')),
+      tipNo: cleanText(r.getString('tip_no'))
+    })
+  }
+  return list
+}
+
+export function parseTalentSubmitResult(resp: UTSJSONObject): TalentSubmitResult {
+  const data = resp.getJSON('data') ?? resp
+  return {
+    assessmentId: data.getNumber('assessment_id') ?? data.getNumber('id') ?? resp.getNumber('assessment_id') ?? 0,
+    testType: data.getNumber('test_type') ?? 1,
+    property: cleanText(data.getString('property')),
+    talent: cleanText(data.getString('talent') ?? data.getString('talent_primary')),
+    checkTalent: cleanText(data.getString('check_talent')),
+    isMihai: data.getNumber('is_mihai') ?? 0,
+    needPay: data.getNumber('need_pay') ?? 0,
+    talentConflict: data.getBoolean('talent_conflict') ?? resp.getBoolean('talent_conflict') ?? false,
+    talentLocked: data.getBoolean('talent_locked') ?? resp.getBoolean('talent_locked') ?? false,
+    talentLastChance: data.getBoolean('talent_last_chance') ?? resp.getBoolean('talent_last_chance') ?? false,
+    lockMessage: cleanText(data.getString('lock_message') ?? resp.getString('lock_message')),
+    currentTalent: cleanText(data.getString('current_talent') ?? resp.getString('current_talent'))
+  }
+}
+
+function parseSupplementQuestion(raw: UTSJSONObject): SupplementQuestion {
+  const options: SupplementOption[] = []
+  const answerObj = raw.getJSON('answer')
+  if (answerObj != null) {
+    answerObj.toMap().forEach((val: any | null, key: string) => {
+      const label = val != null ? cleanText(val.toString()) : ''
+      if (key.length > 0 && label.length > 0) {
+        options.push({ code: key, label: label })
+      }
+    })
+  } else {
+    const answerArr = raw.getArray<UTSJSONObject>('options') ?? []
+    for (let i = 0; i < answerArr.length; i++) {
+      const o = answerArr[i]
+      options.push({
+        code: cleanText(o.getString('code')),
+        label: cleanText(o.getString('label'))
+      })
+    }
+  }
+  return {
+    id: raw.getNumber('id') ?? 0,
+    round: raw.getNumber('round') ?? 1,
+    group: cleanText(raw.getString('group') ?? (raw.getNumber('group')?.toString() ?? '')),
+    title: cleanText(raw.getString('title') ?? raw.getString('content')),
+    options: options
+  }
+}
+
+export function parseSupplementBundle(resp: UTSJSONObject): SupplementBundle {
+  const data = resp.getJSON('data') ?? resp
+  const firstRaw = data.getJSON('first')
+  const first = firstRaw != null ? parseSupplementQuestion(firstRaw) : null
+
+  const round1: SupplementQuestion[] = []
+  const round2 = new Map<string, SupplementQuestion[]>()
+  const round3 = new Map<string, SupplementQuestion[]>()
+
+  const lists = data.getJSON('lists')
+  if (lists != null) {
+    const r1Arr = lists.getArray<UTSJSONObject>('1') ?? []
+    for (let i = 0; i < r1Arr.length; i++) {
+      round1.push(parseSupplementQuestion(r1Arr[i]))
+    }
+    const r2Obj = lists.getJSON('2')
+    if (r2Obj != null) {
+      r2Obj.toMap().forEach((val: any | null, key: string) => {
+        if (Array.isArray(val)) {
+          const arr = val as Array<any>
+          const items: SupplementQuestion[] = []
+          for (let i = 0; i < arr.length; i++) {
+            if (arr[i] instanceof UTSJSONObject) {
+              items.push(parseSupplementQuestion(arr[i] as UTSJSONObject))
+            }
+          }
+          round2.set(key, items)
+        }
+      })
+    }
+    const r3Obj = lists.getJSON('3')
+    if (r3Obj != null) {
+      r3Obj.toMap().forEach((val: any | null, key: string) => {
+        if (Array.isArray(val)) {
+          const arr = val as Array<any>
+          const items: SupplementQuestion[] = []
+          for (let i = 0; i < arr.length; i++) {
+            if (arr[i] instanceof UTSJSONObject) {
+              items.push(parseSupplementQuestion(arr[i] as UTSJSONObject))
+            }
+          }
+          round3.set(key, items)
+        }
+      })
+    }
+  }
+
+  return { first: first, round1: round1, round2: round2, round3: round3 }
+}
+
+function parseTalentConfigView(raw: UTSJSONObject | null): TalentConfigView | null {
+  if (raw == null) return null
+  const people: TalentPersonItem[] = []
+  const peopleArr = raw.getArray<UTSJSONObject>('people') ?? []
+  for (let i = 0; i < peopleArr.length; i++) {
+    const p = peopleArr[i]
+    people.push({
+      name: cleanText(p.getString('n') ?? p.getString('name')),
+      title: cleanText(p.getString('t') ?? p.getString('title')),
+      quote: cleanText(p.getString('q') ?? p.getString('quote')),
+      img: resolveTalentAsset(p.getString('img'))
+    })
+  }
+  const eps: TalentEpisodeItem[] = []
+  const epsArr = raw.getArray<UTSJSONObject>('eps') ?? []
+  for (let i = 0; i < epsArr.length; i++) {
+    const e = epsArr[i]
+    eps.push({
+      title: cleanText(e.getString('t') ?? e.getString('title')),
+      subtitle: cleanText(e.getString('s') ?? e.getString('subtitle')),
+      duration: cleanText(e.getString('d') ?? e.getString('duration')),
+      img: resolveTalentAsset(e.getString('img'))
+    })
+  }
+  const grow: TalentGrowItem[] = []
+  const growArr = raw.getArray<UTSJSONObject>('grow') ?? []
+  for (let i = 0; i < growArr.length; i++) {
+    const g = growArr[i]
+    grow.push({
+      stage: cleanText(g.getString('stage') ?? g.getString('age') ?? g.getString('label')),
+      title: cleanText(g.getString('title') ?? g.getString('name')),
+      content: cleanText(g.getString('content') ?? g.getString('desc') ?? g.getString('tip'))
+    })
+  }
+  return {
+    key: cleanText(raw.getString('key')),
+    name: cleanText(raw.getString('name')),
+    color: cleanText(raw.getString('color')),
+    badgeImg: resolveTalentAsset(raw.getString('badge_img')),
+    element: cleanText(raw.getString('element')),
+    beast: cleanText(raw.getString('beast')),
+    slogan: cleanText(raw.getString('slogan')),
+    hero: cleanText(raw.getString('hero')),
+    en: cleanText(raw.getString('en')),
+    theater: cleanText(raw.getString('theater')),
+    intro: cleanText(raw.getString('intro')),
+    ringImg: resolveTalentAsset(raw.getString('ring_img')),
+    quote: cleanText(raw.getString('quote')),
+    mantra: cleanText(raw.getString('mantra')),
+    quoteTxt: cleanText(raw.getString('quote_txt')),
+    potName: cleanText(raw.getString('pot_name') ?? raw.getString('pot')),
+    potIcon: cleanText(raw.getString('pot_icon') ?? raw.getString('potI')),
+    bl: raw.getNumber('bl') ?? 0,
+    br: raw.getNumber('br') ?? 0,
+    blT: cleanText(raw.getString('blT')),
+    brT: cleanText(raw.getString('brT')),
+    teachT: cleanText(raw.getString('teachT') ?? raw.getString('type')),
+    teachP: cleanText(raw.getString('teachP')),
+    teachP2: cleanText(raw.getString('teachP2')),
+    probS: cleanText(raw.getString('probS')),
+    keys: readMixedStringArray(raw, 'keys'),
+    traits: readMixedStringArray(raw, 'traits'),
+    says: readMixedStringArray(raw, 'says'),
+    probs: readMixedStringArray(raw, 'probs'),
+    grow: grow,
+    people: people,
+    eps: eps
+  }
+}
+
+function parseKidReportInfo(raw: UTSJSONObject | null): KidReportInfo | null {
+  if (raw == null) return null
+  const brain = raw.getJSON('brain')
+  const learn = raw.getJSON('learn')
+  const lp = raw.getJSON('learn_problem')
+  const jfx = raw.getJSON('jfx')
+
+  let problemParagraphs: string[] = lp != null ? readStringArray(lp, 'paragraphs') : []
+  if (problemParagraphs.length == 0 && lp != null) {
+    const html = lp.getString('html') ?? ''
+    if (html.length > 0) problemParagraphs = htmlToParagraphs(html)
+  }
+
+  let piankeParagraphs = readStringArray(raw, 'pianke_paragraphs')
+  if (piankeParagraphs.length == 0) {
+    const pHtml = raw.getString('pianke_html') ?? ''
+    if (pHtml.length > 0) piankeParagraphs = htmlToParagraphs(pHtml)
+  }
+
+  const learnings: KidLearningItem[] = []
+  const lArr = raw.getArray<UTSJSONObject>('learnings') ?? []
+  for (let i = 0; i < lArr.length; i++) {
+    const l = lArr[i]
+    learnings.push({
+      title: cleanText(l.getString('title')),
+      desc: cleanText(l.getString('desc')),
+      coverUrl: resolveTalentAsset(l.getString('cover_url'))
+    })
+  }
+
+  const jobs: KidJobItem[] = []
+  const jArr = raw.getArray<UTSJSONObject>('jobs') ?? []
+  for (let i = 0; i < jArr.length; i++) {
+    const j = jArr[i]
+    jobs.push({
+      title: cleanText(j.getString('title')),
+      fraction: j.getNumber('fraction') ?? 0,
+      desc: cleanText(j.getString('desc')),
+      desc1: cleanText(j.getString('desc1')),
+      tzTitle2: cleanText(j.getString('tz_title2')),
+      tzDesc2: cleanText(j.getString('tz_desc2')),
+      tzTitle3: cleanText(j.getString('tz_title3')),
+      tzDesc3: cleanText(j.getString('tz_desc3')),
+      tzTitle4: cleanText(j.getString('tz_title4')),
+      tzDesc4: cleanText(j.getString('tz_desc4'))
+    })
+  }
+
+  return {
+    lBrain: brain != null ? cleanText(brain.getString('l_brain')) : '',
+    rBrain: brain != null ? cleanText(brain.getString('r_brain')) : '',
+    brainDesc: brain != null ? cleanText(brain.getString('brain_desc')) : '',
+    brainLabels: brain != null ? readStringArray(brain, 'brain_label') : [],
+    learnCreate: learn != null ? (learn.getNumber('create') ?? 0) : 0,
+    learnAbsorbed: learn != null ? (learn.getNumber('absorbed') ?? 0) : 0,
+    learnImagine: learn != null ? (learn.getNumber('imagine') ?? 0) : 0,
+    learnMemory: learn != null ? (learn.getNumber('memory_ability') ?? 0) : 0,
+    learnObservation: learn != null ? (learn.getNumber('observation') ?? 0) : 0,
+    problemTitle: lp != null ? cleanText(lp.getString('title')) : '',
+    problemSubtitle: lp != null ? cleanText(lp.getString('subtitle')) : '',
+    problemParagraphs: problemParagraphs,
+    piankeParagraphs: piankeParagraphs,
+    learnings: learnings,
+    jobs: jobs,
+    jfxTitle: jfx != null ? cleanText(jfx.getString('trait_title')) : '',
+    jfxDesc: jfx != null ? cleanText(jfx.getString('trait_desc')) : '',
+    jfxWorth: jfx != null ? cleanText(jfx.getString('sense_of_worth')) : ''
+  }
+}
+
+export function parseFullTalentReport(resp: UTSJSONObject): FullTalentReport {
+  const d = resp.getJSON('data') ?? resp
+  const mainAttr = d.getJSON('main_attr')
+  const ta = d.getJSON('talent_ability')
+  const tt = d.getJSON('talent_type')
+
+  const attrList: ReportAttrItem[] = []
+  const rawAttrs = d.getArray<UTSJSONObject>('attr_list') ?? []
+  for (let i = 0; i < rawAttrs.length; i++) {
+    const a = rawAttrs[i]
+    attrList.push({
+      id: cleanText(a.getString('id')),
+      name: cleanText(a.getString('name')),
+      value: a.getNumber('value') ?? 0,
+      grade: a.getNumber('grade') ?? 0,
+      isMain: a.getNumber('is_main') ?? 0
+    })
+  }
+
+  const abilityList: ReportAbilityItem[] = []
+  const rawAbilities = d.getArray<UTSJSONObject>('ability_list') ?? []
+  for (let i = 0; i < rawAbilities.length; i++) {
+    const ab = rawAbilities[i]
+    const abName = cleanText(ab.getString('ability_name'))
+    const fallbackName = cleanText(ab.getString('abilityName'))
+    abilityList.push({
+      abilityName: abName.length > 0 ? abName : fallbackName,
+      value: ab.getNumber('value') ?? 0,
+      grade: ab.getNumber('grade') ?? 0,
+      gradeSummary: cleanText(ab.getString('grade_summary')),
+      desp: cleanText(ab.getString('desp'))
+    })
+  }
+
+  const rawTestType = d.getNumber('test_type') ?? 1
+  const normalizedTestType = rawTestType == 0 ? 1 : rawTestType
+
+  return {
+    id: d.getNumber('id') ?? 0,
+    testType: normalizedTestType,
+    sex: d.getNumber('sex') ?? 0,
+    age: d.getNumber('age') ?? 0,
+    rela: d.getNumber('rela') ?? 0,
+    resultas: d.getNumber('resultas') ?? 1,
+    talent: cleanText(d.getString('talent') ?? d.getString('talent_primary')),
+    checkTalent: cleanText(d.getString('check_talent')),
+    property: cleanText(d.getString('property')),
+    isMihai: d.getNumber('is_mihai') ?? 0,
+    stateId: d.getNumber('state_id') ?? 0,
+    stateName: cleanText(d.getString('state_name')),
+    stateDesp: cleanText(d.getString('state_desp')),
+    careerAdvice: cleanText(d.getString('career_advice')),
+    emotionAdvice: cleanText(d.getString('emotion_advice')),
+    mainDesp: mainAttr != null ? cleanText(mainAttr.getString('desp')) : '',
+    mainSupplementDesp: mainAttr != null ? cleanText(mainAttr.getString('supplement_desp')) : '',
+    comboTypeName: mainAttr != null ? cleanText(mainAttr.getString('combo_type_name')) : '',
+    traitSummary: mainAttr != null ? cleanText(mainAttr.getString('trait_summary')) : '',
+    traits: mainAttr != null ? readStringArray(mainAttr, 'traits') : [],
+    attrList: attrList,
+    talentAbilityName: ta != null ? cleanText(ta.getString('abilityName')) : '',
+    talentAbilityValue: ta != null ? (ta.getNumber('value') ?? 0) : 0,
+    talentAbilityGrade: ta != null ? (ta.getNumber('grade') ?? 0) : 0,
+    talentAbilityDesp: ta != null ? cleanText(ta.getString('desp')) : '',
+    talentSay: ta != null ? cleanText(ta.getString('talent_say')) : '',
+    adviceList: ta != null ? readStringArray(ta, 'advice_list') : [],
+    talentTypeName: tt != null ? cleanText(tt.getString('name')) : '',
+    talentTypeDesp: tt != null ? cleanText(tt.getString('desp')) : '',
+    abilityList: abilityList,
+    kidInfo: parseKidReportInfo(d.getJSON('kid_info')),
+    config: parseTalentConfigView(d.getJSON('talent_config')),
+    assessedAt: (d.getString('assessed_at') ?? '').slice(0, 10)
+  }
+}
+
+export function parseParentChildrenRows(resp: UTSJSONObject): Array<UTSJSONObject> {
+  return resp.getArray<UTSJSONObject>('children') ?? []
+}
+
+export function parseRelationChildOption(resp: UTSJSONObject): RelationChildOption {
+  const d = resp.getJSON('data') ?? resp
+  return {
+    childId: d.getNumber('child_id') ?? 0,
+    nickname: cleanText(d.getString('nickname')),
+    gender: d.getNumber('gender') ?? 0,
+    talent: cleanText(d.getString('talent')),
+    hasTest: d.getNumber('has_test') ?? 0,
+    testId: d.getNumber('test_id') ?? 0
+  }
+}
+
+export function parseRelationSubmitResult(resp: UTSJSONObject): RelationSubmitResult {
+  const code = resp.getNumber('code') ?? 0
+  const d = resp.getJSON('data') ?? resp
+  return {
+    id: d.getNumber('id') ?? 0,
+    score: d.getNumber('score') ?? 0,
+    tag: cleanText(d.getString('tag')),
+    txt: cleanText(d.getString('txt')),
+    needSex: (d.getNumber('need_sex') ?? resp.getNumber('need_sex') ?? 0) == 1,
+    needChildTest: (d.getNumber('need_child_test') ?? resp.getNumber('need_child_test') ?? 0) == 1,
+    childId: d.getNumber('child_id') ?? resp.getNumber('child_id') ?? 0,
+    message: code == 1 ? '' : cleanText(resp.getString('msg') ?? resp.getString('detail'))
+  }
+}
+
+export function parseRelationList(resp: UTSJSONObject): RelationListItem[] {
+  const d = resp.getJSON('data') ?? resp
+  const rows = d.getArray<UTSJSONObject>('list') ?? []
+  const list: RelationListItem[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    const fu = r.getJSON('friend_user_info')
+    list.push({
+      id: r.getNumber('id') ?? 0,
+      rela: r.getNumber('rela') ?? 3,
+      relaText: cleanText(r.getString('rela_text')),
+      friendNickname: fu != null ? cleanText(fu.getString('nickname')) : '',
+      friendAvatar: fu != null ? resolveTalentAsset(fu.getString('avatar') ?? fu.getString('headimgurl')) : '',
+      friendTalent: fu != null ? cleanText(fu.getString('talent') ?? fu.getString('adult_talent')) : '',
+      scorePreview: r.getNumber('score_preview') ?? 0,
+      createdAt: (r.getString('created_at') ?? '').slice(0, 10)
+    })
+  }
+  return list
+}
+
+function splitRelationSections(raw: string): RelationSection[] {
+  const lines = htmlToParagraphs(raw)
+  const sections: RelationSection[] = []
+  let currentTitle = ''
+  let currentLines: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.startsWith('【') && line.includes('】')) {
+      if (currentTitle.length > 0 || currentLines.length > 0) {
+        sections.push({ title: currentTitle, lines: currentLines })
+      }
+      currentTitle = line
+      currentLines = []
+    } else {
+      currentLines.push(line)
+    }
+  }
+  if (currentTitle.length > 0 || currentLines.length > 0) {
+    sections.push({ title: currentTitle, lines: currentLines })
+  }
+  return sections
+}
+
+function parseUserBrief(raw: UTSJSONObject | null, fallbackTalent: string): RelationUserBrief {
+  if (raw == null) {
+    return { nickname: '', avatar: '', sex: 0, talent: fallbackTalent }
+  }
+  const t = cleanText(raw.getString('talent') ?? raw.getString('adult_talent'))
+  return {
+    nickname: cleanText(raw.getString('nickname')),
+    avatar: resolveTalentAsset(raw.getString('avatar') ?? raw.getString('headimgurl')),
+    sex: raw.getNumber('sex') ?? 0,
+    talent: t.length > 0 ? t : fallbackTalent
+  }
+}
+
+export function parseRelationReportDetail(resp: UTSJSONObject): RelationReportDetail {
+  const d = resp.getJSON('data') ?? resp
+  const myTalent = cleanText(d.getString('my_talent'))
+  const friendTalent = cleanText(d.getString('friend_talent'))
+  const rawResults = d.getArray<UTSJSONObject>('results') ?? []
+  const dimNames = ['支持度', '互补度', '沟通度', '和谐度']
+  const dims: RelationDimItem[] = []
+  for (let i = 0; i < rawResults.length; i++) {
+    const item = rawResults[i]
+    const defaultName = i < dimNames.length ? dimNames[i] : '维度'
+    const despLines = readStringArray(item, 'desp_lines')
+    const despRaw = item.getString('desp') ?? ''
+    const resolvedDesp = despLines.length > 0 ? despLines : (despRaw.length > 0 ? htmlToParagraphs(despRaw) : [])
+
+    const sections: RelationSection[] = []
+    const rawSections = item.getArray<UTSJSONObject>('desp_two_sections')
+    if (rawSections != null && rawSections.length > 0) {
+      for (let j = 0; j < rawSections.length; j++) {
+        const s = rawSections[j]
+        sections.push({
+          title: cleanText(s.getString('title')),
+          lines: readStringArray(s, 'lines')
+        })
+      }
+    } else {
+      const despTwoRaw = item.getString('despTwo') ?? ''
+      if (despTwoRaw.length > 0) {
+        const parsed = splitRelationSections(despTwoRaw)
+        for (let j = 0; j < parsed.length; j++) sections.push(parsed[j])
+      }
+    }
+
+    const rawName = cleanText(item.getString('name'))
+    dims.push({
+      name: rawName.length > 0 ? rawName : defaultName,
+      value: item.getNumber('relationValue') ?? 0,
+      grade: item.getNumber('grade') ?? 0,
+      sign: cleanText(item.getString('sign')),
+      despLines: resolvedDesp,
+      sections: sections
+    })
+  }
+
+  return {
+    id: d.getNumber('id') ?? 0,
+    rela: d.getNumber('rela') ?? 3,
+    relaText: cleanText(d.getString('rela_text')),
+    myTalent: myTalent,
+    friendTalent: friendTalent,
+    myUser: parseUserBrief(d.getJSON('my_user_info'), myTalent),
+    friendUser: parseUserBrief(d.getJSON('friend_user_info'), friendTalent),
+    score: d.getNumber('score') ?? 0,
+    tag: cleanText(d.getString('tag')),
+    txt: cleanText(d.getString('txt')),
+    dims: dims,
+    createdAt: (d.getString('created_at') ?? '').slice(0, 10)
+  }
+}

@@ -1,0 +1,33 @@
+@import '../../styles/dayu-theme.scss';
+
+.rr-page, .scroll { display: flex; flex: 1; flex-direction: column; }
+.rr-page { background-color: $dy-bg; background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg); }
+.top { display: flex; flex-direction: row; align-items: center; padding: 8px 14px 10px; }
+.back, .spacer { width: 34px; height: 34px; }
+.back { border-radius: 17px; background-color: $dy-card; border: 1px solid $dy-border; align-items: center; justify-content: center; }
+.back-icon { color: $dy-muted; font-size: 28px; line-height: 28px; }
+.top-title { flex: 1; text-align: center; color: $dy-text; font-size: 17px; font-weight: 800; }
+.body { padding: 8px 16px 32px; }
+.hero, .card { display: flex; flex-direction: column; background-color: $dy-card; border: 1.5px solid $dy-border; border-radius: 20px; padding: 18px 16px; margin-bottom: 14px; }
+.hero { align-items: center; border-color: $dy-gold-border; background-color: $dy-bubble; background-image: linear-gradient(135deg, #1b2234, $dy-card); }
+.pair-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 14px; }
+.pair-side { flex: 1; align-items: center; }
+.pair-name { color: $dy-text; font-size: 14px; font-weight: 800; }
+.pair-talent { color: $dy-gold-bright; font-size: 18px; font-weight: 900; margin-top: 4px; }
+.pair-mid { padding: 4px 10px; border-radius: 10px; background-color: $dy-gold-bg; border: 1px solid $dy-gold-border; }
+.pair-rela { color: $dy-gold-bright; font-size: 12px; font-weight: 800; }
+.score-big { color: $dy-green-soft; font-size: 40px; font-weight: 900; }
+.score-tag { color: $dy-gold-bright; font-size: 14px; font-weight: 800; margin-top: 4px; }
+.dim-head { display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.dim-title { color: $dy-gold-bright; font-size: 16px; font-weight: 900; }
+.dim-score { color: $dy-green-soft; font-size: 16px; font-weight: 900; }
+.track { height: 7px; border-radius: 4px; background-color: #1c2436; overflow: hidden; margin-bottom: 12px; }
+.fill { height: 7px; border-radius: 4px; background-color: $dy-green; }
+.short-box { padding: 12px; border-radius: 12px; background-color: $dy-gold-bg; border: 1px solid $dy-gold-border; margin-bottom: 12px; }
+.short-line { color: $dy-gold-bright; font-size: 13px; font-weight: 700; line-height: 21px; }
+.sec-block { margin-bottom: 10px; }
+.sec-title { color: $dy-text; font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+.sec-line { color: $dy-text-body; font-size: 13px; line-height: 21px; margin-bottom: 4px; }
+.dim { color: $dy-muted; font-size: 13px; }
+.error { color: $dy-danger; font-size: 13px; margin-bottom: 10px; }
+.secondary { min-height: 44px; border-radius: 14px; background-color: $dy-bubble; border: 1px solid $dy-border; color: $dy-muted; font-size: 14px; font-weight: 700; }

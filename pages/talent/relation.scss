@@ -1,0 +1,31 @@
+@import '../../styles/dayu-theme.scss';
+
+.rela-page, .scroll { display: flex; flex: 1; flex-direction: column; }
+.rela-page { background-color: $dy-bg; background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg); }
+.top { display: flex; flex-direction: row; align-items: center; padding: 8px 14px 10px; }
+.back, .spacer { width: 34px; height: 34px; }
+.back { border-radius: 17px; background-color: $dy-card; border: 1px solid $dy-border; align-items: center; justify-content: center; }
+.back-icon { color: $dy-muted; font-size: 28px; line-height: 28px; }
+.top-title { flex: 1; text-align: center; color: $dy-text; font-size: 17px; font-weight: 800; }
+.body { padding: 8px 16px 32px; }
+.card { display: flex; flex-direction: column; background-color: $dy-card; border: 1.5px solid $dy-border; border-radius: 20px; padding: 18px 16px; margin-bottom: 14px; }
+.hero-title { color: $dy-gold-bright; font-size: 20px; font-weight: 900; }
+.hero-sub { color: $dy-muted; font-size: 13px; margin-top: 6px; line-height: 20px; }
+.sec-label { color: $dy-text; font-size: 14px; font-weight: 800; margin-bottom: 10px; }
+.chip-row { display: flex; flex-direction: row; flex-wrap: wrap; }
+.chip { padding: 10px 14px; border-radius: 12px; background-color: $dy-bubble; border: 1.5px solid $dy-border; margin-right: 10px; margin-bottom: 10px; }
+.chip-active { background-color: $dy-gold-bg; border-color: $dy-gold; }
+.chip-text { color: $dy-text-body; font-size: 14px; font-weight: 700; }
+.chip-text-active { color: $dy-gold-bright; }
+.input-box { min-height: 44px; padding: 0 12px; border-radius: 12px; background-color: $dy-bubble; border: 1px solid $dy-border; color: $dy-text; font-size: 14px; }
+.child-card { display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 14px; background-color: $dy-bubble; border: 1.5px solid $dy-border; margin-bottom: 8px; }
+.child-card-active { border-color: $dy-green; background-color: $dy-green-bg; }
+.child-name { color: $dy-text; font-size: 14px; font-weight: 800; }
+.child-meta { color: $dy-muted; font-size: 12px; margin-top: 2px; }
+.badge-ok { color: $dy-green-soft; font-size: 12px; font-weight: 800; }
+.badge-warn { color: $dy-gold; font-size: 12px; font-weight: 700; }
+.primary { min-height: 46px; border-radius: 14px; background-color: #2e5bd6; background-image: linear-gradient(135deg, #3a7bff, #2e5bd6); color: #ffffff; font-size: 15px; font-weight: 800; margin-top: 6px; }
+.error { color: $dy-danger; font-size: 13px; margin-bottom: 8px; }
+.dim { color: $dy-muted; font-size: 13px; }
+.hist-item { display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid $dy-border; }
+.hist-score { color: $dy-gold-bright; font-size: 16px; font-weight: 900; }

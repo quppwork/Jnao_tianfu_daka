@@ -17,6 +17,7 @@
             :role="m.role"
             :content="m.content"
             :pending="m.pending"
+            accent="gold"
           />
 
           <view v-if="messages.length == 0 && chips.length > 0" class="tc-chips">
@@ -36,6 +37,7 @@
     <chat-composer
       :sending="sending"
       :inset="bottomInset"
+      accent="gold"
       placeholder="就问报告里的内容"
       @submit="onSubmit"
       @stop="stop"
