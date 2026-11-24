@@ -1,11 +1,23 @@
-$bg: #0b0e14;
-$card: #131926;
-$text: #edebe4;
-$muted: #8b93a5;
-$line: #232b3d;
+@import '../../styles/dayu-theme.scss';
+
+$bg: $dy-bg;
+$card: $dy-card;
+$text: $dy-text;
+$muted: $dy-muted;
+$line: $dy-border;
 $gold: #f5d576;
-$green: #6fcf8e;
-$blue: #2e6be6;
+$green: $dy-green;
+$blue: $dy-blue;
+
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-green;
+  margin-right: 10px;
+}
 
 .training, .training-scroll {
   display: flex;

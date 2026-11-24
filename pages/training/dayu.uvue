@@ -1,9 +1,9 @@
 <template>
   <view class="training">
     <view class="topbar" :style="{ marginTop: insetTop + 'px' }">
-      <view class="back" @click="goBack"><text class="back-glyph">‹</text></view>
+      <image class="brand-logo" src="/static/dayu/avatar_sizhe.jpg" mode="aspectFill" />
       <view class="brand">
-        <text class="brand-title">大宇智能体</text>
+        <text class="brand-title">今日修炼</text>
         <text class="brand-sub">DAYU · 今日通关挑战</text>
       </view>
       <text class="chip" @click="openHistory">历史记录</text>
@@ -117,6 +117,8 @@
         </view>
       </view>
     </scroll-view>
+
+    <dayu-tab-bar role="student" active="train" />
 
     <view v-if="editing" class="overlay" @click="closeEditor">
       <view class="sheet" @click.stop>

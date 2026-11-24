@@ -1,68 +1,73 @@
-$bg: #0a0e17;
-$card: #131a2a;
-$card-soft: #1a2236;
-$border: rgba(99, 132, 255, 0.18);
-$text: #e6ecf7;
-$dim: #8b97ad;
-$accent: #4f7cff;
+@import '../../styles/dayu-theme.scss';
 
-.sv-page { display: flex; flex: 1; flex-direction: column; background-color: $bg; }
+.sv-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  background-color: $dy-bg;
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
+}
 
 .sv-header {
-  display: flex; flex-direction: row; align-items: center; justify-content: space-between;
-  padding-left: 12px; padding-right: 16px; padding-bottom: 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 12px;
+  padding-right: 16px;
+  padding-bottom: 10px;
 }
 .sv-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
-.sv-back-icon { color: $text; font-size: 26px; line-height: 26px; }
-.sv-title { color: $text; font-size: 17px; font-weight: 600; }
+.sv-back-icon { color: $dy-text; font-size: 26px; line-height: 26px; }
+.sv-title { color: $dy-text; font-size: 17px; font-weight: 800; }
 .sv-placeholder { width: 32px; }
 .sv-body { flex: 1; }
 
 .sv-pick {
-  margin: 0 16px 14px 16px; height: 190px; border-radius: 14px;
-  background-color: $card; border-width: 1px; border-style: dashed; border-color: $border;
+  margin: 0 16px 14px 16px; height: 190px; border-radius: 16px;
+  background-color: $dy-card; border-width: 1.5px; border-style: dashed; border-color: $dy-green-border;
   display: flex; align-items: center; justify-content: center;
 }
-.sv-pick-icon { color: $accent; font-size: 32px; }
-.sv-pick-text { color: $dim; font-size: 13px; margin-top: 10px; }
+.sv-pick-icon { color: $dy-green; font-size: 32px; }
+.sv-pick-text { color: $dy-muted; font-size: 13px; margin-top: 10px; }
 .sv-preview { width: 100%; height: 190px; border-radius: 14px; }
 
 .sv-subjects { display: flex; flex-direction: row; flex-wrap: wrap; padding: 0 16px 8px 16px; }
 .sv-subject {
-  padding: 7px 14px; margin: 0 8px 8px 0; border-radius: 11px;
-  background-color: $card; border-width: 1px; border-style: solid; border-color: $border;
+  padding: 7px 14px; margin: 0 8px 8px 0; border-radius: 14px;
+  background-color: $dy-card; border-width: 1px; border-style: solid; border-color: $dy-border;
 }
-.sv-subject-on { background-color: rgba(79, 124, 255, 0.18); border-color: $accent; }
-.sv-subject-text { color: $text; font-size: 12px; }
+.sv-subject-on { background-color: $dy-green-bg; border-color: $dy-green; }
+.sv-subject-text { color: $dy-text; font-size: 12px; font-weight: 700; }
 
 .sv-actions { padding: 4px 16px 14px 16px; }
-.sv-submit { padding: 13px; border-radius: 12px; background-color: $accent; align-items: center; }
-.sv-submit-off { background-color: $card-soft; }
-.sv-submit-text { color: #fff; font-size: 14px; font-weight: 600; }
+.sv-submit { padding: 13px; border-radius: 14px; background-color: $dy-green; align-items: center; }
+.sv-submit-off { background-color: $dy-card; border-width: 1px; border-style: solid; border-color: $dy-border; }
+.sv-submit-text { color: $dy-bg; font-size: 14px; font-weight: 800; }
 
 .sv-result {
-  margin: 0 16px 14px 16px; padding: 16px; border-radius: 14px;
-  background-color: $card; border-width: 1px; border-style: solid; border-color: $border;
+  margin: 0 16px 14px 16px; padding: 16px; border-radius: 16px;
+  background-color: $dy-card; border-width: 1.5px; border-style: solid; border-color: $dy-border;
 }
 .sv-result-head { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
-.sv-result-title { color: $text; font-size: 15px; font-weight: 600; }
+.sv-result-title { color: $dy-text; font-size: 15px; font-weight: 800; }
 .sv-result-source {
-  padding: 2px 9px; border-radius: 8px; font-size: 10px;
-  color: $accent; background-color: rgba(79, 124, 255, 0.14);
+  padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700;
+  color: $dy-green; background-color: $dy-green-bg;
 }
-.sv-result-text { color: $text; font-size: 14px; line-height: 23px; margin-top: 12px; }
+.sv-result-text { color: $dy-text-body; font-size: 14px; line-height: 23px; margin-top: 12px; }
 
 .sv-plan {
-  margin: 0 16px 14px 16px; padding: 14px; border-radius: 12px;
-  background-color: rgba(251, 191, 36, 0.1);
-  border-width: 1px; border-style: solid; border-color: rgba(251, 191, 36, 0.25);
+  margin: 0 16px 14px 16px; padding: 14px; border-radius: 14px;
+  background-color: $dy-gold-bg;
+  border-width: 1px; border-style: solid; border-color: $dy-gold-border;
 }
-.sv-plan-text { color: #fbbf24; font-size: 12px; line-height: 19px; }
+.sv-plan-text { color: $dy-gold-bright; font-size: 12px; line-height: 19px; }
 .sv-plan-btn {
   margin-top: 12px; align-self: flex-start; padding: 8px 16px;
-  border-radius: 11px; background-color: $accent;
+  border-radius: 12px; background-color: $dy-gold;
 }
-.sv-plan-btn-text { color: #fff; font-size: 13px; font-weight: 600; }
+.sv-plan-btn-text { color: $dy-bg; font-size: 13px; font-weight: 800; }
 
-.sv-error { color: #f87171; font-size: 12px; margin: 0 16px; }
+.sv-error { color: $dy-danger; font-size: 12px; margin: 0 16px; }
 .sv-space { height: 32px; }

@@ -1,12 +1,41 @@
 <template>
   <view class="qa-page">
+    <!-- 原版大宇品牌顶栏 -->
     <view class="qa-header" :style="{ paddingTop: insetTop + 'px' }">
-      <view class="qa-back" @click="goBack"><text class="qa-back-icon">‹</text></view>
-      <view class="qa-title-wrap">
-        <text class="qa-title">学科答疑</text>
-        <text class="qa-subtitle">{{ channel.emoji }} {{ channel.name }} · {{ channel.tag }}</text>
+      <view class="qa-brand">
+        <image class="qa-logo" src="/static/dayu/avatar_sizhe.jpg" mode="aspectFill" />
+        <view class="qa-title-wrap">
+          <text class="qa-title">学科答疑</text>
+          <text class="qa-subtitle">ASK DAYU · 天赋导师在线</text>
+        </view>
       </view>
-      <view class="qa-history-entry" @click="openHistory"><text class="qa-history-text">历史</text></view>
+      <view class="qa-top-actions">
+        <view v-if="messages.length > 0" class="qa-chip-btn" @click="toggleMentorStage">
+          <text class="qa-chip-btn-text">{{ showStage ? '收起' : '导师' }}</text>
+        </view>
+        <view class="qa-chip-btn qa-chip-btn-last" @click="openHistory">
+          <text class="qa-chip-btn-text">历史</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 导师舞台卡片 -->
+    <view v-if="showStage || messages.length == 0" class="qa-stage">
+      <image
+        class="qa-stage-avatar"
+        :style="{ borderColor: channel.color }"
+        :src="channel.avatar"
+        mode="aspectFill"
+      />
+      <view class="qa-stage-info">
+        <view class="qa-stage-row">
+          <text class="qa-stage-name">{{ channel.name }}老师</text>
+          <view class="qa-stage-badge" :style="{ borderColor: channel.color }">
+            <text class="qa-stage-badge-text" :style="{ color: channel.color }">{{ channel.tag }}</text>
+          </view>
+        </view>
+        <text class="qa-stage-desc">{{ channel.emoji }} {{ channel.subject }}频道 · 一步步带你想明白，不直接甩答案</text>
+      </view>
     </view>
 
     <scroll-view class="qa-subjects" scroll-x :show-scrollbar="false">
@@ -16,10 +45,13 @@
           :key="c.subject"
           class="qa-chip"
           :class="c.subject == subject ? 'qa-chip-active' : ''"
-          :style="{ backgroundColor: c.subject == subject ? c.color : '#0f1a2e', borderColor: c.subject == subject ? c.color : 'rgba(59, 130, 246, 0.2)' }"
+          :style="{ borderColor: c.subject == subject ? c.color : '#232b3d' }"
           @click="pickSubject(c.subject)"
         >
-          <text class="qa-chip-text" :class="c.subject == subject ? 'qa-chip-text-on' : ''">{{ c.emoji }} {{ c.subject }}</text>
+          <text
+            class="qa-chip-text"
+            :style="{ color: c.subject == subject ? c.color : '#8b93a5' }"
+          >{{ c.emoji }} {{ c.subject }}</text>
         </view>
       </view>
     </scroll-view>
@@ -27,8 +59,8 @@
     <scroll-view class="qa-chat" scroll-y :scroll-into-view="scrollAnchor" :scroll-with-animation="true">
       <view class="qa-chat-inner">
         <view v-if="messages.length == 0" class="qa-empty">
-          <text class="qa-empty-title">有什么问题都可以问我</text>
-          <text class="qa-empty-hint">我会一步步带你想明白，不直接甩答案</text>
+          <text class="qa-empty-title">有什么问题都可以问{{ channel.name }}老师</text>
+          <text class="qa-empty-hint">把题目或卡壳的地方发给我，我会循序渐进引导你</text>
         </view>
 
         <chat-bubble
@@ -37,6 +69,7 @@
           :role="m.role"
           :content="m.content"
           :pending="m.pending"
+          accent="green"
         />
 
         <view id="qa-bottom" class="qa-bottom-anchor"></view>
@@ -52,11 +85,14 @@
 
     <chat-composer
       :sending="sending"
-      :inset="bottomInset"
+      :inset="0"
+      accent="green"
       placeholder="输入你的问题"
       @submit="onSubmit"
       @stop="stop"
     />
+
+    <dayu-tab-bar role="student" active="qa" />
 
     <view v-if="historyOpen" class="qa-mask" @click="closeHistory">
       <view class="qa-sheet" @click.stop>
@@ -109,14 +145,14 @@ const historyOpen = ref(false)
 const historyLoading = ref(false)
 const sessions = ref([])
 const insetTop = ref(0)
-const bottomInset = ref(0)
+const showStage = ref(true)
 
 let requestTask: RequestTask | null = null
 let requestSeq = 0
 let scrollTimer = 0
 
-function goBack() {
-  uni.navigateBack()
+function toggleMentorStage() {
+  showStage.value = !showStage.value
 }
 
 function clearScrollTimer() {
@@ -258,7 +294,6 @@ onLoad(() => {
 
 onReady(() => {
   insetTop.value = getPageTopInset()
-  bottomInset.value = uni.getWindowInfo().safeAreaInsets.bottom
 })
 
 onUnload(() => {

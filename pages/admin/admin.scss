@@ -1,11 +1,13 @@
-$bg: #070b14;
-$card: #0f1a2e;
-$card-soft: #131f38;
-$border: rgba(59, 130, 246, 0.2);
-$dim: #94a3b8;
-$text: #e2e8f0;
-$accent: #3b82f6;
-$danger: #ef4444;
+@import '../../styles/dayu-theme.scss';
+
+$bg: $dy-bg;
+$card: $dy-card;
+$card-soft: $dy-bubble;
+$border: $dy-border;
+$dim: $dy-muted;
+$text: $dy-text;
+$accent: $dy-gold;
+$danger: $dy-danger;
 
 .ad-page {
   display: flex;

@@ -45,16 +45,13 @@ $accent: #3b82f6;
   width: 100%;
   box-sizing: border-box;
   max-width: 440px;
-  margin-top: 16px;
-  padding: 24px 20px 18px;
-  border-radius: 20px;
-  background-color: rgba(255, 255, 255, 0.03);
+  padding: 0 4px;
 }
 
 .brand-head {
   display: flex;
   flex-direction: column;
-  margin-top: -40px;
+  margin-bottom: 8px;
 }
 
 .logo-row {
@@ -100,20 +97,14 @@ $accent: #3b82f6;
   opacity: 0.85;
 }
 
-.login-flow {
-  display: flex;
-  flex-direction: column;
-  margin-top: 20px;
-}
-
 .login-main, .register-main {
   display: flex;
   flex-direction: column;
-  margin-top: 60px;
+  margin-top: 24px;
 }
 
 .register-main {
-  margin-top: 24px;
+  margin-top: 18px;
 }
 
 .btn-primary, .btn-phone-login, .btn-register {
@@ -334,4 +325,103 @@ $accent: #3b82f6;
 .cancel-link {
   align-self: center;
   margin-top: 8px;
+}
+
+.login-picker {
+  flex: 1;
+}
+
+.picker-value {
+  height: 44px;
+  line-height: 44px;
+  color: #ffffff;
+  font-size: 15px;
+}
+
+.picker-placeholder {
+  color: $dim;
+}
+
+.student-captcha-block {
+  margin-bottom: 2px;
+}
+
+.inline-captcha-img {
+  width: 96px;
+  height: 36px;
+  border-radius: 6px;
+  background-color: #f3f4f6;
+  flex-shrink: 0;
+}
+
+.remember-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 2px 0 8px;
+}
+
+.remember-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid $border;
+  background-color: $card;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+.remember-box-on {
+  border-color: $accent;
+  background-color: $accent;
+}
+
+.remember-check {
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.remember-text {
+  color: $dim;
+  font-size: 13px;
+}
+
+.third-party-block {
+  display: flex;
+  flex-direction: column;
+  margin-top: 18px;
+}
+
+.divider-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.divider-text {
+  color: $dim;
+  font-size: 11px;
+  padding: 0 10px;
+}
+
+.btn-wechat {
+  margin: 0;
+  min-height: 44px;
+  line-height: 44px;
+  border-radius: 14px;
+  background-color: rgba(7, 193, 96, 0.14);
+  border: 1px solid rgba(7, 193, 96, 0.45);
+  color: #4ade80;
+  font-size: 15px;
+  font-weight: 600;
 }

@@ -1,139 +1,380 @@
-.page {
+@import '../../styles/dayu-theme.scss';
+
+.dy-home {
+  display: flex;
   flex: 1;
-  background-color: #0b0e14;
-  background-image: linear-gradient(180deg, #101623, #0b0e14);
+  flex-direction: column;
+  background-color: $dy-bg;
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
 }
 
-.home-top, .home-shortcuts {
+.home-top {
   display: flex;
   flex-direction: row;
   align-items: center;
+  padding-left: 14px;
+  padding-right: 14px;
+  padding-bottom: 6px;
 }
 
-.home-top { padding: 8px 14px 4px; }
-.parent-brand { display: flex; flex-direction: column; }
+.parent-brand {
+  display: flex;
+  flex-direction: column;
+}
+
 .parent-title {
-  color: #f5d9a8;
+  color: $dy-gold-bright;
   font-size: 17px;
   font-weight: 900;
 }
+
 .parent-subtitle {
   margin-top: 1px;
-  color: #8b93a5;
-  font-size: 11px;
+  color: $dy-muted;
+  font-size: 10px;
   letter-spacing: 2px;
   font-weight: 700;
 }
 
-.student-label, .logout-button {
-  padding: 0 10px;
+.acct-chip {
+  padding: 5px 11px;
   border-radius: 16px;
-  font-size: 12px;
-  font-weight: 800;
-}
-.student-label {
-  padding: 5px 12px;
-  border: 1.5px solid #c9a227;
-  color: #f5d9a8;
-  background-color: rgba(201, 162, 39, 0.18);
-}
-.home-user {
-  flex: 1;
-  margin: 0 8px;
-  text-align: center;
-  color: #edebe4;
-  font-weight: 900;
-  font-size: 17px;
-}
-.logout-button {
-  margin: 0;
-  min-height: 30px;
-  line-height: 30px;
-  color: #c8cdd8;
-  border: 1.5px solid rgba(200, 205, 216, 0.35);
-  background-color: #101623;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-gold-border;
+  background-color: $dy-gold-bg;
 }
 
+.acct-chip-text {
+  color: $dy-gold-bright;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.home-user {
+  flex: 1;
+  margin-left: 8px;
+  margin-right: 8px;
+  text-align: center;
+  color: $dy-text;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.logout-chip {
+  padding: 5px 11px;
+  border-radius: 16px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border-soft;
+  background-color: $dy-card;
+}
+
+.logout-chip-text {
+  color: $dy-text-body;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 门控页 */
+.gate-scroll {
+  flex: 1;
+}
+
+.gate-body {
+  padding: 16px;
+}
+
+.gate-card {
+  margin-top: 10px;
+  padding: 16px;
+  border-radius: 16px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.gate-title {
+  color: $dy-text;
+  font-size: 17px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.field-label {
+  color: $dy-muted;
+  font-size: 12px;
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+.field-input {
+  height: 42px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 10px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border-soft;
+  background-color: $dy-bg-top;
+  color: $dy-text;
+  font-size: 14px;
+}
+
+.gold-btn {
+  margin-top: 16px;
+  height: 44px;
+  line-height: 44px;
+  border-radius: 12px;
+  background-color: $dy-gold;
+  color: $dy-bg;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.ghost-btn {
+  margin-top: 12px;
+  height: 40px;
+  line-height: 40px;
+  border-radius: 10px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border-soft;
+  background-color: $dy-card;
+  color: $dy-text;
+  font-size: 14px;
+}
+
+.muted {
+  color: $dy-muted;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.error-text {
+  color: $dy-danger;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+/* 学生首页头图 */
 .home-hero {
   position: relative;
-  margin: 4px 14px 0;
+  margin-top: 4px;
+  margin-left: 14px;
+  margin-right: 14px;
   border-radius: 14px;
-  border: 1.5px solid #232b3d;
-  background-color: #0d111f;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-border;
+  background-color: $dy-card-deep;
   overflow: hidden;
 }
-.hero-background {
+
+.hero-bg {
   width: 100%;
   height: 100%;
 }
-.hero-teacher, .hero-cartoon {
-  position: absolute;
-  bottom: 0;
-}
-.hero-teacher { left: 4.3%; width: 26%; height: 93%; }
-.hero-cartoon { left: 22.2%; width: 27%; height: 82%; }
-.team-tag {
-  position: absolute;
-  top: 8px;
-  left: 10px;
-  color: #0d111f;
-  padding: 3px 10px;
-  border-radius: 14px;
-  background-color: #f5d576;
-  background-image: linear-gradient(90deg, #f5d576, #c9a869);
-  font-size: 12px;
-  font-weight: 900;
-}
-.team-caption {
-  display: flex;
-  flex-direction: column;
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 22px 12px 10px;
-  background-image: linear-gradient(180deg, rgba(8, 11, 22, 0), rgba(8, 11, 22, 0.88));
-}
-.team-title { color: #ffffff; font-size: 15px; font-weight: 900; }
-.team-subtitle { color: #c9cfdc; font-size: 12px; margin-top: 2px; }
 
-.home-shortcuts {
-  margin: 8px 14px 6px;
-  justify-content: space-between;
-  flex-wrap: wrap;
+.hero-teacher,
+.hero-cartoon {
+  position: absolute;
+  bottom: 0;
 }
-.home-shortcut {
-  flex: 0 0 23%;
+
+.hero-teacher {
+  left: 4%;
+  width: 26%;
+  height: 92%;
+}
+
+.hero-cartoon {
+  left: 22%;
+  width: 27%;
+  height: 82%;
+}
+
+/* 原版三入口卡 */
+.home-tri {
+  display: flex;
+  flex-direction: row;
+  margin-top: 8px;
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+.tri-card {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-right: 6px;
-  margin-bottom: 6px;
-  padding: 6px 2px 7px;
-  border: 1.5px solid #232b3d;
-  border-radius: 12px;
-  background-color: #131926;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  padding-left: 6px;
+  padding-right: 6px;
+  margin-right: 8px;
+  border-radius: 14px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
 }
-.shortcut-icon { width: 36px; height: 36px; }
-.shortcut-label { color: #edebe4; font-size: 11px; font-weight: 800; margin-top: 2px; }
 
-.content { padding: 24px 16px; }
-.title { font-size: 17px; font-weight: 600; color: #f3f6fc; }
-.muted, .error, .label { margin-top: 8px; color: #a8b6ce; font-size: 14px; }
-.error { color: #ff9a9a; }
-.card { margin-top: 16px; padding: 16px; background-color: #131c2e; border-radius: 12px; }
-.field {
-  padding: 0 12px;
-  height: 42px;
-  margin-top: 6px;
-  color: #f3f6fc;
-  background-color: #070b14;
-  border-radius: 8px;
+.tri-card-last {
+  margin-right: 0;
 }
-.primary, .secondary {
-  margin: 12px 0 0;
-  color: #f3f6fc;
-  background-color: #3062bc;
-  border-radius: 10px;
+
+.tri-ic {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 4px;
 }
-.secondary { background-color: #22334e; }
+
+.tri-name {
+  color: $dy-text;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tri-sub {
+  color: $dy-muted;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* 首页内嵌大宇对话 */
+.home-chat {
+  flex: 1;
+  margin-top: 8px;
+}
+
+.chat-inner {
+  padding-left: 14px;
+  padding-right: 14px;
+  padding-bottom: 10px;
+}
+
+.welcome-card {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background-color: $dy-bubble;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border-soft;
+}
+
+.welcome-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.welcome-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-green;
+  margin-right: 8px;
+}
+
+.welcome-tag {
+  padding: 3px 10px;
+  border-radius: 12px;
+  background-color: $dy-green-bg;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-green-border;
+}
+
+.welcome-tag-text {
+  color: $dy-green-soft;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.welcome-text {
+  color: $dy-text-body;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-direction: row;
+  margin-top: 10px;
+}
+
+.go-pill {
+  padding: 6px 14px;
+  border-radius: 16px;
+  background-color: $dy-green;
+  margin-right: 8px;
+}
+
+.go-pill-text {
+  color: $dy-bg;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.go-pill-soft {
+  background-color: $dy-green-bg;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-green-border;
+}
+
+.go-pill-soft-text {
+  color: $dy-green-soft;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.suggest-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.suggest-chip {
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.suggest-chip-text {
+  color: $dy-green-soft;
+  font-size: 13px;
+}
+
+.chat-anchor {
+  height: 1px;
+}
+
+.chat-status {
+  padding: 4px 14px;
+}
+
+.chat-status-text {
+  color: $dy-muted;
+  font-size: 12px;
+}
+
+.chat-error {
+  padding: 6px 14px;
+  background-color: $dy-danger-bg;
+}
+
+.chat-error-text {
+  color: $dy-danger;
+  font-size: 12px;
+}
