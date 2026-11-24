@@ -1,5 +1,5 @@
 import { requestJson } from '../network/request.uts'
-import { applySessionView, clearSession, saveSession } from '../state/session.uts'
+import { applySessionView, clearSession, getSession, saveSession } from '../state/session.uts'
 
 function getDeviceId(): string {
   const key = 'jnao_device_id'
@@ -25,7 +25,7 @@ export type StudentRegisterPayload = {
 }
 
 export function getLoginCaptcha(): Promise<UTSJSONObject> {
-  return requestJson('/api/auth/captcha', 'GET', null, null, false)
+  return requestJson('/api/t2/auth/captcha', 'GET', null, null, false)
 }
 
 export function sendAuthSms(phone: string, scene: string, captchaId: string, captchaCode: string): Promise<UTSJSONObject> {
@@ -35,7 +35,7 @@ export function sendAuthSms(phone: string, scene: string, captchaId: string, cap
     captcha_id: captchaId,
     captcha_code: captchaCode,
     device_id: getDeviceId()
-  }, null, false)
+  }, null, scene == 'phone_change')
 }
 
 export async function registerParent(
@@ -73,15 +73,17 @@ export async function registerStudent(payload: StudentRegisterPayload) {
   if (payload.grade.trim().length > 0) body['grade'] = payload.grade.trim()
   if (payload.school.trim().length > 0) body['school'] = payload.school.trim()
   if (payload.region.trim().length > 0) body['region'] = payload.region.trim()
-  const data = await requestJson('/api/auth/register/student', 'POST', body, null, false)
-  useLoginResponse(data, 'student')
+  const data = await requestJson('/api/t2/auth/register/student', 'POST', body, null, false)
+  const authObj = data.getJSON('auth') ?? data
+  const sessionObj = data.getJSON('session') ?? data
+  useLoginResponse(authObj, 'student', sessionObj)
 }
 
 export async function loginWithSms(phone: string, code: string, remember: boolean = false) {
-  const data = await requestJson('/api/auth/sms/login', 'POST', {
+  const query = remember ? '?remember=true' : '?remember=false'
+  const data = await requestJson('/api/t2/auth/sms/login' + query, 'POST', {
     phone,
     sms_code: code,
-    remember,
     device_id: getDeviceId()
   }, null, false)
   useLoginResponse(data, 'parent')
@@ -93,7 +95,7 @@ export async function loginWithPassword(
   password: string,
   remember: boolean = false
 ) {
-  const body: UTSJSONObject = { password, role, remember }
+  const body: UTSJSONObject = { password, role }
   if (role == 'parent') {
     body['parent_phone'] = account
   } else {
@@ -102,11 +104,12 @@ export async function loginWithPassword(
   const headers: UTSJSONObject = {
     'X-Device-Id': getDeviceId()
   }
-  const data = await requestJson('/api/auth/login', 'POST', body, headers, false)
+  const query = remember ? '?remember=true' : '?remember=false'
+  const data = await requestJson('/api/t2/auth/login' + query, 'POST', body, headers, false)
   useLoginResponse(data, role)
 }
 
-function useLoginResponse(data: UTSJSONObject, role: string) {
+function useLoginResponse(data: UTSJSONObject, role: string, sessionView: UTSJSONObject | null = null) {
   const userId = data.getNumber('child_user_id') ?? data.getNumber('account.id') ?? 0
   const actualRole = data.getString('role') ?? data.getString('account.role') ?? ''
   const accessToken = data.getString('access_token') ?? data.getString('session_token') ?? ''
@@ -125,38 +128,86 @@ function useLoginResponse(data: UTSJSONObject, role: string) {
     nickname: data.getString('nickname') ?? data.getString('account.display_name') ?? '',
     accessToken
   })
-  applySessionView(data)
+  applySessionView(sessionView ?? data)
 }
 
 export function fetchSession(): Promise<UTSJSONObject> {
-  return requestJson('/api/auth/session', 'GET')
+  return requestJson('/api/t2/auth/session', 'GET')
 }
 
 export function selectSessionProfile(activeChildId: number | null): Promise<UTSJSONObject> {
-  return requestJson('/api/auth/session/profile', 'PATCH', {
+  return requestJson('/api/t2/auth/session/profile', 'PATCH', {
     active_child_id: activeChildId
   })
 }
 
 export function createGuardianCode(): Promise<UTSJSONObject> {
-  return requestJson('/api/auth/guardian-codes', 'POST')
+  return requestJson('/api/t2/auth/guardian-codes', 'POST')
 }
 
 export function bindGuardian(code: string): Promise<UTSJSONObject> {
-  return requestJson('/api/auth/guardian-links', 'POST', { code })
+  return requestJson('/api/t2/auth/guardian-links', 'POST', { code })
 }
 
 export function unbindMyGuardian(): Promise<UTSJSONObject> {
-  return requestJson('/api/auth/guardian-links/me', 'DELETE')
+  return requestJson('/api/t2/auth/guardian-links/me', 'DELETE')
 }
 
 export function unbindGuardian(childId: number): Promise<UTSJSONObject> {
-  return requestJson('/api/auth/guardian-links/' + childId.toString(), 'DELETE')
+  return requestJson('/api/t2/auth/guardian-links/' + childId.toString(), 'DELETE')
+}
+
+export function resetPassword(phone: string, smsCode: string, newPassword: string): Promise<UTSJSONObject> {
+  return requestJson('/api/t2/auth/password/reset', 'POST', {
+    phone: phone.trim(),
+    sms_code: smsCode.trim(),
+    new_password: newPassword,
+    device_id: getDeviceId()
+  }, null, false)
+}
+
+function applyRotatedToken(data: UTSJSONObject) {
+  const session = getSession()
+  if (session == null) return
+  const nextToken = data.getString('access_token') ?? data.getString('session_token') ?? ''
+  const nextNick = data.getString('nickname') ?? data.getString('account.display_name') ?? ''
+  if (nextToken.length > 0 || (nextNick.length > 0 && nextNick != session.nickname)) {
+    saveSession({
+      userId: session.userId,
+      role: session.role,
+      nickname: nextNick.length > 0 ? nextNick : session.nickname,
+      accessToken: nextToken.length > 0 ? nextToken : session.accessToken
+    })
+  }
+  applySessionView(data)
+}
+
+export async function changePassword(oldPassword: string, newPassword: string): Promise<UTSJSONObject> {
+  const data = await requestJson('/api/t2/auth/change-password', 'POST', {
+    old_password: oldPassword,
+    new_password: newPassword
+  })
+  applyRotatedToken(data)
+  return data
+}
+
+export async function changePhone(
+  currentPassword: string,
+  newPhone: string,
+  smsCode: string
+): Promise<UTSJSONObject> {
+  const data = await requestJson('/api/t2/auth/phone/change', 'POST', {
+    current_password: currentPassword,
+    new_phone: newPhone.trim(),
+    sms_code: smsCode.trim()
+  })
+  applyRotatedToken(data)
+  return data
 }
 
 export async function logout() {
   try {
-    await requestJson('/api/auth/logout', 'POST')
+    await requestJson('/api/t2/auth/logout', 'POST')
   } finally {
     clearSession()
   }

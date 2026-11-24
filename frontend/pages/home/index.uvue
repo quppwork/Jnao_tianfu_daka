@@ -150,6 +150,7 @@ import { restoreSession, switchSessionChild } from '../../state/auth-actions.uts
 import {
   clearSession,
   familyState,
+  getActiveChildName,
   getSession,
   isParentViewingChild,
   returnToLogin,
@@ -373,11 +374,11 @@ async function loadProfile() {
     uni.reLaunch({ url: '/pages/guardian/index' })
     return
   }
-  nickname.value = session.nickname
+  nickname.value = isParentViewingChild() ? getActiveChildName() : session.nickname
   loading.value = true
   errorText.value = ''
   try {
-    const path = isParent.value && !isParentViewingChild() ? '/api/parent/profile' : '/api/user/profile'
+    const path = isParent.value && !isParentViewingChild() ? '/api/t2/parent/profile' : '/api/user/profile'
     applyProfile(await requestJson(path))
   } catch (error) {
     errorText.value = error instanceof Error ? error.message : '读取账号信息失败'
@@ -411,7 +412,7 @@ async function saveProfile() {
   saving.value = true
   errorText.value = ''
   try {
-    applyProfile(await requestJson('/api/parent/profile', 'PUT', body))
+    applyProfile(await requestJson('/api/t2/parent/profile', 'PUT', body))
   } catch (error) {
     errorText.value = error instanceof Error ? error.message : '保存失败，请重试'
   } finally {

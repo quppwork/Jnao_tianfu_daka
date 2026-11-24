@@ -49,7 +49,7 @@ import { requestJson } from '../../network/request.uts'
 import { getFullTalentReport } from '../../api/talent.uts'
 import { parseFullTalentReport } from '../../api/talent-parsers.uts'
 import { FullTalentReport } from '../../api/talent-types.uts'
-import { getSession } from '../../state/session.uts'
+import { getActiveChildName, getSession, isParentViewingChild } from '../../state/session.uts'
 import { getPageTopInset } from '../../utils/layout.uts'
 
 const id = ref(0)
@@ -86,8 +86,9 @@ async function loadReport() {
     fullReport.value = parsed
 
     const session = getSession()
-    nickname.value = session?.nickname ?? ''
-    if (session?.role == 'student') {
+    const viewingChild = isParentViewingChild()
+    nickname.value = viewingChild ? getActiveChildName() : (session?.nickname ?? '')
+    if (session?.role == 'student' || viewingChild) {
       const profile = await requestJson('/api/user/profile')
       const profileData = profile.getJSON('profile_json')
       const change = profile.getJSON('pending_talent') ?? profileData?.getJSON('pending_talent')

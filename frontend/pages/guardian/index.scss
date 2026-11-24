@@ -200,3 +200,73 @@
   color: #fca5a5;
   font-size: 13px;
 }
+
+.card-gap {
+  margin-bottom: 12px;
+}
+
+.btn-secondary-full {
+  margin: 0;
+  min-height: 44px;
+  line-height: 44px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: $dy-text;
+  background-color: $dy-bubble;
+  border: 1px solid $dy-border;
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 340px;
+  padding: 22px 18px 18px;
+  border-radius: 16px;
+  border: 1px solid $dy-border;
+  background-color: $dy-card;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-title {
+  color: $dy-text;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.modal-input-wrap {
+  padding: 0 12px;
+  margin-bottom: 10px;
+  border: 1px solid $dy-border;
+  border-radius: 12px;
+  background-color: $dy-bg;
+}
+
+.modal-input {
+  height: 44px;
+  color: $dy-text;
+  font-size: 14px;
+}
+
+.modal-error {
+  color: #fca5a5;
+  font-size: 12px;
+  margin-bottom: 8px;
+}

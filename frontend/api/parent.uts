@@ -5,7 +5,7 @@ import { LLM_TIMEOUT_MS } from '../network/timeouts.uts'
 /** 家长中心：资料、孩子账户、配额、家长课堂、家长版大宇 */
 
 export function getParentProfile(): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/profile')
+  return requestJson('/api/t2/parent/profile')
 }
 
 export type ParentProfilePatch = {
@@ -24,27 +24,27 @@ export function updateParentProfile(patch: ParentProfilePatch): Promise<UTSJSONO
   if (patch.password.length > 0) body['password'] = patch.password
   if (patch.oldPassword.length > 0) body['old_password'] = patch.oldPassword
   if (patch.requirePassword) body['require_password'] = true
-  return requestJson('/api/parent/profile', 'PUT', body)
+  return requestJson('/api/t2/parent/profile', 'PUT', body)
 }
 
 export function getParentQuota(): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/quota')
+  return requestJson('/api/t2/parent/quota')
 }
 
 export function getChildCreationConfig(): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/children/config')
+  return requestJson('/api/t2/parent/children/config')
 }
 
 export function createChildWithIdempotency(payload: UTSJSONObject): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/children', 'POST', payload)
+  return requestJson('/api/t2/parent/children', 'POST', payload)
 }
 
 export function getChildDetails(childId: number): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/children/' + childId.toString() + '/details')
+  return requestJson('/api/t2/parent/children/' + childId.toString() + '/details')
 }
 
 export function updateChildDetails(childId: number, payload: UTSJSONObject): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/children/' + childId.toString() + '/details', 'PATCH', payload)
+  return requestJson('/api/t2/parent/children/' + childId.toString() + '/details', 'PATCH', payload)
 }
 
 export function resetChildPassword(
@@ -52,10 +52,25 @@ export function resetChildPassword(
   currentPassword: string,
   newPassword: string
 ): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/children/' + childId.toString() + '/password/reset', 'POST', {
+  return requestJson('/api/t2/parent/children/' + childId.toString() + '/password/reset', 'POST', {
     current_password: currentPassword,
     new_password: newPassword
   })
+}
+
+function calcAgeFromBirthDate(birthDate: string): number {
+  const parts = birthDate.trim().split('-')
+  if (parts.length != 3) return 0
+  const y = parseInt(parts[0])
+  const m = parseInt(parts[1])
+  const d = parseInt(parts[2])
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return 0
+  const now = new Date()
+  let age = now.getFullYear() - y
+  if (now.getMonth() + 1 < m || (now.getMonth() + 1 == m && now.getDate() < d)) {
+    age -= 1
+  }
+  return age > 0 ? age : 0
 }
 
 export function buildCreateChildPayload(
@@ -66,19 +81,19 @@ export function buildCreateChildPayload(
   password: string,
   birthDate: string,
   grade: string,
-  school: string,
+  _school: string,
   region: string
 ): UTSJSONObject {
+  const displayNick = nickname.trim().length > 0 ? nickname.trim() : realName.trim()
   const data: UTSJSONObject = {
     request_id: requestId,
     login_name: loginName.trim().toLowerCase(),
-    real_name: realName.trim(),
+    nickname: displayNick,
     password: password
   }
-  if (nickname.trim().length > 0) data['nickname'] = nickname.trim()
-  if (birthDate.trim().length > 0) data['birth_date'] = birthDate.trim()
+  const age = calcAgeFromBirthDate(birthDate)
+  if (age > 0) data['age'] = age
   if (grade.trim().length > 0) data['grade'] = grade.trim()
-  if (school.trim().length > 0) data['school'] = school.trim()
   if (region.trim().length > 0) data['region'] = region.trim()
   return data
 }
@@ -103,7 +118,7 @@ export function buildUpdateChildDetailsPayload(
 }
 
 export function listChildren(): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/children')
+  return requestJson('/api/t2/parent/children')
 }
 
 /** 家长默认关注的孩子；没有绑定孩子时返回 0 */

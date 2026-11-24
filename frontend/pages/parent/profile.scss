@@ -51,3 +51,42 @@ $accent: $dy-gold;
 .pf-empty { display: flex; padding: 48px 16px; align-items: center; justify-content: center; }
 .pf-empty-text { color: $dim; font-size: 13px; }
 .pf-space { height: 32px; }
+
+.pf-phone-card { margin-top: 14px; }
+.pf-phone-info { display: flex; flex-direction: column; }
+.pf-phone-btn {
+  padding: 7px 12px; border-radius: 10px;
+  background-color: $dy-gold-bg; border-width: 1px; border-style: solid; border-color: $dy-gold-border;
+}
+.pf-phone-btn-text { color: $dy-gold-bright; font-size: 12px; font-weight: 600; }
+
+.pf-overlay {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 20px; background-color: rgba(0, 0, 0, 0.6);
+}
+.pf-modal {
+  width: 100%; max-width: 340px; padding: 20px 18px 18px; border-radius: 16px;
+  background-color: $card; border-width: 1px; border-style: solid; border-color: $border;
+  display: flex; flex-direction: column;
+}
+.pf-modal-title { color: $text; font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 6px; }
+.pf-sms-row { display: flex; flex-direction: row; align-items: center; margin-top: 8px; }
+.pf-sms-input { flex: 1; margin-top: 0; margin-right: 8px; }
+.pf-captcha-img { width: 92px; height: 38px; border-radius: 8px; background-color: #f3f4f6; flex-shrink: 0; }
+.pf-sms-btn {
+  padding: 0 10px; height: 38px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background-color: $dy-gold-bg; border-width: 1px; border-style: solid; border-color: $dy-gold-border;
+}
+.pf-sms-btn-text { color: $dy-gold-bright; font-size: 12px; font-weight: 600; }
+.pf-modal-error { color: #f87171; font-size: 12px; margin-top: 8px; }
+.pf-modal-actions { display: flex; flex-direction: row; margin-top: 14px; }
+.pf-modal-cancel {
+  flex: 1; padding: 11px; margin-right: 10px; border-radius: 10px;
+  background-color: $card-soft; align-items: center;
+}
+.pf-modal-cancel-text { color: $dim; font-size: 14px; font-weight: 600; }
+.pf-modal-confirm {
+  flex: 1; padding: 11px; border-radius: 10px; background-color: $accent; align-items: center;
+}

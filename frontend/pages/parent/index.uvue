@@ -10,7 +10,9 @@
       <view class="hero">
         <view class="hero-avatar"><text class="hero-letter">{{ parentName.charAt(0) }}</text></view>
         <text class="hero-name">{{ parentName }}</text>
-        <text v-if="loaded" class="hero-sub">已关联 {{ children.length }} 个孩子 · 名额 {{ quotaUsed }}/{{ quotaLimit }}</text>
+        <text v-if="loaded" class="hero-sub">
+          {{ quotaLimit > 0 ? ('已关联 ' + children.length.toString() + ' 个孩子 · 名额 ' + quotaUsed.toString() + '/' + quotaLimit.toString()) : ('已关联 ' + children.length.toString() + ' 个孩子') }}
+        </text>
       </view>
 
       <view class="children-section">
@@ -43,7 +45,7 @@
                 <text v-if="activeChildId == child.id" class="active-tag">当前视角</text>
               </view>
               <text class="child-detail">
-                {{ (child.age > 0 ? child.age.toString() + '岁' : '年龄未填') + ' · ' + (child.grade.length > 0 ? child.grade : '年级未填') + (child.school.length > 0 ? ' · ' + child.school : '') }}
+                {{ childMetaText(child) }}
               </text>
             </view>
           </view>
@@ -115,8 +117,8 @@
             <view class="input-wrap">
               <input v-model="school" class="field" :maxlength="50" :disabled="saving" placeholder="学校名称（选填）" />
             </view>
-            <view class="input-wrap">
-              <input v-model="region" class="field" :maxlength="20" :disabled="saving" placeholder="地区（选填）" />
+            <view class="input-wrap" @click="openRegionPicker">
+              <text class="picker-text">{{ regionDisplay.length > 0 ? '所在地区：' + regionDisplay : '请选择所在地区（选填）' }}</text>
             </view>
             <text v-if="formError.length > 0" class="form-error">{{ formError }}</text>
             <button class="btn-save" :loading="saving" :disabled="saving" @click="saveChild">保存</button>
@@ -145,6 +147,7 @@
         <button class="btn-cancel" :disabled="saving" @click="closeResetModal">取消</button>
       </view>
     </view>
+    <region-picker :visible="regionPickerOpen" :value="region" @confirm="onRegionConfirm" @close="regionPickerOpen = false" />
   </view>
 </template>
 
@@ -159,6 +162,7 @@ import {
   resetChildPassword,
   updateChildDetails
 } from '../../api/parent.uts'
+import { getRegionDisplayName } from '../../config/region/options.uts'
 import { getApiErrorCode, isUncertainError } from '../../network/request.uts'
 import { restoreSession, switchSessionChild } from '../../state/auth-actions.uts'
 import {
@@ -210,6 +214,7 @@ const birthDate = ref('')
 const grade = ref('')
 const school = ref('')
 const region = ref('')
+const regionPickerOpen = ref(false)
 
 // 代重置孩子密码
 const resetOpen = ref(false)
@@ -221,6 +226,7 @@ const childConfirmPassword = ref('')
 
 const gradeOptions = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三']
 const gradeIndex = computed(() => Math.max(0, gradeOptions.indexOf(grade.value)))
+const regionDisplay = computed(() => getRegionDisplayName(region.value))
 const now = new Date()
 const todayDate = now.getFullYear().toString() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0')
 const defaultBirthDate = (now.getFullYear() - 10).toString() + '-01-01'
@@ -235,12 +241,32 @@ function childDisplayName(child) {
   return child.name.length > 0 ? child.name : (child.nickname.length > 0 ? child.nickname : '孩')
 }
 
+function childMetaText(child) {
+  const parts = [
+    child.age > 0 ? child.age.toString() + '岁' : '年龄未填',
+    child.grade.length > 0 ? child.grade : '年级未填'
+  ]
+  if (child.school.length > 0) parts.push(child.school)
+  const regionName = getRegionDisplayName(child.region)
+  if (regionName.length > 0) parts.push(regionName)
+  return parts.join(' · ')
+}
+
 function onBirthDateChange(event) {
   birthDate.value = event.detail.value.toString()
 }
 
 function onGradeChange(event) {
   grade.value = gradeOptions[parseInt(event.detail.value.toString())]
+}
+
+function openRegionPicker() {
+  if (!saving.value) regionPickerOpen.value = true
+}
+
+function onRegionConfirm(code) {
+  region.value = code
+  regionPickerOpen.value = false
 }
 
 async function loadAll() {
@@ -371,6 +397,7 @@ async function openEditChild(id) {
 
 function closeEditor() {
   editing.value = false
+  regionPickerOpen.value = false
   pendingRequestId.value = ''
   password.value = ''
   confirmPassword.value = ''
@@ -427,7 +454,18 @@ async function saveChild() {
         school.value,
         region.value
       )
-      await createChildWithIdempotency(payload)
+      const created = await createChildWithIdempotency(payload)
+      const createdId = created.getNumber('id') ?? 0
+      if (createdId > 0) {
+        try {
+          await updateChildDetails(
+            createdId,
+            buildUpdateChildDetailsPayload(rName, nick, birthDate.value, grade.value, school.value, region.value)
+          )
+        } catch (_) {
+          // 账号已创建成功，扩展资料可稍后在编辑资料中补齐
+        }
+      }
       uni.showToast({ title: '已创建孩子账号', icon: 'none' })
     } else {
       const payload = buildUpdateChildDetailsPayload(
@@ -563,6 +601,10 @@ onLoad(() => {
   }
   parentName.value = session.nickname.length > 0 ? session.nickname : '家长'
   loadAll()
+})
+
+onShow(() => {
+  if (loaded.value) loadAll()
 })
 
 onReady(() => {
