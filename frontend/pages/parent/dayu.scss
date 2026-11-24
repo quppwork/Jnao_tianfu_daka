@@ -1,16 +1,11 @@
-$bg: #070b14;
-$card: #0f1a2e;
-$border: rgba(59, 130, 246, 0.2);
-$dim: #94a3b8;
-$text: #e2e8f0;
-$gold: #c9a227;
+@import '../../styles/dayu-theme.scss';
 
 .pd-page {
   display: flex;
   flex: 1;
   flex-direction: column;
-  position: relative;
-  background-color: $bg;
+  background-color: $dy-bg;
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
 }
 
 .pd-header {
@@ -18,121 +13,243 @@ $gold: #c9a227;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding-left: 12px;
-  padding-right: 16px;
-  padding-bottom: 8px;
+  padding-left: 14px;
+  padding-right: 14px;
+  padding-bottom: 6px;
 }
 
-.pd-back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-}
-
-.pd-back-icon {
-  color: $text;
-  font-size: 26px;
-  line-height: 26px;
-}
-
-.pd-title {
-  color: $text;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.pd-header-right {
-  width: 32px;
-  height: 32px;
-}
-
-.pd-body {
-  flex: 1;
-}
-
-.pd-hero {
+.pd-brand {
   display: flex;
   flex-direction: column;
+}
+
+.pd-brand-t1 {
+  color: $dy-gold-bright;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.pd-brand-t2 {
+  margin-top: 1px;
+  color: $dy-muted;
+  font-size: 10px;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.pd-actions {
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  padding: 4px 16px 12px 16px;
+}
+
+.pd-chip-gold {
+  padding: 5px 11px;
+  margin-right: 8px;
+  border-radius: 16px;
+  background-color: $dy-gold-bg;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-gold-border;
+}
+
+.pd-chip-gold-text {
+  color: $dy-gold-bright;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pd-chip-ghost {
+  padding: 5px 11px;
+  border-radius: 16px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border-soft;
+}
+
+.pd-chip-ghost-text {
+  color: $dy-text-body;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 原版导师团头图 */
+.pd-hero {
+  position: relative;
+  height: 126px;
+  margin-top: 4px;
+  margin-left: 14px;
+  margin-right: 14px;
+  border-radius: 14px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-border;
+  background-color: $dy-card-deep;
+  overflow: hidden;
 }
 
 .pd-hero-img {
   width: 100%;
-  height: 120px;
+  height: 100%;
 }
 
-.pd-hero-title {
-  color: $gold;
-  font-size: 14px;
-  font-weight: 600;
-  margin-top: 8px;
-}
-
-.pd-hero-sub {
-  color: $dim;
+.pd-teamtag {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  background-color: #f5d576;
+  background-image: linear-gradient(90deg, #f5d576, $dy-gold);
+  color: $dy-card-deep;
   font-size: 11px;
-  margin-top: 4px;
-  text-align: center;
+  font-weight: 900;
 }
 
-.pd-shortcuts {
+.pd-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px 12px 9px 12px;
+  background-image: linear-gradient(180deg, rgba(8, 11, 22, 0), rgba(8, 11, 22, 0.9));
+}
+
+.pd-cap-t {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.pd-cap-s {
+  color: $dy-text-body;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* 原版三入口卡 */
+.pd-tri {
   display: flex;
   flex-direction: row;
-  padding: 0 16px 12px 16px;
+  margin-top: 8px;
+  margin-left: 14px;
+  margin-right: 14px;
 }
 
-.pd-shortcut {
-  display: flex;
+.pd-tri-item {
   flex: 1;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 6px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  padding-left: 6px;
+  padding-right: 6px;
   margin-right: 8px;
-  border-radius: 12px;
-  background-color: $card;
+  border-radius: 14px;
+  background-color: $dy-card;
   border-width: 1px;
   border-style: solid;
-  border-color: $border;
+  border-color: $dy-border;
 }
 
-.pd-sc-emoji {
-  font-size: 22px;
-  margin-bottom: 6px;
+.pd-tri-last {
+  margin-right: 0;
 }
 
-.pd-sc-name {
-  color: $text;
-  font-size: 12px;
+.pd-tri-ic {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 4px;
 }
 
-.pd-suggests {
-  display: flex;
-  flex-direction: column;
-  padding: 0 16px 12px 16px;
-}
-
-.pd-suggest {
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border-radius: 10px;
-  background-color: $card;
-  border-width: 1px;
-  border-style: solid;
-  border-color: $border;
-}
-
-.pd-suggest-text {
-  color: $dim;
+.pd-tri-n {
+  color: $dy-text;
   font-size: 13px;
+  font-weight: 800;
+}
+
+.pd-tri-s {
+  color: $dy-muted;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.pd-tri-live {
+  color: $dy-green;
+  font-weight: 700;
+}
+
+/* 对话区 */
+.pd-body {
+  flex: 1;
+  margin-top: 8px;
 }
 
 .pd-messages {
   display: flex;
   flex-direction: column;
-  padding: 0 16px 8px 16px;
+  padding-left: 14px;
+  padding-right: 14px;
+  padding-bottom: 10px;
+}
+
+.pd-intro {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding-right: 20px;
+}
+
+.pd-intro-av {
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-gold;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.pd-intro-bubble {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  background-color: $dy-bubble;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border-soft;
+}
+
+.pd-intro-text {
+  color: $dy-text-body;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.pd-suggests {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.pd-suggest {
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.pd-suggest-text {
+  color: $dy-gold-bright;
+  font-size: 13px;
 }
 
 .pd-anchor {
@@ -140,20 +257,20 @@ $gold: #c9a227;
 }
 
 .pd-status {
-  padding: 4px 16px;
+  padding: 4px 14px;
 }
 
 .pd-status-text {
-  color: $dim;
+  color: $dy-muted;
   font-size: 12px;
 }
 
 .pd-error {
-  padding: 6px 16px;
-  background-color: rgba(239, 68, 68, 0.12);
+  padding: 6px 14px;
+  background-color: $dy-danger-bg;
 }
 
 .pd-error-text {
-  color: #f87171;
+  color: $dy-danger;
   font-size: 12px;
 }

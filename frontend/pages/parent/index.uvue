@@ -5,132 +5,259 @@
       <text class="nav-title">孩子账户管理</text>
       <view class="nav-action" @click="goProfile"><text class="nav-action-text">资料</text></view>
     </view>
+
     <scroll-view class="parent-scroll" scroll-y :show-scrollbar="false">
       <view class="hero">
         <view class="hero-avatar"><text class="hero-letter">{{ parentName.charAt(0) }}</text></view>
         <text class="hero-name">{{ parentName }}</text>
-        <text v-if="loaded" class="hero-sub">已绑定 {{ children.length }} 个孩子 · 名额 {{ quotaUsed }}/{{ quotaLimit }}</text>
+        <text v-if="loaded" class="hero-sub">已关联 {{ children.length }} 个孩子 · 名额 {{ quotaUsed }}/{{ quotaLimit }}</text>
       </view>
 
       <view class="children-section">
         <view class="section-header">
           <text class="section-title">我的孩子</text>
-          <button class="btn-add" :disabled="!canAdd || saving" @click="startNew">+ 添加孩子</button>
+          <view class="header-actions">
+            <button class="btn-bind" :disabled="!canAdd || busy" @click="openBindModal">关联码绑定</button>
+            <button v-if="creationEnabled" class="btn-add" :disabled="!canAdd || busy" @click="startNew">+ 创建孩子</button>
+          </view>
         </view>
+
         <view v-if="loading" class="empty-state"><text class="empty-title">加载中...</text></view>
         <view v-else-if="errorText.length > 0" class="empty-state">
           <text class="form-error">{{ errorText }}</text>
-          <button class="btn-add" @click="loadChildren">重试</button>
+          <button class="btn-add" @click="loadAll">重试</button>
         </view>
         <view v-else-if="children.length == 0" class="empty-state">
-          <text class="empty-icon">📋</text>
-          <text class="empty-title">暂无孩子账号</text>
-          <text class="empty-hint">点击「添加孩子」分配账号和密码</text>
+          <text class="empty-icon">👨‍👩‍👧</text>
+          <text class="empty-title">还没有关联孩子</text>
+          <text class="empty-hint">孩子已有账号可输入 8 位关联码绑定；尚无账号可为孩子创建新账号</text>
         </view>
-        <view v-for="child in children" :key="child.id" class="child-card" @click="editChild(child)">
-          <view class="child-avatar"><text class="child-letter">{{ child.nickname.charAt(0) }}</text></view>
-          <view class="child-info">
-            <text class="child-name">{{ child.nickname }}</text>
-            <text class="child-detail">账号：{{ child.account }}</text>
-            <text class="child-detail">天赋：{{ child.talent }} · 训练 {{ child.trainingDays }} 天</text>
+
+        <view v-for="child in children" :key="child.id" class="child-card-wrap">
+          <view class="child-card-top">
+            <view class="child-avatar"><text class="child-letter">{{ childDisplayName(child).charAt(0) }}</text></view>
+            <view class="child-info">
+              <view class="child-name-row">
+                <text class="child-name">{{ child.name.length > 0 ? child.name : child.nickname }}</text>
+                <text v-if="child.nickname.length > 0 && child.nickname != child.name" class="child-nick">（{{ child.nickname }}）</text>
+                <text v-if="activeChildId == child.id" class="active-tag">当前视角</text>
+              </view>
+              <text class="child-detail">
+                {{ (child.age > 0 ? child.age.toString() + '岁' : '年龄未填') + ' · ' + (child.grade.length > 0 ? child.grade : '年级未填') + (child.school.length > 0 ? ' · ' + child.school : '') }}
+              </text>
+            </view>
           </view>
-          <text class="child-detail">编辑</text>
+
+          <view class="child-actions">
+            <button class="action-pill action-primary" :disabled="busy" @click="enterChildView(child.id)">
+              {{ switchingId == child.id ? '切换中…' : '切换视角' }}
+            </button>
+            <button class="action-pill" :disabled="busy" @click="openEditChild(child.id)">资料</button>
+            <button class="action-pill" :disabled="busy" @click="openResetModal(child)">重置密码</button>
+            <button class="action-pill action-danger" :disabled="busy" @click="confirmUnlink(child)">解绑</button>
+          </view>
         </view>
       </view>
     </scroll-view>
 
+    <dayu-tab-bar role="parent" active="pset" />
+
+    <!-- 关联码绑定弹层 -->
+    <view v-if="bindOpen" class="overlay" @click="closeBindModal">
+      <view class="form-panel modal-pad" @click.stop>
+        <text class="form-title">关联已有孩子</text>
+        <text class="form-hint modal-hint">请输入孩子在「家长关联」页面生成的 8 位关联码，无需空格和分隔符。</text>
+        <view class="input-wrap">
+          <input v-model="bindCode" class="field" :maxlength="16" :disabled="saving" placeholder="请输入 8 位关联码" @confirm="submitBind" />
+        </view>
+        <text v-if="bindCodePreview.length > 0" class="code-preview">输入预览：{{ bindCodePreview }}</text>
+        <text v-if="formError.length > 0" class="form-error">{{ formError }}</text>
+        <button v-if="uncertain" class="btn-cancel" :disabled="saving" @click="refreshAfterUncertain">刷新关联状态</button>
+        <button class="btn-save" :loading="saving" :disabled="saving || !canSubmitBind" @click="submitBind">确认关联</button>
+        <button class="btn-cancel" :disabled="saving" @click="closeBindModal">取消</button>
+      </view>
+    </view>
+
+    <!-- 创建 / 编辑孩子资料弹层 -->
     <view v-if="editing" class="overlay" @click="dismissEditor">
       <scroll-view class="form-panel" direction="vertical" :style="{ height: formHeight + 'px' }" @click.stop>
-       <view class="form-content">
-        <text class="form-title">{{ childId == 0 ? '添加孩子账号' : '编辑孩子' }}</text>
-        <view v-if="childId == 0" class="input-wrap"><input v-model="account" class="field" :maxlength="30" placeholder="登录账号（英文/数字，唯一）" /></view>
-        <view class="input-wrap"><input v-model="nickname" class="field" :maxlength="20" placeholder="孩子姓名/昵称" /></view>
-        <view class="input-wrap"><input v-model="password" class="field" password :maxlength="32" :placeholder="childId == 0 ? '登录密码（8-32位，含大小写+数字）' : '新密码（留空不改）'" /></view>
-        <view class="input-wrap"><input v-model="confirmPassword" class="field" password :maxlength="32" :placeholder="childId == 0 ? '确认密码' : '确认新密码'" /></view>
+        <view class="form-content">
+          <text class="form-title">{{ childId == 0 ? '创建孩子账号' : '编辑孩子资料' }}</text>
+          <text v-if="loadingDetails" class="form-hint">正在读取孩子资料…</text>
+          <template v-else>
+            <view v-if="childId == 0" class="input-wrap">
+              <input v-model="account" class="field" :maxlength="50" :disabled="saving" placeholder="登录账号（2-50位，唯一）" />
+            </view>
+            <view class="input-wrap">
+              <input v-model="realName" class="field" :maxlength="20" :disabled="saving" placeholder="孩子姓名（必填）" />
+            </view>
+            <view class="input-wrap">
+              <input v-model="nickname" class="field" :maxlength="20" :disabled="saving" placeholder="展示昵称（选填）" />
+            </view>
+            <template v-if="childId == 0">
+              <view class="input-wrap">
+                <input v-model="password" class="field" password :maxlength="32" :disabled="saving" placeholder="登录密码（8-32位，含大小写+数字）" />
+              </view>
+              <view class="input-wrap">
+                <input v-model="confirmPassword" class="field" password :maxlength="32" :disabled="saving" placeholder="确认密码" />
+              </view>
+            </template>
+            <view class="input-wrap">
+              <picker class="form-picker" mode="date" :value="birthDate.length > 0 ? birthDate : defaultBirthDate" start="1990-01-01" :end="todayDate" :disabled="saving" @change="onBirthDateChange">
+                <text class="picker-text">{{ birthDate.length > 0 ? '出生日期：' + birthDate : '请选择出生日期（必填）' }}</text>
+              </picker>
+            </view>
+            <view class="input-wrap">
+              <picker class="form-picker" :range="gradeOptions" :value="gradeIndex" :disabled="saving" @change="onGradeChange">
+                <text class="picker-text">{{ grade.length > 0 ? grade : '请选择年级（选填）' }}</text>
+              </picker>
+            </view>
+            <view class="input-wrap">
+              <input v-model="school" class="field" :maxlength="50" :disabled="saving" placeholder="学校名称（选填）" />
+            </view>
+            <view class="input-wrap">
+              <input v-model="region" class="field" :maxlength="20" :disabled="saving" placeholder="地区（选填）" />
+            </view>
+            <text v-if="formError.length > 0" class="form-error">{{ formError }}</text>
+            <button class="btn-save" :loading="saving" :disabled="saving" @click="saveChild">保存</button>
+          </template>
+          <button class="btn-cancel" :disabled="saving" @click="dismissEditor">取消</button>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 家长代重置孩子密码弹层 -->
+    <view v-if="resetOpen" class="overlay" @click="closeResetModal">
+      <view class="form-panel modal-pad" @click.stop>
+        <text class="form-title">重置「{{ resetTargetName }}」的密码</text>
+        <text class="form-hint modal-hint">需验证你的家长当前密码，重置后孩子其他设备将自动退出。</text>
         <view class="input-wrap">
-          <picker class="form-picker" :range="ageOptions" :value="ageIndex" @change="onAgeChange">
-            <text class="picker-text">{{ age.length > 0 ? age + ' 岁' : '请选择年龄' }}</text>
-          </picker>
+          <input v-model="parentCurrentPassword" class="field" password :maxlength="128" :disabled="saving" placeholder="请输入家长当前密码" />
         </view>
         <view class="input-wrap">
-          <picker class="form-picker" :range="gradeOptions" :value="gradeIndex" @change="onGradeChange">
-            <text class="picker-text">{{ grade.length > 0 ? grade : '请选择年级' }}</text>
-          </picker>
+          <input v-model="childNewPassword" class="field" password :maxlength="32" :disabled="saving" placeholder="孩子新密码（8-32位，含大小写+数字）" />
+        </view>
+        <view class="input-wrap">
+          <input v-model="childConfirmPassword" class="field" password :maxlength="32" :disabled="saving" placeholder="确认孩子新密码" />
         </view>
         <text v-if="formError.length > 0" class="form-error">{{ formError }}</text>
-        <button class="btn-save" :loading="saving" :disabled="saving" @click="saveChild">保存</button>
-        <text v-if="childId > 0" class="form-hint">如需注销或转移账号，请联系管理员</text>
-        <button class="btn-cancel" :disabled="saving" @click="dismissEditor">取消</button>
-       </view>
-      </scroll-view>
+        <button class="btn-save" :loading="saving" :disabled="saving" @click="submitResetPassword">确认重置</button>
+        <button class="btn-cancel" :disabled="saving" @click="closeResetModal">取消</button>
+      </view>
     </view>
   </view>
 </template>
 
 <script setup lang="uts">
-import { requestJson } from '../../network/request.uts'
-import { readParentChildren, buildCreateChildBody } from '../../api/parent.uts'
-import { getSession } from '../../state/session.uts'
+import { bindGuardian, unbindGuardian } from '../../api/auth.uts'
+import {
+  buildCreateChildPayload,
+  buildUpdateChildDetailsPayload,
+  createChildWithIdempotency,
+  getChildCreationConfig,
+  getChildDetails,
+  resetChildPassword,
+  updateChildDetails
+} from '../../api/parent.uts'
+import { getApiErrorCode, isUncertainError } from '../../network/request.uts'
+import { restoreSession, switchSessionChild } from '../../state/auth-actions.uts'
+import {
+  applyConfirmedGuardianUnlink,
+  applySessionView,
+  familyState,
+  getSession,
+  returnToLogin
+} from '../../state/session.uts'
+import {
+  formatGuardianCode,
+  generateRequestId,
+  isGuardianCodeValid,
+  normalizeGuardianCode
+} from '../../utils/guardian-code.uts'
 import { getPageTopInset } from '../../utils/layout.uts'
 import { meetsPasswordPolicy, PASSWORD_HINT } from '../../utils/password-policy.uts'
 
-const children = ref([])
 const loaded = ref(false)
 const loading = ref(false)
 const insetTop = ref(0)
-const formHeight = ref(470)
+const formHeight = ref(500)
 const parentName = ref('家长')
+const creationEnabled = ref(true)
 const quotaLimit = ref(0)
 const quotaUsed = ref(0)
 const canAdd = ref(false)
 const saving = ref(false)
+const switchingId = ref(0)
+const errorText = ref('')
+const formError = ref('')
+const uncertain = ref(false)
+
+// 关联码绑定
+const bindOpen = ref(false)
+const bindCode = ref('')
+
+// 创建/编辑孩子
 const editing = ref(false)
+const loadingDetails = ref(false)
 const childId = ref(0)
+const pendingRequestId = ref('')
 const account = ref('')
+const realName = ref('')
 const nickname = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const birthDate = ref('')
 const grade = ref('')
-const age = ref('')
-const errorText = ref('')
-const formError = ref('')
-const path = '/api/parent/children'
-const ageOptions= []
-for (let value = 3; value <= 120; value++) ageOptions.push(value.toString())
-const gradeOptions = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三']
-const ageIndex = computed(() => Math.max(0, ageOptions.indexOf(age.value)))
-const gradeIndex = computed(() => Math.max(0, gradeOptions.indexOf(grade.value)))
+const school = ref('')
+const region = ref('')
 
-function onAgeChange(event) {
-  age.value = ageOptions[parseInt(event.detail.value.toString())]
+// 代重置孩子密码
+const resetOpen = ref(false)
+const resetTargetId = ref(0)
+const resetTargetName = ref('')
+const parentCurrentPassword = ref('')
+const childNewPassword = ref('')
+const childConfirmPassword = ref('')
+
+const gradeOptions = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三']
+const gradeIndex = computed(() => Math.max(0, gradeOptions.indexOf(grade.value)))
+const now = new Date()
+const todayDate = now.getFullYear().toString() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0')
+const defaultBirthDate = (now.getFullYear() - 10).toString() + '-01-01'
+
+const children = computed(() => familyState.value.children)
+const activeChildId = computed(() => familyState.value.activeChildId)
+const busy = computed(() => loading.value || saving.value || switchingId.value > 0)
+const canSubmitBind = computed(() => isGuardianCodeValid(bindCode.value))
+const bindCodePreview = computed(() => canSubmitBind.value ? formatGuardianCode(bindCode.value) : '')
+
+function childDisplayName(child) {
+  return child.name.length > 0 ? child.name : (child.nickname.length > 0 ? child.nickname : '孩')
+}
+
+function onBirthDateChange(event) {
+  birthDate.value = event.detail.value.toString()
 }
 
 function onGradeChange(event) {
   grade.value = gradeOptions[parseInt(event.detail.value.toString())]
 }
 
-async function loadChildren() {
+async function loadAll() {
   if (loading.value) return
   loading.value = true
   errorText.value = ''
   try {
-    const responses = await Promise.all([requestJson(path), requestJson('/api/parent/quota')])
-    const entries = readParentChildren(responses[0])
-    const quota = responses[1]
-    quotaLimit.value = quota.getNumber('limit') ?? 0
-    quotaUsed.value = quota.getNumber('used') ?? 0
-    canAdd.value = quota.getBoolean('can_add') == true
-    children.value = entries.map((entry) => {
-      return {
-        id: entry.getNumber('id') ?? 0,
-        account: entry.getString('login_name') ?? '',
-        nickname: entry.getString('nickname') ?? '',
-        trainingDays: entry.getNumber('training_days') ?? 0,
-        talent: entry.getString('talent') ?? '未测评',
-        grade: entry.getString('grade') ?? '',
-        age: entry.getNumber('age')?.toString() ?? ''
-      }
-    })
+    const sessionTask = restoreSession(true)
+    const cfg = await getChildCreationConfig()
+    const sessionOk = await sessionTask
+    if (!sessionOk && !familyState.value.loaded) {
+      throw new Error('会话状态读取失败，请重试')
+    }
+    creationEnabled.value = cfg.getBoolean('enabled') != false
+    quotaLimit.value = cfg.getNumber('max_children') ?? 0
+    quotaUsed.value = cfg.getNumber('current_children') ?? familyState.value.children.length
+    canAdd.value = cfg.getBoolean('can_add') == true
     loaded.value = true
   } catch (error) {
     loaded.value = false
@@ -141,55 +268,181 @@ async function loadChildren() {
   }
 }
 
-function editChild(child) {
-  if (saving.value) return
-  childId.value = child.id
-  account.value = child.account
-  nickname.value = child.nickname
-  password.value = ''
-  confirmPassword.value = ''
-  grade.value = child.grade
-  age.value = child.age
+function openBindModal() {
+  if (busy.value) return
+  bindCode.value = ''
   formError.value = ''
-  editing.value = true
+  uncertain.value = false
+  bindOpen.value = true
+}
+
+function closeBindModal() {
+  if (saving.value) return
+  bindOpen.value = false
+  bindCode.value = ''
+  formError.value = ''
+  uncertain.value = false
+}
+
+async function submitBind() {
+  if (saving.value || !canSubmitBind.value) return
+  saving.value = true
+  formError.value = ''
+  uncertain.value = false
+  try {
+    const data = await bindGuardian(normalizeGuardianCode(bindCode.value))
+    if (!applySessionView(data)) {
+      uncertain.value = true
+      formError.value = '关联可能已成功，请刷新后查看'
+      return
+    }
+    bindOpen.value = false
+    bindCode.value = ''
+    uni.showToast({ title: '已关联孩子', icon: 'none' })
+    loadAll()
+  } catch (error) {
+    if (getApiErrorCode(error) == 'already_linked') {
+      restoreSession(true)
+    }
+    uncertain.value = isUncertainError(error)
+    formError.value = uncertain.value
+      ? '操作结果尚未确认，请刷新关联状态后重试'
+      : (error instanceof Error ? error.message : '关联失败，请重试')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function refreshAfterUncertain() {
+  if (saving.value) return
+  await loadAll()
+  uncertain.value = false
+  formError.value = '已刷新列表，请核对当前关联状态'
 }
 
 function startNew() {
-  if (canAdd.value) editChild({ id: 0, account: '', nickname: '', trainingDays: 0, talent: '', grade: '', age: '' })
+  if (!canAdd.value || busy.value) return
+  childId.value = 0
+  pendingRequestId.value = generateRequestId()
+  account.value = ''
+  realName.value = ''
+  nickname.value = ''
+  password.value = ''
+  confirmPassword.value = ''
+  birthDate.value = ''
+  grade.value = ''
+  school.value = ''
+  region.value = ''
+  formError.value = ''
+  loadingDetails.value = false
+  editing.value = true
+}
+
+async function openEditChild(id) {
+  if (busy.value) return
+  childId.value = id
+  pendingRequestId.value = ''
+  account.value = ''
+  realName.value = ''
+  nickname.value = ''
+  password.value = ''
+  confirmPassword.value = ''
+  birthDate.value = ''
+  grade.value = ''
+  school.value = ''
+  region.value = ''
+  formError.value = ''
+  loadingDetails.value = true
+  editing.value = true
+  try {
+    const details = await getChildDetails(id)
+    realName.value = details.getString('real_name') ?? ''
+    nickname.value = details.getString('nickname') ?? ''
+    birthDate.value = details.getString('birth_date') ?? ''
+    grade.value = details.getString('grade') ?? ''
+    school.value = details.getString('school') ?? ''
+    region.value = details.getString('region') ?? ''
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : '读取孩子资料失败'
+  } finally {
+    loadingDetails.value = false
+  }
 }
 
 function closeEditor() {
   editing.value = false
+  pendingRequestId.value = ''
   password.value = ''
   confirmPassword.value = ''
+  formError.value = ''
+}
+
+function dismissEditor() {
+  if (!saving.value) closeEditor()
 }
 
 async function saveChild() {
-  if (saving.value) return
+  if (saving.value || loadingDetails.value) return
   const creating = childId.value == 0
   const loginName = account.value.trim()
-  const name = nickname.value.trim()
+  const rName = realName.value.trim()
+  const nick = nickname.value.trim()
   const secret = password.value.trim()
-  const year = age.value.length > 0 ? parseInt(age.value) : null
-  if (name.length < 2 || (creating && loginName.length < 2)) {
-    formError.value = '账号和昵称至少 2 位'
+
+  if (creating && loginName.length < 2) {
+    formError.value = '登录账号至少 2 位'
     return
   }
-  if ((creating || secret.length > 0) && !meetsPasswordPolicy(secret)) {
-    formError.value = PASSWORD_HINT
+  if (rName.length < 2) {
+    formError.value = '孩子姓名至少 2 个字符'
     return
   }
-  if (secret != confirmPassword.value.trim()) {
-    formError.value = '两次输入的密码不一致'
+  if (creating && birthDate.value.length == 0) {
+    formError.value = '请选择出生日期'
     return
   }
-  const data = buildCreateChildBody(name, creating ? loginName : '', secret, grade.value.trim(), year == null ? 0 : year)
+  if (creating) {
+    if (!meetsPasswordPolicy(secret)) {
+      formError.value = PASSWORD_HINT
+      return
+    }
+    if (secret != confirmPassword.value.trim()) {
+      formError.value = '两次输入的密码不一致'
+      return
+    }
+  }
+
   saving.value = true
   formError.value = ''
   try {
-    await requestJson(creating ? path : path + '/' + childId.value.toString(), creating ? 'POST' : 'PUT', data)
+    if (creating) {
+      const payload = buildCreateChildPayload(
+        pendingRequestId.value,
+        loginName,
+        rName,
+        nick,
+        secret,
+        birthDate.value,
+        grade.value,
+        school.value,
+        region.value
+      )
+      await createChildWithIdempotency(payload)
+      uni.showToast({ title: '已创建孩子账号', icon: 'none' })
+    } else {
+      const payload = buildUpdateChildDetailsPayload(
+        rName,
+        nick,
+        birthDate.value,
+        grade.value,
+        school.value,
+        region.value
+      )
+      await updateChildDetails(childId.value, payload)
+      uni.showToast({ title: '已保存资料', icon: 'none' })
+    }
     closeEditor()
-    await loadChildren()
+    await loadAll()
   } catch (error) {
     formError.value = error instanceof Error ? error.message : '保存失败，请重试'
   } finally {
@@ -197,8 +450,101 @@ async function saveChild() {
   }
 }
 
-function dismissEditor() {
-  if (!saving.value) closeEditor()
+function openResetModal(child) {
+  if (busy.value) return
+  resetTargetId.value = child.id
+  resetTargetName.value = childDisplayName(child)
+  parentCurrentPassword.value = ''
+  childNewPassword.value = ''
+  childConfirmPassword.value = ''
+  formError.value = ''
+  resetOpen.value = true
+}
+
+function closeResetModal() {
+  if (saving.value) return
+  resetOpen.value = false
+  parentCurrentPassword.value = ''
+  childNewPassword.value = ''
+  childConfirmPassword.value = ''
+  formError.value = ''
+}
+
+async function submitResetPassword() {
+  if (saving.value) return
+  if (parentCurrentPassword.value.trim().length == 0) {
+    formError.value = '请输入家长当前密码'
+    return
+  }
+  const nextPwd = childNewPassword.value.trim()
+  if (!meetsPasswordPolicy(nextPwd)) {
+    formError.value = PASSWORD_HINT
+    return
+  }
+  if (nextPwd != childConfirmPassword.value.trim()) {
+    formError.value = '两次输入的新密码不一致'
+    return
+  }
+  saving.value = true
+  formError.value = ''
+  try {
+    await resetChildPassword(resetTargetId.value, parentCurrentPassword.value.trim(), nextPwd)
+    closeResetModal()
+    uni.showToast({ title: '已重置孩子密码', icon: 'none' })
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : '重置密码失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function enterChildView(id) {
+  if (busy.value) return
+  switchingId.value = id
+  try {
+    const ok = await switchSessionChild(id)
+    if (ok) {
+      uni.reLaunch({ url: '/pages/home/index' })
+    } else {
+      uni.showToast({ title: '切换视角失败，请刷新重试', icon: 'none' })
+    }
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '切换视角失败', icon: 'none' })
+  } finally {
+    switchingId.value = 0
+  }
+}
+
+function confirmUnlink(child) {
+  if (busy.value) return
+  const name = childDisplayName(child)
+  uni.showModal({
+    title: '解除与「' + name + '」的关联？',
+    content: '解除后无法查看该孩子数据，孩子账号与历史记录不会被删除；再次关联需孩子重新生成关联码。',
+    confirmText: '确认解除',
+    confirmColor: '#f87171',
+    success: (res) => {
+      if (res.confirm) doUnlink(child.id)
+    }
+  })
+}
+
+async function doUnlink(id) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    await unbindGuardian(id)
+    applyConfirmedGuardianUnlink(id)
+    uni.showToast({ title: '已解除关联', icon: 'none' })
+    await loadAll()
+  } catch (error) {
+    const msg = isUncertainError(error)
+      ? '操作结果尚未确认，请刷新关联状态后重试'
+      : (error instanceof Error ? error.message : '解除关联失败')
+    uni.showToast({ title: msg, icon: 'none' })
+  } finally {
+    saving.value = false
+  }
 }
 
 function goProfile() {
@@ -210,13 +556,18 @@ function goBack() {
 }
 
 onLoad(() => {
-  parentName.value = getSession()?.nickname ?? '家长'
-  loadChildren()
+  const session = getSession()
+  if (session == null) {
+    returnToLogin()
+    return
+  }
+  parentName.value = session.nickname.length > 0 ? session.nickname : '家长'
+  loadAll()
 })
 
 onReady(() => {
   insetTop.value = getPageTopInset()
-  formHeight.value = Math.min(520, Math.round(uni.getWindowInfo().windowHeight * 0.82))
+  formHeight.value = Math.min(560, Math.round(uni.getWindowInfo().windowHeight * 0.84))
 })
 </script>
 

@@ -1,2 +1,10 @@
 // 从 index.uvue 抽出：.uvue 的 script 块不支持 type / interface 声明
-export type Child = { id: number; account: string; nickname: string; trainingDays: number; talent: string; grade: string; age: string }
+export type ManagedChild = {
+  id: number
+  name: string
+  nickname: string
+  age: number
+  grade: string
+  school: string
+  region: string
+}
