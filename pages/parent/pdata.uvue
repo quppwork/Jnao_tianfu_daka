@@ -1,0 +1,507 @@
+<template>
+  <view class="dt-page">
+    <view class="dt-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="dt-brand">
+        <text class="dt-title">数据分析</text>
+        <text class="dt-sub">DASHBOARD · {{ syncHint }}</text>
+      </view>
+      <view class="dt-refresh" @click="reloadCurrent">
+        <text class="dt-refresh-text">刷新</text>
+      </view>
+    </view>
+
+    <!-- 孩子切换胶囊 -->
+    <scroll-view v-if="children.length > 0" class="dt-kids" scroll-x :show-scrollbar="false">
+      <view class="dt-kid-row">
+        <view
+          v-for="c in children"
+          :key="c.id.toString()"
+          class="dt-kid-chip"
+          :class="c.id == activeChildId ? 'dt-kid-on' : ''"
+          @click="pickChild(c.id)"
+        >
+          <text class="dt-kid-text" :class="c.id == activeChildId ? 'dt-kid-text-on' : ''">{{ c.nickname }}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <scroll-view class="dt-body" scroll-y :show-scrollbar="false">
+      <view v-if="loading" class="dt-empty">
+        <text class="dt-muted">正在读取孩子训练数据…</text>
+      </view>
+      <view v-else-if="children.length == 0" class="dt-empty">
+        <text class="dt-empty-title">还没有绑定孩子账号</text>
+        <text class="dt-muted">去「我的」添加孩子后，这里会自动同步训练数据</text>
+        <view class="dt-gold-btn" @click="goChildren">
+          <text class="dt-gold-btn-text">去添加孩子</text>
+        </view>
+      </view>
+      <template v-else>
+        <!-- 学员概览卡 -->
+        <view class="dt-hero">
+          <view class="dt-avatar">
+            <text class="dt-avatar-char">{{ talentChar }}</text>
+          </view>
+          <view class="dt-hero-info">
+            <text class="dt-hero-name">{{ childName }}</text>
+            <text class="dt-hero-meta">{{ talentLabel }} · {{ tierLabel }}</text>
+          </view>
+        </view>
+
+        <!-- 核心指标 -->
+        <view class="dt-metrics">
+          <view class="dt-metric">
+            <text class="dt-metric-val">{{ totalDays }}</text>
+            <text class="dt-metric-lbl">累计训练天</text>
+          </view>
+          <view class="dt-metric">
+            <text class="dt-metric-val">{{ streakDays }}</text>
+            <text class="dt-metric-lbl">当前连续天</text>
+          </view>
+          <view class="dt-metric dt-metric-last">
+            <text class="dt-metric-val">{{ weekCount }}</text>
+            <text class="dt-metric-lbl">本周打卡</text>
+          </view>
+        </view>
+
+        <!-- 大宇 AI 数据解读 -->
+        <view class="dt-card">
+          <text class="dt-card-title">📌 大宇本周解读</text>
+          <text class="dt-insight">{{ insightText }}</text>
+        </view>
+
+        <!-- 技能进度 -->
+        <view v-if="skills.length > 0" class="dt-card">
+          <text class="dt-card-title">🎯 技能成长进度</text>
+          <view v-for="(sk, idx) in skills" :key="idx.toString()" class="dt-skill">
+            <view class="dt-skill-head">
+              <text class="dt-skill-name">{{ sk.name }}</text>
+              <text class="dt-skill-val">{{ sk.meta }}</text>
+            </view>
+            <view class="dt-bar-bg">
+              <view class="dt-bar-fill" :style="{ width: sk.percent + '%' }"></view>
+            </view>
+          </view>
+        </view>
+      </template>
+
+      <text v-if="errorText.length > 0" class="dt-error">{{ errorText }}</text>
+      <view class="dt-space"></view>
+    </scroll-view>
+
+    <dayu-tab-bar role="parent" active="pdata" />
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getChildDashboard, listChildren, readParentChildren } from '../../api/parent.uts'
+import { getSession, returnToLogin } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const insetTop = ref(0)
+const loading = ref(true)
+const errorText = ref('')
+const syncHint = ref('实时同步')
+const children = ref([])
+const activeChildId = ref(0)
+
+const childName = ref('学员')
+const talentChar = ref('星')
+const talentLabel = ref('待测评')
+const tierLabel = ref('成长中')
+const totalDays = ref('0')
+const streakDays = ref('0')
+const weekCount = ref('0')
+const insightText = ref('大宇正在解读本周训练数据…')
+const skills = ref([])
+
+function applyDashboard(data: UTSJSONObject) {
+  syncHint.value = data.getString('sync_hint') ?? '实时同步'
+  const child = data.getJSON('child')
+  if (child != null) {
+    childName.value = child.getString('nickname') ?? '学员'
+    const tc = child.getString('talent_char') ?? ''
+    talentChar.value = tc.length > 0 ? tc : '星'
+    const tl = child.getString('talent') ?? ''
+    talentLabel.value = tl.length > 0 ? tl : '待测评'
+  }
+  const tier = data.getJSON('tier')
+  if (tier != null) {
+    tierLabel.value = tier.getString('name') ?? tier.getString('label') ?? '成长中'
+  }
+  const m = data.getJSON('metrics')
+  if (m != null) {
+    totalDays.value = (m.getNumber('total_days') ?? m.getNumber('training_days') ?? 0).toString()
+    streakDays.value = (m.getNumber('streak_days') ?? m.getNumber('streak') ?? 0).toString()
+    weekCount.value = (m.getNumber('week_checkins') ?? m.getNumber('week_days') ?? 0).toString()
+  }
+  const insight = data.getJSON('insight')
+  const itext = insight?.getString('text') ?? ''
+  if (itext.length > 0) {
+    insightText.value = itext
+  }
+  const rawSkills = data.getArray<UTSJSONObject>('skills_progress') ?? []
+  const parsed = []
+  for (let i = 0; i < rawSkills.length; i++) {
+    const s = rawSkills[i]
+    const name = s.getString('skill') ?? s.getString('name') ?? '技能'
+    const pct = s.getNumber('percent') ?? s.getNumber('progress') ?? 0
+    const clamped = pct < 0 ? 0 : (pct > 100 ? 100 : Math.round(pct))
+    const stage = s.getString('stage_label') ?? (clamped.toString() + '%')
+    parsed.push({ name: name, meta: stage, percent: clamped })
+  }
+  skills.value = parsed
+}
+
+async function pickChild(id: number) {
+  if (id <= 0) return
+  activeChildId.value = id
+  loading.value = true
+  errorText.value = ''
+  insightText.value = '大宇正在解读本周训练数据…'
+  try {
+    const fast = await getChildDashboard(id, false)
+    applyDashboard(fast)
+    loading.value = false
+    // 异步补充 AI 周报解读，不阻塞首屏数据
+    getChildDashboard(id, true).then((full) => {
+      if (activeChildId.value == id) applyDashboard(full)
+    }).catch(() => {})
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '读取数据失败'
+    loading.value = false
+  }
+}
+
+function reloadCurrent() {
+  if (activeChildId.value > 0) {
+    pickChild(activeChildId.value)
+  } else {
+    boot()
+  }
+}
+
+function goChildren() {
+  uni.redirectTo({ url: '/pages/parent/index' })
+}
+
+async function boot() {
+  loading.value = true
+  errorText.value = ''
+  try {
+    const rows = readParentChildren(await listChildren())
+    const list = []
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]
+      const id = r.getNumber('id') ?? 0
+      const name = r.getString('nickname') ?? '学员'
+      if (id > 0) list.push({ id: id, nickname: name })
+    }
+    children.value = list
+    if (list.length > 0) {
+      await pickChild(list[0].id)
+    } else {
+      loading.value = false
+    }
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '加载孩子列表失败'
+    loading.value = false
+  }
+}
+
+onLoad(() => {
+  if (getSession() == null) {
+    returnToLogin()
+    return
+  }
+  boot()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+</script>
+
+<style lang="scss" scoped>
+@import '../../styles/dayu-theme.scss';
+
+.dt-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  background-color: $dy-bg;
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
+}
+
+.dt-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-bottom: 8px;
+}
+
+.dt-brand {
+  display: flex;
+  flex-direction: column;
+}
+
+.dt-title {
+  color: $dy-gold-bright;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.dt-sub {
+  color: $dy-muted;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.dt-refresh {
+  padding: 5px 12px;
+  border-radius: 16px;
+  background-color: $dy-gold-bg;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-gold-border;
+}
+
+.dt-refresh-text {
+  color: $dy-gold-bright;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dt-kids {
+  height: 44px;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.dt-kid-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.dt-kid-chip {
+  padding: 6px 14px;
+  margin-right: 8px;
+  border-radius: 16px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.dt-kid-on {
+  background-color: $dy-gold-bg;
+  border-color: $dy-gold;
+}
+
+.dt-kid-text {
+  color: $dy-muted;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dt-kid-text-on {
+  color: $dy-gold-bright;
+}
+
+.dt-body {
+  flex: 1;
+}
+
+.dt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 20px;
+}
+
+.dt-empty-title {
+  color: $dy-text;
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.dt-muted {
+  color: $dy-muted;
+  font-size: 13px;
+  text-align: center;
+}
+
+.dt-gold-btn {
+  margin-top: 16px;
+  padding: 9px 20px;
+  border-radius: 14px;
+  background-color: $dy-gold;
+}
+
+.dt-gold-btn-text {
+  color: $dy-bg;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dt-hero {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 6px 14px 12px 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background-color: $dy-card;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-gold-border;
+}
+
+.dt-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  background-color: $dy-gold-bg;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $dy-gold;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.dt-avatar-char {
+  color: $dy-gold-bright;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.dt-hero-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.dt-hero-name {
+  color: $dy-text;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.dt-hero-meta {
+  color: $dy-gold-bright;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.dt-metrics {
+  display: flex;
+  flex-direction: row;
+  margin: 0 14px 12px 14px;
+}
+
+.dt-metric {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 8px;
+  margin-right: 8px;
+  border-radius: 14px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.dt-metric-last {
+  margin-right: 0;
+}
+
+.dt-metric-val {
+  color: $dy-gold-bright;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.dt-metric-lbl {
+  color: $dy-muted;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.dt-card {
+  margin: 0 14px 12px 14px;
+  padding: 15px;
+  border-radius: 16px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.dt-card-title {
+  color: $dy-text;
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.dt-insight {
+  color: $dy-text-body;
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.dt-skill {
+  margin-bottom: 10px;
+}
+
+.dt-skill-head {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.dt-skill-name {
+  color: $dy-text;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dt-skill-val {
+  color: $dy-green;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dt-bar-bg {
+  height: 7px;
+  border-radius: 4px;
+  background-color: $dy-bg-top;
+  overflow: hidden;
+}
+
+.dt-bar-fill {
+  height: 7px;
+  border-radius: 4px;
+  background-color: $dy-green;
+}
+
+.dt-error {
+  color: $dy-danger;
+  font-size: 12px;
+  margin: 6px 16px;
+}
+
+.dt-space {
+  height: 16px;
+}
+</style>

@@ -1,0 +1,356 @@
+<template>
+  <view class="cs-page">
+    <view class="cs-header" :style="{ paddingTop: insetTop + 'px' }">
+      <view class="cs-brand">
+        <text class="cs-title">在线咨询</text>
+        <text class="cs-sub">CONSULT · 真人导师与家长支持通道</text>
+      </view>
+      <view class="cs-refresh" @click="refreshMessages">
+        <text class="cs-refresh-text">刷新</text>
+      </view>
+    </view>
+
+    <!-- 频道选择 -->
+    <scroll-view v-if="channels.length > 0" class="cs-channels" scroll-x :show-scrollbar="false">
+      <view class="cs-channel-row">
+        <view
+          v-for="ch in channels"
+          :key="ch.code"
+          class="cs-chip"
+          :class="ch.code == activeCode ? 'cs-chip-on' : ''"
+          @click="selectChannel(ch.code)"
+        >
+          <text class="cs-chip-text" :class="ch.code == activeCode ? 'cs-chip-text-on' : ''">{{ ch.name }}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <scroll-view class="cs-body" scroll-y :scroll-into-view="scrollAnchor" :show-scrollbar="false">
+      <view class="cs-inner">
+        <view v-if="loading" class="cs-empty">
+          <text class="cs-muted">正在连接咨询频道…</text>
+        </view>
+        <view v-else-if="messages.length == 0" class="cs-empty">
+          <text class="cs-empty-title">欢迎进入{{ activeName }}</text>
+          <text class="cs-muted">可直接发送问题，导师看到后会及时回复</text>
+        </view>
+        <chat-bubble
+          v-for="(m, idx) in messages"
+          :key="idx.toString()"
+          :role="m.role"
+          :content="m.content"
+          :pending="false"
+          accent="gold"
+        />
+        <view id="cs-bottom" class="cs-anchor"></view>
+      </view>
+    </scroll-view>
+
+    <view v-if="errorText.length > 0" class="cs-error">
+      <text class="cs-error-text">{{ errorText }}</text>
+    </view>
+
+    <chat-composer
+      :sending="sending"
+      :inset="0"
+      accent="gold"
+      placeholder="输入要咨询导师的问题…"
+      @submit="onSend"
+    />
+
+    <dayu-tab-bar role="parent" active="consult" />
+  </view>
+</template>
+
+<script setup lang="uts">
+import {
+  listConsultChannels,
+  listConsultMessages,
+  openConsultConversation,
+  sendConsultMessage
+} from '../../api/parent.uts'
+import { getSession, returnToLogin } from '../../state/session.uts'
+import { getPageTopInset } from '../../utils/layout.uts'
+
+const insetTop = ref(0)
+const loading = ref(true)
+const sending = ref(false)
+const errorText = ref('')
+const channels = ref([])
+const activeCode = ref('')
+const activeName = ref('在线咨询')
+const conversationId = ref(0)
+const messages = ref([])
+const scrollAnchor = ref('')
+let scrollTimer = 0
+
+function clearScrollTimer() {
+  if (scrollTimer != 0) {
+    clearTimeout(scrollTimer)
+    scrollTimer = 0
+  }
+}
+
+function scrollToBottom() {
+  clearScrollTimer()
+  scrollAnchor.value = ''
+  scrollTimer = setTimeout(() => {
+    scrollTimer = 0
+    scrollAnchor.value = 'cs-bottom'
+  }, 20)
+}
+
+function mapMessages(rows: Array<UTSJSONObject>) {
+  const out = []
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const content = row.getString('content') ?? ''
+    if (content.length == 0) continue
+    const isMine = row.getBoolean('is_mine') == true || row.getString('sender_role') == 'parent'
+    const senderName = row.getString('sender_name') ?? ''
+    const display = !isMine && senderName.length > 0 ? senderName + '：' + content : content
+    out.push({ role: isMine ? 'user' : 'ai', content: display, pending: false })
+  }
+  return out
+}
+
+async function selectChannel(code: string) {
+  if (code.length == 0) return
+  activeCode.value = code
+  for (let i = 0; i < channels.value.length; i++) {
+    if (channels.value[i].code == code) {
+      activeName.value = channels.value[i].name
+      break
+    }
+  }
+  loading.value = true
+  errorText.value = ''
+  try {
+    const opened = await openConsultConversation(code)
+    const conv = opened.getJSON('conversation')
+    const cid = conv?.getNumber('id') ?? 0
+    conversationId.value = cid
+    if (cid > 0) {
+      const hist = await listConsultMessages(cid)
+      messages.value = mapMessages(hist.getArray<UTSJSONObject>('messages') ?? [])
+      scrollToBottom()
+    } else {
+      messages.value = []
+    }
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '打开咨询频道失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function refreshMessages() {
+  if (conversationId.value <= 0) {
+    if (activeCode.value.length > 0) await selectChannel(activeCode.value)
+    return
+  }
+  errorText.value = ''
+  try {
+    const hist = await listConsultMessages(conversationId.value)
+    messages.value = mapMessages(hist.getArray<UTSJSONObject>('messages') ?? [])
+    scrollToBottom()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '刷新消息失败'
+  }
+}
+
+async function onSend(text: string) {
+  if (sending.value) return
+  if (conversationId.value <= 0) {
+    errorText.value = '尚未连接咨询会话，请稍后重试'
+    return
+  }
+  sending.value = true
+  errorText.value = ''
+  try {
+    await sendConsultMessage(conversationId.value, text)
+    await refreshMessages()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '发送失败，请重试'
+  } finally {
+    sending.value = false
+  }
+}
+
+async function boot() {
+  loading.value = true
+  errorText.value = ''
+  try {
+    const data = await listConsultChannels()
+    const rows = data.getArray<UTSJSONObject>('channels') ?? []
+    const parsed = []
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]
+      const code = r.getString('code') ?? ''
+      const name = r.getString('name') ?? code
+      if (code.length > 0) parsed.push({ code: code, name: name })
+    }
+    channels.value = parsed
+    if (parsed.length > 0) {
+      await selectChannel(parsed[0].code)
+    } else {
+      loading.value = false
+    }
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '加载咨询频道失败'
+    loading.value = false
+  }
+}
+
+onLoad(() => {
+  if (getSession() == null) {
+    returnToLogin()
+    return
+  }
+  boot()
+})
+
+onReady(() => {
+  insetTop.value = getPageTopInset()
+})
+
+onUnload(() => {
+  clearScrollTimer()
+})
+</script>
+
+<style lang="scss" scoped>
+@import '../../styles/dayu-theme.scss';
+
+.cs-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  background-color: $dy-bg;
+  background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg);
+}
+
+.cs-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-bottom: 8px;
+}
+
+.cs-brand {
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-title {
+  color: $dy-gold-bright;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.cs-sub {
+  color: $dy-muted;
+  font-size: 10px;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+.cs-refresh {
+  padding: 5px 12px;
+  border-radius: 16px;
+  background-color: $dy-gold-bg;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-gold-border;
+}
+
+.cs-refresh-text {
+  color: $dy-gold-bright;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cs-channels {
+  height: 44px;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.cs-channel-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.cs-chip {
+  padding: 6px 13px;
+  margin-right: 8px;
+  border-radius: 16px;
+  background-color: $dy-card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border;
+}
+
+.cs-chip-on {
+  background-color: $dy-gold-bg;
+  border-color: $dy-gold;
+}
+
+.cs-chip-text {
+  color: $dy-muted;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cs-chip-text-on {
+  color: $dy-gold-bright;
+}
+
+.cs-body {
+  flex: 1;
+}
+
+.cs-inner {
+  padding: 12px 14px 8px 14px;
+}
+
+.cs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 44px;
+  padding-bottom: 44px;
+}
+
+.cs-empty-title {
+  color: $dy-text;
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.cs-muted {
+  color: $dy-muted;
+  font-size: 13px;
+}
+
+.cs-anchor {
+  height: 1px;
+}
+
+.cs-error {
+  padding: 6px 14px;
+  background-color: $dy-danger-bg;
+}
+
+.cs-error-text {
+  color: $dy-danger;
+  font-size: 12px;
+}
+</style>

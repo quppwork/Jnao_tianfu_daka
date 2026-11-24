@@ -31,6 +31,77 @@ export function getParentQuota(): Promise<UTSJSONObject> {
   return requestJson('/api/parent/quota')
 }
 
+export function getChildCreationConfig(): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children/config')
+}
+
+export function createChildWithIdempotency(payload: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children', 'POST', payload)
+}
+
+export function getChildDetails(childId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children/' + childId.toString() + '/details')
+}
+
+export function updateChildDetails(childId: number, payload: UTSJSONObject): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children/' + childId.toString() + '/details', 'PATCH', payload)
+}
+
+export function resetChildPassword(
+  childId: number,
+  currentPassword: string,
+  newPassword: string
+): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/children/' + childId.toString() + '/password/reset', 'POST', {
+    current_password: currentPassword,
+    new_password: newPassword
+  })
+}
+
+export function buildCreateChildPayload(
+  requestId: string,
+  loginName: string,
+  realName: string,
+  nickname: string,
+  password: string,
+  birthDate: string,
+  grade: string,
+  school: string,
+  region: string
+): UTSJSONObject {
+  const data: UTSJSONObject = {
+    request_id: requestId,
+    login_name: loginName.trim().toLowerCase(),
+    real_name: realName.trim(),
+    password: password
+  }
+  if (nickname.trim().length > 0) data['nickname'] = nickname.trim()
+  if (birthDate.trim().length > 0) data['birth_date'] = birthDate.trim()
+  if (grade.trim().length > 0) data['grade'] = grade.trim()
+  if (school.trim().length > 0) data['school'] = school.trim()
+  if (region.trim().length > 0) data['region'] = region.trim()
+  return data
+}
+
+export function buildUpdateChildDetailsPayload(
+  realName: string,
+  nickname: string,
+  birthDate: string,
+  grade: string,
+  school: string,
+  region: string
+): UTSJSONObject {
+  const data: UTSJSONObject = {
+    real_name: realName.trim(),
+    nickname: nickname.trim()
+  }
+  if (birthDate.trim().length > 0) data['birth_date'] = birthDate.trim()
+  if (grade.trim().length > 0) data['grade'] = grade.trim()
+  if (school.trim().length > 0) data['school'] = school.trim()
+  if (region.trim().length > 0) data['region'] = region.trim()
+  return data
+}
+
 export function listChildren(): Promise<UTSJSONObject> {
   return requestJson('/api/parent/children')
 }
@@ -89,8 +160,9 @@ export function getChildSummary(childId: number): Promise<UTSJSONObject> {
   return requestJson('/api/parent/children/' + childId.toString() + '/summary')
 }
 
-export function getChildDashboard(childId: number): Promise<UTSJSONObject> {
-  return requestJson('/api/parent/children/' + childId.toString() + '/dashboard')
+export function getChildDashboard(childId: number, includeInsight: boolean = false): Promise<UTSJSONObject> {
+  const flag = includeInsight ? 'true' : 'false'
+  return requestJson('/api/parent/children/' + childId.toString() + '/dashboard?insight=' + flag, 'GET', null, null, true, includeInsight ? 60000 : 15000)
 }
 
 export function listParentCourses(): Promise<UTSJSONObject> {
@@ -167,4 +239,23 @@ export function buildCreateChildBody(nickname: string, loginName: string, passwo
   if (grade.length > 0) data['grade'] = grade
   if (age > 0) data['age'] = age
   return data
+}
+
+export function listConsultChannels(): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/consult/channels')
+}
+
+export function openConsultConversation(channelCode: string): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/consult/conversations/open', 'POST', { channel_code: channelCode })
+}
+
+export function listConsultMessages(conversationId: number): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/consult/conversations/' + conversationId.toString() + '/messages?limit=100')
+}
+
+export function sendConsultMessage(conversationId: number, content: string): Promise<UTSJSONObject> {
+  return requestJson('/api/parent/consult/conversations/' + conversationId.toString() + '/messages', 'POST', {
+    content: content,
+    content_type: 'text'
+  })
 }

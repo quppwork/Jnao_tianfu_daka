@@ -1,51 +1,80 @@
 <template>
   <view class="pd-page">
+    <!-- 原版家长顶栏 -->
     <view class="pd-header" :style="{ paddingTop: insetTop + 'px' }">
-      <view class="pd-back" @click="goBack"><text class="pd-back-icon">‹</text></view>
-      <text class="pd-title">大宇智能体 · 家长版</text>
-      <view class="pd-header-right"></view>
+      <view class="pd-brand">
+        <text class="pd-brand-t1">大宇智能体</text>
+        <text class="pd-brand-t2">PARENT · 家长版</text>
+      </view>
+      <view class="pd-actions">
+        <view class="pd-chip-gold" @click="openChildren">
+          <text class="pd-chip-gold-text">孩子管理</text>
+        </view>
+        <view class="pd-chip-ghost" @click="signOut">
+          <text class="pd-chip-ghost-text">{{ signingOut ? '退出中' : '退出' }}</text>
+        </view>
+      </view>
     </view>
 
-    <scroll-view class="pd-body" scroll-y :scroll-into-view="scrollAnchor" :scroll-with-animation="true">
-      <view class="pd-hero">
-        <image class="pd-hero-img" src="/static/parent/parent-team.jpg" mode="aspectFit" />
-        <text class="pd-hero-title">张宇老师 · 天赋导师团</text>
-        <text class="pd-hero-sub">不是一个人，是一支教育团队——陪孩子，也陪家长</text>
+    <!-- 原版导师团头图（使用本地图片，本地/线上永不图裂） -->
+    <view class="pd-hero">
+      <image class="pd-hero-img" src="/static/parent/parent-team.jpg" mode="aspectFill" />
+      <text class="pd-teamtag">天赋导师团</text>
+      <view class="pd-cap">
+        <text class="pd-cap-t">张宇老师 · 天赋导师团</text>
+        <text class="pd-cap-s">不是一个人，是一支教育团队——陪孩子，也陪家长</text>
       </view>
+    </view>
 
-      <view class="pd-shortcuts">
-        <view class="pd-shortcut" @click="openTalentTest">
-          <text class="pd-sc-emoji">🧬</text>
-          <text class="pd-sc-name">天赋测试</text>
-        </view>
-        <view class="pd-shortcut" @click="openParentCourse">
-          <text class="pd-sc-emoji">🎓</text>
-          <text class="pd-sc-name">家长课堂</text>
-        </view>
-        <view class="pd-shortcut" @click="openConsult">
-          <text class="pd-sc-emoji">💬</text>
-          <text class="pd-sc-name">一键咨询</text>
-        </view>
+    <!-- 原版家长三入口卡 -->
+    <view class="pd-tri">
+      <view class="pd-tri-item" @click="openTalentTest">
+        <image class="pd-tri-ic" src="/static/dayu/ic/dna.png" mode="aspectFit" />
+        <text class="pd-tri-n">天赋测试</text>
+        <text class="pd-tri-s">孩子·自己都能测</text>
       </view>
-
-      <view v-if="messages.length == 0 && suggests.length > 0" class="pd-suggests">
-        <view
-          v-for="(s, i) in suggests"
-          :key="i.toString()"
-          class="pd-suggest"
-          @click="sendSuggest(s)"
-        >
-          <text class="pd-suggest-text">{{ s }}</text>
-        </view>
+      <view class="pd-tri-item" @click="openParentCourse">
+        <image class="pd-tri-ic" src="/static/dayu/ic/cap.png" mode="aspectFit" />
+        <text class="pd-tri-n">家长课堂</text>
+        <text class="pd-tri-s">6门课·72讲</text>
       </view>
+      <view class="pd-tri-item pd-tri-last" @click="openConsult">
+        <image class="pd-tri-ic" src="/static/dayu/ic/bubble.png" mode="aspectFit" />
+        <text class="pd-tri-n">一键咨询</text>
+        <text class="pd-tri-s pd-tri-live">● 真人导师在线</text>
+      </view>
+    </view>
 
+    <!-- 家长大宇对话区 -->
+    <scroll-view class="pd-body" scroll-y :scroll-into-view="scrollAnchor" :show-scrollbar="false">
       <view class="pd-messages">
+        <view v-if="messages.length == 0" class="pd-intro">
+          <image class="pd-intro-av" src="/static/dayu/avatar_sizhe.jpg" mode="aspectFill" />
+          <view class="pd-intro-bubble">
+            <text class="pd-intro-text">
+              您好！我是大宇智能体家长版。孩子的天赋训练进度、家长课堂选课、测评报告解读，随时问我。
+            </text>
+          </view>
+        </view>
+
+        <view v-if="messages.length == 0 && suggests.length > 0" class="pd-suggests">
+          <view
+            v-for="(s, i) in suggests"
+            :key="i.toString()"
+            class="pd-suggest"
+            @click="sendSuggest(s)"
+          >
+            <text class="pd-suggest-text">{{ s }}</text>
+          </view>
+        </view>
+
         <chat-bubble
           v-for="(m, index) in messages"
           :key="index.toString()"
           :role="m.role"
           :content="m.content"
           :pending="m.pending"
+          accent="gold"
         />
         <view id="pd-bottom" class="pd-anchor"></view>
       </view>
@@ -60,15 +89,19 @@
 
     <chat-composer
       :sending="sending"
-      :inset="bottomInset"
+      :inset="0"
+      accent="gold"
       placeholder="问大宇：孩子训练 / 家长课程 / 报告解读…"
       @submit="onSubmit"
       @stop="stop"
     />
+
+    <dayu-tab-bar role="parent" active="dayu" />
   </view>
 </template>
 
 <script setup lang="uts">
+import { logout } from '../../api/auth.uts'
 import {
   getParentGuideSession,
   getParentSuggestPrompts,
@@ -95,13 +128,13 @@ const suggests = ref([
 
 const messages = ref([])
 const sending = ref(false)
+const signingOut = ref(false)
 const statusText = ref('')
 const errorText = ref('')
 const sessionId = ref(0)
 const focusChildId = ref(0)
 const scrollAnchor = ref('')
 const insetTop = ref(0)
-const bottomInset = ref(0)
 
 let requestTask: RequestTask | null = null
 let requestSeq = 0
@@ -139,8 +172,8 @@ function applyState(state) {
   sessionId.value = state.sessionId
 }
 
-function goBack() {
-  uni.navigateBack()
+function openChildren() {
+  uni.navigateTo({ url: '/pages/parent/index' })
 }
 
 function openTalentTest() {
@@ -151,9 +184,21 @@ function openParentCourse() {
   uni.navigateTo({ url: '/pages/parent/pcourse' })
 }
 
-/** 咨询页目前是静态 HTML，走 web-view 承接 */
 function openConsult() {
-  uni.navigateTo({ url: '/pages/webview/index?page=consult.html' })
+  uni.redirectTo({ url: '/pages/parent/consult' })
+}
+
+async function signOut() {
+  if (signingOut.value) return
+  signingOut.value = true
+  try {
+    await logout()
+    returnToLogin()
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '退出失败，请重试'
+  } finally {
+    signingOut.value = false
+  }
 }
 
 function scrollToBottom() {
@@ -183,7 +228,7 @@ function onSubmit(text) {
 
   requestSeq = requestSeq + 1
   const seq = requestSeq
-  const options= {
+  const options = {
     message: text,
     sessionId: sessionId.value,
     childId: focusChildId.value
@@ -207,7 +252,6 @@ function stop() {
   applyState(finishTurn(snapshot()))
 }
 
-/** 默认关注第一个孩子；家长登录后至少要有一个绑定孩子才能对话 */
 async function loadFocusChild() {
   try {
     const id = readFirstChildId(await listChildren())
@@ -227,8 +271,8 @@ async function loadHistory() {
       messages.value = list
       scrollToBottom()
     }
-  } catch (error) {
-    // 首次进入没有历史会话属于正常情况，不打扰用户
+  } catch (_) {
+    // 首次进入没有历史会话属于正常情况
   }
 }
 
@@ -237,7 +281,7 @@ async function loadSuggests() {
     const data = await getParentSuggestPrompts(3)
     const list = readParentSuggests(data)
     if (list.length > 0) suggests.value = list
-  } catch (error) {
+  } catch (_) {
     // 取不到就用默认建议
   }
 }
@@ -255,7 +299,6 @@ onLoad(() => {
 
 onReady(() => {
   insetTop.value = getPageTopInset()
-  bottomInset.value = uni.getWindowInfo().safeAreaInsets.bottom
 })
 
 onUnload(() => {

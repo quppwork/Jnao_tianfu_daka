@@ -1,12 +1,14 @@
-$bg: #0a0e17;
-$card: #131a2a;
-$card-soft: #1a2236;
-$border: rgba(99, 132, 255, 0.18);
-$text: #e6ecf7;
-$dim: #8b97ad;
-$accent: #4f7cff;
+@import '../../styles/dayu-theme.scss';
 
-.pf-page { display: flex; flex: 1; flex-direction: column; background-color: $bg; }
+$bg: $dy-bg;
+$card: $dy-card;
+$card-soft: $dy-bubble;
+$border: $dy-border;
+$text: $dy-text;
+$dim: $dy-muted;
+$accent: $dy-gold;
+
+.pf-page { display: flex; flex: 1; flex-direction: column; background-color: $bg; background-image: linear-gradient(180deg, $dy-bg-top, $dy-bg); }
 
 .pf-header {
   display: flex; flex-direction: row; align-items: center; justify-content: space-between;
