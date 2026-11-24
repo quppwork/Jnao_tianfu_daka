@@ -1,0 +1,76 @@
+import { provinceRows, districtRows } from './region-data.uts'
+
+export type RegionOption = {
+  code: string
+  name: string
+}
+
+export type RegionParts = {
+  provinceCode: string
+  provinceName: string
+  cityCode: string
+  cityName: string
+  districtCode: string
+  districtName: string
+}
+
+export function getProvinces(): RegionOption[] {
+  return provinceRows.map((row: string): RegionOption => {
+    const fields = row.split('\t')
+    return { code: fields[0], name: fields[1] }
+  })
+}
+
+export function getRegionOptions(provinceCode: string, cityCode: string): RegionOption[] {
+  const source = districtRows.find((row: string): boolean => row.startsWith(provinceCode + '|'))
+  if (source == null) return []
+  const result: RegionOption[] = []
+  const lines = source.substring(source.indexOf('|') + 1).split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const fields = lines[i].split('\t')
+    if (fields.length != 4) continue
+    if (cityCode.length == 0) {
+      if (!result.some((item: RegionOption): boolean => item.code == fields[0])) {
+        result.push({ code: fields[0], name: fields[1] })
+      }
+    } else if (fields[0] == cityCode) {
+      result.push({ code: fields[2], name: fields[3] })
+    }
+  }
+  return result
+}
+
+export function parseRegionParts(code: string): RegionParts | null {
+  const trimmed = code.trim()
+  if (trimmed.length < 6) return null
+  const province = getProvinces().find((item: RegionOption): boolean =>
+    trimmed.startsWith(item.code.substring(0, 2))
+  )
+  if (province == null) return null
+  const source = districtRows.find((row: string): boolean => row.startsWith(province.code + '|'))
+  if (source == null) return null
+  const lines = source.substring(source.indexOf('|') + 1).split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const fields = lines[i].split('\t')
+    if (fields.length == 4 && fields[2] == trimmed) {
+      return {
+        provinceCode: province.code,
+        provinceName: province.name,
+        cityCode: fields[0],
+        cityName: fields[1],
+        districtCode: fields[2],
+        districtName: fields[3]
+      }
+    }
+  }
+  return null
+}
+
+/** 6 位行政区划码格式化为「省 · 市 · 区」，历史纯文本地区原样展示 */
+export function getRegionDisplayName(code: string): string {
+  const trimmed = code.trim()
+  if (trimmed.length == 0) return ''
+  const parts = parseRegionParts(trimmed)
+  if (parts == null) return trimmed
+  return parts.provinceName + ' · ' + parts.cityName + ' · ' + parts.districtName
+}

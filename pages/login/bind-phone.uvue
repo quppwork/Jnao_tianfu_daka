@@ -73,7 +73,7 @@
 
 <script setup lang="uts">
 import { getLoginCaptcha, wechatSendBindSms, wechatBindPhone } from '../../api/auth.uts'
-import { saveSession } from '../../state/session.uts'
+import { applySessionView, saveSession } from '../../state/session.uts'
 import { getPageTopInset } from '../../utils/layout.uts'
 
 const insetTop = ref(0)
@@ -195,7 +195,7 @@ async function submit() {
   try {
     const data = await wechatBindPhone(bindTicket.value, phone.value.trim(), smsCode.value.trim())
     const token = data.getString('access_token') ?? data.getString('session_token') ?? ''
-    const userId = data.getNumber('user_id') ?? 0
+    const userId = data.getNumber('child_user_id') ?? data.getNumber('user_id') ?? 0
     const role = data.getString('role') ?? ''
     if (token.length == 0 || userId <= 0) throw new Error('绑定成功但没拿到登录凭证')
     saveSession({
@@ -204,6 +204,7 @@ async function submit() {
       nickname: data.getString('nickname') ?? '',
       accessToken: token
     })
+    applySessionView(data)
     const nextStep = data.getString('next_step') ?? ''
     if (nextStep == 'complete-profile') {
       uni.redirectTo({ url: '/pages/login/onboarding' })

@@ -56,15 +56,55 @@
 
         <text v-if="okTips.length > 0" class="pf-tips">{{ okTips }}</text>
         <text v-if="errorText.length > 0" class="pf-error">{{ errorText }}</text>
+
+        <!-- 换绑手机号 -->
+        <view class="pf-card pf-phone-card">
+          <view class="pf-field-row">
+            <view class="pf-phone-info">
+              <text class="pf-card-title">绑定手机号</text>
+              <text class="pf-card-hint">{{ currentPhone.length > 0 ? currentPhone : '未绑定' }}</text>
+            </view>
+            <view class="pf-phone-btn" @click="openPhoneModal">
+              <text class="pf-phone-btn-text">换绑手机号</text>
+            </view>
+          </view>
+        </view>
       </template>
 
       <view class="pf-space"></view>
     </scroll-view>
+
+    <!-- 换绑手机号弹层 -->
+    <view v-if="phoneModalOpen" class="pf-overlay" @click="closePhoneModal">
+      <view class="pf-modal" @click.stop>
+        <text class="pf-modal-title">换绑手机号</text>
+        <input class="pf-input" v-model="phonePwd" password :disabled="changingPhone" placeholder="当前登录密码" maxlength="128" />
+        <input class="pf-input" v-model="newPhone" type="number" :disabled="changingPhone || sendingPhoneSms" placeholder="新手机号（11位）" maxlength="11" />
+        <view class="pf-sms-row">
+          <input class="pf-input pf-sms-input" v-model="phoneCaptchaCode" :disabled="changingPhone || sendingPhoneSms" placeholder="图形验证码" maxlength="8" />
+          <image v-if="phoneCaptchaImg.length > 0" class="pf-captcha-img" :src="phoneCaptchaImg" mode="aspectFit" @click="loadPhoneCaptcha" />
+          <view v-else class="pf-sms-btn" @click="loadPhoneCaptcha"><text class="pf-sms-btn-text">刷新</text></view>
+        </view>
+        <view class="pf-sms-row">
+          <input class="pf-input pf-sms-input" v-model="phoneSmsCode" type="number" :disabled="changingPhone" placeholder="短信验证码" maxlength="8" />
+          <view class="pf-sms-btn" @click="sendPhoneSms">
+            <text class="pf-sms-btn-text">{{ phoneWait > 0 ? phoneWait.toString() + 's' : (sendingPhoneSms ? '发送中' : '获取验证码') }}</text>
+          </view>
+        </view>
+        <text v-if="phoneError.length > 0" class="pf-modal-error">{{ phoneError }}</text>
+        <view class="pf-modal-actions">
+          <view class="pf-modal-cancel" @click="closePhoneModal"><text class="pf-modal-cancel-text">取消</text></view>
+          <view class="pf-modal-confirm" @click="submitPhoneChange"><text class="pf-save-text">{{ changingPhone ? '提交中…' : '确认换绑' }}</text></view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup lang="uts">
+import { changePhone, getLoginCaptcha, sendAuthSms } from '../../api/auth.uts'
 import { getParentProfile, updateParentProfile } from '../../api/parent.uts'
+import { getSession, saveSession } from '../../state/session.uts'
 import { getPageTopInset } from '../../utils/layout.uts'
 
 const loading = ref(true)
@@ -75,9 +115,24 @@ const insetTop = ref(0)
 
 const nickname = ref('')
 const realName = ref('')
+const currentPhone = ref('')
 const oldPassword = ref('')
 const newPassword = ref('')
 const requirePassword = ref(false)
+
+const phoneModalOpen = ref(false)
+const phonePwd = ref('')
+const newPhone = ref('')
+const phoneCaptchaId = ref('')
+const phoneCaptchaImg = ref('')
+const phoneCaptchaCode = ref('')
+const phoneSmsCode = ref('')
+const phoneError = ref('')
+const sendingPhoneSms = ref(false)
+const changingPhone = ref(false)
+const phoneWait = ref(0)
+let phoneWaitUntil = 0
+let phoneTimer = 0
 
 function goBack() {
   uni.navigateBack()
@@ -95,6 +150,7 @@ async function load() {
     const data = await getParentProfile()
     nickname.value = data.getString('nickname') ?? ''
     realName.value = data.getString('real_name') ?? ''
+    currentPhone.value = data.getString('parent_phone') ?? data.getString('phone') ?? ''
   } catch (error) {
     errorText.value = error instanceof Error ? error.message : '读取资料失败'
   } finally {
@@ -137,7 +193,20 @@ async function save() {
       oldPassword: oldPwd,
       requirePassword: requirePassword.value
     }
-    await updateParentProfile(patch)
+    const updated = await updateParentProfile(patch)
+    const session = getSession()
+    if (session != null) {
+      const nextToken = updated.getString('access_token') ?? updated.getString('session_token') ?? ''
+      const nextNick = updated.getString('nickname') ?? nick
+      if (nextToken.length > 0 || (nextNick.length > 0 && nextNick != session.nickname)) {
+        saveSession({
+          userId: session.userId,
+          role: session.role,
+          nickname: nextNick.length > 0 ? nextNick : session.nickname,
+          accessToken: nextToken.length > 0 ? nextToken : session.accessToken
+        })
+      }
+    }
     okTips.value = newPwd.length > 0 ? '已保存，下次登录请用新密码' : '已保存'
     uni.showToast({ title: '已保存', icon: 'none' })
     oldPassword.value = ''
@@ -152,12 +221,116 @@ async function save() {
   }
 }
 
+function stopPhoneTimer() {
+  if (phoneTimer != 0) {
+    clearInterval(phoneTimer)
+    phoneTimer = 0
+  }
+}
+
+function updatePhoneWait() {
+  phoneWait.value = Math.max(0, Math.ceil((phoneWaitUntil - Date.now()) / 1000))
+  if (phoneWait.value == 0) stopPhoneTimer()
+}
+
+async function loadPhoneCaptcha() {
+  phoneCaptchaCode.value = ''
+  phoneCaptchaId.value = ''
+  phoneCaptchaImg.value = ''
+  try {
+    const data = await getLoginCaptcha()
+    const id = data.getString('captcha_id') ?? ''
+    const img = data.getString('image_base64') ?? ''
+    if (id.length == 0 || img.length == 0) throw new Error('验证码加载失败')
+    phoneCaptchaId.value = id
+    phoneCaptchaImg.value = 'data:image/' + (data.getString('image_format') ?? 'png') + ';base64,' + img
+  } catch (error) {
+    phoneError.value = error instanceof Error ? error.message : '无法加载图形验证码'
+  }
+}
+
+function openPhoneModal() {
+  phonePwd.value = ''
+  newPhone.value = ''
+  phoneSmsCode.value = ''
+  phoneError.value = ''
+  phoneModalOpen.value = true
+  loadPhoneCaptcha()
+}
+
+function closePhoneModal() {
+  if (changingPhone.value || sendingPhoneSms.value) return
+  phoneModalOpen.value = false
+  phonePwd.value = ''
+  phoneSmsCode.value = ''
+  phoneError.value = ''
+}
+
+async function sendPhoneSms() {
+  if (sendingPhoneSms.value || changingPhone.value || phoneWait.value > 0) return
+  phoneError.value = ''
+  const target = newPhone.value.trim()
+  if (!/^\d{11}$/.test(target)) {
+    phoneError.value = '请输入正确的 11 位新手机号'
+    return
+  }
+  if (phoneCaptchaId.value.length == 0 || phoneCaptchaCode.value.trim().length < 4) {
+    phoneError.value = '请填写图形验证码'
+    return
+  }
+  sendingPhoneSms.value = true
+  try {
+    const res = await sendAuthSms(target, 'phone_change', phoneCaptchaId.value, phoneCaptchaCode.value.trim())
+    phoneWaitUntil = Date.now() + Math.max(1, res.getNumber('resend_after') ?? 60) * 1000
+    updatePhoneWait()
+    phoneTimer = setInterval(updatePhoneWait, 1000)
+    uni.showToast({ title: res.getString('message') ?? '验证码已发送', icon: 'none' })
+  } catch (error) {
+    phoneError.value = error instanceof Error ? error.message : '发送失败，请重试'
+    loadPhoneCaptcha()
+  } finally {
+    sendingPhoneSms.value = false
+  }
+}
+
+async function submitPhoneChange() {
+  if (changingPhone.value || sendingPhoneSms.value) return
+  phoneError.value = ''
+  if (phonePwd.value.trim().length == 0) {
+    phoneError.value = '请输入当前登录密码'
+    return
+  }
+  if (!/^\d{11}$/.test(newPhone.value.trim())) {
+    phoneError.value = '请输入正确的 11 位新手机号'
+    return
+  }
+  if (!/^\d{4,8}$/.test(phoneSmsCode.value.trim())) {
+    phoneError.value = '请输入短信验证码'
+    return
+  }
+  changingPhone.value = true
+  try {
+    await changePhone(phonePwd.value.trim(), newPhone.value.trim(), phoneSmsCode.value.trim())
+    phoneModalOpen.value = false
+    uni.showToast({ title: '手机号已换绑', icon: 'none' })
+    await load()
+  } catch (error) {
+    phoneError.value = error instanceof Error ? error.message : '换绑失败，请重试'
+  } finally {
+    changingPhone.value = false
+  }
+}
+
 onLoad(() => {
   load()
 })
 
 onReady(() => {
   insetTop.value = getPageTopInset()
+})
+
+onUnload(() => {
+  stopPhoneTimer()
 })
 </script>
 

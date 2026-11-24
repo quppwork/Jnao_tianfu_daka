@@ -110,8 +110,9 @@ export function requestJson(
         }
         const body = response.data
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          const code = body?.getString('code') ?? ''
-          const detail = body?.getString('detail') ?? '请求失败，请重试'
+          const nestedDetail = body?.getJSON('detail')
+          const code = nestedDetail?.getString('code') ?? body?.getString('code') ?? ''
+          const detail = nestedDetail?.getString('detail') ?? body?.getString('detail') ?? '请求失败，请重试'
           if (
             response.statusCode == 401 &&
             session != null &&

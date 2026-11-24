@@ -1,0 +1,274 @@
+<template>
+  <view v-if="visible" class="rp-mask" @click="close">
+    <view class="rp-sheet" :style="{ paddingBottom: bottomPad + 'px' }" @click.stop>
+      <view class="rp-head">
+        <text class="rp-action" @click="clearSelection">清空</text>
+        <text class="rp-title">选择所在地区</text>
+        <text class="rp-action" @click="close">取消</text>
+      </view>
+
+      <view class="rp-tabs">
+        <view
+          class="rp-tab"
+          :class="{ 'rp-tab-active': stage == 0 }"
+          @click="selectStage(0)"
+        >
+          <text class="rp-tab-text" :class="{ 'rp-tab-text-active': stage == 0 }">
+            {{ draftProvinceName.length > 0 ? draftProvinceName : '选择省' }}
+          </text>
+        </view>
+        <view
+          v-if="draftProvince.length > 0"
+          class="rp-tab"
+          :class="{ 'rp-tab-active': stage == 1 }"
+          @click="selectStage(1)"
+        >
+          <text class="rp-tab-text" :class="{ 'rp-tab-text-active': stage == 1 }">
+            {{ draftCityName.length > 0 ? draftCityName : '选择市' }}
+          </text>
+        </view>
+        <view
+          v-if="draftCity.length > 0"
+          class="rp-tab"
+          :class="{ 'rp-tab-active': stage == 2 }"
+          @click="selectStage(2)"
+        >
+          <text class="rp-tab-text" :class="{ 'rp-tab-text-active': stage == 2 }">
+            {{ draftDistrictName.length > 0 ? draftDistrictName : '选择区/县' }}
+          </text>
+        </view>
+      </view>
+
+      <scroll-view class="rp-list" scroll-y :show-scrollbar="false">
+        <view
+          v-for="item in currentOptions"
+          :key="item.code"
+          class="rp-item"
+          :class="{ 'rp-item-on': item.code == selectedCode }"
+          @click="choose(item)"
+        >
+          <text class="rp-item-text" :class="{ 'rp-item-text-on': item.code == selectedCode }">{{ item.name }}</text>
+          <text v-if="item.code == selectedCode" class="rp-check">✓</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { getProvinces, getRegionOptions, parseRegionParts } from '../../config/region/options.uts'
+
+const props = defineProps({
+  visible: { type: Boolean, default: false },
+  value: { type: String, default: '' }
+})
+const emit = defineEmits(['confirm', 'close'])
+
+const stage = ref(0)
+const draftProvince = ref('')
+const draftProvinceName = ref('')
+const draftCity = ref('')
+const draftCityName = ref('')
+const draftDistrict = ref('')
+const draftDistrictName = ref('')
+const bottomPad = ref(16)
+
+const provinces = getProvinces()
+
+const currentOptions = computed(() => {
+  if (stage.value == 0) return provinces
+  if (stage.value == 1) return getRegionOptions(draftProvince.value, '')
+  return getRegionOptions(draftProvince.value, draftCity.value)
+})
+
+const selectedCode = computed(() => {
+  if (stage.value == 0) return draftProvince.value
+  if (stage.value == 1) return draftCity.value
+  return draftDistrict.value
+})
+
+function syncFromValue() {
+  const parts = parseRegionParts(props.value)
+  if (parts == null) {
+    stage.value = 0
+    draftProvince.value = ''
+    draftProvinceName.value = ''
+    draftCity.value = ''
+    draftCityName.value = ''
+    draftDistrict.value = ''
+    draftDistrictName.value = ''
+    return
+  }
+  draftProvince.value = parts.provinceCode
+  draftProvinceName.value = parts.provinceName
+  draftCity.value = parts.cityCode
+  draftCityName.value = parts.cityName
+  draftDistrict.value = parts.districtCode
+  draftDistrictName.value = parts.districtName
+  stage.value = 2
+}
+
+function selectStage(next) {
+  if (next == 1 && draftProvince.value.length == 0) return
+  if (next == 2 && draftCity.value.length == 0) return
+  stage.value = next
+}
+
+function choose(item) {
+  if (stage.value == 0) {
+    draftProvince.value = item.code
+    draftProvinceName.value = item.name
+    draftCity.value = ''
+    draftCityName.value = ''
+    draftDistrict.value = ''
+    draftDistrictName.value = ''
+    stage.value = 1
+    return
+  }
+  if (stage.value == 1) {
+    draftCity.value = item.code
+    draftCityName.value = item.name
+    draftDistrict.value = ''
+    draftDistrictName.value = ''
+    stage.value = 2
+    return
+  }
+  draftDistrict.value = item.code
+  draftDistrictName.value = item.name
+  emit('confirm', item.code)
+}
+
+function clearSelection() {
+  emit('confirm', '')
+}
+
+function close() {
+  emit('close')
+}
+
+watch(() => props.visible, (open) => {
+  if (open) {
+    uni.hideKeyboard()
+    syncFromValue()
+  }
+})
+
+onMounted(() => {
+  const safe = uni.getWindowInfo().safeAreaInsets.bottom
+  bottomPad.value = safe > 0 ? safe + 10 : 16
+})
+</script>
+
+<style lang="scss" scoped>
+@import '../../styles/dayu-theme.scss';
+
+.rp-mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.rp-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 420px;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  background-color: $dy-card;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $dy-border;
+}
+
+.rp-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+}
+
+.rp-title {
+  color: $dy-text;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.rp-action {
+  color: $dy-muted;
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
+.rp-tabs {
+  display: flex;
+  flex-direction: row;
+  padding: 0 16px;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $dy-border;
+}
+
+.rp-tab {
+  padding: 8px 10px 10px;
+  margin-right: 8px;
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-bottom-color: transparent;
+}
+
+.rp-tab-active {
+  border-bottom-color: $dy-gold-bright;
+}
+
+.rp-tab-text {
+  color: $dy-muted;
+  font-size: 13px;
+}
+
+.rp-tab-text-active {
+  color: $dy-gold-bright;
+  font-weight: 600;
+}
+
+.rp-list {
+  flex: 1;
+  padding: 6px 16px;
+}
+
+.rp-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 10px;
+  border-radius: 10px;
+}
+
+.rp-item-on {
+  background-color: $dy-gold-bg;
+}
+
+.rp-item-text {
+  color: $dy-text-body;
+  font-size: 14px;
+}
+
+.rp-item-text-on {
+  color: $dy-gold-bright;
+  font-weight: 600;
+}
+
+.rp-check {
+  color: $dy-gold-bright;
+  font-size: 14px;
+  font-weight: 700;
+}
+</style>

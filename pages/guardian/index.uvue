@@ -60,16 +60,40 @@
           <button class="btn-ghost" :disabled="busy" @click="refreshStatus">刷新关联状态</button>
         </view>
 
+        <view class="action-card">
+          <text class="status-title card-gap">账号安全</text>
+          <button class="btn-secondary-full" :disabled="busy" @click="openPwdModal">修改登录密码</button>
+        </view>
+
         <view v-if="errorText.length > 0" class="error-box">
           <text class="error-text">{{ errorText }}</text>
         </view>
       </view>
     </scroll-view>
+
+    <!-- 学生自改密码弹层 -->
+    <view v-if="pwdModalOpen" class="overlay" @click="closePwdModal">
+      <view class="modal-card" @click.stop>
+        <text class="modal-title">修改登录密码</text>
+        <view class="modal-input-wrap">
+          <input v-model="oldPassword" class="modal-input" password :maxlength="128" :disabled="changingPwd" placeholder="当前密码" />
+        </view>
+        <view class="modal-input-wrap">
+          <input v-model="newPassword" class="modal-input" password :maxlength="32" :disabled="changingPwd" placeholder="新密码（8-32位，含大小写+数字）" />
+        </view>
+        <view class="modal-input-wrap">
+          <input v-model="confirmPassword" class="modal-input" password :maxlength="32" :disabled="changingPwd" placeholder="确认新密码" @confirm="submitChangePassword" />
+        </view>
+        <text v-if="pwdError.length > 0" class="modal-error">{{ pwdError }}</text>
+        <button class="btn-primary" :loading="changingPwd" :disabled="changingPwd" @click="submitChangePassword">确认修改</button>
+        <button class="btn-ghost" :disabled="changingPwd" @click="closePwdModal">取消</button>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup lang="uts">
-import { createGuardianCode, logout, unbindMyGuardian } from '../../api/auth.uts'
+import { changePassword, createGuardianCode, logout, unbindMyGuardian } from '../../api/auth.uts'
 import { getApiErrorCode, isUncertainError } from '../../network/request.uts'
 import { restoreSession } from '../../state/auth-actions.uts'
 import {
@@ -80,13 +104,21 @@ import {
 } from '../../state/session.uts'
 import { formatGuardianCode, isGuardianCodeValid } from '../../utils/guardian-code.uts'
 import { getPageTopInset } from '../../utils/layout.uts'
+import { meetsPasswordPolicy, PASSWORD_HINT } from '../../utils/password-policy.uts'
 
 const insetTop = ref(0)
 const canGoBack = ref(false)
+const entered = ref(false)
 const busy = ref(false)
 const errorText = ref('')
 const generatedCode = ref('')
 const remaining = ref(0)
+const pwdModalOpen = ref(false)
+const oldPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const pwdError = ref('')
+const changingPwd = ref(false)
 let expiresAtMs = 0
 let timer = 0
 
@@ -127,7 +159,7 @@ async function generate() {
   clearCode()
   try {
     const data = await createGuardianCode()
-    const code = data.getString('code') ?? ''
+    const code = data.getString('raw_code') ?? data.getString('code') ?? ''
     const expiry = Date.parse(data.getString('expires_at') ?? '')
     if (!isGuardianCodeValid(code) || !Number.isFinite(expiry) || expiry <= Date.now()) {
       errorText.value = '关联码响应无效，请重新生成'
@@ -210,6 +242,53 @@ async function doUnlink() {
   }
 }
 
+function openPwdModal() {
+  if (busy.value) return
+  oldPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  pwdError.value = ''
+  pwdModalOpen.value = true
+}
+
+function closePwdModal() {
+  if (changingPwd.value) return
+  pwdModalOpen.value = false
+  oldPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  pwdError.value = ''
+}
+
+async function submitChangePassword() {
+  if (changingPwd.value) return
+  pwdError.value = ''
+  const oldPwd = oldPassword.value.trim()
+  const nextPwd = newPassword.value.trim()
+  if (oldPwd.length == 0) {
+    pwdError.value = '请输入当前密码'
+    return
+  }
+  if (!meetsPasswordPolicy(nextPwd)) {
+    pwdError.value = PASSWORD_HINT
+    return
+  }
+  if (nextPwd != confirmPassword.value.trim()) {
+    pwdError.value = '两次输入的新密码不一致'
+    return
+  }
+  changingPwd.value = true
+  try {
+    await changePassword(oldPwd, nextPwd)
+    closePwdModal()
+    uni.showToast({ title: '密码已修改', icon: 'none' })
+  } catch (error) {
+    pwdError.value = error instanceof Error ? error.message : '修改密码失败'
+  } finally {
+    changingPwd.value = false
+  }
+}
+
 function enterHome() {
   uni.reLaunch({ url: '/pages/home/index' })
 }
@@ -241,6 +320,14 @@ onLoad(() => {
   }
   canGoBack.value = getCurrentPages().length > 1
   restoreSession(true)
+})
+
+onShow(() => {
+  if (!entered.value) {
+    entered.value = true
+    return
+  }
+  if (!busy.value) restoreSession(true)
 })
 
 onReady(() => {

@@ -61,6 +61,9 @@
                   <text class="picker-value" :class="{ 'picker-placeholder': grade.length == 0 }">{{ grade.length > 0 ? '年级：' + grade : '请选择年级（选填）' }}</text>
                 </picker>
               </view>
+              <view class="input-wrap" @click="openRegionPicker">
+                <text class="picker-value" :class="{ 'picker-placeholder': regionDisplay.length == 0 }">{{ regionDisplay.length > 0 ? '所在地区：' + regionDisplay : '请选择所在地区（选填）' }}</text>
+              </view>
               <view class="input-wrap">
                 <input v-model="school" class="login-input" :maxlength="50" placeholder="学校名称（选填）" :disabled="submitting" />
               </view>
@@ -97,8 +100,10 @@
               <text class="remember-text">保持登录 30 天</text>
             </view>
 
-            <view v-if="!registering && role == 'parent'" class="form-links">
-              <text class="form-link form-link-left" @click="toggleLoginMode">{{ useSms ? '密码登录' : '验证码登录' }}</text>
+            <view v-if="!registering" class="form-links">
+              <text v-if="role == 'parent'" class="form-link form-link-left" @click="toggleLoginMode">{{ useSms ? '密码登录' : '验证码登录' }}</text>
+              <view v-else class="form-link-left"></view>
+              <text class="form-link form-link-right" @click="openForgotPassword">忘记密码</text>
             </view>
             <text v-if="registering" class="agreement">注册即代表您同意《用户协议》和《隐私政策》</text>
             <text v-if="errorText.length > 0" class="login-error">{{ errorText }}</text>
@@ -124,6 +129,29 @@
       </view>
     </scroll-view>
 
+    <!-- 家长找回密码弹层 -->
+    <view v-if="forgotOpen" class="overlay" @click="closeForgotPassword">
+      <view class="captcha-panel" @click.stop>
+        <text class="captcha-title">找回家长密码</text>
+        <view class="input-wrap">
+          <input v-model="forgotPhone" class="login-input" type="number" :maxlength="11" :disabled="resetting || sendingSms" placeholder="注册手机号（11位）" />
+        </view>
+        <view class="input-wrap sms-row">
+          <input v-model="forgotSmsCode" class="login-input" type="number" :maxlength="8" :disabled="resetting" placeholder="短信验证码" />
+          <button class="sms-btn" :disabled="resetting || sendingSms || waitSeconds > 0" @click="openResetCaptcha">{{ waitSeconds > 0 ? waitSeconds.toString() + 's' : '获取验证码' }}</button>
+        </view>
+        <view class="input-wrap">
+          <input v-model="forgotNewPassword" class="login-input" password :maxlength="32" :disabled="resetting" placeholder="新密码（8-32位，含大小写+数字）" />
+        </view>
+        <view class="input-wrap">
+          <input v-model="forgotConfirmPassword" class="login-input" password :maxlength="32" :disabled="resetting" placeholder="确认新密码" @confirm="submitForgotPassword" />
+        </view>
+        <text v-if="forgotError.length > 0" class="login-error">{{ forgotError }}</text>
+        <button class="btn-primary" :disabled="resetting || sendingSms" @click="submitForgotPassword">{{ resetting ? '提交中…' : '重置密码' }}</button>
+        <text class="form-link cancel-link" @click="closeForgotPassword">取消</text>
+      </view>
+    </view>
+
     <view v-if="showCaptcha" class="overlay" @click="closeCaptcha">
       <view class="captcha-panel" @click.stop>
         <text class="captcha-title">安全验证</text>
@@ -140,6 +168,7 @@
         <text class="form-link cancel-link" @click="closeCaptcha">取消</text>
       </view>
     </view>
+    <region-picker :visible="regionPickerOpen" :value="region" @confirm="onRegionConfirm" @close="regionPickerOpen = false" />
   </view>
 </template>
 
@@ -150,8 +179,10 @@ import {
   loginWithSms,
   registerParent,
   registerStudent,
+  resetPassword,
   sendAuthSms
 } from '../../api/auth.uts'
+import { getRegionDisplayName } from '../../config/region/options.uts'
 import { getApiErrorCode } from '../../network/request.uts'
 import { familyState, getSession } from '../../state/session.uts'
 import { getUserProfile } from '../../api/user.uts'
@@ -167,6 +198,8 @@ const nickname = ref('')
 const realName = ref('')
 const birthDate = ref('')
 const grade = ref('')
+const region = ref('')
+const regionPickerOpen = ref(false)
 const school = ref('')
 const remember = ref(false)
 const errorText = ref('')
@@ -174,6 +207,14 @@ const submitting = ref(false)
 const useSms = ref(false)
 const registering = ref(false)
 const showCaptcha = ref(false)
+const captchaScene = ref('login')
+const forgotOpen = ref(false)
+const forgotPhone = ref('')
+const forgotSmsCode = ref('')
+const forgotNewPassword = ref('')
+const forgotConfirmPassword = ref('')
+const forgotError = ref('')
+const resetting = ref(false)
 const captchaImage = ref('')
 const captchaId = ref('')
 const captchaCode = ref('')
@@ -194,6 +235,7 @@ let timer = 0
 
 const gradeOptions = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三']
 const gradeIndex = computed(() => Math.max(0, gradeOptions.indexOf(grade.value)))
+const regionDisplay = computed(() => getRegionDisplayName(region.value))
 const now = new Date()
 const todayDate = now.getFullYear().toString() + '-' + (now.getMonth() + 1).toString().padStart(2, '0') + '-' + now.getDate().toString().padStart(2, '0')
 const defaultBirthDate = (now.getFullYear() - 10).toString() + '-01-01'
@@ -208,6 +250,15 @@ function onBirthDateChange(event) {
 
 function onGradeChange(event) {
   grade.value = gradeOptions[parseInt(event.detail.value.toString())]
+}
+
+function openRegionPicker() {
+  if (!submitting.value) regionPickerOpen.value = true
+}
+
+function onRegionConfirm(code) {
+  region.value = code
+  regionPickerOpen.value = false
 }
 
 /** 登录成功后按角色分流；未绑定家长的学生先进入关联码页 */
@@ -316,8 +367,80 @@ function openCaptcha() {
     return
   }
   errorText.value = ''
+  captchaScene.value = registering.value ? 'register' : 'login'
   showCaptcha.value = true
   loadCaptcha()
+}
+
+function openForgotPassword() {
+  if (submitting.value || sendingSms.value) return
+  if (role.value == 'student') {
+    uni.showModal({
+      title: '忘记密码',
+      content: '学生账号不支持自主找回密码，请联系已关联家长在「孩子账户管理 → 重置密码」中协助重置。',
+      showCancel: false
+    })
+    return
+  }
+  forgotPhone.value = phone.value.trim()
+  forgotSmsCode.value = ''
+  forgotNewPassword.value = ''
+  forgotConfirmPassword.value = ''
+  forgotError.value = ''
+  forgotOpen.value = true
+}
+
+function closeForgotPassword() {
+  if (!resetting.value) forgotOpen.value = false
+}
+
+function openResetCaptcha() {
+  if (resetting.value || waitSeconds.value > 0 || sendingSms.value) return
+  if (!/^\d{11}$/.test(forgotPhone.value.trim())) {
+    forgotError.value = '请输入正确的手机号'
+    return
+  }
+  forgotError.value = ''
+  captchaScene.value = 'reset'
+  showCaptcha.value = true
+  loadCaptcha()
+}
+
+async function submitForgotPassword() {
+  if (resetting.value || sendingSms.value) return
+  forgotError.value = ''
+  const targetPhone = forgotPhone.value.trim()
+  const code = forgotSmsCode.value.trim()
+  const nextPwd = forgotNewPassword.value.trim()
+  if (!/^\d{11}$/.test(targetPhone)) {
+    forgotError.value = '请输入正确的手机号'
+    return
+  }
+  if (!/^\d{4,8}$/.test(code)) {
+    forgotError.value = '请输入短信验证码'
+    return
+  }
+  if (!meetsPasswordPolicy(nextPwd)) {
+    forgotError.value = PASSWORD_HINT
+    return
+  }
+  if (nextPwd != forgotConfirmPassword.value.trim()) {
+    forgotError.value = '两次输入的新密码不一致'
+    return
+  }
+  resetting.value = true
+  try {
+    await resetPassword(targetPhone, code, nextPwd)
+    forgotOpen.value = false
+    phone.value = targetPhone
+    useSms.value = false
+    password.value = ''
+    uni.showToast({ title: '密码已重置，请用新密码登录', icon: 'none' })
+  } catch (error) {
+    forgotError.value = error instanceof Error ? error.message : '重置失败，请重试'
+  } finally {
+    resetting.value = false
+  }
 }
 
 function closeCaptcha() {
@@ -342,7 +465,8 @@ async function sendSms() {
   sendingSms.value = true
   captchaError.value = ''
   try {
-    const data = await sendAuthSms(phone.value.trim(), registering.value ? 'register' : 'login', captchaId.value, code)
+    const targetPhone = captchaScene.value == 'reset' ? forgotPhone.value.trim() : phone.value.trim()
+    const data = await sendAuthSms(targetPhone, captchaScene.value, captchaId.value, code)
     resendUntil = Date.now() + Math.max(1, data.getNumber('resend_after') ?? 60) * 1000
     updateCountdown()
     timer = setInterval(updateCountdown, 1000)
@@ -426,7 +550,7 @@ async function submit() {
         birthDate: birthDate.value,
         grade: grade.value,
         school: school.value.trim(),
-        region: '',
+        region: region.value,
         captchaId: studentCaptchaId.value,
         captchaCode: studentCaptchaCode.value.trim(),
         remember: remember.value
