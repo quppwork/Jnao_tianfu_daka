@@ -1,3 +1,11 @@
-<script lang="uts">
-export default {}
+<script setup lang="uts">
+import { restoreSession } from './state/auth-actions.uts'
+
+onLaunch(() => {
+  restoreSession()
+})
+
+onAppShow(() => {
+  restoreSession()
+})
 </script>

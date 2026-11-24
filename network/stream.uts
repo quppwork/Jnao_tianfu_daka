@@ -1,5 +1,11 @@
 import { getApiOrigin } from '../config/environment.uts'
 import { clearSession, getSession, returnToLogin } from '../state/session.uts'
+import {
+  getContextVersion,
+  isCurrentContext,
+  registerContextResource,
+  releaseContextResource
+} from '../state/user-context.uts'
 
 /**
  * 后端 SSE 事件类型（见 backend/app/core/sse.py）
@@ -146,10 +152,19 @@ export function streamPost(path: string, body: UTSJSONObject, sink: SseEventSink
     headers['X-Session-Token'] = session.accessToken
   }
 
+  const contextVersion = getContextVersion()
   let pending: Uint8Array | null = null
   let receivedChunk = false
   let doneReceived = false
   let settled = false
+  let resourceId = 0
+
+  function release() {
+    if (resourceId != 0) {
+      releaseContextResource(resourceId)
+      resourceId = 0
+    }
+  }
 
   function emitFromBytes(bytes: Uint8Array) {
     let start = 0
@@ -195,6 +210,11 @@ export function streamPost(path: string, body: UTSJSONObject, sink: SseEventSink
     success: (response) => {
       if (settled) return
       settled = true
+      release()
+      if (!isCurrentContext(contextVersion)) {
+        sink(makeEvent('abort', '', '上下文已切换', null))
+        return
+      }
       const status = response.statusCode
       if (status == 401) {
         // 只有会话仍是本次请求用的那个才清，避免并发请求误清新登录态
@@ -229,6 +249,11 @@ export function streamPost(path: string, body: UTSJSONObject, sink: SseEventSink
     fail: (err) => {
       if (settled) return
       settled = true
+      release()
+      if (!isCurrentContext(contextVersion)) {
+        sink(makeEvent('abort', '', '上下文已切换', null))
+        return
+      }
       const raw = err.errMsg
       const lower = raw.toLowerCase()
       if (lower.indexOf('abort') >= 0) {
@@ -240,12 +265,22 @@ export function streamPost(path: string, body: UTSJSONObject, sink: SseEventSink
   })
 
   task.onChunkReceived((response: RequestTaskOnChunkReceivedListenerResult) => {
-    if (settled) return
+    if (settled || !isCurrentContext(contextVersion)) return
     receivedChunk = true
     const incoming = new Uint8Array(response.data)
     if (incoming.length == 0) return
     emitFromBytes(pending == null ? incoming : concatBytes(pending, incoming))
   })
+
+  if (!settled) {
+    resourceId = registerContextResource(() => {
+      if (settled) return
+      settled = true
+      resourceId = 0
+      task.abort()
+      sink(makeEvent('abort', '', '上下文已切换', null))
+    })
+  }
 
   return task
 }

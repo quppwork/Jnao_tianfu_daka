@@ -1,18 +1,25 @@
 <template>
-  <view class="cc-bar" :style="{ paddingBottom: inset + 'px' }">
+  <view class="cc-bar" :style="{ paddingBottom: inset > 0 ? inset + 'px' : '10px' }">
     <input
       v-model="draft"
       class="cc-input"
       :disabled="sending"
       :maxlength="maxlength"
       :placeholder="placeholder"
+      placeholder-style="color:#5a6274"
       confirm-type="send"
       @confirm="submit"
     />
     <button v-if="sending" class="cc-btn cc-btn-stop" @click="doStop">
-      <text class="cc-btn-text">停止</text>
+      <text class="cc-btn-text-stop">停止</text>
     </button>
-    <button v-else class="cc-btn" :disabled="!canSend" @click="submit">
+    <button
+      v-else
+      class="cc-btn"
+      :class="accent == 'gold' ? 'cc-btn-gold' : 'cc-btn-green'"
+      :disabled="!canSend"
+      @click="submit"
+    >
       <text class="cc-btn-text">发送</text>
     </button>
   </view>
@@ -34,7 +41,6 @@ const props = defineProps({
     type: String,
     default: '输入你的问题'
   },
-
   maxlength: {
     type: Number,
     default: 4000
@@ -42,6 +48,10 @@ const props = defineProps({
   inset: {
     type: Number,
     default: 0
+  },
+  accent: {
+    type: String,
+    default: 'green'
   }
 })
 
@@ -65,31 +75,33 @@ function doStop() {
 </script>
 
 <style lang="scss" scoped>
-$card: #0f1a2e;
-$card-soft: #131f38;
-$border: rgba(59, 130, 246, 0.2);
-$text: #e2e8f0;
-$accent: #3b82f6;
+@import '../../styles/dayu-theme.scss';
 
 .cc-bar {
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding: 10px 16px;
+  padding-top: 10px;
+  padding-left: 14px;
+  padding-right: 14px;
   border-top-width: 1px;
   border-top-style: solid;
-  border-top-color: $border;
-  background-color: $card;
+  border-top-color: $dy-border;
+  background-color: $dy-bg;
 }
 
 .cc-input {
   flex: 1;
   height: 40px;
-  padding: 0 12px;
+  padding-left: 14px;
+  padding-right: 14px;
   margin-right: 10px;
   border-radius: 20px;
-  background-color: $card-soft;
-  color: $text;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $dy-border-soft;
+  background-color: $dy-card;
+  color: $dy-text;
   font-size: 14px;
 }
 
@@ -100,16 +112,31 @@ $accent: #3b82f6;
   width: 68px;
   height: 40px;
   border-radius: 20px;
-  background-color: $accent;
+  padding: 0;
+  margin: 0;
+}
+
+.cc-btn-green {
+  background-color: $dy-green;
+}
+
+.cc-btn-gold {
+  background-color: $dy-gold;
 }
 
 .cc-btn-stop {
-  background-color: #ef4444;
+  background-color: $dy-danger;
 }
 
 .cc-btn-text {
+  color: $dy-bg;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cc-btn-text-stop {
   color: #ffffff;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
 }
 </style>

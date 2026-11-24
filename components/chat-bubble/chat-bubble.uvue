@@ -1,9 +1,27 @@
 <template>
   <view class="cb-row" :class="role == 'user' ? 'cb-row-user' : 'cb-row-ai'">
-    <view class="cb-bubble" :class="role == 'user' ? 'cb-bubble-user' : 'cb-bubble-ai'">
-      <text v-if="content.length > 0" class="cb-text">{{ content }}</text>
+    <image
+      v-if="role != 'user'"
+      class="cb-avatar"
+      :class="accent == 'gold' ? 'cb-avatar-gold' : 'cb-avatar-green'"
+      src="/static/dayu/avatar_sizhe.jpg"
+      mode="aspectFill"
+    />
+    <view
+      class="cb-bubble"
+      :class="role == 'user' ? (accent == 'gold' ? 'cb-bubble-user-gold' : 'cb-bubble-user-green') : 'cb-bubble-ai'"
+    >
+      <text
+        v-if="content.length > 0"
+        class="cb-text"
+        :class="role == 'user' ? 'cb-text-user' : ''"
+      >{{ content }}</text>
       <text v-if="pending && content.length == 0" class="cb-text cb-muted">正在思考…</text>
-      <text v-if="pending && content.length > 0" class="cb-caret">▍</text>
+      <text
+        v-if="pending && content.length > 0"
+        class="cb-caret"
+        :class="accent == 'gold' ? 'cb-caret-gold' : 'cb-caret-green'"
+      >▍</text>
     </view>
   </view>
 </template>
@@ -25,20 +43,21 @@ defineProps({
   pending: {
     type: Boolean,
     default: false
+  },
+  accent: {
+    type: String,
+    default: 'green'
   }
 })
 </script>
 
 <style lang="scss" scoped>
-$card: #0f1a2e;
-$border: rgba(59, 130, 246, 0.2);
-$text: #e2e8f0;
-$dim: #94a3b8;
-$accent: #3b82f6;
+@import '../../styles/dayu-theme.scss';
 
 .cb-row {
   display: flex;
   flex-direction: row;
+  align-items: flex-start;
   margin-bottom: 12px;
 }
 
@@ -49,45 +68,78 @@ $accent: #3b82f6;
 
 .cb-row-ai {
   justify-content: flex-start;
-  padding-right: 48px;
+  padding-right: 28px;
+}
+
+.cb-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  margin-right: 8px;
+  border-width: 1.5px;
+  border-style: solid;
+  flex-shrink: 0;
+}
+
+.cb-avatar-green {
+  border-color: $dy-green;
+}
+
+.cb-avatar-gold {
+  border-color: $dy-gold;
 }
 
 .cb-bubble {
   flex-shrink: 1;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
   flex-direction: row;
   flex-wrap: wrap;
 }
 
-.cb-bubble-user {
-  background-color: $accent;
-}
-
 .cb-bubble-ai {
-  background-color: $card;
+  background-color: $dy-bubble;
   border-width: 1px;
   border-style: solid;
-  border-color: $border;
+  border-color: $dy-border-soft;
+  border-bottom-left-radius: 4px;
+}
+
+.cb-bubble-user-green {
+  background-color: $dy-green;
+  border-bottom-right-radius: 4px;
+}
+
+.cb-bubble-user-gold {
+  background-color: $dy-gold;
+  border-bottom-right-radius: 4px;
 }
 
 .cb-text {
-  color: $text;
+  color: $dy-text-body;
   font-size: 14px;
   line-height: 22px;
 }
 
-.cb-bubble-user .cb-text {
-  color: #ffffff;
+.cb-text-user {
+  color: $dy-bg;
+  font-weight: 600;
 }
 
 .cb-muted {
-  color: $dim;
+  color: $dy-muted;
 }
 
 .cb-caret {
-  color: $accent;
   font-size: 14px;
   line-height: 22px;
+}
+
+.cb-caret-green {
+  color: $dy-green;
+}
+
+.cb-caret-gold {
+  color: $dy-gold-bright;
 }
 </style>

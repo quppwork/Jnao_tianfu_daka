@@ -1,0 +1,42 @@
+// 账号、当前孩子切换或退出时作废旧上下文，并中止仍在途的请求，避免旧响应写入新视角。
+type ContextResource = {
+  id: number
+  dispose: () => void
+}
+
+let version = 0
+let resourceSeq = 0
+let resources: ContextResource[] = []
+
+export function getContextVersion(): number {
+  return version
+}
+
+export function isCurrentContext(expected: number): boolean {
+  return expected == version
+}
+
+export function registerContextResource(dispose: () => void): number {
+  resourceSeq += 1
+  resources.push({ id: resourceSeq, dispose })
+  return resourceSeq
+}
+
+export function releaseContextResource(id: number) {
+  const index = resources.findIndex((item: ContextResource): boolean => item.id == id)
+  if (index >= 0) resources.splice(index, 1)
+}
+
+export function resetUserContext() {
+  // 先递增版本再取消：abort 同步触发回调时，旧响应也已被判定为过期。
+  version += 1
+  const previous = resources
+  resources = []
+  previous.forEach((item: ContextResource) => {
+    try {
+      item.dispose()
+    } catch (_) {
+      // 单个资源失败不阻止其余资源清理
+    }
+  })
+}

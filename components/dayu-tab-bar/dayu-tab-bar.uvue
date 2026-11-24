@@ -1,0 +1,197 @@
+<template>
+  <view class="dy-foot-wrap">
+    <view v-if="showChildBanner" class="dy-child-banner">
+      <text class="dy-child-banner-text">孩子视角：{{ activeChildName }}</text>
+      <view class="dy-child-banner-btn" @click="returnToParentView">
+        <text class="dy-child-banner-btn-text">{{ returning ? '切回中…' : '返回家长版' }}</text>
+      </view>
+    </view>
+    <view class="dy-foot" :style="{ paddingBottom: bottomPad + 'px' }">
+      <view
+        v-for="tab in tabs"
+        :key="tab.key"
+        class="dy-foot-item"
+        @click="onTap(tab)"
+      >
+        <image class="dy-foot-ic" :src="tab.icon" mode="aspectFit" />
+        <text
+          class="dy-foot-label"
+          :class="tab.key == active ? (role == 'parent' ? 'dy-foot-on-gold' : 'dy-foot-on-green') : ''"
+        >{{ tab.label }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { switchSessionChild } from '../../state/auth-actions.uts'
+import { getActiveChildName, isParentViewingChild } from '../../state/session.uts'
+
+defineOptions({
+  styleIsolation: 'app'
+})
+
+type TabItem = {
+  key: string
+  label: string
+  path: string
+  icon: string
+}
+
+const props = defineProps({
+  role: {
+    type: String,
+    default: 'student'
+  },
+  active: {
+    type: String,
+    default: 'guide'
+  }
+})
+
+const STUDENT_TABS: TabItem[] = [
+  { key: 'guide', label: '大宇AI', path: '/pages/home/index', icon: '/static/dayu/ic/robot.png' },
+  { key: 'train', label: '今日修炼', path: '/pages/training/dayu', icon: '/static/dayu/ic/map.png' },
+  { key: 'qa', label: '学科答疑', path: '/pages/qa/index', icon: '/static/dayu/ic/cap.png' },
+  { key: 'academy', label: '天赋学院', path: '/pages/academy/index', icon: '/static/dayu/ic/bubble.png' },
+  { key: 'console', label: '中央电脑', path: '/pages/growth/index', icon: '/static/dayu/ic/computer.png' }
+]
+
+const PARENT_TABS: TabItem[] = [
+  { key: 'dayu', label: '大宇', path: '/pages/parent/dayu', icon: '/static/dayu/ic/robot.png' },
+  { key: 'community', label: '天赋社区', path: '/pages/parent/community', icon: '/static/dayu/ic/family.png' },
+  { key: 'consult', label: '在线咨询', path: '/pages/parent/consult', icon: '/static/dayu/ic/bubble.png' },
+  { key: 'pdata', label: '数据分析', path: '/pages/parent/pdata', icon: '/static/dayu/ic/target.png' },
+  { key: 'pset', label: '我的', path: '/pages/parent/index', icon: '/static/dayu/ic/person.png' }
+]
+
+const tabs = computed(() => {
+  return props.role == 'parent' ? PARENT_TABS : STUDENT_TABS
+})
+
+const bottomPad = ref(8)
+const returning = ref(false)
+
+const showChildBanner = computed((): boolean => {
+  return props.role == 'student' && isParentViewingChild()
+})
+
+const activeChildName = computed((): string => getActiveChildName())
+
+async function returnToParentView() {
+  if (returning.value) return
+  returning.value = true
+  try {
+    await switchSessionChild(null)
+    uni.reLaunch({ url: '/pages/parent/dayu' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '切回家长版失败', icon: 'none' })
+  } finally {
+    returning.value = false
+  }
+}
+
+onMounted(() => {
+  const safe = uni.getWindowInfo().safeAreaInsets.bottom
+  bottomPad.value = safe > 0 ? safe + 6 : 8
+})
+
+function onTap(tab: TabItem) {
+  if (tab.key == props.active) return
+  if (tab.path.indexOf('/pages/webview/index') == 0) {
+    uni.navigateTo({ url: tab.path })
+    return
+  }
+  uni.redirectTo({
+    url: tab.path,
+    fail: () => {
+      uni.reLaunch({ url: tab.path })
+    }
+  })
+}
+</script>
+
+<style lang="scss" scoped>
+@import '../../styles/dayu-theme.scss';
+
+.dy-foot-wrap {
+  display: flex;
+  flex-direction: column;
+  background-color: $dy-bg;
+}
+
+.dy-child-banner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background-color: $dy-gold-bg;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $dy-gold-border;
+}
+
+.dy-child-banner-text {
+  color: $dy-gold-bright;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dy-child-banner-btn {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background-color: rgba(201, 168, 105, 0.25);
+  border: 1px solid $dy-gold-border;
+}
+
+.dy-child-banner-btn-text {
+  color: $dy-gold-bright;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dy-foot {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  padding-top: 6px;
+  padding-left: 6px;
+  padding-right: 6px;
+  background-color: $dy-bg;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $dy-border;
+}
+
+.dy-foot-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.dy-foot-ic {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 2px;
+}
+
+.dy-foot-label {
+  font-size: 11px;
+  color: $dy-dim;
+  font-weight: 500;
+}
+
+.dy-foot-on-green {
+  color: $dy-green;
+  font-weight: 700;
+}
+
+.dy-foot-on-gold {
+  color: $dy-gold-bright;
+  font-weight: 700;
+}
+</style>

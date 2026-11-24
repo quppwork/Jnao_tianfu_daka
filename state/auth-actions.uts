@@ -1,0 +1,71 @@
+import { fetchSession, selectSessionProfile } from '../api/auth.uts'
+import { applySessionView, getSession, getSessionRevision } from './session.uts'
+import { getContextVersion, isCurrentContext } from './user-context.uts'
+
+let restoring = false
+let restoreAgain = false
+let switching = false
+
+export async function restoreSession(force: boolean = false): Promise<boolean> {
+  if (force && (restoring || switching)) {
+    restoreAgain = true
+    return false
+  }
+  const session = getSession()
+  if (restoring || switching || session == null) return false
+  restoring = true
+  const version = getContextVersion()
+  const token = session.accessToken
+  const revision = getSessionRevision()
+  let applied = false
+  try {
+    const body = await fetchSession()
+    const current = getSession()
+    if (
+      isCurrentContext(version) &&
+      current != null &&
+      current.accessToken == token &&
+      revision == getSessionRevision()
+    ) {
+      applied = applySessionView(body)
+    }
+  } catch (_) {
+    // 401 已由 request.uts 统一清理；网络或服务端暂不可用时保留现有本地状态
+  } finally {
+    restoring = false
+    if (restoreAgain && !switching) {
+      restoreAgain = false
+      await restoreSession(false)
+    }
+  }
+  return applied
+}
+
+export async function switchSessionChild(childId: number | null): Promise<boolean> {
+  const session = getSession()
+  if (switching || session == null) return false
+  switching = true
+  const version = getContextVersion()
+  const token = session.accessToken
+  const revision = getSessionRevision()
+  let applied = false
+  try {
+    const body = await selectSessionProfile(childId)
+    const current = getSession()
+    if (
+      isCurrentContext(version) &&
+      current != null &&
+      current.accessToken == token &&
+      revision == getSessionRevision()
+    ) {
+      applied = applySessionView(body)
+    }
+  } finally {
+    switching = false
+    if (restoreAgain && !restoring) {
+      restoreAgain = false
+      await restoreSession(false)
+    }
+  }
+  return applied
+}
