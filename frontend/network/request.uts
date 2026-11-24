@@ -1,5 +1,44 @@
 import { getApiOrigin } from '../config/environment.uts'
 import { clearSession, getSession, returnToLogin } from '../state/session.uts'
+import {
+  getContextVersion,
+  isCurrentContext,
+  registerContextResource,
+  releaseContextResource
+} from '../state/user-context.uts'
+
+export class ApiError extends Error {
+  code: string
+  statusCode: number
+  kind: string
+
+  constructor(message: string, code: string = '', statusCode: number = 0, kind: string = 'http') {
+    super(message)
+    this.code = code
+    this.statusCode = statusCode
+    this.kind = kind
+  }
+}
+
+export function getApiErrorCode(error: any | null): string {
+  return error instanceof ApiError ? error.code : ''
+}
+
+export function isUncertainError(error: any | null): boolean {
+  return error instanceof ApiError && (error.kind == 'network' || error.kind == 'parse')
+}
+
+let lastGuardianPromptAt = 0
+
+function promptGuardianBinding() {
+  const now = Date.now()
+  if (now - lastGuardianPromptAt < 1500) return
+  lastGuardianPromptAt = now
+  const pages = getCurrentPages()
+  if (pages.length > 0 && pages[pages.length - 1].route == 'pages/guardian/index') return
+  uni.showToast({ title: '请先完成家长关联', icon: 'none' })
+  uni.navigateTo({ url: '/pages/guardian/index' })
+}
 
 export function requestJson(
   path: string,
@@ -10,12 +49,14 @@ export function requestJson(
   timeout: number = 15000
 ): Promise<UTSJSONObject> {
   return new Promise<UTSJSONObject>((resolve, reject) => {
+    const contextVersion = getContextVersion()
     const session = authenticated ? getSession() : null
     if (authenticated && session == null) {
       returnToLogin()
-      reject(new Error('请先登录'))
+      reject(new ApiError('请先登录', 'unauthorized', 401, 'http'))
       return
     }
+
     const headers = extraHeaders ?? ({} as UTSJSONObject)
     headers['Content-Type'] = 'application/json'
     if (session != null) {
@@ -27,7 +68,32 @@ export function requestJson(
         headers['X-Session-Token'] = session.accessToken
       }
     }
-    uni.request<UTSJSONObject>({
+
+    let settled = false
+    let resourceId = 0
+    let task: RequestTask | null = null
+
+    function finishResolve(value: UTSJSONObject) {
+      if (settled) return
+      settled = true
+      if (resourceId != 0) releaseContextResource(resourceId)
+      task = null
+      if (!isCurrentContext(contextVersion)) {
+        reject(new ApiError('上下文已切换', 'cancelled', 0, 'cancelled'))
+        return
+      }
+      resolve(value)
+    }
+
+    function finishReject(error: ApiError) {
+      if (settled) return
+      settled = true
+      if (resourceId != 0) releaseContextResource(resourceId)
+      task = null
+      reject(error)
+    }
+
+    task = uni.request<UTSJSONObject>({
       url: getApiOrigin() + path,
       method,
       data,
@@ -37,25 +103,59 @@ export function requestJson(
       // H5 端靠它鉴权；App / 小程序端无 Cookie，必须依赖上面的 token header。
       withCredentials: true,
       success: (response) => {
+        if (settled) return
+        if (!isCurrentContext(contextVersion)) {
+          finishReject(new ApiError('上下文已切换', 'cancelled', 0, 'cancelled'))
+          return
+        }
         const body = response.data
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          if (response.statusCode == 401 && session != null && getSession()?.accessToken == session.accessToken) {
+          const code = body?.getString('code') ?? ''
+          const detail = body?.getString('detail') ?? '请求失败，请重试'
+          if (
+            response.statusCode == 401 &&
+            session != null &&
+            getSession()?.accessToken == session.accessToken
+          ) {
             clearSession()
             returnToLogin()
+          } else if (
+            response.statusCode == 403 &&
+            code == 'guardian_required' &&
+            session != null &&
+            session.role == 'student'
+          ) {
+            promptGuardianBinding()
           }
-          const detail = body?.getString('detail')
-          reject(new Error(detail ?? '请求失败，请重试'))
+          finishReject(new ApiError(detail, code, response.statusCode, 'http'))
+          return
+        }
+        if (response.statusCode == 204 || method == 'HEAD') {
+          finishResolve({} as UTSJSONObject)
           return
         }
         if (body == null) {
-          reject(new Error('服务响应格式有误'))
+          finishReject(new ApiError('服务响应格式有误', 'parse_error', response.statusCode, 'parse'))
           return
         }
-        resolve(body)
+        finishResolve(body)
       },
       fail: () => {
-        reject(new Error('无法连接服务，请检查网络'))
+        if (settled) return
+        if (!isCurrentContext(contextVersion)) {
+          finishReject(new ApiError('上下文已切换', 'cancelled', 0, 'cancelled'))
+          return
+        }
+        finishReject(new ApiError('无法连接服务，请检查网络', 'network_error', 0, 'network'))
       }
     })
+
+    if (!settled && task != null) {
+      resourceId = registerContextResource(() => {
+        const active = task
+        finishReject(new ApiError('上下文已切换', 'cancelled', 0, 'cancelled'))
+        active?.abort()
+      })
+    }
   })
 }

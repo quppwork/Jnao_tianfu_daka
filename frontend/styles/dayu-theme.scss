@@ -1,0 +1,39 @@
+// 大宇智能体 · 统一设计系统（敬天府夜色 × 五者天赋色）
+// 对照 backend/dev:vue_fronted/src/static/dayu/style.css
+
+// 背景与表面层级
+$dy-bg: #0b0e14;
+$dy-bg-top: #101623;
+$dy-card: #131926;
+$dy-card-deep: #0d111f;
+$dy-bubble: #161d2b;
+$dy-border: #232b3d;
+$dy-border-soft: #2a3040;
+
+// 文字层级
+$dy-text: #edebe4;
+$dy-text-body: #d8dce6;
+$dy-muted: #8b93a5;
+$dy-dim: #5a6274;
+
+// 角色主色：学生翡翠绿 / 家长暖金
+$dy-green: #6fcf8e;
+$dy-green-soft: #8fefc0;
+$dy-green-bg: rgba(111, 207, 142, 0.12);
+$dy-green-border: rgba(111, 207, 142, 0.45);
+
+$dy-gold: #c9a869;
+$dy-gold-bright: #f5d9a8;
+$dy-gold-bg: rgba(201, 168, 105, 0.14);
+$dy-gold-border: rgba(201, 168, 105, 0.45);
+
+// 语义色与五者天赋色
+$dy-blue: #2e6be6;
+$dy-danger: #f87171;
+$dy-danger-bg: rgba(248, 113, 113, 0.14);
+
+$dy-talent-si: #6fcf8e;
+$dy-talent-ying: #f5b971;
+$dy-talent-de: #e88ca5;
+$dy-talent-xing: #66b8ff;
+$dy-talent-xue: #b794f4;

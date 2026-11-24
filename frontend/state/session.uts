@@ -1,3 +1,6 @@
+import { ref } from 'vue'
+import { resetUserContext } from './user-context.uts'
+
 const SESSION_KEY = 'jnao_native_session'
 
 export type Session = {
@@ -7,8 +10,40 @@ export type Session = {
   accessToken: string
 }
 
+export type ChildProfile = {
+  id: number
+  name: string
+  nickname: string
+  /** 0 表示未填写出生日期 */
+  age: number
+  grade: string
+  school: string
+  region: string
+}
+
+/** 服务端会话视图；只在内存中保存，冷启动由 restoreSession 重新拉取 */
+export type FamilyState = {
+  loaded: boolean
+  /** 家长当前进入的孩子；0 表示家长视角。学生会话固定为自身 ID */
+  activeChildId: number
+  children: ChildProfile[]
+  guardianLinked: boolean
+  expiresAt: string
+}
+
 let currentSession: Session | null = null
 let loaded = false
+let sessionRevision = 0
+
+export function getSessionRevision(): number {
+  return sessionRevision
+}
+
+function emptyFamily(): FamilyState {
+  return { loaded: false, activeChildId: 0, children: [], guardianLinked: false, expiresAt: '' }
+}
+
+export const familyState = ref<FamilyState>(emptyFamily())
 
 export function getSession(): Session | null {
   if (loaded) return currentSession
@@ -24,17 +59,104 @@ export function getSession(): Session | null {
 }
 
 export function saveSession(session: Session) {
+  const previous = getSession()
   uni.setStorageSync(SESSION_KEY, JSON.stringify(session))
   currentSession = session
   loaded = true
+  sessionRevision += 1
+  if (previous == null || previous.userId != session.userId || previous.role != session.role) {
+    familyState.value = emptyFamily()
+    resetUserContext()
+  }
 }
 
 export function clearSession() {
   currentSession = null
   loaded = true
+  sessionRevision += 1
   uni.removeStorageSync(SESSION_KEY)
+  familyState.value = emptyFamily()
+  resetUserContext()
 }
 
 export function returnToLogin() {
   uni.reLaunch({ url: '/pages/login/index' })
+}
+
+/** 家长正在以孩子身份查看学生版页面 */
+export function isParentViewingChild(): boolean {
+  return getSession()?.role == 'parent' && familyState.value.activeChildId > 0
+}
+
+export function getActiveChildName(): string {
+  const id = familyState.value.activeChildId
+  const list = familyState.value.children
+  const found = list.find((item: ChildProfile): boolean => item.id == id)
+  if (found == null) return '当前孩子'
+  return found.name.length > 0 ? found.name : (found.nickname.length > 0 ? found.nickname : '当前孩子')
+}
+
+function parseChild(row: UTSJSONObject): ChildProfile {
+  return {
+    id: row.getNumber('id') ?? 0,
+    name: row.getString('name') ?? '',
+    nickname: row.getString('nickname') ?? '',
+    age: row.getNumber('age') ?? 0,
+    grade: row.getString('grade') ?? '',
+    school: row.getString('school') ?? '',
+    region: row.getString('region') ?? ''
+  }
+}
+
+/**
+ * 写入服务端返回的会话视图（GET /api/auth/session、视角切换、关联绑定、登录响应）。
+ * 账号与本地会话不一致或当前孩子不在可访问列表中时拒绝写入。
+ */
+export function applySessionView(body: UTSJSONObject): boolean {
+  const session = getSession()
+  if (session == null) return false
+  if (!UTSJSONObject.keys(body).includes('active_child_id')) return false
+  const accountId = body.getNumber('account.id') ?? body.getNumber('child_user_id') ?? 0
+  const role = body.getString('account.role') ?? body.getString('role') ?? ''
+  if (accountId != session.userId || role != session.role) return false
+
+  const rows = body.getArray<UTSJSONObject>('children') ?? []
+  const children: ChildProfile[] = []
+  for (let i = 0; i < rows.length; i++) {
+    children.push(parseChild(rows[i]))
+  }
+  const activeChildId = body.getNumber('active_child_id') ?? 0
+  if (activeChildId > 0 && children.findIndex((child: ChildProfile): boolean => child.id == activeChildId) < 0) {
+    return false
+  }
+
+  const previousActive = familyState.value.activeChildId
+  sessionRevision += 1
+  familyState.value = {
+    loaded: true,
+    activeChildId,
+    children,
+    guardianLinked: body.getBoolean('guardian_linked') == true,
+    expiresAt: body.getString('expires_at') ?? ''
+  }
+  const displayName = body.getString('account.display_name') ?? ''
+  if (displayName.length > 0 && displayName != session.nickname) {
+    saveSession({ userId: session.userId, role: session.role, nickname: displayName, accessToken: session.accessToken })
+  }
+  if (previousActive != activeChildId) resetUserContext()
+  return true
+}
+
+/** 解绑 DELETE 确认成功后立即移除已撤权的数据，再由调用方异步刷新会话 */
+export function applyConfirmedGuardianUnlink(childId: number) {
+  sessionRevision += 1
+  const state = familyState.value
+  if (getSession()?.role == 'student') {
+    familyState.value = { loaded: state.loaded, activeChildId: state.activeChildId, children: state.children, guardianLinked: false, expiresAt: state.expiresAt }
+    return
+  }
+  const children = state.children.filter((child: ChildProfile): boolean => child.id != childId)
+  const leavingActive = state.activeChildId == childId
+  familyState.value = { loaded: state.loaded, activeChildId: leavingActive ? 0 : state.activeChildId, children, guardianLinked: false, expiresAt: state.expiresAt }
+  if (leavingActive) resetUserContext()
 }
